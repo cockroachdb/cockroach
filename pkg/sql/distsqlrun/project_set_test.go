@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -155,8 +155,8 @@ func BenchmarkProjectSet(b *testing.B) {
 	for _, c := range benchCases {
 		b.Run(c.description, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				flowCtx := distsql.FlowCtx{
-					Cfg:     &distsql.ServerConfig{Settings: st},
+				flowCtx := execinfra.FlowCtx{
+					Cfg:     &execinfra.ServerConfig{Settings: st},
 					EvalCtx: &evalCtx,
 				}
 
@@ -165,7 +165,7 @@ func BenchmarkProjectSet(b *testing.B) {
 				p, err := newProcessor(
 					context.Background(), &flowCtx, 0, /* processorID */
 					&execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec}, &execinfrapb.PostProcessSpec{},
-					[]distsql.RowSource{in}, []distsql.RowReceiver{out}, []distsql.LocalProcessor{})
+					[]execinfra.RowSource{in}, []execinfra.RowReceiver{out}, []execinfra.LocalProcessor{})
 				if err != nil {
 					b.Fatal(err)
 				}

@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -300,11 +300,11 @@ func TestSorter(t *testing.T) {
 
 						evalCtx := tree.MakeTestingEvalContext(st)
 						defer evalCtx.Stop(ctx)
-						diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+						diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 						defer diskMonitor.Stop(ctx)
-						flowCtx := distsql.FlowCtx{
+						flowCtx := execinfra.FlowCtx{
 							EvalCtx: &evalCtx,
-							Cfg: &distsql.ServerConfig{
+							Cfg: &execinfra.ServerConfig{
 								Settings:    cluster.MakeTestingClusterSettings(),
 								TempStorage: tempEngine,
 								DiskMonitor: diskMonitor,
@@ -318,7 +318,7 @@ func TestSorter(t *testing.T) {
 						in := newRowBuffer(c.types, c.input, rowBufferArgs{})
 						out := &RowBuffer{}
 
-						var s distsql.Processor
+						var s execinfra.Processor
 						if !forceSortAll {
 							var err error
 							s, err = newSorter(context.Background(), &flowCtx, 0 /* processorID */, &c.spec, in, &c.post, out)
@@ -415,11 +415,11 @@ func BenchmarkSortAll(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &distsql.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			DiskMonitor: diskMonitor,
 		},
@@ -431,7 +431,7 @@ func BenchmarkSortAll(b *testing.B) {
 
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -457,11 +457,11 @@ func BenchmarkSortLimit(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &distsql.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			DiskMonitor: diskMonitor,
 		},
@@ -472,7 +472,7 @@ func BenchmarkSortLimit(b *testing.B) {
 
 	const numRows = 1 << 16
 	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-		input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
+		input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeRandIntRows(rng, numRows, numCols))
 		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 			post := execinfrapb.PostProcessSpec{Limit: limit}
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
@@ -503,11 +503,11 @@ func BenchmarkSortChunks(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &distsql.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			DiskMonitor: diskMonitor,
 		},
@@ -527,7 +527,7 @@ func BenchmarkSortChunks(b *testing.B) {
 				for i, row := range rows {
 					row[0] = sqlbase.IntEncDatum(i / chunkSize)
 				}
-				input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, rows)
+				input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, rows)
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

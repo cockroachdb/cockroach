@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -381,7 +381,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// groups of rows go to the same hash bucket).
 	rightRows := make(sqlbase.EncDatumRows, 0)
 	for i := 1; i <= 20; i++ {
-		for j := 1; j <= 4*distsql.RowChannelBufSize; j++ {
+		for j := 1; j <= 4*execinfra.RowChannelBufSize; j++ {
 			rightRows = append(rightRows, sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
 			})

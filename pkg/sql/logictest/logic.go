@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1066,14 +1066,14 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		ReplicationMode: base.ReplicationManual,
 	}
 
-	distSQLKnobs := &distsql.TestingKnobs{
-		MetadataTestLevel: distsql.Off, DeterministicStats: true,
+	distSQLKnobs := &execinfra.TestingKnobs{
+		MetadataTestLevel: execinfra.Off, DeterministicStats: true,
 	}
 	if cfg.distSQLUseDisk {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
 	if cfg.distSQLMetadataTestEnabled {
-		distSQLKnobs.MetadataTestLevel = distsql.On
+		distSQLKnobs.MetadataTestLevel = execinfra.On
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 	if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {

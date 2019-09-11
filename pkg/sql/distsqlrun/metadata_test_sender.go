@@ -13,15 +13,15 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // metadataTestSender intersperses a metadata record after every row.
 type metadataTestSender struct {
-	distsql.ProcessorBase
-	input distsql.RowSource
+	execinfra.ProcessorBase
+	input execinfra.RowSource
 	id    string
 
 	// sendRowNumMeta is set to true when the next call to Next() must return
@@ -30,17 +30,17 @@ type metadataTestSender struct {
 	rowNumCnt      int32
 }
 
-var _ distsql.Processor = &metadataTestSender{}
-var _ distsql.RowSource = &metadataTestSender{}
+var _ execinfra.Processor = &metadataTestSender{}
+var _ execinfra.RowSource = &metadataTestSender{}
 
 const metadataTestSenderProcName = "meta sender"
 
 func newMetadataTestSender(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 	id string,
 ) (*metadataTestSender, error) {
 	mts := &metadataTestSender{input: input, id: id}
@@ -52,8 +52,8 @@ func newMetadataTestSender(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		distsql.ProcStateOpts{
-			InputsToDrain: []distsql.RowSource{mts.input},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{mts.input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
@@ -94,7 +94,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 		}
 	}
 
-	for mts.State == distsql.StateRunning {
+	for mts.State == execinfra.StateRunning {
 		row, meta := mts.input.Next()
 		if meta != nil {
 			// Other processors will start draining when they get an error meta from

@@ -13,8 +13,8 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -44,16 +44,16 @@ import (
 // both the inputs and the output have been properly closed.
 func EmitHelper(
 	ctx context.Context,
-	output *distsql.ProcOutputHelper,
+	output *execinfra.ProcOutputHelper,
 	row sqlbase.EncDatumRow,
 	meta *execinfrapb.ProducerMetadata,
 	pushTrailingMeta func(context.Context),
-	inputs ...distsql.RowSource,
+	inputs ...execinfra.RowSource,
 ) bool {
 	if output.Output() == nil {
 		panic("output RowReceiver not initialized for emitting")
 	}
-	var consumerStatus distsql.ConsumerStatus
+	var consumerStatus execinfra.ConsumerStatus
 	if meta != nil {
 		if row != nil {
 			panic("both row data and metadata in the same EmitHelper call")
@@ -62,24 +62,24 @@ func EmitHelper(
 		foundErr := meta.Err != nil
 		consumerStatus = output.Output().Push(nil /* row */, meta)
 		if foundErr {
-			consumerStatus = distsql.ConsumerClosed
+			consumerStatus = execinfra.ConsumerClosed
 		}
 	} else {
 		var err error
 		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
 			output.Output().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
-			consumerStatus = distsql.ConsumerClosed
+			consumerStatus = execinfra.ConsumerClosed
 		}
 	}
 	switch consumerStatus {
-	case distsql.NeedMoreRows:
+	case execinfra.NeedMoreRows:
 		return true
-	case distsql.DrainRequested:
+	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
-		distsql.DrainAndClose(ctx, output.Output(), nil /* cause */, pushTrailingMeta, inputs...)
+		execinfra.DrainAndClose(ctx, output.Output(), nil /* cause */, pushTrailingMeta, inputs...)
 		return false
-	case distsql.ConsumerClosed:
+	case execinfra.ConsumerClosed:
 		log.VEventf(ctx, 1, "no more rows required. Consumer shut down.")
 		for _, input := range inputs {
 			input.ConsumerClosed()
@@ -94,14 +94,14 @@ func EmitHelper(
 
 func newProcessor(
 	ctx context.Context,
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
-	inputs []distsql.RowSource,
-	outputs []distsql.RowReceiver,
-	localProcessors []distsql.LocalProcessor,
-) (distsql.Processor, error) {
+	inputs []execinfra.RowSource,
+	outputs []execinfra.RowReceiver,
+	localProcessors []execinfra.LocalProcessor,
+) (execinfra.Processor, error) {
 	if core.Noop != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
@@ -128,10 +128,10 @@ func newProcessor(
 			return nil, err
 		}
 		if len(core.JoinReader.LookupColumns) == 0 {
-			return distsql.NewIndexJoiner(
+			return execinfra.NewIndexJoiner(
 				flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
 		}
-		return distsql.NewJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
+		return execinfra.NewJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
 	}
 	if core.Sorter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -328,17 +328,17 @@ type VectorizeAlwaysException interface {
 
 // NewReadImportDataProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewReadImportDataProcessor func(*distsql.FlowCtx, int32, execinfrapb.ReadImportDataSpec, distsql.RowReceiver) (distsql.Processor, error)
+var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewSSTWriterProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewSSTWriterProcessor func(*distsql.FlowCtx, int32, execinfrapb.SSTWriterSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
+var NewSSTWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.SSTWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewCSVWriterProcessor is externally implemented.
-var NewCSVWriterProcessor func(*distsql.FlowCtx, int32, execinfrapb.CSVWriterSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
+var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewChangeAggregatorProcessor is externally implemented.
-var NewChangeAggregatorProcessor func(*distsql.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, distsql.RowReceiver) (distsql.Processor, error)
+var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewChangeFrontierProcessor is externally implemented.
-var NewChangeFrontierProcessor func(*distsql.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, distsql.RowSource, distsql.RowReceiver) (distsql.Processor, error)
+var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)

@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,14 +39,14 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1
 	types := sqlbase.OneIntCol
-	input := distsql.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
+	input := execinfra.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
 	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
@@ -54,7 +54,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	}
 
 	vee := newTestVectorizedPanicEmitter(col, execerror.VectorizedInternalPanic)
-	mat, err := distsql.NewMaterializer(
+	mat, err := execinfra.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		vee,
@@ -86,14 +86,14 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows, nCols := 1, 1
 	types := sqlbase.OneIntCol
-	input := distsql.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
+	input := execinfra.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
 	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	}
 
 	nvee := newTestVectorizedPanicEmitter(col, nil /* panicFn */)
-	mat, err := distsql.NewMaterializer(
+	mat, err := execinfra.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		nvee,
@@ -130,12 +130,12 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
-	mat, err := distsql.NewMaterializer(
+	mat, err := execinfra.NewMaterializer(
 		&flowCtx,
 		0, /* processorID */
 		&colexec.CallbackOperator{
@@ -158,7 +158,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	}
 
 	flow := &Flow{
-		processors: []distsql.Processor{mat},
+		processors: []execinfra.Processor{mat},
 		// This test specifically verifies that a flow doesn't get stuck in Wait for
 		// asynchronous components that haven't been signaled to exit. To simulate
 		// this we just create a mock startable.

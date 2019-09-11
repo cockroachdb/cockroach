@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -33,7 +33,7 @@ import (
 // desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
 	spans     roachpb.Spans
 	limitHint int64
@@ -49,15 +49,15 @@ type tableReader struct {
 
 	// fetcher wraps a row.Fetcher, allowing the tableReader to add a stat
 	// collection layer.
-	fetcher distsql.RowFetcher
+	fetcher execinfra.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
 	// rowsRead is the number of rows read and is tracked unconditionally.
 	rowsRead int64
 }
 
-var _ distsql.Processor = &tableReader{}
-var _ distsql.RowSource = &tableReader{}
+var _ execinfra.Processor = &tableReader{}
+var _ execinfra.RowSource = &tableReader{}
 var _ execinfrapb.MetadataSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
@@ -70,11 +70,11 @@ var trPool = sync.Pool{
 
 // newTableReader creates a tableReader.
 func newTableReader(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*tableReader, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
@@ -82,7 +82,7 @@ func newTableReader(
 
 	tr := trPool.Get().(*tableReader)
 
-	tr.limitHint = distsql.LimitHint(spec.LimitHint, post)
+	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 	tr.maxResults = spec.MaxResults
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
@@ -97,7 +97,7 @@ func newTableReader(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		distsql.ProcStateOpts{
+		execinfra.ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a Fetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
@@ -113,7 +113,7 @@ func newTableReader(
 
 	var fetcher row.Fetcher
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
-	if _, _, err := distsql.InitRowFetcher(
+	if _, _, err := execinfra.InitRowFetcher(
 		&fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility,
 	); err != nil {
@@ -131,10 +131,10 @@ func newTableReader(
 	}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		tr.fetcher = distsql.NewRowFetcherStatCollector(&fetcher)
+		tr.fetcher = execinfra.NewRowFetcherStatCollector(&fetcher)
 		tr.FinishTrace = tr.outputStatsToTrace
 	} else {
-		tr.fetcher = &distsql.RowFetcherWrapper{Fetcher: &fetcher}
+		tr.fetcher = &execinfra.RowFetcherWrapper{Fetcher: &fetcher}
 	}
 
 	return tr, nil
@@ -163,7 +163,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.fetcher.Start(fetcherCtx)
-	limitBatches := distsql.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
+	limitBatches := execinfra.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
@@ -201,7 +201,7 @@ func (tr *tableReader) Release() {
 
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for tr.State == distsql.StateRunning {
+	for tr.State == execinfra.StateRunning {
 		row, meta := tr.fetcher.Next()
 
 		if meta != nil {
@@ -255,7 +255,7 @@ func (trs *TableReaderStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
 // fail silently if the tableReader is not collecting stats.
 func (tr *tableReader) outputStatsToTrace() {
-	is, ok := distsql.GetFetcherInputStats(tr.FlowCtx, tr.fetcher)
+	is, ok := execinfra.GetFetcherInputStats(tr.FlowCtx, tr.fetcher)
 	if !ok {
 		return
 	}
@@ -270,12 +270,12 @@ func (tr *tableReader) outputStatsToTrace() {
 func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
-		ranges := distsql.MisplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.FlowCtx.NodeID)
+		ranges := execinfra.MisplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.FlowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := distsql.GetTxnCoordMeta(ctx, tr.FlowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, tr.FlowCtx.Txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 

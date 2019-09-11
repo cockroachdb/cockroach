@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,14 +33,14 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	nRows := coldata.BatchSize * 2
 	nCols := len(typs)
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := distsql.NewRepeatableRowSource(typs, rows)
+	input := execinfra.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
@@ -69,14 +69,14 @@ func BenchmarkColumnarize(b *testing.B) {
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := distsql.NewRepeatableRowSource(types, rows)
+	input := execinfra.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 

@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/vecbuiltins"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -42,13 +42,13 @@ func checkNumIn(inputs []colexec.Operator, numIn int) error {
 // columnar execution flow and returns toWrap's output as an exec.Operator.
 func wrapRowSource(
 	ctx context.Context,
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	input colexec.Operator,
 	inputTypes []types.T,
-	newToWrap func(distsql.RowSource) (distsql.RowSource, error),
+	newToWrap func(execinfra.RowSource) (execinfra.RowSource, error),
 ) (*Columnarizer, error) {
 	var (
-		toWrapInput distsql.RowSource
+		toWrapInput execinfra.RowSource
 		// TODO(asubiotto): Plumb proper processorIDs once we have stats.
 		processorID int32
 	)
@@ -60,7 +60,7 @@ func wrapRowSource(
 		toWrapInput = c.input
 	} else {
 		var err error
-		toWrapInput, err = distsql.NewMaterializer(
+		toWrapInput, err = execinfra.NewMaterializer(
 			flowCtx,
 			processorID,
 			input,
@@ -97,7 +97,7 @@ type NewColOperatorResult struct {
 // NewColOperator creates a new columnar operator according to the given spec.
 func NewColOperator(
 	ctx context.Context,
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
 	inputs []colexec.Operator,
 ) (result NewColOperatorResult, err error) {
@@ -509,9 +509,9 @@ func NewColOperator(
 			flowCtx,
 			inputs[0],
 			spec.Input[0].ColumnTypes,
-			func(input distsql.RowSource) (distsql.RowSource, error) {
+			func(input execinfra.RowSource) (execinfra.RowSource, error) {
 				var (
-					jr  distsql.RowSource
+					jr  execinfra.RowSource
 					err error
 				)
 				// The lookup and index joiners need to be passed the post-process specs,
@@ -519,11 +519,11 @@ func NewColOperator(
 				// This means that we'll let those processors do any renders or filters,
 				// which isn't ideal. We could improve this.
 				if len(core.JoinReader.LookupColumns) == 0 {
-					jr, err = distsql.NewIndexJoiner(
+					jr, err = execinfra.NewIndexJoiner(
 						flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
 					)
 				} else {
-					jr, err = distsql.NewJoinReader(
+					jr, err = execinfra.NewJoinReader(
 						flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
 					)
 				}
@@ -674,7 +674,7 @@ func NewColOperator(
 		var renderedCols []uint32
 		for _, expr := range post.RenderExprs {
 			var (
-				helper    distsql.ExprHelper
+				helper    execinfra.ExprHelper
 				renderMem int
 			)
 			err := helper.Init(expr, result.ColumnTypes, flowCtx.EvalCtx)
@@ -863,7 +863,7 @@ func (r *NewColOperatorResult) planFilterExpr(
 	evalCtx *tree.EvalContext, filter execinfrapb.Expression,
 ) error {
 	var (
-		helper       distsql.ExprHelper
+		helper       execinfra.ExprHelper
 		selectionMem int
 	)
 	err := helper.Init(filter, r.ColumnTypes, evalCtx)

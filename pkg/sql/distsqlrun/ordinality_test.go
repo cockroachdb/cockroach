@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -109,8 +109,8 @@ func TestOrdinality(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
-			flowCtx := distsql.FlowCtx{
-				Cfg:     &distsql.ServerConfig{Settings: st},
+			flowCtx := execinfra.FlowCtx{
+				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
 			}
 
@@ -156,15 +156,15 @@ func BenchmarkOrdinality(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	spec := &execinfrapb.OrdinalitySpec{}
 
 	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		input := distsql.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
+		input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
 		b.SetBytes(int64(8 * numRows * numCols))
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {

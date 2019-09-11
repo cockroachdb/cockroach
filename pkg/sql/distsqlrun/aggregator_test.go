@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -416,8 +416,8 @@ func BenchmarkAggregation(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
@@ -433,7 +433,7 @@ func BenchmarkAggregation(b *testing.B) {
 			}
 			post := &execinfrapb.PostProcessSpec{}
 			disposer := &rowDisposer{}
-			input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
@@ -462,15 +462,15 @@ func BenchmarkCountRows(b *testing.B) {
 	disposer := &rowDisposer{}
 	const numCols = 1
 	const numRows = 100000
-	input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
+	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
@@ -495,8 +495,8 @@ func BenchmarkGrouping(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	spec := &execinfrapb.AggregatorSpec{
@@ -504,7 +504,7 @@ func BenchmarkGrouping(b *testing.B) {
 	}
 	post := &execinfrapb.PostProcessSpec{}
 	disposer := &rowDisposer{}
-	input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
+	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 	b.SetBytes(int64(8 * numRows * numCols))
 	b.ResetTimer()
@@ -543,8 +543,8 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
@@ -562,7 +562,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 			spec.OrderedGroupCols = allOrderedGroupCols[:numOrderedCols]
 			post := &execinfrapb.PostProcessSpec{}
 			disposer := &rowDisposer{}
-			input := distsql.NewRepeatableRowSource(sqlbase.ThreeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
+			input := execinfra.NewRepeatableRowSource(sqlbase.ThreeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
 
 			b.SetBytes(int64(8 * intPow(groupSize, len(groupedCols)+1) * numCols))
 			b.ResetTimer()

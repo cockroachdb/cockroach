@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,9 +33,9 @@ import (
 )
 
 type changeAggregator struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
-	flowCtx *distsql.FlowCtx
+	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeAggregatorSpec
 	memAcc  mon.BoundAccount
 
@@ -68,17 +68,17 @@ type changeAggregator struct {
 	resolvedSpanBuf encDatumRowBuffer
 }
 
-var _ distsql.Processor = &changeAggregator{}
-var _ distsql.RowSource = &changeAggregator{}
+var _ execinfra.Processor = &changeAggregator{}
+var _ execinfra.RowSource = &changeAggregator{}
 
 func newChangeAggregatorProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ChangeAggregatorSpec,
-	output distsql.RowReceiver,
-) (distsql.Processor, error) {
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
 	ca := &changeAggregator{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -92,7 +92,7 @@ func newChangeAggregatorProcessor(
 		processorID,
 		output,
 		memMonitor,
-		distsql.ProcStateOpts{
+		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				ca.close()
 				return nil
@@ -238,7 +238,7 @@ func (ca *changeAggregator) close() {
 
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for ca.State == distsql.StateRunning {
+	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
 			return ca.changedRowBuf.Pop(), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
@@ -303,15 +303,15 @@ const (
 )
 
 type changeFrontier struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
-	flowCtx *distsql.FlowCtx
+	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeFrontierSpec
 	memAcc  mon.BoundAccount
 	a       sqlbase.DatumAlloc
 
 	// input returns rows from one or more changeAggregator processors
-	input distsql.RowSource
+	input execinfra.RowSource
 
 	// sf contains the current resolved timestamp high-water for the tracked
 	// span set.
@@ -350,18 +350,18 @@ type changeFrontier struct {
 	metricsID int
 }
 
-var _ distsql.Processor = &changeFrontier{}
-var _ distsql.RowSource = &changeFrontier{}
+var _ execinfra.Processor = &changeFrontier{}
+var _ execinfra.RowSource = &changeFrontier{}
 
 func newChangeFrontierProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ChangeFrontierSpec,
-	input distsql.RowSource,
-	output distsql.RowReceiver,
-) (distsql.Processor, error) {
+	input execinfra.RowSource,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
 	cf := &changeFrontier{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -376,12 +376,12 @@ func newChangeFrontierProcessor(
 		processorID,
 		output,
 		memMonitor,
-		distsql.ProcStateOpts{
+		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				cf.close()
 				return nil
 			},
-			InputsToDrain: []distsql.RowSource{cf.input},
+			InputsToDrain: []execinfra.RowSource{cf.input},
 		},
 	); err != nil {
 		return nil, err
@@ -502,7 +502,7 @@ func (cf *changeFrontier) closeMetrics() {
 
 // Next is part of the RowSource interface.
 func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for cf.State == distsql.StateRunning {
+	for cf.State == execinfra.StateRunning {
 		if !cf.passthroughBuf.IsEmpty() {
 			return cf.passthroughBuf.Pop(), nil
 		} else if !cf.resolvedBuf.IsEmpty() {

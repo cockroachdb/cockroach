@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -396,9 +396,9 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
-			flowCtx := distsql.FlowCtx{
+			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
 				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID: s.NodeID(),
@@ -526,9 +526,9 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
-			flowCtx := distsql.FlowCtx{
+			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
 				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID: s.NodeID(),
@@ -584,9 +584,9 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	}
 	defer sp.Finish()
 
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 		// Run in a LeafTxn so that txn metadata is produced.
 		Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 		NodeID: s.NodeID(),

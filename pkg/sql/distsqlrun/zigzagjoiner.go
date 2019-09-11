@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -220,7 +220,7 @@ import (
 // - Implicit columns (a)
 // - Index columns: (d, b, a)
 type zigzagJoiner struct {
-	distsql.JoinerBase
+	execinfra.JoinerBase
 
 	evalCtx       *tree.EvalContext
 	cancelChecker *sqlbase.CancelChecker
@@ -255,8 +255,8 @@ type zigzagJoiner struct {
 // too many rows and therefore skipping less rows.
 const zigzagJoinerBatchSize = 5
 
-var _ distsql.Processor = &zigzagJoiner{}
-var _ distsql.RowSource = &zigzagJoiner{}
+var _ execinfra.Processor = &zigzagJoiner{}
+var _ execinfra.RowSource = &zigzagJoiner{}
 var _ execinfrapb.MetadataSource = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
@@ -264,12 +264,12 @@ const zigzagJoinerProcName = "zigzagJoiner"
 // newZigzagJoiner creates a new zigzag joiner given a spec and an EncDatumRow
 // holding the values of the prefix columns of the index specified in the spec.
 func newZigzagJoiner(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.ZigzagJoinerSpec,
 	fixedValues []sqlbase.EncDatumRow,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
 	z := &zigzagJoiner{}
 
@@ -290,7 +290,7 @@ func newZigzagJoiner(
 		0, /* numMerged */
 		post,
 		output,
-		distsql.ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
+		execinfra.ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
 	)
 	if err != nil {
 		return nil, err
@@ -434,7 +434,7 @@ func (z *zigzagJoiner) setupInfo(
 	info.container.Reset()
 
 	// Setup the Fetcher.
-	_, _, err := distsql.InitRowFetcher(
+	_, _, err := execinfra.InitRowFetcher(
 		&(info.fetcher),
 		info.table,
 		int(info.index.ID)-1,
@@ -475,7 +475,7 @@ func (z *zigzagJoiner) producerMeta(err error) *execinfrapb.ProducerMetadata {
 	if !z.Closed {
 		if err != nil {
 			meta = &execinfrapb.ProducerMetadata{Err: err}
-		} else if trace := distsql.GetTraceData(z.Ctx); trace != nil {
+		} else if trace := execinfra.GetTraceData(z.Ctx); trace != nil {
 			meta = &execinfrapb.ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
@@ -698,7 +698,7 @@ func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
 		rightRow := z.infos[right].container.Peek()
 
 		// TODO(pbardea): Extend this logic to support multi-way joins.
-		if left == int(distsql.RightSide) {
+		if left == int(execinfra.RightSide) {
 			leftRow, rightRow = rightRow, leftRow
 		}
 		renderedRow, err := z.Render(leftRow, rightRow)

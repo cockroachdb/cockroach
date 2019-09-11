@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,7 +39,7 @@ const (
 type tableInfo struct {
 	tableID  sqlbase.ID
 	indexID  sqlbase.IndexID
-	post     distsql.ProcOutputHelper
+	post     execinfra.ProcOutputHelper
 	ordering sqlbase.ColumnOrdering
 }
 
@@ -48,7 +48,7 @@ type tableInfo struct {
 // filters the rows, performs a merge join with equality constraints.
 // See docs/RFCS/20171025_interleaved_table_joins.md
 type interleavedReaderJoiner struct {
-	distsql.JoinerBase
+	execinfra.JoinerBase
 
 	// runningState represents the state of the processor. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
@@ -72,8 +72,8 @@ type interleavedReaderJoiner struct {
 	// These are required for OUTER joins where the ancestor need to be
 	// emitted regardless.
 	ancestorJoined     bool
-	ancestorJoinSide   distsql.JoinSide
-	descendantJoinSide distsql.JoinSide
+	ancestorJoinSide   execinfra.JoinSide
+	descendantJoinSide execinfra.JoinSide
 	unmatchedChild     sqlbase.EncDatumRow
 	// ancestorTablePos is the corresponding index of the ancestor table in
 	// tables.
@@ -99,7 +99,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.Pr
 	// state phase that outputs either 1 or 0 rows on every call, or a special
 	// unmatched child phase that outputs a child row that doesn't match the last
 	// seen ancestor if the join type calls for it.
-	for irj.State == distsql.StateRunning {
+	for irj.State == execinfra.StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch irj.runningState {
@@ -253,7 +253,7 @@ func (irj *interleavedReaderJoiner) nextRow() (
 	newState := irjReading
 	// Set the unmatched child if necessary (we'll pick it up again after we emit
 	// the ancestor).
-	if distsql.ShouldEmitUnmatchedRow(irj.descendantJoinSide, irj.JoinType) {
+	if execinfra.ShouldEmitUnmatchedRow(irj.descendantJoinSide, irj.JoinType) {
 		irj.unmatchedChild = row
 		newState = irjUnmatchedChild
 	}
@@ -266,16 +266,16 @@ func (irj *interleavedReaderJoiner) ConsumerClosed() {
 	irj.InternalClose()
 }
 
-var _ distsql.Processor = &interleavedReaderJoiner{}
+var _ execinfra.Processor = &interleavedReaderJoiner{}
 var _ execinfrapb.MetadataSource = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.InterleavedReaderJoinerSpec,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*interleavedReaderJoiner, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.AssertionFailedf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
@@ -343,11 +343,11 @@ func newInterleavedReaderJoiner(
 
 	allSpans, _ = roachpb.MergeSpans(allSpans)
 
-	ancestorJoinSide := distsql.LeftSide
-	descendantJoinSide := distsql.RightSide
+	ancestorJoinSide := execinfra.LeftSide
+	descendantJoinSide := execinfra.RightSide
 	if ancestorTablePos == 1 {
-		ancestorJoinSide = distsql.RightSide
-		descendantJoinSide = distsql.LeftSide
+		ancestorJoinSide = execinfra.RightSide
+		descendantJoinSide = execinfra.LeftSide
 	}
 
 	irj := &interleavedReaderJoiner{
@@ -364,7 +364,7 @@ func newInterleavedReaderJoiner(
 		return nil, err
 	}
 
-	irj.limitHint = distsql.LimitHint(spec.LimitHint, post)
+	irj.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	// TODO(richardwu): Generalize this to 2+ tables.
 	if err := irj.JoinerBase.Init(
@@ -380,8 +380,8 @@ func newInterleavedReaderJoiner(
 		0,   /*numMergedColumns*/
 		post,
 		output,
-		distsql.ProcStateOpts{
-			InputsToDrain:        []distsql.RowSource{},
+		execinfra.ProcStateOpts{
+			InputsToDrain:        []execinfra.RowSource{},
 			TrailingMetaCallback: irj.generateTrailingMeta,
 		},
 	); err != nil {
@@ -435,11 +435,11 @@ func (irj *interleavedReaderJoiner) generateMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
-	ranges := distsql.MisplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.FlowCtx.NodeID)
+	ranges := execinfra.MisplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.FlowCtx.NodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 	}
-	if meta := distsql.GetTxnCoordMeta(ctx, irj.FlowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, irj.FlowCtx.Txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
@@ -456,7 +456,7 @@ func (irj *interleavedReaderJoiner) maybeUnmatchedAncestor() sqlbase.EncDatumRow
 	// We first try to emit the previous ancestor row if it
 	// was never joined with a child row.
 	if irj.ancestorRow != nil && !irj.ancestorJoined {
-		if !distsql.ShouldEmitUnmatchedRow(irj.ancestorJoinSide, irj.JoinType) {
+		if !execinfra.ShouldEmitUnmatchedRow(irj.ancestorJoinSide, irj.JoinType) {
 			return nil
 		}
 

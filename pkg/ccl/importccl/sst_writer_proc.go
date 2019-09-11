@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,12 +48,12 @@ var sstOutputTypes = []types.T{
 }
 
 func newSSTWriterProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.SSTWriterSpec,
-	input distsql.RowSource,
-	output distsql.RowReceiver,
-) (distsql.Processor, error) {
+	input execinfra.RowSource,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	sp := &sstWriter{
 		flowCtx:     flowCtx,
 		processorID: processorID,
@@ -77,12 +77,12 @@ func newSSTWriterProcessor(
 }
 
 type sstWriter struct {
-	flowCtx     *distsql.FlowCtx
+	flowCtx     *execinfra.FlowCtx
 	processorID int32
 	spec        execinfrapb.SSTWriterSpec
-	input       distsql.RowSource
-	out         distsql.ProcOutputHelper
-	output      distsql.RowReceiver
+	input       execinfra.RowSource
+	out         execinfra.ProcOutputHelper
+	output      execinfra.RowReceiver
 	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
@@ -90,7 +90,7 @@ type sstWriter struct {
 	db          *client.DB
 }
 
-var _ distsql.Processor = &sstWriter{}
+var _ execinfra.Processor = &sstWriter{}
 
 func (sp *sstWriter) OutputTypes() []types.T {
 	return sstOutputTypes
@@ -112,7 +112,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
 		typs := sp.input.OutputTypes()
-		input := distsql.MakeNoMetadataRowSource(sp.input, sp.output)
+		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := sp.tempStorage.NewSortedDiskMultiMap()
 		defer store.Close(ctx)
@@ -257,7 +257,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 					if err != nil {
 						return err
 					}
-					if cs != distsql.NeedMoreRows {
+					if cs != execinfra.NeedMoreRows {
 						return errors.New("unexpected closure of consumer")
 					}
 				}
@@ -321,7 +321,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 		}
 		return nil
 	}()
-	distsql.DrainAndClose(
+	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }
 

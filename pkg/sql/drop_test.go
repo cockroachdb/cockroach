@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -505,7 +505,7 @@ func TestDropIndex(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 			AsyncExecQuickly:  true,
 		},
-		DistSQL: &distsql.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if clearIndexAttempt && (sp.Key != nil || sp.EndKey != nil) {
 					emptySpan = false

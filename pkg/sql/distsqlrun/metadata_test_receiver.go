@@ -14,15 +14,15 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 type metadataTestReceiver struct {
-	distsql.ProcessorBase
-	input distsql.RowSource
+	execinfra.ProcessorBase
+	input execinfra.RowSource
 
 	// trailingErrMeta stores the error metadata received from the input. We
 	// do not return this metadata immediately because metadata propagation errors
@@ -40,17 +40,17 @@ type rowNumCounter struct {
 	err              error
 }
 
-var _ distsql.Processor = &metadataTestReceiver{}
-var _ distsql.RowSource = &metadataTestReceiver{}
+var _ execinfra.Processor = &metadataTestReceiver{}
+var _ execinfra.RowSource = &metadataTestReceiver{}
 
 const metadataTestReceiverProcName = "meta receiver"
 
 func newMetadataTestReceiver(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 	senders []string,
 ) (*metadataTestReceiver, error) {
 	mtr := &metadataTestReceiver{
@@ -66,8 +66,8 @@ func newMetadataTestReceiver(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		distsql.ProcStateOpts{
-			InputsToDrain: []distsql.RowSource{input},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				var trailingMeta []execinfrapb.ProducerMetadata
 				if mtr.rowCounts != nil {
@@ -148,14 +148,14 @@ func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
 // inspect metadata while draining.
 func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for {
-		if mtr.State == distsql.StateTrailingMeta {
+		if mtr.State == execinfra.StateTrailingMeta {
 			if meta := mtr.PopTrailingMeta(); meta != nil {
 				return nil, meta
 			}
 			// If there's no more trailingMeta, we've moved to stateExhausted, and we
 			// might return some trailingErrMeta below.
 		}
-		if mtr.State == distsql.StateExhausted {
+		if mtr.State == execinfra.StateExhausted {
 			if len(mtr.trailingErrMeta) > 0 {
 				meta := mtr.trailingErrMeta[0]
 				mtr.trailingErrMeta = mtr.trailingErrMeta[1:]
@@ -222,7 +222,7 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.Produ
 		}
 
 		// Swallow rows if we're draining.
-		if mtr.State == distsql.StateDraining {
+		if mtr.State == execinfra.StateDraining {
 			continue
 		}
 

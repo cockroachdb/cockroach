@@ -31,12 +31,12 @@ import (
 //
 // func resolveSpans(
 //   ctx context.Context,
-//   it *distsql.SpanResolverIterator,
+//   it *execinfra.SpanResolverIterator,
 //   spans ...spanWithDir,
 // ) ([][]kv.ReplicaInfo, error) {
-//   lr := distsql.NewSpanResolver(
+//   lr := execinfra.NewSpanResolver(
 //     distSender, gossip, nodeDescriptor,
-//     distsql.BinPackingLeaseHolderChoice)
+//     execinfra.BinPackingLeaseHolderChoice)
 //   it := lr.NewSpanResolverIterator(nil)
 //   res := make([][]kv.ReplicaInfo, 0)
 //   for _, span := range spans {

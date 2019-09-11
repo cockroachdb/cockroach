@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -106,7 +106,7 @@ func TestOrderedSync(t *testing.T) {
 		},
 	}
 	for testIdx, c := range testCases {
-		var sources []distsql.RowSource
+		var sources []execinfra.RowSource
 		for _, srcRows := range c.sources {
 			rowBuf := newRowBuffer(sqlbase.ThreeIntCols, srcRows, rowBufferArgs{})
 			sources = append(sources, rowBuf)
@@ -143,7 +143,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 
 	expectedMeta := &execinfrapb.ProducerMetadata{Err: errors.New("expected metadata")}
 
-	var sources []distsql.RowSource
+	var sources []execinfra.RowSource
 	for i := 0; i < 4; i++ {
 		rowBuf := newRowBuffer(sqlbase.OneIntCol, nil /* rows */, rowBufferArgs{})
 		sources = append(sources, rowBuf)
@@ -183,7 +183,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 func TestUnorderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mrc := &distsql.RowChannel{}
+	mrc := &execinfra.RowChannel{}
 	mrc.InitWithNumSenders([]types.T{*types.Int}, 5)
 	producerErr := make(chan error, 100)
 	for i := 1; i <= 5; i++ {
@@ -192,7 +192,7 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 				b := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				if status := mrc.Push(row, nil /* meta */); status != distsql.NeedMoreRows {
+				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}
 			}
@@ -232,7 +232,7 @@ func TestUnorderedSync(t *testing.T) {
 	}
 
 	// Test case when one source closes with an error.
-	mrc = &distsql.RowChannel{}
+	mrc = &execinfra.RowChannel{}
 	mrc.InitWithNumSenders([]types.T{*types.Int}, 5)
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
@@ -240,7 +240,7 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 				b := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				if status := mrc.Push(row, nil /* meta */); status != distsql.NeedMoreRows {
+				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}
 			}

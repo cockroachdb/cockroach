@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -85,7 +85,7 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
-	distsql.ServerConfig
+	execinfra.ServerConfig
 	flowRegistry  *flowRegistry
 	flowScheduler *flowScheduler
 	memMonitor    mon.BytesMonitor
@@ -95,7 +95,7 @@ type ServerImpl struct {
 var _ execinfrapb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx context.Context, cfg distsql.ServerConfig) *ServerImpl {
+func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
@@ -199,7 +199,7 @@ func (ds *ServerImpl) setupFlow(
 	parentSpan opentracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	syncFlowConsumer distsql.RowReceiver,
+	syncFlowConsumer execinfra.RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
 	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
@@ -346,7 +346,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}
 	// TODO(radu): we should sanity check some of these fields.
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
 		ID:             req.Flow.FlowID,
@@ -384,7 +384,7 @@ func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (context.Context, *Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
 }
@@ -403,7 +403,7 @@ type LocalState struct {
 
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
-	LocalProcs []distsql.LocalProcessor
+	LocalProcs []execinfra.LocalProcessor
 	Txn        *client.Txn
 }
 
@@ -414,7 +414,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 	localState LocalState,
 ) (context.Context, *Flow, error) {
 	return ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState)

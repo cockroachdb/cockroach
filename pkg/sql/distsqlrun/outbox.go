@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -49,9 +49,9 @@ type flowStream interface {
 // first).
 type outbox struct {
 	// RowChannel implements the RowReceiver interface.
-	distsql.RowChannel
+	execinfra.RowChannel
 
-	flowCtx  *distsql.FlowCtx
+	flowCtx  *execinfra.FlowCtx
 	streamID execinfrapb.StreamID
 	nodeID   roachpb.NodeID
 	// The rows received from the RowChannel will be forwarded on this stream once
@@ -74,11 +74,11 @@ type outbox struct {
 	stats                  OutboxStats
 }
 
-var _ distsql.RowReceiver = &outbox{}
+var _ execinfra.RowReceiver = &outbox{}
 var _ startable = &outbox{}
 
 func newOutbox(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	nodeID roachpb.NodeID,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
@@ -96,7 +96,7 @@ func newOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *outb
 	return &outbox{stream: stream}
 }
 
-func (m *outbox) setFlowCtx(flowCtx *distsql.FlowCtx) {
+func (m *outbox) setFlowCtx(flowCtx *execinfra.FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
@@ -204,7 +204,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	defer m.RowChannel.ConsumerClosed()
 
 	var span opentracing.Span
-	ctx, span = distsql.ProcessorSpan(ctx, "outbox")
+	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
@@ -295,7 +295,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					tracing.SetSpanStats(span, &m.stats)
 					tracing.FinishSpan(span)
 					spanFinished = true
-					if trace := distsql.GetTraceData(ctx); trace != nil {
+					if trace := execinfra.GetTraceData(ctx); trace != nil {
 						err := m.addRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err

@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,29 +48,29 @@ func verifyColOperator(
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
+	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &distsql.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: diskMonitor,
 		},
 	}
 
-	inputsProc := make([]distsql.RowSource, len(inputs))
-	inputsColOp := make([]distsql.RowSource, len(inputs))
+	inputsProc := make([]execinfra.RowSource, len(inputs))
+	inputsColOp := make([]execinfra.RowSource, len(inputs))
 	for i, input := range inputs {
-		inputsProc[i] = distsql.NewRepeatableRowSource(inputTypes[i], input)
-		inputsColOp[i] = distsql.NewRepeatableRowSource(inputTypes[i], input)
+		inputsProc[i] = execinfra.NewRepeatableRowSource(inputTypes[i], input)
+		inputsColOp[i] = execinfra.NewRepeatableRowSource(inputTypes[i], input)
 	}
 
-	proc, err := newProcessor(ctx, flowCtx, 0, &pspec.Core, &pspec.Post, inputsProc, []distsql.RowReceiver{nil}, nil)
+	proc, err := newProcessor(ctx, flowCtx, 0, &pspec.Core, &pspec.Post, inputsProc, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		return err
 	}
-	outProc, ok := proc.(distsql.RowSource)
+	outProc, ok := proc.(execinfra.RowSource)
 	if !ok {
 		return errors.New("processor is unexpectedly not a RowSource")
 	}
@@ -89,7 +89,7 @@ func verifyColOperator(
 		return err
 	}
 
-	outColOp, err := distsql.NewMaterializer(
+	outColOp, err := execinfra.NewMaterializer(
 		flowCtx,
 		int32(len(inputs))+2,
 		result.Op,

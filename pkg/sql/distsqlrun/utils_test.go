@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -88,24 +88,24 @@ func runProcessorTest(
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	flowCtx := distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 		Txn:     txn,
 	}
 
 	p, err := newProcessor(
 		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
-		[]distsql.RowSource{in}, []distsql.RowReceiver{out}, []distsql.LocalProcessor{})
+		[]execinfra.RowSource{in}, []execinfra.RowReceiver{out}, []execinfra.LocalProcessor{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	switch pt := p.(type) {
-	case *distsql.JoinReader:
+	case *execinfra.JoinReader:
 		// Reduce batch size to exercise batching logic.
 		pt.SetBatchSize(2 /* batchSize */)
-	case *distsql.IndexJoiner:
+	case *execinfra.IndexJoiner:
 		//	Reduce batch size to exercise batching logic.
 		pt.SetBatchSize(2 /* batchSize */)
 	}
@@ -140,13 +140,13 @@ func (s *sorterBase) getRows() *rowcontainer.DiskBackedRowContainer {
 // rowDisposer is a distsql.RowReceiver that discards any rows Push()ed.
 type rowDisposer struct{}
 
-var _ distsql.RowReceiver = &rowDisposer{}
+var _ execinfra.RowReceiver = &rowDisposer{}
 
 // Push is part of the distsql.RowReceiver interface.
 func (r *rowDisposer) Push(
 	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
-) distsql.ConsumerStatus {
-	return distsql.NeedMoreRows
+) execinfra.ConsumerStatus {
+	return execinfra.NeedMoreRows
 }
 
 // ProducerDone is part of the RowReceiver interface.

@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -498,9 +498,9 @@ func TestZigzagJoiner(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
-			flowCtx := distsql.FlowCtx{
+			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &distsql.ServerConfig{Settings: st},
+				Cfg:     &execinfra.ServerConfig{Settings: st},
 				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			}
 
@@ -561,9 +561,9 @@ func TestZigzagJoinerDrain(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 		Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 

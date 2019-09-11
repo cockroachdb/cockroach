@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
@@ -79,7 +79,7 @@ type DistSQLPlanner struct {
 
 	// metadataTestTolerance is the minimum level required to plan metadata test
 	// processors.
-	metadataTestTolerance distsql.MetadataTestLevel
+	metadataTestTolerance execinfra.MetadataTestLevel
 
 	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
 	// pool of workers.
@@ -168,7 +168,7 @@ func NewDistSQLPlanner(
 		},
 		distSender:            distSender,
 		rpcCtx:                rpcCtx,
-		metadataTestTolerance: distsql.NoExplain,
+		metadataTestTolerance: execinfra.NoExplain,
 	}
 	dsp.nodeHealth.isLive = liveness.IsLive
 

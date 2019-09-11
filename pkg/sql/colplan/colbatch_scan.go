@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,7 +40,7 @@ import (
 type colBatchScan struct {
 	colexec.ZeroInputNode
 	spans     roachpb.Spans
-	flowCtx   *distsql.FlowCtx
+	flowCtx   *execinfra.FlowCtx
 	rf        *row.CFetcher
 	limitHint int64
 	ctx       context.Context
@@ -61,7 +61,7 @@ func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
 	s.init = true
 
-	limitBatches := distsql.ScanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
+	limitBatches := execinfra.ScanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
 
 	if err := s.rf.StartScan(
 		s.ctx, s.flowCtx.Txn, s.spans,
@@ -90,12 +90,12 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	}
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if !s.flowCtx.Local {
-		ranges := distsql.MisplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
+		ranges := execinfra.MisplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := distsql.GetTxnCoordMeta(ctx, s.flowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, s.flowCtx.Txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
@@ -103,17 +103,17 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // newColBatchScan creates a new colBatchScan operator.
 func newColBatchScan(
-	flowCtx *distsql.FlowCtx, spec *execinfrapb.TableReaderSpec, post *execinfrapb.PostProcessSpec,
+	flowCtx *execinfra.FlowCtx, spec *execinfrapb.TableReaderSpec, post *execinfrapb.PostProcessSpec,
 ) (*colBatchScan, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
 	}
 
-	limitHint := distsql.LimitHint(spec.LimitHint, post)
+	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
 	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	typs := spec.Table.ColumnTypesWithMutations(returnMutations)
-	helper := distsql.ProcOutputHelper{}
+	helper := execinfra.ProcOutputHelper{}
 	if err := helper.Init(
 		post,
 		typs,

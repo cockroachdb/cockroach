@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -30,10 +30,10 @@ import (
 // reading the input in chunks of size coldata.BatchSize and converting each
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 	colexec.NonExplainable
 
-	input distsql.RowSource
+	input execinfra.RowSource
 	da    sqlbase.DatumAlloc
 
 	buffered        sqlbase.EncDatumRows
@@ -47,7 +47,7 @@ var _ colexec.StaticMemoryOperator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
-	ctx context.Context, flowCtx *distsql.FlowCtx, processorID int32, input distsql.RowSource,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, input execinfra.RowSource,
 ) (*Columnarizer, error) {
 	var err error
 	c := &Columnarizer{
@@ -62,7 +62,7 @@ func NewColumnarizer(
 		processorID,
 		nil, /* output */
 		nil, /* memMonitor */
-		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{input}},
+		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{input}},
 	); err != nil {
 		return nil, err
 	}

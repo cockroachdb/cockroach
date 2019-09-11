@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,7 +50,7 @@ type RowBuffer struct {
 	// when the receiver read all the rows.
 	Done bool
 
-	ConsumerStatus distsql.ConsumerStatus
+	ConsumerStatus execinfra.ConsumerStatus
 
 	// Schema of the rows in this buffer.
 	types []types.T
@@ -58,8 +58,8 @@ type RowBuffer struct {
 	args rowBufferArgs
 }
 
-var _ distsql.RowReceiver = &RowBuffer{}
-var _ distsql.RowSource = &RowBuffer{}
+var _ execinfra.RowReceiver = &RowBuffer{}
+var _ execinfra.RowSource = &RowBuffer{}
 
 // rowBufferArgs contains testing-oriented parameters for a RowBuffer.
 type rowBufferArgs struct {
@@ -99,7 +99,7 @@ func newRowBuffer(types []types.T, rows sqlbase.EncDatumRows, hooks rowBufferArg
 // Push is part of the RowReceiver interface.
 func (rb *RowBuffer) Push(
 	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
-) distsql.ConsumerStatus {
+) execinfra.ConsumerStatus {
 	if rb.args.OnPush != nil {
 		rb.args.OnPush(row, meta)
 	}
@@ -113,18 +113,18 @@ func (rb *RowBuffer) Push(
 		rowCopy := append(sqlbase.EncDatumRow(nil), row...)
 		rb.mu.records = append(rb.mu.records, bufferedRecord{row: rowCopy, meta: meta})
 	}
-	status := distsql.ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
+	status := execinfra.ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
 	if rb.args.AccumulateRowsWhileDraining {
 		storeRow()
 	} else {
 		switch status {
-		case distsql.NeedMoreRows:
+		case execinfra.NeedMoreRows:
 			storeRow()
-		case distsql.DrainRequested:
+		case execinfra.DrainRequested:
 			if meta != nil {
 				storeRow()
 			}
-		case distsql.ConsumerClosed:
+		case execinfra.ConsumerClosed:
 		}
 	}
 	return status
@@ -188,7 +188,7 @@ func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata)
 // ConsumerDone is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerDone() {
 	if atomic.CompareAndSwapUint32((*uint32)(&rb.ConsumerStatus),
-		uint32(distsql.NeedMoreRows), uint32(distsql.DrainRequested)) {
+		uint32(execinfra.NeedMoreRows), uint32(execinfra.DrainRequested)) {
 		if rb.args.OnConsumerDone != nil {
 			rb.args.OnConsumerDone(rb)
 		}
@@ -197,11 +197,11 @@ func (rb *RowBuffer) ConsumerDone() {
 
 // ConsumerClosed is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerClosed() {
-	status := distsql.ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
-	if status == distsql.ConsumerClosed {
+	status := execinfra.ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
+	if status == execinfra.ConsumerClosed {
 		log.Fatalf(context.Background(), "RowBuffer already closed")
 	}
-	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(distsql.ConsumerClosed))
+	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(execinfra.ConsumerClosed))
 	if rb.args.OnConsumerClosed != nil {
 		rb.args.OnConsumerClosed(rb)
 	}

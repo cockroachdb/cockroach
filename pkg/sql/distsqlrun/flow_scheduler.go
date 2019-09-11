@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -39,7 +39,7 @@ type flowScheduler struct {
 	log.AmbientContext
 	stopper    *stop.Stopper
 	flowDoneCh chan *Flow
-	metrics    *distsql.Metrics
+	metrics    *execinfra.Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -62,7 +62,7 @@ func newFlowScheduler(
 	ambient log.AmbientContext,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
-	metrics *distsql.Metrics,
+	metrics *execinfra.Metrics,
 ) *flowScheduler {
 	fs := &flowScheduler{
 		AmbientContext: ambient,

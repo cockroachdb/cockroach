@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -44,9 +44,9 @@ func TestSampleAggregator(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	runTest := func(memLimitBytes int64, expectOutOfMemory bool) {
-		flowCtx := distsql.FlowCtx{
+		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
-			Cfg: &distsql.ServerConfig{
+			Cfg: &execinfra.ServerConfig{
 				Settings: st,
 				DB:       kvDB,
 				Executor: server.InternalExecutor().(sqlutil.InternalExecutor),

@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -279,7 +279,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 					NodeID: 2, StoreID: 2, ReplicaID: 2}},
 			},
 		}})
-	if status != distsql.NeedMoreRows {
+	if status != execinfra.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
 	status = r.Push(nil /* row */, &execinfrapb.ProducerMetadata{
@@ -290,7 +290,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 					NodeID: 3, StoreID: 3, ReplicaID: 3}},
 			},
 		}})
-	if status != distsql.NeedMoreRows {
+	if status != execinfra.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
 
@@ -519,7 +519,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 		numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-			ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{DistSQL: &distsql.TestingKnobs{DrainFast: true}}, UseDatabase: "test"},
+			ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{DrainFast: true}}, UseDatabase: "test"},
 		},
 	)
 	ctx := context.TODO()

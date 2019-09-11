@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -266,7 +266,7 @@ func TestPostProcess(t *testing.T) {
 			inBuf := newRowBuffer(sqlbase.ThreeIntCols, input, rowBufferArgs{})
 			outBuf := &RowBuffer{}
 
-			var out distsql.ProcOutputHelper
+			var out execinfra.ProcOutputHelper
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			if err := out.Init(&tc.post, inBuf.OutputTypes(), evalCtx, outBuf); err != nil {
@@ -293,7 +293,7 @@ func TestPostProcess(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if status != distsql.NeedMoreRows {
+				if status != execinfra.NeedMoreRows {
 					out.Close()
 					break
 				}
@@ -412,13 +412,13 @@ func TestProcessorBaseContext(t *testing.T) {
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
 		evalCtx := tree.MakeTestingEvalContext(st)
-		flowCtx := &distsql.FlowCtx{
-			Cfg:     &distsql.ServerConfig{Settings: st},
+		flowCtx := &execinfra.FlowCtx{
+			Cfg:     &execinfra.ServerConfig{Settings: st},
 			EvalCtx: &evalCtx,
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 
-		input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(10, 1))
+		input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(10, 1))
 		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &rowDisposer{})
 		if err != nil {
 			t.Fatal(err)
@@ -489,7 +489,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// We're going to test by running a query that selects rows 1..10 with limit
-	// 5. Out of these, rows 1..5 are on node 2, 6..10 on node 1. We're going to
+	// 5. Out of these, rows 1..5 are on node 1, 6..10 on node 2. We're going to
 	// block the read on node 1 until the client gets the 5 rows from node 2. Then
 	// we're going to inject an uncertainty error in the blocked read. The point
 	// of the test is to check that the error is swallowed, because the processor

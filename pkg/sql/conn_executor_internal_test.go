@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -254,7 +254,7 @@ func startConnExecutor(
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := &base.NodeIDContainer{}
 	nodeID.Set(ctx, 1)
-	distSQLMetrics := distsql.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
 		Settings:        st,
@@ -268,7 +268,7 @@ func startConnExecutor(
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, distsqlrun.Version, st, roachpb.NodeDescriptor{NodeID: 1},
 			nil, /* rpcCtx */
-			distsqlrun.NewServer(ctx, distsql.ServerConfig{
+			distsqlrun.NewServer(ctx, execinfra.ServerConfig{
 				AmbientContext: testutils.MakeAmbientCtx(),
 				Settings:       st,
 				Stopper:        stopper,

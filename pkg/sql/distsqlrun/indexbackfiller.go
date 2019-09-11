@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -39,7 +39,7 @@ type indexBackfiller struct {
 	desc *sqlbase.ImmutableTableDescriptor
 }
 
-var _ distsql.Processor = &indexBackfiller{}
+var _ execinfra.Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
 
 var backfillerBufferSize = settings.RegisterByteSizeSetting(
@@ -59,11 +59,11 @@ var backillerSSTSize = settings.RegisterByteSizeSetting(
 )
 
 func newIndexBackfiller(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
 		desc: sqlbase.NewImmutableTableDescriptor(spec.Table),

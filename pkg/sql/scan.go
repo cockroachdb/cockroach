@@ -16,8 +16,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -228,7 +228,7 @@ func (n *scanNode) canParallelize() bool {
 	// We can't parallelize if we have a non-zero limit hint, since DistSender
 	// is limited to running limited batches serially.
 	return n.maxResults != 0 &&
-		n.maxResults < distsql.ParallelScanResultThreshold &&
+		n.maxResults < execinfra.ParallelScanResultThreshold &&
 		n.limitHint() == 0 &&
 		n.parallelScansEnabled
 }

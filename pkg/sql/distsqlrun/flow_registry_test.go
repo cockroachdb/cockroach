@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -588,7 +588,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 
 	fr := makeFlowRegistry(0)
 	wg := sync.WaitGroup{}
-	rc := &distsql.RowChannel{}
+	rc := &execinfra.RowChannel{}
 	rc.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[execinfrapb.StreamID]*inboundStreamInfo{
 		0: {
@@ -672,9 +672,9 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	ctx := context.Background()
 	fr := makeFlowRegistry(0)
-	left := &distsql.RowChannel{}
+	left := &execinfra.RowChannel{}
 	left.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
-	right := &distsql.RowChannel{}
+	right := &execinfra.RowChannel{}
 	right.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
 
 	wgLeft := sync.WaitGroup{}
@@ -697,7 +697,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	// RegisterFlow with an immediate timeout.
 	flow := &Flow{
-		FlowCtx: distsql.FlowCtx{
+		FlowCtx: execinfra.FlowCtx{
 			ID: execinfrapb.FlowID{UUID: uuid.FastMakeV4()},
 		},
 		inboundStreams: inboundStreams,

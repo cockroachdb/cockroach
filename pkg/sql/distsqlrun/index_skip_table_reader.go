@@ -15,8 +15,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -29,7 +29,7 @@ import (
 // of the index is distinct. It uses the index to seek to distinct values
 // of the prefix instead of doing a full table scan.
 type indexSkipTableReader struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
 	spans roachpb.Spans
 
@@ -60,16 +60,16 @@ var istrPool = sync.Pool{
 	},
 }
 
-var _ distsql.Processor = &indexSkipTableReader{}
-var _ distsql.RowSource = &indexSkipTableReader{}
+var _ execinfra.Processor = &indexSkipTableReader{}
+var _ execinfra.RowSource = &indexSkipTableReader{}
 var _ execinfrapb.MetadataSource = &indexSkipTableReader{}
 
 func newIndexSkipTableReader(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.IndexSkipTableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*indexSkipTableReader, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
@@ -90,7 +90,7 @@ func newIndexSkipTableReader(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		distsql.ProcStateOpts{
+		execinfra.ProcStateOpts{
 			InputsToDrain:        nil,
 			TrailingMetaCallback: t.generateTrailingMeta,
 		},
@@ -157,7 +157,7 @@ func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
 }
 
 func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for t.State == distsql.StateRunning {
+	for t.State == execinfra.StateRunning {
 		if t.currentSpan >= len(t.spans) {
 			t.MoveToDraining(nil)
 			return nil, t.DrainHelper()
@@ -176,7 +176,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 		// Range info resets once a scan begins, so we need to maintain
 		// the range info we get after each scan.
 		if !t.ignoreMisplannedRanges {
-			ranges := distsql.MisplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.FlowCtx.NodeID)
+			ranges := execinfra.MisplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.FlowCtx.NodeID)
 			for _, r := range ranges {
 				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
 			}
@@ -260,7 +260,7 @@ func (t *indexSkipTableReader) generateMeta(ctx context.Context) []execinfrapb.P
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
-	if meta := distsql.GetTxnCoordMeta(ctx, t.FlowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, t.FlowCtx.Txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta

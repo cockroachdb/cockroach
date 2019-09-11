@@ -93,11 +93,10 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 }
 
 const (
-	execPackagePrefix  = "github.com/cockroachdb/cockroach/pkg/sql/exec"
-	colPrefix          = "github.com/cockroachdb/cockroach/pkg/col"
-	colBatchScanPrefix = "github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*colBatchScan)"
-	cFetcherPrefix     = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
-	columnarizerPrefix = "github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*columnarizer)"
+	colPackagePrefix     = "github.com/cockroachdb/cockroach/pkg/col"
+	colexecPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	colplanPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colplan"
+	cFetcherPrefix       = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
 )
 
 // isPanicFromVectorizedEngine checks whether the panic that was emitted from
@@ -105,11 +104,10 @@ const (
 // file name and the line number) came from the vectorized engine.
 // panicEmittedFrom must be trimmed to not have any white spaces in the prefix.
 func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
-	return strings.HasPrefix(panicEmittedFrom, execPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, colPrefix) ||
-		strings.HasPrefix(panicEmittedFrom, colBatchScanPrefix) ||
-		strings.HasPrefix(panicEmittedFrom, cFetcherPrefix) ||
-		strings.HasPrefix(panicEmittedFrom, columnarizerPrefix)
+	return strings.HasPrefix(panicEmittedFrom, colPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, colexecPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, colplanPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, cFetcherPrefix)
 }
 
 // StorageError is an error that was created by a component below the sql

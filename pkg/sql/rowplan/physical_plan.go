@@ -19,8 +19,8 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -73,7 +73,7 @@ type PhysicalPlan struct {
 	// installed in this physical plan to wrap any planNodes that couldn't be
 	// properly translated into DistSQL processors. This will be empty if no
 	// wrapping had to happen.
-	LocalProcessors []distsql.LocalProcessor
+	LocalProcessors []execinfra.LocalProcessor
 
 	// LocalProcessorIndexes contains pointers to all of the RowSourceIdx fields
 	// of the  LocalPlanNodeSpecs that were created. This list is in the same

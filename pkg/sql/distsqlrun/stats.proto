@@ -13,7 +13,7 @@ package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
 import "gogoproto/gogo.proto";
-import "sql/distsql/stats.proto";
+import "sql/execinfra/stats.proto";
 
 // TableReaderStats are the stats collected during a tableReader run.
 message TableReaderStats {

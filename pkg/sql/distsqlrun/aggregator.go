@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,13 +46,13 @@ func (af aggregateFuncs) close(ctx context.Context) {
 // aggregatorBase's output schema is comprised of what is specified by the
 // accompanying SELECT expressions.
 type aggregatorBase struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
 	// runningState represents the state of the aggregator. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
 	runningState aggregatorState
-	input        distsql.RowSource
+	input        execinfra.RowSource
 	inputDone    bool
 	inputTypes   []types.T
 	funcs        []*aggregateFuncHolder
@@ -83,19 +83,19 @@ type aggregatorBase struct {
 // trailingMetaCallback is passed as part of ProcStateOpts; the inputs to drain
 // are in aggregatorBase.
 func (ag *aggregatorBase) init(
-	self distsql.RowSource,
-	flowCtx *distsql.FlowCtx,
+	self execinfra.RowSource,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.AggregatorSpec,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		input = distsql.NewInputStatCollector(input)
+		input = execinfra.NewInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
@@ -138,7 +138,7 @@ func (ag *aggregatorBase) init(
 
 		arguments := make(tree.Datums, len(aggInfo.Arguments))
 		for j, argument := range aggInfo.Arguments {
-			h := distsql.ExprHelper{}
+			h := execinfra.ExprHelper{}
 			// Pass nil types and row - there are no variables in these expressions.
 			if err := h.Init(argument, nil /* types */, flowCtx.EvalCtx); err != nil {
 				return errors.Wrapf(err, "%s", argument)
@@ -169,8 +169,8 @@ func (ag *aggregatorBase) init(
 
 	return ag.ProcessorBase.Init(
 		self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
-		distsql.ProcStateOpts{
-			InputsToDrain:        []distsql.RowSource{ag.input},
+		execinfra.ProcStateOpts{
+			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,
 		},
 	)
@@ -196,7 +196,7 @@ func (as *AggregatorStats) StatsForQueryPlan() []string {
 }
 
 func (ag *aggregatorBase) outputStatsToTrace() {
-	is, ok := distsql.GetInputStats(ag.FlowCtx, ag.input)
+	is, ok := execinfra.GetInputStats(ag.FlowCtx, ag.input)
 	if !ok {
 		return
 	}
@@ -232,13 +232,13 @@ type orderedAggregator struct {
 	bucket aggregateFuncs
 }
 
-var _ distsql.Processor = &hashAggregator{}
-var _ distsql.RowSource = &hashAggregator{}
+var _ execinfra.Processor = &hashAggregator{}
+var _ execinfra.RowSource = &hashAggregator{}
 
 const hashAggregatorProcName = "hash aggregator"
 
-var _ distsql.Processor = &orderedAggregator{}
-var _ distsql.RowSource = &orderedAggregator{}
+var _ execinfra.Processor = &orderedAggregator{}
+var _ execinfra.RowSource = &orderedAggregator{}
 
 const orderedAggregatorProcName = "ordered aggregator"
 
@@ -256,13 +256,13 @@ const (
 )
 
 func newAggregator(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.AggregatorSpec,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
-) (distsql.Processor, error) {
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	if len(spec.GroupCols) == 0 &&
 		len(spec.Aggregations) == 1 &&
 		spec.Aggregations[0].FilterColIdx == nil &&
@@ -296,12 +296,12 @@ func newAggregator(
 }
 
 func newOrderedAggregator(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.AggregatorSpec,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*orderedAggregator, error) {
 	ag := &orderedAggregator{}
 
@@ -630,7 +630,7 @@ func (ag *orderedAggregator) emitRow() (
 
 // Next is part of the RowSource interface.
 func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for ag.State == distsql.StateRunning {
+	for ag.State == execinfra.StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch ag.runningState {
@@ -652,7 +652,7 @@ func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMeta
 
 // Next is part of the RowSource interface.
 func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for ag.State == distsql.StateRunning {
+	for ag.State == execinfra.StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch ag.runningState {

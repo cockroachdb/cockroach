@@ -13,8 +13,8 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -23,21 +23,21 @@ import (
 // post-processing or in the last stage of a computation, where we may only
 // need the synchronizer to join streams.
 type noopProcessor struct {
-	distsql.ProcessorBase
-	input distsql.RowSource
+	execinfra.ProcessorBase
+	input execinfra.RowSource
 }
 
-var _ distsql.Processor = &noopProcessor{}
-var _ distsql.RowSource = &noopProcessor{}
+var _ execinfra.Processor = &noopProcessor{}
+var _ execinfra.RowSource = &noopProcessor{}
 
 const noopProcName = "noop"
 
 func newNoopProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
 	if err := n.Init(
@@ -48,7 +48,7 @@ func newNoopProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{n.input}},
+		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{n.input}},
 	); err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (n *noopProcessor) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for n.State == distsql.StateRunning {
+	for n.State == execinfra.StateRunning {
 		row, meta := n.input.Next()
 
 		if meta != nil {

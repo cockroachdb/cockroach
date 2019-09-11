@@ -13,8 +13,8 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -23,16 +23,16 @@ import (
 // projectSetProcessor is the physical processor implementation of
 // projectSetNode.
 type projectSetProcessor struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
-	input distsql.RowSource
+	input execinfra.RowSource
 	spec  *execinfrapb.ProjectSetSpec
 
 	// exprHelpers are the constant-folded, type checked expressions specified
 	// in the ROWS FROM syntax. This can contain many kinds of expressions
 	// (anything that is "function-like" including COALESCE, NULLIF) not just
 	// SRFs.
-	exprHelpers []*distsql.ExprHelper
+	exprHelpers []*execinfra.ExprHelper
 
 	// funcs contains a valid pointer to a SRF FuncExpr for every entry
 	// in `exprHelpers` that is actually a SRF function application.
@@ -60,24 +60,24 @@ type projectSetProcessor struct {
 	emitCount int64
 }
 
-var _ distsql.Processor = &projectSetProcessor{}
-var _ distsql.RowSource = &projectSetProcessor{}
+var _ execinfra.Processor = &projectSetProcessor{}
+var _ execinfra.RowSource = &projectSetProcessor{}
 
 const projectSetProcName = "projectSet"
 
 func newProjectSetProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.ProjectSetSpec,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*projectSetProcessor, error) {
 	outputTypes := append(input.OutputTypes(), spec.GeneratedColumns...)
 	ps := &projectSetProcessor{
 		input:       input,
 		spec:        spec,
-		exprHelpers: make([]*distsql.ExprHelper, len(spec.Exprs)),
+		exprHelpers: make([]*execinfra.ExprHelper, len(spec.Exprs)),
 		funcs:       make([]*tree.FuncExpr, len(spec.Exprs)),
 		rowBuffer:   make(sqlbase.EncDatumRow, len(outputTypes)),
 		gens:        make([]tree.ValueGenerator, len(spec.Exprs)),
@@ -91,7 +91,7 @@ func newProjectSetProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		distsql.ProcStateOpts{InputsToDrain: []distsql.RowSource{ps.input}},
+		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{ps.input}},
 	); err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 
 	// Initialize exprHelpers.
 	for i, expr := range ps.spec.Exprs {
-		var helper distsql.ExprHelper
+		var helper execinfra.ExprHelper
 		err := helper.Init(expr, ps.input.OutputTypes(), ps.EvalCtx)
 		if err != nil {
 			ps.MoveToDraining(err)
@@ -220,7 +220,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	const cancelCheckCount = 10000
 
-	for ps.State == distsql.StateRunning {
+	for ps.State == execinfra.StateRunning {
 
 		// Occasionally check for cancellation.
 		ps.emitCount++

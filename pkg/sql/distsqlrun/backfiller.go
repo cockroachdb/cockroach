@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -67,9 +67,9 @@ type backfiller struct {
 	filter backfill.MutationFilter
 
 	spec        execinfrapb.BackfillerSpec
-	output      distsql.RowReceiver
-	out         distsql.ProcOutputHelper
-	flowCtx     *distsql.FlowCtx
+	output      execinfra.RowReceiver
+	out         execinfra.ProcOutputHelper
+	flowCtx     *execinfra.FlowCtx
 	processorID int32
 }
 
@@ -115,10 +115,10 @@ func (b backfiller) getMutationsToProcess(
 func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
-	ctx, span := distsql.ProcessorSpan(ctx, opName)
+	ctx, span := execinfra.ProcessorSpan(ctx, opName)
 	defer tracing.FinishSpan(span)
 	meta := b.doRun(ctx)
-	distsql.SendTraceData(ctx, b.output)
+	execinfra.SendTraceData(ctx, b.output)
 	if EmitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
 		b.output.ProducerDone()
 	}

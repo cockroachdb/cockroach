@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,9 +38,9 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &distsql.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
 	nRows := 10
@@ -53,11 +53,11 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 			ID: uuid.MakeV4().String(),
 		},
 	}
-	mts, err := newProcessor(ctx, &flowCtx, 0, &mtsSpec, &execinfrapb.PostProcessSpec{}, []distsql.RowSource{input}, []distsql.RowReceiver{nil}, nil)
+	mts, err := newProcessor(ctx, &flowCtx, 0, &mtsSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{input}, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mtsAsRowSource, ok := mts.(distsql.RowSource)
+	mtsAsRowSource, ok := mts.(execinfra.RowSource)
 	if !ok {
 		t.Fatal("MetadataTestSender is not a RowSource")
 	}
@@ -68,7 +68,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	}
 
 	noop := colexec.NewNoop(col)
-	mat, err := distsql.NewMaterializer(
+	mat, err := execinfra.NewMaterializer(
 		&flowCtx,
 		2, /* processorID */
 		noop,
@@ -88,11 +88,11 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 			SenderIDs: []string{mtsSpec.MetadataTestSender.ID},
 		},
 	}
-	mtr, err := newProcessor(ctx, &flowCtx, 3, &mtrSpec, &execinfrapb.PostProcessSpec{}, []distsql.RowSource{distsql.RowSource(mat)}, []distsql.RowReceiver{nil}, nil)
+	mtr, err := newProcessor(ctx, &flowCtx, 3, &mtrSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{execinfra.RowSource(mat)}, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mtrAsRowSource, ok := mtr.(distsql.RowSource)
+	mtrAsRowSource, ok := mtr.(execinfra.RowSource)
 	if !ok {
 		t.Fatal("MetadataTestReceiver is not a RowSource")
 	}

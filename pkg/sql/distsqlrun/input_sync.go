@@ -17,8 +17,8 @@ import (
 	"container/heap"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -27,7 +27,7 @@ import (
 )
 
 type srcInfo struct {
-	src distsql.RowSource
+	src execinfra.RowSource
 	// row is the last row received from src.
 	row sqlbase.EncDatumRow
 }
@@ -93,7 +93,7 @@ type orderedSynchronizer struct {
 	metadata []*execinfrapb.ProducerMetadata
 }
 
-var _ distsql.RowSource = &orderedSynchronizer{}
+var _ execinfra.RowSource = &orderedSynchronizer{}
 
 // OutputTypes is part of the RowSource interface.
 func (s *orderedSynchronizer) OutputTypes() []types.T {
@@ -322,7 +322,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 func (s *orderedSynchronizer) ConsumerDone() {
 	// We're entering draining mode. Only metadata will be forwarded from now on.
 	if s.state != draining {
-		s.consumerStatusChanged(draining, distsql.RowSource.ConsumerDone)
+		s.consumerStatusChanged(draining, execinfra.RowSource.ConsumerDone)
 	}
 }
 
@@ -330,13 +330,13 @@ func (s *orderedSynchronizer) ConsumerDone() {
 func (s *orderedSynchronizer) ConsumerClosed() {
 	// The state shouldn't matter, as no further methods should be called, but
 	// we'll set it to something other than the default.
-	s.consumerStatusChanged(drainBuffered, distsql.RowSource.ConsumerClosed)
+	s.consumerStatusChanged(drainBuffered, execinfra.RowSource.ConsumerClosed)
 }
 
 // consumerStatusChanged calls a RowSource method on all the non-exhausted
 // sources.
 func (s *orderedSynchronizer) consumerStatusChanged(
-	newState orderedSynchronizerState, f func(distsql.RowSource),
+	newState orderedSynchronizerState, f func(execinfra.RowSource),
 ) {
 	if s.state == notInitialized {
 		for i := range s.sources {
@@ -355,8 +355,8 @@ func (s *orderedSynchronizer) consumerStatusChanged(
 }
 
 func makeOrderedSync(
-	ordering sqlbase.ColumnOrdering, evalCtx *tree.EvalContext, sources []distsql.RowSource,
-) (distsql.RowSource, error) {
+	ordering sqlbase.ColumnOrdering, evalCtx *tree.EvalContext, sources []execinfra.RowSource,
+) (execinfra.RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))
 	}

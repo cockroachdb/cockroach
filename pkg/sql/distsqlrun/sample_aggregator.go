@@ -17,8 +17,8 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,10 +37,10 @@ import (
 // A sample aggregator processor aggregates results from multiple sampler
 // processors. See SampleAggregatorSpec for more details.
 type sampleAggregator struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
 	spec    *execinfrapb.SampleAggregatorSpec
-	input   distsql.RowSource
+	input   execinfra.RowSource
 	memAcc  mon.BoundAccount
 	inTypes []types.T
 	sr      stats.SampleReservoir
@@ -57,7 +57,7 @@ type sampleAggregator struct {
 	sketchCol    int
 }
 
-var _ distsql.Processor = &sampleAggregator{}
+var _ execinfra.Processor = &sampleAggregator{}
 
 const sampleAggregatorProcName = "sample aggregator"
 
@@ -66,12 +66,12 @@ const sampleAggregatorProcName = "sample aggregator"
 var SampleAggregatorProgressInterval = 5 * time.Second
 
 func newSampleAggregator(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.SampleAggregatorSpec,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*sampleAggregator, error) {
 	for _, s := range spec.Sketches {
 		if len(s.Columns) == 0 {
@@ -92,7 +92,7 @@ func newSampleAggregator(
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
 	// enough.
-	memMonitor := distsql.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sample-aggregator-mem")
+	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sample-aggregator-mem")
 	rankCol := len(input.OutputTypes()) - 5
 	s := &sampleAggregator{
 		spec:         spec,
@@ -122,7 +122,7 @@ func newSampleAggregator(
 
 	if err := s.Init(
 		nil, post, []types.T{}, flowCtx, processorID, output, memMonitor,
-		distsql.ProcStateOpts{
+		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				s.close()
 				return nil
@@ -135,7 +135,7 @@ func newSampleAggregator(
 }
 
 func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
-	distsql.SendTraceData(ctx, s.Out.Output())
+	execinfra.SendTraceData(ctx, s.Out.Output())
 }
 
 // Run is part of the Processor interface.
@@ -145,7 +145,7 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
-		distsql.DrainAndClose(s.Ctx, s.Out.Output(), err, s.pushTrailingMeta, s.input)
+		execinfra.DrainAndClose(s.Ctx, s.Out.Output(), err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
 		s.pushTrailingMeta(s.Ctx)
 		s.input.ConsumerClosed()

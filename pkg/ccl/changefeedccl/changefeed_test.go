@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -631,7 +631,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				return nil
 			}
 			knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-				DistSQL.(*distsql.TestingKnobs).
+				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = waitSinkHook
 
@@ -903,7 +903,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		beforeEmitRowCh := make(chan struct{}, 2)
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsql.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			<-beforeEmitRowCh
@@ -1045,7 +1045,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsql.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		origAfterSinkFlushHook := knobs.AfterSinkFlush
 		var failSink int64
@@ -1124,7 +1124,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		wait := make(chan struct{})
 		resume := make(chan struct{})
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsql.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			if atomic.LoadInt32(&shouldWait) == 0 {
@@ -1206,7 +1206,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		wait := make(chan struct{})
 		resume := make(chan struct{})
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsql.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			if atomic.LoadInt32(&shouldWait) == 0 {
@@ -1694,7 +1694,7 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 
 	flushCh := make(chan struct{}, 1)
 	defer close(flushCh)
-	knobs := base.TestingKnobs{DistSQL: &distsql.TestingKnobs{Changefeed: &TestingKnobs{
+	knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
 		AfterSinkFlush: func() error {
 			select {
 			case flushCh <- struct{}{}:
@@ -1802,7 +1802,7 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsql.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		// The RowContainer used internally by the memBuffer seems to request from
 		// the budget in 10240 chunks. Set this number high enough for one but not

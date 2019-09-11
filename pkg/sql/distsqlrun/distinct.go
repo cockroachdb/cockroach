@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -29,9 +29,9 @@ import (
 
 // Distinct is the physical processor implementation of the DISTINCT relational operator.
 type Distinct struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
-	input            distsql.RowSource
+	input            execinfra.RowSource
 	types            []types.T
 	haveLastGroupKey bool
 	lastGroupKey     sqlbase.EncDatumRow
@@ -50,25 +50,25 @@ type SortedDistinct struct {
 	Distinct
 }
 
-var _ distsql.Processor = &Distinct{}
-var _ distsql.RowSource = &Distinct{}
+var _ execinfra.Processor = &Distinct{}
+var _ execinfra.RowSource = &Distinct{}
 
 const distinctProcName = "distinct"
 
-var _ distsql.Processor = &SortedDistinct{}
-var _ distsql.RowSource = &SortedDistinct{}
+var _ execinfra.Processor = &SortedDistinct{}
+var _ execinfra.RowSource = &SortedDistinct{}
 
 const sortedDistinctProcName = "sorted distinct"
 
 // NewDistinct instantiates a new Distinct processor.
 func NewDistinct(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.DistinctSpec,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
-) (distsql.RowSourcedProcessor, error) {
+	output execinfra.RowReceiver,
+) (execinfra.RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
 		return nil, errors.AssertionFailedf("0 distinct columns specified for distinct processor")
 	}
@@ -90,7 +90,7 @@ func NewDistinct(
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsql.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
 	d := &Distinct{
 		input:        input,
 		orderedCols:  spec.OrderedColumns,
@@ -99,7 +99,7 @@ func NewDistinct(
 		types:        input.OutputTypes(),
 	}
 
-	var returnProcessor distsql.RowSourcedProcessor = d
+	var returnProcessor execinfra.RowSourcedProcessor = d
 	if allSorted {
 		// We can use the faster sortedDistinct processor.
 		sd := &SortedDistinct{
@@ -114,8 +114,8 @@ func NewDistinct(
 
 	if err := d.Init(
 		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
-		distsql.ProcStateOpts{
-			InputsToDrain: []distsql.RowSource{d.input},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{d.input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				d.close()
 				return nil
@@ -127,7 +127,7 @@ func NewDistinct(
 	d.haveLastGroupKey = false
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		d.input = distsql.NewInputStatCollector(d.input)
+		d.input = execinfra.NewInputStatCollector(d.input)
 		d.FinishTrace = d.outputStatsToTrace
 	}
 
@@ -197,7 +197,7 @@ func (d *Distinct) close() {
 
 // Next is part of the RowSource interface.
 func (d *Distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for d.State == distsql.StateRunning {
+	for d.State == execinfra.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
@@ -265,7 +265,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 // sortedDistinct is simpler than distinct. All it has to do is keep track
 // of the last row it saw, emitting if the new row is different.
 func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for d.State == distsql.StateRunning {
+	for d.State == execinfra.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
@@ -324,7 +324,7 @@ func (ds *DistinctStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
 func (d *Distinct) outputStatsToTrace() {
-	is, ok := distsql.GetInputStats(d.FlowCtx, d.input)
+	is, ok := execinfra.GetInputStats(d.FlowCtx, d.input)
 	if !ok {
 		return
 	}

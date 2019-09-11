@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -27,18 +27,18 @@ import (
 
 type ProcessorTestConfig struct {
 	// ProcessorTest takes ownership of the evalCtx passed through this FlowCtx.
-	FlowCtx *distsql.FlowCtx
+	FlowCtx *execinfra.FlowCtx
 
-	BeforeTestCase func(p distsql.Processor, inputs []distsql.RowSource, output distsql.RowReceiver)
-	AfterTestCase  func(p distsql.Processor, inputs []distsql.RowSource, output distsql.RowReceiver)
+	BeforeTestCase func(p execinfra.Processor, inputs []execinfra.RowSource, output execinfra.RowReceiver)
+	AfterTestCase  func(p execinfra.Processor, inputs []execinfra.RowSource, output execinfra.RowReceiver)
 }
 
 func DefaultProcessorTestConfig() ProcessorTestConfig {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	return ProcessorTestConfig{
-		FlowCtx: &distsql.FlowCtx{
-			Cfg:     &distsql.ServerConfig{Settings: st},
+		FlowCtx: &execinfra.FlowCtx{
+			Cfg:     &execinfra.ServerConfig{Settings: st},
 			EvalCtx: &evalCtx,
 		},
 	}
@@ -128,7 +128,7 @@ func (p *ProcessorTest) RunTestCases(
 ) {
 	var processorID int32
 	for _, tc := range testCases {
-		inputs := make([]distsql.RowSource, 1, 2)
+		inputs := make([]execinfra.RowSource, 1, 2)
 		inputs[0] = newRowBuffer(
 			tc.Input.Types, tc.Input.toEncDatumRows(), rowBufferArgs{},
 		)
@@ -148,7 +148,7 @@ func (p *ProcessorTest) RunTestCases(
 			&tc.ProcessorCore,
 			&tc.Post,
 			inputs,
-			[]distsql.RowReceiver{output},
+			[]execinfra.RowReceiver{output},
 			nil, /* localProcessors */
 		)
 		if err != nil {

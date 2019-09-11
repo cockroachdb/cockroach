@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -43,23 +43,23 @@ var csvOutputTypes = []types.T{
 }
 
 type readImportDataProcessor struct {
-	flowCtx *distsql.FlowCtx
+	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ReadImportDataSpec
-	output  distsql.RowReceiver
+	output  execinfra.RowReceiver
 }
 
-var _ distsql.Processor = &readImportDataProcessor{}
+var _ execinfra.Processor = &readImportDataProcessor{}
 
 func (cp *readImportDataProcessor) OutputTypes() []types.T {
 	return csvOutputTypes
 }
 
 func newReadImportDataProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ReadImportDataSpec,
-	output distsql.RowReceiver,
-) (distsql.Processor, error) {
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	cp := &readImportDataProcessor{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -246,7 +246,7 @@ func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.
 						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
 					}
 				}
-				if cp.output.Push(row, nil) != distsql.NeedMoreRows {
+				if cp.output.Push(row, nil) != execinfra.NeedMoreRows {
 					return errors.New("unexpected closure of consumer")
 				}
 			}

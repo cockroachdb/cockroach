@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,10 +44,10 @@ type sketchInfo struct {
 // statistics (including cardinality estimation sketch data). See SamplerSpec
 // for more details.
 type samplerProcessor struct {
-	distsql.ProcessorBase
+	execinfra.ProcessorBase
 
-	flowCtx         *distsql.FlowCtx
-	input           distsql.RowSource
+	flowCtx         *execinfra.FlowCtx
+	input           execinfra.RowSource
 	memAcc          mon.BoundAccount
 	sr              stats.SampleReservoir
 	sketches        []sketchInfo
@@ -62,7 +62,7 @@ type samplerProcessor struct {
 	sketchCol    int
 }
 
-var _ distsql.Processor = &samplerProcessor{}
+var _ execinfra.Processor = &samplerProcessor{}
 
 const samplerProcName = "sampler"
 
@@ -88,12 +88,12 @@ const cpuUsageMinThrottle = 0.25
 const cpuUsageMaxThrottle = 0.75
 
 func newSamplerProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.SamplerSpec,
-	input distsql.RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output distsql.RowReceiver,
+	output execinfra.RowReceiver,
 ) (*samplerProcessor, error) {
 	for _, s := range spec.Sketches {
 		if _, ok := supportedSketchTypes[s.SketchType]; !ok {
@@ -108,7 +108,7 @@ func newSamplerProcessor(
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
 	// enough.
-	memMonitor := distsql.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sampler-mem")
+	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sampler-mem")
 	s := &samplerProcessor{
 		flowCtx:         flowCtx,
 		input:           input,
@@ -157,7 +157,7 @@ func newSamplerProcessor(
 
 	if err := s.Init(
 		nil, post, outTypes, flowCtx, processorID, output, memMonitor,
-		distsql.ProcStateOpts{
+		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				s.close()
 				return nil
@@ -170,7 +170,7 @@ func newSamplerProcessor(
 }
 
 func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
-	distsql.SendTraceData(ctx, s.Out.Output())
+	execinfra.SendTraceData(ctx, s.Out.Output())
 }
 
 // Run is part of the Processor interface.
@@ -180,7 +180,7 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 
 	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
-		distsql.DrainAndClose(s.Ctx, s.Out.Output(), err, s.pushTrailingMeta, s.input)
+		execinfra.DrainAndClose(s.Ctx, s.Out.Output(), err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
 		s.pushTrailingMeta(s.Ctx)
 		s.input.ConsumerClosed()

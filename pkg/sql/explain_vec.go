@@ -17,9 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -100,10 +100,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
 	}
-	flowCtx := &distsql.FlowCtx{
+	flowCtx := &execinfra.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
-		Cfg: &distsql.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    params.p.execCfg.Settings,
 			DiskMonitor: &mon.BytesMonitor{},
 		},

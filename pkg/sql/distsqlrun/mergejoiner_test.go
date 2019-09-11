@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -700,8 +700,8 @@ func TestMergeJoiner(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
-			flowCtx := distsql.FlowCtx{
-				Cfg:     &distsql.ServerConfig{Settings: st},
+			flowCtx := execinfra.FlowCtx{
+				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
 			}
 
@@ -806,8 +806,8 @@ func TestConsumerClosed(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
-			flowCtx := distsql.FlowCtx{
-				Cfg:     &distsql.ServerConfig{Settings: st},
+			flowCtx := execinfra.FlowCtx{
+				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
 			}
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -830,8 +830,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
@@ -854,8 +854,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
 			rows := sqlbase.MakeIntRows(inputSize, numCols)
-			leftInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
-			rightInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+			leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+			rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -873,8 +873,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := inputSize
 		b.Run(fmt.Sprintf("OneSideRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			leftInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(inputSize, numCols))
-			rightInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
+			leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(inputSize, numCols))
+			rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -893,8 +893,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		numRepeats := int(math.Sqrt(float64(inputSize)))
 		b.Run(fmt.Sprintf("BothSidesRepeatInputSize=%d", inputSize), func(b *testing.B) {
 			row := sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols)
-			leftInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, row)
-			rightInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, row)
+			leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, row)
+			rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, row)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

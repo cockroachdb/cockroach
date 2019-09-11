@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -49,7 +49,7 @@ func setupRouter(
 	diskMonitor *mon.BytesMonitor,
 	spec execinfrapb.OutputRouterSpec,
 	inputTypes []types.T,
-	streams []distsql.RowReceiver,
+	streams []execinfra.RowReceiver,
 ) (router, *sync.WaitGroup) {
 	r, err := makeRouter(&spec, streams)
 	if err != nil {
@@ -57,8 +57,8 @@ func setupRouter(
 	}
 
 	ctx := context.TODO()
-	flowCtx := distsql.FlowCtx{
-		Cfg: &distsql.ServerConfig{
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			DiskMonitor: diskMonitor,
 		},
@@ -82,7 +82,7 @@ func TestRouters(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	// Generate tables of possible values for each column; we have fewer possible
@@ -138,7 +138,7 @@ func TestRouters(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.spec.Type.String(), func(t *testing.T) {
 			bufs := make([]*RowBuffer, tc.numBuckets)
-			recvs := make([]distsql.RowReceiver, tc.numBuckets)
+			recvs := make([]execinfra.RowReceiver, tc.numBuckets)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, tc.numBuckets)
 			for i := 0; i < tc.numBuckets; i++ {
 				bufs[i] = &RowBuffer{}
@@ -153,7 +153,7 @@ func TestRouters(t *testing.T) {
 				for j := 0; j < numCols; j++ {
 					row[j] = vals[j][rng.Intn(len(vals[j]))]
 				}
-				if status := r.Push(row, nil /* meta */); status != distsql.NeedMoreRows {
+				if status := r.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					t.Fatalf("unexpected status: %d", status)
 				}
 			}
@@ -295,7 +295,7 @@ func TestConsumerStatus(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	testCases := []struct {
@@ -319,7 +319,7 @@ func TestConsumerStatus(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufs := make([]*RowBuffer, 2)
-			recvs := make([]distsql.RowReceiver, 2)
+			recvs := make([]execinfra.RowReceiver, 2)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				bufs[i] = &RowBuffer{}
@@ -359,31 +359,31 @@ func TestConsumerStatus(t *testing.T) {
 
 			// Push a row and expect NeedMoreRows.
 			consumerStatus := router.Push(row0, nil /* meta */)
-			if consumerStatus != distsql.NeedMoreRows {
-				t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+			if consumerStatus != execinfra.NeedMoreRows {
+				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
 
 			// Start draining stream 0. Keep expecting NeedMoreRows, regardless on
 			// which stream we send.
 			bufs[0].ConsumerDone()
 			consumerStatus = router.Push(row0, nil /* meta */)
-			if consumerStatus != distsql.NeedMoreRows {
-				t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+			if consumerStatus != execinfra.NeedMoreRows {
+				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
 			consumerStatus = router.Push(row1, nil /* meta */)
-			if consumerStatus != distsql.NeedMoreRows {
-				t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+			if consumerStatus != execinfra.NeedMoreRows {
+				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
 
 			// Close stream 0. Continue to expect NeedMoreRows.
 			bufs[0].ConsumerClosed()
 			consumerStatus = router.Push(row0, nil /* meta */)
-			if consumerStatus != distsql.NeedMoreRows {
-				t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+			if consumerStatus != execinfra.NeedMoreRows {
+				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
 			consumerStatus = router.Push(row1, nil /* meta */)
-			if consumerStatus != distsql.NeedMoreRows {
-				t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+			if consumerStatus != execinfra.NeedMoreRows {
+				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
 
 			// Start draining stream 1. Now that all streams are draining, expect
@@ -391,8 +391,8 @@ func TestConsumerStatus(t *testing.T) {
 			bufs[1].ConsumerDone()
 			testutils.SucceedsSoon(t, func() error {
 				status := router.Push(row1, nil /* meta */)
-				if status != distsql.DrainRequested {
-					return fmt.Errorf("expected status %d, got: %d", distsql.DrainRequested, consumerStatus)
+				if status != execinfra.DrainRequested {
+					return fmt.Errorf("expected status %d, got: %d", execinfra.DrainRequested, consumerStatus)
 				}
 				return nil
 			})
@@ -402,8 +402,8 @@ func TestConsumerStatus(t *testing.T) {
 			// DrainRequested.
 			bufs[1].ConsumerClosed()
 			consumerStatus = router.Push(row1, nil /* meta */)
-			if consumerStatus != distsql.DrainRequested {
-				t.Fatalf("expected status %d, got: %d", distsql.DrainRequested, consumerStatus)
+			if consumerStatus != execinfra.DrainRequested {
+				t.Fatalf("expected status %d, got: %d", execinfra.DrainRequested, consumerStatus)
 			}
 
 			// Attempt to send some metadata. This will cause the router to observe
@@ -412,8 +412,8 @@ func TestConsumerStatus(t *testing.T) {
 				consumerStatus := router.Push(
 					nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.Errorf("test error")},
 				)
-				if consumerStatus != distsql.ConsumerClosed {
-					return fmt.Errorf("expected status %d, got: %d", distsql.ConsumerClosed, consumerStatus)
+				if consumerStatus != execinfra.ConsumerClosed {
+					return fmt.Errorf("expected status %d, got: %d", execinfra.ConsumerClosed, consumerStatus)
 				}
 				return nil
 			})
@@ -451,7 +451,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	testCases := []struct {
@@ -474,8 +474,8 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			chans := make([]distsql.RowChannel, 2)
-			recvs := make([]distsql.RowReceiver, 2)
+			chans := make([]execinfra.RowChannel, 2)
+			recvs := make([]execinfra.RowReceiver, 2)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].InitWithBufSizeAndNumSenders(nil /* no column types */, 1, 1)
@@ -492,8 +492,8 @@ func TestMetadataIsForwarded(t *testing.T) {
 			// Push metadata; it should go to stream 0.
 			for i := 0; i < 10; i++ {
 				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err1})
-				if consumerStatus != distsql.NeedMoreRows {
-					t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+				if consumerStatus != execinfra.NeedMoreRows {
+					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
 				_, meta := chans[0].Next()
 				if meta.Err != err1 {
@@ -505,8 +505,8 @@ func TestMetadataIsForwarded(t *testing.T) {
 			// Push metadata; it should still go to stream 0.
 			for i := 0; i < 10; i++ {
 				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err2})
-				if consumerStatus != distsql.NeedMoreRows {
-					t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+				if consumerStatus != execinfra.NeedMoreRows {
+					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
 				_, meta := chans[0].Next()
 				if meta.Err != err2 {
@@ -520,8 +520,8 @@ func TestMetadataIsForwarded(t *testing.T) {
 			// observed.
 			testutils.SucceedsSoon(t, func() error {
 				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err3})
-				if consumerStatus != distsql.NeedMoreRows {
-					t.Fatalf("expected status %d, got: %d", distsql.NeedMoreRows, consumerStatus)
+				if consumerStatus != execinfra.NeedMoreRows {
+					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
 				// Receive on stream 1 if there is a message waiting. Metadata may still
 				// try to go to 0 for a little while.
@@ -545,8 +545,8 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 			testutils.SucceedsSoon(t, func() error {
 				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err4})
-				if consumerStatus != distsql.ConsumerClosed {
-					return fmt.Errorf("expected status %d, got: %d", distsql.ConsumerClosed, consumerStatus)
+				if consumerStatus != execinfra.ConsumerClosed {
+					return fmt.Errorf("expected status %d, got: %d", execinfra.ConsumerClosed, consumerStatus)
 				}
 				return nil
 			})
@@ -558,7 +558,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 	}
 }
 
-func drainRowChannel(rc *distsql.RowChannel) {
+func drainRowChannel(rc *execinfra.RowChannel) {
 	for {
 		row, meta := rc.Next()
 		if row == nil && meta == nil {
@@ -593,8 +593,8 @@ func TestRouterBlocks(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			colTypes := []types.T{*types.Int}
-			chans := make([]distsql.RowChannel, 2)
-			recvs := make([]distsql.RowReceiver, 2)
+			chans := make([]execinfra.RowChannel, 2)
+			recvs := make([]execinfra.RowReceiver, 2)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].InitWithBufSizeAndNumSenders(colTypes, 1, 1)
@@ -609,10 +609,10 @@ func TestRouterBlocks(t *testing.T) {
 			ctx := context.TODO()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
-			diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+			diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 			defer diskMonitor.Stop(ctx)
-			flowCtx := distsql.FlowCtx{
-				Cfg: &distsql.ServerConfig{
+			flowCtx := execinfra.FlowCtx{
+				Cfg: &execinfra.ServerConfig{
 					Settings:    st,
 					DiskMonitor: diskMonitor,
 				},
@@ -637,7 +637,7 @@ func TestRouterBlocks(t *testing.T) {
 					default:
 						row := sqlbase.RandEncDatumRowOfTypes(rng, colTypes)
 						status := router.Push(row, nil /* meta */)
-						if status != distsql.NeedMoreRows {
+						if status != execinfra.NeedMoreRows {
 							break Loop
 						}
 						atomic.AddUint32(&numRowsSent, 1)
@@ -695,7 +695,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	const numCols = 1
 
 	var (
-		rowChan distsql.RowChannel
+		rowChan execinfra.RowChannel
 		rb      routerBase
 		wg      sync.WaitGroup
 	)
@@ -707,7 +707,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	st := cluster.MakeTestingClusterSettings()
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
@@ -731,9 +731,9 @@ func TestRouterDiskSpill(t *testing.T) {
 	)
 	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
 	defer evalCtx.Stop(ctx)
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &distsql.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: diskMonitor,
@@ -746,7 +746,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	// Initialize the RowChannel with the minimal buffer size so as to block
 	// writes to the channel (after the first one).
 	rowChan.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
-	rb.setupStreams(&spec, []distsql.RowReceiver{&rowChan})
+	rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
 	rb.init(ctx, &flowCtx, sqlbase.OneIntCol)
 	rb.start(ctx, &wg, nil /* ctxCancel */)
 
@@ -887,8 +887,8 @@ func TestRangeRouterInit(t *testing.T) {
 				RangeRouterSpec: tc.spec,
 			}
 			colTypes := []types.T{*types.Int}
-			chans := make([]distsql.RowChannel, 2)
-			recvs := make([]distsql.RowReceiver, 2)
+			chans := make([]execinfra.RowChannel, 2)
+			recvs := make([]execinfra.RowReceiver, 2)
 			spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].InitWithBufSizeAndNumSenders(colTypes, 1, 1)
@@ -912,10 +912,10 @@ func BenchmarkRouter(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	input := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
+	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 	for _, spec := range []execinfrapb.OutputRouterSpec{
 		{
@@ -935,8 +935,8 @@ func BenchmarkRouter(b *testing.B) {
 	} {
 		b.Run(spec.Type.String(), func(b *testing.B) {
 			for _, nOutputs := range []int{2, 4, 8} {
-				chans := make([]distsql.RowChannel, nOutputs)
-				recvs := make([]distsql.RowReceiver, nOutputs)
+				chans := make([]execinfra.RowChannel, nOutputs)
+				recvs := make([]execinfra.RowReceiver, nOutputs)
 				spec.Streams = make([]execinfrapb.StreamEndpointSpec, nOutputs)
 				b.Run(fmt.Sprintf("outputs=%d", nOutputs), func(b *testing.B) {
 					b.SetBytes(int64(nOutputs * numCols * numRows * 8))
@@ -951,7 +951,7 @@ func BenchmarkRouter(b *testing.B) {
 						for i := range chans {
 							go drainRowChannel(&chans[i])
 						}
-						distsql.Run(ctx, input, r)
+						execinfra.Run(ctx, input, r)
 						r.ProducerDone()
 						wg.Wait()
 					}

@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -105,7 +105,7 @@ type flowCreatorHelper interface {
 	// to be run asynchronously.
 	accumulateAsyncComponent(runFn)
 	// addMaterializer adds a materializer to the flow.
-	addMaterializer(*distsql.Materializer)
+	addMaterializer(*execinfra.Materializer)
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -149,7 +149,7 @@ type vectorizedFlowCreator struct {
 	vectorizedStatsCollectorsQueue []*colexec.VectorizedStatsCollector
 	procIDs                        []int32
 	waitGroup                      *sync.WaitGroup
-	syncFlowConsumer               distsql.RowReceiver
+	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
 
@@ -168,7 +168,7 @@ func newVectorizedFlowCreator(
 	componentCreator remoteComponentCreator,
 	recordingStats bool,
 	waitGroup *sync.WaitGroup,
-	syncFlowConsumer distsql.RowReceiver,
+	syncFlowConsumer execinfra.RowReceiver,
 	nodeDialer *nodedialer.Dialer,
 	flowID execinfrapb.FlowID,
 ) *vectorizedFlowCreator {
@@ -385,7 +385,7 @@ func (s *vectorizedFlowCreator) setupInput(
 // NOTE: The caller must not reuse the metadataSourcesQueue.
 func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	pspec *execinfrapb.ProcessorSpec,
 	op colexec.Operator,
 	opOutputTypes []coltypes.T,
@@ -457,7 +457,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				)
 			}
 		}
-		proc, err := distsql.NewMaterializer(
+		proc, err := execinfra.NewMaterializer(
 			flowCtx,
 			pspec.ProcessorID,
 			op,
@@ -484,7 +484,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 
 func (s *vectorizedFlowCreator) setupFlow(
 	ctx context.Context,
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
 	acc *mon.BoundAccount,
 ) (leaves []colexec.OpNode, err error) {
@@ -659,8 +659,8 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 	)
 }
 
-func (r *vectorizedFlowCreatorHelper) addMaterializer(m *distsql.Materializer) {
-	r.f.processors = make([]distsql.Processor, 1)
+func (r *vectorizedFlowCreatorHelper) addMaterializer(m *execinfra.Materializer) {
+	r.f.processors = make([]execinfra.Processor, 1)
 	r.f.processors[0] = m
 }
 
@@ -716,7 +716,7 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addMaterializer(*distsql.Materializer) {}
+func (r *noopFlowCreatorHelper) addMaterializer(*execinfra.Materializer) {}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
@@ -728,15 +728,15 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // It returns a list of the leaf operators of all flows for the purposes of
 // EXPLAIN output.
 func SupportsVectorized(
-	ctx context.Context, flowCtx *distsql.FlowCtx, processorSpecs []execinfrapb.ProcessorSpec,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, processorSpecs []execinfrapb.ProcessorSpec,
 ) (leaves []colexec.OpNode, err error) {
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(),
 		vectorizedRemoteComponentCreator{},
-		false,                 /* recordingStats */
-		nil,                   /* waitGroup */
-		&distsql.RowChannel{}, /* syncFlowConsumer */
-		nil,                   /* nodeDialer */
+		false,                   /* recordingStats */
+		nil,                     /* waitGroup */
+		&execinfra.RowChannel{}, /* syncFlowConsumer */
+		nil,                     /* nodeDialer */
 		execinfrapb.FlowID{},
 	)
 	// We create an unlimited memory account because we're interested whether the

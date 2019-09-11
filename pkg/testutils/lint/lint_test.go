@@ -1229,7 +1229,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
 				// This exception is for hash.go, which re-implements runtime.noescape
 				// for efficient hashing.
-				stream.GrepNot(`pkg/sql/exec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
+				stream.GrepNot(`pkg/sql/colexec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 				stream.GrepNot(`^#`), // comment line
 			})
 		}
@@ -1441,8 +1441,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/.*\.pb\.go:`),
 			stream.GrepNot(`pkg/col/coldata/.*\.eg\.go:`),
 			stream.GrepNot(`pkg/col/colserde/arrowserde/.*_generated\.go:`),
-			stream.GrepNot(`pkg/sql/exec/.*\.eg\.go:`),
-			stream.GrepNot(`pkg/sql/exec/.*_generated\.go:`),
+			stream.GrepNot(`pkg/sql/colexec/.*\.eg\.go:`),
+			stream.GrepNot(`pkg/sql/colexec/.*_generated\.go:`),
 			stream.GrepNot(`pkg/sql/pgwire/hba/conf.go:`),
 
 			// Ignore types that can change by system.

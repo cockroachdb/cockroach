@@ -15,8 +15,8 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -57,7 +57,7 @@ func (s vectorizedInboundStreamHandler) timeout(err error) {
 }
 
 type rowInboundStreamHandler struct {
-	distsql.RowReceiver
+	execinfra.RowReceiver
 }
 
 var _ inboundStreamHandler = rowInboundStreamHandler{}
@@ -87,7 +87,7 @@ func ProcessInboundStream(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	dst distsql.RowReceiver,
+	dst execinfra.RowReceiver,
 	f *Flow,
 ) error {
 
@@ -109,7 +109,7 @@ func processInboundStreamHelper(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	dst distsql.RowReceiver,
+	dst execinfra.RowReceiver,
 	f *Flow,
 ) error {
 	draining := false
@@ -200,7 +200,7 @@ func sendDrainSignalToStreamProducer(
 func processProducerMessage(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	dst distsql.RowReceiver,
+	dst execinfra.RowReceiver,
 	sd *StreamDecoder,
 	draining *bool,
 	msg *execinfrapb.ProducerMessage,
@@ -235,9 +235,9 @@ func processProducerMessage(
 			continue
 		}
 		switch dst.Push(row, meta) {
-		case distsql.NeedMoreRows:
+		case execinfra.NeedMoreRows:
 			continue
-		case distsql.DrainRequested:
+		case execinfra.DrainRequested:
 			// The rest of rows are not needed by the consumer. We'll send a drain
 			// signal to the producer and expect it to quickly send trailing
 			// metadata and close its side of the stream, at which point we also
@@ -248,7 +248,7 @@ func processProducerMessage(
 					log.Errorf(ctx, "draining error: %s", err)
 				}
 			}
-		case distsql.ConsumerClosed:
+		case execinfra.ConsumerClosed:
 			return processMessageResult{err: nil, consumerClosed: true}
 		}
 	}

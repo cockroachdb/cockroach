@@ -14,8 +14,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,7 +44,7 @@ func (f startableFn) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel co
 
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
-	distsql.FlowCtx
+	execinfra.FlowCtx
 
 	flowRegistry *flowRegistry
 	// isVectorized indicates whether it is a vectorized flow.
@@ -52,23 +52,23 @@ type Flow struct {
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
-	processors []distsql.Processor
+	processors []execinfra.Processor
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []startable
 	// syncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
 	// or to the local host).
-	syncFlowConsumer distsql.RowReceiver
+	syncFlowConsumer execinfra.RowReceiver
 
-	localProcessors []distsql.LocalProcessor
+	localProcessors []execinfra.LocalProcessor
 
 	// startedGoroutines specifies whether this flow started any goroutines. This
 	// is used in Wait() to avoid the overhead of waiting for non-existent
 	// goroutines.
 	startedGoroutines bool
 
-	localStreams map[execinfrapb.StreamID]distsql.RowReceiver
+	localStreams map[execinfrapb.StreamID]execinfra.RowReceiver
 
 	// inboundStreams are streams that receive data from other hosts; this map
 	// is to be passed to flowRegistry.RegisterFlow.
@@ -94,10 +94,10 @@ type Flow struct {
 }
 
 func newFlow(
-	flowCtx distsql.FlowCtx,
+	flowCtx execinfra.FlowCtx,
 	flowReg *flowRegistry,
-	syncFlowConsumer distsql.RowReceiver,
-	localProcessors []distsql.LocalProcessor,
+	syncFlowConsumer execinfra.RowReceiver,
+	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
 ) *Flow {
 	f := &Flow{
@@ -127,7 +127,7 @@ func (f *Flow) checkInboundStreamID(sid execinfrapb.StreamID) error {
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(
-	ctx context.Context, spec execinfrapb.StreamEndpointSpec, receiver distsql.RowReceiver,
+	ctx context.Context, spec execinfrapb.StreamEndpointSpec, receiver execinfra.RowReceiver,
 ) error {
 	sid := spec.StreamID
 	switch spec.Type {
@@ -148,7 +148,7 @@ func (f *Flow) setupInboundStream(
 			return errors.Errorf("local stream %d has multiple consumers", sid)
 		}
 		if f.localStreams == nil {
-			f.localStreams = make(map[execinfrapb.StreamID]distsql.RowReceiver)
+			f.localStreams = make(map[execinfrapb.StreamID]execinfra.RowReceiver)
 		}
 		f.localStreams[sid] = receiver
 
@@ -164,7 +164,7 @@ func (f *Flow) setupInboundStream(
 // mailbox is created.
 func (f *Flow) setupOutboundStream(
 	spec execinfrapb.StreamEndpointSpec,
-) (distsql.RowReceiver, error) {
+) (execinfra.RowReceiver, error) {
 	sid := spec.StreamID
 	switch spec.Type {
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
@@ -195,7 +195,7 @@ func (f *Flow) setupOutboundStream(
 //
 // Pass-through routers are not supported; they should be handled separately.
 func (f *Flow) setupRouter(spec *execinfrapb.OutputRouterSpec) (router, error) {
-	streams := make([]distsql.RowReceiver, len(spec.Streams))
+	streams := make([]execinfra.RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
 		streams[i], err = f.setupOutboundStream(spec.Streams[i])
@@ -207,7 +207,7 @@ func (f *Flow) setupRouter(spec *execinfrapb.OutputRouterSpec) (router, error) {
 }
 
 func checkNumInOut(
-	inputs []distsql.RowSource, outputs []distsql.RowReceiver, numIn, numOut int,
+	inputs []execinfra.RowSource, outputs []execinfra.RowReceiver, numIn, numOut int,
 ) error {
 	if len(inputs) != numIn {
 		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
@@ -219,13 +219,13 @@ func checkNumInOut(
 }
 
 type copyingRowReceiver struct {
-	distsql.RowReceiver
+	execinfra.RowReceiver
 	alloc sqlbase.EncDatumRowAlloc
 }
 
 func (r *copyingRowReceiver) Push(
 	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
-) distsql.ConsumerStatus {
+) execinfra.ConsumerStatus {
 	if row != nil {
 		row = r.alloc.CopyRow(row)
 	}
@@ -233,12 +233,12 @@ func (r *copyingRowReceiver) Push(
 }
 
 func (f *Flow) makeProcessor(
-	ctx context.Context, ps *execinfrapb.ProcessorSpec, inputs []distsql.RowSource,
-) (distsql.Processor, error) {
+	ctx context.Context, ps *execinfrapb.ProcessorSpec, inputs []execinfra.RowSource,
+) (execinfra.Processor, error) {
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
-	var output distsql.RowReceiver
+	var output execinfra.RowReceiver
 	spec := &ps.Output[0]
 	if spec.Type == execinfrapb.OutputRouterSpec_PASS_THROUGH {
 		// There is no entity that corresponds to a pass-through router - we just
@@ -269,7 +269,7 @@ func (f *Flow) makeProcessor(
 
 	output = &copyingRowReceiver{RowReceiver: output}
 
-	outputs := []distsql.RowReceiver{output}
+	outputs := []execinfra.RowReceiver{output}
 	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs, f.localProcessors)
 	if err != nil {
 		return nil, err
@@ -289,17 +289,17 @@ func (f *Flow) makeProcessor(
 
 // setupInputSyncs populates a slice of input syncs, one for each Processor in
 // f.Spec, each containing one RowSource for each input to that Processor.
-func (f *Flow) setupInputSyncs(ctx context.Context) ([][]distsql.RowSource, error) {
-	inputSyncs := make([][]distsql.RowSource, len(f.spec.Processors))
+func (f *Flow) setupInputSyncs(ctx context.Context) ([][]execinfra.RowSource, error) {
+	inputSyncs := make([][]execinfra.RowSource, len(f.spec.Processors))
 	for pIdx, ps := range f.spec.Processors {
 		for _, is := range ps.Input {
 			if len(is.Streams) == 0 {
 				return nil, errors.Errorf("input sync with no streams")
 			}
-			var sync distsql.RowSource
+			var sync execinfra.RowSource
 			switch is.Type {
 			case execinfrapb.InputSyncSpec_UNORDERED:
-				mrc := &distsql.RowChannel{}
+				mrc := &execinfra.RowChannel{}
 				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
 				for _, s := range is.Streams {
 					if err := f.setupInboundStream(ctx, s, mrc); err != nil {
@@ -309,9 +309,9 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]distsql.RowSource, erro
 				sync = mrc
 			case execinfrapb.InputSyncSpec_ORDERED:
 				// Ordered synchronizer: create a RowChannel for each input.
-				streams := make([]distsql.RowSource, len(is.Streams))
+				streams := make([]execinfra.RowSource, len(is.Streams))
 				for i, s := range is.Streams {
-					rowChan := &distsql.RowChannel{}
+					rowChan := &execinfra.RowChannel{}
 					rowChan.InitWithNumSenders(is.ColumnTypes, 1 /* numSenders */)
 					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
 						return nil, err
@@ -338,8 +338,8 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]distsql.RowSource, erro
 // has one output, and that output is a simple PASS_THROUGH output), and
 // populates f.processors with all created processors that weren't fused to and
 // thus need their own goroutine.
-func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]distsql.RowSource) error {
-	f.processors = make([]distsql.Processor, 0, len(f.spec.Processors))
+func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]execinfra.RowSource) error {
+	f.processors = make([]execinfra.Processor, 0, len(f.spec.Processors))
 
 	// Populate f.processors: see which processors need their own goroutine and
 	// which are fused with their consumer.
@@ -354,7 +354,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]distsql.RowSo
 		fuse := func() bool {
 			// If the processor implements RowSource try to hook it up directly to the
 			// input of a later processor.
-			source, ok := p.(distsql.RowSource)
+			source, ok := p.(execinfra.RowSource)
 			if !ok {
 				return false
 			}
@@ -516,7 +516,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	defer f.Wait()
 
 	// We'll take care of the last processor in particular.
-	var headProc distsql.Processor
+	var headProc execinfra.Processor
 	if len(f.processors) == 0 {
 		return errors.AssertionFailedf("no processors in flow")
 	}

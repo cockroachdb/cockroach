@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,14 +34,14 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := distsql.NewRepeatableRowSource(typs, rows)
+	input := execinfra.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
@@ -49,7 +49,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := distsql.NewMaterializer(
+	m, err := execinfra.NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		c,
@@ -115,14 +115,14 @@ func TestMaterializeTypes(t *testing.T) {
 		sqlbase.EncDatum{Datum: tree.NewDName("aloha")},
 		sqlbase.EncDatum{Datum: tree.NewDOid(59)},
 	}
-	input := distsql.NewRepeatableRowSource(types, sqlbase.EncDatumRows{inputRow})
+	input := execinfra.NewRepeatableRowSource(types, sqlbase.EncDatumRows{inputRow})
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
@@ -134,7 +134,7 @@ func TestMaterializeTypes(t *testing.T) {
 	for i := range outputToInputColIdx {
 		outputToInputColIdx[i] = i
 	}
-	m, err := distsql.NewMaterializer(
+	m, err := execinfra.NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		c,
@@ -171,14 +171,14 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := distsql.NewRepeatableRowSource(types, rows)
+	input := execinfra.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	c, err := NewColumnarizer(ctx, flowCtx, 0, input)
@@ -188,7 +188,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 	for i := 0; i < b.N; i++ {
-		m, err := distsql.NewMaterializer(
+		m, err := execinfra.NewMaterializer(
 			flowCtx,
 			1, /* processorID */
 			c,

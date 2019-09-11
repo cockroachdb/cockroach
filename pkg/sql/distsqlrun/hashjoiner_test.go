@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -76,15 +76,15 @@ func TestHashJoiner(t *testing.T) {
 		// knobs in the flowCtx before instantiating a hashJoiner and hjSetup can
 		// optionally be provided to modify the hashJoiner after instantiation but
 		// before Run().
-		testFunc := func(t *testing.T, flowCtxSetup func(f *distsql.FlowCtx), hjSetup func(h *hashJoiner)) error {
-			side := distsql.RightSide
+		testFunc := func(t *testing.T, flowCtxSetup func(f *execinfra.FlowCtx), hjSetup func(h *hashJoiner)) error {
+			side := execinfra.RightSide
 			for i := 0; i < 2; i++ {
 				leftInput := newRowBuffer(c.leftTypes, c.leftInput, rowBufferArgs{})
 				rightInput := newRowBuffer(c.rightTypes, c.rightInput, rowBufferArgs{})
 				out := &RowBuffer{}
-				flowCtx := distsql.FlowCtx{
+				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
-					Cfg: &distsql.ServerConfig{
+					Cfg: &execinfra.ServerConfig{
 						Settings:    st,
 						TempStorage: tempEngine,
 						DiskMonitor: &diskMonitor,
@@ -113,7 +113,7 @@ func TestHashJoiner(t *testing.T) {
 					h.forcedStoredSide = &side
 				}
 				h.Run(context.Background())
-				side = distsql.OtherSide(h.storedSide)
+				side = execinfra.OtherSide(h.storedSide)
 
 				if !out.ProducerClosed() {
 					return errors.New("output RowReceiver not closed")
@@ -140,7 +140,7 @@ func TestHashJoiner(t *testing.T) {
 		// Run test with a variety of memory limits.
 		for _, memLimit := range []int64{1, 256, 512, 1024, 2048} {
 			t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
-				if err := testFunc(t, func(f *distsql.FlowCtx) {
+				if err := testFunc(t, func(f *execinfra.FlowCtx) {
 					f.Cfg.TestingKnobs.MemoryLimitBytes = memLimit
 				}, nil); err != nil {
 					t.Fatal(err)
@@ -189,9 +189,9 @@ func TestHashJoinerError(t *testing.T) {
 			leftInput := newRowBuffer(c.leftTypes, c.leftInput, rowBufferArgs{})
 			rightInput := newRowBuffer(c.rightTypes, c.rightInput, rowBufferArgs{})
 			out := &RowBuffer{}
-			flowCtx := distsql.FlowCtx{
+			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg: &distsql.ServerConfig{
+				Cfg: &execinfra.ServerConfig{
 					Settings:    st,
 					TempStorage: tempEngine,
 					DiskMonitor: &diskMonitor,
@@ -325,13 +325,13 @@ func TestHashJoinerDrain(t *testing.T) {
 	// Since the use of external storage overrides h.initialBufferSize, disable
 	// it for this test.
 	settings := cluster.MakeTestingClusterSettings()
-	distsql.SettingUseTempStorageJoins.Override(&settings.SV, false)
+	execinfra.SettingUseTempStorageJoins.Override(&settings.SV, false)
 
 	evalCtx := tree.MakeTestingEvalContext(settings)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
-	flowCtx := distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: settings},
+	flowCtx := execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: settings},
 		EvalCtx: &evalCtx,
 	}
 
@@ -452,14 +452,14 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	flowCtx := distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
 	// Disable external storage for this test to avoid initializing temp storage
 	// infrastructure.
-	distsql.SettingUseTempStorageJoins.Override(&st.SV, false)
+	execinfra.SettingUseTempStorageJoins.Override(&st.SV, false)
 
 	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
@@ -504,11 +504,11 @@ func BenchmarkHashJoiner(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := distsql.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	flowCtx := &distsql.FlowCtx{
+	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &distsql.ServerConfig{
+		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			DiskMonitor: diskMonitor,
 		},
@@ -543,8 +543,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 				}
 				b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 					rows := sqlbase.MakeIntRows(numRows, numCols)
-					leftInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
-					rightInput := distsql.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+					leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+					rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
 					b.SetBytes(int64(8 * numRows * numCols * 2))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {

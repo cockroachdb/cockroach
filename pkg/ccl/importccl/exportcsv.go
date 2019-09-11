@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,12 +32,12 @@ const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
 
 func newCSVWriterProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.CSVWriterSpec,
-	input distsql.RowSource,
-	output distsql.RowReceiver,
-) (distsql.Processor, error) {
+	input execinfra.RowSource,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 
 	if err := utilccl.CheckEnterpriseEnabled(
 		flowCtx.Cfg.Settings,
@@ -62,15 +62,15 @@ func newCSVWriterProcessor(
 }
 
 type csvWriter struct {
-	flowCtx     *distsql.FlowCtx
+	flowCtx     *execinfra.FlowCtx
 	processorID int32
 	spec        execinfrapb.CSVWriterSpec
-	input       distsql.RowSource
-	out         distsql.ProcOutputHelper
-	output      distsql.RowReceiver
+	input       execinfra.RowSource
+	out         execinfra.ProcOutputHelper
+	output      execinfra.RowReceiver
 }
 
-var _ distsql.Processor = &csvWriter{}
+var _ execinfra.Processor = &csvWriter{}
 
 func (sp *csvWriter) OutputTypes() []types.T {
 	res := make([]types.T, len(sqlbase.ExportColumns))
@@ -92,7 +92,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
-		input := distsql.MakeNoMetadataRowSource(sp.input, sp.output)
+		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 
 		alloc := &sqlbase.DatumAlloc{}
 
@@ -187,7 +187,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err != nil {
 				return err
 			}
-			if cs != distsql.NeedMoreRows {
+			if cs != execinfra.NeedMoreRows {
 				// TODO(dt): presumably this is because our recv already closed due to
 				// another error... so do we really need another one?
 				return errors.New("unexpected closure of consumer")
@@ -201,7 +201,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	}()
 
 	// TODO(dt): pick up tracing info in trailing meta
-	distsql.DrainAndClose(
+	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }
 

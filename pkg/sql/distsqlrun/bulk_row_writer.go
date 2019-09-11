@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,25 +34,25 @@ var CTASPlanResultTypes = []types.T{
 }
 
 type bulkRowWriter struct {
-	flowCtx        *distsql.FlowCtx
+	flowCtx        *execinfra.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
 	spec           execinfrapb.BulkRowWriterSpec
-	input          distsql.RowSource
-	out            distsql.ProcOutputHelper
-	output         distsql.RowReceiver
+	input          execinfra.RowSource
+	out            execinfra.ProcOutputHelper
+	output         execinfra.RowReceiver
 	summary        roachpb.BulkOpSummary
 }
 
-var _ distsql.Processor = &bulkRowWriter{}
+var _ execinfra.Processor = &bulkRowWriter{}
 
 func newBulkRowWriterProcessor(
-	flowCtx *distsql.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BulkRowWriterSpec,
-	input distsql.RowSource,
-	output distsql.RowReceiver,
-) (distsql.Processor, error) {
+	input execinfra.RowSource,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	c := &bulkRowWriter{
 		flowCtx:        flowCtx,
 		processorID:    processorID,
@@ -122,7 +122,7 @@ func (sp *bulkRowWriter) convertLoop(
 
 	done := false
 	alloc := &sqlbase.DatumAlloc{}
-	input := distsql.MakeNoMetadataRowSource(sp.input, sp.output)
+	input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 	typs := sp.input.OutputTypes()
 
 	for {
@@ -192,7 +192,7 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 
 	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, evalCtx, kvCh)
 	if err != nil {
-		distsql.DrainAndClose(
+		execinfra.DrainAndClose(
 			ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 		return
 	}
@@ -218,11 +218,11 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 			sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		}); emitErr != nil {
 			err = emitErr
-		} else if cs != distsql.NeedMoreRows {
+		} else if cs != execinfra.NeedMoreRows {
 			err = errors.New("unexpected closure of consumer")
 		}
 	}
 
-	distsql.DrainAndClose(
+	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }

@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -150,9 +150,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// up vectorized flows since the flows will effectively be planned twice.
 			for _, spec := range flows {
 				if _, err := distsqlrun.SupportsVectorized(
-					ctx, &distsql.FlowCtx{
+					ctx, &execinfra.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
-						Cfg: &distsql.ServerConfig{
+						Cfg: &execinfra.ServerConfig{
 							DiskMonitor: &mon.BytesMonitor{},
 							Settings:    dsp.st,
 						},
@@ -409,7 +409,7 @@ type DistSQLReceiver struct {
 	txnAbortedErr atomic.Value
 
 	row    tree.Datums
-	status distsql.ConsumerStatus
+	status execinfra.ConsumerStatus
 	alloc  sqlbase.DatumAlloc
 	closed bool
 
@@ -488,7 +488,7 @@ func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
-var _ distsql.RowReceiver = &DistSQLReceiver{}
+var _ execinfra.RowReceiver = &DistSQLReceiver{}
 
 var receiverSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -578,7 +578,7 @@ func (r *DistSQLReceiver) SetError(err error) {
 // Push is part of the RowReceiver interface.
 func (r *DistSQLReceiver) Push(
 	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
-) distsql.ConsumerStatus {
+) execinfra.ConsumerStatus {
 	if meta != nil {
 		if meta.TxnCoordMeta != nil {
 			if r.txn != nil {
@@ -649,9 +649,9 @@ func (r *DistSQLReceiver) Push(
 	}
 	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here if we weren't canceled.
-		return distsql.ConsumerClosed
+		return execinfra.ConsumerClosed
 	}
-	if r.status != distsql.NeedMoreRows {
+	if r.status != execinfra.NeedMoreRows {
 		return r.status
 	}
 
@@ -673,7 +673,7 @@ func (r *DistSQLReceiver) Push(
 	// planNodeToRowSource is not set up to handle decoding the row.
 	if r.noColsRequired {
 		r.row = []tree.Datum{}
-		r.status = distsql.ConsumerClosed
+		r.status = execinfra.ConsumerClosed
 	} else {
 		if r.row == nil {
 			r.row = make(tree.Datums, len(r.resultToStreamColMap))
@@ -682,7 +682,7 @@ func (r *DistSQLReceiver) Push(
 			err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
 			if err != nil {
 				r.resultWriter.SetError(err)
-				r.status = distsql.ConsumerClosed
+				r.status = execinfra.ConsumerClosed
 				return r.status
 			}
 			r.row[i] = row[resIdx].Datum
@@ -716,7 +716,7 @@ func (r *DistSQLReceiver) Push(
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
 		// above failed, presumably with an out-of-memory error).
-		r.status = distsql.ConsumerClosed
+		r.status = execinfra.ConsumerClosed
 	}
 	return r.status
 }

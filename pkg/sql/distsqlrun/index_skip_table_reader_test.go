@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -424,9 +424,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
-			flowCtx := distsql.FlowCtx{
+			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}
@@ -437,7 +437,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			var results distsql.RowSource
+			var results execinfra.RowSource
 			tr.Start(ctx)
 			results = tr
 
@@ -495,9 +495,9 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	nodeID := tc.Server(0).NodeID()
-	flowCtx := distsql.FlowCtx{
+	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &distsql.ServerConfig{Settings: st},
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		Txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
 		NodeID:  nodeID,
 	}
@@ -601,7 +601,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 
 			tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 
-			runner := func(reader distsql.RowSource, b *testing.B) {
+			runner := func(reader execinfra.RowSource, b *testing.B) {
 				reader.Start(ctx)
 				count := 0
 				for {
@@ -619,9 +619,9 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				}
 			}
 
-			flowCtxTableReader := distsql.FlowCtx{
+			flowCtxTableReader := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}
@@ -656,9 +656,9 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				}
 			})
 
-			flowCtxIndexSkipTableReader := distsql.FlowCtx{
+			flowCtxIndexSkipTableReader := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
-				Cfg:     &distsql.ServerConfig{Settings: s.ClusterSettings()},
+				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}

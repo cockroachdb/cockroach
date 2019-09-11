@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -72,8 +72,8 @@ func TestValuesProcessor(t *testing.T) {
 					st := cluster.MakeTestingClusterSettings()
 					evalCtx := tree.NewTestingEvalContext(st)
 					defer evalCtx.Stop(context.Background())
-					flowCtx := distsql.FlowCtx{
-						Cfg:     &distsql.ServerConfig{Settings: st},
+					flowCtx := execinfra.FlowCtx{
+						Cfg:     &execinfra.ServerConfig{Settings: st},
 						EvalCtx: evalCtx,
 					}
 
@@ -131,8 +131,8 @@ func BenchmarkValuesProcessor(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := distsql.FlowCtx{
-		Cfg:     &distsql.ServerConfig{Settings: st},
+	flowCtx := execinfra.FlowCtx{
+		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 	post := execinfrapb.PostProcessSpec{}

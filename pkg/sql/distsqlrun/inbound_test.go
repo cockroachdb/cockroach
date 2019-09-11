@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -45,10 +45,10 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	ni := base.NodeIDContainer{}
 	ni.Set(ctx, 1)
 	st := cluster.MakeTestingClusterSettings()
-	mt := distsql.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	mt := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	srv := NewServer(
 		ctx,
-		distsql.ServerConfig{
+		execinfra.ServerConfig{
 			Settings: st,
 			Stopper:  stopper,
 			Metrics:  &mt,
@@ -73,8 +73,8 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	// The outbox uses this stopper to run a goroutine.
 	outboxStopper := stop.NewStopper()
-	flowCtx := distsql.FlowCtx{
-		Cfg: &distsql.ServerConfig{
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
 			Settings:   st,
 			NodeDialer: nodedialer.New(rpcContext, staticAddressResolver(ln.Addr())),
 			Stopper:    outboxStopper,
@@ -118,7 +118,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// the write to the row channel is asynchronous wrt the outbox sending the
 	// row and getting back the updated consumer status.
 	testutils.SucceedsSoon(t, func() error {
-		if cs := outbox.Push(row, nil /* meta */); cs != distsql.DrainRequested {
+		if cs := outbox.Push(row, nil /* meta */); cs != execinfra.DrainRequested {
 			return errors.Errorf("unexpected consumer status %s", cs)
 		}
 		return nil
