@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execplan
+package colplan
 
 import (
 	"context"
@@ -22,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
+
+// TODO(yuzefovich): once row.CFetcher is moved into colexec, move Columnarizer
+// there as well.
 
 // Columnarizer turns a RowSource input into an exec.Operator output, by
 // reading the input in chunks of size coldata.BatchSize and converting each

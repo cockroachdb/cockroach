@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO(yuzefovich): move CFetcher into sql/colexec.
+
 // Only unique secondary indexes have extra columns to decode (namely the
 // primary index columns).
 func cHasExtraCols(table *cTableInfo) bool {

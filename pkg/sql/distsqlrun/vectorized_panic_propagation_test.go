@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +48,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := distsql.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := execplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := distsql.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := execplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}

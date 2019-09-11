@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -62,7 +62,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal("MetadataTestSender is not a RowSource")
 	}
 
-	col, err := execplan.NewColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource)
+	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource)
 	if err != nil {
 		t.Fatal(err)
 	}

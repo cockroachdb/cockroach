@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execplan
+package colplan
 
 import (
 	"context"
@@ -31,6 +31,9 @@ import (
 // initial size of pre-allocated batches (probably via a batch allocator), we
 // should get rid off table readers entirely. We will have to be careful about
 // propagating the metadata though.
+
+// TODO(yuzefovich): once row.CFetcher is moved into colexec, move colBatchScan
+// there as well.
 
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
