@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -601,6 +602,39 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	return samples, nil
 }
 
+func presplitTableBoundaries(
+	ctx context.Context,
+	cfg *ExecutorConfig,
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+) error {
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we should use the sticky bit to
+	// ensure that the splits are not automatically split by the merge queue. If
+	// the cluster does not support sticky bits, we disable the merge queue via
+	// gossip, so we can just set the split to expire immediately.
+	stickyBitEnabled := cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	}
+	for _, tbl := range tables {
+		for _, span := range tbl.Desc.AllIndexSpans() {
+			if err := cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+				return err
+			}
+
+			log.VEventf(ctx, 1, "scattering index range %s", span.Key)
+			scatterReq := &roachpb.AdminScatterRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(span),
+			}
+			if _, pErr := client.SendWrapped(ctx, cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
+				log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
+			}
+		}
+	}
+	return nil
+}
+
 // DistIngest is used by IMPORT to run a DistSQL flow to ingest data by starting
 // reader processes on many nodes that each read and ingest their assigned files
 // and then send back a summary of what they ingested. The combined summary is
@@ -687,6 +721,10 @@ func DistIngest(
 		res.Add(counts)
 		return nil
 	})
+
+	if err := presplitTableBoundaries(ctx, phs.ExecCfg(), tables); err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
 
 	recv := MakeDistSQLReceiver(
 		ctx,
