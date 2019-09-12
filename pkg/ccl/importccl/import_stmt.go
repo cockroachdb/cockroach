@@ -174,9 +174,24 @@ func importPlanHook(
 			return err
 		}
 
-		files, err := filesFn()
+		listedFiles, err := filesFn()
 		if err != nil {
 			return err
+		}
+		var files []string
+		for _, file := range listedFiles {
+			s, err := storageccl.ExportStorageFromURI(ctx, file, p.ExecCfg().Settings)
+			if err != nil {
+				return err
+			}
+
+			expandedFiles, err := s.ListFiles(ctx, "")
+			if err != nil {
+				files = append(files, file)
+				continue
+			}
+
+			files = append(files, expandedFiles...)
 		}
 
 		table := importStmt.Table
@@ -382,7 +397,7 @@ func importPlanHook(
 		ingestDirectly = !ingestSorted
 
 		var tableDetails []jobspb.ImportDetails_Table
-		jobDesc, err := importJobDescription(p, importStmt, nil, files, opts)
+		jobDesc, err := importJobDescription(p, importStmt, nil, listedFiles, opts)
 		if err != nil {
 			return err
 		}
@@ -514,7 +529,7 @@ func importPlanHook(
 					return err
 				}
 				tableDescs = []*sqlbase.TableDescriptor{tbl.TableDesc()}
-				descStr, err := importJobDescription(p, importStmt, create.Defs, files, opts)
+				descStr, err := importJobDescription(p, importStmt, create.Defs, listedFiles, opts)
 				if err != nil {
 					return err
 				}
