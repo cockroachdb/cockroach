@@ -318,15 +318,20 @@ func processLocalityForRange(
 ) {
 	// Get the zone.
 	var zKey ZoneKey
-	if err := visitZones(ctx, r, cfg,
+	found, err := visitZones(ctx, r, cfg,
 		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
 			if zone.IsSubzonePlaceholder() {
 				return false
 			}
 			zKey = key
 			return true
-		}); err != nil {
+		})
+	if err != nil {
 		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
+	}
+	if !found {
+		log.Errorf(ctx, "no suitable zone config found for range: %s", &r)
+		return
 	}
 
 	// Compute the required quorum and the number of live nodes. If the number of live nodes gets lower
