@@ -89,3 +89,6 @@
 - Version: 22 (MinAcceptedVersion: 21)
     - Change date math to better align with PostgreSQL:
       https://github.com/cockroachdb/cockroach/pull/31146
+- Version: 23 (MinAcceptedVersion: 21)
+    - Permit non-public scans in joinReader to prevent correctness errors during
+      index backfills.
