@@ -120,7 +120,7 @@ func makeScalarSample(
 	}
 	if s.canRecurse() {
 		for {
-			// No need for a retry counter here because makeConstExpr well eventually
+			// No need for a retry counter here because makeConstExpr will eventually
 			// be called and it always succeeds.
 			idx := sampler.Next()
 			result, ok := weights[idx].fn(s, ctx, typ, refs)
