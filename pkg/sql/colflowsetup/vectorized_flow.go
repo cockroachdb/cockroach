@@ -46,6 +46,7 @@ func NewVectorizedFlow(base *flowbase.FlowBase) flowbase.Flow {
 	return &vectorizedFlow{FlowBase: base}
 }
 
+// Setup is part of the flowbase.Flow interface.
 func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
 	f.SetSpec(spec)
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
@@ -55,7 +56,7 @@ func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
 	}
-	helper := &vectorizedFlowCreatorHelper{f: f}
+	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
 	creator := newVectorizedFlowCreator(
 		helper,
 		vectorizedRemoteComponentCreator{},
@@ -668,15 +669,17 @@ type vectorizedInboundStreamHandler struct {
 
 var _ flowbase.InboundStreamHandler = vectorizedInboundStreamHandler{}
 
+// Run is part of the flowbase.InboundStreamHandler interface.
 func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	_ *execinfrapb.ProducerMessage,
-	_ flowbase.Flow,
+	_ *flowbase.FlowBase,
 ) error {
 	return s.RunWithStream(ctx, stream)
 }
 
+// Timeout is part of the flowbase.InboundStreamHandler interface.
 func (s vectorizedInboundStreamHandler) Timeout(err error) {
 	s.Inbox.Timeout(err)
 }
@@ -684,7 +687,7 @@ func (s vectorizedInboundStreamHandler) Timeout(err error) {
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
 // vectorized infrastructure to be actually run.
 type vectorizedFlowCreatorHelper struct {
-	f flowbase.Flow
+	f *flowbase.FlowBase
 }
 
 var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}

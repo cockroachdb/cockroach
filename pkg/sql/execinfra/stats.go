@@ -54,8 +54,11 @@ func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 const (
 	rowsReadTagSuffix  = "input.rows"
 	stallTimeTagSuffix = "stalltime"
+	// MaxMemoryTagSuffix is the tag suffix for the max memory used stat.
 	MaxMemoryTagSuffix = "mem.max"
-	MaxDiskTagSuffix   = "disk.max"
+	// MaxDiskTagSuffix is the tag suffix for the max disk used stat.
+	MaxDiskTagSuffix = "disk.max"
+	// BytesReadTagSuffix is the tag suffix for the bytes read stat.
 	BytesReadTagSuffix = "bytes.read"
 )
 
@@ -71,8 +74,11 @@ func (is InputStats) Stats(prefix string) map[string]string {
 const (
 	rowsReadQueryPlanSuffix  = "rows read"
 	stallTimeQueryPlanSuffix = "stall time"
+	// MaxMemoryQueryPlanSuffix is the tag suffix for the max memory used.
 	MaxMemoryQueryPlanSuffix = "max memory used"
-	MaxDiskQueryPlanSuffix   = "max disk used"
+	// MaxDiskQueryPlanSuffix is the tag suffix for the max disk used.
+	MaxDiskQueryPlanSuffix = "max disk used"
+	// BytesReadQueryPlanSuffix is the tag suffix for the bytes read.
 	BytesReadQueryPlanSuffix = "bytes read"
 )
 

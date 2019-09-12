@@ -104,6 +104,8 @@ func checkNumInOut(
 	return nil
 }
 
+// NewProcessor creates a new execinfra.Processor according to the provided
+// core.
 func NewProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,

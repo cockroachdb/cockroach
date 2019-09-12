@@ -58,6 +58,7 @@ type flowWithCtx struct {
 	enqueueTime time.Time
 }
 
+// NewFlowScheduler creates a new FlowScheduler.
 func NewFlowScheduler(
 	ambient log.AmbientContext,
 	stopper *stop.Stopper,

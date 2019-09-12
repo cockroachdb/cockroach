@@ -19,6 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+// MetadataTestReceiver is a Processors that is complimentary to
+// MetadataTestSender which checks that all metadata emitted by latter is
+// received.
 type MetadataTestReceiver struct {
 	ProcessorBase
 	input RowSource
@@ -44,6 +47,7 @@ var _ RowSource = &MetadataTestReceiver{}
 
 const metadataTestReceiverProcName = "meta receiver"
 
+// NewMetadataTestReceiver creates a new MetadataTestReceiver.
 func NewMetadataTestReceiver(
 	flowCtx *FlowCtx,
 	processorID int32,

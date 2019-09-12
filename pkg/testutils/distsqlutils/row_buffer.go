@@ -130,7 +130,7 @@ func (rb *RowBuffer) Push(
 	return status
 }
 
-// producerClosed is a utility function used by tests to check whether the
+// ProducerClosed is a utility function used by tests to check whether the
 // RowBuffer has had ProducerDone() called on it.
 func (rb *RowBuffer) ProducerClosed() bool {
 	rb.Mu.Lock()

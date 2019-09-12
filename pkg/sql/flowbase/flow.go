@@ -32,42 +32,25 @@ const (
 	FlowFinished
 )
 
+// Startable is any component that can be started (a router or an outbox).
 type Startable interface {
 	Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc)
 }
 
+// StartableFn is an adapter when a customer function (i.e. a custom goroutine)
+// needs to become Startable.
 type StartableFn func(context.Context, *sync.WaitGroup, context.CancelFunc)
 
+// Start is a part of the Startable interface.
 func (f StartableFn) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 	f(ctx, wg, ctxCancel)
 }
 
 // Flow represents a flow which consists of processors and streams.
 type Flow interface {
-	// CheckInboundStreamID takes a stream ID and returns an error if an inbound
-	// stream already exists with that ID in the inbound streams map, creating the
-	// inbound streams map if it is nil.
-	CheckInboundStreamID(sid execinfrapb.StreamID) error
-
-	// GetWaitGroup returns the wait group of this flow.
-	GetWaitGroup() *sync.WaitGroup
-
-	// GetCtxDone returns the context cancellation channel of the flow's context.
-	GetCtxDone() <-chan struct{}
-
-	// GetSpec returns the FlowSpec.
-	// TODO(yuzefovich): this probably can be unexported.
-	GetSpec() *execinfrapb.FlowSpec
-
-	GetFlowCtx() *execinfra.FlowCtx
-
-	GetCancelFlowFn() context.CancelFunc
-
-	AnnotateCtx(context.Context) context.Context
-
-	AddStartable(Startable)
-
-	GetID() execinfrapb.FlowID
+	// Setup sets up all the infrastructure for the flow as defined by the flow
+	// spec. The flow will then need to be started and run.
+	Setup(context.Context, *execinfrapb.FlowSpec) error
 
 	// Start starts the flow. Processors run asynchronously in their own goroutines.
 	// Wait() needs to be called to wait for the flow to finish.
@@ -91,24 +74,26 @@ type Flow interface {
 	// canceled before all goroutines exit, it calls f.cancel().
 	Wait()
 
-	Cleanup(context.Context)
-
-	Setup(context.Context, *execinfrapb.FlowSpec) error
-
-	SetProcessors([]execinfra.Processor)
-
-	GetLocalProcessors() []execinfra.LocalProcessor
-
-	AddRemoteStream(execinfrapb.StreamID, *InboundStreamInfo)
-
-	GetSyncFlowConsumer() execinfra.RowReceiver
-
-	GetFlowSpec() *execinfrapb.FlowSpec
-
 	// IsLocal returns whether this flow does not have any remote execution.
 	IsLocal() bool
+
+	// GetFlowCtx returns the flow context of this flow.
+	GetFlowCtx() *execinfra.FlowCtx
+
+	// AddStartable accumulates a Startable object.
+	AddStartable(Startable)
+
+	// GetID returns the flow ID.
+	GetID() execinfrapb.FlowID
+
+	// Cleanup should be called when the flow completes (after all processors and
+	// mailboxes exited).
+	Cleanup(context.Context)
 }
 
+// FlowBase is the shared logic between row based and vectorized flows. It
+// implements Flow interface for convenience and for usage in tests, but if
+// FlowBase.Setup is called, it'll panic.
 type FlowBase struct {
 	execinfra.FlowCtx
 
@@ -158,12 +143,14 @@ type FlowBase struct {
 	spec *execinfrapb.FlowSpec
 }
 
+// Setup is part of the Flow interface.
 func (f *FlowBase) Setup(context.Context, *execinfrapb.FlowSpec) error {
 	panic("Setup should not be called on FlowBase")
 }
 
 var _ Flow = &FlowBase{}
 
+// NewFlowBase creates a new FlowBase.
 func NewFlowBase(
 	flowCtx execinfra.FlowCtx,
 	flowReg *FlowRegistry,
@@ -182,6 +169,24 @@ func NewFlowBase(
 	return base
 }
 
+// GetFlowCtx is part of the Flow interface.
+func (f *FlowBase) GetFlowCtx() *execinfra.FlowCtx {
+	return &f.FlowCtx
+}
+
+// AddStartable is part of the Flow interface.
+func (f *FlowBase) AddStartable(s Startable) {
+	f.startables = append(f.startables, s)
+}
+
+// GetID is part of the Flow interface.
+func (f *FlowBase) GetID() execinfrapb.FlowID {
+	return f.ID
+}
+
+// CheckInboundStreamID takes a stream ID and returns an error if an inbound
+// stream already exists with that ID in the inbound streams map, creating the
+// inbound streams map if it is nil.
 func (f *FlowBase) CheckInboundStreamID(sid execinfrapb.StreamID) error {
 	if _, found := f.inboundStreams[sid]; found {
 		return errors.Errorf("inbound stream %d already exists in map", sid)
@@ -192,58 +197,45 @@ func (f *FlowBase) CheckInboundStreamID(sid execinfrapb.StreamID) error {
 	return nil
 }
 
+// GetWaitGroup returns the wait group of this flow.
 func (f *FlowBase) GetWaitGroup() *sync.WaitGroup {
 	return &f.waitGroup
 }
 
+// GetCtxDone returns done channel of the context of this flow.
 func (f *FlowBase) GetCtxDone() <-chan struct{} {
 	return f.ctxDone
 }
 
+// SetSpec sets the flow spec of this flow. This is useful for debugging
+// purposes.
 func (f *FlowBase) SetSpec(spec *execinfrapb.FlowSpec) {
 	f.spec = spec
 }
 
-func (f *FlowBase) GetSpec() *execinfrapb.FlowSpec {
-	return f.spec
-}
-
-func (f *FlowBase) GetFlowCtx() *execinfra.FlowCtx {
-	return &f.FlowCtx
-}
-
-func (f *FlowBase) AnnotateCtx(ctx context.Context) context.Context {
-	return f.FlowCtx.AnnotateCtx(ctx)
-}
-
-func (f *FlowBase) AddStartable(s Startable) {
-	f.startables = append(f.startables, s)
-}
-
-func (f *FlowBase) GetID() execinfrapb.FlowID {
-	return f.ID
-}
-
+// GetCancelFlowFn returns the context cancellation function of the context of
+// this flow.
 func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
 	return f.ctxCancel
 }
 
+// SetProcessors overrides the current f.processors with the provided
+// processors. This is used to set up the vectorized flow.
 func (f *FlowBase) SetProcessors(processors []execinfra.Processor) {
 	f.processors = processors
 }
 
+// AddRemoteStream adds a remote stream to this flow.
 func (f *FlowBase) AddRemoteStream(streamID execinfrapb.StreamID, streamInfo *InboundStreamInfo) {
 	f.inboundStreams[streamID] = streamInfo
 }
 
+// GetSyncFlowConsumer returns the special syncFlowConsumer outbox.
 func (f *FlowBase) GetSyncFlowConsumer() execinfra.RowReceiver {
 	return f.syncFlowConsumer
 }
 
-func (f *FlowBase) GetFlowSpec() *execinfrapb.FlowSpec {
-	return f.spec
-}
-
+// GetLocalProcessors return the execinfra.LocalProcessors of this flow.
 func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 	return f.localProcessors
 }
@@ -302,6 +294,7 @@ func (f *FlowBase) IsLocal() bool {
 	return len(f.inboundStreams) == 0
 }
 
+// Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
 	if _, err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
@@ -315,6 +308,7 @@ func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
 	return nil
 }
 
+// Run is part of the Flow interface.
 func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 	defer f.Wait()
 
@@ -340,6 +334,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 	return nil
 }
 
+// Wait is part of the Flow interface.
 func (f *FlowBase) Wait() {
 	if !f.startedGoroutines {
 		return
@@ -379,8 +374,7 @@ type Releasable interface {
 	Release()
 }
 
-// Cleanup should be called when the flow completes (after all processors and
-// mailboxes exited).
+// Cleanup is part of the Flow interface.
 func (f *FlowBase) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")

@@ -59,15 +59,18 @@ type StreamEncoder struct {
 	msgHdr execinfrapb.ProducerHeader
 }
 
+// HasHeaderBeenSent returns whether the header has been sent.
 func (se *StreamEncoder) HasHeaderBeenSent() bool {
 	return se.headerSent
 }
 
+// SetHeaderFields sets the header fields.
 func (se *StreamEncoder) SetHeaderFields(flowID execinfrapb.FlowID, streamID execinfrapb.StreamID) {
 	se.msgHdr.FlowID = flowID
 	se.msgHdr.StreamID = streamID
 }
 
+// Init initializes the encoder.
 func (se *StreamEncoder) Init(types []types.T) {
 	se.infos = make([]execinfrapb.DatumInfo, len(types))
 	for i := range types {

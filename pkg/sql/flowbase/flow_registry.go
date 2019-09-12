@@ -29,6 +29,8 @@ import (
 
 var errNoInboundStreamConnection = errors.New("no inbound stream connection")
 
+// SettingFlowStreamTimeout is a cluster setting that sets the default flow
+// stream timeout.
 var SettingFlowStreamTimeout = settings.RegisterNonNegativeDurationSetting(
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
@@ -84,7 +86,7 @@ type flowEntry struct {
 	// up the entry.
 	refCount int
 
-	flow Flow
+	flow *FlowBase
 
 	// inboundStreams are streams that receive data from other hosts, through the
 	// FlowStream API. All fields in the inboundStreamInfos are protected by the
@@ -179,7 +181,7 @@ func (fr *FlowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
 func (fr *FlowRegistry) RegisterFlow(
 	ctx context.Context,
 	id execinfrapb.FlowID,
-	f Flow,
+	f *FlowBase,
 	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo,
 	timeout time.Duration,
 ) (retErr error) {
@@ -204,7 +206,7 @@ func (fr *FlowRegistry) RegisterFlow(
 		return errors.Errorf(
 			"flow already registered: current node ID: %d flowID: %s.\n"+
 				"Current flow: %+v\nExisting flow: %+v",
-			fr.nodeID, f.GetSpec().FlowID, f.GetSpec(), entry.flow.GetSpec())
+			fr.nodeID, f.spec.FlowID, f.spec, entry.flow.spec)
 	}
 	// Take a reference that will be removed by UnregisterFlow.
 	entry.refCount++
@@ -442,7 +444,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	streamID execinfrapb.StreamID,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	timeout time.Duration,
-) (_ Flow, _ InboundStreamHandler, _ func(), retErr error) {
+) (_ *FlowBase, _ InboundStreamHandler, _ func(), retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
 

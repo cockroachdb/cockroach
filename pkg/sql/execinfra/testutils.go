@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
+// StaticNodeID is the default Node ID to be used in tests.
 const StaticNodeID = roachpb.NodeID(3)
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
@@ -92,8 +93,8 @@ func MakeTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMo
 	return &diskMonitor
 }
 
-// GenerateValueSpec generates a ValuesCoreSpec that encodes the given rows. We
-// pass the types as well because zero rows are allowed.
+// GenerateValuesSpec generates a ValuesCoreSpec that encodes the given rows.
+// We pass the types as well because zero rows are allowed.
 func GenerateValuesSpec(
 	colTypes []types.T, rows sqlbase.EncDatumRows, rowsPerChunk int,
 ) (execinfrapb.ValuesCoreSpec, error) {

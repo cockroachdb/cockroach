@@ -42,15 +42,14 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
-	flow := colflowsetup.NewVectorizedFlow(
-		flowbase.NewFlowBase(
-			flowCtx,
-			nil,  /* flowReg */
-			nil,  /* syncFlowConsumer */
-			nil,  /* localProcessors */
-			true, /* isVectorized */
-		),
+	base := flowbase.NewFlowBase(
+		flowCtx,
+		nil,  /* flowReg */
+		nil,  /* syncFlowConsumer */
+		nil,  /* localProcessors */
+		true, /* isVectorized */
 	)
+	flow := colflowsetup.NewVectorizedFlow(base)
 
 	mat, err := colflowsetup.NewMaterializer(
 		&flowCtx,
@@ -65,13 +64,13 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		&distsqlutils.RowBuffer{},
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
-		flow.GetCancelFlowFn,
+		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	flow.SetProcessors([]execinfra.Processor{mat})
+	base.SetProcessors([]execinfra.Processor{mat})
 	// This test specifically verifies that a flow doesn't get stuck in Wait for
 	// asynchronous components that haven't been signaled to exit. To simulate
 	// this we just create a mock startable.

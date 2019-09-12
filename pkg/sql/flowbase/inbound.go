@@ -24,11 +24,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// InboundStreamHandler is a handler of an inbound stream.
 type InboundStreamHandler interface {
 	// run is called once a FlowStream RPC is handled and a stream is obtained to
 	// make this stream accessible to the rest of the flow.
 	Run(
-		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f Flow,
+		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f *FlowBase,
 	) error
 	// timeout is called with an error, which results in the teardown of the
 	// stream strategy with the given error.
@@ -36,21 +37,25 @@ type InboundStreamHandler interface {
 	Timeout(err error)
 }
 
+// RowInboundStreamHandler is an InboundStreamHandler for the row based flow.
+// It is exported since it is the default for the flow infrastructure.
 type RowInboundStreamHandler struct {
 	execinfra.RowReceiver
 }
 
 var _ InboundStreamHandler = RowInboundStreamHandler{}
 
+// Run is part of the InboundStreamHandler interface.
 func (s RowInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	f Flow,
+	f *FlowBase,
 ) error {
 	return processInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
 }
 
+// Timeout is part of the InboundStreamHandler interface.
 func (s RowInboundStreamHandler) Timeout(err error) {
 	s.Push(
 		nil, /* row */
@@ -68,7 +73,7 @@ func processInboundStream(
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
-	f Flow,
+	f *FlowBase,
 ) error {
 
 	err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f)
@@ -90,7 +95,7 @@ func processInboundStreamHelper(
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
-	f Flow,
+	f *FlowBase,
 ) error {
 	draining := false
 	var sd StreamDecoder

@@ -73,6 +73,7 @@ type Outbox struct {
 var _ execinfra.RowReceiver = &Outbox{}
 var _ Startable = &Outbox{}
 
+// NewOutbox creates a new Outbox.
 func NewOutbox(
 	flowCtx *execinfra.FlowCtx,
 	nodeID roachpb.NodeID,
@@ -92,10 +93,12 @@ func NewOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *Outb
 	return &Outbox{stream: stream}
 }
 
+// SetFlowCtx sets the flow context for the Outbox.
 func (m *Outbox) SetFlowCtx(flowCtx *execinfra.FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
+// Init initializes the Outbox.
 func (m *Outbox) Init(typs []types.T) {
 	if typs == nil {
 		// We check for nil to detect uninitialized cases; but we support 0-length
@@ -452,6 +455,7 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	go m.run(ctx, wg)
 }
 
+// Err returns the error (if any occurred) while Outbox was running.
 func (m *Outbox) Err() error {
 	return m.err
 }

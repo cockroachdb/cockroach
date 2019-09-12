@@ -30,20 +30,22 @@ type rowBasedFlow struct {
 
 var _ flowbase.Flow = &rowBasedFlow{}
 
+// NewRowBasedFlow returns a row based flow using base as its FlowBase.
 func NewRowBasedFlow(base *flowbase.FlowBase) flowbase.Flow {
 	return &rowBasedFlow{FlowBase: base}
 }
 
+// Setup if part of the flowbase.Flow interface.
 func (f *rowBasedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
 	f.SetSpec(spec)
 	// First step: setup the input synchronizers for all processors.
-	inputSyncs, err := f.setupInputSyncs(ctx)
+	inputSyncs, err := f.setupInputSyncs(ctx, spec)
 	if err != nil {
 		return err
 	}
 
 	// Then, populate processors.
-	return f.setupProcessors(ctx, inputSyncs)
+	return f.setupProcessors(ctx, spec, inputSyncs)
 }
 
 // setupProcessors creates processors for each spec in f.spec, fusing processors
@@ -52,9 +54,8 @@ func (f *rowBasedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) er
 // populates f.processors with all created processors that weren't fused to and
 // thus need their own goroutine.
 func (f *rowBasedFlow) setupProcessors(
-	ctx context.Context, inputSyncs [][]execinfra.RowSource,
+	ctx context.Context, spec *execinfrapb.FlowSpec, inputSyncs [][]execinfra.RowSource,
 ) error {
-	spec := f.GetFlowSpec()
 	processors := make([]execinfra.Processor, 0, len(spec.Processors))
 
 	// Populate processors: see which processors need their own goroutine and
@@ -189,8 +190,9 @@ func (f *rowBasedFlow) makeProcessor(
 
 // setupInputSyncs populates a slice of input syncs, one for each Processor in
 // f.Spec, each containing one RowSource for each input to that Processor.
-func (f *rowBasedFlow) setupInputSyncs(ctx context.Context) ([][]execinfra.RowSource, error) {
-	spec := f.GetFlowSpec()
+func (f *rowBasedFlow) setupInputSyncs(
+	ctx context.Context, spec *execinfrapb.FlowSpec,
+) ([][]execinfra.RowSource, error) {
 	inputSyncs := make([][]execinfra.RowSource, len(spec.Processors))
 	for pIdx, ps := range spec.Processors {
 		for _, is := range ps.Input {

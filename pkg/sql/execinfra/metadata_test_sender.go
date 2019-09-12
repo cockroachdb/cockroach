@@ -34,6 +34,7 @@ var _ RowSource = &MetadataTestSender{}
 
 const metadataTestSenderProcName = "meta sender"
 
+// NewMetadataTestSender creates a new MetadataTestSender.
 func NewMetadataTestSender(
 	flowCtx *FlowCtx,
 	processorID int32,
