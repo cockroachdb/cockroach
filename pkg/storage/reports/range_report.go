@@ -64,13 +64,18 @@ func (r *replicationStatsReportSaver) LastUpdatedRowCount() int {
 	return r.lastUpdatedRowCount
 }
 
+// EnsureEntry creates an entry for the given key if there is none.
+func (r *replicationStatsReportSaver) EnsureEntry(zKey ZoneKey) {
+	if _, ok := r.stats[zKey]; !ok {
+		r.stats[zKey] = zoneRangeStatus{}
+	}
+}
+
 // AddZoneRangeStatus adds a row to the report.
 func (r *replicationStatsReportSaver) AddZoneRangeStatus(
 	zKey ZoneKey, unavailable bool, underReplicated bool, overReplicated bool,
 ) {
-	if _, ok := r.stats[zKey]; !ok {
-		r.stats[zKey] = zoneRangeStatus{}
-	}
+	r.EnsureEntry(zKey)
 	rStat := r.stats[zKey]
 	rStat.numRanges++
 	if unavailable {
@@ -285,7 +290,7 @@ func makeReplicationStatsVisitor(
 		nodeChecker: nodeChecker,
 		report:      saver,
 	}
-	v.report.resetReport()
+	v.reset(ctx)
 	return v
 }
 
@@ -314,11 +319,7 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 
 func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneConfig) {
 	if v.zoneHasReport(zone) {
-		v.report.AddZoneRangeStatus(
-			key,
-			false, /* unavailable */
-			false, /* underReplicated */
-			false /* overReplicated */)
+		v.report.EnsureEntry(key)
 	}
 }
 
