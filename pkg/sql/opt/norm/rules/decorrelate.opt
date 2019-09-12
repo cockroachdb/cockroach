@@ -306,7 +306,9 @@
 # instead of CONST_AGG.
 #
 # An ordinality column only needs to be synthesized if "left" does not already
-# have a strict key.
+# have a strict key. We wrap the output in a Project operator to ensure that
+# the original output columns are preserved and the ordinality column is not
+# inadvertently added as a new output column.
 #
 # CONST_AGG is an internal aggregation function used when all rows in the
 # grouping set have the same value on the column.
@@ -327,21 +329,25 @@
     $private:*
 )
 =>
-(Select
-    ((OpName $right)
-        (InnerJoinApply
-            $newLeft:(EnsureKey $left)
-            $input
-            []
-            $private
+(Project
+    (Select
+        ((OpName $right)
+            (InnerJoinApply
+                $newLeft:(EnsureKey $left)
+                $input
+                []
+                $private
+            )
+            (AppendAggCols
+                $aggregations
+                ConstAgg (NonKeyCols $newLeft)
+            )
+            (AddColsToGrouping $groupingPrivate (KeyCols $newLeft))
         )
-        (AppendAggCols
-            $aggregations
-            ConstAgg (NonKeyCols $newLeft)
-        )
-        (AddColsToGrouping $groupingPrivate (KeyCols $newLeft))
+        $on
     )
-    $on
+    []
+    (OutputCols2 $left $right)
 )
 
 # TryDecorrelateScalarGroupBy "pushes down" a Join into a ScalarGroupBy
