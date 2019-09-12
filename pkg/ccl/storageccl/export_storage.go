@@ -280,9 +280,9 @@ var (
 )
 
 type localFileStorage struct {
-	cfg  roachpb.ExportStorage_LocalFilePath // constains un-prefixed base -- DO NOT use for I/O ops.
-	base string                              // the prefixed base, for I/O ops on this node.
-	externalIODir string                     // base directory in which we can perform reads and writes
+	cfg           roachpb.ExportStorage_LocalFilePath // constains un-prefixed base -- DO NOT use for I/O ops.
+	base          string                              // the prefixed base, for I/O ops on this node.
+	externalIODir string                              // base directory in which we can perform reads and writes
 }
 
 var _ ExportStorage = &localFileStorage{}

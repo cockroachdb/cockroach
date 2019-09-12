@@ -227,7 +227,7 @@ func testListFiles(t *testing.T, storeURI string) {
 			_ = file.Close()
 		}
 
-		s := storeFromURI(ctx, t,  appendPath(t, storeURI, "*.csv"))
+		s := storeFromURI(ctx, t, appendPath(t, storeURI, "*.csv"))
 		filesList, err := s.ListFiles(ctx, "")
 		if err != nil {
 			t.Fatal(err)
@@ -236,10 +236,10 @@ func testListFiles(t *testing.T, storeURI string) {
 			t.Fatal(`listed incorrect number of files`, filesList)
 		}
 		uri, _ := url.Parse(storeURI)
-		expectedBaseUri := fmt.Sprintf("%s://%s%s", uri.Scheme, uri.Host, uri.Path)
+		expectedBaseURI := fmt.Sprintf("%s://%s%s", uri.Scheme, uri.Host, uri.Path)
 		for i, result := range filesList {
-			if result != fmt.Sprintf("%s/%s", expectedBaseUri,  fileNames[i]) {
-				t.Fatal(`resulting list is incorrect`, expectedBaseUri, filesList)
+			if result != fmt.Sprintf("%s/%s", expectedBaseURI, fileNames[i]) {
+				t.Fatal(`resulting list is incorrect`, expectedBaseURI, filesList)
 			}
 		}
 

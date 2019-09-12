@@ -180,7 +180,7 @@ func importPlanHook(
 		}
 		var files []string
 		for _, file := range listedFiles {
-			s, err := storageccl.ExportStorageFromURI(ctx, file,  p.ExecCfg().Settings)
+			s, err := storageccl.ExportStorageFromURI(ctx, file, p.ExecCfg().Settings)
 			if err != nil {
 				return err
 			}
