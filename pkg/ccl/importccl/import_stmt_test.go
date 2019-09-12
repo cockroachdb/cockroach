@@ -1312,6 +1312,34 @@ func TestImportIntoCSV(t *testing.T) {
 		err     string
 	}{
 		{
+			"import-into-no-decompress-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
+			[]string{`'nodelocal:///data-[0-9]'`},
+			` WITH decompress = 'none'`,
+			"",
+		},
+		{
+			"import-into-explicit-gzip-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
+			[]string{`'nodelocal:///data-[0-9].gz?param=value'`},
+			` WITH decompress = 'gzip'`,
+			"",
+		},
+		{
+			"import-into-auto-bzip-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			[]string{`'nodelocal:///data-[0-9].bz2'`},
+			` WITH decompress = 'auto'`,
+			"",
+		},
+		{
+			"import-no-files-match-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			[]string{`'nodelocal:///data-[0-9][0-9]*'`},
+			` WITH decompress = 'auto'`,
+			"no such file or directory",
+		},
+		{
 			"simple-import-into",
 			`IMPORT INTO t (a, b) CSV DATA (%s)`,
 			testFiles.files,
