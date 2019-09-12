@@ -58,7 +58,7 @@ func (s *sorterBase) init(
 		s.FinishTrace = s.outputStatsToTrace
 	}
 
-	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Cfg.Settings.SV) ||
+	useTempStorage := execinfra.SettingUseTempStorageSorts.Get(&flowCtx.Cfg.Settings.SV) ||
 		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0
 	var memMonitor *mon.BytesMonitor
 	if useTempStorage {
@@ -147,8 +147,8 @@ const sorterTagPrefix = "sorter."
 // Stats implements the SpanStats interface.
 func (ss *SorterStats) Stats() map[string]string {
 	statsMap := ss.InputStats.Stats(sorterTagPrefix)
-	statsMap[sorterTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedMem)
-	statsMap[sorterTagPrefix+maxDiskTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedDisk)
+	statsMap[sorterTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedMem)
+	statsMap[sorterTagPrefix+execinfra.MaxDiskTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedDisk)
 	return statsMap
 }
 
@@ -156,8 +156,8 @@ func (ss *SorterStats) Stats() map[string]string {
 func (ss *SorterStats) StatsForQueryPlan() []string {
 	return append(
 		ss.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", maxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)),
+		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", execinfra.MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)),
 	)
 }
 

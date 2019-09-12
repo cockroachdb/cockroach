@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package colplan
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,13 +47,13 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	nCols := 1
 	types := sqlbase.OneIntCol
 
-	input := newRowBuffer(types, sqlbase.MakeIntRows(nRows, nCols), rowBufferArgs{})
+	input := execinfra.NewRowBuffer(types, sqlbase.MakeIntRows(nRows, nCols), execinfra.RowBufferArgs{})
 	mtsSpec := execinfrapb.ProcessorCoreUnion{
 		MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
 			ID: uuid.MakeV4().String(),
 		},
 	}
-	mts, err := newProcessor(ctx, &flowCtx, 0, &mtsSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{input}, []execinfra.RowReceiver{nil}, nil)
+	mts, err := distsqlrun.newProcessor(ctx, &flowCtx, 0, &mtsSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{input}, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal("MetadataTestSender is not a RowSource")
 	}
 
-	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource)
+	col, err := NewColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 			SenderIDs: []string{mtsSpec.MetadataTestSender.ID},
 		},
 	}
-	mtr, err := newProcessor(ctx, &flowCtx, 3, &mtrSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{execinfra.RowSource(mat)}, []execinfra.RowReceiver{nil}, nil)
+	mtr, err := distsqlrun.newProcessor(ctx, &flowCtx, 3, &mtrSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{execinfra.RowSource(mat)}, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

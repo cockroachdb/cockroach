@@ -86,8 +86,8 @@ func TestWindowerAccountingForResults(t *testing.T) {
 			},
 		}},
 	}
-	output := newRowBuffer(
-		sqlbase.OneIntCol, nil, rowBufferArgs{},
+	output := execinfra.NewRowBuffer(
+		sqlbase.OneIntCol, nil, execinfra.RowBufferArgs{},
 	)
 
 	d, err := newWindower(flowCtx, 0 /* processorID */, &spec, input, post, output)

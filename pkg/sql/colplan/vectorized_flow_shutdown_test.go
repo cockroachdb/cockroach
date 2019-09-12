@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package colplan
 
 import (
 	"context"
@@ -134,7 +134,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
 	require.NoError(t, err)
 	dialer := &mockDialer{addr: addr}
@@ -211,7 +211,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					require.NoError(t, err)
 					wg.Add(1)
 					go func(id int) {
-						outbox.Run(ctx, dialer, staticNodeID, flowID, execinfrapb.StreamID(id), cancelFn)
+						outbox.Run(ctx, dialer, execinfra.StaticNodeID, flowID, execinfrapb.StreamID(id), cancelFn)
 						wg.Done()
 					}(id)
 

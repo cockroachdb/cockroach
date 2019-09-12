@@ -694,9 +694,9 @@ func TestMergeJoiner(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			ms := c.spec
-			leftInput := newRowBuffer(c.leftTypes, c.leftInput, rowBufferArgs{})
-			rightInput := newRowBuffer(c.rightTypes, c.rightInput, rowBufferArgs{})
-			out := &RowBuffer{}
+			leftInput := execinfra.NewRowBuffer(c.leftTypes, c.leftInput, execinfra.RowBufferArgs{})
+			rightInput := execinfra.NewRowBuffer(c.rightTypes, c.rightInput, execinfra.RowBufferArgs{})
+			out := &execinfra.RowBuffer{}
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
@@ -795,12 +795,12 @@ func TestConsumerClosed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.typ.String() /* name */, func(t *testing.T) {
-			leftInput := newRowBuffer(leftTypes, tc.leftRows, rowBufferArgs{})
-			rightInput := newRowBuffer(rightTypes, tc.rightRows, rowBufferArgs{})
+			leftInput := execinfra.NewRowBuffer(leftTypes, tc.leftRows, execinfra.RowBufferArgs{})
+			rightInput := execinfra.NewRowBuffer(rightTypes, tc.rightRows, execinfra.RowBufferArgs{})
 
 			// Create a consumer and close it immediately. The mergeJoiner should find out
 			// about this closer the first time it attempts to push a row.
-			out := &RowBuffer{}
+			out := &execinfra.RowBuffer{}
 			out.ConsumerDone()
 
 			st := cluster.MakeTestingClusterSettings()

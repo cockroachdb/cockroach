@@ -404,7 +404,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				NodeID: s.NodeID(),
 			}
 
-			out := &RowBuffer{}
+			out := &execinfra.RowBuffer{}
 			irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &tc.spec, &tc.post, out)
 			if err != nil {
 				t.Fatal(err)
@@ -534,7 +534,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				NodeID: s.NodeID(),
 			}
 
-			out := &RowBuffer{}
+			out := &execinfra.RowBuffer{}
 			_, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &tc.spec, &tc.post, out)
 			if err == nil {
 				t.Fatalf("expected an error")
@@ -608,7 +608,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		Type: sqlbase.InnerJoin,
 	}
 
-	out := &RowBuffer{}
+	out := &execinfra.RowBuffer{}
 	irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &innerJoinSpec, &execinfrapb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)

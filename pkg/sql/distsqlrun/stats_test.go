@@ -26,7 +26,7 @@ func TestInputStatCollector(t *testing.T) {
 	const numRows = 100
 
 	isc := execinfra.NewInputStatCollector(
-		newRowBuffer(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, 1), rowBufferArgs{}),
+		execinfra.NewRowBuffer(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, 1), execinfra.RowBufferArgs{}),
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {
 	}

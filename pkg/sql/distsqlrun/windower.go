@@ -734,7 +734,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						"hash column %d, row with only %d columns", errors.Safe(col), errors.Safe(len(row)))
 				}
 				var err error
-				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, preferredEncoding, w.scratch)
+				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, execinfra.PreferredEncoding, w.scratch)
 				if err != nil {
 					return err
 				}
@@ -898,8 +898,8 @@ const windowerTagPrefix = "windower."
 // Stats implements the SpanStats interface.
 func (ws *WindowerStats) Stats() map[string]string {
 	inputStatsMap := ws.InputStats.Stats(windowerTagPrefix)
-	inputStatsMap[windowerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedMem)
-	inputStatsMap[windowerTagPrefix+maxDiskTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedDisk)
+	inputStatsMap[windowerTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedMem)
+	inputStatsMap[windowerTagPrefix+execinfra.MaxDiskTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedDisk)
 	return inputStatsMap
 }
 
@@ -907,8 +907,8 @@ func (ws *WindowerStats) Stats() map[string]string {
 func (ws *WindowerStats) StatsForQueryPlan() []string {
 	return append(
 		ws.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", maxDiskQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedDisk)),
+		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", execinfra.MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedDisk)),
 	)
 }
 func (w *windower) outputStatsToTrace() {

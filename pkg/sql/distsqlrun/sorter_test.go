@@ -315,8 +315,8 @@ func TestSorter(t *testing.T) {
 						// back to using a disk row container.
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memLimit.bytes
 
-						in := newRowBuffer(c.types, c.input, rowBufferArgs{})
-						out := &RowBuffer{}
+						in := execinfra.NewRowBuffer(c.types, c.input, execinfra.RowBufferArgs{})
+						out := &execinfra.RowBuffer{}
 
 						var s execinfra.Processor
 						if !forceSortAll {

@@ -79,9 +79,9 @@ func TestHashJoiner(t *testing.T) {
 		testFunc := func(t *testing.T, flowCtxSetup func(f *execinfra.FlowCtx), hjSetup func(h *hashJoiner)) error {
 			side := execinfra.RightSide
 			for i := 0; i < 2; i++ {
-				leftInput := newRowBuffer(c.leftTypes, c.leftInput, rowBufferArgs{})
-				rightInput := newRowBuffer(c.rightTypes, c.rightInput, rowBufferArgs{})
-				out := &RowBuffer{}
+				leftInput := execinfra.NewRowBuffer(c.leftTypes, c.leftInput, execinfra.RowBufferArgs{})
+				rightInput := execinfra.NewRowBuffer(c.rightTypes, c.rightInput, execinfra.RowBufferArgs{})
+				out := &execinfra.RowBuffer{}
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Cfg: &execinfra.ServerConfig{
@@ -186,9 +186,9 @@ func TestHashJoinerError(t *testing.T) {
 		// testFunc is a helper function that runs a hashJoin with the current
 		// test case after running the provided setup function.
 		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
-			leftInput := newRowBuffer(c.leftTypes, c.leftInput, rowBufferArgs{})
-			rightInput := newRowBuffer(c.rightTypes, c.rightInput, rowBufferArgs{})
-			out := &RowBuffer{}
+			leftInput := execinfra.NewRowBuffer(c.leftTypes, c.leftInput, execinfra.RowBufferArgs{})
+			rightInput := execinfra.NewRowBuffer(c.rightTypes, c.rightInput, execinfra.RowBufferArgs{})
+			out := &execinfra.RowBuffer{}
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg: &execinfra.ServerConfig{
@@ -233,7 +233,7 @@ func TestHashJoinerError(t *testing.T) {
 }
 
 func checkExpectedRows(
-	types []types.T, expectedRows sqlbase.EncDatumRows, results *RowBuffer,
+	types []types.T, expectedRows sqlbase.EncDatumRows, results *execinfra.RowBuffer,
 ) error {
 	var expected []string
 	for _, row := range expectedRows {
@@ -296,30 +296,30 @@ func TestHashJoinerDrain(t *testing.T) {
 		{v[0]},
 	}
 	leftInputDrainNotification := make(chan error, 1)
-	leftInputConsumerDone := func(rb *RowBuffer) {
+	leftInputConsumerDone := func(rb *execinfra.RowBuffer) {
 		// Check that draining occurs before the left input has been consumed,
 		// not at the end.
 		// The left input started with 2 rows and 1 was consumed to find out
 		// that we need to drain. So we expect 1 to be left.
-		rb.mu.Lock()
-		defer rb.mu.Unlock()
-		if len(rb.mu.records) != 1 {
+		rb.Mu.Lock()
+		defer rb.Mu.Unlock()
+		if len(rb.Mu.Records) != 1 {
 			leftInputDrainNotification <- errors.Errorf(
-				"expected 1 row left, got: %d", len(rb.mu.records))
+				"expected 1 row left, got: %d", len(rb.Mu.Records))
 			return
 		}
 		leftInputDrainNotification <- nil
 	}
-	leftInput := newRowBuffer(
+	leftInput := execinfra.NewRowBuffer(
 		sqlbase.OneIntCol,
 		inputs[0],
-		rowBufferArgs{OnConsumerDone: leftInputConsumerDone},
+		execinfra.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
-	rightInput := newRowBuffer(sqlbase.OneIntCol, inputs[1], rowBufferArgs{})
-	out := newRowBuffer(
+	rightInput := execinfra.NewRowBuffer(sqlbase.OneIntCol, inputs[1], execinfra.RowBufferArgs{})
+	out := execinfra.NewRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
-		rowBufferArgs{AccumulateRowsWhileDraining: true},
+		execinfra.RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
 
 	// Since the use of external storage overrides h.initialBufferSize, disable
@@ -357,10 +357,10 @@ func TestHashJoinerDrain(t *testing.T) {
 		t.Fatal(callbackErr)
 	}
 
-	leftInput.mu.Lock()
-	defer leftInput.mu.Unlock()
-	if len(leftInput.mu.records) != 0 {
-		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.mu.records))
+	leftInput.Mu.Lock()
+	defer leftInput.Mu.Unlock()
+	if len(leftInput.Mu.Records) != 0 {
+		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.Mu.Records))
 	}
 
 	if err := checkExpectedRows(sqlbase.OneIntCol, expected, out); err != nil {
@@ -396,33 +396,33 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		},
 	}
 	leftInputDrainNotification := make(chan error, 1)
-	leftInputConsumerDone := func(rb *RowBuffer) {
+	leftInputConsumerDone := func(rb *execinfra.RowBuffer) {
 		// Check that draining occurs before the left input has been consumed, not
 		// at the end.
-		rb.mu.Lock()
-		defer rb.mu.Unlock()
-		if len(rb.mu.records) != 2 {
+		rb.Mu.Lock()
+		defer rb.Mu.Unlock()
+		if len(rb.Mu.Records) != 2 {
 			leftInputDrainNotification <- errors.Errorf(
-				"expected 2 rows left in the left input, got: %d", len(rb.mu.records))
+				"expected 2 rows left in the left input, got: %d", len(rb.Mu.Records))
 			return
 		}
 		leftInputDrainNotification <- nil
 	}
 	rightInputDrainNotification := make(chan error, 1)
-	rightInputConsumerDone := func(rb *RowBuffer) {
+	rightInputConsumerDone := func(rb *execinfra.RowBuffer) {
 		// Check that draining occurs before the right input has been consumed, not
 		// at the end.
-		rb.mu.Lock()
-		defer rb.mu.Unlock()
-		if len(rb.mu.records) != 2 {
+		rb.Mu.Lock()
+		defer rb.Mu.Unlock()
+		if len(rb.Mu.Records) != 2 {
 			rightInputDrainNotification <- errors.Errorf(
-				"expected 2 rows left in the right input, got: %d", len(rb.mu.records))
+				"expected 2 rows left in the right input, got: %d", len(rb.Mu.Records))
 			return
 		}
 		rightInputDrainNotification <- nil
 	}
 	rightErrorReturned := false
-	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	rightInputNext := func(rb *execinfra.RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		if !rightErrorReturned {
 			rightErrorReturned = true
 			// The right input is going to return an error as the first thing.
@@ -431,23 +431,23 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		// Let RowBuffer.Next() do its usual thing.
 		return nil, nil
 	}
-	leftInput := newRowBuffer(
+	leftInput := execinfra.NewRowBuffer(
 		sqlbase.OneIntCol,
 		inputs[0],
-		rowBufferArgs{OnConsumerDone: leftInputConsumerDone},
+		execinfra.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
-	rightInput := newRowBuffer(
+	rightInput := execinfra.NewRowBuffer(
 		sqlbase.OneIntCol,
 		inputs[1],
-		rowBufferArgs{
+		execinfra.RowBufferArgs{
 			OnConsumerDone: rightInputConsumerDone,
 			OnNext:         rightInputNext,
 		},
 	)
-	out := newRowBuffer(
+	out := execinfra.NewRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
-		rowBufferArgs{},
+		execinfra.RowBufferArgs{},
 	)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -480,19 +480,19 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		t.Fatal(callbackErr)
 	}
 
-	leftInput.mu.Lock()
-	defer leftInput.mu.Unlock()
-	if len(leftInput.mu.records) != 0 {
-		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.mu.records))
+	leftInput.Mu.Lock()
+	defer leftInput.Mu.Unlock()
+	if len(leftInput.Mu.Records) != 0 {
+		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.Mu.Records))
 	}
 
-	out.mu.Lock()
-	defer out.mu.Unlock()
-	if len(out.mu.records) != 1 {
-		t.Fatalf("expected 1 record, got: %d", len(out.mu.records))
+	out.Mu.Lock()
+	defer out.Mu.Unlock()
+	if len(out.Mu.Records) != 1 {
+		t.Fatalf("expected 1 record, got: %d", len(out.Mu.Records))
 	}
-	if !testutils.IsError(out.mu.records[0].meta.Err, "Test error. Please drain.") {
-		t.Fatalf("expected %q, got: %v", "Test error", out.mu.records[0].meta.Err)
+	if !testutils.IsError(out.Mu.Records[0].Meta.Err, "Test error. Please drain.") {
+		t.Fatalf("expected %q, got: %v", "Test error", out.Mu.Records[0].Meta.Err)
 	}
 }
 

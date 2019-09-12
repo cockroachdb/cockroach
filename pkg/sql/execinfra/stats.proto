@@ -30,3 +30,8 @@ message JoinReaderStats {
   InputStats index_lookup_stats = 2 [(gogoproto.nullable) = false];
   reserved 3;
 }
+
+// OutboxStats are the stats collected by an outbox.
+message OutboxStats {
+  int64 bytes_sent = 1;
+}

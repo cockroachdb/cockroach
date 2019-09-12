@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -166,7 +165,7 @@ type Server struct {
 	distSender       *kv.DistSender
 	db               *client.DB
 	pgServer         *pgwire.Server
-	distSQLServer    *distsqlrun.ServerImpl
+	distSQLServer    *execinfra.ServerImpl
 	node             *Node
 	registry         *metric.Registry
 	recorder         *status.MetricsRecorder
@@ -570,7 +569,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
 
-	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
+	s.distSQLServer = execinfra.NewServer(ctx, distSQLCfg)
 	execinfrapb.RegisterDistSQLServer(s.grpc.Server, s.distSQLServer)
 
 	s.admin = newAdminServer(s)
@@ -651,7 +650,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
-			distsqlrun.Version,
+			execinfra.Version,
 			s.st,
 			// The node descriptor will be set later, once it is initialized.
 			roachpb.NodeDescriptor{},

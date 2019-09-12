@@ -134,9 +134,9 @@ func TestTableReader(t *testing.T) {
 				}
 
 				var out execinfra.RowReceiver
-				var buf *RowBuffer
+				var buf *execinfra.RowBuffer
 				if !rowSource {
-					buf = &RowBuffer{}
+					buf = &execinfra.RowBuffer{}
 					out = buf
 				}
 				tr, err := newTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, out)
@@ -228,9 +228,9 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 
 	testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
 		var out execinfra.RowReceiver
-		var buf *RowBuffer
+		var buf *execinfra.RowBuffer
 		if !rowSource {
-			buf = &RowBuffer{}
+			buf = &execinfra.RowBuffer{}
 			out = buf
 		}
 		tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, out)

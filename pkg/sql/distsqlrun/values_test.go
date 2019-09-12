@@ -20,39 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
-
-// generateValueSpec generates a ValuesCoreSpec that encodes the given rows. We pass
-// the types as well because zero rows are allowed.
-func generateValuesSpec(
-	colTypes []types.T, rows sqlbase.EncDatumRows, rowsPerChunk int,
-) (execinfrapb.ValuesCoreSpec, error) {
-	var spec execinfrapb.ValuesCoreSpec
-	spec.Columns = make([]execinfrapb.DatumInfo, len(colTypes))
-	for i := range spec.Columns {
-		spec.Columns[i].Type = colTypes[i]
-		spec.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
-	}
-
-	var a sqlbase.DatumAlloc
-	for i := 0; i < len(rows); {
-		var buf []byte
-		for end := i + rowsPerChunk; i < len(rows) && i < end; i++ {
-			for j, info := range spec.Columns {
-				var err error
-				buf, err = rows[i][j].Encode(&colTypes[j], &a, info.Encoding, buf)
-				if err != nil {
-					return execinfrapb.ValuesCoreSpec{}, err
-				}
-			}
-		}
-		spec.RawBytes = append(spec.RawBytes, buf)
-	}
-	return spec, nil
-}
 
 func TestValuesProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -63,12 +33,12 @@ func TestValuesProcessor(t *testing.T) {
 				t.Run(fmt.Sprintf("%d-%d-%d", numRows, numCols, rowsPerChunk), func(t *testing.T) {
 					inRows, colTypes := sqlbase.RandEncDatumRows(rng, numRows, numCols)
 
-					spec, err := generateValuesSpec(colTypes, inRows, rowsPerChunk)
+					spec, err := execinfra.GenerateValuesSpec(colTypes, inRows, rowsPerChunk)
 					if err != nil {
 						t.Fatal(err)
 					}
 
-					out := &RowBuffer{}
+					out := &execinfra.RowBuffer{}
 					st := cluster.MakeTestingClusterSettings()
 					evalCtx := tree.NewTestingEvalContext(st)
 					defer evalCtx.Stop(context.Background())
@@ -141,7 +111,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 		for _, rowsPerChunk := range []int{1, 4, 16} {
 			b.Run(fmt.Sprintf("rows=%d,chunkSize=%d", numRows, rowsPerChunk), func(b *testing.B) {
 				rows := sqlbase.MakeIntRows(numRows, numCols)
-				spec, err := generateValuesSpec(sqlbase.TwoIntCols, rows, rowsPerChunk)
+				spec, err := execinfra.GenerateValuesSpec(sqlbase.TwoIntCols, rows, rowsPerChunk)
 				if err != nil {
 					b.Fatal(err)
 				}

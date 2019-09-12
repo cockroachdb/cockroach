@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package colplan
 
 import (
 	"context"
@@ -22,16 +22,50 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 )
+
+type vectorizedFlow struct {
+	execinfra.FlowBase
+}
+
+var _ execinfra.Flow = &vectorizedFlow{}
+
+func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
+	f.SetSpec(spec)
+	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
+	acc := f.EvalCtx.Mon.MakeBoundAccount()
+	f.VectorizedBoundAccount = &acc
+	recordingStats := false
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		recordingStats = true
+	}
+	helper := &vectorizedFlowCreatorHelper{f: f}
+	creator := newVectorizedFlowCreator(
+		helper,
+		vectorizedRemoteComponentCreator{},
+		recordingStats,
+		f.GetWaitGroup(),
+		f.GetSyncFlowConsumer(),
+		f.GetFlowCtx().Cfg.NodeDialer,
+		f.GetID(),
+	)
+	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc)
+	if err == nil {
+		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
+		return nil
+	}
+	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+	return err
+}
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
 // that wraps op and connects the newly created wrapper with those
@@ -538,7 +572,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			inputs = append(inputs, input)
 		}
 
-		result, err := colplan.NewColOperator(ctx, flowCtx, pspec, inputs)
+		result, err := NewColOperator(ctx, flowCtx, pspec, inputs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
@@ -624,7 +658,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
 // vectorized infrastructure to be actually run.
 type vectorizedFlowCreatorHelper struct {
-	f *Flow
+	f execinfra.Flow
 }
 
 var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
@@ -632,20 +666,19 @@ var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
 func (r *vectorizedFlowCreatorHelper) addStreamEndpoint(
 	streamID execinfrapb.StreamID, inbox *colrpc.Inbox, wg *sync.WaitGroup,
 ) {
-	r.f.inboundStreams[streamID] = &inboundStreamInfo{
-		receiver:  vectorizedInboundStreamHandler{inbox},
-		waitGroup: wg,
-	}
+	r.f.AddRemoteVectorizedStream(streamID, execinfra.NewInboundStreamInfo(
+		vectorizedInboundStreamHandler{inbox},
+		wg,
+	))
 }
 
 func (r *vectorizedFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) error {
-	return r.f.checkInboundStreamID(sid)
+	return r.f.CheckInboundStreamID(sid)
 }
 
 func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
-	r.f.startables = append(
-		r.f.startables,
-		startableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
+	r.f.AddStartable(
+		execinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
 			if wg != nil {
 				wg.Add(1)
 			}
@@ -655,36 +688,17 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 					wg.Done()
 				}
 			}()
-		}),
-	)
+		}))
 }
 
 func (r *vectorizedFlowCreatorHelper) addMaterializer(m *execinfra.Materializer) {
-	r.f.processors = make([]execinfra.Processor, 1)
-	r.f.processors[0] = m
+	processors := make([]execinfra.Processor, 1)
+	processors[0] = m
+	r.f.SetProcessors(processors)
 }
 
 func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
-	return r.f.ctxCancel
-}
-
-func (f *Flow) setupVectorizedFlow(ctx context.Context, acc *mon.BoundAccount) error {
-	recordingStats := false
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		recordingStats = true
-	}
-	helper := &vectorizedFlowCreatorHelper{f: f}
-	creator := newVectorizedFlowCreator(
-		helper,
-		vectorizedRemoteComponentCreator{},
-		recordingStats,
-		&f.waitGroup,
-		f.syncFlowConsumer,
-		f.Cfg.NodeDialer,
-		f.ID,
-	)
-	_, err := creator.setupFlow(ctx, &f.FlowCtx, f.spec.Processors, acc)
-	return err
+	return r.f.GetCancelFlowFn()
 }
 
 // noopFlowCreatorHelper is a flowCreatorHelper that only performs sanity

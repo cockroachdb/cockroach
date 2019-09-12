@@ -263,8 +263,8 @@ func TestPostProcess(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
-			inBuf := newRowBuffer(sqlbase.ThreeIntCols, input, rowBufferArgs{})
-			outBuf := &RowBuffer{}
+			inBuf := execinfra.NewRowBuffer(sqlbase.ThreeIntCols, input, execinfra.RowBufferArgs{})
+			outBuf := &execinfra.RowBuffer{}
 
 			var out execinfra.ProcOutputHelper
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())

@@ -129,16 +129,16 @@ func (p *ProcessorTest) RunTestCases(
 	var processorID int32
 	for _, tc := range testCases {
 		inputs := make([]execinfra.RowSource, 1, 2)
-		inputs[0] = newRowBuffer(
-			tc.Input.Types, tc.Input.toEncDatumRows(), rowBufferArgs{},
+		inputs[0] = execinfra.NewRowBuffer(
+			tc.Input.Types, tc.Input.toEncDatumRows(), execinfra.RowBufferArgs{},
 		)
 		if tc.SecondInput != nil {
-			inputs[1] = newRowBuffer(
-				tc.SecondInput.Types, tc.SecondInput.toEncDatumRows(), rowBufferArgs{},
+			inputs[1] = execinfra.NewRowBuffer(
+				tc.SecondInput.Types, tc.SecondInput.toEncDatumRows(), execinfra.RowBufferArgs{},
 			)
 		}
-		output := newRowBuffer(
-			tc.Output.Types, nil, rowBufferArgs{},
+		output := execinfra.NewRowBuffer(
+			tc.Output.Types, nil, execinfra.RowBufferArgs{},
 		)
 
 		processor, err := newProcessor(

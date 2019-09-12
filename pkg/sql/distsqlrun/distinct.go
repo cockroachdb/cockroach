@@ -309,7 +309,7 @@ const distinctTagPrefix = "distinct."
 // Stats implements the SpanStats interface.
 func (ds *DistinctStats) Stats() map[string]string {
 	inputStatsMap := ds.InputStats.Stats(distinctTagPrefix)
-	inputStatsMap[distinctTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(ds.MaxAllocatedMem)
+	inputStatsMap[distinctTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(ds.MaxAllocatedMem)
 	return inputStatsMap
 }
 
@@ -317,7 +317,7 @@ func (ds *DistinctStats) Stats() map[string]string {
 func (ds *DistinctStats) StatsForQueryPlan() []string {
 	return append(
 		ds.InputStats.StatsForQueryPlan(""),
-		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)),
 	)
 }
 

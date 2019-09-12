@@ -64,9 +64,9 @@ func setupRouter(
 		},
 		EvalCtx: evalCtx,
 	}
-	r.init(ctx, &flowCtx, inputTypes)
+	init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
-	r.start(ctx, wg, nil /* ctxCancel */)
+	execinfra.Start(ctx, wg, nil /* ctxCancel */)
 	return r, wg
 }
 
@@ -137,11 +137,11 @@ func TestRouters(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.spec.Type.String(), func(t *testing.T) {
-			bufs := make([]*RowBuffer, tc.numBuckets)
+			bufs := make([]*execinfra.RowBuffer, tc.numBuckets)
 			recvs := make([]execinfra.RowReceiver, tc.numBuckets)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, tc.numBuckets)
 			for i := 0; i < tc.numBuckets; i++ {
-				bufs[i] = &RowBuffer{}
+				bufs[i] = &execinfra.RowBuffer{}
 				recvs[i] = bufs[i]
 				tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 			}
@@ -153,11 +153,11 @@ func TestRouters(t *testing.T) {
 				for j := 0; j < numCols; j++ {
 					row[j] = vals[j][rng.Intn(len(vals[j]))]
 				}
-				if status := r.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
+				if status := execinfra.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					t.Fatalf("unexpected status: %d", status)
 				}
 			}
-			r.ProducerDone()
+			execinfra.ProducerDone()
 			wg.Wait()
 
 			rows := make([]sqlbase.EncDatumRows, len(bufs))
@@ -318,11 +318,11 @@ func TestConsumerStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			bufs := make([]*RowBuffer, 2)
+			bufs := make([]*execinfra.RowBuffer, 2)
 			recvs := make([]execinfra.RowReceiver, 2)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
-				bufs[i] = &RowBuffer{}
+				bufs[i] = &execinfra.RowBuffer{}
 				recvs[i] = bufs[i]
 				tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 			}
@@ -358,7 +358,7 @@ func TestConsumerStatus(t *testing.T) {
 			}
 
 			// Push a row and expect NeedMoreRows.
-			consumerStatus := router.Push(row0, nil /* meta */)
+			consumerStatus := execinfra.Push(row0, nil /* meta */)
 			if consumerStatus != execinfra.NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
@@ -366,22 +366,22 @@ func TestConsumerStatus(t *testing.T) {
 			// Start draining stream 0. Keep expecting NeedMoreRows, regardless on
 			// which stream we send.
 			bufs[0].ConsumerDone()
-			consumerStatus = router.Push(row0, nil /* meta */)
+			consumerStatus = execinfra.Push(row0, nil /* meta */)
 			if consumerStatus != execinfra.NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
-			consumerStatus = router.Push(row1, nil /* meta */)
+			consumerStatus = execinfra.Push(row1, nil /* meta */)
 			if consumerStatus != execinfra.NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
 
 			// Close stream 0. Continue to expect NeedMoreRows.
 			bufs[0].ConsumerClosed()
-			consumerStatus = router.Push(row0, nil /* meta */)
+			consumerStatus = execinfra.Push(row0, nil /* meta */)
 			if consumerStatus != execinfra.NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
-			consumerStatus = router.Push(row1, nil /* meta */)
+			consumerStatus = execinfra.Push(row1, nil /* meta */)
 			if consumerStatus != execinfra.NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 			}
@@ -390,7 +390,7 @@ func TestConsumerStatus(t *testing.T) {
 			// DrainRequested.
 			bufs[1].ConsumerDone()
 			testutils.SucceedsSoon(t, func() error {
-				status := router.Push(row1, nil /* meta */)
+				status := execinfra.Push(row1, nil /* meta */)
 				if status != execinfra.DrainRequested {
 					return fmt.Errorf("expected status %d, got: %d", execinfra.DrainRequested, consumerStatus)
 				}
@@ -401,7 +401,7 @@ func TestConsumerStatus(t *testing.T) {
 			// only detect this when trying to send metadata - so we still expect
 			// DrainRequested.
 			bufs[1].ConsumerClosed()
-			consumerStatus = router.Push(row1, nil /* meta */)
+			consumerStatus = execinfra.Push(row1, nil /* meta */)
 			if consumerStatus != execinfra.DrainRequested {
 				t.Fatalf("expected status %d, got: %d", execinfra.DrainRequested, consumerStatus)
 			}
@@ -409,7 +409,7 @@ func TestConsumerStatus(t *testing.T) {
 			// Attempt to send some metadata. This will cause the router to observe
 			// that everything's closed now.
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(
+				consumerStatus := execinfra.Push(
 					nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.Errorf("test error")},
 				)
 				if consumerStatus != execinfra.ConsumerClosed {
@@ -417,7 +417,7 @@ func TestConsumerStatus(t *testing.T) {
 				}
 				return nil
 			})
-			router.ProducerDone()
+			execinfra.ProducerDone()
 			wg.Wait()
 		})
 	}
@@ -491,7 +491,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 			// Push metadata; it should go to stream 0.
 			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err1})
+				consumerStatus := execinfra.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err1})
 				if consumerStatus != execinfra.NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
@@ -504,7 +504,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			chans[0].ConsumerDone()
 			// Push metadata; it should still go to stream 0.
 			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err2})
+				consumerStatus := execinfra.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err2})
 				if consumerStatus != execinfra.NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
@@ -519,7 +519,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			// Metadata should switch to going to stream 1 once the new status is
 			// observed.
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err3})
+				consumerStatus := execinfra.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err3})
 				if consumerStatus != execinfra.NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
 				}
@@ -544,14 +544,14 @@ func TestMetadataIsForwarded(t *testing.T) {
 			}
 
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err4})
+				consumerStatus := execinfra.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err4})
 				if consumerStatus != execinfra.ConsumerClosed {
 					return fmt.Errorf("expected status %d, got: %d", execinfra.ConsumerClosed, consumerStatus)
 				}
 				return nil
 			})
 
-			router.ProducerDone()
+			execinfra.ProducerDone()
 
 			wg.Wait()
 		})
@@ -618,9 +618,9 @@ func TestRouterBlocks(t *testing.T) {
 				},
 				EvalCtx: &evalCtx,
 			}
-			router.init(ctx, &flowCtx, colTypes)
+			init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
-			router.start(ctx, &wg, nil /* ctxCancel */)
+			execinfra.Start(ctx, &wg, nil /* ctxCancel */)
 
 			// Set up a goroutine that tries to send rows until the stop channel
 			// is closed.
@@ -636,14 +636,14 @@ func TestRouterBlocks(t *testing.T) {
 						break Loop
 					default:
 						row := sqlbase.RandEncDatumRowOfTypes(rng, colTypes)
-						status := router.Push(row, nil /* meta */)
+						status := execinfra.Push(row, nil /* meta */)
 						if status != execinfra.NeedMoreRows {
 							break Loop
 						}
 						atomic.AddUint32(&numRowsSent, 1)
 					}
 				}
-				router.ProducerDone()
+				execinfra.ProducerDone()
 				wg.Done()
 			}()
 
@@ -748,7 +748,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	rowChan.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
 	rb.init(ctx, &flowCtx, sqlbase.OneIntCol)
-	rb.start(ctx, &wg, nil /* ctxCancel */)
+	rb.Start(ctx, &wg, nil /* ctxCancel */)
 
 	rows := sqlbase.MakeIntRows(numRows, numCols)
 	// output is the sole router output in this test.
@@ -952,7 +952,7 @@ func BenchmarkRouter(b *testing.B) {
 							go drainRowChannel(&chans[i])
 						}
 						execinfra.Run(ctx, input, r)
-						r.ProducerDone()
+						execinfra.ProducerDone()
 						wg.Wait()
 					}
 				})

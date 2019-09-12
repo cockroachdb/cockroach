@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package colplan
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,7 +47,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := execinfra.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +94,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := execinfra.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := colplan.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +147,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		},
 		nil, /* typs */
 		&execinfrapb.PostProcessSpec{},
-		&RowBuffer{},
+		&execinfra.RowBuffer{},
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
 		nil, /* cancelFlow */
@@ -157,22 +156,22 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	flow := &Flow{
-		processors: []execinfra.Processor{mat},
-		// This test specifically verifies that a flow doesn't get stuck in Wait for
-		// asynchronous components that haven't been signaled to exit. To simulate
-		// this we just create a mock startable.
-		startables: []startable{
-			startableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
-				wg.Add(1)
-				go func() {
-					// Ensure context is canceled.
-					<-ctx.Done()
-					wg.Done()
-				}()
-			}),
-		},
-	}
+	// TODO(yuzefovich)
+	var flow execinfra.Flow
+	flow.SetProcessors([]execinfra.Processor{mat})
+	// This test specifically verifies that a flow doesn't get stuck in Wait for
+	// asynchronous components that haven't been signaled to exit. To simulate
+	// this we just create a mock startable.
+	flow.AddStartable(
+		execinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
+			wg.Add(1)
+			go func() {
+				// Ensure context is canceled.
+				<-ctx.Done()
+				wg.Done()
+			}()
+		}),
+	)
 
 	require.Panics(t, func() { require.NoError(t, flow.Run(ctx, nil)) })
 }

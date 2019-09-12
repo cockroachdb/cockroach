@@ -770,8 +770,8 @@ func (hjs *HashJoinerStats) Stats() map[string]string {
 		statsMap[k] = v
 	}
 	statsMap[hashJoinerTagPrefix+"stored_side"] = hjs.StoredSide
-	statsMap[hashJoinerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedMem)
-	statsMap[hashJoinerTagPrefix+maxDiskTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedDisk)
+	statsMap[hashJoinerTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedMem)
+	statsMap[hashJoinerTagPrefix+execinfra.MaxDiskTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedDisk)
 	return statsMap
 }
 
@@ -782,8 +782,8 @@ func (hjs *HashJoinerStats) StatsForQueryPlan() []string {
 	return append(
 		leftInputStats,
 		fmt.Sprintf("stored side: %s", hjs.StoredSide),
-		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", maxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
+		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", execinfra.MaxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
 	)
 }
 

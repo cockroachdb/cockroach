@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"context"
@@ -38,18 +38,18 @@ var settingFlowStreamTimeout = settings.RegisterNonNegativeDurationSetting(
 // consumers.
 const expectedConnectionTime time.Duration = 500 * time.Millisecond
 
-// inboundStreamInfo represents the endpoint where a data stream from another
+// InboundStreamInfo represents the endpoint where a data stream from another
 // node connects to a flow. The external node initiates this process through a
 // FlowStream RPC, which uses (*Flow).connectInboundStream() to associate the
 // stream to a receiver to push rows to.
-type inboundStreamInfo struct {
+type InboundStreamInfo struct {
 	// receiver is the entity that will receive rows from another host, which is
 	// part of a processor (normally an input synchronizer) for row-based
 	// execution and a colrpc.Inbox for vectorized execution.
 	//
 	// During a FlowStream RPC, the stream is handed off to this strategy to
 	// process.
-	receiver  inboundStreamHandler
+	receiver  InboundStreamHandler
 	connected bool
 	// if set, indicates that we waited too long for an inbound connection, or
 	// we don't want this stream to connect anymore due to flow cancellation.
@@ -60,6 +60,16 @@ type inboundStreamInfo struct {
 
 	// waitGroup to signal on when finished.
 	waitGroup *sync.WaitGroup
+}
+
+// NewInboundStreamInfo returns a new InboundStreamInfo.
+func NewInboundStreamInfo(
+	receiver InboundStreamHandler, waitGroup *sync.WaitGroup,
+) *InboundStreamInfo {
+	return &InboundStreamInfo{
+		receiver:  receiver,
+		waitGroup: waitGroup,
+	}
 }
 
 // flowEntry is a structure associated with a (potential) flow.
@@ -73,13 +83,13 @@ type flowEntry struct {
 	// up the entry.
 	refCount int
 
-	flow *Flow
+	flow Flow
 
 	// inboundStreams are streams that receive data from other hosts, through the
 	// FlowStream API. All fields in the inboundStreamInfos are protected by the
 	// flowRegistry mutex (except the receiver, whose methods can be called
 	// freely).
-	inboundStreams map[execinfrapb.StreamID]*inboundStreamInfo
+	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo
 
 	// streamTimer is a timer that fires after a timeout and verifies that all
 	// inbound streams have been connected.
@@ -168,8 +178,8 @@ func (fr *flowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
 func (fr *flowRegistry) RegisterFlow(
 	ctx context.Context,
 	id execinfrapb.FlowID,
-	f *Flow,
-	inboundStreams map[execinfrapb.StreamID]*inboundStreamInfo,
+	f Flow,
+	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo,
 	timeout time.Duration,
 ) (retErr error) {
 	fr.Lock()
@@ -193,7 +203,7 @@ func (fr *flowRegistry) RegisterFlow(
 		return errors.Errorf(
 			"flow already registered: current node ID: %d flowID: %s.\n"+
 				"Current flow: %+v\nExisting flow: %+v",
-			fr.nodeID, f.spec.FlowID, f.spec, entry.flow.spec)
+			fr.nodeID, f.GetSpec().FlowID, f.GetSpec(), entry.flow.GetSpec())
 	}
 	// Take a reference that will be removed by UnregisterFlow.
 	entry.refCount++
@@ -227,8 +237,8 @@ func (fr *flowRegistry) RegisterFlow(
 				)
 			}
 			for _, r := range timedOutReceivers {
-				go func(r inboundStreamHandler) {
-					r.timeout(errNoInboundStreamConnection)
+				go func(r InboundStreamHandler) {
+					r.Timeout(errNoInboundStreamConnection)
 				}(r)
 			}
 		})
@@ -242,12 +252,12 @@ func (fr *flowRegistry) RegisterFlow(
 // streams that were canceled. The caller is expected to send those
 // RowReceivers a cancellation message - this method can't do it because sending
 // those messages shouldn't happen under the flow registry's lock.
-func (fr *flowRegistry) cancelPendingStreamsLocked(id execinfrapb.FlowID) []inboundStreamHandler {
+func (fr *flowRegistry) cancelPendingStreamsLocked(id execinfrapb.FlowID) []InboundStreamHandler {
 	entry := fr.flows[id]
 	if entry == nil || entry.flow == nil {
 		return nil
 	}
-	pendingReceivers := make([]inboundStreamHandler, 0)
+	pendingReceivers := make([]InboundStreamHandler, 0)
 	for streamID, is := range entry.inboundStreams {
 		// Connected, non-finished inbound streams will get an error
 		// returned in ProcessInboundStream(). Non-connected streams
@@ -410,7 +420,7 @@ func (fr *flowRegistry) Undrain() {
 	fr.Unlock()
 }
 
-// ConnectInboundStream finds the inboundStreamInfo for the given
+// ConnectInboundStream finds the InboundStreamInfo for the given
 // <flowID,streamID> pair and marks it as connected. It waits up to timeout for
 // the stream to be registered with the registry. It also sends the handshake
 // messages to the producer of the stream.
@@ -431,7 +441,7 @@ func (fr *flowRegistry) ConnectInboundStream(
 	streamID execinfrapb.StreamID,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	timeout time.Duration,
-) (_ *Flow, _ inboundStreamHandler, _ func(), retErr error) {
+) (_ Flow, _ InboundStreamHandler, _ func(), retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
 

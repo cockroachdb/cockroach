@@ -240,7 +240,7 @@ const tableReaderTagPrefix = "tablereader."
 // Stats implements the SpanStats interface.
 func (trs *TableReaderStats) Stats() map[string]string {
 	inputStatsMap := trs.InputStats.Stats(tableReaderTagPrefix)
-	inputStatsMap[tableReaderTagPrefix+bytesReadTagSuffix] = humanizeutil.IBytes(trs.BytesRead)
+	inputStatsMap[tableReaderTagPrefix+execinfra.BytesReadTagSuffix] = humanizeutil.IBytes(trs.BytesRead)
 	return inputStatsMap
 }
 
@@ -248,7 +248,7 @@ func (trs *TableReaderStats) Stats() map[string]string {
 func (trs *TableReaderStats) StatsForQueryPlan() []string {
 	return append(
 		trs.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", bytesReadQueryPlanSuffix, humanizeutil.IBytes(trs.BytesRead)),
+		fmt.Sprintf("%s: %s", execinfra.BytesReadQueryPlanSuffix, humanizeutil.IBytes(trs.BytesRead)),
 	)
 }
 

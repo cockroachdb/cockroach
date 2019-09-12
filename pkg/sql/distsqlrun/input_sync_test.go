@@ -108,7 +108,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []execinfra.RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := newRowBuffer(sqlbase.ThreeIntCols, srcRows, rowBufferArgs{})
+			rowBuf := execinfra.NewRowBuffer(sqlbase.ThreeIntCols, srcRows, execinfra.RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -145,7 +145,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 
 	var sources []execinfra.RowSource
 	for i := 0; i < 4; i++ {
-		rowBuf := newRowBuffer(sqlbase.OneIntCol, nil /* rows */, rowBufferArgs{})
+		rowBuf := execinfra.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, execinfra.RowBufferArgs{})
 		sources = append(sources, rowBuf)
 		rowBuf.Push(nil, expectedMeta)
 	}

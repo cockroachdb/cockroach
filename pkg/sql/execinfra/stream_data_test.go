@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"context"
@@ -16,38 +16,12 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
-
-// The encoder/decoder don't maintain the ordering between rows and metadata
-// records.
-func testGetDecodedRows(
-	tb testing.TB,
-	sd *StreamDecoder,
-	decodedRows sqlbase.EncDatumRows,
-	metas []execinfrapb.ProducerMetadata,
-) (sqlbase.EncDatumRows, []execinfrapb.ProducerMetadata) {
-	for {
-		row, meta, err := sd.GetRow(nil /* rowBuf */)
-		if err != nil {
-			tb.Fatal(err)
-		}
-		if row == nil && meta == nil {
-			break
-		}
-		if row != nil {
-			decodedRows = append(decodedRows, row)
-		} else {
-			metas = append(metas, *meta)
-		}
-	}
-	return decodedRows, metas
-}
 
 func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []rowOrMeta) {
 	var se StreamEncoder
@@ -58,7 +32,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 	numRows := 0
 	numMeta := 0
 
-	se.init(types)
+	se.Init(types)
 
 	for rowIdx := 0; rowIdx <= len(records); rowIdx++ {
 		if rowIdx < len(records) {
@@ -82,7 +56,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 			if err != nil {
 				tb.Fatal(err)
 			}
-			decodedRows, metas = testGetDecodedRows(tb, &sd, decodedRows, metas)
+			decodedRows, metas = TestGetDecodedRows(tb, &sd, decodedRows, metas)
 		}
 	}
 	if len(metas) != numMeta {
@@ -154,7 +128,7 @@ func BenchmarkStreamEncoder(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			cols := sqlbase.MakeIntCols(numCols)
 			rows := sqlbase.MakeIntRows(numRows, numCols)
-			input := execinfra.NewRepeatableRowSource(cols, rows)
+			input := NewRepeatableRowSource(cols, rows)
 
 			b.ResetTimer()
 			ctx := context.Background()
@@ -171,7 +145,7 @@ func BenchmarkStreamEncoder(b *testing.B) {
 					}
 				}
 				var se StreamEncoder
-				se.init(cols)
+				se.Init(cols)
 				b.StartTimer()
 
 				// Add rows to the StreamEncoder until the input source is exhausted.
@@ -202,7 +176,7 @@ func BenchmarkStreamDecoder(b *testing.B) {
 			b.SetBytes(int64(outboxBufRows * numCols * 8))
 			var se StreamEncoder
 			colTypes := sqlbase.MakeIntCols(numCols)
-			se.init(colTypes)
+			se.Init(colTypes)
 			inRow := sqlbase.MakeIntRows(1, numCols)[0]
 			for i := 0; i < outboxBufRows; i++ {
 				if err := se.AddRow(inRow); err != nil {

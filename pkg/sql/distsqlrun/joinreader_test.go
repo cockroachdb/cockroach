@@ -419,9 +419,9 @@ func TestJoinReader(t *testing.T) {
 					}
 					encRows[rowIdx] = encRow
 				}
-				in := newRowBuffer(c.inputTypes, encRows, rowBufferArgs{})
+				in := execinfra.NewRowBuffer(c.inputTypes, encRows, execinfra.RowBufferArgs{})
 
-				out := &RowBuffer{}
+				out := &execinfra.RowBuffer{}
 				jr, err := execinfra.NewJoinReader(
 					&flowCtx,
 					0, /* processorID */
@@ -533,7 +533,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 	}
 
-	out := &RowBuffer{}
+	out := &execinfra.RowBuffer{}
 	jr, err := execinfra.NewJoinReader(
 		&flowCtx,
 		0, /* processorID */
@@ -543,7 +543,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			LookupColumns: []uint32{0},
 			Type:          sqlbase.InnerJoin,
 		},
-		newRowBuffer(sqlbase.OneIntCol, inputRows, rowBufferArgs{}),
+		execinfra.NewRowBuffer(sqlbase.OneIntCol, inputRows, execinfra.RowBufferArgs{}),
 		&execinfrapb.PostProcessSpec{
 			Projection:    true,
 			OutputColumns: []uint32{2},
@@ -632,9 +632,9 @@ func TestJoinReaderDrain(t *testing.T) {
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		in := newRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, rowBufferArgs{})
+		in := execinfra.NewRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, execinfra.RowBufferArgs{})
 
-		out := &RowBuffer{}
+		out := &execinfra.RowBuffer{}
 		out.ConsumerClosed()
 		jr, err := execinfra.NewJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
@@ -650,12 +650,12 @@ func TestJoinReaderDrain(t *testing.T) {
 	// called on the consumer.
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
-		in := newRowBuffer(sqlbase.OneIntCol, nil /* rows */, rowBufferArgs{})
+		in := execinfra.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, execinfra.RowBufferArgs{})
 		if status := in.Push(encRow, &execinfrapb.ProducerMetadata{Err: expectedMetaErr}); status != execinfra.NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
 
-		out := &RowBuffer{}
+		out := &execinfra.RowBuffer{}
 		out.ConsumerDone()
 		jr, err := execinfra.NewJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,

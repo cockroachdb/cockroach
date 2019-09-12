@@ -8,70 +8,49 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"context"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
+	"github.com/pkg/errors"
 )
 
-type inboundStreamHandler interface {
+type InboundStreamHandler interface {
 	// run is called once a FlowStream RPC is handled and a stream is obtained to
 	// make this stream accessible to the rest of the flow.
-	run(
-		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f *Flow,
+	Run(
+		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f Flow,
 	) error
 	// timeout is called with an error, which results in the teardown of the
 	// stream strategy with the given error.
 	// WARNING: timeout may block.
-	timeout(err error)
-}
-
-type vectorizedInboundStreamHandler struct {
-	*colrpc.Inbox
-}
-
-var _ inboundStreamHandler = vectorizedInboundStreamHandler{}
-
-func (s vectorizedInboundStreamHandler) run(
-	ctx context.Context,
-	stream execinfrapb.DistSQL_FlowStreamServer,
-	_ *execinfrapb.ProducerMessage,
-	_ *Flow,
-) error {
-	return s.RunWithStream(ctx, stream)
-}
-
-func (s vectorizedInboundStreamHandler) timeout(err error) {
-	s.Timeout(err)
+	Timeout(err error)
 }
 
 type rowInboundStreamHandler struct {
-	execinfra.RowReceiver
+	RowReceiver
 }
 
-var _ inboundStreamHandler = rowInboundStreamHandler{}
+var _ InboundStreamHandler = rowInboundStreamHandler{}
 
-func (s rowInboundStreamHandler) run(
+func (s rowInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	f *Flow,
+	f Flow,
 ) error {
-	return ProcessInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
+	return processInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
 }
 
-func (s rowInboundStreamHandler) timeout(err error) {
+func (s rowInboundStreamHandler) Timeout(err error) {
 	s.Push(
 		nil, /* row */
 		&execinfrapb.ProducerMetadata{Err: err},
@@ -79,16 +58,16 @@ func (s rowInboundStreamHandler) timeout(err error) {
 	s.ProducerDone()
 }
 
-// ProcessInboundStream receives rows from a DistSQL_FlowStreamServer and sends
+// processInboundStream receives rows from a DistSQL_FlowStreamServer and sends
 // them to a RowReceiver. Optionally processes an initial StreamMessage that was
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
-func ProcessInboundStream(
+func processInboundStream(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	dst execinfra.RowReceiver,
-	f *Flow,
+	dst RowReceiver,
+	f Flow,
 ) error {
 
 	err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f)
@@ -109,8 +88,8 @@ func processInboundStreamHelper(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	dst execinfra.RowReceiver,
-	f *Flow,
+	dst RowReceiver,
+	f Flow,
 ) error {
 	draining := false
 	var sd StreamDecoder
@@ -143,9 +122,9 @@ func processInboundStreamHelper(
 	// result channel is buffered.
 	errChan := make(chan error, 1)
 
-	f.waitGroup.Add(1)
+	f.GetWaitGroup().Add(1)
 	go func() {
-		defer f.waitGroup.Done()
+		defer f.GetWaitGroup().Done()
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
@@ -175,7 +154,7 @@ func processInboundStreamHelper(
 	// Check for context cancellation while reading from the stream on another
 	// goroutine.
 	select {
-	case <-f.ctxDone:
+	case <-f.GetCtxDone():
 		return sqlbase.QueryCanceledError
 	case err := <-errChan:
 		return err
@@ -200,7 +179,7 @@ func sendDrainSignalToStreamProducer(
 func processProducerMessage(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	dst execinfra.RowReceiver,
+	dst RowReceiver,
 	sd *StreamDecoder,
 	draining *bool,
 	msg *execinfrapb.ProducerMessage,
@@ -235,9 +214,9 @@ func processProducerMessage(
 			continue
 		}
 		switch dst.Push(row, meta) {
-		case execinfra.NeedMoreRows:
+		case NeedMoreRows:
 			continue
-		case execinfra.DrainRequested:
+		case DrainRequested:
 			// The rest of rows are not needed by the consumer. We'll send a drain
 			// signal to the producer and expect it to quickly send trailing
 			// metadata and close its side of the stream, at which point we also
@@ -248,7 +227,7 @@ func processProducerMessage(
 					log.Errorf(ctx, "draining error: %s", err)
 				}
 			}
-		case execinfra.ConsumerClosed:
+		case ConsumerClosed:
 			return processMessageResult{err: nil, consumerClosed: true}
 		}
 	}

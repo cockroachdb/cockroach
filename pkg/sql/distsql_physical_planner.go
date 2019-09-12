@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -74,7 +73,7 @@ type DistSQLPlanner struct {
 	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
 	stopper      *stop.Stopper
-	distSQLSrv   *distsqlrun.ServerImpl
+	distSQLSrv   *execinfra.ServerImpl
 	spanResolver rowplan.SpanResolver
 
 	// metadataTestTolerance is the minimum level required to plan metadata test
@@ -144,7 +143,7 @@ func NewDistSQLPlanner(
 	st *cluster.Settings,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
-	distSQLSrv *distsqlrun.ServerImpl,
+	distSQLSrv *execinfra.ServerImpl,
 	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
@@ -848,7 +847,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 	if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(nodeID), &v); err != nil {
 		return false
 	}
-	return distsqlrun.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
+	return execinfra.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
 func getIndexIdx(n *scanNode) (uint32, error) {

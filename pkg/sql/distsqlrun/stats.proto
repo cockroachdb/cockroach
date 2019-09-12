@@ -61,11 +61,6 @@ message SorterStats {
   int64 max_allocated_disk = 3;
 }
 
-// OutboxStats are the stats collected by an outbox.
-message OutboxStats {
-  int64 bytes_sent = 1;
-}
-
 // RouterOutputStats are the stats collected by a single router output stream.
 message RouterOutputStats {
   int64 num_rows = 1;

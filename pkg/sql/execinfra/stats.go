@@ -54,6 +54,9 @@ func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 const (
 	rowsReadTagSuffix  = "input.rows"
 	stallTimeTagSuffix = "stalltime"
+	MaxMemoryTagSuffix = "mem.max"
+	MaxDiskTagSuffix   = "disk.max"
+	BytesReadTagSuffix = "bytes.read"
 )
 
 // Stats is a utility method that returns a map of the InputStats` stats to
@@ -68,6 +71,9 @@ func (is InputStats) Stats(prefix string) map[string]string {
 const (
 	rowsReadQueryPlanSuffix  = "rows read"
 	stallTimeQueryPlanSuffix = "stall time"
+	MaxMemoryQueryPlanSuffix = "max memory used"
+	MaxDiskQueryPlanSuffix   = "max disk used"
+	BytesReadQueryPlanSuffix = "bytes read"
 )
 
 // StatsForQueryPlan is a utility method that returns a list of the InputStats'

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package colplan
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -40,6 +41,14 @@ func (c callbackRemoteComponentCreator) newOutbox(
 
 func (c callbackRemoteComponentCreator) newInbox(typs []coltypes.T) (*colrpc.Inbox, error) {
 	return c.newInboxFn(typs)
+}
+
+func intCols(numCols int) []types.T {
+	cols := make([]types.T, numCols)
+	for i := range cols {
+		cols[i] = *types.Int
+	}
+	return cols
 }
 
 // TestDrainOnlyInputDAG is a regression test for #39137 to ensure
@@ -186,14 +195,14 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
-	f := &Flow{FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx, NodeID: roachpb.NodeID(1)}}
+	f := &execinfra.FlowBase{FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx, NodeID: roachpb.NodeID(1)}}
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f},
 		componentCreator,
 		false, /* recordingStats */
 		&wg,
-		newRowBuffer(intCols(1 /* numCols */), nil /* rows */, rowBufferArgs{}),
+		&execinfra.RowChannel{},
 		nil, /* nodeDialer */
 		execinfrapb.FlowID{},
 	)

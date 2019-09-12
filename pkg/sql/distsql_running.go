@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
@@ -115,15 +116,15 @@ func (dsp *DistSQLPlanner) setupFlows(
 	txnCoordMeta *roachpb.TxnCoordMeta,
 	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
-	localState distsqlrun.LocalState,
+	localState execinfra.LocalState,
 	vectorizeThresholdMet bool,
-) (context.Context, *distsqlrun.Flow, error) {
+) (context.Context, execinfra.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
 
 	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
 	setupReq := execinfrapb.SetupFlowRequest{
 		TxnCoordMeta: txnCoordMeta,
-		Version:      distsqlrun.Version,
+		Version:      execinfra.Version,
 		EvalContext:  evalCtxProto,
 		TraceKV:      evalCtx.Tracing.KVTracingEnabled(),
 	}
@@ -149,7 +150,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
 			// up vectorized flows since the flows will effectively be planned twice.
 			for _, spec := range flows {
-				if _, err := distsqlrun.SupportsVectorized(
+				if _, err := colplan.SupportsVectorized(
 					ctx, &execinfra.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
 						Cfg: &execinfra.ServerConfig{
@@ -274,7 +275,7 @@ func (dsp *DistSQLPlanner) Run(
 	ctx := planCtx.ctx
 
 	var (
-		localState   distsqlrun.LocalState
+		localState   execinfra.LocalState
 		txnCoordMeta *roachpb.TxnCoordMeta
 	)
 	// NB: putting part of evalCtx in localState means it might be mutated down

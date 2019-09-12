@@ -37,6 +37,15 @@ var SettingUseTempStorageJoins = settings.RegisterBoolSetting(
 	true,
 )
 
+// SettingUseTempStorageSorts is a cluster setting that configures whether
+// sorts are allowed to spill to disk.
+// TODO(yuzefovich): remove this setting.
+var SettingUseTempStorageSorts = settings.RegisterBoolSetting(
+	"sql.distsql.temp_storage.sorts",
+	"set to true to enable use of disk for distributed sql sorts",
+	true,
+)
+
 // SettingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
 var SettingWorkMemBytes = settings.RegisterByteSizeSetting(

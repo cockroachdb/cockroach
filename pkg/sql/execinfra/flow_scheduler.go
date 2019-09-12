@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"container/list"
@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -38,8 +37,8 @@ var settingMaxRunningFlows = settings.RegisterIntSetting(
 type flowScheduler struct {
 	log.AmbientContext
 	stopper    *stop.Stopper
-	flowDoneCh chan *Flow
-	metrics    *execinfra.Metrics
+	flowDoneCh chan Flow
+	metrics    *Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -54,20 +53,17 @@ type flowScheduler struct {
 // to avoid the need to store the context.
 type flowWithCtx struct {
 	ctx         context.Context
-	flow        *Flow
+	flow        Flow
 	enqueueTime time.Time
 }
 
 func newFlowScheduler(
-	ambient log.AmbientContext,
-	stopper *stop.Stopper,
-	settings *cluster.Settings,
-	metrics *execinfra.Metrics,
+	ambient log.AmbientContext, stopper *stop.Stopper, settings *cluster.Settings, metrics *Metrics,
 ) *flowScheduler {
 	fs := &flowScheduler{
 		AmbientContext: ambient,
 		stopper:        stopper,
-		flowDoneCh:     make(chan *Flow, flowDoneChanSize),
+		flowDoneCh:     make(chan Flow, flowDoneChanSize),
 		metrics:        metrics,
 	}
 	fs.mu.queue = list.New()
@@ -80,16 +76,16 @@ func newFlowScheduler(
 	return fs
 }
 
-func (fs *flowScheduler) canRunFlow(_ *Flow) bool {
+func (fs *flowScheduler) canRunFlow(_ Flow) bool {
 	// TODO(radu): we will have more complex resource accounting (like memory).
 	// For now we just limit the number of concurrent flows.
 	return fs.mu.numRunning < fs.mu.maxRunningFlows
 }
 
 // runFlowNow starts the given flow; does not wait for the flow to complete.
-func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) error {
+func (fs *flowScheduler) runFlowNow(ctx context.Context, f Flow) error {
 	log.VEventf(
-		ctx, 1, "flow scheduler running flow %s, currently running %d", f.ID, fs.mu.numRunning,
+		ctx, 1, "flow scheduler running flow %s, currently running %d", f.GetID(), fs.mu.numRunning,
 	)
 	fs.mu.numRunning++
 	fs.metrics.FlowStart()
@@ -110,7 +106,7 @@ func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) error {
 //
 // If the flow can start immediately, errors encountered when starting the flow
 // are returned. If the flow is enqueued, these error will be later ignored.
-func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f *Flow) error {
+func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 	return fs.stopper.RunTaskWithErr(
 		ctx, "distsqlrun.flowScheduler: scheduling flow", func(ctx context.Context) error {
 			fs.mu.Lock()
@@ -119,7 +115,7 @@ func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f *Flow) error {
 			if fs.canRunFlow(f) {
 				return fs.runFlowNow(ctx, f)
 			}
-			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.ID)
+			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.GetID())
 			fs.metrics.FlowsQueued.Inc(1)
 			fs.mu.queue.PushBack(&flowWithCtx{
 				ctx:         ctx,
@@ -156,7 +152,7 @@ func (fs *flowScheduler) Start() {
 						fs.mu.queue.Remove(frElem)
 						wait := timeutil.Since(n.enqueueTime)
 						log.VEventf(
-							n.ctx, 1, "flow scheduler dequeued flow %s, spent %s in queue", n.flow.ID, wait,
+							n.ctx, 1, "flow scheduler dequeued flow %s, spent %s in queue", n.flow.GetID(), wait,
 						)
 						fs.metrics.FlowsQueued.Dec(1)
 						fs.metrics.QueueWaitHist.RecordValue(int64(wait))

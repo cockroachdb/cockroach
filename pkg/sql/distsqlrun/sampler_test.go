@@ -33,7 +33,7 @@ func runSampler(
 	for i := range rows {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
 	}
-	in := newRowBuffer(sqlbase.OneIntCol, rows, rowBufferArgs{})
+	in := execinfra.NewRowBuffer(sqlbase.OneIntCol, rows, execinfra.RowBufferArgs{})
 	outTypes := []types.T{
 		*types.Int, // original column
 		*types.Int, // rank
@@ -43,7 +43,7 @@ func runSampler(
 		*types.Bytes,
 	}
 
-	out := newRowBuffer(outTypes, nil /* rows */, rowBufferArgs{})
+	out := execinfra.NewRowBuffer(outTypes, nil /* rows */, execinfra.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -180,7 +180,7 @@ func TestSamplerSketch(t *testing.T) {
 	numNulls := []int{2, 1}
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)
-	in := newRowBuffer(sqlbase.TwoIntCols, rows, rowBufferArgs{})
+	in := execinfra.NewRowBuffer(sqlbase.TwoIntCols, rows, execinfra.RowBufferArgs{})
 	outTypes := []types.T{
 		*types.Int,   // original column
 		*types.Int,   // original column
@@ -191,7 +191,7 @@ func TestSamplerSketch(t *testing.T) {
 		*types.Bytes, // sketch data
 	}
 
-	out := newRowBuffer(outTypes, nil /* rows */, rowBufferArgs{})
+	out := execinfra.NewRowBuffer(outTypes, nil /* rows */, execinfra.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

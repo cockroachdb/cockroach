@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
@@ -575,7 +574,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 
 	// Drain the second node and expect the query to be planned on only the
 	// first node.
-	distServer := tc.Server(1).DistSQLServer().(*distsqlrun.ServerImpl)
+	distServer := tc.Server(1).DistSQLServer().(*execinfra.ServerImpl)
 	distServer.Drain(ctx, 0 /* flowDrainWait */)
 
 	expectPlan([][]string{{"https://cockroachdb.github.io/rowplan/decode.html#eJyUkDFLxEAUhHt_xTGVwsolV26lWF2TSO7EQoKs2UcIJPvCextQjvx3SbbQE060fDM78w17QmBPhRtIYV-QozYYhRtSZVmk9GDv32Ezgy6MU1zk2qBhIdgTYhd7gsXRvfVUkfMk2wwGnqLr-rV2lG5w8nEXpkFhcBhdULu5hUE5RbspOBDq2YCn-NWv0bUEm8_m7xvu21aodZFlm59PeCifiuNrVT4frm8usnb_YVWkIwelM86l5myuDci3lP5UeZKGHoWbFZPOcs2tgieNyc3TsQ_JWgZ-D-e_hnc_wvV89RkAAP__weakAA=="}})
@@ -794,8 +793,8 @@ func TestPartitionSpans(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
-				Version:            distsqlrun.Version,
+				MinAcceptedVersion: execinfra.MinAcceptedVersion,
+				Version:            execinfra.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -816,7 +815,7 @@ func TestPartitionSpans(t *testing.T) {
 			}
 
 			dsp := DistSQLPlanner{
-				planVersion:  distsqlrun.Version,
+				planVersion:  execinfra.Version,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
 				stopper:      stopper,
@@ -1079,8 +1078,8 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
-				Version:            distsqlrun.Version,
+				MinAcceptedVersion: execinfra.MinAcceptedVersion,
+				Version:            execinfra.Version,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -1095,7 +1094,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	}
 
 	dsp := DistSQLPlanner{
-		planVersion:  distsqlrun.Version,
+		planVersion:  execinfra.Version,
 		st:           cluster.MakeTestingClusterSettings(),
 		nodeDesc:     *tsp.nodes[gatewayNode-1],
 		stopper:      stopper,
@@ -1161,8 +1160,8 @@ func TestCheckNodeHealth(t *testing.T) {
 	if err := mockGossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(nodeID),
 		&execinfrapb.DistSQLVersionGossipInfo{
-			MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
-			Version:            distsqlrun.Version,
+			MinAcceptedVersion: execinfra.MinAcceptedVersion,
+			Version:            execinfra.Version,
 		},
 		0, // ttl - no expiration
 	); err != nil {

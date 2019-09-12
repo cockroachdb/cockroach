@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -94,7 +94,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 
-	var localState distsqlrun.LocalState
+	var localState execinfra.LocalState
 	localState.EvalContext = planCtx.EvalContext()
 	if planCtx.isLocal {
 		localState.IsLocal = true
@@ -125,7 +125,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		opChains, err := distsqlrun.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
+		opChains, err := colplan.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
 		if err != nil {
 			return err
 		}

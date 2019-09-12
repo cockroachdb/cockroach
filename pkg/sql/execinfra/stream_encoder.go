@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"context"
@@ -18,6 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
+
+// PreferredEncoding is the encoding used for EncDatums that don't already have
+// an encoding available.
+const PreferredEncoding = sqlbase.DatumEncoding_ASCENDING_KEY
 
 // StreamEncoder converts EncDatum rows into a sequence of ProducerMessage.
 //
@@ -55,12 +59,16 @@ type StreamEncoder struct {
 	msgHdr execinfrapb.ProducerHeader
 }
 
-func (se *StreamEncoder) setHeaderFields(flowID execinfrapb.FlowID, streamID execinfrapb.StreamID) {
+func (se *StreamEncoder) HasHeaderBeenSent() bool {
+	return se.headerSent
+}
+
+func (se *StreamEncoder) SetHeaderFields(flowID execinfrapb.FlowID, streamID execinfrapb.StreamID) {
 	se.msgHdr.FlowID = flowID
 	se.msgHdr.StreamID = streamID
 }
 
-func (se *StreamEncoder) init(types []types.T) {
+func (se *StreamEncoder) Init(types []types.T) {
 	se.infos = make([]execinfrapb.DatumInfo, len(types))
 	for i := range types {
 		se.infos[i].Type = types[i]
@@ -82,7 +90,7 @@ func (se *StreamEncoder) AddMetadata(ctx context.Context, meta execinfrapb.Produ
 // AddRow encodes a message.
 func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 	if se.infos == nil {
-		panic("init not called")
+		panic("Init not called")
 	}
 	if len(se.infos) != len(row) {
 		return errors.Errorf("inconsistent row length: expected %d, got %d", len(se.infos), len(row))
@@ -92,7 +100,7 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 		for i := range row {
 			enc, ok := row[i].Encoding()
 			if !ok {
-				enc = preferredEncoding
+				enc = PreferredEncoding
 			}
 			sType := se.infos[i].Type.Family()
 			if enc != sqlbase.DatumEncoding_VALUE &&

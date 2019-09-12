@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"context"
@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -75,17 +73,11 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 24
 // nodes.
 const minFlowDrainWait = 1 * time.Second
 
-var settingUseTempStorageSorts = settings.RegisterBoolSetting(
-	"sql.distsql.temp_storage.sorts",
-	"set to true to enable use of disk for distributed sql sorts",
-	true,
-)
-
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024 /* 1MB */)
 
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
-	execinfra.ServerConfig
+	ServerConfig
 	flowRegistry  *flowRegistry
 	flowScheduler *flowScheduler
 	memMonitor    mon.BytesMonitor
@@ -95,7 +87,7 @@ type ServerImpl struct {
 var _ execinfrapb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
+func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
@@ -199,9 +191,9 @@ func (ds *ServerImpl) setupFlow(
 	parentSpan opentracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	syncFlowConsumer execinfra.RowReceiver,
+	syncFlowConsumer RowReceiver,
 	localState LocalState,
-) (context.Context, *Flow, error) {
+) (context.Context, Flow, error) {
 	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
@@ -346,7 +338,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}
 	// TODO(radu): we should sanity check some of these fields.
-	flowCtx := execinfra.FlowCtx{
+	flowCtx := FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
 		ID:             req.Flow.FlowID,
@@ -362,14 +354,14 @@ func (ds *ServerImpl) setupFlow(
 	// to restore the original value which can have data races under stress.
 	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
-	if err := f.setup(ctx, &req.Flow); err != nil {
+	if err := f.Setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
 	}
-	if !f.isLocal() {
-		flowCtx.AddLogTag("f", f.ID.Short())
+	if !f.IsLocal() {
+		flowCtx.AddLogTag("f", f.GetFlowCtx().ID.Short())
 		flowCtx.AnnotateCtx(ctx)
 	}
 	return ctx, f, nil
@@ -384,8 +376,8 @@ func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	output execinfra.RowReceiver,
-) (context.Context, *Flow, error) {
+	output RowReceiver,
+) (context.Context, Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
 }
 
@@ -403,7 +395,7 @@ type LocalState struct {
 
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
-	LocalProcs []execinfra.LocalProcessor
+	LocalProcs []LocalProcessor
 	Txn        *client.Txn
 }
 
@@ -414,9 +406,9 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	output execinfra.RowReceiver,
+	output RowReceiver,
 	localState LocalState,
-) (context.Context, *Flow, error) {
+) (context.Context, Flow, error) {
 	return ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState)
 }
 
@@ -437,12 +429,12 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 	if err != nil {
 		return err
 	}
-	mbox.setFlowCtx(&f.FlowCtx)
+	mbox.setFlowCtx(f.GetFlowCtx())
 
 	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: sync flow", func(ctx context.Context) {
 		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
-		f.startables = append(f.startables, mbox)
+		f.AddStartable(mbox)
 		ds.Metrics.FlowStart()
 		if err := f.Run(ctx, func() {}); err != nil {
 			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
@@ -506,7 +498,7 @@ func (ds *ServerImpl) flowStreamInt(
 	}
 	defer cleanup()
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
-	return streamStrategy.run(f.AnnotateCtx(ctx), stream, msg, f)
+	return streamStrategy.Run(f.AnnotateCtx(ctx), stream, msg, f)
 }
 
 // FlowStream is part of the DistSQLServer interface.

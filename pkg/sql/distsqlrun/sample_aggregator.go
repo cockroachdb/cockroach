@@ -220,8 +220,8 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 					// don't create a biased histogram.
 					s.sr.Disable()
 				}
-			} else if !EmitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
-				// No cleanup required; EmitHelper() took care of it.
+			} else if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
 			continue

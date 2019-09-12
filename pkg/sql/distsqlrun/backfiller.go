@@ -119,7 +119,7 @@ func (b *backfiller) Run(ctx context.Context) {
 	defer tracing.FinishSpan(span)
 	meta := b.doRun(ctx)
 	execinfra.SendTraceData(ctx, b.output)
-	if EmitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
+	if emitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
 		b.output.ProducerDone()
 	}
 }

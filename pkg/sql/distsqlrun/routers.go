@@ -38,7 +38,7 @@ import (
 
 type router interface {
 	execinfra.RowReceiver
-	startable
+	execinfra.Startable
 	init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []types.T)
 }
 
@@ -233,7 +233,7 @@ func (rb *routerBase) setupStreams(
 	}
 }
 
-// init must be called after setupStreams but before start.
+// init must be called after setupStreams but before Start.
 func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []types.T) {
 	// Check if we're recording stats.
 	if s := opentracing.SpanFromContext(ctx); s != nil && tracing.IsRecording(s) {
@@ -242,7 +242,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 
 	rb.types = types
 	for i := range rb.outputs {
-		// This method must be called before we start() so we don't need
+		// This method must be called before we Start() so we don't need
 		// to take the mutex.
 		evalCtx := flowCtx.NewEvalCtx()
 		rb.outputs[i].memoryMonitor = execinfra.NewLimitedMonitor(
@@ -265,14 +265,14 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 		)
 
 		// Initialize any outboxes.
-		if o, ok := rb.outputs[i].stream.(*outbox); ok {
-			o.init(types)
+		if o, ok := rb.outputs[i].stream.(*execinfra.Outbox); ok {
+			o.Init(types)
 		}
 	}
 }
 
-// start must be called after init.
-func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
+// Start must be called after init.
+func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {
@@ -588,7 +588,7 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 		// nodes may be doing the same hashing and the encodings need to match. The
 		// encoding needs to be determined at planning time. #13829
 		var err error
-		hr.buffer, err = row[col].Encode(&hr.types[col], &hr.alloc, preferredEncoding, hr.buffer)
+		hr.buffer, err = row[col].Encode(&hr.types[col], &hr.alloc, execinfra.PreferredEncoding, hr.buffer)
 		if err != nil {
 			return -1, err
 		}
@@ -692,7 +692,7 @@ func (rr *rangeRouter) spanForData(data []byte) int {
 	if i == len(rr.spans) {
 		return -1
 	}
-	// Make sure the start is <= data.
+	// Make sure the Start is <= data.
 	if bytes.Compare(rr.spans[i].Start, data) > 0 {
 		return -1
 	}
@@ -705,8 +705,8 @@ const routerOutputTagPrefix = "routeroutput."
 func (ros *RouterOutputStats) Stats() map[string]string {
 	statsMap := make(map[string]string)
 	statsMap[routerOutputTagPrefix+"rows_routed"] = strconv.FormatInt(ros.NumRows, 10)
-	statsMap[routerOutputTagPrefix+maxMemoryTagSuffix] = strconv.FormatInt(ros.MaxAllocatedMem, 10)
-	statsMap[routerOutputTagPrefix+maxDiskTagSuffix] = strconv.FormatInt(ros.MaxAllocatedDisk, 10)
+	statsMap[routerOutputTagPrefix+execinfra.MaxMemoryTagSuffix] = strconv.FormatInt(ros.MaxAllocatedMem, 10)
+	statsMap[routerOutputTagPrefix+execinfra.MaxDiskTagSuffix] = strconv.FormatInt(ros.MaxAllocatedDisk, 10)
 	return statsMap
 }
 
@@ -714,7 +714,7 @@ func (ros *RouterOutputStats) Stats() map[string]string {
 func (ros *RouterOutputStats) StatsForQueryPlan() []string {
 	return []string{
 		fmt.Sprintf("rows routed: %d", ros.NumRows),
-		fmt.Sprintf("%s: %d", maxMemoryQueryPlanSuffix, ros.MaxAllocatedMem),
-		fmt.Sprintf("%s: %d", maxDiskQueryPlanSuffix, ros.MaxAllocatedDisk),
+		fmt.Sprintf("%s: %d", execinfra.MaxMemoryQueryPlanSuffix, ros.MaxAllocatedMem),
+		fmt.Sprintf("%s: %d", execinfra.MaxDiskQueryPlanSuffix, ros.MaxAllocatedDisk),
 	}
 }

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -31,27 +30,23 @@ import (
 	"google.golang.org/grpc"
 )
 
-const outboxBufRows = 16
 const outboxFlushPeriod = 100 * time.Microsecond
-
-// preferredEncoding is the encoding used for EncDatums that don't already have
-// an encoding available.
-const preferredEncoding = sqlbase.DatumEncoding_ASCENDING_KEY
+const outboxBufRows = 16
 
 type flowStream interface {
 	Send(*execinfrapb.ProducerMessage) error
 	Recv() (*execinfrapb.ConsumerSignal, error)
 }
 
-// outbox implements an outgoing mailbox as a RowReceiver that receives rows and
+// Outbox implements an outgoing mailbox as a RowReceiver that receives rows and
 // sends them to a gRPC stream. Its core logic runs in a goroutine. We send rows
 // when we accumulate outboxBufRows or every outboxFlushPeriod (whichever comes
 // first).
-type outbox struct {
+type Outbox struct {
 	// RowChannel implements the RowReceiver interface.
-	execinfra.RowChannel
+	RowChannel
 
-	flowCtx  *execinfra.FlowCtx
+	flowCtx  *FlowCtx
 	streamID execinfrapb.StreamID
 	nodeID   roachpb.NodeID
 	// The rows received from the RowChannel will be forwarded on this stream once
@@ -74,17 +69,14 @@ type outbox struct {
 	stats                  OutboxStats
 }
 
-var _ execinfra.RowReceiver = &outbox{}
-var _ startable = &outbox{}
+var _ RowReceiver = &Outbox{}
+var _ Startable = &Outbox{}
 
-func newOutbox(
-	flowCtx *execinfra.FlowCtx,
-	nodeID roachpb.NodeID,
-	flowID execinfrapb.FlowID,
-	streamID execinfrapb.StreamID,
-) *outbox {
-	m := &outbox{flowCtx: flowCtx, nodeID: nodeID}
-	m.encoder.setHeaderFields(flowID, streamID)
+func NewOutbox(
+	flowCtx *FlowCtx, nodeID roachpb.NodeID, flowID execinfrapb.FlowID, streamID execinfrapb.StreamID,
+) *Outbox {
+	m := &Outbox{flowCtx: flowCtx, nodeID: nodeID}
+	m.encoder.SetHeaderFields(flowID, streamID)
 	m.streamID = streamID
 	return m
 }
@@ -92,22 +84,22 @@ func newOutbox(
 // newOutboxSyncFlowStream sets up an outbox for the special "sync flow"
 // stream. The flow context should be provided via setFlowCtx when it is
 // available.
-func newOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *outbox {
-	return &outbox{stream: stream}
+func newOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *Outbox {
+	return &Outbox{stream: stream}
 }
 
-func (m *outbox) setFlowCtx(flowCtx *execinfra.FlowCtx) {
+func (m *Outbox) setFlowCtx(flowCtx *FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
-func (m *outbox) init(typs []types.T) {
+func (m *Outbox) Init(typs []types.T) {
 	if typs == nil {
 		// We check for nil to detect uninitialized cases; but we support 0-length
 		// rows.
 		typs = make([]types.T, 0)
 	}
 	m.RowChannel.InitWithNumSenders(typs, 1)
-	m.encoder.init(typs)
+	m.encoder.Init(typs)
 }
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated, flush() is
@@ -118,7 +110,7 @@ func (m *outbox) init(typs []types.T) {
 // communication error, in which case the other side of the stream should get it
 // too, or it might be an encoding error, in which case we've forwarded it on
 // the stream.
-func (m *outbox) addRow(
+func (m *Outbox) addRow(
 	ctx context.Context, row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) error {
 	mustFlush := false
@@ -150,8 +142,8 @@ func (m *outbox) addRow(
 // returned indicates that sending a message on the outbox's stream failed, and
 // thus the stream can't be used any more. The stream is also set to nil if
 // an error is returned.
-func (m *outbox) flush(ctx context.Context) error {
-	if m.numRows == 0 && m.encoder.headerSent {
+func (m *Outbox) flush(ctx context.Context) error {
+	if m.numRows == 0 && m.encoder.HasHeaderBeenSent() {
 		return nil
 	}
 	msg := m.encoder.FormMessage(ctx)
@@ -198,13 +190,13 @@ func (m *outbox) flush(ctx context.Context) error {
 // stream, or otherwise the error has already been forwarded on the stream.
 // Depending on the specific error, the stream might or might not need to be
 // closed. In case it doesn't, m.stream has been set to nil.
-func (m *outbox) mainLoop(ctx context.Context) error {
+func (m *Outbox) mainLoop(ctx context.Context) error {
 	// No matter what happens, we need to make sure we close our RowChannel, since
 	// writers could be writing to it as soon as we are started.
 	defer m.RowChannel.ConsumerClosed()
 
 	var span opentracing.Span
-	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
+	ctx, span = ProcessorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
@@ -295,7 +287,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					tracing.SetSpanStats(span, &m.stats)
 					tracing.FinishSpan(span)
 					spanFinished = true
-					if trace := execinfra.GetTraceData(ctx); trace != nil {
+					if trace := GetTraceData(ctx); trace != nil {
 						err := m.addRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err
@@ -375,7 +367,7 @@ type drainSignal struct {
 // stream or until the caller cancels the context. The caller has to cancel the
 // context once it no longer reads from the channel, otherwise this method might
 // deadlock when attempting to write to the channel.
-func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
+func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
 	ch := make(chan drainSignal, 1)
 
 	stream := m.stream
@@ -430,7 +422,7 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 	return ch, nil
 }
 
-func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
+func (m *Outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	err := m.mainLoop(ctx)
 	if stream, ok := m.stream.(execinfrapb.DistSQL_FlowStreamClient); ok {
 		closeErr := stream.CloseSend()
@@ -444,8 +436,8 @@ func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-// Starts the outbox.
-func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
+// Start starts the outbox.
+func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
 	if m.Types() == nil {
 		panic("outbox not initialized")
 	}

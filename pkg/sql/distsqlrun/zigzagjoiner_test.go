@@ -504,7 +504,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			}
 
-			out := &RowBuffer{}
+			out := &execinfra.RowBuffer{}
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 			z, err := newZigzagJoiner(&flowCtx, 0 /* processorID */, &c.spec, c.fixedValues, &post, out)
 			if err != nil {
@@ -573,7 +573,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		out := &RowBuffer{}
+		out := &execinfra.RowBuffer{}
 		out.ConsumerClosed()
 		zz, err := newZigzagJoiner(
 			&flowCtx,

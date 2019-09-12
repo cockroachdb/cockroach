@@ -264,7 +264,7 @@ func (mjs *MergeJoinerStats) Stats() map[string]string {
 	for k, v := range rightInputStatsMap {
 		statsMap[k] = v
 	}
-	statsMap[mergeJoinerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(mjs.MaxAllocatedMem)
+	statsMap[mergeJoinerTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(mjs.MaxAllocatedMem)
 	return statsMap
 }
 
@@ -274,7 +274,7 @@ func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
 		mjs.LeftInputStats.StatsForQueryPlan("left "),
 		mjs.RightInputStats.StatsForQueryPlan("right ")...,
 	)
-	return append(stats, fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
+	return append(stats, fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
 }
 
 // outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will

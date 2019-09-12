@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package distsqlrun
+package execinfra
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -253,7 +252,7 @@ func TestClusterFlow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
+		rows, metas = TestGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreTxnCoordMeta(metas)
@@ -372,7 +371,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 			sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
 		}
 	}
-	leftValuesSpec, err := generateValuesSpec(typs, leftRows, 10 /* rows per chunk */)
+	leftValuesSpec, err := GenerateValuesSpec(typs, leftRows, 10 /* rows per chunk */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,14 +380,14 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// groups of rows go to the same hash bucket).
 	rightRows := make(sqlbase.EncDatumRows, 0)
 	for i := 1; i <= 20; i++ {
-		for j := 1; j <= 4*execinfra.RowChannelBufSize; j++ {
+		for j := 1; j <= 4*RowChannelBufSize; j++ {
 			rightRows = append(rightRows, sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
 			})
 		}
 	}
 
-	rightValuesSpec, err := generateValuesSpec(typs, rightRows, 10 /* rows per chunk */)
+	rightValuesSpec, err := GenerateValuesSpec(typs, rightRows, 10 /* rows per chunk */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +518,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
+		rows, metas = TestGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreTxnCoordMeta(metas)
@@ -615,7 +614,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					valSpecs := make([]execinfrapb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {
 						se := StreamEncoder{}
-						se.init(sqlbase.ThreeIntCols)
+						se.Init(sqlbase.ThreeIntCols)
 						for j := 0; j < numRows; j++ {
 							row := make(sqlbase.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
@@ -765,7 +764,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							if err != nil {
 								b.Fatal(err)
 							}
-							rows, metas = testGetDecodedRows(b, &decoder, rows, metas)
+							rows, metas = TestGetDecodedRows(b, &decoder, rows, metas)
 						}
 						metas = ignoreMisplannedRanges(metas)
 						metas = ignoreTxnCoordMeta(metas)

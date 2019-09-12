@@ -31,7 +31,7 @@ type valuesProcessor struct {
 	// number of rows that are encoded in data.
 	numRows uint64
 
-	sd     StreamDecoder
+	sd     execinfra.StreamDecoder
 	rowBuf sqlbase.EncDatumRow
 }
 

@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// EmitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
+// emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
 // It takes a row to emit and, if anything happens other than the normal
 // situation where the emitting succeeds and the consumer still needs rows, both
 // the (potentially many) inputs and the output are properly closed after
@@ -42,7 +42,7 @@ import (
 //
 // Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed.
-func EmitHelper(
+func emitHelper(
 	ctx context.Context,
 	output *execinfra.ProcOutputHelper,
 	row sqlbase.EncDatumRow,
@@ -56,7 +56,7 @@ func EmitHelper(
 	var consumerStatus execinfra.ConsumerStatus
 	if meta != nil {
 		if row != nil {
-			panic("both row data and metadata in the same EmitHelper call")
+			panic("both row data and metadata in the same emitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
 		foundErr := meta.Err != nil
@@ -90,6 +90,18 @@ func EmitHelper(
 		log.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
 		return false
 	}
+}
+
+func checkNumInOut(
+	inputs []execinfra.RowSource, outputs []execinfra.RowReceiver, numIn, numOut int,
+) error {
+	if len(inputs) != numIn {
+		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
+	}
+	if len(outputs) != numOut {
+		return errors.Errorf("expected %d output(s), got %d", numOut, len(outputs))
+	}
+	return nil
 }
 
 func newProcessor(

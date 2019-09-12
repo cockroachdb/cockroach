@@ -107,11 +107,11 @@ func TestSampleAggregator(t *testing.T) {
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 
-		outputs := make([]*RowBuffer, numSamplers)
+		outputs := make([]*execinfra.RowBuffer, numSamplers)
 		for i := 0; i < numSamplers; i++ {
 			rows := sqlbase.GenEncDatumRowsInt(rowPartitions[i])
-			in := newRowBuffer(sqlbase.TwoIntCols, rows, rowBufferArgs{})
-			outputs[i] = newRowBuffer(samplerOutTypes, nil /* rows */, rowBufferArgs{})
+			in := execinfra.NewRowBuffer(sqlbase.TwoIntCols, rows, execinfra.RowBufferArgs{})
+			outputs[i] = execinfra.NewRowBuffer(samplerOutTypes, nil /* rows */, execinfra.RowBufferArgs{})
 
 			spec := &execinfrapb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
 			p, err := newSamplerProcessor(
@@ -123,7 +123,7 @@ func TestSampleAggregator(t *testing.T) {
 			p.Run(context.Background())
 		}
 		// Randomly interleave the output rows from the samplers into a single buffer.
-		samplerResults := newRowBuffer(samplerOutTypes, nil /* rows */, rowBufferArgs{})
+		samplerResults := execinfra.NewRowBuffer(samplerOutTypes, nil /* rows */, execinfra.RowBufferArgs{})
 		for len(outputs) > 0 {
 			i := rng.Intn(len(outputs))
 			row, meta := outputs[i].Next()
@@ -139,7 +139,7 @@ func TestSampleAggregator(t *testing.T) {
 		}
 
 		// Now run the sample aggregator.
-		finalOut := newRowBuffer([]types.T{}, nil /* rows*/, rowBufferArgs{})
+		finalOut := execinfra.NewRowBuffer([]types.T{}, nil /* rows*/, execinfra.RowBufferArgs{})
 		spec := &execinfrapb.SampleAggregatorSpec{
 			SampleSize:       100,
 			Sketches:         sketchSpecs,

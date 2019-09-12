@@ -109,8 +109,8 @@ func TestDistinct(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ds := c.spec
 
-			in := newRowBuffer(sqlbase.TwoIntCols, c.input, rowBufferArgs{})
-			out := &RowBuffer{}
+			in := execinfra.NewRowBuffer(sqlbase.TwoIntCols, c.input, execinfra.RowBufferArgs{})
+			out := &execinfra.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)

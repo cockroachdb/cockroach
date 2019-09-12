@@ -160,8 +160,8 @@ func BenchmarkProjectSet(b *testing.B) {
 					EvalCtx: &evalCtx,
 				}
 
-				in := newRowBuffer(c.inputTypes, c.input, rowBufferArgs{})
-				out := &RowBuffer{}
+				in := execinfra.NewRowBuffer(c.inputTypes, c.input, execinfra.RowBufferArgs{})
+				out := &execinfra.RowBuffer{}
 				p, err := newProcessor(
 					context.Background(), &flowCtx, 0, /* processorID */
 					&execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec}, &execinfrapb.PostProcessSpec{},
