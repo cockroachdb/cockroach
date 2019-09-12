@@ -22,7 +22,7 @@ option go_package = "execinfrapb";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/io-formats.proto";
 import "sql/sqlbase/structured.proto";
-import "sql/execinfra/execinfrapb/processors_base.proto";
+import "sql/execinfrapb/processors_base.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 

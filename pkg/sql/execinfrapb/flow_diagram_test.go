@@ -362,7 +362,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, _, err := diagram.ToURL()
+	s, _, err := ToURL()
 	if err != nil {
 		t.Fatal(err)
 	}

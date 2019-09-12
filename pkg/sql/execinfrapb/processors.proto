@@ -19,12 +19,12 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
-import "sql/execinfra/execinfrapb/data.proto";
-import "sql/execinfra/execinfrapb/processors_base.proto";
-import "sql/execinfra/execinfrapb/processors_sql.proto";
-import "sql/execinfra/execinfrapb/processors_bulk_io.proto";
-import "sql/execinfra/execinfrapb/processors_changefeeds.proto";
-import "sql/execinfra/execinfrapb/processors_table_stats.proto";
+import "sql/execinfrapb/data.proto";
+import "sql/execinfrapb/processors_base.proto";
+import "sql/execinfrapb/processors_sql.proto";
+import "sql/execinfrapb/processors_bulk_io.proto";
+import "sql/execinfrapb/processors_changefeeds.proto";
+import "sql/execinfrapb/processors_table_stats.proto";
 import "gogoproto/gogo.proto";
 
 // Each processor has the following components:

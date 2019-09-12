@@ -21,8 +21,8 @@ import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
 import "roachpb/data.proto";
-import "sql/execinfra/execinfrapb/data.proto";
-import "sql/execinfra/execinfrapb/processors.proto";
+import "sql/execinfrapb/data.proto";
+import "sql/execinfrapb/processors.proto";
 
 message SetupFlowRequest {
   reserved 1, 2;

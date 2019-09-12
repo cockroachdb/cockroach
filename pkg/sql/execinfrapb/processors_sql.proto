@@ -21,8 +21,8 @@ option go_package = "execinfrapb";
 
 import "sql/sqlbase/structured.proto";
 import "sql/sqlbase/join_type.proto";
-import "sql/execinfra/execinfrapb/data.proto";
-import "sql/execinfra/execinfrapb/processors_base.proto";
+import "sql/execinfrapb/data.proto";
+import "sql/execinfrapb/processors_base.proto";
 import "gogoproto/gogo.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
