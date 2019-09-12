@@ -53,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/tool"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -758,6 +760,14 @@ https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb
 	},
 }
 
+var debugPebbleCmd = &cobra.Command{
+	Use:   "pebble [command]",
+	Short: "run a Pebble introspection tool command",
+	Long: `
+Allows the use of pebble tools, such as to introspect manifests, SSTables, etc.
+`,
+}
+
 var debugSSTDumpCmd = &cobra.Command{
 	Use:   "sst_dump",
 	Short: "run the RocksDB 'sst_dump' tool",
@@ -1317,6 +1327,22 @@ process that has failed and cannot restart.
 
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
+
+	pebbleTool := tool.New()
+	// To be able to read Cockroach-written RocksDB manifests/SSTables, comparator
+	// and merger functions must be specified to pebble that match the ones used
+	// to write those files.
+	//
+	// TODO(itsbilal): Port the Cockroach merger over from libroach/merge.cc to go
+	// and use that here. Until this happens, some data (eg. timeseries) will be
+	// printed incorrectly by this tool: it will be concatenated instead of being
+	// properly merged.
+	merger := *pebble.DefaultMerger
+	merger.Name = "cockroach_merge_operator"
+	pebbleTool.RegisterMerger(&merger)
+	pebbleTool.RegisterComparer(engine.MVCCComparer)
+	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
+	DebugCmd.AddCommand(debugPebbleCmd)
 
 	f := debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
