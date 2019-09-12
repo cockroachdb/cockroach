@@ -29,9 +29,9 @@ EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) 
 tree                      field        description  columns  ordering
 ·                         distributed  false        ·        ·
 ·                         vectorized   true         ·        ·
-limit                     ·            ·            (w)      weak-key(w); +w
+limit                     ·            ·            (w)      +w
  │                        count        25           ·        ·
- └── distinct             ·            ·            (w)      weak-key(w); +w
+ └── distinct             ·            ·            (w)      +w
       │                   distinct on  w            ·        ·
       │                   order key    w            ·        ·
       └── limit           ·            ·            (w)      +w

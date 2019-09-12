@@ -180,7 +180,9 @@ type Factory interface {
 	// The orderedCols are a subset of distinctCols; the input is required to be
 	// ordered along these columns (i.e. all rows with the same values on these
 	// columns are a contiguous part of the input).
-	ConstructDistinct(input Node, distinctCols, orderedCols ColumnOrdinalSet) (Node, error)
+	ConstructDistinct(
+		input Node, distinctCols, orderedCols ColumnOrdinalSet, reqOrdering OutputOrdering,
+	) (Node, error)
 
 	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT
 	// operation (either the ALL or the DISTINCT version). The left and right
