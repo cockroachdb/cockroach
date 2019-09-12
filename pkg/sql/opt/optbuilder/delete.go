@@ -61,6 +61,11 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	var mb mutationBuilder
 	mb.init(b, "delete", tab, *alias)
 
+	var indexFlags *tree.IndexFlags
+	if source, ok := del.Table.(*tree.AliasedTableExpr); ok {
+		indexFlags = source.IndexFlags
+	}
+
 	// Build the input expression that selects the rows that will be deleted:
 	//
 	//   WITH <with>
@@ -68,7 +73,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the delete table will be projected.
-	mb.buildInputForDelete(inScope, del.Where, del.Limit, del.OrderBy)
+	mb.buildInputForDelete(inScope, del.Where, del.Limit, del.OrderBy, indexFlags)
 
 	// Build the final delete statement, including any returned expressions.
 	if resultsNeeded(del.Returning) {

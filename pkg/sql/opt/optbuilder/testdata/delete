@@ -92,6 +92,68 @@ delete foo
       │                   └── const: 0 [type=int]
       └── const: 10 [type=int]
 
+# DELETE with index hints
+exec-ddl
+CREATE TABLE xyzw (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX foo (z, y)
+)
+----
+
+build
+DELETE FROM xyzw@primary
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ └── scan xyzw
+      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      └── flags: force-index=primary
+
+build
+DELETE FROM xyzw@foo
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ └── scan xyzw
+      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      └── flags: force-index=foo
+
+build
+DELETE FROM xyzw@{FORCE_INDEX=foo,ASC}
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ └── scan xyzw
+      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      └── flags: force-index=foo,fwd
+
+build
+DELETE FROM xyzw@{FORCE_INDEX=foo,DESC}
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ └── scan xyzw,rev
+      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      └── flags: force-index=foo,rev
+
+build
+DELETE FROM xyzw@{NO_INDEX_JOIN}
+----
+delete xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ └── scan xyzw
+      ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      └── flags: no-index-join
+
+
 # Use placeholders.
 build
 DELETE FROM xyz WHERE x=$1 ORDER BY y+$2 DESC LIMIT 2
