@@ -348,7 +348,15 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	extraMountOpts := ""
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
-		args = append(args, "--local-ssd", "interface=SCSI")
+		// n2-class GCP machines cannot be requested with only 1 SSD;
+		// minimum number of actual SSDs is 2.
+		n2MachineTypes := regexp.MustCompile("^n2-")
+		if n2MachineTypes.MatchString(p.opts.MachineType) && opts.SSDOpts.GCESSDCount < 2 {
+			opts.SSDOpts.GCESSDCount = 2
+		}
+		for i := 0; i < opts.SSDOpts.GCESSDCount; i++ {
+			args = append(args, "--local-ssd", "interface=SCSI")
+		}
 		if opts.SSDOpts.NoExt4Barrier {
 			extraMountOpts = "nobarrier"
 		}

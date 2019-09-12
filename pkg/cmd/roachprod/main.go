@@ -1581,6 +1581,8 @@ func main() {
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.UseLocalSSD,
 		"local-ssd", true, "Use local SSD")
+	createCmd.Flags().IntVar(&createVMOpts.SSDOpts.GCESSDCount,
+		"gce-local-ssd-count", 1, "Number of local SSDs to create on GCE instance")
 	createCmd.Flags().BoolVar(&createVMOpts.SSDOpts.NoExt4Barrier,
 		"local-ssd-no-ext4-barrier", true,
 		`Mount the local SSD with the "-o nobarrier" flag. `+

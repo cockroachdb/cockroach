@@ -119,6 +119,7 @@ type CreateOpts struct {
 	VMProviders    []string
 	SSDOpts        struct {
 		UseLocalSSD bool
+		GCESSDCount int
 		// NoExt4Barrier, if set, makes the "-o nobarrier" flag be used when
 		// mounting the SSD. Ignored if UseLocalSSD is not set.
 		NoExt4Barrier bool
