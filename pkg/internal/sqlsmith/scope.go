@@ -39,26 +39,24 @@ func (t colRefs) stripTableName() {
 type scope struct {
 	schema *Smither
 
-	// The budget tracks available complexity. It is randomly generated. Each
-	// call to canRecurse decreases it such that canRecurse will eventually
-	// always return false.
-	budget int
+	complexity float64
 }
 
 func (s *Smither) makeScope() *scope {
+	c := s.complexity
+	if c < 0 || c > 1 {
+		c = s.rnd.Float64()
+	}
 	return &scope{
-		schema: s,
-		budget: s.rnd.Intn(100),
+		schema:     s,
+		complexity: c,
 	}
 }
 
 // canRecurse returns whether the current function should possibly invoke
-// a function that calls creates new nodes.
+// a function that creates new nodes.
 func (s *scope) canRecurse() bool {
-	s.budget--
-	// Disable recursion randomly so that early expressions don't take all
-	// the budget.
-	return s.budget > 0 && s.coin()
+	return s.complexity > s.schema.rnd.Float64()
 }
 
 // Context holds information about what kinds of expressions are legal at
