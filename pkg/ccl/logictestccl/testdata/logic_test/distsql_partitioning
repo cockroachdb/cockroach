@@ -111,6 +111,14 @@ test t3 p3 NULL y t3@sec      (3)  constraints = '[+dc=dc3]'
 test t3 p4 NULL y t3@sec      (4)  constraints = '[+dc=dc4]'
 
 query TTTTTTTT
+SHOW PARTITIONS FROM INDEX t3@*
+----
+test t3 p1 NULL x t3@primary  (1)  constraints = '[+dc=dc1]'
+test t3 p2 NULL x t3@primary  (2)  constraints = '[+dc=dc2]'
+test t3 p3 NULL y t3@sec      (3)  constraints = '[+dc=dc3]'
+test t3 p4 NULL y t3@sec      (4)  constraints = '[+dc=dc4]'
+
+query TTTTTTTT
 SHOW PARTITIONS FROM INDEX t3@sec
 ----
 test t3 p3 NULL y t3@sec      (3)  constraints = '[+dc=dc3]'
