@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +46,7 @@ func TestFakeSpanResolver(t *testing.T) {
 		},
 	)
 
-	resolver := distsqlutils.FakeResolverForTestCluster(tc)
+	resolver := physicalplanutils.FakeResolverForTestCluster(tc)
 
 	db := tc.Server(0).DB()
 

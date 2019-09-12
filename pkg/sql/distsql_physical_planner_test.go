@@ -486,7 +486,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	// Verify the plan (should include all 5 nodes).
 	r.CheckQueryResults(t,
 		"SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t]",
-		[][]string{{"https://cockroachdb.github.io/rowplan/decode.html#eJy8k09LwzAYxu9-CnlOCu9h7bo5e5rHHXQy9SQ91OalFLamJCkoo99d1iDaIskgo8f8-T2_PG1yRC0FP-UH1kjfEYEQgzAHIQFhgYzQKFmw1lKdtlhgIz6RzghV3bTmNJ0RCqkY6RGmMntGitf8Y887zgUrEASbvNr3kkZVh1x9rQ0I29ak1-sYWUeQrflJ6-h8z0NZKi5zI0eal7fHm3V0e3b0b2JbSyVYsRgEZt2F5dFE38_jCakQT1TB4wmpMJ-ogscTUiGZqILHc6mH-E_0jnUja82jBznMywgsSrZvWctWFfysZNGH2-G2391PCNbGrkZ2sKnt0ulYf-HICccDOBrDsdvsUc-ddOKGk5BzL5zw0m1ehpjvnPDKbV6FmO_d_2rmuSbuSzZ2Z93VdwAAAP__XTV6BQ=="}},
+		[][]string{{"https://cockroachdb.github.io/distsqlrun/decode.html#eJy8k09LwzAYxu9-CnlOCu9h7bo5e5rHHXQy9SQ91OalFLamJCkoo99d1iDaIskgo8f8-T2_PG1yRC0FP-UH1kjfEYEQgzAHIQFhgYzQKFmw1lKdtlhgIz6RzghV3bTmNJ0RCqkY6RGmMntGitf8Y887zgUrEASbvNr3kkZVh1x9rQ0I29ak1-sYWUeQrflJ6-h8z0NZKi5zI0eal7fHm3V0e3b0b2JbSyVYsRgEZt2F5dFE38_jCakQT1TB4wmpMJ-ogscTUiGZqILHc6mH-E_0jnUja82jBznMywgsSrZvWctWFfysZNGH2-G2391PCNbGrkZ2sKnt0ulYf-HICccDOBrDsdvsUc-ddOKGk5BzL5zw0m1ehpjvnPDKbV6FmO_d_2rmuSbuSzZ2Z93VdwAAAP__XTV6BQ=="}},
 	)
 
 	// Stop node 5.
@@ -496,7 +496,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 	r.CheckQueryResults(t,
 		"SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t]",
-		[][]string{{"https://cockroachdb.github.io/rowplan/decode.html#eJy8k8FK7DAYhff3KS5npZCF6dRx7KouZ6Ejo64ki9j8lEKnKUkKytB3lzaItkg60qHL5M93vpySHlFpRQ_yQBbJKzgYIjCswBBDMNRGZ2StNt3YH96qdyRXDEVVN67bFgyZNoTkCFe4kpDgWb6VtCepyIBBkZNF2QtqUxyk-UgdGHaNS_6nEUTLoBv3lday0z13eW4ol06PNE8v9xcpvzw5-juxqbRRZEgNAkV7Zjlf6PtNeOZUiBaqMOGZU2G1UIUJz7le8S_Re7K1riyNXvMwTzCQysn_CFY3JqNHo7M-3C93_el-Q5F1fsr9Ylv5UXetnzAPwtEA5mM4CsK3YfMqCMdhOJ5z7esgvA6b13PMN0F4EzZv_mQW7b_PAAAA__-DuA-E"}},
+		[][]string{{"https://cockroachdb.github.io/distsqlrun/decode.html#eJy8k8FK7DAYhff3KS5npZCF6dRx7KouZ6Ejo64ki9j8lEKnKUkKytB3lzaItkg60qHL5M93vpySHlFpRQ_yQBbJKzgYIjCswBBDMNRGZ2StNt3YH96qdyRXDEVVN67bFgyZNoTkCFe4kpDgWb6VtCepyIBBkZNF2QtqUxyk-UgdGHaNS_6nEUTLoBv3lday0z13eW4ol06PNE8v9xcpvzw5-juxqbRRZEgNAkV7Zjlf6PtNeOZUiBaqMOGZU2G1UIUJz7le8S_Re7K1riyNXvMwTzCQysn_CFY3JqNHo7M-3C93_el-Q5F1fsr9Ylv5UXetnzAPwtEA5mM4CsK3YfMqCMdhOJ5z7esgvA6b13PMN0F4EzZv_mQW7b_PAAAA__-DuA-E"}},
 	)
 
 	// Stop node 2; note that no range had replicas on both 2 and 5.
@@ -506,7 +506,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 	r.CheckQueryResults(t,
 		"SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t]",
-		[][]string{{"https://cockroachdb.github.io/rowplan/decode.html#eJy8kkFLwzAUx-9-CvmfFHIwXZ3QUz3uoJOpJ8khNo9S6JrykoIy-t2lDaItkk02dkxe_r_fe-Ht0FhDj3pLDtkbJAQWEEihBFq2BTlneSiFhyvzgexGoGrazg_XSqCwTMh28JWvCRle9HtNG9KGGAKGvK7qEd5ytdX8mXsIrDufXeYJVC9gO_9N68XhnvuyZCq1tzPN8-vDVS6vD0b_ELvGsiEmMwGq_sRyeab_2-M5ZoTkTCPs8ZxqBf5Ab8i1tnE0W4UpTwmQKSlskbMdF_TEthjh4bgeX48XhpwPVRkOqyaUhrZ-h2U0nEzCch5OouG7uHkRDafxcHpM27fR8DJuXv7LrPqLrwAAAP__vMyldA=="}},
+		[][]string{{"https://cockroachdb.github.io/distsqlrun/decode.html#eJy8kkFLwzAUx-9-CvmfFHIwXZ3QUz3uoJOpJ8khNo9S6JrykoIy-t2lDaItkk02dkxe_r_fe-Ht0FhDj3pLDtkbJAQWEEihBFq2BTlneSiFhyvzgexGoGrazg_XSqCwTMh28JWvCRle9HtNG9KGGAKGvK7qEd5ytdX8mXsIrDufXeYJVC9gO_9N68XhnvuyZCq1tzPN8-vDVS6vD0b_ELvGsiEmMwGq_sRyeab_2-M5ZoTkTCPs8ZxqBf5Ab8i1tnE0W4UpTwmQKSlskbMdF_TEthjh4bgeX48XhpwPVRkOqyaUhrZ-h2U0nEzCch5OouG7uHkRDafxcHpM27fR8DJuXv7LrPqLrwAAAP__vMyldA=="}},
 	)
 }
 
@@ -571,14 +571,14 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	}
 
 	// Verify distribution.
-	expectPlan([][]string{{"https://cockroachdb.github.io/rowplan/decode.html#eJyskT9r8zAQh_f3U4Sb8oKCIyddNKV0ylC75A8digmqdRhDIpmTBC3B373YGhKHRE1LR935d8_juyNoozCTB7Qg3oADgxQKBg2ZEq011JXDR0v1AWLKoNaNd125YFAaQhBHcLXbIwjYyPc9rlAqpGQKDBQ6We_70Q3VB0mfC-0PFhisG6mtGE2SDpl7J0aZ0QhFy8B4dyJYJysEwVt2v8VjVRFW0hlK0qHEU77NNrtV_roe_7_JSm-yTgivDSkkVIP5RRu3mQ9t1tvn3TLbjBf8tsxsIMPvXz-_Z_0Jn_xi_d9YnP3w7E_Xf4W1QtsYbfHiDNcnT7vzoKow3NIaTyW-kCl7THjmfa4vKLQudHl4LHVodYLnYR4Np4Mwvwyn0fBDnDyLhufx8PxH2kX77ysAAP__gSRfcA=="}})
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlrun/decode.html#eJyskT9r8zAQh_f3U4Sb8oKCIyddNKV0ylC75A8digmqdRhDIpmTBC3B373YGhKHRE1LR935d8_juyNoozCTB7Qg3oADgxQKBg2ZEq011JXDR0v1AWLKoNaNd125YFAaQhBHcLXbIwjYyPc9rlAqpGQKDBQ6We_70Q3VB0mfC-0PFhisG6mtGE2SDpl7J0aZ0QhFy8B4dyJYJysEwVt2v8VjVRFW0hlK0qHEU77NNrtV_roe_7_JSm-yTgivDSkkVIP5RRu3mQ9t1tvn3TLbjBf8tsxsIMPvXz-_Z_0Jn_xi_d9YnP3w7E_Xf4W1QtsYbfHiDNcnT7vzoKow3NIaTyW-kCl7THjmfa4vKLQudHl4LHVodYLnYR4Np4Mwvwyn0fBDnDyLhufx8PxH2kX77ysAAP__gSRfcA=="}})
 
 	// Drain the second node and expect the query to be planned on only the
 	// first node.
 	distServer := tc.Server(1).DistSQLServer().(*distsql.ServerImpl)
 	distServer.Drain(ctx, 0 /* flowDrainWait */)
 
-	expectPlan([][]string{{"https://cockroachdb.github.io/rowplan/decode.html#eJyUkDFLxEAUhHt_xTGVwsolV26lWF2TSO7EQoKs2UcIJPvCextQjvx3SbbQE060fDM78w17QmBPhRtIYV-QozYYhRtSZVmk9GDv32Ezgy6MU1zk2qBhIdgTYhd7gsXRvfVUkfMk2wwGnqLr-rV2lG5w8nEXpkFhcBhdULu5hUE5RbspOBDq2YCn-NWv0bUEm8_m7xvu21aodZFlm59PeCifiuNrVT4frm8usnb_YVWkIwelM86l5myuDci3lP5UeZKGHoWbFZPOcs2tgieNyc3TsQ_JWgZ-D-e_hnc_wvV89RkAAP__weakAA=="}})
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlrun/decode.html#eJyUkDFLxEAUhHt_xTGVwsolV26lWF2TSO7EQoKs2UcIJPvCextQjvx3SbbQE060fDM78w17QmBPhRtIYV-QozYYhRtSZVmk9GDv32Ezgy6MU1zk2qBhIdgTYhd7gsXRvfVUkfMk2wwGnqLr-rV2lG5w8nEXpkFhcBhdULu5hUE5RbspOBDq2YCn-NWv0bUEm8_m7xvu21aodZFlm59PeCifiuNrVT4frm8usnb_YVWkIwelM86l5myuDci3lP5UeZKGHoWbFZPOcs2tgieNyc3TsQ_JWgZ-D-e_hnc_wvV89RkAAP__weakAA=="}})
 
 	// Verify correctness.
 	var res int
@@ -796,7 +796,7 @@ func TestPartitionSpans(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: distsql.MinAcceptedVersion,
+				MinAcceptedVersion: execinfra.MinAcceptedVersion,
 				Version:            execinfra.Version,
 			},
 			0, // ttl - no expiration
@@ -1081,7 +1081,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		if err := mockGossip.AddInfoProto(
 			gossip.MakeDistSQLNodeVersionKey(nodeID),
 			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: distsql.MinAcceptedVersion,
+				MinAcceptedVersion: execinfra.MinAcceptedVersion,
 				Version:            execinfra.Version,
 			},
 			0, // ttl - no expiration
@@ -1163,7 +1163,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	if err := mockGossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(nodeID),
 		&execinfrapb.DistSQLVersionGossipInfo{
-			MinAcceptedVersion: distsql.MinAcceptedVersion,
+			MinAcceptedVersion: execinfra.MinAcceptedVersion,
 			Version:            execinfra.Version,
 		},
 		0, // ttl - no expiration

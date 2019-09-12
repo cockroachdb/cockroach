@@ -49,7 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1111,7 +1111,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 
 	t.cluster = serverutils.StartTestCluster(t.rootT, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
-		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
+		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 

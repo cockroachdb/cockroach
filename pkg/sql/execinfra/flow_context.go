@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// This file lives here instead of sql/flowbase to avoid an import cycle.
+
 package execinfra
 
 import (

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -67,14 +68,14 @@ func (s *colBatchScan) Init() {
 		s.ctx, s.flowCtx.Txn, s.spans,
 		limitBatches, s.limitHint, s.flowCtx.TraceKV,
 	); err != nil {
-		panic(err)
+		execerror.VectorizedInternalPanic(err)
 	}
 }
 
 func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 	bat, err := s.rf.NextBatch(ctx)
 	if err != nil {
-		panic(err)
+		execerror.VectorizedInternalPanic(err)
 	}
 	bat.SetSelection(false)
 	return bat

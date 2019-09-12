@@ -123,7 +123,9 @@ func (m *Materializer) Child(nth int) execinfrapb.OpNode {
 	if nth == 0 {
 		return m.input
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // Start is part of the RowSource interface.

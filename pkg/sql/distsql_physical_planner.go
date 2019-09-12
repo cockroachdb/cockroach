@@ -573,7 +573,7 @@ func (p *PlanningCtx) sanityCheckAddresses() error {
 // (partial in that it can correspond to a planNode subtree and not necessarily
 // to the entire planNode for a given query).
 //
-// It augments rowplan.PhysicalPlan with information relating the physical
+// It augments physicalplan.PhysicalPlan with information relating the physical
 // plan to a planNode subtree.
 //
 // These plans are built recursively on a planNode tree.

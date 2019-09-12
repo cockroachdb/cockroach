@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -67,7 +68,7 @@ func (d *mockDialer) Dial(
 // close must be called after the test.
 func (d *mockDialer) close() {
 	if err := d.mu.conn.Close(); err != nil {
-		panic(err)
+		execerror.VectorizedInternalPanic(err)
 	}
 }
 

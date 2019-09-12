@@ -12,7 +12,6 @@ package colflowsetup
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -21,10 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +51,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	vee := newTestVectorizedPanicEmitter(col, execerror.VectorizedInternalPanic)
+	vee := newTestVectorizedInternalPanicEmitter(col)
 	mat, err := NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
@@ -75,8 +72,6 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	require.NotPanics(t, func() { _, meta = mat.Next() }, "VectorizedInternalPanic was not caught")
 	require.NotNil(t, meta.Err, "VectorizedInternalPanic was not propagated as metadata")
 }
-
-// TODO(yuzefovich): fix these tests.
 
 // TestNonVectorizedPanicPropagation verifies that materializers do not handle
 // panics coming not from exec package. It sets up the following chain:
@@ -103,7 +98,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nvee := newTestVectorizedPanicEmitter(col, nil /* panicFn */)
+	nvee := newTestNonVectorizedPanicEmitter(col)
 	mat, err := NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
@@ -123,105 +118,65 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	require.Panics(t, func() { mat.Next() }, "NonVectorizedPanic was caught by the operators")
 }
 
-// TestNonVectorizedPanicDoesntHangServer verifies that propagating a non
-// vectorized panic doesn't result in a hang as described in:
-// https://github.com/cockroachdb/cockroach/issues/39779
-func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(ctx)
-
-	flowCtx := execinfra.FlowCtx{
-		EvalCtx: &evalCtx,
-		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
-	}
-	flow := NewVectorizedFlow(
-		flowbase.NewFlowBase(
-			flowCtx,
-			nil,  /* flowReg */
-			nil,  /* syncFlowConsumer */
-			nil,  /* localProcessors */
-			true, /* isVectorized */
-		),
-	)
-
-	mat, err := NewMaterializer(
-		&flowCtx,
-		0, /* processorID */
-		&colexec.CallbackOperator{
-			NextCb: func(ctx context.Context) coldata.Batch {
-				a := []int{0}
-				// Trigger an index out of bounds panic.
-				a[0] = a[100]
-				return nil
-			},
-		},
-		nil, /* typs */
-		&execinfrapb.PostProcessSpec{},
-		&distsqlutils.RowBuffer{},
-		nil, /* metadataSourceQueue */
-		nil, /* outputStatsToTrace */
-		flow.GetCancelFlowFn,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	flow.SetProcessors([]execinfra.Processor{mat})
-	// This test specifically verifies that a flow doesn't get stuck in Wait for
-	// asynchronous components that haven't been signaled to exit. To simulate
-	// this we just create a mock startable.
-	flow.AddStartable(
-		flowbase.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
-			wg.Add(1)
-			go func() {
-				// Ensure context is canceled.
-				<-ctx.Done()
-				wg.Done()
-			}()
-		}),
-	)
-
-	require.Panics(t, func() { require.NoError(t, flow.Run(ctx, nil)) })
-}
-
-// testVectorizedPanicEmitter is an exec.Operator that panics on every
-// odd-numbered invocation of Next() and returns the next batch from the input
-// on every even-numbered (i.e. it becomes a noop for those iterations). Used
-// for tests only. If panicFn is non-nil, it is used; otherwise, the builtin
-// panic function is called.
-type testVectorizedPanicEmitter struct {
+// testVectorizedInternalPanicEmitter is an colexec.Operator that panics with
+// execerror.VectorizedInternalPanic on every odd-numbered invocation of Next()
+// and returns the next batch from the input on every even-numbered (i.e. it
+// becomes a noop for those iterations). Used for tests only.
+type testVectorizedInternalPanicEmitter struct {
 	colexec.OneInputNode
 	emitBatch bool
-
-	panicFn func(interface{})
 }
 
-var _ colexec.Operator = &testVectorizedPanicEmitter{}
+var _ colexec.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestVectorizedPanicEmitter(
-	input colexec.Operator, panicFn func(interface{}),
-) colexec.Operator {
-	return &testVectorizedPanicEmitter{
+func newTestVectorizedInternalPanicEmitter(input colexec.Operator) colexec.Operator {
+	return &testVectorizedInternalPanicEmitter{
 		OneInputNode: colexec.NewOneInputNode(input),
-		panicFn:      panicFn,
 	}
 }
 
 // Init is part of exec.Operator interface.
-func (e *testVectorizedPanicEmitter) Init() {
+func (e *testVectorizedInternalPanicEmitter) Init() {
 	e.Input().Init()
 }
 
 // Next is part of exec.Operator interface.
-func (e *testVectorizedPanicEmitter) Next(ctx context.Context) coldata.Batch {
+func (e *testVectorizedInternalPanicEmitter) Next(ctx context.Context) coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
-		if e.panicFn != nil {
-			e.panicFn("")
-		}
+		execerror.VectorizedInternalPanic("")
+	}
+
+	e.emitBatch = false
+	return e.Input().Next(ctx)
+}
+
+// testNonVectorizedPanicEmitter is the same as
+// testVectorizedInternalPanicEmitter but it panics with the builtin panic
+// function. Used for tests only. It is the only colexec.Operator panics from
+// which are not caught.
+type testNonVectorizedPanicEmitter struct {
+	colexec.OneInputNode
+	emitBatch bool
+}
+
+var _ colexec.Operator = &testVectorizedInternalPanicEmitter{}
+
+func newTestNonVectorizedPanicEmitter(input colexec.Operator) colexec.Operator {
+	return &testNonVectorizedPanicEmitter{
+		OneInputNode: colexec.NewOneInputNode(input),
+	}
+}
+
+// Init is part of exec.Operator interface.
+func (e *testNonVectorizedPanicEmitter) Init() {
+	e.Input().Init()
+}
+
+// Next is part of exec.Operator interface.
+func (e *testNonVectorizedPanicEmitter) Next(ctx context.Context) coldata.Batch {
+	if !e.emitBatch {
+		e.emitBatch = true
 		panic("")
 	}
 

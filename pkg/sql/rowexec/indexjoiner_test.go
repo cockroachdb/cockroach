@@ -8,6 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// This file doesn't live next to execinfra/indexjoiner.go in order to use
+// unexported method runProcessorsTest.
+// TODO(yuzefovich): move this test file next to indexjoiner.go.
+
 package rowexec
 
 import (
@@ -24,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-// TODO(yuzefovich): move this test file next to indexjoiner.go.
 
 func TestIndexJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()

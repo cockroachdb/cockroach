@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -114,7 +115,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	for idx, ct := range columnTypes {
 		err := colexec.EncDatumRowsToColVec(c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
 		if err != nil {
-			panic(err)
+			execerror.VectorizedInternalPanic(err)
 		}
 	}
 	return c.batch
@@ -125,7 +126,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 // columnarizers are not expected to be Run, so we prohibit calling this method
 // on them.
 func (c *Columnarizer) Run(context.Context) {
-	panic("Columnarizer should not be Run")
+	execerror.VectorizedInternalPanic("Columnarizer should not be Run")
 }
 
 var _ colexec.Operator = &Columnarizer{}
@@ -153,7 +154,9 @@ func (c *Columnarizer) Child(nth int) execinfrapb.OpNode {
 		if n, ok := c.input.(execinfrapb.OpNode); ok {
 			return n
 		}
-		panic("input to Columnarizer is not an exec.OpNode")
+		execerror.VectorizedInternalPanic("input to Columnarizer is not an exec.OpNode")
 	}
-	panic(fmt.Sprintf("invalid index %d", nth))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }

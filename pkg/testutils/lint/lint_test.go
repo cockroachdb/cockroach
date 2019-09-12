@@ -1463,8 +1463,11 @@ func TestLint(t *testing.T) {
 			"-nE",
 			fmt.Sprintf(`panic\(.*\)`),
 			"--",
-			"sql/exec",
-			":!sql/exec/execerror/error.go",
+			"sql/colexec",
+			"sql/colflowsetup",
+			":!sql/colexec/execerror/error.go",
+			":!sql/colexec/execpb/stats.pb.go",
+			":!sql/colflowsetup/vectorized_panic_propagation_test.go",
 		)
 		if err != nil {
 			t.Fatal(err)

@@ -65,7 +65,7 @@ func setupRouter(
 		},
 		EvalCtx: evalCtx,
 	}
-	init(ctx, &flowCtx, inputTypes)
+	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
 	r.Start(ctx, wg, nil /* ctxCancel */)
 	return r, wg
@@ -619,7 +619,7 @@ func TestRouterBlocks(t *testing.T) {
 				},
 				EvalCtx: &evalCtx,
 			}
-			init(ctx, &flowCtx, colTypes)
+			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.Start(ctx, &wg, nil /* ctxCancel */)
 

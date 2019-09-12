@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -655,7 +656,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	}
 
 	if len(s.vectorizedStatsCollectorsQueue) > 0 {
-		panic("not all vectorized stats collectors have been processed")
+		execerror.VectorizedInternalPanic("not all vectorized stats collectors have been processed")
 	}
 	return s.leaves, nil
 }
@@ -676,7 +677,7 @@ func (s vectorizedInboundStreamHandler) Run(
 }
 
 func (s vectorizedInboundStreamHandler) Timeout(err error) {
-	s.Timeout(err)
+	s.Inbox.Timeout(err)
 }
 
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
