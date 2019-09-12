@@ -27,6 +27,7 @@ var rewriteCSVTestData = envutil.EnvOrDefaultBool("COCKROACH_REWRITE_CSV_TESTDAT
 
 type csvTestFiles struct {
 	files, gzipFiles, bzipFiles, filesWithOpts, filesWithDups, fileWithShadowKeys, fileWithDupKeySameValue []string
+	filesUsingWildcard, gzipFilesUsingWildcard, bzipFilesUsingWildcard                                     []string
 }
 
 // Returns a single CSV file with a previously imported key sandiwched between
@@ -108,6 +109,11 @@ func getTestFiles(numFiles int) csvTestFiles {
 
 	testFiles.fileWithDupKeySameValue = append(testFiles.fileWithDupKeySameValue, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("dup-key-same-value%s", suffix)))
 	testFiles.fileWithShadowKeys = append(testFiles.fileWithShadowKeys, fmt.Sprintf(`'nodelocal:///%s'`, fmt.Sprintf("shadow-data%s", suffix)))
+
+	wildcardFileName := "data-[0-9]"
+	testFiles.filesUsingWildcard = append(testFiles.filesUsingWildcard, fmt.Sprintf(`'nodelocal:///%s%s'`, wildcardFileName, suffix))
+	testFiles.gzipFilesUsingWildcard = append(testFiles.gzipFilesUsingWildcard, fmt.Sprintf(`'nodelocal:///%s%s.gz'`, wildcardFileName, suffix))
+	testFiles.bzipFilesUsingWildcard = append(testFiles.gzipFilesUsingWildcard, fmt.Sprintf(`'nodelocal:///%s%s.bz2'`, wildcardFileName, suffix))
 
 	return testFiles
 }
