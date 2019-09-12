@@ -208,9 +208,18 @@ func (mb *mutationBuilder) fetchColID(tabOrd int) opt.ColumnID {
 // the query (RETURNING clause).
 // TODO(andyk): Do needed column analysis to project fewer columns if possible.
 func (mb *mutationBuilder) buildInputForUpdate(
-	inScope *scope, from tree.TableExprs, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
-	indexFlags *tree.IndexFlags,
+	inScope *scope,
+	texpr tree.TableExpr,
+	from tree.TableExprs,
+	where *tree.Where,
+	limit *tree.Limit,
+	orderBy tree.OrderBy,
 ) {
+	var indexFlags *tree.IndexFlags
+	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
+		indexFlags = source.IndexFlags
+	}
+
 	// Fetch columns from different instance of the table metadata, so that it's
 	// possible to remap columns, as in this example:
 	//
@@ -307,9 +316,13 @@ func (mb *mutationBuilder) buildInputForUpdate(
 // All columns from the table to update are added to fetchColList.
 // TODO(andyk): Do needed column analysis to project fewer columns if possible.
 func (mb *mutationBuilder) buildInputForDelete(
-	inScope *scope, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
-	indexFlags *tree.IndexFlags,
+	inScope *scope, texpr tree.TableExpr, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
 ) {
+	var indexFlags *tree.IndexFlags
+	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
+		indexFlags = source.IndexFlags
+	}
+
 	// Fetch columns from different instance of the table metadata, so that it's
 	// possible to remap columns, as in this example:
 	//

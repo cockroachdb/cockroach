@@ -92,7 +92,7 @@ delete foo
       │                   └── const: 0 [type=int]
       └── const: 10 [type=int]
 
-# DELETE with index hints
+# DELETE with index hints.
 exec-ddl
 CREATE TABLE xyzw (
   x INT PRIMARY KEY,
@@ -153,6 +153,10 @@ delete xyzw
       ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
       └── flags: no-index-join
 
+build
+DELETE FROM xyzw@bad_idx
+----
+error: index "bad_idx" not found
 
 # Use placeholders.
 build

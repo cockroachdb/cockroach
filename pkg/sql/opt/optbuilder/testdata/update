@@ -283,7 +283,7 @@ update abcde
                 │    └── variable: c [type=int]
                 └── const: 1 [type=int]
 
-# UPDATE with index hints
+# UPDATE with index hints.
 exec-ddl
 CREATE TABLE xyzw (
   x INT PRIMARY KEY,
@@ -403,6 +403,11 @@ update xyzw
       │              └── const: 1 [type=int]
       └── projections
            └── const: 2 [type=int]
+
+build
+UPDATE xyzw@bad_idx SET x=2 WHERE z=1
+----
+error: index "bad_idx" not found
 
 
 # Infer types.

@@ -96,11 +96,6 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	var mb mutationBuilder
 	mb.init(b, "update", tab, *alias)
 
-	var indexFlags *tree.IndexFlags
-	if source, ok := upd.Table.(*tree.AliasedTableExpr); ok {
-		indexFlags = source.IndexFlags
-	}
-
 	// Build the input expression that selects the rows that will be updated:
 	//
 	//   WITH <with>
@@ -108,7 +103,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdate(inScope, upd.From, upd.Where, upd.Limit, upd.OrderBy, indexFlags)
+	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
