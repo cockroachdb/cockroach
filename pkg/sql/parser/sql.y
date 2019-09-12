@@ -1170,8 +1170,14 @@ alter_table_stmt:
 // ALTER PARTITION <name> <command>
 //
 // Commands:
-//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <zoneconfig>
-//   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
+//   -- Alter a single partition which exists on any of a table's indexes.
+//   ALTER PARTITION <partition> OF TABLE <tablename> CONFIGURE ZONE <zoneconfig>
+//
+//   -- Alter a partition of a specific index.
+//   ALTER PARTITION <partition> OF INDEX <tablename>@<indexname> CONFIGURE ZONE <zoneconfig>
+//
+//   -- Alter all partitions with the same name across a table's indexes.
+//   ALTER PARTITION <partition> OF INDEX <tablename>@* CONFIGURE ZONE <zoneconfig>
 //
 // Zone configurations:
 //   DISCARD
@@ -1498,6 +1504,12 @@ alter_zone_partition_stmt:
     }
     s.AllIndexes = true
     $$.val = s
+  }
+| ALTER PARTITION partition_name OF TABLE table_name '@' '*' error
+  {
+    err := errors.New("index wildcard unsupported in ALTER PARTITION ... OF TABLE")
+    err = errors.WithHint(err, "try ALTER PARTITION <partition> OF INDEX <tablename>@*")
+    return setErr(sqllex, err)
   }
 
 var_set_list:
