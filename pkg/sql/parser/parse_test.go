@@ -2683,6 +2683,14 @@ DETAIL: source SQL:
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
                                                                                                               ^`,
 		},
+		{
+			`ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1`,
+			`at or near "configure": syntax error: index wildcard unsupported in ALTER PARTITION ... OF TABLE
+DETAIL: source SQL:
+ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
+                                 ^
+HINT: try ALTER PARTITION <partition> OF INDEX <tablename>@*`,
+		},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
