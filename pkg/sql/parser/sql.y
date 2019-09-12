@@ -3455,6 +3455,10 @@ show_partitions_stmt:
   {
     $$.val = &tree.ShowPartitions{IsIndex: true, Index: $5.tableIndexName()}
   }
+| SHOW PARTITIONS FROM INDEX table_name '@' '*'
+  {
+    $$.val = &tree.ShowPartitions{IsTable: true, Table: $5.unresolvedObjectName()}
+  }
 | SHOW PARTITIONS error // SHOW HELP: SHOW PARTITIONS
 
 // %Help: SHOW DATABASES - list databases
