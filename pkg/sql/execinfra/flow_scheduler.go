@@ -108,7 +108,7 @@ func (fs *flowScheduler) runFlowNow(ctx context.Context, f Flow) error {
 // are returned. If the flow is enqueued, these error will be later ignored.
 func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 	return fs.stopper.RunTaskWithErr(
-		ctx, "distsqlrun.flowScheduler: scheduling flow", func(ctx context.Context) error {
+		ctx, "rowexec.flowScheduler: scheduling flow", func(ctx context.Context) error {
 			fs.mu.Lock()
 			defer fs.mu.Unlock()
 

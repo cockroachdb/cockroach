@@ -13,8 +13,8 @@ package sql
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -104,7 +104,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	}
 	// Figure out which built-in to compute.
 	funcStr := strings.ToUpper(funcInProgress.expr.Func.String())
-	funcSpec, err := distsqlrun.CreateWindowerSpecFunc(funcStr)
+	funcSpec, err := rowexec.CreateWindowerSpecFunc(funcStr)
 	if err != nil {
 		return execinfrapb.WindowerSpec_WindowFn{}, nil, err
 	}
@@ -112,7 +112,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	for i, argIdx := range funcInProgress.argsIdxs {
 		argTypes[i] = s.plan.ResultTypes[argIdx]
 	}
-	_, outputType, err := distsqlrun.GetWindowFunctionInfo(funcSpec, argTypes...)
+	_, outputType, err := rowexec.GetWindowFunctionInfo(funcSpec, argTypes...)
 	if err != nil {
 		return execinfrapb.WindowerSpec_WindowFn{}, outputType, err
 	}

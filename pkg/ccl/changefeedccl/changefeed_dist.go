@@ -14,8 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -23,8 +23,8 @@ import (
 )
 
 func init() {
-	distsqlrun.NewChangeAggregatorProcessor = newChangeAggregatorProcessor
-	distsqlrun.NewChangeFrontierProcessor = newChangeFrontierProcessor
+	rowexec.NewChangeAggregatorProcessor = newChangeAggregatorProcessor
+	rowexec.NewChangeFrontierProcessor = newChangeFrontierProcessor
 }
 
 const (
@@ -192,7 +192,7 @@ func distChangefeedFlow(
 	return resultRows.Err()
 }
 
-// changefeedResultWriter implements the `distsqlrun.resultWriter` that sends
+// changefeedResultWriter implements the `rowexec.resultWriter` that sends
 // the received rows back over the given channel.
 type changefeedResultWriter struct {
 	rowsCh       chan<- tree.Datums

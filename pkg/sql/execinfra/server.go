@@ -35,10 +35,10 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
-// Version identifies the distsqlrun protocol version.
+// Version identifies the rowexec protocol version.
 //
 // This version is separate from the main CockroachDB version numbering; it is
-// only changed when the distsqlrun API changes.
+// only changed when the rowexec API changes.
 //
 // The planner populates the version in SetupFlowRequest.
 // A server only accepts requests with versions in the range MinAcceptedVersion
@@ -46,9 +46,9 @@ import (
 //
 // Is is possible used to provide a "window" of compatibility when new features are
 // added. Example:
-//  - we start with Version=1; distsqlrun servers with version 1 only accept
+//  - we start with Version=1; rowexec servers with version 1 only accept
 //    requests with version 1.
-//  - a new distsqlrun feature is added; Version is bumped to 2. The
+//  - a new rowexec feature is added; Version is bumped to 2. The
 //    planner does not yet use this feature by default; it still issues
 //    requests with version 1.
 //  - MinAcceptedVersion is still 1, i.e. servers with version 2
@@ -431,7 +431,7 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 	}
 	mbox.setFlowCtx(f.GetFlowCtx())
 
-	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: sync flow", func(ctx context.Context) {
+	if err := ds.Stopper.RunTask(ctx, "rowexec.ServerImpl: sync flow", func(ctx context.Context) {
 		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
 		f.AddStartable(mbox)

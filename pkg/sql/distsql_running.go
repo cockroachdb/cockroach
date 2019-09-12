@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -172,7 +172,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
 							if rsidx != nil {
 								lp := localState.LocalProcs[*rsidx]
-								if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
+								if z, ok := lp.(rowexec.VectorizeAlwaysException); ok {
 									if z.IsException() {
 										returnVectorizationSetupError = false
 									}
@@ -381,7 +381,7 @@ type DistSQLReceiver struct {
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []types.T
 
-	// resultToStreamColMap maps result columns to columns in the distsqlrun results
+	// resultToStreamColMap maps result columns to columns in the rowexec results
 	// stream.
 	resultToStreamColMap []int
 
@@ -857,7 +857,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRecv := recv.clone()
 	var typ sqlbase.ColTypeInfo
 	var rows *rowcontainer.RowContainer
-	if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
+	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
 		subqueryRecv.noColsRequired = true
 		typ = sqlbase.ColTypeInfoFromColTypes([]types.T{})
 	} else {
@@ -887,11 +887,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		return err
 	}
 	switch subqueryPlan.execMode {
-	case distsqlrun.SubqueryExecModeExists:
+	case rowexec.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know if there is at least one row.
 		hasRows := rows.Len() != 0
 		subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
-	case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
+	case rowexec.SubqueryExecModeAllRows, rowexec.SubqueryExecModeAllRowsNormalized:
 		var result tree.DTuple
 		for rows.Len() > 0 {
 			row := rows.At(0)
@@ -907,11 +907,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 			}
 		}
 
-		if subqueryPlan.execMode == distsqlrun.SubqueryExecModeAllRowsNormalized {
+		if subqueryPlan.execMode == rowexec.SubqueryExecModeAllRowsNormalized {
 			result.Normalize(&evalCtx.EvalContext)
 		}
 		subqueryPlans[planIdx].result = &result
-	case distsqlrun.SubqueryExecModeOneRow:
+	case rowexec.SubqueryExecModeOneRow:
 		switch rows.Len() {
 		case 0:
 			subqueryPlans[planIdx].result = tree.DNull

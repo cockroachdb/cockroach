@@ -11,8 +11,8 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -65,8 +65,8 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	}
 
 	// Set the plan's result types to be ScrubTypes.
-	p.ResultTypes = distsqlrun.ScrubTypes
-	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
+	p.ResultTypes = rowexec.ScrubTypes
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(rowexec.ScrubTypes)))
 
 	dsp.FinalizePlan(planCtx, &p)
 	return p, nil

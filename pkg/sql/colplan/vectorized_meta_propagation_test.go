@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -53,7 +53,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 			ID: uuid.MakeV4().String(),
 		},
 	}
-	mts, err := distsqlrun.newProcessor(ctx, &flowCtx, 0, &mtsSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{input}, []execinfra.RowReceiver{nil}, nil)
+	mts, err := rowexec.newProcessor(ctx, &flowCtx, 0, &mtsSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{input}, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 			SenderIDs: []string{mtsSpec.MetadataTestSender.ID},
 		},
 	}
-	mtr, err := distsqlrun.newProcessor(ctx, &flowCtx, 3, &mtrSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{execinfra.RowSource(mat)}, []execinfra.RowReceiver{nil}, nil)
+	mtr, err := rowexec.newProcessor(ctx, &flowCtx, 3, &mtrSpec, &execinfrapb.PostProcessSpec{}, []execinfra.RowSource{execinfra.RowSource(mat)}, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

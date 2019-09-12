@@ -120,7 +120,7 @@ type ServerConfig struct {
 	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
-// RuntimeStats is an interface through which the distsqlrun layer can get
+// RuntimeStats is an interface through which the rowexec layer can get
 // information about runtime statistics.
 type RuntimeStats interface {
 	// GetCPUCombinedPercentNorm returns the recent user+system cpu usage,

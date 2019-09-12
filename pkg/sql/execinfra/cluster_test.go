@@ -595,7 +595,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 }
 
 // BenchmarkInfrastructure sets up a flow that doesn't use KV at all and runs it
-// repeatedly. The intention is to profile the distsqlrun infrastructure itself.
+// repeatedly. The intention is to profile the rowexec infrastructure itself.
 func BenchmarkInfrastructure(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 

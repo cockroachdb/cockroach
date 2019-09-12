@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// This file contains helper code to populate distsqlrun.Expressions during
+// This file contains helper code to populate rowexec.Expressions during
 // planning.
 
 package rowplan
@@ -24,7 +24,7 @@ import (
 )
 
 // ExprContext is an interface containing objects necessary for creating
-// distsqlrun.Expressions.
+// rowexec.Expressions.
 type ExprContext interface {
 	// EvalContext returns the tree.EvalContext for planning.
 	EvalContext() *tree.EvalContext
@@ -33,7 +33,7 @@ type ExprContext interface {
 	IsLocal() bool
 
 	// EvaluateSubqueries returns true if subqueries should be evaluated before
-	// creating the distsqlrun.Expression.
+	// creating the rowexec.Expression.
 	EvaluateSubqueries() bool
 }
 
@@ -55,9 +55,9 @@ func (fakeExprContext) EvaluateSubqueries() bool {
 	return true
 }
 
-// MakeExpression creates a distsqlrun.Expression.
+// MakeExpression creates a rowexec.Expression.
 //
-// The distsqlrun.Expression uses the placeholder syntax (@1, @2, @3..) to refer
+// The rowexec.Expression uses the placeholder syntax (@1, @2, @3..) to refer
 // to columns.
 //
 // The expr uses IndexedVars to refer to columns. The caller can optionally

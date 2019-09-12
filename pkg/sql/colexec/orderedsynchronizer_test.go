@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// Adapted from the same-named test in the distsqlrun package.
+// Adapted from the same-named test in the rowexec package.
 func TestOrderedSync(t *testing.T) {
 	testCases := []struct {
 		sources  []tuples

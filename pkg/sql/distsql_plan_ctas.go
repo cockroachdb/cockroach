@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -43,12 +43,12 @@ func PlanAndRunCTAS(
 	}
 
 	p.AddNoGroupingStage(
-		out, execinfrapb.PostProcessSpec{}, distsqlrun.CTASPlanResultTypes, execinfrapb.Ordering{},
+		out, execinfrapb.PostProcessSpec{}, rowexec.CTASPlanResultTypes, execinfrapb.Ordering{},
 	)
 
 	// The bulk row writers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0}
-	p.ResultTypes = distsqlrun.CTASPlanResultTypes
+	p.ResultTypes = rowexec.CTASPlanResultTypes
 
 	// Make copy of evalCtx as Run might modify it.
 	evalCtxCopy := planner.ExtendedEvalContextCopy()

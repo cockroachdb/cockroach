@@ -91,7 +91,7 @@ type TestServerInterface interface {
 	// The real return type is *kv.DistSender.
 	DistSenderI() interface{}
 
-	// DistSQLServer returns the *distsqlrun.ServerImpl as an interface{}.
+	// DistSQLServer returns the *rowexec.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
 	// JobRegistry returns the *jobs.Registry as an interface{}.

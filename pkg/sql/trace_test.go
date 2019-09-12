@@ -144,7 +144,7 @@ func TestTrace(t *testing.T) {
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
 			optionalSpans: []string{
-				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"/cockroach.sql.rowexec.DistSQL/SetupFlow",
 				"noop",
 			},
 		},
@@ -212,7 +212,7 @@ func TestTrace(t *testing.T) {
 			// Depending on whether the data is local or not, we may not see these
 			// spans.
 			optionalSpans: []string{
-				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"/cockroach.sql.rowexec.DistSQL/SetupFlow",
 				"noop",
 			},
 		},

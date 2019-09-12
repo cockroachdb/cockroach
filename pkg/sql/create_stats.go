@@ -478,7 +478,7 @@ func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn) error
 	// because that transaction must be read-only. In the future we may want
 	// to use the transaction that inserted the new stats into the
 	// system.table_statistics table, but that would require calling
-	// MakeEventLogger from the distsqlrun package.
+	// MakeEventLogger from the rowexec package.
 	return r.evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return MakeEventLogger(r.evalCtx.ExecCfg).InsertEventRecord(
 			ctx,

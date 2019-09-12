@@ -56,7 +56,7 @@ type LocalProcessor interface {
 type ProcOutputHelper struct {
 	numInternalCols int
 	// output can be optionally passed in for use with EmitRow and
-	// distsqlrun.emitHelper.
+	// rowexec.emitHelper.
 	// If output is nil, one can invoke ProcessRow to obtain the
 	// post-processed row directly.
 	output   RowReceiver
@@ -225,7 +225,7 @@ func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
 // rendering processing; the output has not been closed and it's the caller's
 // responsibility to push the error to the output.
 //
-// Note: check out distsqlrun.emitHelper() for a useful wrapper.
+// Note: check out rowexec.emitHelper() for a useful wrapper.
 func (h *ProcOutputHelper) EmitRow(
 	ctx context.Context, row sqlbase.EncDatumRow,
 ) (ConsumerStatus, error) {

@@ -16,7 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -295,7 +295,7 @@ func populateEntriesForObserver(
 			"original sql",
 			tree.AsStringWithFlags(subqueryPlans[i].subquery, subqueryFmtFlags),
 		)
-		observer.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
+		observer.attr("subquery", "exec mode", rowexec.SubqueryExecModeNames[subqueryPlans[i].execMode])
 		if subqueryPlans[i].plan != nil {
 			if err := walkPlan(ctx, subqueryPlans[i].plan, observer); err != nil && returnError {
 				return err
