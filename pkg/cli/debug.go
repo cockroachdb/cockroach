@@ -53,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/tool"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -758,6 +760,16 @@ https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb
 	},
 }
 
+var debugPebbleCmd = &cobra.Command{
+	Use:   "pebble [command]",
+	Short: "run a Pebble tool command",
+	Long: `
+Allows the use of pebble tools, such as to introspect manifests, SSTables, etc.
+'cockroach debug pebble' accepts the same arguments and flags as the 'pebble'
+binary.
+`,
+}
+
 var debugSSTDumpCmd = &cobra.Command{
 	Use:   "sst_dump",
 	Short: "run the RocksDB 'sst_dump' tool",
@@ -1303,6 +1315,8 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugMergeLogsCommand,
 )
 
+
+
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
 var DebugCmd = &cobra.Command{
 	Use:   "debug [command]",
@@ -1317,6 +1331,14 @@ process that has failed and cannot restart.
 
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
+
+	pebbleTool := tool.New()
+	merger := *pebble.DefaultMerger
+	merger.Name = "cockroach_merge_operator"
+	pebbleTool.RegisterMerger(&merger)
+	pebbleTool.RegisterComparer(engine.MVCCComparer)
+	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
+	DebugCmd.AddCommand(debugPebbleCmd)
 
 	f := debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
