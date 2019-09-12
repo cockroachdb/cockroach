@@ -1984,3 +1984,43 @@ func (node *AlterTableAddColumn) doc(p *PrettyCfg) pretty.Doc {
 		p.Doc(node.ColumnDef),
 	)
 }
+
+func (node *Prepare) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node *Prepare) docTable(p *PrettyCfg) []pretty.TableRow {
+	name := p.Doc(&node.Name)
+	if len(node.Types) > 0 {
+		typs := make([]pretty.Doc, len(node.Types))
+		for i, t := range node.Types {
+			typs[i] = pretty.Text(t.SQLString())
+		}
+		name = pretty.ConcatSpace(name,
+			p.bracket("(", p.commaSeparated(typs...), ")"),
+		)
+	}
+	return []pretty.TableRow{
+		p.row("PREPARE", name),
+		p.row("AS", p.Doc(node.Statement)),
+	}
+}
+
+func (node *Execute) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node *Execute) docTable(p *PrettyCfg) []pretty.TableRow {
+	name := p.Doc(&node.Name)
+	if len(node.Params) > 0 {
+		name = pretty.ConcatSpace(
+			name,
+			p.bracket("(", p.Doc(&node.Params), ")"),
+		)
+	}
+	rows := []pretty.TableRow{p.row("EXECUTE", name)}
+	if node.DiscardRows {
+		rows = append(rows, p.row("", pretty.Keyword("DISCARD ROWS")))
+	}
+	return rows
+}
