@@ -1,7 +1,7 @@
 # LogicTest: local
 
 statement ok
-SET optimizer_foreign_keys = true
+SET experimental_optimizer_foreign_keys = true
 
 statement ok
 CREATE TABLE parent (p INT PRIMARY KEY, other INT)
