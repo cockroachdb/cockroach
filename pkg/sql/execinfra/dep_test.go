@@ -23,9 +23,10 @@ func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/sql/execinfra", true,
 		[]string{
-			// TODO(yuzefovich): fix this.
+			// TODO(yuzefovich): fix this (CFetcher in sql/row is the issue).
 			//"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup",
+			"github.com/cockroachdb/cockroach/pkg/sql/flowbase",
 			"github.com/cockroachdb/cockroach/pkg/sql/rowexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/rowflowsetup",
 		}, nil,

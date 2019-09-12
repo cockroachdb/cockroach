@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,10 +45,10 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	ni := base.NodeIDContainer{}
 	ni.Set(ctx, 1)
 	st := cluster.MakeTestingClusterSettings()
-	mt := MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	mt := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	srv := NewServer(
 		ctx,
-		ServerConfig{
+		execinfra.ServerConfig{
 			Settings: st,
 			Stopper:  stopper,
 			Metrics:  &mt,
@@ -72,8 +73,8 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	// The outbox uses this stopper to run a goroutine.
 	outboxStopper := stop.NewStopper()
-	flowCtx := FlowCtx{
-		Cfg: &ServerConfig{
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
 			Settings:   st,
 			NodeDialer: nodedialer.New(rpcContext, staticAddressResolver(ln.Addr())),
 			Stopper:    outboxStopper,
@@ -81,7 +82,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	}
 
 	streamID := execinfrapb.StreamID(1)
-	outbox := NewOutbox(&flowCtx, StaticNodeID, execinfrapb.FlowID{}, streamID)
+	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, execinfrapb.FlowID{}, streamID)
 	outbox.Init(sqlbase.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no
@@ -90,7 +91,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	wg := f.GetWaitGroup()
 
 	// Use RegisterFlow to register our consumer, which we will control.
-	consumer := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
+	consumer := execinfra.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, execinfra.RowBufferArgs{})
 	connectionInfo := map[execinfrapb.StreamID]*InboundStreamInfo{
 		streamID: NewInboundStreamInfo(
 			rowInboundStreamHandler{consumer},
@@ -118,7 +119,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// the write to the row channel is asynchronous wrt the outbox sending the
 	// row and getting back the updated consumer status.
 	testutils.SucceedsSoon(t, func() error {
-		if cs := outbox.Push(row, nil /* meta */); cs != DrainRequested {
+		if cs := outbox.Push(row, nil /* meta */); cs != execinfra.DrainRequested {
 			return errors.Errorf("unexpected consumer status %s", cs)
 		}
 		return nil

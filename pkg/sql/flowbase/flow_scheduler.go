@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"container/list"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -38,7 +39,7 @@ type flowScheduler struct {
 	log.AmbientContext
 	stopper    *stop.Stopper
 	flowDoneCh chan Flow
-	metrics    *Metrics
+	metrics    *execinfra.Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -58,7 +59,10 @@ type flowWithCtx struct {
 }
 
 func newFlowScheduler(
-	ambient log.AmbientContext, stopper *stop.Stopper, settings *cluster.Settings, metrics *Metrics,
+	ambient log.AmbientContext,
+	stopper *stop.Stopper,
+	settings *cluster.Settings,
+	metrics *execinfra.Metrics,
 ) *flowScheduler {
 	fs := &flowScheduler{
 		AmbientContext: ambient,

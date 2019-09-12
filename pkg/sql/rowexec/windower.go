@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -734,7 +735,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						"hash column %d, row with only %d columns", errors.Safe(col), errors.Safe(len(row)))
 				}
 				var err error
-				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, execinfra.PreferredEncoding, w.scratch)
+				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, flowbase.PreferredEncoding, w.scratch)
 				if err != nil {
 					return err
 				}

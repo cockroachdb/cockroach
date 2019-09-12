@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -488,7 +489,7 @@ type ExecutorConfig struct {
 	RPCContext        *rpc.Context
 	LeaseManager      *LeaseManager
 	Clock             *hlc.Clock
-	DistSQLSrv        *execinfra.ServerImpl
+	DistSQLSrv        *flowbase.ServerImpl
 	StatusServer      serverpb.StatusServer
 	MetricsRecorder   nodeStatusGenerator
 	SessionRegistry   *SessionRegistry

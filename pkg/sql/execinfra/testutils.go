@@ -96,31 +96,6 @@ func MakeTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMo
 	return &diskMonitor
 }
 
-// The encoder/decoder don't maintain the ordering between rows and metadata
-// records.
-func TestGetDecodedRows(
-	tb testing.TB,
-	sd *StreamDecoder,
-	decodedRows sqlbase.EncDatumRows,
-	metas []execinfrapb.ProducerMetadata,
-) (sqlbase.EncDatumRows, []execinfrapb.ProducerMetadata) {
-	for {
-		row, meta, err := sd.GetRow(nil /* rowBuf */)
-		if err != nil {
-			tb.Fatal(err)
-		}
-		if row == nil && meta == nil {
-			break
-		}
-		if row != nil {
-			decodedRows = append(decodedRows, row)
-		} else {
-			metas = append(metas, *meta)
-		}
-	}
-	return decodedRows, metas
-}
-
 // GenerateValueSpec generates a ValuesCoreSpec that encodes the given rows. We
 // pass the types as well because zero rows are allowed.
 func GenerateValuesSpec(

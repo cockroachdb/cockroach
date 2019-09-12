@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,9 +45,9 @@ type flowStream interface {
 // first).
 type Outbox struct {
 	// RowChannel implements the RowReceiver interface.
-	RowChannel
+	execinfra.RowChannel
 
-	flowCtx  *FlowCtx
+	flowCtx  *execinfra.FlowCtx
 	streamID execinfrapb.StreamID
 	nodeID   roachpb.NodeID
 	// The rows received from the RowChannel will be forwarded on this stream once
@@ -69,11 +70,14 @@ type Outbox struct {
 	stats                  OutboxStats
 }
 
-var _ RowReceiver = &Outbox{}
+var _ execinfra.RowReceiver = &Outbox{}
 var _ Startable = &Outbox{}
 
 func NewOutbox(
-	flowCtx *FlowCtx, nodeID roachpb.NodeID, flowID execinfrapb.FlowID, streamID execinfrapb.StreamID,
+	flowCtx *execinfra.FlowCtx,
+	nodeID roachpb.NodeID,
+	flowID execinfrapb.FlowID,
+	streamID execinfrapb.StreamID,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, nodeID: nodeID}
 	m.encoder.SetHeaderFields(flowID, streamID)
@@ -88,7 +92,7 @@ func newOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *Outb
 	return &Outbox{stream: stream}
 }
 
-func (m *Outbox) setFlowCtx(flowCtx *FlowCtx) {
+func (m *Outbox) setFlowCtx(flowCtx *execinfra.FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
@@ -196,7 +200,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	defer m.RowChannel.ConsumerClosed()
 
 	var span opentracing.Span
-	ctx, span = ProcessorSpan(ctx, "outbox")
+	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
@@ -287,7 +291,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 					tracing.SetSpanStats(span, &m.stats)
 					tracing.FinishSpan(span)
 					spanFinished = true
-					if trace := GetTraceData(ctx); trace != nil {
+					if trace := execinfra.GetTraceData(ctx); trace != nil {
 						err := m.addRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -116,15 +117,15 @@ func (dsp *DistSQLPlanner) setupFlows(
 	txnCoordMeta *roachpb.TxnCoordMeta,
 	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
-	localState execinfra.LocalState,
+	localState flowbase.LocalState,
 	vectorizeThresholdMet bool,
-) (context.Context, execinfra.Flow, error) {
+) (context.Context, flowbase.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
 
 	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
 	setupReq := execinfrapb.SetupFlowRequest{
 		TxnCoordMeta: txnCoordMeta,
-		Version:      execinfra.Version,
+		Version:      flowbase.Version,
 		EvalContext:  evalCtxProto,
 		TraceKV:      evalCtx.Tracing.KVTracingEnabled(),
 	}
@@ -275,7 +276,7 @@ func (dsp *DistSQLPlanner) Run(
 	ctx := planCtx.ctx
 
 	var (
-		localState   execinfra.LocalState
+		localState   flowbase.LocalState
 		txnCoordMeta *roachpb.TxnCoordMeta
 	)
 	// NB: putting part of evalCtx in localState means it might be mutated down

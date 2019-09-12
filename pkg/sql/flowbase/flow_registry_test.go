@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -220,7 +221,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &FlowBase{}
 	streamID1 := execinfrapb.StreamID(1)
-	consumer := &RowBuffer{}
+	consumer := &execinfra.RowBuffer{}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
@@ -317,7 +318,7 @@ func TestHandshake(t *testing.T) {
 			}
 			connectConsumer := func() {
 				f1 := &FlowBase{}
-				consumer := &RowBuffer{}
+				consumer := &execinfra.RowBuffer{}
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
 				inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
@@ -528,7 +529,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	// much work to create that ServerConfig by hand.
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	cfg := ServerConfig{}
+	cfg := execinfra.ServerConfig{}
 
 	distSQLSrv := NewServer(ctx, cfg)
 	distSQLSrv.flowRegistry.Drain(time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */)
@@ -559,7 +560,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	}
 
 	types := make([]types.T, 0)
-	rb := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
+	rb := execinfra.NewRowBuffer(types, nil /* rows */, execinfra.RowBufferArgs{})
 	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &distSQLSrv.memMonitor, &req, rb)
 	if err != nil {
 		t.Fatal(err)
@@ -587,7 +588,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 
 	fr := makeFlowRegistry(0)
 	wg := sync.WaitGroup{}
-	rc := &RowChannel{}
+	rc := &execinfra.RowChannel{}
 	rc.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
@@ -619,10 +620,10 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// pushChan is used to be able to tell when a Push on the RowBuffer has
 	// occurred.
 	pushChan := make(chan *execinfrapb.ProducerMetadata)
-	rc := NewRowBuffer(
+	rc := execinfra.NewRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
-		RowBufferArgs{
+		execinfra.RowBufferArgs{
 			OnPush: func(_ sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
 				pushChan <- meta
 				<-pushChan
@@ -671,9 +672,9 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	ctx := context.Background()
 	fr := makeFlowRegistry(0)
-	left := &RowChannel{}
+	left := &execinfra.RowChannel{}
 	left.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
-	right := &RowChannel{}
+	right := &execinfra.RowChannel{}
 	right.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
 
 	wgLeft := sync.WaitGroup{}
@@ -696,7 +697,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	// RegisterFlow with an immediate timeout.
 	flow := &FlowBase{
-		FlowCtx: FlowCtx{
+		FlowCtx: execinfra.FlowCtx{
 			ID: execinfrapb.FlowID{UUID: uuid.FastMakeV4()},
 		},
 		inboundStreams: inboundStreams,

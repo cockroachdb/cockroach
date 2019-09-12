@@ -23,6 +23,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup", true,
 		[]string{
+			"github.com/cockroachdb/cockroach/pkg/sql/distsql",
 			"github.com/cockroachdb/cockroach/pkg/sql/rowexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/rowflowsetup",
 		}, nil,

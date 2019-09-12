@@ -11,7 +11,7 @@
 // Routers are used by processors to direct outgoing rows to (potentially)
 // multiple streams; see docs/RFCS/distributed_sql.md
 
-package rowexec
+package rowflowsetup
 
 import (
 	"bytes"
@@ -25,7 +25,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,7 +40,7 @@ import (
 
 type router interface {
 	execinfra.RowReceiver
-	execinfra.Startable
+	flowbase.Startable
 	init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []types.T)
 }
 
@@ -102,7 +104,7 @@ type routerOutput struct {
 	// TODO(radu): add padding of size sys.CacheLineSize to ensure there is no
 	// false-sharing?
 
-	stats RouterOutputStats
+	stats rowexec.RouterOutputStats
 
 	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
 	memoryMonitor, diskMonitor *mon.BytesMonitor
@@ -265,7 +267,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 		)
 
 		// Initialize any outboxes.
-		if o, ok := rb.outputs[i].stream.(*execinfra.Outbox); ok {
+		if o, ok := rb.outputs[i].stream.(*flowbase.Outbox); ok {
 			o.Init(types)
 		}
 	}
@@ -588,7 +590,7 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 		// nodes may be doing the same hashing and the encodings need to match. The
 		// encoding needs to be determined at planning time. #13829
 		var err error
-		hr.buffer, err = row[col].Encode(&hr.types[col], &hr.alloc, execinfra.PreferredEncoding, hr.buffer)
+		hr.buffer, err = row[col].Encode(&hr.types[col], &hr.alloc, flowbase.PreferredEncoding, hr.buffer)
 		if err != nil {
 			return -1, err
 		}
@@ -702,7 +704,7 @@ func (rr *rangeRouter) spanForData(data []byte) int {
 const routerOutputTagPrefix = "routeroutput."
 
 // Stats implements the SpanStats interface.
-func (ros *RouterOutputStats) Stats() map[string]string {
+func (ros *rowexec.RouterOutputStats) Stats() map[string]string {
 	statsMap := make(map[string]string)
 	statsMap[routerOutputTagPrefix+"rows_routed"] = strconv.FormatInt(ros.NumRows, 10)
 	statsMap[routerOutputTagPrefix+execinfra.MaxMemoryTagSuffix] = strconv.FormatInt(ros.MaxAllocatedMem, 10)
@@ -711,7 +713,7 @@ func (ros *RouterOutputStats) Stats() map[string]string {
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
-func (ros *RouterOutputStats) StatsForQueryPlan() []string {
+func (ros *rowexec.RouterOutputStats) StatsForQueryPlan() []string {
 	return []string{
 		fmt.Sprintf("rows routed: %d", ros.NumRows),
 		fmt.Sprintf("%s: %d", execinfra.MaxMemoryQueryPlanSuffix, ros.MaxAllocatedMem),

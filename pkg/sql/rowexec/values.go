@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -31,7 +32,7 @@ type valuesProcessor struct {
 	// number of rows that are encoded in data.
 	numRows uint64
 
-	sd     execinfra.StreamDecoder
+	sd     flowbase.StreamDecoder
 	rowBuf sqlbase.EncDatumRow
 }
 

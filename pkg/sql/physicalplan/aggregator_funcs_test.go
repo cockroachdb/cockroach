@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -54,12 +55,12 @@ func runTestFlow(
 	txn *client.Txn,
 	procs ...execinfrapb.ProcessorSpec,
 ) sqlbase.EncDatumRows {
-	distSQLSrv := srv.DistSQLServer().(*execinfra.ServerImpl)
+	distSQLSrv := srv.DistSQLServer().(*flowbase.ServerImpl)
 
 	txnCoordMeta := txn.GetTxnCoordMeta(context.TODO())
 	txnCoordMeta.StripRootToLeaf()
 	req := execinfrapb.SetupFlowRequest{
-		Version:      execinfra.Version,
+		Version:      flowbase.Version,
 		TxnCoordMeta: &txnCoordMeta,
 		Flow: execinfrapb.FlowSpec{
 			FlowID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},

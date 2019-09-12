@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
@@ -16,12 +16,38 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
+
+// The encoder/decoder don't maintain the ordering between rows and metadata
+// records.
+func testGetDecodedRows(
+	tb testing.TB,
+	sd *StreamDecoder,
+	decodedRows sqlbase.EncDatumRows,
+	metas []execinfrapb.ProducerMetadata,
+) (sqlbase.EncDatumRows, []execinfrapb.ProducerMetadata) {
+	for {
+		row, meta, err := sd.GetRow(nil /* rowBuf */)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		if row == nil && meta == nil {
+			break
+		}
+		if row != nil {
+			decodedRows = append(decodedRows, row)
+		} else {
+			metas = append(metas, *meta)
+		}
+	}
+	return decodedRows, metas
+}
 
 func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []rowOrMeta) {
 	var se StreamEncoder
@@ -56,7 +82,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 			if err != nil {
 				tb.Fatal(err)
 			}
-			decodedRows, metas = TestGetDecodedRows(tb, &sd, decodedRows, metas)
+			decodedRows, metas = testGetDecodedRows(tb, &sd, decodedRows, metas)
 		}
 	}
 	if len(metas) != numMeta {
@@ -128,7 +154,7 @@ func BenchmarkStreamEncoder(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			cols := sqlbase.MakeIntCols(numCols)
 			rows := sqlbase.MakeIntRows(numRows, numCols)
-			input := NewRepeatableRowSource(cols, rows)
+			input := execinfra.NewRepeatableRowSource(cols, rows)
 
 			b.ResetTimer()
 			ctx := context.Background()

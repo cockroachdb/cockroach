@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -58,7 +59,7 @@ type Flow interface {
 	// TODO(yuzefovich): this probably can be unexported.
 	GetSpec() *execinfrapb.FlowSpec
 
-	GetFlowCtx() *FlowCtx
+	GetFlowCtx() *execinfra.FlowCtx
 
 	GetCancelFlowFn() context.CancelFunc
 
@@ -94,15 +95,13 @@ type Flow interface {
 
 	Setup(context.Context, *execinfrapb.FlowSpec) error
 
-	SetProcessors([]Processor)
+	SetProcessors([]execinfra.Processor)
 
-	GetLocalProcessors() []LocalProcessor
+	GetLocalProcessors() []execinfra.LocalProcessor
 
-	AddRemoteRowBasedStream(execinfrapb.StreamID, RowReceiver)
+	AddRemoteStream(execinfrapb.StreamID, *InboundStreamInfo)
 
-	AddRemoteVectorizedStream(execinfrapb.StreamID, *InboundStreamInfo)
-
-	GetSyncFlowConsumer() RowReceiver
+	GetSyncFlowConsumer() execinfra.RowReceiver
 
 	GetFlowSpec() *execinfrapb.FlowSpec
 
@@ -111,7 +110,7 @@ type Flow interface {
 }
 
 type FlowBase struct {
-	FlowCtx
+	execinfra.FlowCtx
 
 	flowRegistry *flowRegistry
 	// isVectorized indicates whether it is a vectorized flow.
@@ -119,16 +118,16 @@ type FlowBase struct {
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
-	processors []Processor
+	processors []execinfra.Processor
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []Startable
 	// syncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
 	// or to the local host).
-	syncFlowConsumer RowReceiver
+	syncFlowConsumer execinfra.RowReceiver
 
-	localProcessors []LocalProcessor
+	localProcessors []execinfra.LocalProcessor
 
 	// startedGoroutines specifies whether this flow started any goroutines. This
 	// is used in Wait() to avoid the overhead of waiting for non-existent
@@ -166,10 +165,10 @@ func (f *FlowBase) Setup(context.Context, *execinfrapb.FlowSpec) error {
 var _ Flow = &FlowBase{}
 
 func newFlow(
-	flowCtx FlowCtx,
+	flowCtx execinfra.FlowCtx,
 	flowReg *flowRegistry,
-	syncFlowConsumer RowReceiver,
-	localProcessors []LocalProcessor,
+	syncFlowConsumer execinfra.RowReceiver,
+	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
 ) Flow {
 	f := &FlowBase{
@@ -209,7 +208,7 @@ func (f *FlowBase) GetSpec() *execinfrapb.FlowSpec {
 	return f.spec
 }
 
-func (f *FlowBase) GetFlowCtx() *FlowCtx {
+func (f *FlowBase) GetFlowCtx() *execinfra.FlowCtx {
 	return &f.FlowCtx
 }
 
@@ -229,24 +228,15 @@ func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
 	return f.ctxCancel
 }
 
-func (f *FlowBase) SetProcessors(processors []Processor) {
+func (f *FlowBase) SetProcessors(processors []execinfra.Processor) {
 	f.processors = processors
 }
 
-func (f *FlowBase) AddRemoteRowBasedStream(streamID execinfrapb.StreamID, receiver RowReceiver) {
-	f.inboundStreams[streamID] = &InboundStreamInfo{
-		receiver:  rowInboundStreamHandler{receiver},
-		waitGroup: &f.waitGroup,
-	}
-}
-
-func (f *FlowBase) AddRemoteVectorizedStream(
-	streamID execinfrapb.StreamID, streamInfo *InboundStreamInfo,
-) {
+func (f *FlowBase) AddRemoteStream(streamID execinfrapb.StreamID, streamInfo *InboundStreamInfo) {
 	f.inboundStreams[streamID] = streamInfo
 }
 
-func (f *FlowBase) GetSyncFlowConsumer() RowReceiver {
+func (f *FlowBase) GetSyncFlowConsumer() execinfra.RowReceiver {
 	return f.syncFlowConsumer
 }
 
@@ -254,7 +244,7 @@ func (f *FlowBase) GetFlowSpec() *execinfrapb.FlowSpec {
 	return f.spec
 }
 
-func (f *FlowBase) GetLocalProcessors() []LocalProcessor {
+func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 	return f.localProcessors
 }
 
@@ -329,7 +319,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 	defer f.Wait()
 
 	// We'll take care of the last processor in particular.
-	var headProc Processor
+	var headProc execinfra.Processor
 	if len(f.processors) == 0 {
 		return errors.AssertionFailedf("no processors in flow")
 	}

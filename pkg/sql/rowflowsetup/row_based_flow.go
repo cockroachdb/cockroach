@@ -8,25 +8,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowexec
+package rowflowsetup
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
 type rowBasedFlow struct {
-	execinfra.FlowBase
+	flowbase.FlowBase
 
 	localStreams map[execinfrapb.StreamID]execinfra.RowReceiver
 }
 
-var _ execinfra.Flow = &rowBasedFlow{}
+var _ flowbase.Flow = &rowBasedFlow{}
 
 func (f *rowBasedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
 	f.SetSpec(spec)
@@ -155,7 +157,7 @@ func (f *rowBasedFlow) makeProcessor(
 	output = &copyingRowReceiver{RowReceiver: output}
 
 	outputs := []execinfra.RowReceiver{output}
-	proc, err := NewProcessor(
+	proc, err := rowexec.NewProcessor(
 		ctx,
 		&f.FlowCtx,
 		ps.ProcessorID,
@@ -175,7 +177,7 @@ func (f *rowBasedFlow) makeProcessor(
 	switch o := rowRecv.(type) {
 	case router:
 		o.init(ctx, &f.FlowCtx, types)
-	case *execinfra.Outbox:
+	case *flowbase.Outbox:
 		o.Init(types)
 	}
 	return proc, nil
@@ -245,7 +247,10 @@ func (f *rowBasedFlow) setupInboundStream(
 		if log.V(2) {
 			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
-		f.AddRemoteRowBasedStream(sid, receiver)
+		f.AddRemoteStream(sid, flowbase.NewInboundStreamInfo(
+			flowbase.rowInboundStreamHandler{receiver},
+			f.GetWaitGroup(),
+		))
 
 	case execinfrapb.StreamEndpointSpec_LOCAL:
 		if _, found := f.localStreams[sid]; found {
@@ -275,7 +280,7 @@ func (f *rowBasedFlow) setupOutboundStream(
 		return f.GetSyncFlowConsumer(), nil
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
-		outbox := execinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid)
+		outbox := flowbase.NewOutbox(&f.FlowCtx, spec.TargetNodeID, f.ID, sid)
 		f.AddStartable(outbox)
 		return outbox, nil
 

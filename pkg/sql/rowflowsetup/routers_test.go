@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowexec
+package rowflowsetup
 
 import (
 	"bytes"
@@ -64,7 +64,7 @@ func setupRouter(
 		},
 		EvalCtx: evalCtx,
 	}
-	r.init(ctx, &flowCtx, inputTypes)
+	init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
 	r.Start(ctx, wg, nil /* ctxCancel */)
 	return r, wg
@@ -618,7 +618,7 @@ func TestRouterBlocks(t *testing.T) {
 				},
 				EvalCtx: &evalCtx,
 			}
-			router.init(ctx, &flowCtx, colTypes)
+			init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.Start(ctx, &wg, nil /* ctxCancel */)
 

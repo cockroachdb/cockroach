@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -37,13 +38,13 @@ func createDummyStream() (
 ) {
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, StaticNodeID)
+	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	conn, err := rpcContext.GRPCDialNode(addr.String(), StaticNodeID,
+	conn, err := rpcContext.GRPCDialNode(addr.String(), execinfra.StaticNodeID,
 		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err

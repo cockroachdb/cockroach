@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -157,13 +158,13 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	}
 
 	// TODO(yuzefovich)
-	var flow execinfra.Flow
+	var flow flowbase.Flow
 	flow.SetProcessors([]execinfra.Processor{mat})
 	// This test specifically verifies that a flow doesn't get stuck in Wait for
 	// asynchronous components that haven't been signaled to exit. To simulate
 	// this we just create a mock startable.
 	flow.AddStartable(
-		execinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
+		flowbase.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
 			wg.Add(1)
 			go func() {
 				// Ensure context is canceled.

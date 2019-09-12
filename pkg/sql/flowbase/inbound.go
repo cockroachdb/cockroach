@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,7 +37,7 @@ type InboundStreamHandler interface {
 }
 
 type rowInboundStreamHandler struct {
-	RowReceiver
+	execinfra.RowReceiver
 }
 
 var _ InboundStreamHandler = rowInboundStreamHandler{}
@@ -66,7 +67,7 @@ func processInboundStream(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	dst RowReceiver,
+	dst execinfra.RowReceiver,
 	f Flow,
 ) error {
 
@@ -88,7 +89,7 @@ func processInboundStreamHelper(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
-	dst RowReceiver,
+	dst execinfra.RowReceiver,
 	f Flow,
 ) error {
 	draining := false
@@ -179,7 +180,7 @@ func sendDrainSignalToStreamProducer(
 func processProducerMessage(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	dst RowReceiver,
+	dst execinfra.RowReceiver,
 	sd *StreamDecoder,
 	draining *bool,
 	msg *execinfrapb.ProducerMessage,
@@ -214,9 +215,9 @@ func processProducerMessage(
 			continue
 		}
 		switch dst.Push(row, meta) {
-		case NeedMoreRows:
+		case execinfra.NeedMoreRows:
 			continue
-		case DrainRequested:
+		case execinfra.DrainRequested:
 			// The rest of rows are not needed by the consumer. We'll send a drain
 			// signal to the producer and expect it to quickly send trailing
 			// metadata and close its side of the stream, at which point we also
@@ -227,7 +228,7 @@ func processProducerMessage(
 					log.Errorf(ctx, "draining error: %s", err)
 				}
 			}
-		case ConsumerClosed:
+		case execinfra.ConsumerClosed:
 			return processMessageResult{err: nil, consumerClosed: true}
 		}
 	}

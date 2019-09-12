@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package flowbase
 
 import (
 	"context"
@@ -100,7 +100,7 @@ func TestServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, metas = TestGetDecodedRows(t, &decoder, rows, metas)
+		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreTxnCoordMeta(metas)
 	metas = ignoreMetricsMeta(metas)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -94,7 +95,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 
-	var localState execinfra.LocalState
+	var localState flowbase.LocalState
 	localState.EvalContext = planCtx.EvalContext()
 	if planCtx.isLocal {
 		localState.IsLocal = true

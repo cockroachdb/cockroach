@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -34,10 +35,10 @@ import (
 )
 
 type vectorizedFlow struct {
-	execinfra.FlowBase
+	flowbase.FlowBase
 }
 
-var _ execinfra.Flow = &vectorizedFlow{}
+var _ flowbase.Flow = &vectorizedFlow{}
 
 func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
 	f.SetSpec(spec)
@@ -659,13 +660,13 @@ type vectorizedInboundStreamHandler struct {
 	*colrpc.Inbox
 }
 
-var _ execinfra.InboundStreamHandler = vectorizedInboundStreamHandler{}
+var _ flowbase.InboundStreamHandler = vectorizedInboundStreamHandler{}
 
 func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	_ *execinfrapb.ProducerMessage,
-	_ execinfra.Flow,
+	_ flowbase.Flow,
 ) error {
 	return s.RunWithStream(ctx, stream)
 }
@@ -677,7 +678,7 @@ func (s vectorizedInboundStreamHandler) Timeout(err error) {
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
 // vectorized infrastructure to be actually run.
 type vectorizedFlowCreatorHelper struct {
-	f execinfra.Flow
+	f flowbase.Flow
 }
 
 var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
@@ -685,7 +686,7 @@ var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
 func (r *vectorizedFlowCreatorHelper) addStreamEndpoint(
 	streamID execinfrapb.StreamID, inbox *colrpc.Inbox, wg *sync.WaitGroup,
 ) {
-	r.f.AddRemoteVectorizedStream(streamID, execinfra.NewInboundStreamInfo(
+	r.f.AddRemoteStream(streamID, flowbase.NewInboundStreamInfo(
 		vectorizedInboundStreamHandler{inbox},
 		wg,
 	))
@@ -697,7 +698,7 @@ func (r *vectorizedFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.Strea
 
 func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 	r.f.AddStartable(
-		execinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
+		flowbase.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
 			if wg != nil {
 				wg.Add(1)
 			}
