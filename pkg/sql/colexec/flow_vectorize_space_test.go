@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -128,7 +128,7 @@ func TestVectorizeSpaceError(t *testing.T) {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 				}
 				acc := memMon.MakeBoundAccount()
-				result, err := colplan.NewColOperator(ctx, flowCtx, tc.spec, inputs)
+				result, err := colflowsetup.NewColOperator(ctx, flowCtx, tc.spec, inputs)
 				if err != nil {
 					t.Fatal(err)
 				}

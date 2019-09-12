@@ -92,10 +92,11 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 	return retErr
 }
 
+// TODO(yuzefovich): update this.
 const (
 	colPackagePrefix     = "github.com/cockroachdb/cockroach/pkg/col"
 	colexecPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	colplanPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colplan"
+	colplanPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	cFetcherPrefix       = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
 )
 

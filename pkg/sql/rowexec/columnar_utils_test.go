@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,14 +77,14 @@ func verifyColOperator(
 
 	columnarizers := make([]colexec.Operator, len(inputs))
 	for i, input := range inputsColOp {
-		c, err := colplan.NewColumnarizer(ctx, flowCtx, int32(i)+1, input)
+		c, err := colflowsetup.NewColumnarizer(ctx, flowCtx, int32(i)+1, input)
 		if err != nil {
 			return err
 		}
 		columnarizers[i] = c
 	}
 
-	result, err := colplan.NewColOperator(ctx, flowCtx, pspec, columnarizers)
+	result, err := colflowsetup.NewColOperator(ctx, flowCtx, pspec, columnarizers)
 	if err != nil {
 		return err
 	}

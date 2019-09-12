@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -125,7 +125,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		opChains, err := colplan.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
+		opChains, err := colflowsetup.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
 		if err != nil {
 			return err
 		}
