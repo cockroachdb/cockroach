@@ -115,8 +115,7 @@ var prettyCfg = func() tree.PrettyCfg {
 func (s *Smither) Generate() string {
 	i := 0
 	for {
-		scope := s.makeScope()
-		stmt, ok := scope.makeStmt()
+		stmt, ok := s.makeStmt()
 		if !ok {
 			i++
 			if i > 1000 {
@@ -132,8 +131,7 @@ func (s *Smither) Generate() string {
 // GenerateExpr returns a random SQL expression that does not depend on any
 // tables or columns.
 func (s *Smither) GenerateExpr() tree.TypedExpr {
-	scope := s.makeScope()
-	return makeScalar(scope, s.randScalarType(), nil)
+	return makeScalar(s, s.randScalarType(), nil)
 }
 
 func (s *Smither) name(prefix string) tree.Name {
