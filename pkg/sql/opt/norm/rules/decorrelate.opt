@@ -327,21 +327,25 @@
     $private:*
 )
 =>
-(Select
-    ((OpName $right)
-        (InnerJoinApply
-            $newLeft:(EnsureKey $left)
-            $input
-            []
-            $private
+(Project
+    (Select
+        ((OpName $right)
+            (InnerJoinApply
+                $newLeft:(EnsureKey $left)
+                $input
+                []
+                $private
+            )
+            (AppendAggCols
+                $aggregations
+                ConstAgg (NonKeyCols $newLeft)
+            )
+            (AddColsToGrouping $groupingPrivate (KeyCols $newLeft))
         )
-        (AppendAggCols
-            $aggregations
-            ConstAgg (NonKeyCols $newLeft)
-        )
-        (AddColsToGrouping $groupingPrivate (KeyCols $newLeft))
+        $on
     )
-    $on
+    []
+    (OutputCols2 $left $right)
 )
 
 # TryDecorrelateScalarGroupBy "pushes down" a Join into a ScalarGroupBy
