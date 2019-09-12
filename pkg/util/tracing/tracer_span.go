@@ -13,6 +13,7 @@ package tracing
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -225,10 +226,29 @@ func IsRecordable(os opentracing.Span) bool {
 	return isCockroachSpan
 }
 
+type Recording []RecordedSpan
+
+func (r Recording) String() string {
+	sb := strings.Builder{}
+	for _, sp := range r {
+		sb.WriteString(fmt.Sprintf("=== %s [", sp.Operation))
+		for k, v := range sp.Tags {
+			if v != "" {
+				sb.WriteString(fmt.Sprintf("%s:%s ", k, v))
+			} else {
+				sb.WriteString(fmt.Sprintf("%s ", k))
+			}
+		}
+		sb.WriteString("]\n")
+		sb.WriteString(sp.String())
+	}
+	return sb.String()
+}
+
 // GetRecording retrieves the current recording, if the span has recording
 // enabled. This can be called while spans that are part of the record are
 // still open; it can run concurrently with operations on those spans.
-func GetRecording(os opentracing.Span) []RecordedSpan {
+func GetRecording(os opentracing.Span) Recording {
 	if _, noop := os.(*noopSpan); noop {
 		return nil
 	}
