@@ -77,6 +77,7 @@ type Smither struct {
 	vectorizable       bool
 	outputSort         bool
 	ignoreFNs          []*regexp.Regexp
+	complexity         float64
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -93,6 +94,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 
 		statements: allStatements,
 		tableExprs: allTableExprs,
+		complexity: 0.2,
 	}
 	for _, opt := range opts {
 		opt.Apply(s)
