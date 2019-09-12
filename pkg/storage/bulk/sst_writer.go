@@ -30,39 +30,6 @@ type SSTWriter struct {
 	scratch  []byte
 }
 
-var mvccComparer = &pebble.Comparer{
-	Compare: engine.MVCCKeyCompare,
-	AbbreviatedKey: func(k []byte) uint64 {
-		key, _, ok := enginepb.SplitMVCCKey(k)
-		if !ok {
-			return 0
-		}
-		return pebble.DefaultComparer.AbbreviatedKey(key)
-	},
-
-	Separator: func(dst, a, b []byte) []byte {
-		return append(dst, a...)
-	},
-
-	Successor: func(dst, a []byte) []byte {
-		return append(dst, a...)
-	},
-	Split: func(k []byte) int {
-		if len(k) == 0 {
-			return len(k)
-		}
-		// This is similar to what enginepb.SplitMVCCKey does.
-		tsLen := int(k[len(k)-1])
-		keyPartEnd := len(k) - 1 - tsLen
-		if keyPartEnd < 0 {
-			return len(k)
-		}
-		return keyPartEnd
-	},
-
-	Name: "cockroach_comparator",
-}
-
 // timeboundPropCollector implements a property collector for MVCC Timestamps.
 // Its behavior matches TimeBoundTblPropCollector in table_props.cc.
 type timeboundPropCollector struct {
@@ -126,7 +93,7 @@ var pebbleOpts = func() *pebble.Options {
 	merger.Name = "nullptr"
 	opts := &pebble.Options{
 		TableFormat: pebble.TableFormatLevelDB,
-		Comparer:    mvccComparer,
+		Comparer:    engine.MVCCComparer,
 		Merger:      &merger,
 	}
 	opts.EnsureDefaults()
