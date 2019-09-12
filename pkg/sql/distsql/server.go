@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package flowbase
+package distsql
 
 import (
 	"context"
@@ -19,8 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -36,38 +39,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
-// Version identifies the distsql protocol version.
-//
-// This version is separate from the main CockroachDB version numbering; it is
-// only changed when the distsql API changes.
-//
-// The planner populates the version in SetupFlowRequest.
-// A server only accepts requests with versions in the range MinAcceptedVersion
-// to Version.
-//
-// Is is possible used to provide a "window" of compatibility when new features are
-// added. Example:
-//  - we start with Version=1; distsql servers with version 1 only accept
-//    requests with version 1.
-//  - a new distsql feature is added; Version is bumped to 2. The
-//    planner does not yet use this feature by default; it still issues
-//    requests with version 1.
-//  - MinAcceptedVersion is still 1, i.e. servers with version 2
-//    accept both versions 1 and 2.
-//  - after an upgrade cycle, we can enable the feature in the planner,
-//    requiring version 2.
-//  - at some later point, we can choose to deprecate version 1 and have
-//    servers only accept versions >= 2 (by setting
-//    MinAcceptedVersion to 2).
-//
-// ATTENTION: When updating these fields, add to version_history.txt explaining
-// what changed.
-const Version execinfrapb.DistSQLVersion = 24
-
-// MinAcceptedVersion is the oldest version that the server is
-// compatible with; see above.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 24
-
 // minFlowDrainWait is the minimum amount of time a draining server allows for
 // any incoming flows to be registered. It acts as a grace period in which the
 // draining server waits for its gossiped draining state to be received by other
@@ -79,8 +50,8 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	execinfra.ServerConfig
-	flowRegistry  *flowRegistry
-	flowScheduler *flowScheduler
+	flowRegistry  *flowbase.FlowRegistry
+	flowScheduler *flowbase.FlowScheduler
 	memMonitor    mon.BytesMonitor
 	regexpCache   *tree.RegexpCache
 }
@@ -92,8 +63,8 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
-		flowRegistry:  makeFlowRegistry(cfg.NodeID.Get()),
-		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
+		flowRegistry:  flowbase.NewFlowRegistry(cfg.NodeID.Get()),
+		flowScheduler: flowbase.NewFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
 		memMonitor: mon.MakeMonitor(
 			"distsql",
 			mon.MemoryResource,
@@ -115,8 +86,8 @@ func (ds *ServerImpl) Start() {
 	if err := ds.ServerConfig.Gossip.AddInfoProto(
 		gossip.MakeDistSQLNodeVersionKey(ds.ServerConfig.NodeID.Get()),
 		&execinfrapb.DistSQLVersionGossipInfo{
-			Version:            Version,
-			MinAcceptedVersion: MinAcceptedVersion,
+			Version:            execinfra.Version,
+			MinAcceptedVersion: execinfra.MinAcceptedVersion,
 		},
 		0, // ttl - no expiration
 	); err != nil {
@@ -194,11 +165,11 @@ func (ds *ServerImpl) setupFlow(
 	req *execinfrapb.SetupFlowRequest,
 	syncFlowConsumer execinfra.RowReceiver,
 	localState LocalState,
-) (context.Context, Flow, error) {
-	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
+) (context.Context, flowbase.Flow, error) {
+	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
-			req.Version, MinAcceptedVersion, Version,
+			req.Version, execinfra.MinAcceptedVersion, execinfra.Version,
 		)
 		log.Warning(ctx, err)
 		return ctx, nil, err
@@ -368,6 +339,20 @@ func (ds *ServerImpl) setupFlow(
 	return ctx, f, nil
 }
 
+func newFlow(
+	flowCtx execinfra.FlowCtx,
+	flowReg *flowbase.FlowRegistry,
+	syncFlowConsumer execinfra.RowReceiver,
+	localProcessors []execinfra.LocalProcessor,
+	isVectorized bool,
+) flowbase.Flow {
+	base := flowbase.NewFlowBase(flowCtx, flowReg, syncFlowConsumer, localProcessors, isVectorized)
+	if isVectorized {
+		return colflowsetup.NewVectorizedFlow(base)
+	}
+	return rowflowsetup.NewRowBasedFlow(base)
+}
+
 // SetupSyncFlow sets up a synchronous flow, connecting the sync response
 // output stream to the given RowReceiver. The flow is not started. The flow
 // will be associated with the given context.
@@ -378,7 +363,7 @@ func (ds *ServerImpl) SetupSyncFlow(
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
-) (context.Context, Flow, error) {
+) (context.Context, flowbase.Flow, error) {
 	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
 }
 
@@ -409,14 +394,14 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
 	localState LocalState,
-) (context.Context, Flow, error) {
+) (context.Context, flowbase.Flow, error) {
 	return ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) error {
 	// Set up the outgoing mailbox for the stream.
-	mbox := newOutboxSyncFlowStream(stream)
+	mbox := flowbase.NewOutboxSyncFlowStream(stream)
 
 	firstMsg, err := stream.Recv()
 	if err != nil {
@@ -430,9 +415,9 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 	if err != nil {
 		return err
 	}
-	mbox.setFlowCtx(f.GetFlowCtx())
+	mbox.SetFlowCtx(f.GetFlowCtx())
 
-	if err := ds.Stopper.RunTask(ctx, "flowbase.ServerImpl: sync flow", func(ctx context.Context) {
+	if err := ds.Stopper.RunTask(ctx, "distsql.ServerImpl: sync flow", func(ctx context.Context) {
 		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
 		f.AddStartable(mbox)
@@ -446,7 +431,7 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 	}); err != nil {
 		return err
 	}
-	return mbox.err
+	return mbox.Err()
 }
 
 // SetupFlow is part of the DistSQLServer interface.
@@ -492,7 +477,7 @@ func (ds *ServerImpl) flowStreamInt(
 		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
 	f, streamStrategy, cleanup, err := ds.flowRegistry.ConnectInboundStream(
-		ctx, flowID, streamID, stream, settingFlowStreamTimeout.Get(&ds.Settings.SV),
+		ctx, flowID, streamID, stream, flowbase.SettingFlowStreamTimeout.Get(&ds.Settings.SV),
 	)
 	if err != nil {
 		return err

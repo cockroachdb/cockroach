@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 )
 
 // runProcessorTest instantiates a processor with the provided spec, runs it
@@ -36,8 +37,8 @@ func runProcessorTest(
 	expected sqlbase.EncDatumRows,
 	txn *client.Txn,
 ) {
-	in := execinfra.NewRowBuffer(inputTypes, inputRows, execinfra.RowBufferArgs{})
-	out := &execinfra.RowBuffer{}
+	in := distsqlutils.NewRowBuffer(inputTypes, inputRows, distsqlutils.RowBufferArgs{})
+	out := &distsqlutils.RowBuffer{}
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

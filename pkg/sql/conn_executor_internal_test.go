@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -266,9 +266,9 @@ func startConnExecutor(
 			ClusterID: func() uuid.UUID { return uuid.UUID{} },
 		},
 		DistSQLPlanner: NewDistSQLPlanner(
-			ctx, flowbase.Version, st, roachpb.NodeDescriptor{NodeID: 1},
+			ctx, execinfra.Version, st, roachpb.NodeDescriptor{NodeID: 1},
 			nil, /* rpcCtx */
-			flowbase.NewServer(ctx, execinfra.ServerConfig{
+			distsql.NewServer(ctx, execinfra.ServerConfig{
 				AmbientContext: testutils.MakeAmbientCtx(),
 				Settings:       st,
 				Stopper:        stopper,

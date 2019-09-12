@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -404,7 +405,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				NodeID: s.NodeID(),
 			}
 
-			out := &execinfra.RowBuffer{}
+			out := &distsqlutils.RowBuffer{}
 			irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &tc.spec, &tc.post, out)
 			if err != nil {
 				t.Fatal(err)
@@ -534,7 +535,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				NodeID: s.NodeID(),
 			}
 
-			out := &execinfra.RowBuffer{}
+			out := &distsqlutils.RowBuffer{}
 			_, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &tc.spec, &tc.post, out)
 			if err == nil {
 				t.Fatalf("expected an error")
@@ -608,7 +609,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		Type: sqlbase.InnerJoin,
 	}
 
-	out := &execinfra.RowBuffer{}
+	out := &distsqlutils.RowBuffer{}
 	irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &innerJoinSpec, &execinfrapb.PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)

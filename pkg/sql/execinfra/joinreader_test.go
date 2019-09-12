@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -418,9 +419,9 @@ func TestJoinReader(t *testing.T) {
 					}
 					encRows[rowIdx] = encRow
 				}
-				in := NewRowBuffer(c.inputTypes, encRows, RowBufferArgs{})
+				in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
 
-				out := &RowBuffer{}
+				out := &distsqlutils.RowBuffer{}
 				jr, err := NewJoinReader(
 					&flowCtx,
 					0, /* processorID */
@@ -532,7 +533,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 	}
 
-	out := &RowBuffer{}
+	out := &distsqlutils.RowBuffer{}
 	jr, err := NewJoinReader(
 		&flowCtx,
 		0, /* processorID */
@@ -542,7 +543,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			LookupColumns: []uint32{0},
 			Type:          sqlbase.InnerJoin,
 		},
-		NewRowBuffer(sqlbase.OneIntCol, inputRows, RowBufferArgs{}),
+		distsqlutils.NewRowBuffer(sqlbase.OneIntCol, inputRows, distsqlutils.RowBufferArgs{}),
 		&execinfrapb.PostProcessSpec{
 			Projection:    true,
 			OutputColumns: []uint32{2},
@@ -631,9 +632,9 @@ func TestJoinReaderDrain(t *testing.T) {
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		in := NewRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, RowBufferArgs{})
+		in := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, distsqlutils.RowBufferArgs{})
 
-		out := &RowBuffer{}
+		out := &distsqlutils.RowBuffer{}
 		out.ConsumerClosed()
 		jr, err := NewJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
@@ -649,12 +650,12 @@ func TestJoinReaderDrain(t *testing.T) {
 	// called on the consumer.
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
-		in := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
+		in := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
 		if status := in.Push(encRow, &execinfrapb.ProducerMetadata{Err: expectedMetaErr}); status != NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
 
-		out := &RowBuffer{}
+		out := &distsqlutils.RowBuffer{}
 		out.ConsumerDone()
 		jr, err := NewJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,

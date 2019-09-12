@@ -94,10 +94,10 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 
 // TODO(yuzefovich): update this.
 const (
-	colPackagePrefix     = "github.com/cockroachdb/cockroach/pkg/col"
-	colexecPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	colplanPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
-	cFetcherPrefix       = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
+	colPackagePrefix          = "github.com/cockroachdb/cockroach/pkg/col"
+	colexecPackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	colflowsetupPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
+	cFetcherPrefix            = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
 )
 
 // isPanicFromVectorizedEngine checks whether the panic that was emitted from
@@ -107,7 +107,7 @@ const (
 func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
 	return strings.HasPrefix(panicEmittedFrom, colPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, colexecPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, colplanPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, colflowsetupPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, cFetcherPrefix)
 }
 

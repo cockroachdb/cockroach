@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -38,7 +39,7 @@ func TestValuesProcessor(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					out := &execinfra.RowBuffer{}
+					out := &distsqlutils.RowBuffer{}
 					st := cluster.MakeTestingClusterSettings()
 					evalCtx := tree.NewTestingEvalContext(st)
 					defer evalCtx.Stop(context.Background())

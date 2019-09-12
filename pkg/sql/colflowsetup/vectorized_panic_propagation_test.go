@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -74,6 +75,8 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	require.NotPanics(t, func() { _, meta = mat.Next() }, "VectorizedInternalPanic was not caught")
 	require.NotNil(t, meta.Err, "VectorizedInternalPanic was not propagated as metadata")
 }
+
+// TODO(yuzefovich): fix these tests.
 
 // TestNonVectorizedPanicPropagation verifies that materializers do not handle
 // panics coming not from exec package. It sets up the following chain:
@@ -134,6 +137,15 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
+	flow := NewVectorizedFlow(
+		flowbase.NewFlowBase(
+			flowCtx,
+			nil,  /* flowReg */
+			nil,  /* syncFlowConsumer */
+			nil,  /* localProcessors */
+			true, /* isVectorized */
+		),
+	)
 
 	mat, err := NewMaterializer(
 		&flowCtx,
@@ -148,17 +160,15 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		},
 		nil, /* typs */
 		&execinfrapb.PostProcessSpec{},
-		&execinfra.RowBuffer{},
+		&distsqlutils.RowBuffer{},
 		nil, /* metadataSourceQueue */
 		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		flow.GetCancelFlowFn,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// TODO(yuzefovich)
-	var flow flowbase.Flow
 	flow.SetProcessors([]execinfra.Processor{mat})
 	// This test specifically verifies that a flow doesn't get stuck in Wait for
 	// asynchronous components that haven't been signaled to exit. To simulate

@@ -32,10 +32,10 @@ var settingMaxRunningFlows = settings.RegisterIntSetting(
 	500,
 )
 
-// flowScheduler manages running flows and decides when to queue and when to
+// FlowScheduler manages running flows and decides when to queue and when to
 // start flows. The main interface it presents is ScheduleFlows, which passes a
 // flow to be run.
-type flowScheduler struct {
+type FlowScheduler struct {
 	log.AmbientContext
 	stopper    *stop.Stopper
 	flowDoneCh chan Flow
@@ -58,13 +58,13 @@ type flowWithCtx struct {
 	enqueueTime time.Time
 }
 
-func newFlowScheduler(
+func NewFlowScheduler(
 	ambient log.AmbientContext,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	metrics *execinfra.Metrics,
-) *flowScheduler {
-	fs := &flowScheduler{
+) *FlowScheduler {
+	fs := &FlowScheduler{
 		AmbientContext: ambient,
 		stopper:        stopper,
 		flowDoneCh:     make(chan Flow, flowDoneChanSize),
@@ -80,14 +80,14 @@ func newFlowScheduler(
 	return fs
 }
 
-func (fs *flowScheduler) canRunFlow(_ Flow) bool {
+func (fs *FlowScheduler) canRunFlow(_ Flow) bool {
 	// TODO(radu): we will have more complex resource accounting (like memory).
 	// For now we just limit the number of concurrent flows.
 	return fs.mu.numRunning < fs.mu.maxRunningFlows
 }
 
 // runFlowNow starts the given flow; does not wait for the flow to complete.
-func (fs *flowScheduler) runFlowNow(ctx context.Context, f Flow) error {
+func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow) error {
 	log.VEventf(
 		ctx, 1, "flow scheduler running flow %s, currently running %d", f.GetID(), fs.mu.numRunning,
 	)
@@ -110,9 +110,9 @@ func (fs *flowScheduler) runFlowNow(ctx context.Context, f Flow) error {
 //
 // If the flow can start immediately, errors encountered when starting the flow
 // are returned. If the flow is enqueued, these error will be later ignored.
-func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
+func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 	return fs.stopper.RunTaskWithErr(
-		ctx, "rowexec.flowScheduler: scheduling flow", func(ctx context.Context) error {
+		ctx, "flowbase.FlowScheduler: scheduling flow", func(ctx context.Context) error {
 			fs.mu.Lock()
 			defer fs.mu.Unlock()
 
@@ -132,7 +132,7 @@ func (fs *flowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 }
 
 // Start launches the main loop of the scheduler.
-func (fs *flowScheduler) Start() {
+func (fs *FlowScheduler) Start() {
 	ctx := fs.AnnotateCtx(context.Background())
 	fs.stopper.RunWorker(ctx, func(context.Context) {
 		stopped := false

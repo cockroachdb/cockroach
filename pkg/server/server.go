@@ -45,9 +45,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -166,7 +166,7 @@ type Server struct {
 	distSender       *kv.DistSender
 	db               *client.DB
 	pgServer         *pgwire.Server
-	distSQLServer    *flowbase.ServerImpl
+	distSQLServer    *distsql.ServerImpl
 	node             *Node
 	registry         *metric.Registry
 	recorder         *status.MetricsRecorder
@@ -570,7 +570,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
 
-	s.distSQLServer = flowbase.NewServer(ctx, distSQLCfg)
+	s.distSQLServer = distsql.NewServer(ctx, distSQLCfg)
 	execinfrapb.RegisterDistSQLServer(s.grpc.Server, s.distSQLServer)
 
 	s.admin = newAdminServer(s)
@@ -651,7 +651,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
-			flowbase.Version,
+			execinfra.Version,
 			s.st,
 			// The node descriptor will be set later, once it is initialized.
 			roachpb.NodeDescriptor{},

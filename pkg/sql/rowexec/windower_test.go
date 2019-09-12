@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -86,8 +87,8 @@ func TestWindowerAccountingForResults(t *testing.T) {
 			},
 		}},
 	}
-	output := execinfra.NewRowBuffer(
-		sqlbase.OneIntCol, nil, execinfra.RowBufferArgs{},
+	output := distsqlutils.NewRowBuffer(
+		sqlbase.OneIntCol, nil, distsqlutils.RowBufferArgs{},
 	)
 
 	d, err := newWindower(flowCtx, 0 /* processorID */, &spec, input, post, output)

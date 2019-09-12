@@ -36,13 +36,13 @@ type InboundStreamHandler interface {
 	Timeout(err error)
 }
 
-type rowInboundStreamHandler struct {
+type RowInboundStreamHandler struct {
 	execinfra.RowReceiver
 }
 
-var _ InboundStreamHandler = rowInboundStreamHandler{}
+var _ InboundStreamHandler = RowInboundStreamHandler{}
 
-func (s rowInboundStreamHandler) Run(
+func (s RowInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	firstMsg *execinfrapb.ProducerMessage,
@@ -51,7 +51,7 @@ func (s rowInboundStreamHandler) Run(
 	return processInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
 }
 
-func (s rowInboundStreamHandler) Timeout(err error) {
+func (s RowInboundStreamHandler) Timeout(err error) {
 	s.Push(
 		nil, /* row */
 		&execinfrapb.ProducerMetadata{Err: err},

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -160,8 +161,8 @@ func BenchmarkProjectSet(b *testing.B) {
 					EvalCtx: &evalCtx,
 				}
 
-				in := execinfra.NewRowBuffer(c.inputTypes, c.input, execinfra.RowBufferArgs{})
-				out := &execinfra.RowBuffer{}
+				in := distsqlutils.NewRowBuffer(c.inputTypes, c.input, distsqlutils.RowBufferArgs{})
+				out := &distsqlutils.RowBuffer{}
 				p, err := NewProcessor(
 					context.Background(), &flowCtx, 0, /* processorID */
 					&execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec}, &execinfrapb.PostProcessSpec{},

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -315,8 +316,8 @@ func TestSorter(t *testing.T) {
 						// back to using a disk row container.
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memLimit.bytes
 
-						in := execinfra.NewRowBuffer(c.types, c.input, execinfra.RowBufferArgs{})
-						out := &execinfra.RowBuffer{}
+						in := distsqlutils.NewRowBuffer(c.types, c.input, distsqlutils.RowBufferArgs{})
+						out := &distsqlutils.RowBuffer{}
 
 						var s execinfra.Processor
 						if !forceSortAll {

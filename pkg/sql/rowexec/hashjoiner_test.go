@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
@@ -79,9 +80,9 @@ func TestHashJoiner(t *testing.T) {
 		testFunc := func(t *testing.T, flowCtxSetup func(f *execinfra.FlowCtx), hjSetup func(h *hashJoiner)) error {
 			side := execinfra.RightSide
 			for i := 0; i < 2; i++ {
-				leftInput := execinfra.NewRowBuffer(c.leftTypes, c.leftInput, execinfra.RowBufferArgs{})
-				rightInput := execinfra.NewRowBuffer(c.rightTypes, c.rightInput, execinfra.RowBufferArgs{})
-				out := &execinfra.RowBuffer{}
+				leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
+				rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
+				out := &distsqlutils.RowBuffer{}
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Cfg: &execinfra.ServerConfig{
@@ -186,9 +187,9 @@ func TestHashJoinerError(t *testing.T) {
 		// testFunc is a helper function that runs a hashJoin with the current
 		// test case after running the provided setup function.
 		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
-			leftInput := execinfra.NewRowBuffer(c.leftTypes, c.leftInput, execinfra.RowBufferArgs{})
-			rightInput := execinfra.NewRowBuffer(c.rightTypes, c.rightInput, execinfra.RowBufferArgs{})
-			out := &execinfra.RowBuffer{}
+			leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
+			rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
+			out := &distsqlutils.RowBuffer{}
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg: &execinfra.ServerConfig{
@@ -233,7 +234,7 @@ func TestHashJoinerError(t *testing.T) {
 }
 
 func checkExpectedRows(
-	types []types.T, expectedRows sqlbase.EncDatumRows, results *execinfra.RowBuffer,
+	types []types.T, expectedRows sqlbase.EncDatumRows, results *distsqlutils.RowBuffer,
 ) error {
 	var expected []string
 	for _, row := range expectedRows {
@@ -296,7 +297,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		{v[0]},
 	}
 	leftInputDrainNotification := make(chan error, 1)
-	leftInputConsumerDone := func(rb *execinfra.RowBuffer) {
+	leftInputConsumerDone := func(rb *distsqlutils.RowBuffer) {
 		// Check that draining occurs before the left input has been consumed,
 		// not at the end.
 		// The left input started with 2 rows and 1 was consumed to find out
@@ -310,16 +311,16 @@ func TestHashJoinerDrain(t *testing.T) {
 		}
 		leftInputDrainNotification <- nil
 	}
-	leftInput := execinfra.NewRowBuffer(
+	leftInput := distsqlutils.NewRowBuffer(
 		sqlbase.OneIntCol,
 		inputs[0],
-		execinfra.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
+		distsqlutils.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
-	rightInput := execinfra.NewRowBuffer(sqlbase.OneIntCol, inputs[1], execinfra.RowBufferArgs{})
-	out := execinfra.NewRowBuffer(
+	rightInput := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, inputs[1], distsqlutils.RowBufferArgs{})
+	out := distsqlutils.NewRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
-		execinfra.RowBufferArgs{AccumulateRowsWhileDraining: true},
+		distsqlutils.RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
 
 	// Since the use of external storage overrides h.initialBufferSize, disable
@@ -396,7 +397,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		},
 	}
 	leftInputDrainNotification := make(chan error, 1)
-	leftInputConsumerDone := func(rb *execinfra.RowBuffer) {
+	leftInputConsumerDone := func(rb *distsqlutils.RowBuffer) {
 		// Check that draining occurs before the left input has been consumed, not
 		// at the end.
 		rb.Mu.Lock()
@@ -409,7 +410,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		leftInputDrainNotification <- nil
 	}
 	rightInputDrainNotification := make(chan error, 1)
-	rightInputConsumerDone := func(rb *execinfra.RowBuffer) {
+	rightInputConsumerDone := func(rb *distsqlutils.RowBuffer) {
 		// Check that draining occurs before the right input has been consumed, not
 		// at the end.
 		rb.Mu.Lock()
@@ -422,7 +423,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		rightInputDrainNotification <- nil
 	}
 	rightErrorReturned := false
-	rightInputNext := func(rb *execinfra.RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	rightInputNext := func(rb *distsqlutils.RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		if !rightErrorReturned {
 			rightErrorReturned = true
 			// The right input is going to return an error as the first thing.
@@ -431,23 +432,23 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		// Let RowBuffer.Next() do its usual thing.
 		return nil, nil
 	}
-	leftInput := execinfra.NewRowBuffer(
+	leftInput := distsqlutils.NewRowBuffer(
 		sqlbase.OneIntCol,
 		inputs[0],
-		execinfra.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
+		distsqlutils.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
-	rightInput := execinfra.NewRowBuffer(
+	rightInput := distsqlutils.NewRowBuffer(
 		sqlbase.OneIntCol,
 		inputs[1],
-		execinfra.RowBufferArgs{
+		distsqlutils.RowBufferArgs{
 			OnConsumerDone: rightInputConsumerDone,
 			OnNext:         rightInputNext,
 		},
 	)
-	out := execinfra.NewRowBuffer(
+	out := distsqlutils.NewRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
-		execinfra.RowBufferArgs{},
+		distsqlutils.RowBufferArgs{},
 	)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

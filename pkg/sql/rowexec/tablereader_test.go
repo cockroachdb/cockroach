@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -134,9 +135,9 @@ func TestTableReader(t *testing.T) {
 				}
 
 				var out execinfra.RowReceiver
-				var buf *execinfra.RowBuffer
+				var buf *distsqlutils.RowBuffer
 				if !rowSource {
-					buf = &execinfra.RowBuffer{}
+					buf = &distsqlutils.RowBuffer{}
 					out = buf
 				}
 				tr, err := newTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, out)
@@ -228,9 +229,9 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 
 	testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
 		var out execinfra.RowReceiver
-		var buf *execinfra.RowBuffer
+		var buf *distsqlutils.RowBuffer
 		if !rowSource {
-			buf = &execinfra.RowBuffer{}
+			buf = &distsqlutils.RowBuffer{}
 			out = buf
 		}
 		tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, out)

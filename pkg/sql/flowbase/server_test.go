@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,7 +65,7 @@ func TestServer(t *testing.T) {
 	txnCoordMeta := txn.GetTxnCoordMeta(ctx)
 	txnCoordMeta.StripRootToLeaf()
 
-	req := &execinfrapb.SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
+	req := &execinfrapb.SetupFlowRequest{Version: execinfra.Version, TxnCoordMeta: &txnCoordMeta}
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &ts},
@@ -120,15 +121,15 @@ func TestServer(t *testing.T) {
 			expectedErr string
 		}{
 			{
-				version:     Version + 1,
+				version:     execinfra.Version + 1,
 				expectedErr: "version mismatch",
 			},
 			{
-				version:     MinAcceptedVersion - 1,
+				version:     execinfra.MinAcceptedVersion - 1,
 				expectedErr: "version mismatch",
 			},
 			{
-				version:     MinAcceptedVersion,
+				version:     execinfra.MinAcceptedVersion,
 				expectedErr: "",
 			},
 		}
@@ -168,8 +169,8 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if v.Version != Version || v.MinAcceptedVersion != MinAcceptedVersion {
+	if v.Version != execinfra.Version || v.MinAcceptedVersion != execinfra.MinAcceptedVersion {
 		t.Fatalf("node is gossipping the wrong version. Expected: [%d-%d], got [%d-%d",
-			Version, MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
+			execinfra.Version, execinfra.MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
 	}
 }

@@ -17,15 +17,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -36,7 +34,7 @@ import (
 // registered, waits until it gets registered - up to the given timeout. If the
 // timeout elapses and the flow is not registered, the bool return value will be
 // false.
-func lookupFlow(fr *flowRegistry, fid execinfrapb.FlowID, timeout time.Duration) Flow {
+func lookupFlow(fr *FlowRegistry, fid execinfrapb.FlowID, timeout time.Duration) Flow {
 	fr.Lock()
 	defer fr.Unlock()
 	entry := fr.getEntryLocked(fid)
@@ -50,13 +48,13 @@ func lookupFlow(fr *flowRegistry, fid execinfrapb.FlowID, timeout time.Duration)
 	return entry.flow
 }
 
-// lookupStreamInfo returns a stream entry from a flowRegistry. If either the
+// lookupStreamInfo returns a stream entry from a FlowRegistry. If either the
 // flow or the streams are missing, an error is returned.
 //
 // A copy of the registry's InboundStreamInfo is returned so it can be accessed
 // without locking.
 func lookupStreamInfo(
-	fr *flowRegistry, fid execinfrapb.FlowID, sid execinfrapb.StreamID,
+	fr *FlowRegistry, fid execinfrapb.FlowID, sid execinfrapb.StreamID,
 ) (InboundStreamInfo, error) {
 	fr.Lock()
 	defer fr.Unlock()
@@ -73,7 +71,7 @@ func lookupStreamInfo(
 
 func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	reg := makeFlowRegistry(roachpb.NodeID(0))
+	reg := NewFlowRegistry(roachpb.NodeID(0))
 
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &FlowBase{}
@@ -212,7 +210,7 @@ func TestFlowRegistry(t *testing.T) {
 // are propagated to their consumers and future attempts to connect them fail.
 func TestStreamConnectionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	reg := makeFlowRegistry(roachpb.NodeID(0))
+	reg := NewFlowRegistry(roachpb.NodeID(0))
 
 	jiffy := time.Nanosecond
 
@@ -221,11 +219,11 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	f1 := &FlowBase{}
 	streamID1 := execinfrapb.StreamID(1)
-	consumer := &execinfra.RowBuffer{}
+	consumer := &distsqlutils.RowBuffer{}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
-		streamID1: {receiver: rowInboundStreamHandler{consumer}, waitGroup: wg},
+		streamID1: {receiver: RowInboundStreamHandler{consumer}, waitGroup: wg},
 	}
 	if err := reg.RegisterFlow(
 		context.TODO(), id1, f1, inboundStreams, jiffy,
@@ -280,7 +278,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 func TestHandshake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	reg := makeFlowRegistry(roachpb.NodeID(0))
+	reg := NewFlowRegistry(roachpb.NodeID(0))
 
 	tests := []struct {
 		name                   string
@@ -318,11 +316,11 @@ func TestHandshake(t *testing.T) {
 			}
 			connectConsumer := func() {
 				f1 := &FlowBase{}
-				consumer := &execinfra.RowBuffer{}
+				consumer := &distsqlutils.RowBuffer{}
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
 				inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
-					streamID: {receiver: rowInboundStreamHandler{consumer}, waitGroup: wg},
+					streamID: {receiver: RowInboundStreamHandler{consumer}, waitGroup: wg},
 				}
 				if err := reg.RegisterFlow(
 					context.TODO(), flowID, f1, inboundStreams, time.Hour, /* timeout */
@@ -373,13 +371,13 @@ func TestHandshake(t *testing.T) {
 	}
 }
 
-// TestFlowRegistryDrain verifies a flowRegistry's draining behavior. See
+// TestFlowRegistryDrain verifies a FlowRegistry's draining behavior. See
 // subtests for more details.
 func TestFlowRegistryDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.TODO()
-	reg := makeFlowRegistry(roachpb.NodeID(0))
+	reg := NewFlowRegistry(roachpb.NodeID(0))
 
 	flow := &FlowBase{}
 	id := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -401,7 +399,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */)
 			drainDone <- struct{}{}
 		}()
-		// Be relatively sure that the flowRegistry is draining.
+		// Be relatively sure that the FlowRegistry is draining.
 		time.Sleep(time.Microsecond)
 		reg.UnregisterFlow(id)
 		<-drainDone
@@ -416,7 +414,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		reg.Undrain()
 	})
 
-	// AcceptNewFlow verifies that a flowRegistry continues accepting flows
+	// AcceptNewFlow verifies that a FlowRegistry continues accepting flows
 	// while draining.
 	t.Run("AcceptNewFlow", func(t *testing.T) {
 		registerFlow(t, id)
@@ -425,7 +423,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */)
 			drainDone <- struct{}{}
 		}()
-		// Be relatively sure that the flowRegistry is draining.
+		// Be relatively sure that the FlowRegistry is draining.
 		time.Sleep(time.Microsecond)
 		newFlowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 		registerFlow(t, newFlowID)
@@ -446,12 +444,12 @@ func TestFlowRegistryDrain(t *testing.T) {
 		reg.Undrain()
 	})
 
-	// MinFlowWait verifies that the flowRegistry waits a minimum amount of time
+	// MinFlowWait verifies that the FlowRegistry waits a minimum amount of time
 	// for incoming flows to be registered.
 	t.Run("MinFlowWait", func(t *testing.T) {
 		// Case in which draining is initiated with zero running flows.
 		drainDone := make(chan struct{})
-		// Register a flow right before the flowRegistry waits for
+		// Register a flow right before the FlowRegistry waits for
 		// minFlowDrainWait. Use an errChan because draining is performed from
 		// another goroutine and cannot call t.Fatal.
 		errChan := make(chan error)
@@ -480,7 +478,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		// to simulate an incoming flow that is registered during the minimum wait
 		// time. However, it is possible to unregister the first flow after the
 		// minimum wait time has passed, in which case we simply verify that the
-		// flowRegistry drain process has lasted at least the required wait time.
+		// FlowRegistry drain process has lasted at least the required wait time.
 		registerFlow(t, id)
 		reg.testingRunBeforeDrainSleep = func() {
 			if err := reg.RegisterFlow(
@@ -496,7 +494,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 			reg.Drain(math.MaxInt64 /* flowDrainWait */, minFlowDrainWait)
 			drainDone <- struct{}{}
 		}()
-		// Be relatively sure that the flowRegistry is draining.
+		// Be relatively sure that the FlowRegistry is draining.
 		time.Sleep(time.Microsecond)
 		reg.UnregisterFlow(id)
 		select {
@@ -517,68 +515,6 @@ func TestFlowRegistryDrain(t *testing.T) {
 	})
 }
 
-// Test that we can register send a sync flow to the distSQLSrv after the
-// flowRegistry is draining and the we can also clean that flow up (the flow
-// will get a draining error). This used to crash.
-func TestSyncFlowAfterDrain(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.TODO()
-	// We'll create a server just so that we can extract its distsql ServerConfig,
-	// so we can use it for a manually-built DistSQL Server below. Otherwise, too
-	// much work to create that ServerConfig by hand.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	cfg := execinfra.ServerConfig{}
-
-	distSQLSrv := NewServer(ctx, cfg)
-	distSQLSrv.flowRegistry.Drain(time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */)
-
-	// We create some flow; it doesn't matter what.
-	req := execinfrapb.SetupFlowRequest{Version: Version}
-	req.Flow = execinfrapb.FlowSpec{
-		Processors: []execinfrapb.ProcessorSpec{
-			{
-				Core: execinfrapb.ProcessorCoreUnion{Values: &execinfrapb.ValuesCoreSpec{}},
-				Output: []execinfrapb.OutputRouterSpec{{
-					Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
-					Streams: []execinfrapb.StreamEndpointSpec{{StreamID: 1, Type: execinfrapb.StreamEndpointSpec_REMOTE}},
-				}},
-			},
-			{
-				Input: []execinfrapb.InputSyncSpec{{
-					Type:    execinfrapb.InputSyncSpec_UNORDERED,
-					Streams: []execinfrapb.StreamEndpointSpec{{StreamID: 1, Type: execinfrapb.StreamEndpointSpec_REMOTE}},
-				}},
-				Core: execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-				Output: []execinfrapb.OutputRouterSpec{{
-					Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
-					Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
-				}},
-			},
-		},
-	}
-
-	types := make([]types.T, 0)
-	rb := execinfra.NewRowBuffer(types, nil /* rows */, execinfra.RowBufferArgs{})
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &distSQLSrv.memMonitor, &req, rb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := flow.Start(ctx, func() {}); err != nil {
-		t.Fatal(err)
-	}
-	flow.Wait()
-	_, meta := rb.Next()
-	if meta == nil {
-		t.Fatal("expected draining err, got no meta")
-	}
-	if !testutils.IsError(meta.Err, "the registry is draining") {
-		t.Fatalf("expected draining err, got: %v", meta.Err)
-	}
-	flow.Cleanup(ctx)
-}
-
 // TestInboundStreamTimeoutIsRetryable verifies that a failure from an inbound
 // stream to connect in a timeout is considered retryable by
 // pgerror.IsSQLRetryableError.
@@ -586,13 +522,13 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	fr := makeFlowRegistry(0)
+	fr := NewFlowRegistry(0)
 	wg := sync.WaitGroup{}
 	rc := &execinfra.RowChannel{}
 	rc.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver:  rowInboundStreamHandler{rc},
+			receiver:  RowInboundStreamHandler{rc},
 			waitGroup: &wg,
 		},
 	}
@@ -616,14 +552,14 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	fr := makeFlowRegistry(0)
+	fr := NewFlowRegistry(0)
 	// pushChan is used to be able to tell when a Push on the RowBuffer has
 	// occurred.
 	pushChan := make(chan *execinfrapb.ProducerMetadata)
-	rc := execinfra.NewRowBuffer(
+	rc := distsqlutils.NewRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
-		execinfra.RowBufferArgs{
+		distsqlutils.RowBufferArgs{
 			OnPush: func(_ sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
 				pushChan <- meta
 				<-pushChan
@@ -635,7 +571,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	wg.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver:  rowInboundStreamHandler{rc},
+			receiver:  RowInboundStreamHandler{rc},
 			waitGroup: &wg,
 		},
 	}
@@ -671,7 +607,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	fr := makeFlowRegistry(0)
+	fr := NewFlowRegistry(0)
 	left := &execinfra.RowChannel{}
 	left.InitWithBufSizeAndNumSenders(nil /* types */, 1, 1)
 	right := &execinfra.RowChannel{}
@@ -683,11 +619,11 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	wgRight.Add(1)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
-			receiver:  rowInboundStreamHandler{left},
+			receiver:  RowInboundStreamHandler{left},
 			waitGroup: &wgLeft,
 		},
 		1: {
-			receiver:  rowInboundStreamHandler{right},
+			receiver:  RowInboundStreamHandler{right},
 			waitGroup: &wgRight,
 		},
 	}

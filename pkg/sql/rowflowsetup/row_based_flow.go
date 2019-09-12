@@ -23,12 +23,16 @@ import (
 )
 
 type rowBasedFlow struct {
-	flowbase.FlowBase
+	*flowbase.FlowBase
 
 	localStreams map[execinfrapb.StreamID]execinfra.RowReceiver
 }
 
 var _ flowbase.Flow = &rowBasedFlow{}
+
+func NewRowBasedFlow(base *flowbase.FlowBase) flowbase.Flow {
+	return &rowBasedFlow{FlowBase: base}
+}
 
 func (f *rowBasedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
 	f.SetSpec(spec)
@@ -248,7 +252,7 @@ func (f *rowBasedFlow) setupInboundStream(
 			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
 		f.AddRemoteStream(sid, flowbase.NewInboundStreamInfo(
-			flowbase.rowInboundStreamHandler{receiver},
+			flowbase.RowInboundStreamHandler{receiver},
 			f.GetWaitGroup(),
 		))
 

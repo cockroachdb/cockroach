@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -33,7 +34,7 @@ func runSampler(
 	for i := range rows {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
 	}
-	in := execinfra.NewRowBuffer(sqlbase.OneIntCol, rows, execinfra.RowBufferArgs{})
+	in := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, rows, distsqlutils.RowBufferArgs{})
 	outTypes := []types.T{
 		*types.Int, // original column
 		*types.Int, // rank
@@ -43,7 +44,7 @@ func runSampler(
 		*types.Bytes,
 	}
 
-	out := execinfra.NewRowBuffer(outTypes, nil /* rows */, execinfra.RowBufferArgs{})
+	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -180,7 +181,7 @@ func TestSamplerSketch(t *testing.T) {
 	numNulls := []int{2, 1}
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)
-	in := execinfra.NewRowBuffer(sqlbase.TwoIntCols, rows, execinfra.RowBufferArgs{})
+	in := distsqlutils.NewRowBuffer(sqlbase.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 	outTypes := []types.T{
 		*types.Int,   // original column
 		*types.Int,   // original column
@@ -191,7 +192,7 @@ func TestSamplerSketch(t *testing.T) {
 		*types.Bytes, // sketch data
 	}
 
-	out := execinfra.NewRowBuffer(outTypes, nil /* rows */, execinfra.RowBufferArgs{})
+	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

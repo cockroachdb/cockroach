@@ -112,7 +112,7 @@ type Flow interface {
 type FlowBase struct {
 	execinfra.FlowCtx
 
-	flowRegistry *flowRegistry
+	flowRegistry *FlowRegistry
 	// isVectorized indicates whether it is a vectorized flow.
 	isVectorized bool
 	// processors contains a subset of the processors in the flow - the ones that
@@ -135,7 +135,7 @@ type FlowBase struct {
 	startedGoroutines bool
 
 	// inboundStreams are streams that receive data from other hosts; this map
-	// is to be passed to flowRegistry.RegisterFlow.
+	// is to be passed to FlowRegistry.RegisterFlow.
 	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo
 
 	// waitGroup is used to wait for async components of the flow:
@@ -164,22 +164,22 @@ func (f *FlowBase) Setup(context.Context, *execinfrapb.FlowSpec) error {
 
 var _ Flow = &FlowBase{}
 
-func newFlow(
+func NewFlowBase(
 	flowCtx execinfra.FlowCtx,
-	flowReg *flowRegistry,
+	flowReg *FlowRegistry,
 	syncFlowConsumer execinfra.RowReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
-) Flow {
-	f := &FlowBase{
+) *FlowBase {
+	base := &FlowBase{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
 		isVectorized:     isVectorized,
 		syncFlowConsumer: syncFlowConsumer,
 		localProcessors:  localProcessors,
 	}
-	f.status = FlowNotStarted
-	return f
+	base.status = FlowNotStarted
+	return base
 }
 
 func (f *FlowBase) CheckInboundStreamID(sid execinfrapb.StreamID) error {
@@ -272,7 +272,7 @@ func (f *FlowBase) startInternal(ctx context.Context, doneFn func()) (context.Co
 		f.waitGroup.Add(len(f.inboundStreams))
 
 		if err := f.flowRegistry.RegisterFlow(
-			ctx, f.ID, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
+			ctx, f.ID, f, f.inboundStreams, SettingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
 		); err != nil {
 			return ctx, err
 		}

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -137,11 +138,11 @@ func TestRouters(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.spec.Type.String(), func(t *testing.T) {
-			bufs := make([]*execinfra.RowBuffer, tc.numBuckets)
+			bufs := make([]*distsqlutils.RowBuffer, tc.numBuckets)
 			recvs := make([]execinfra.RowReceiver, tc.numBuckets)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, tc.numBuckets)
 			for i := 0; i < tc.numBuckets; i++ {
-				bufs[i] = &execinfra.RowBuffer{}
+				bufs[i] = &distsqlutils.RowBuffer{}
 				recvs[i] = bufs[i]
 				tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 			}
@@ -318,11 +319,11 @@ func TestConsumerStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			bufs := make([]*execinfra.RowBuffer, 2)
+			bufs := make([]*distsqlutils.RowBuffer, 2)
 			recvs := make([]execinfra.RowReceiver, 2)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
-				bufs[i] = &execinfra.RowBuffer{}
+				bufs[i] = &distsqlutils.RowBuffer{}
 				recvs[i] = bufs[i]
 				tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 			}

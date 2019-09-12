@@ -35,10 +35,14 @@ import (
 )
 
 type vectorizedFlow struct {
-	flowbase.FlowBase
+	*flowbase.FlowBase
 }
 
 var _ flowbase.Flow = &vectorizedFlow{}
+
+func NewVectorizedFlow(base *flowbase.FlowBase) flowbase.Flow {
+	return &vectorizedFlow{FlowBase: base}
+}
 
 func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
 	f.SetSpec(spec)

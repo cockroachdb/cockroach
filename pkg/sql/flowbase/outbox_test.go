@@ -369,8 +369,8 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				}()
 				// Wait for the consumer to connect.
 				call := <-mockServer.RunSyncFlowCalls
-				outbox = newOutboxSyncFlowStream(call.Stream)
-				outbox.setFlowCtx(&execinfra.FlowCtx{
+				outbox = NewOutboxSyncFlowStream(call.Stream)
+				outbox.SetFlowCtx(&execinfra.FlowCtx{
 					Cfg: &execinfra.ServerConfig{
 						Settings: cluster.MakeTestingClusterSettings(),
 						Stopper:  stopper,

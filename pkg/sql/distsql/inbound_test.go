@@ -8,23 +8,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package flowbase
+package distsql
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,6 +37,16 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// staticAddressResolver maps StaticNodeID to the given address.
+func staticAddressResolver(addr net.Addr) nodedialer.AddressResolver {
+	return func(nodeID roachpb.NodeID) (net.Addr, error) {
+		if nodeID == execinfra.StaticNodeID {
+			return addr, nil
+		}
+		return nil, errors.Errorf("node %d not found", nodeID)
+	}
+}
 
 // TestOutboxInboundStreamIntegration verifies that if an inbound stream gets
 // a draining status from its consumer, that status is propagated back to the
@@ -82,19 +96,19 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	}
 
 	streamID := execinfrapb.StreamID(1)
-	outbox := NewOutbox(&flowCtx, execinfra.StaticNodeID, execinfrapb.FlowID{}, streamID)
+	outbox := flowbase.NewOutbox(&flowCtx, execinfra.StaticNodeID, execinfrapb.FlowID{}, streamID)
 	outbox.Init(sqlbase.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no
 	// goroutines were leaked. Grab the flow's waitGroup to avoid a copy warning.
-	f := &FlowBase{}
+	f := &flowbase.FlowBase{}
 	wg := f.GetWaitGroup()
 
 	// Use RegisterFlow to register our consumer, which we will control.
-	consumer := execinfra.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, execinfra.RowBufferArgs{})
-	connectionInfo := map[execinfrapb.StreamID]*InboundStreamInfo{
-		streamID: NewInboundStreamInfo(
-			rowInboundStreamHandler{consumer},
+	consumer := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
+	connectionInfo := map[execinfrapb.StreamID]*flowbase.InboundStreamInfo{
+		streamID: flowbase.NewInboundStreamInfo(
+			flowbase.RowInboundStreamHandler{consumer},
 			wg,
 		),
 	}

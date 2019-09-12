@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -103,8 +104,8 @@ func TestOrdinality(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			os := c.spec
 
-			in := execinfra.NewRowBuffer(sqlbase.TwoIntCols, c.input, execinfra.RowBufferArgs{})
-			out := &execinfra.RowBuffer{}
+			in := distsqlutils.NewRowBuffer(sqlbase.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
+			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)

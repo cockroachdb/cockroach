@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -263,8 +264,8 @@ func TestPostProcess(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
-			inBuf := execinfra.NewRowBuffer(sqlbase.ThreeIntCols, input, execinfra.RowBufferArgs{})
-			outBuf := &execinfra.RowBuffer{}
+			inBuf := distsqlutils.NewRowBuffer(sqlbase.ThreeIntCols, input, distsqlutils.RowBufferArgs{})
+			outBuf := &distsqlutils.RowBuffer{}
 
 			var out execinfra.ProcOutputHelper
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())

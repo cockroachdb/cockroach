@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -694,9 +695,9 @@ func TestMergeJoiner(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			ms := c.spec
-			leftInput := execinfra.NewRowBuffer(c.leftTypes, c.leftInput, execinfra.RowBufferArgs{})
-			rightInput := execinfra.NewRowBuffer(c.rightTypes, c.rightInput, execinfra.RowBufferArgs{})
-			out := &execinfra.RowBuffer{}
+			leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
+			rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
+			out := &distsqlutils.RowBuffer{}
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
@@ -795,12 +796,12 @@ func TestConsumerClosed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.typ.String() /* name */, func(t *testing.T) {
-			leftInput := execinfra.NewRowBuffer(leftTypes, tc.leftRows, execinfra.RowBufferArgs{})
-			rightInput := execinfra.NewRowBuffer(rightTypes, tc.rightRows, execinfra.RowBufferArgs{})
+			leftInput := distsqlutils.NewRowBuffer(leftTypes, tc.leftRows, distsqlutils.RowBufferArgs{})
+			rightInput := distsqlutils.NewRowBuffer(rightTypes, tc.rightRows, distsqlutils.RowBufferArgs{})
 
 			// Create a consumer and close it immediately. The mergeJoiner should find out
 			// about this closer the first time it attempts to push a row.
-			out := &execinfra.RowBuffer{}
+			out := &distsqlutils.RowBuffer{}
 			out.ConsumerDone()
 
 			st := cluster.MakeTestingClusterSettings()

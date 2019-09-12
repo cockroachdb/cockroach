@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -504,7 +505,7 @@ func TestZigzagJoiner(t *testing.T) {
 				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			}
 
-			out := &execinfra.RowBuffer{}
+			out := &distsqlutils.RowBuffer{}
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 			z, err := newZigzagJoiner(&flowCtx, 0 /* processorID */, &c.spec, c.fixedValues, &post, out)
 			if err != nil {
@@ -573,7 +574,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		out := &execinfra.RowBuffer{}
+		out := &distsqlutils.RowBuffer{}
 		out.ConsumerClosed()
 		zz, err := newZigzagJoiner(
 			&flowCtx,

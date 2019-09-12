@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -107,11 +108,11 @@ func TestSampleAggregator(t *testing.T) {
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 
-		outputs := make([]*execinfra.RowBuffer, numSamplers)
+		outputs := make([]*distsqlutils.RowBuffer, numSamplers)
 		for i := 0; i < numSamplers; i++ {
 			rows := sqlbase.GenEncDatumRowsInt(rowPartitions[i])
-			in := execinfra.NewRowBuffer(sqlbase.TwoIntCols, rows, execinfra.RowBufferArgs{})
-			outputs[i] = execinfra.NewRowBuffer(samplerOutTypes, nil /* rows */, execinfra.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(sqlbase.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
+			outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 			spec := &execinfrapb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
 			p, err := newSamplerProcessor(
@@ -123,7 +124,7 @@ func TestSampleAggregator(t *testing.T) {
 			p.Run(context.Background())
 		}
 		// Randomly interleave the output rows from the samplers into a single buffer.
-		samplerResults := execinfra.NewRowBuffer(samplerOutTypes, nil /* rows */, execinfra.RowBufferArgs{})
+		samplerResults := distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 		for len(outputs) > 0 {
 			i := rng.Intn(len(outputs))
 			row, meta := outputs[i].Next()
@@ -139,7 +140,7 @@ func TestSampleAggregator(t *testing.T) {
 		}
 
 		// Now run the sample aggregator.
-		finalOut := execinfra.NewRowBuffer([]types.T{}, nil /* rows*/, execinfra.RowBufferArgs{})
+		finalOut := distsqlutils.NewRowBuffer([]types.T{}, nil /* rows*/, distsqlutils.RowBufferArgs{})
 		spec := &execinfrapb.SampleAggregatorSpec{
 			SampleSize:       100,
 			Sketches:         sketchSpecs,

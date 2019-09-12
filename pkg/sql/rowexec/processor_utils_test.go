@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 )
 
 type ProcessorTestConfig struct {
@@ -129,16 +130,16 @@ func (p *ProcessorTest) RunTestCases(
 	var processorID int32
 	for _, tc := range testCases {
 		inputs := make([]execinfra.RowSource, 1, 2)
-		inputs[0] = execinfra.NewRowBuffer(
-			tc.Input.Types, tc.Input.toEncDatumRows(), execinfra.RowBufferArgs{},
+		inputs[0] = distsqlutils.NewRowBuffer(
+			tc.Input.Types, tc.Input.toEncDatumRows(), distsqlutils.RowBufferArgs{},
 		)
 		if tc.SecondInput != nil {
-			inputs[1] = execinfra.NewRowBuffer(
-				tc.SecondInput.Types, tc.SecondInput.toEncDatumRows(), execinfra.RowBufferArgs{},
+			inputs[1] = distsqlutils.NewRowBuffer(
+				tc.SecondInput.Types, tc.SecondInput.toEncDatumRows(), distsqlutils.RowBufferArgs{},
 			)
 		}
-		output := execinfra.NewRowBuffer(
-			tc.Output.Types, nil, execinfra.RowBufferArgs{},
+		output := distsqlutils.NewRowBuffer(
+			tc.Output.Types, nil, distsqlutils.RowBufferArgs{},
 		)
 
 		processor, err := NewProcessor(

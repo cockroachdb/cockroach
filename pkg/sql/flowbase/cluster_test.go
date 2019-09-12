@@ -113,7 +113,7 @@ func TestClusterFlow(t *testing.T) {
 	fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 	req1 := &execinfrapb.SetupFlowRequest{
-		Version:      Version,
+		Version:      execinfra.Version,
 		TxnCoordMeta: &txnCoordMeta,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -135,7 +135,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 
 	req2 := &execinfrapb.SetupFlowRequest{
-		Version:      Version,
+		Version:      execinfra.Version,
 		TxnCoordMeta: &txnCoordMeta,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -157,7 +157,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 
 	req3 := &execinfrapb.SetupFlowRequest{
-		Version:      Version,
+		Version:      execinfra.Version,
 		TxnCoordMeta: &txnCoordMeta,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -413,7 +413,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 
 	req := execinfrapb.SetupFlowRequest{
-		Version:      Version,
+		Version:      execinfra.Version,
 		TxnCoordMeta: &txnCoordMeta,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
@@ -670,7 +670,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
-							Version:      Version,
+							Version:      execinfra.Version,
 							TxnCoordMeta: &txnCoordMeta,
 							Flow: execinfrapb.FlowSpec{
 								Processors: []execinfrapb.ProcessorSpec{{

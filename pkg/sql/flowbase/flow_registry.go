@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -28,7 +29,7 @@ import (
 
 var errNoInboundStreamConnection = errors.New("no inbound stream connection")
 
-var settingFlowStreamTimeout = settings.RegisterNonNegativeDurationSetting(
+var SettingFlowStreamTimeout = settings.RegisterNonNegativeDurationSetting(
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
@@ -87,7 +88,7 @@ type flowEntry struct {
 
 	// inboundStreams are streams that receive data from other hosts, through the
 	// FlowStream API. All fields in the inboundStreamInfos are protected by the
-	// flowRegistry mutex (except the receiver, whose methods can be called
+	// FlowRegistry mutex (except the receiver, whose methods can be called
 	// freely).
 	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo
 
@@ -96,37 +97,37 @@ type flowEntry struct {
 	streamTimer *time.Timer
 }
 
-// flowRegistry allows clients to look up flows by ID and to wait for flows to
+// FlowRegistry allows clients to look up flows by ID and to wait for flows to
 // be registered. Multiple clients can wait concurrently for the same flow.
-type flowRegistry struct {
+type FlowRegistry struct {
 	syncutil.Mutex
 
 	// nodeID is the ID of the current node. Used for debugging.
 	nodeID roachpb.NodeID
 
-	// All fields in the flowEntry's are protected by the flowRegistry mutex,
+	// All fields in the flowEntry's are protected by the FlowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[execinfrapb.FlowID]*flowEntry
 
-	// draining specifies whether the flowRegistry is in drain mode. If it is,
-	// the flowRegistry will not accept new flows.
+	// draining specifies whether the FlowRegistry is in drain mode. If it is,
+	// the FlowRegistry will not accept new flows.
 	draining bool
 
 	// flowDone is signaled whenever the size of flows decreases.
 	flowDone *sync.Cond
 
 	// testingRunBeforeDrainSleep is a testing knob executed when a draining
-	// flowRegistry has no registered flows but must still wait for a minimum time
+	// FlowRegistry has no registered flows but must still wait for a minimum time
 	// for any incoming flows to register.
 	testingRunBeforeDrainSleep func()
 }
 
-// makeFlowRegistry creates a new flowRegistry.
+// NewFlowRegistry creates a new FlowRegistry.
 //
 // nodeID is the ID of the current node. Used for debugging; pass 0 if you don't
 // care.
-func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
-	fr := &flowRegistry{
+func NewFlowRegistry(nodeID roachpb.NodeID) *FlowRegistry {
+	fr := &FlowRegistry{
 		nodeID: nodeID,
 		flows:  make(map[execinfrapb.FlowID]*flowEntry),
 	}
@@ -137,7 +138,7 @@ func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
 // getEntryLocked returns the flowEntry associated with the id. If the entry
 // doesn't exist, one is created and inserted into the map.
 // It should only be called while holding the mutex.
-func (fr *flowRegistry) getEntryLocked(id execinfrapb.FlowID) *flowEntry {
+func (fr *FlowRegistry) getEntryLocked(id execinfrapb.FlowID) *flowEntry {
 	entry, ok := fr.flows[id]
 	if !ok {
 		entry = &flowEntry{}
@@ -149,7 +150,7 @@ func (fr *flowRegistry) getEntryLocked(id execinfrapb.FlowID) *flowEntry {
 // releaseEntryLocked decreases the refCount in the entry for the given id, and
 // cleans up the entry if the refCount reaches 0.
 // It should only be called while holding the mutex.
-func (fr *flowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
+func (fr *FlowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
 	entry := fr.flows[id]
 	if entry.refCount > 1 {
 		entry.refCount--
@@ -175,7 +176,7 @@ func (fr *flowRegistry) releaseEntryLocked(id execinfrapb.FlowID) {
 // responsibility for calling Done() on that WaitGroup; this responsibility will
 // be forwarded forward by ConnectInboundStream. In case this method returns an
 // error, the WaitGroup will be decremented.
-func (fr *flowRegistry) RegisterFlow(
+func (fr *FlowRegistry) RegisterFlow(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	f Flow,
@@ -252,7 +253,7 @@ func (fr *flowRegistry) RegisterFlow(
 // streams that were canceled. The caller is expected to send those
 // RowReceivers a cancellation message - this method can't do it because sending
 // those messages shouldn't happen under the flow registry's lock.
-func (fr *flowRegistry) cancelPendingStreamsLocked(id execinfrapb.FlowID) []InboundStreamHandler {
+func (fr *FlowRegistry) cancelPendingStreamsLocked(id execinfrapb.FlowID) []InboundStreamHandler {
 	entry := fr.flows[id]
 	if entry == nil || entry.flow == nil {
 		return nil
@@ -273,7 +274,7 @@ func (fr *flowRegistry) cancelPendingStreamsLocked(id execinfrapb.FlowID) []Inbo
 
 // UnregisterFlow removes a flow from the registry. Any subsequent
 // ConnectInboundStream calls for the flow will fail to find it and time out.
-func (fr *flowRegistry) UnregisterFlow(id execinfrapb.FlowID) {
+func (fr *FlowRegistry) UnregisterFlow(id execinfrapb.FlowID) {
 	fr.Lock()
 	entry := fr.flows[id]
 	if entry.streamTimer != nil {
@@ -289,7 +290,7 @@ func (fr *flowRegistry) UnregisterFlow(id execinfrapb.FlowID) {
 // returns nil. It should only be called while holding the mutex. The mutex is
 // temporarily unlocked if we need to wait.
 // It is illegal to call this if the flow is already connected.
-func (fr *flowRegistry) waitForFlowLocked(
+func (fr *FlowRegistry) waitForFlowLocked(
 	ctx context.Context, id execinfrapb.FlowID, timeout time.Duration,
 ) *flowEntry {
 	entry := fr.getEntryLocked(id)
@@ -332,13 +333,13 @@ func (fr *flowRegistry) waitForFlowLocked(
 // expectedConnectionTime so that any flows that were registered at the end of
 // the time window have a reasonable amount of time to connect to their
 // consumers, thus unblocking them.
-// The flowRegistry rejects any new flows once it has finished draining.
+// The FlowRegistry rejects any new flows once it has finished draining.
 //
 // Note that since local flows are not added to the registry, they are not
 // waited for. However, this is fine since there should be no local flows
-// running when the flowRegistry drains as the draining logic starts with
+// running when the FlowRegistry drains as the draining logic starts with
 // draining all client connections to a node.
-func (fr *flowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time.Duration) {
+func (fr *FlowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time.Duration) {
 	allFlowsDone := make(chan struct{}, 1)
 	start := timeutil.Now()
 	stopWaiting := false
@@ -413,8 +414,8 @@ func (fr *flowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time
 	allFlowsDone <- struct{}{}
 }
 
-// Undrain causes the flowRegistry to start accepting flows again.
-func (fr *flowRegistry) Undrain() {
+// Undrain causes the FlowRegistry to start accepting flows again.
+func (fr *FlowRegistry) Undrain() {
 	fr.Lock()
 	fr.draining = false
 	fr.Unlock()
@@ -435,7 +436,7 @@ func (fr *flowRegistry) Undrain() {
 // is not blocked on this stream any more.
 // In case an error is returned, the cleanup function is nil, the Flow is not
 // considered connected and is not cleaned up.
-func (fr *flowRegistry) ConnectInboundStream(
+func (fr *FlowRegistry) ConnectInboundStream(
 	ctx context.Context,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
@@ -455,8 +456,8 @@ func (fr *flowRegistry) ConnectInboundStream(
 			Handshake: &execinfrapb.ConsumerHandshake{
 				ConsumerScheduled:        false,
 				ConsumerScheduleDeadline: &deadline,
-				Version:                  Version,
-				MinAcceptedVersion:       MinAcceptedVersion,
+				Version:                  execinfra.Version,
+				MinAcceptedVersion:       execinfra.MinAcceptedVersion,
 			},
 		}); err != nil {
 			// TODO(andrei): We failed to send a message to the producer; we'll return
@@ -499,8 +500,8 @@ func (fr *flowRegistry) ConnectInboundStream(
 	if err := stream.Send(&execinfrapb.ConsumerSignal{
 		Handshake: &execinfrapb.ConsumerHandshake{
 			ConsumerScheduled:  true,
-			Version:            Version,
-			MinAcceptedVersion: MinAcceptedVersion,
+			Version:            execinfra.Version,
+			MinAcceptedVersion: execinfra.MinAcceptedVersion,
 		},
 	}); err != nil {
 		return nil, nil, nil, err
@@ -514,7 +515,7 @@ func (fr *flowRegistry) ConnectInboundStream(
 	return entry.flow, s.receiver, cleanup, nil
 }
 
-func (fr *flowRegistry) finishInboundStreamLocked(
+func (fr *FlowRegistry) finishInboundStreamLocked(
 	fid execinfrapb.FlowID, sid execinfrapb.StreamID,
 ) {
 	flowEntry := fr.getEntryLocked(fid)

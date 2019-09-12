@@ -85,14 +85,14 @@ func NewOutbox(
 	return m
 }
 
-// newOutboxSyncFlowStream sets up an outbox for the special "sync flow"
-// stream. The flow context should be provided via setFlowCtx when it is
+// NewOutboxSyncFlowStream sets up an outbox for the special "sync flow"
+// stream. The flow context should be provided via SetFlowCtx when it is
 // available.
-func newOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *Outbox {
+func NewOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *Outbox {
 	return &Outbox{stream: stream}
 }
 
-func (m *Outbox) setFlowCtx(flowCtx *execinfra.FlowCtx) {
+func (m *Outbox) SetFlowCtx(flowCtx *execinfra.FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
@@ -450,6 +450,10 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	}
 	m.flowCtxCancel = flowCtxCancel
 	go m.run(ctx, wg)
+}
+
+func (m *Outbox) Err() error {
+	return m.err
 }
 
 const outboxTagPrefix = "outbox."
