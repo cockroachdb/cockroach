@@ -354,9 +354,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			return cannotDistribute, err
 		}
 		// If we have to sort, distribute the query.
-		if n.needSort {
-			rec = rec.compose(shouldDistribute)
-		}
+		rec = rec.compose(shouldDistribute)
 		return rec, nil
 
 	case *joinNode:
@@ -1250,29 +1248,6 @@ func (dsp *DistSQLPlanner) addSorters(p *PhysicalPlan, n *sortNode) {
 			p.ResultTypes,
 			ordering,
 		)
-	}
-
-	if len(n.columns) != len(p.PlanToStreamColMap) {
-		// In cases like:
-		//   SELECT a FROM t ORDER BY b
-		// we have columns (b) that are only used for sorting. These columns are not
-		// in the output columns of the sortNode; we set a projection such that the
-		// plan results map 1-to-1 to sortNode columns.
-		//
-		// Note that internally, AddProjection might retain more columns than
-		// necessary so we can preserve the p.Ordering between parallel streams
-		// when they merge later.
-		p.PlanToStreamColMap = p.PlanToStreamColMap[:len(n.columns)]
-		columns := make([]uint32, 0, len(n.columns))
-		for i, col := range p.PlanToStreamColMap {
-			if col < 0 {
-				// This column isn't needed; ignore it.
-				continue
-			}
-			p.PlanToStreamColMap[i] = len(columns)
-			columns = append(columns, uint32(col))
-		}
-		p.AddProjection(columns)
 	}
 }
 
