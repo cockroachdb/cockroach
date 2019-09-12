@@ -321,6 +321,9 @@ func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneCo
 	if v.zoneHasReport(zone) {
 		v.report.EnsureEntry(key)
 	}
+	for i, sz := range zone.Subzones {
+		v.ensureEntries(MakeZoneKey(key.ZoneID, SubzoneIDFromIndex(i)), &sz.Config)
+	}
 }
 
 // visit is part of the rangeVisitor interface.
