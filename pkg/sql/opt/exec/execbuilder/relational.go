@@ -966,11 +966,12 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 	for i := range ordering {
 		orderedCols.Add(int(input.getColumnOrdinal(ordering[i].ID())))
 	}
-	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
+	ep := execPlan{outputCols: input.outputCols}
+	reqOrdering := ep.reqOrdering(distinct)
+	ep.root, err = b.factory.ConstructDistinct(input.root, distinctCols, orderedCols, reqOrdering)
 	if err != nil {
 		return execPlan{}, err
 	}
-	ep := execPlan{root: node, outputCols: input.outputCols}
 
 	// buildGroupByInput can add extra sort column(s), so discard those if they
 	// are present by using an additional projection.

@@ -33,6 +33,8 @@ type distinctNode struct {
 	// Subset of distinctOnColIdxs on which the input guarantees an ordering.
 	// All rows that are equal on these columns appear contiguously in the input.
 	columnsInOrder util.FastIntSet
+
+	props physicalProps
 }
 
 func (n *distinctNode) startExec(params runParams) error {
