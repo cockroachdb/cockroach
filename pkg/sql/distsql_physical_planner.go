@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -74,7 +74,7 @@ type DistSQLPlanner struct {
 	nodeDesc     roachpb.NodeDescriptor
 	stopper      *stop.Stopper
 	distSQLSrv   *execinfra.ServerImpl
-	spanResolver rowplan.SpanResolver
+	spanResolver physicalplan.SpanResolver
 
 	// metadataTestTolerance is the minimum level required to plan metadata test
 	// processors.
@@ -184,7 +184,7 @@ func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
 func (dsp *DistSQLPlanner) SetNodeDesc(desc roachpb.NodeDescriptor) {
 	dsp.nodeDesc = desc
 	if dsp.spanResolver == nil {
-		sr := rowplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.gossip, desc,
+		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.gossip, desc,
 			dsp.rpcCtx, ReplicaOraclePolicy)
 		dsp.SetSpanResolver(sr)
 	}
@@ -192,7 +192,7 @@ func (dsp *DistSQLPlanner) SetNodeDesc(desc roachpb.NodeDescriptor) {
 
 // SetSpanResolver switches to a different SpanResolver. It is the caller's
 // responsibility to make sure the DistSQLPlanner is not in use.
-func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver rowplan.SpanResolver) {
+func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver physicalplan.SpanResolver) {
 	dsp.spanResolver = spanResolver
 }
 
@@ -505,7 +505,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 type PlanningCtx struct {
 	ctx             context.Context
 	ExtendedEvalCtx *extendedEvalContext
-	spanIter        rowplan.SpanResolverIterator
+	spanIter        physicalplan.SpanResolverIterator
 	// NodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// PhysicalPlan we generate with this context.
 	// Nodes that fail a health check have empty addresses.
@@ -530,7 +530,7 @@ type PlanningCtx struct {
 	noEvalSubqueries bool
 }
 
-var _ rowplan.ExprContext = &PlanningCtx{}
+var _ physicalplan.ExprContext = &PlanningCtx{}
 
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
 func (p *PlanningCtx) EvalContext() *tree.EvalContext {
@@ -577,7 +577,7 @@ func (p *PlanningCtx) sanityCheckAddresses() error {
 //
 // These plans are built recursively on a planNode tree.
 type PhysicalPlan struct {
-	rowplan.PhysicalPlan
+	physicalplan.PhysicalPlan
 
 	// PlanToStreamColMap maps planNode columns (see planColumns()) to columns in
 	// the result streams. These stream indices correspond to the streams
@@ -868,7 +868,7 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 func initTableReaderSpec(
 	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
-	s := rowplan.NewTableReaderSpec()
+	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
 		Table:      *n.desc.TableDesc(),
 		Reverse:    n.reverse,
@@ -891,7 +891,7 @@ func initTableReaderSpec(
 		return s, execinfrapb.PostProcessSpec{}, nil
 	}
 
-	filter, err := rowplan.MakeExpression(n.filter, planCtx, indexVarMap)
+	filter, err := physicalplan.MakeExpression(n.filter, planCtx, indexVarMap)
 	if err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
 	}
@@ -1097,8 +1097,8 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	var p PhysicalPlan
 	stageID := p.NewStageID()
 
-	p.ResultRouters = make([]rowplan.ProcessorIdx, len(spanPartitions))
-	p.Processors = make([]rowplan.Processor, 0, len(spanPartitions))
+	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
+	p.Processors = make([]physicalplan.Processor, 0, len(spanPartitions))
 
 	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
 
@@ -1110,7 +1110,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			tr = spec
 		} else {
 			// For the rest, we have to copy the spec into a fresh spec.
-			tr = rowplan.NewTableReaderSpec()
+			tr = physicalplan.NewTableReaderSpec()
 			// Grab the Spans field of the new spec, and reuse it in case the pooled
 			// TableReaderSpec we got has pre-allocated Spans memory.
 			newSpansSlice := tr.Spans
@@ -1126,7 +1126,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			p.MaxEstimatedRowCount = n.estimatedRowCount
 		}
 
-		proc := rowplan.Processor{
+		proc := physicalplan.Processor{
 			Node: sp.Node,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:    execinfrapb.ProcessorCoreUnion{TableReader: tr},
@@ -1317,7 +1317,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		aggregationsColumnTypes[i] = make([]types.T, len(fholder.arguments))
 		for j, argument := range fholder.arguments {
 			var err error
-			aggregations[i].Arguments[j], err = rowplan.MakeExpression(argument, planCtx, nil)
+			aggregations[i].Arguments[j], err = physicalplan.MakeExpression(argument, planCtx, nil)
 			if err != nil {
 				return err
 			}
@@ -1381,7 +1381,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 				// non-distinct aggregations.
 				allDistinct = false
 			}
-			if _, ok := rowplan.DistAggregationTable[e.Func]; !ok {
+			if _, ok := physicalplan.DistAggregationTable[e.Func]; !ok {
 				multiStage = false
 				break
 			}
@@ -1459,7 +1459,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		nFinalAgg := 0
 		needRender := false
 		for _, e := range aggregations {
-			info := rowplan.DistAggregationTable[e.Func]
+			info := physicalplan.DistAggregationTable[e.Func]
 			nLocalAgg += len(info.LocalStage)
 			nFinalAgg += len(info.FinalStage)
 			if info.FinalRendering != nil {
@@ -1494,7 +1494,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// to all final aggregations.
 		finalIdx := 0
 		for _, e := range aggregations {
-			info := rowplan.DistAggregationTable[e.Func]
+			info := physicalplan.DistAggregationTable[e.Func]
 
 			// relToAbsLocalIdx maps each local stage for the given
 			// aggregation e to its final index in localAggs.  This
@@ -1693,7 +1693,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 			// to each aggregation.
 			finalIdx := 0
 			for i, e := range aggregations {
-				info := rowplan.DistAggregationTable[e.Func]
+				info := physicalplan.DistAggregationTable[e.Func]
 				if info.FinalRendering == nil {
 					// mappedIdx corresponds to the index
 					// location of the result for this
@@ -1703,7 +1703,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					// across and within stages.
 					mappedIdx := int(finalIdxMap[finalIdx])
 					var err error
-					renderExprs[i], err = rowplan.MakeExpression(
+					renderExprs[i], err = physicalplan.MakeExpression(
 						h.IndexedVar(mappedIdx), planCtx, nil /* indexVarMap */)
 					if err != nil {
 						return err
@@ -1723,7 +1723,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					if err != nil {
 						return err
 					}
-					renderExprs[i], err = rowplan.MakeExpression(
+					renderExprs[i], err = physicalplan.MakeExpression(
 						expr, planCtx,
 						nil /* indexVarMap */)
 					if err != nil {
@@ -1803,9 +1803,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// We have one final stage processor for each result router. This is a
 		// somewhat arbitrary decision; we could have a different number of nodes
 		// working on the final stage.
-		pIdxStart := rowplan.ProcessorIdx(len(p.Processors))
+		pIdxStart := physicalplan.ProcessorIdx(len(p.Processors))
 		for _, resultProc := range p.ResultRouters {
-			proc := rowplan.Processor{
+			proc := physicalplan.Processor{
 				Node: p.Processors[resultProc].Node,
 				Spec: execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{
@@ -1825,13 +1825,13 @@ func (dsp *DistSQLPlanner) addAggregators(
 
 		// Connect the streams.
 		for bucket := 0; bucket < len(p.ResultRouters); bucket++ {
-			pIdx := pIdxStart + rowplan.ProcessorIdx(bucket)
+			pIdx := pIdxStart + physicalplan.ProcessorIdx(bucket)
 			p.MergeResultStreams(p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0)
 		}
 
 		// Set the new result routers.
 		for i := 0; i < len(p.ResultRouters); i++ {
-			p.ResultRouters[i] = pIdxStart + rowplan.ProcessorIdx(i)
+			p.ResultRouters[i] = pIdxStart + physicalplan.ProcessorIdx(i)
 		}
 
 		p.ResultTypes = finalOutTypes
@@ -1855,7 +1855,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
 	}
 
-	filter, err := rowplan.MakeExpression(
+	filter, err := physicalplan.MakeExpression(
 		n.table.filter, planCtx, nil /* indexVarMap */)
 	if err != nil {
 		return PhysicalPlan{}, err
@@ -1977,7 +1977,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 			indexVarMap[numInputNodeCols+i] = int(post.OutputColumns[numLeftCols+i])
 		}
 		var err error
-		joinReaderSpec.OnExpr, err = rowplan.MakeExpression(
+		joinReaderSpec.OnExpr, err = physicalplan.MakeExpression(
 			n.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
@@ -2099,7 +2099,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		for i := range n.columns {
 			indexVarMap[i] = int(post.OutputColumns[i])
 		}
-		zigzagJoinerSpec.OnExpr, err = rowplan.MakeExpression(
+		zigzagJoinerSpec.OnExpr, err = physicalplan.MakeExpression(
 			n.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
@@ -2108,7 +2108,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	}
 
 	// Build the PhysicalPlan.
-	proc := rowplan.Processor{
+	proc := physicalplan.Processor{
 		Node: nodeID,
 		Spec: execinfrapb.ProcessorSpec{
 			Core:    execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
@@ -2121,7 +2121,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	plan.Processors = append(plan.Processors, proc)
 
 	// Each result router correspond to each of the processors we appended.
-	plan.ResultRouters = []rowplan.ProcessorIdx{rowplan.ProcessorIdx(0)}
+	plan.ResultRouters = []physicalplan.ProcessorIdx{physicalplan.ProcessorIdx(0)}
 
 	plan.PlanToStreamColMap = planToStreamColMap
 	plan.ResultTypes = types
@@ -2220,8 +2220,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	}
 
 	var p PhysicalPlan
-	var leftRouters, rightRouters []rowplan.ProcessorIdx
-	p.PhysicalPlan, leftRouters, rightRouters = rowplan.MergePlans(
+	var leftRouters, rightRouters []physicalplan.ProcessorIdx
+	p.PhysicalPlan, leftRouters, rightRouters = physicalplan.MergePlans(
 		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
 	)
 
@@ -2438,7 +2438,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			log.Fatal(planCtx.ctx, err)
 		}
 		plan.AddNoGroupingStageWithCoreFunc(
-			func(_ int, _ *rowplan.Processor) execinfrapb.ProcessorCoreUnion {
+			func(_ int, _ *physicalplan.Processor) execinfrapb.ProcessorCoreUnion {
 				return execinfrapb.ProcessorCoreUnion{
 					MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
 						ID: uuid.MakeV4().String(),
@@ -2538,7 +2538,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 		}}
 	}
 	name := nodeName(n)
-	proc := rowplan.Processor{
+	proc := physicalplan.Processor{
 		Node: dsp.nodeDesc.NodeID,
 		Spec: execinfrapb.ProcessorSpec{
 			Input: input,
@@ -2567,7 +2567,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 	// distributed, so make sure that p.ResultRouters has at least 1 slot and
 	// write the new processor index there.
 	if cap(p.ResultRouters) < 1 {
-		p.ResultRouters = make([]rowplan.ProcessorIdx, 1)
+		p.ResultRouters = make([]physicalplan.ProcessorIdx, 1)
 	} else {
 		p.ResultRouters = p.ResultRouters[:1]
 	}
@@ -2594,8 +2594,8 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 	s.NumRows = uint64(numRows)
 	s.RawBytes = rawBytes
 
-	plan := rowplan.PhysicalPlan{
-		Processors: []rowplan.Processor{{
+	plan := physicalplan.PhysicalPlan{
+		Processors: []physicalplan.Processor{{
 			// TODO: find a better node to place processor at
 			Node: dsp.nodeDesc.NodeID,
 			Spec: execinfrapb.ProcessorSpec{
@@ -2603,7 +2603,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
 			},
 		}},
-		ResultRouters: []rowplan.ProcessorIdx{0},
+		ResultRouters: []physicalplan.ProcessorIdx{0},
 		ResultTypes:   resultTypes,
 	}
 
@@ -2770,7 +2770,7 @@ func createProjectSetSpec(
 	}
 	for i, expr := range n.exprs {
 		var err error
-		spec.Exprs[i], err = rowplan.MakeExpression(expr, planCtx, indexVarMap)
+		spec.Exprs[i], err = physicalplan.MakeExpression(expr, planCtx, indexVarMap)
 		if err != nil {
 			return nil, err
 		}
@@ -2970,7 +2970,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	// uses the naive ordering propagation below. To fix this, use similar logic
 	// to the distinct case above to get the new ordering, and add a projection in
 	// a no-grouping no-op stage.
-	resultTypes, err := rowplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+	resultTypes, err := physicalplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
 	mergeOrdering := leftPlan.MergeOrdering
 	if n.unionType != tree.UnionOp {
 		// In INTERSECT and EXCEPT cases where the merge ordering contains columns
@@ -2990,7 +2990,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				return PhysicalPlan{}, err
 			}
 		}
-		resultTypes, err = rowplan.MergeResultTypes(childResultTypes[0], childResultTypes[1])
+		resultTypes, err = physicalplan.MergeResultTypes(childResultTypes[0], childResultTypes[1])
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -3009,7 +3009,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		}
 
 		// Result types should now be mergeable.
-		resultTypes, err = rowplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+		resultTypes, err = physicalplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -3017,8 +3017,8 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	}
 
 	// Merge processors, streams, result routers, and stage counter.
-	var leftRouters, rightRouters []rowplan.ProcessorIdx
-	p.PhysicalPlan, leftRouters, rightRouters = rowplan.MergePlans(
+	var leftRouters, rightRouters []physicalplan.ProcessorIdx
+	p.PhysicalPlan, leftRouters, rightRouters = physicalplan.MergePlans(
 		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
 
 	if n.unionType == tree.UnionOp {
@@ -3208,9 +3208,9 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			// SourceRouterSlot - namely, position in which
 			// a node appears in nodes.
 			prevStageRouters := plan.ResultRouters
-			plan.ResultRouters = make([]rowplan.ProcessorIdx, 0, len(nodes))
+			plan.ResultRouters = make([]physicalplan.ProcessorIdx, 0, len(nodes))
 			for bucket, nodeID := range nodes {
-				proc := rowplan.Processor{
+				proc := physicalplan.Processor{
 					Node: nodeID,
 					Spec: execinfrapb.ProcessorSpec{
 						Input: []execinfrapb.InputSyncSpec{{
@@ -3228,7 +3228,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 				pIdx := plan.AddProcessor(proc)
 
 				for _, router := range prevStageRouters {
-					plan.Streams = append(plan.Streams, rowplan.Stream{
+					plan.Streams = append(plan.Streams, physicalplan.Stream{
 						SourceProcessor:  router,
 						SourceRouterSlot: bucket,
 						DestProcessor:    pIdx,

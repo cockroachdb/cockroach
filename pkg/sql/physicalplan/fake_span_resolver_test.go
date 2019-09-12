@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowplan_test
+package physicalplan_test
 
 import (
 	"context"

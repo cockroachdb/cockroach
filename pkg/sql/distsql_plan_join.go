@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -205,7 +205,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 			Type:      joinType,
 		}
 
-		proc := rowplan.Processor{
+		proc := physicalplan.Processor{
 			Node: nodeID,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:    execinfrapb.ProcessorCoreUnion{InterleavedReaderJoiner: irj},
@@ -219,9 +219,9 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	}
 
 	// Each result router correspond to each of the processors we appended.
-	plan.ResultRouters = make([]rowplan.ProcessorIdx, len(nodes))
+	plan.ResultRouters = make([]physicalplan.ProcessorIdx, len(nodes))
 	for i := 0; i < len(nodes); i++ {
-		plan.ResultRouters[i] = rowplan.ProcessorIdx(i)
+		plan.ResultRouters[i] = physicalplan.ProcessorIdx(i)
 	}
 
 	plan.PlanToStreamColMap = joinToStreamColMap
@@ -302,7 +302,7 @@ func remapOnExpr(
 		idx++
 	}
 
-	return rowplan.MakeExpression(n.pred.onCond, planCtx, joinColMap)
+	return physicalplan.MakeExpression(n.pred.onCond, planCtx, joinColMap)
 }
 
 // eqCols produces a slice of ordinal references for the plan columns specified
@@ -814,7 +814,7 @@ func distsqlSetOpJoinType(setOpType tree.UnionType) sqlbase.JoinType {
 
 // getNodesOfRouters returns all nodes that routers are put on.
 func getNodesOfRouters(
-	routers []rowplan.ProcessorIdx, processors []rowplan.Processor,
+	routers []physicalplan.ProcessorIdx, processors []physicalplan.Processor,
 ) (nodes []roachpb.NodeID) {
 	seen := make(map[roachpb.NodeID]struct{})
 	for _, pIdx := range routers {
@@ -828,7 +828,7 @@ func getNodesOfRouters(
 }
 
 func findJoinProcessorNodes(
-	leftRouters, rightRouters []rowplan.ProcessorIdx, processors []rowplan.Processor,
+	leftRouters, rightRouters []physicalplan.ProcessorIdx, processors []physicalplan.Processor,
 ) (nodes []roachpb.NodeID) {
 	// TODO(radu): for now we run a join processor on every node that produces
 	// data for either source. In the future we should be smarter here.

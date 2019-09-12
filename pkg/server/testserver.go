@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -613,7 +613,7 @@ func (ts *TestServer) DistSQLServer() interface{} {
 
 // SetDistSQLSpanResolver is part of TestServerInterface.
 func (ts *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
-	ts.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(rowplan.SpanResolver))
+	ts.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
 // GetFirstStoreID is part of TestServerInterface.

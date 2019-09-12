@@ -12,8 +12,8 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -42,7 +42,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 
 	var p PhysicalPlan
 	stageID := p.NewStageID()
-	p.ResultRouters = make([]rowplan.ProcessorIdx, len(spanPartitions))
+	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		tr := &execinfrapb.TableReaderSpec{}
 		*tr = *spec
@@ -51,7 +51,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 			tr.Spans[j].Span = sp.Spans[j]
 		}
 
-		proc := rowplan.Processor{
+		proc := physicalplan.Processor{
 			Node: sp.Node,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:    execinfrapb.ProcessorCoreUnion{TableReader: tr},

@@ -11,7 +11,7 @@
 // This file contains helper code to populate rowexec.Expressions during
 // planning.
 
-package rowplan
+package physicalplan
 
 import (
 	"fmt"

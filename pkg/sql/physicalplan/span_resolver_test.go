@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowplan_test
+package physicalplan_test
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -82,7 +82,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	// Create a SpanResolver using the 4th node, with empty caches.
 	s3 := tc.Servers[3]
 
-	lr := rowplan.NewSpanResolver(
+	lr := physicalplan.NewSpanResolver(
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kv.DistSender), s3.Gossip(), s3.GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
@@ -188,7 +188,7 @@ func TestSpanResolver(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
-	lr := rowplan.NewSpanResolver(
+	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor, nil,
@@ -282,7 +282,7 @@ func TestMixedDirections(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
-	lr := rowplan.NewSpanResolver(
+	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kv.DistSender), s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
@@ -380,7 +380,7 @@ type rngInfo struct {
 }
 
 func resolveSpans(
-	ctx context.Context, it rowplan.SpanResolverIterator, spans ...spanWithDir,
+	ctx context.Context, it physicalplan.SpanResolverIterator, spans ...spanWithDir,
 ) ([][]rngInfo, error) {
 	res := make([][]rngInfo, 0)
 	for _, span := range spans {
