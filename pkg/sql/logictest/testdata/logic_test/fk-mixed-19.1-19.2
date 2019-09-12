@@ -7,7 +7,7 @@
 # validated when added in 19.1, hence the need for different logic tests.
 
 statement ok
-SET optimizer_foreign_keys = false
+SET experimental_optimizer_foreign_keys = false
 
 # Disable automatic stats to avoid flakiness.
 statement ok
