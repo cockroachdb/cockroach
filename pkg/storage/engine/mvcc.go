@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors/errbase"
+	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 )
 
@@ -121,6 +123,11 @@ func (k MVCCKey) String() string {
 		return k.Key.String()
 	}
 	return fmt.Sprintf("%s/%s", k.Key, k.Timestamp)
+}
+
+// Format implements the fmt.Formatter interface.
+func (k MVCCKey) Format(f fmt.State, c rune) {
+	fmt.Fprintf(f, "%s/%s", keys.PrettyPrint(nil, k.Key), k.Timestamp)
 }
 
 // Len returns the size of the MVCCKey when encoded. Implements the
@@ -1859,6 +1866,68 @@ func mvccInitPutUsingIter(
 			}
 			return value.RawBytes, nil
 		})
+}
+
+// mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
+type mvccKeyFormatter struct {
+	key MVCCKey
+	err error
+}
+
+var _ fmt.Formatter = mvccKeyFormatter{}
+
+// Format implements the fmt.Formatter interface.
+func (m mvccKeyFormatter) Format(f fmt.State, c rune) {
+	if m.err != nil {
+		errbase.FormatError(m.err, f, c)
+		return
+	}
+	m.key.Format(f, c)
+}
+
+// MVCCComparer is a pebble.Comparer object that implements MVCC-specific
+// comparator settings for use with Pebble.
+//
+// TODO(itsbilal): Move this to a new file pebble.go.
+var MVCCComparer = &pebble.Comparer{
+	Compare: MVCCKeyCompare,
+	AbbreviatedKey: func(k []byte) uint64 {
+		key, _, ok := enginepb.SplitMVCCKey(k)
+		if !ok {
+			return 0
+		}
+		return pebble.DefaultComparer.AbbreviatedKey(key)
+	},
+
+	Format: func (k []byte) fmt.Formatter {
+		decoded, err := DecodeMVCCKey(k)
+		if err != nil {
+			return mvccKeyFormatter{err: err}
+		}
+		return mvccKeyFormatter{key: decoded}
+	},
+
+	Separator: func(dst, a, b []byte) []byte {
+		return append(dst, a...)
+	},
+
+	Successor: func(dst, a []byte) []byte {
+		return append(dst, a...)
+	},
+	Split: func(k []byte) int {
+		if len(k) == 0 {
+			return len(k)
+		}
+		// This is similar to what enginepb.SplitMVCCKey does.
+		tsLen := int(k[len(k)-1])
+		keyPartEnd := len(k) - 1 - tsLen
+		if keyPartEnd < 0 {
+			return len(k)
+		}
+		return keyPartEnd
+	},
+
+	Name: "cockroach_comparator",
 }
 
 // MVCCMerge implements a merge operation. Merge adds integer values,
