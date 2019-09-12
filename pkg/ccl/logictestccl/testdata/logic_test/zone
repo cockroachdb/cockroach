@@ -608,6 +608,9 @@ CREATE INDEX x2 ON t2 (x) PARTITION BY LIST (x) (
 statement ok
 ALTER PARTITION p1 OF INDEX t2@* CONFIGURE ZONE USING num_replicas = 1
 
+statement error index "t2" does not exist\nHINT: try specifying the index as <tablename>@<indexname>
+ALTER PARTITION p1 OF INDEX t2 CONFIGURE ZONE USING num_replicas = 1
+
 query TT
 SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@%'
 ----
