@@ -506,7 +506,7 @@ func (s *scope) makeSelectClause(
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
-	stmt, refs, ok := s.makeSelect(s.schema.makeDesiredTypes(), nil)
+	stmt, refs, ok := s.makeSelect(nil, nil)
 	if !ok {
 		return stmt, ok
 	}
