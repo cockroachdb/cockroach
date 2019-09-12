@@ -36,27 +36,10 @@ func (t colRefs) stripTableName() {
 	}
 }
 
-type scope struct {
-	schema *Smither
-
-	complexity float64
-}
-
-func (s *Smither) makeScope() *scope {
-	c := s.complexity
-	if c < 0 || c > 1 {
-		c = s.rnd.Float64()
-	}
-	return &scope{
-		schema:     s,
-		complexity: c,
-	}
-}
-
 // canRecurse returns whether the current function should possibly invoke
 // a function that creates new nodes.
-func (s *scope) canRecurse() bool {
-	return s.complexity > s.schema.rnd.Float64()
+func (s *Smither) canRecurse() bool {
+	return s.complexity > s.rnd.Float64()
 }
 
 // Context holds information about what kinds of expressions are legal at
