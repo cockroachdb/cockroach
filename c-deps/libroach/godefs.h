@@ -13,7 +13,6 @@
 #include <libroach.h>
 
 extern "C" {
-bool __attribute__((weak)) rocksDBV(int, int);
-void __attribute__((weak)) rocksDBLog(int, char*, int);
+void __attribute__((weak)) rocksDBLog(bool, int, char*, int);
 char* __attribute__((weak)) prettyPrintKey(DBKey);
 }  // extern "C"
