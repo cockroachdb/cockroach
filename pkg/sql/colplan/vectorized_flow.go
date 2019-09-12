@@ -655,6 +655,25 @@ func (s *vectorizedFlowCreator) setupFlow(
 	return s.leaves, nil
 }
 
+type vectorizedInboundStreamHandler struct {
+	*colrpc.Inbox
+}
+
+var _ execinfra.InboundStreamHandler = vectorizedInboundStreamHandler{}
+
+func (s vectorizedInboundStreamHandler) Run(
+	ctx context.Context,
+	stream execinfrapb.DistSQL_FlowStreamServer,
+	_ *execinfrapb.ProducerMessage,
+	_ execinfra.Flow,
+) error {
+	return s.RunWithStream(ctx, stream)
+}
+
+func (s vectorizedInboundStreamHandler) Timeout(err error) {
+	s.Timeout(err)
+}
+
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
 // vectorized infrastructure to be actually run.
 type vectorizedFlowCreatorHelper struct {

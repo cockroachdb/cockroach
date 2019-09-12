@@ -8,21 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowexec
+package execinfra
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-type metadataTestReceiver struct {
-	execinfra.ProcessorBase
-	input execinfra.RowSource
+type MetadataTestReceiver struct {
+	ProcessorBase
+	input RowSource
 
 	// trailingErrMeta stores the error metadata received from the input. We
 	// do not return this metadata immediately because metadata propagation errors
@@ -40,20 +39,20 @@ type rowNumCounter struct {
 	err              error
 }
 
-var _ execinfra.Processor = &metadataTestReceiver{}
-var _ execinfra.RowSource = &metadataTestReceiver{}
+var _ Processor = &MetadataTestReceiver{}
+var _ RowSource = &MetadataTestReceiver{}
 
 const metadataTestReceiverProcName = "meta receiver"
 
-func newMetadataTestReceiver(
-	flowCtx *execinfra.FlowCtx,
+func NewMetadataTestReceiver(
+	flowCtx *FlowCtx,
 	processorID int32,
-	input execinfra.RowSource,
+	input RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
+	output RowReceiver,
 	senders []string,
-) (*metadataTestReceiver, error) {
-	mtr := &metadataTestReceiver{
+) (*MetadataTestReceiver, error) {
+	mtr := &MetadataTestReceiver{
 		input:     input,
 		senders:   senders,
 		rowCounts: make(map[string]rowNumCounter),
@@ -66,8 +65,8 @@ func newMetadataTestReceiver(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{
-			InputsToDrain: []execinfra.RowSource{input},
+		ProcStateOpts{
+			InputsToDrain: []RowSource{input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				var trailingMeta []execinfrapb.ProducerMetadata
 				if mtr.rowCounts != nil {
@@ -89,7 +88,7 @@ func newMetadataTestReceiver(
 // that it has received exactly one of each expected RowNum. If the check
 // detects dropped or repeated metadata, it returns error metadata. Otherwise,
 // it returns nil.
-func (mtr *metadataTestReceiver) checkRowNumMetadata() *execinfrapb.ProducerMetadata {
+func (mtr *MetadataTestReceiver) checkRowNumMetadata() *execinfrapb.ProducerMetadata {
 	defer func() { mtr.rowCounts = nil }()
 
 	if len(mtr.rowCounts) != len(mtr.senders) {
@@ -136,7 +135,7 @@ func (mtr *metadataTestReceiver) checkRowNumMetadata() *execinfrapb.ProducerMeta
 }
 
 // Start is part of the RowSource interface.
-func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
+func (mtr *MetadataTestReceiver) Start(ctx context.Context) context.Context {
 	mtr.input.Start(ctx)
 	return mtr.StartInternal(ctx, metadataTestReceiverProcName)
 }
@@ -146,16 +145,16 @@ func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
 // This implementation doesn't follow the usual patterns of other processors; it
 // makes more limited use of the ProcessorBase's facilities because it needs to
 // inspect metadata while draining.
-func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (mtr *MetadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for {
-		if mtr.State == execinfra.StateTrailingMeta {
+		if mtr.State == StateTrailingMeta {
 			if meta := mtr.PopTrailingMeta(); meta != nil {
 				return nil, meta
 			}
 			// If there's no more trailingMeta, we've moved to stateExhausted, and we
 			// might return some trailingErrMeta below.
 		}
-		if mtr.State == execinfra.StateExhausted {
+		if mtr.State == StateExhausted {
 			if len(mtr.trailingErrMeta) > 0 {
 				meta := mtr.trailingErrMeta[0]
 				mtr.trailingErrMeta = mtr.trailingErrMeta[1:]
@@ -222,7 +221,7 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.Produ
 		}
 
 		// Swallow rows if we're draining.
-		if mtr.State == execinfra.StateDraining {
+		if mtr.State == StateDraining {
 			continue
 		}
 
@@ -235,12 +234,12 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *execinfrapb.Produ
 }
 
 // ConsumerDone is part of the RowSource interface.
-func (mtr *metadataTestReceiver) ConsumerDone() {
+func (mtr *MetadataTestReceiver) ConsumerDone() {
 	mtr.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (mtr *metadataTestReceiver) ConsumerClosed() {
+func (mtr *MetadataTestReceiver) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	mtr.InternalClose()
 }

@@ -8,20 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowexec
+package execinfra
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// metadataTestSender intersperses a metadata record after every row.
-type metadataTestSender struct {
-	execinfra.ProcessorBase
-	input execinfra.RowSource
+// MetadataTestSender intersperses a metadata record after every row.
+type MetadataTestSender struct {
+	ProcessorBase
+	input RowSource
 	id    string
 
 	// sendRowNumMeta is set to true when the next call to Next() must return
@@ -30,20 +29,20 @@ type metadataTestSender struct {
 	rowNumCnt      int32
 }
 
-var _ execinfra.Processor = &metadataTestSender{}
-var _ execinfra.RowSource = &metadataTestSender{}
+var _ Processor = &MetadataTestSender{}
+var _ RowSource = &MetadataTestSender{}
 
 const metadataTestSenderProcName = "meta sender"
 
-func newMetadataTestSender(
-	flowCtx *execinfra.FlowCtx,
+func NewMetadataTestSender(
+	flowCtx *FlowCtx,
 	processorID int32,
-	input execinfra.RowSource,
+	input RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output execinfra.RowReceiver,
+	output RowReceiver,
 	id string,
-) (*metadataTestSender, error) {
-	mts := &metadataTestSender{input: input, id: id}
+) (*MetadataTestSender, error) {
+	mts := &MetadataTestSender{input: input, id: id}
 	if err := mts.Init(
 		mts,
 		post,
@@ -52,8 +51,8 @@ func newMetadataTestSender(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{
-			InputsToDrain: []execinfra.RowSource{mts.input},
+		ProcStateOpts{
+			InputsToDrain: []RowSource{mts.input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
@@ -74,13 +73,13 @@ func newMetadataTestSender(
 }
 
 // Start is part of the RowSource interface.
-func (mts *metadataTestSender) Start(ctx context.Context) context.Context {
+func (mts *MetadataTestSender) Start(ctx context.Context) context.Context {
 	mts.input.Start(ctx)
 	return mts.StartInternal(ctx, metadataTestSenderProcName)
 }
 
 // Next is part of the RowSource interface.
-func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (mts *MetadataTestSender) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// Every call after a row has been returned returns a metadata record.
 	if mts.sendRowNumMeta {
 		mts.sendRowNumMeta = false
@@ -94,7 +93,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 		}
 	}
 
-	for mts.State == execinfra.StateRunning {
+	for mts.State == StateRunning {
 		row, meta := mts.input.Next()
 		if meta != nil {
 			// Other processors will start draining when they get an error meta from
@@ -116,7 +115,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (mts *metadataTestSender) ConsumerClosed() {
+func (mts *MetadataTestSender) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	mts.InternalClose()
 }
