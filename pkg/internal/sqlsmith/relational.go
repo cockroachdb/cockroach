@@ -420,7 +420,7 @@ func (s *scope) makeSelectClause(
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
 	requireFrom := s.schema.vectorizable || s.d6() != 1
-	for (requireFrom && len(clause.From.Tables) < 1) || s.coin() {
+	for (requireFrom && len(clause.From.Tables) < 1) || s.canRecurse() {
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
 			// Add a normal data source.
@@ -456,7 +456,7 @@ func (s *scope) makeSelectClause(
 		// TODO(mjibson): vec only supports GROUP BYs on fully-ordered
 		// columns, which we could support here. Also see #39240 which
 		// will support this more generally.
-		if !s.schema.vectorizable && s.d6() <= 2 {
+		if !s.schema.vectorizable && s.d6() <= 2 && s.canRecurse() {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
@@ -483,7 +483,7 @@ func (s *scope) makeSelectClause(
 			// TODO(mjibson): also use this context sometimes in
 			// non-aggregate mode (select sum(x) from a).
 			ctx = groupByCtx
-		} else if s.d6() <= 1 {
+		} else if s.d6() <= 1 && s.canRecurse() {
 			// Enable window functions. This will enable them for all
 			// exprs, but makeFunc will only let a few through.
 			ctx = windowCtx
