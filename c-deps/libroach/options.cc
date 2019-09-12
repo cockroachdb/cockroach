@@ -45,18 +45,10 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
 // The DBLogger is a rocksdb::Logger that calls back into Go code for formatted logging.
 class DBLogger : public rocksdb::Logger {
  public:
-  DBLogger(rocksdb::Logger* info_logger) : info_logger_(info_logger) {}
+  DBLogger(bool use_primary_log) : use_primary_log_(use_primary_log) {}
 
   virtual void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
                     va_list ap) override {
-    // If an INFO logger was provider, log everything to this file. We
-    // include WARN, ERROR, and FATAL so that debugging doesn't
-    // require jumping back and forth between the CockroachDB logs and
-    // the RocksDB logs.
-    if (info_logger_ != nullptr) {
-      info_logger_->Logv(log_level, format, ap);
-    }
-
     int go_log_level = util::log::Severity::UNKNOWN;  // compiler tells us to initialize it
     switch (log_level) {
       case rocksdb::DEBUG_LEVEL:
@@ -64,11 +56,6 @@ class DBLogger : public rocksdb::Logger {
         go_log_level = util::log::Severity::INFO;
         break;
       case rocksdb::INFO_LEVEL:
-        // Only output INFO to the CockroachDB logs if it wasn't
-        // already included in the RocksDB logs.
-        if (info_logger_ != nullptr) {
-          return;
-        }
         go_log_level = util::log::Severity::INFO;
         break;
       case rocksdb::WARN_LEVEL:
@@ -89,11 +76,6 @@ class DBLogger : public rocksdb::Logger {
         return;
     }
 
-    static const int kDefaultVerbosityForInfoLogging = 3;
-    if (!rocksDBV(go_log_level, kDefaultVerbosityForInfoLogging)) {
-      return;
-    }
-
     // First try with a small fixed size buffer.
     char space[1024];
 
@@ -106,7 +88,7 @@ class DBLogger : public rocksdb::Logger {
     va_end(backup_ap);
 
     if ((result >= 0) && (result < sizeof(space))) {
-      rocksDBLog(go_log_level, space, result);
+      rocksDBLog(use_primary_log_, go_log_level, space, result);
       return;
     }
 
@@ -129,7 +111,7 @@ class DBLogger : public rocksdb::Logger {
 
       if ((result >= 0) && (result < length)) {
         // It fit
-        rocksDBLog(go_log_level, buf, result);
+        rocksDBLog(use_primary_log_, go_log_level, buf, result);
         delete[] buf;
         return;
       }
@@ -148,13 +130,13 @@ class DBLogger : public rocksdb::Logger {
   }
 
  private:
-  rocksdb::Logger* const info_logger_;
+  const bool use_primary_log_;
 };
 
 }  // namespace
 
-rocksdb::Logger* NewDBLogger(rocksdb::Logger* info_logger) {
-  return new DBLogger(info_logger);
+rocksdb::Logger* NewDBLogger(bool use_primary_log) {
+  return new DBLogger(use_primary_log);
 }
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
@@ -171,7 +153,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.max_subcompactions = 1;
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
-  options.info_log.reset(NewDBLogger(nullptr));
+  options.info_log.reset(NewDBLogger(false /* use_primary_log */));
   options.merge_operator.reset(NewMergeOperator());
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();

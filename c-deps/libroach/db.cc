@@ -172,16 +172,6 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
 
   const std::string db_dir = ToString(dir);
 
-  if (!db_dir.empty()) {
-    // Reset the RocksDB logger so that INFO logs go to a file, while
-    // other logging levels are directed to the Go logger.
-    options.info_log.reset();
-    auto status = rocksdb::CreateLoggerFromOptions(db_dir, options, &options.info_log);
-    if (!status.ok()) {
-      return ToDBStatus(status);
-    }
-  }
-
   // Make the default options.env the default. It points to Env::Default which does not
   // need to be deleted.
   std::unique_ptr<cockroach::EnvManager> env_mgr(new cockroach::EnvManager(options.env));

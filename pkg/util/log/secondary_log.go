@@ -95,3 +95,17 @@ func (l *SecondaryLogger) Logf(ctx context.Context, format string, args ...inter
 	fmt.Fprintf(&buf, format, args...)
 	l.logger.outputLogEntry(Severity_INFO, file, line, buf.String())
 }
+
+// LogSev logs an event at the specified severity on a secondary logger.
+func (l *SecondaryLogger) LogSev(ctx context.Context, sev Severity, args ...interface{}) {
+	file, line, _ := caller.Lookup(1)
+	var buf strings.Builder
+	formatTags(ctx, &buf)
+
+	// Add a counter. This is important for auditing.
+	counter := atomic.AddUint64(&l.msgCount, 1)
+	fmt.Fprintf(&buf, "%d ", counter)
+
+	fmt.Fprint(&buf, args...)
+	l.logger.outputLogEntry(Severity_INFO, file, line, buf.String())
+}
