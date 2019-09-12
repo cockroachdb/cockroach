@@ -366,3 +366,31 @@ query TTT
 UPDATE t35364 SET x=2.5 RETURNING *
 ----
 3  2  8
+
+# Ensure that index hints in UPDATE statements force the choice of a specific index
+# as described in #38799.
+statement ok
+CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b))
+
+query TTTTT
+EXPLAIN (VERBOSE) UPDATE t38799@foo SET c=2 WHERE a=1
+----
+·                               distributed  false           ·                   ·
+·                               vectorized   false           ·                   ·
+count                           ·            ·               ()                  ·
+ └── update                     ·            ·               ()                  ·
+      │                         table        t38799          ·                   ·
+      │                         set          c               ·                   ·
+      │                         strategy     updater         ·                   ·
+      └── render                ·            ·               (a, b, c, column7)  ·
+           │                    render 0     a               ·                   ·
+           │                    render 1     b               ·                   ·
+           │                    render 2     c               ·                   ·
+           │                    render 3     2               ·                   ·
+           └── filter           ·            ·               (a, b, c)           ·
+                │               filter       a = 1           ·                   ·
+                └── index-join  ·            ·               (a, b, c)           ·
+                     │          table        t38799@primary  ·                   ·
+                     └── scan   ·            ·               (a, b)              ·
+·                               table        t38799@foo      ·                   ·
+·                               spans        ALL             ·                   ·
