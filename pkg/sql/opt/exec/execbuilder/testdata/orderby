@@ -51,11 +51,11 @@ EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 render                    ·            ·          (c, b)  ·
  │                        render 0     c          ·       ·
  │                        render 1     b          ·       ·
- └── limit                ·            ·          (b, c)  weak-key(b,c); +b
+ └── limit                ·            ·          (b, c)  +b
       │                   count        2          ·       ·
-      └── sort            ·            ·          (b, c)  weak-key(b,c); +b
+      └── sort            ·            ·          (b, c)  +b
            │              order        +b         ·       ·
-           └── distinct   ·            ·          (b, c)  weak-key(b,c)
+           └── distinct   ·            ·          (b, c)  ·
                 │         distinct on  b, c       ·       ·
                 └── scan  ·            ·          (b, c)  ·
 ·                         table        t@primary  ·       ·

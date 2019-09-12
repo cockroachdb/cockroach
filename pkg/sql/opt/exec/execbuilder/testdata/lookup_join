@@ -203,7 +203,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON
 tree                   field        description        columns                       ordering
 ·                      distributed  true               ·                             ·
 ·                      vectorized   true               ·                             ·
-distinct               ·            ·                  (title)                       weak-key(title); +title
+distinct               ·            ·                  (title)                       ·
  │                     distinct on  title              ·                             ·
  │                     order key    title              ·                             ·
  └── render            ·            ·                  (title)                       +title
@@ -236,7 +236,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, a
 tree                      field        description        columns                                   ordering
 ·                         distributed  true               ·                                         ·
 ·                         vectorized   false              ·                                         ·
-distinct                  ·            ·                  (name)                                    weak-key(name)
+distinct                  ·            ·                  (name)                                    ·
  │                        distinct on  name               ·                                         ·
  └── render               ·            ·                  (name)                                    ·
       │                   render 0     name               ·                                         ·
