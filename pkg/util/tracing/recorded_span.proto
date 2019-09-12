@@ -20,6 +20,8 @@ import "google/protobuf/duration.proto";
 // RecordedSpan is a span that is part of a recording. It can be transferred
 // over the wire for snowball tracing.
 message RecordedSpan {
+  option (gogoproto.goproto_stringer) = false;
+
   // ID of the trace; spans that are part of the same hierarchy share
   // the same trace ID.
   uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
