@@ -336,6 +336,8 @@ CREATE TABLE IF NOT EXISTS tab_orig AS
 		g::STRING::JSONB AS _jsonb
 	FROM
 		generate_series(1, 5) AS g;
+
+INSERT INTO tab_orig DEFAULT VALUES;
 `
 
 	// VecSeedTable is like SeedTable except only types supported by vectorized
@@ -352,5 +354,7 @@ CREATE TABLE IF NOT EXISTS tab_orig AS
 		g::STRING::BYTES AS _bytes
 	FROM
 		generate_series(1, 5) AS g;
+
+INSERT INTO tab_orig DEFAULT VALUES;
 `
 )
