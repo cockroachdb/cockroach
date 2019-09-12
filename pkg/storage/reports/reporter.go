@@ -286,16 +286,19 @@ func (stats *Reporter) isNodeLive(nodeID roachpb.NodeID) bool {
 // visitor is called for each zone config until it returns true, or until the
 // default zone config is reached. It's passed zone configs and the
 // corresponding zoneKeys.
+//
+// visitZones returns true if the visitor returned true and returns false is the
+// zone hierarchy was exhausted.
 func visitZones(
 	ctx context.Context,
 	r roachpb.RangeDescriptor,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
-) error {
+) (bool, error) {
 	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(r.StartKey)
 	zone, err := getZoneByID(id, cfg)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// We've got the zone config (without considering for inheritance) for the
@@ -309,12 +312,12 @@ func visitZones(
 		subzone, subzoneIdx := zone.GetSubzoneForKeySuffix(keySuffix)
 		if subzone != nil {
 			if visitor(ctx, &subzone.Config, MakeZoneKey(id, SubzoneIDFromIndex(int(subzoneIdx)))) {
-				return nil
+				return true, nil
 			}
 		}
 		// Try the zone for our object.
 		if visitor(ctx, zone, MakeZoneKey(id, 0)) {
-			return nil
+			return true, nil
 		}
 	}
 
@@ -329,47 +332,45 @@ func visitAncestors(
 	id uint32,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
-) error {
+) (bool, error) {
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
 	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(sqlbase.ID(id)))
 	if descVal == nil {
 		// Couldn't find a descriptor. This is not expected to happen.
 		// Let's just look at the default zone config.
-		visitDefaultZone(ctx, cfg, visitor)
-		return nil
+		return visitDefaultZone(ctx, cfg, visitor), nil
 	}
 
 	var desc sqlbase.Descriptor
 	if err := descVal.GetProto(&desc); err != nil {
-		return err
+		return false, err
 	}
 	tableDesc := desc.GetTable()
 	// If it's a database, the parent is the default zone.
 	if tableDesc == nil {
-		visitDefaultZone(ctx, cfg, visitor)
-		return nil
+		return visitDefaultZone(ctx, cfg, visitor), nil
 	}
 
 	// If it's a table, the parent is a database.
 	zone, err := getZoneByID(uint32(tableDesc.ParentID), cfg)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if zone != nil {
-		visitor(ctx, zone, MakeZoneKey(uint32(tableDesc.ParentID), 0))
-		return nil
+		if visitor(ctx, zone, MakeZoneKey(uint32(tableDesc.ParentID), NoSubzone)) {
+			return true, nil
+		}
 	}
 	// The parent database did not have constraints. Its parent is the default zone.
-	visitDefaultZone(ctx, cfg, visitor)
-	return nil
+	return visitDefaultZone(ctx, cfg, visitor), nil
 }
 
 func visitDefaultZone(
 	ctx context.Context,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
-) {
+) bool {
 	zone, err := getZoneByID(keys.RootNamespaceID, cfg)
 	if err != nil {
 		log.Fatalf(ctx, "failed to get default zone config: %s", err)
@@ -377,7 +378,7 @@ func visitDefaultZone(
 	if zone == nil {
 		log.Fatal(ctx, "default zone config missing unexpectedly")
 	}
-	visitor(ctx, zone, MakeZoneKey(keys.RootNamespaceID, 0))
+	return visitor(ctx, zone, MakeZoneKey(keys.RootNamespaceID, NoSubzone))
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
