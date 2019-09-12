@@ -21,10 +21,7 @@ import (
 // sub-node.
 type sortNode struct {
 	plan     planNode
-	columns  sqlbase.ResultColumns
 	ordering sqlbase.ColumnOrdering
-
-	needSort bool
 }
 
 func (n *sortNode) startExec(runParams) error {

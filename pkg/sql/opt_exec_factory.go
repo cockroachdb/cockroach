@@ -519,13 +519,9 @@ func (ef *execFactory) ConstructSetOp(
 func (ef *execFactory) ConstructSort(
 	input exec.Node, ordering sqlbase.ColumnOrdering,
 ) (exec.Node, error) {
-	plan := input.(planNode)
-	inputColumns := planColumns(plan)
 	return &sortNode{
-		plan:     plan,
-		columns:  inputColumns,
+		plan:     input.(planNode),
 		ordering: ordering,
-		needSort: true,
 	}, nil
 }
 
@@ -1186,12 +1182,10 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 	// does not get confused.
 	ageColIdx := sqlbase.GetTraceAgeColumnIdx(compact)
 	node = &sortNode{
-		plan:    node,
-		columns: planColumns(node),
+		plan: node,
 		ordering: sqlbase.ColumnOrdering{
 			sqlbase.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
 		},
-		needSort: true,
 	}
 
 	if typ == tree.ShowTraceReplica {

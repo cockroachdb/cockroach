@@ -71,13 +71,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.applyLimit(n.plan, getLimit(count, n.offset), false /* soft */)
 
 	case *sortNode:
-		if n.needSort {
-			// We can't propagate the limit, because the sort
-			// potentially needs all rows.
-			numRows = math.MaxInt64
-			soft = true
-		}
-		p.applyLimit(n.plan, numRows, soft)
+		// We can't propagate the limit, because the sort potentially needs all
+		// rows.
+		p.setUnlimited(n.plan)
 
 	case *groupNode:
 		if n.needOnlyOneRow {

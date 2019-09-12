@@ -706,10 +706,6 @@ func formatOrdering(ordering sqlbase.ColumnOrdering, cols sqlbase.ResultColumns)
 func nodeName(plan planNode) string {
 	// Some nodes have custom names depending on attributes.
 	switch n := plan.(type) {
-	case *sortNode:
-		if !n.needSort {
-			return "nosort"
-		}
 	case *scanNode:
 		if n.reverse {
 			return "revscan"
