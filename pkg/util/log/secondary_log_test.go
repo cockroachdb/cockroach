@@ -31,7 +31,7 @@ func TestSecondaryLog(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false)
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
 
 	// Interleave some messages.
 	Infof(context.Background(), "test1")

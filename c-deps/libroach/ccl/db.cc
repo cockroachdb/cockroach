@@ -146,9 +146,10 @@ rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const s
         "on-disk version does not support encryption, but we found encryption flags");
   }
 
-  // We use a logger at V(0) for encryption status instead of the existing info_log.
-  // This should only be used to occasional logging (eg: key loading and rotation).
-  std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(0));
+  // We log to the primary CockroachDB log for encryption status
+  // instead of the RocksDB specific log. This should only be used to
+  // occasional logging (eg: key loading and rotation).
+  std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(true /* use_primary_log */));
 
   // We have encryption options. Check whether the AES instruction set is supported.
   if (!UsesAESNI()) {

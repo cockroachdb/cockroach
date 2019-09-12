@@ -99,19 +99,38 @@ var ingestDelayTime = settings.RegisterDurationSetting(
 // traces of every iterator allocated. DO NOT ENABLE in production code.
 const debugIteratorLeak = false
 
-//export rocksDBV
-func rocksDBV(sevLvl C.int, infoVerbosity C.int) bool {
-	sev := log.Severity(sevLvl)
-	return sev == log.Severity_INFO && log.V(int32(infoVerbosity)) ||
-		sev == log.Severity_WARNING ||
-		sev == log.Severity_ERROR ||
-		sev == log.Severity_FATAL
+var rocksdbLogger *log.SecondaryLogger
+
+// InitRocksDBLogger initializes the logger to use for RocksDB log messages. If
+// not called, WARNING, ERROR, and FATAL logs will be output to the normal
+// CockroachDB log.
+func InitRocksDBLogger(ctx context.Context) {
+	rocksdbLogger = log.NewSecondaryLogger(ctx, nil, "rocksdb",
+		true /* enableGC */, false /* forceSyncWrites */, false /* enableMsgCount */)
 }
 
 //export rocksDBLog
-func rocksDBLog(sevLvl C.int, s *C.char, n C.int) {
+func rocksDBLog(usePrimaryLog C.bool, sevLvl C.int, s *C.char, n C.int) {
+	sev := log.Severity(sevLvl)
+	if !usePrimaryLog {
+		if rocksdbLogger != nil {
+			// NB: No need for the rocksdb tag if we're logging to a rocksdb specific
+			// file.
+			rocksdbLogger.LogSev(context.Background(), sev, C.GoStringN(s, n))
+			return
+		}
+
+		// Only log INFO logs to the normal CockroachDB log at --v=3 and
+		// above. This only applies when we're not using the primary log for
+		// RocksDB generated messages (which is utilized by the encryption-at-rest
+		// code).
+		if sev == log.Severity_INFO && !log.V(3) {
+			return
+		}
+	}
+
 	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
-	switch log.Severity(sevLvl) {
+	switch sev {
 	case log.Severity_WARNING:
 		log.Warning(ctx, C.GoStringN(s, n))
 	case log.Severity_ERROR:
