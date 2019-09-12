@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -906,7 +907,7 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.ServerConn(0)
-	// Speed up the generation of the
+	// Speed up the generation of the reports.
 	_, err := db.Exec("set cluster setting kv.replication_reports.interval = '1ms'")
 	require.NoError(t, err)
 
@@ -916,17 +917,31 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 
 	// Collect all the zones that exist at cluster bootstrap.
 	systemZoneIDs := make([]int, 0, 10)
+	systemZones := make([]config.ZoneConfig, 0, 10)
 	{
-		rows, err := db.Query("select id from system.zones")
+		rows, err := db.Query("select id, config from system.zones")
 		require.NoError(t, err)
 		for rows.Next() {
 			var zoneID int
-			require.NoError(t, rows.Scan(&zoneID))
+			var buf []byte
+			cfg := config.ZoneConfig{}
+			require.NoError(t, rows.Scan(&zoneID, &buf))
+			require.NoError(t, protoutil.Unmarshal(buf, &cfg))
 			systemZoneIDs = append(systemZoneIDs, zoneID)
+			systemZones = append(systemZones, cfg)
 		}
 		require.NoError(t, rows.Err())
 	}
 	require.True(t, len(systemZoneIDs) > 0, "expected some system zones, got none")
+	// Remove the entries in systemZoneIDs that don't get critical localities reports.
+	i := 0
+	for j, zid := range systemZoneIDs {
+		if zoneChangesReplication(&systemZones[j]) {
+			systemZoneIDs[i] = zid
+			i++
+		}
+	}
+	systemZoneIDs = systemZoneIDs[:i]
 
 	expCritLoc := []string{"region=r1", "region=r1,dc=dc1"}
 
