@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -213,6 +214,89 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	})
 }
 
+func testListFiles(t *testing.T, storeURI string) {
+	ctx := context.TODO()
+	dataLetterFiles := []string{"dataA.csv", "dataB.csv", "dataC.csv"}
+	dataNumberFiles := []string{"data1.csv", "data2.csv", "data3.csv"}
+	letterFiles := []string{"A.csv", "B.csv", "C.csv"}
+	fileNames := append(dataLetterFiles, dataNumberFiles...)
+	fileNames = append(fileNames, letterFiles...)
+	sort.Strings(fileNames)
+
+	for _, fileName := range fileNames {
+		file := storeFromURI(ctx, t, storeURI)
+		if err := file.WriteFile(ctx, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
+			t.Fatal(err)
+		}
+		_ = file.Close()
+	}
+
+	uri, _ := url.Parse(storeURI)
+	expectedBaseURI := fmt.Sprintf("%s://%s%s", uri.Scheme, uri.Host, uri.Path)
+
+	for _, tc := range []struct {
+		name       string
+		URI        string
+		resultList []string
+	}{
+		{
+			"list-all-csv",
+			appendPath(t, storeURI, "*.csv"),
+			fileNames,
+		},
+		{
+			"list-letter-csv",
+			appendPath(t, storeURI, "?.csv"),
+			letterFiles,
+		},
+		{
+			"list-data-num-csv",
+			appendPath(t, storeURI, "data[0-9].csv"),
+			dataNumberFiles,
+		},
+		{
+			"list-no-matches",
+			appendPath(t, storeURI, "dataD.csv"),
+			[]string{},
+		},
+		{
+			"list-escaped-star",
+			appendPath(t, storeURI, "\\*.csv"),
+			[]string{},
+		},
+		{
+			"list-escaped-range",
+			appendPath(t, storeURI, "data\\[0-9\\].csv"),
+			[]string{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := storeFromURI(ctx, t, tc.URI)
+			filesList, err := s.ListFiles(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(filesList) != len(tc.resultList) {
+				t.Fatal(`listed incorrect number of files`, filesList)
+			}
+			for i, result := range filesList {
+				if result != fmt.Sprintf("%s/%s", expectedBaseURI, tc.resultList[i]) {
+					t.Fatal(`resulting list is incorrect`, expectedBaseURI, filesList)
+				}
+			}
+		})
+	}
+
+	for _, fileName := range fileNames {
+		file := storeFromURI(ctx, t, storeURI)
+		if err := file.Delete(ctx, fileName); err != nil {
+			t.Fatal(err)
+		}
+		_ = file.Close()
+	}
+}
+
 func TestPutLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -226,6 +310,7 @@ func TestPutLocal(t *testing.T) {
 	}
 
 	testExportStore(t, dest, false)
+	testListFiles(t, fmt.Sprintf("nodelocal://%s/%s", p, "listing-test"))
 }
 
 func TestLocalIOLimits(t *testing.T) {
@@ -456,6 +541,14 @@ func TestPutS3(t *testing.T) {
 			),
 			false,
 		)
+		testListFiles(t,
+			fmt.Sprintf(
+				"s3://%s/%s?%s=%s&%s=%s",
+				bucket, "listing-test",
+				S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+				S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
+			),
+		)
 	})
 }
 
@@ -504,7 +597,10 @@ func TestPutGoogleCloud(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"), false)
 	})
 	t.Run("default", func(t *testing.T) {
-		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", AuthParam, authParamDefault), false)
+		testExportStore(t,
+			fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", AuthParam, authParamDefault),
+			false,
+		)
 	})
 	t.Run("specified", func(t *testing.T) {
 		credentials := os.Getenv("GS_JSONKEY")
@@ -523,13 +619,27 @@ func TestPutGoogleCloud(t *testing.T) {
 			),
 			false,
 		)
+		testListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+				bucket,
+				"backup-test-specified",
+				"listing-test",
+				AuthParam,
+				authParamSpecified,
+				CredentialsParam,
+				url.QueryEscape(encoded),
+			),
+		)
 	})
 	t.Run("implicit", func(t *testing.T) {
 		// Only test these if they exist.
 		if _, err := google.FindDefaultCredentials(context.TODO()); err != nil {
 			t.Skip(err)
 		}
-		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit", AuthParam, authParamImplicit), false)
+		testExportStore(t,
+			fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit", AuthParam, authParamImplicit),
+			false,
+		)
 	})
 }
 
@@ -553,6 +663,14 @@ func TestPutAzure(t *testing.T) {
 			AzureAccountKeyParam, url.QueryEscape(accountKey),
 		),
 		false,
+	)
+	testListFiles(
+		t,
+		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
+			bucket, "listing-test",
+			AzureAccountNameParam, url.QueryEscape(accountName),
+			AzureAccountKeyParam, url.QueryEscape(accountKey),
+		),
 	)
 }
 

@@ -57,10 +57,11 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
-	importOptionSSTSize    = "sstsize"
-	importOptionDecompress = "decompress"
-	importOptionOversample = "oversample"
-	importOptionSkipFKs    = "skip_foreign_keys"
+	importOptionSSTSize          = "sstsize"
+	importOptionDecompress       = "decompress"
+	importOptionOversample       = "oversample"
+	importOptionSkipFKs          = "skip_foreign_keys"
+	importOptionDisableGlobMatch = "disable_glob_matching"
 
 	importOptionDirectIngest = "experimental_direct_ingestion"
 	importOptionSortedIngest = "experimental_sorted_ingestion"
@@ -86,7 +87,8 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionDecompress: sql.KVStringOptRequireValue,
 	importOptionOversample: sql.KVStringOptRequireValue,
 
-	importOptionSkipFKs: sql.KVStringOptRequireNoValue,
+	importOptionSkipFKs:          sql.KVStringOptRequireNoValue,
+	importOptionDisableGlobMatch: sql.KVStringOptRequireNoValue,
 
 	importOptionDirectIngest: sql.KVStringOptRequireNoValue,
 	importOptionSortedIngest: sql.KVStringOptRequireNoValue,
@@ -174,9 +176,32 @@ func importPlanHook(
 			return err
 		}
 
-		files, err := filesFn()
+		filenamePatterns, err := filesFn()
 		if err != nil {
 			return err
+		}
+		var files []string
+		if _, ok := opts[importOptionDisableGlobMatch]; ok {
+			files = filenamePatterns
+		} else {
+			for _, file := range filenamePatterns {
+				if storageccl.URINeedsExpansion(file) {
+					s, err := storageccl.ExportStorageFromURI(ctx, file, p.ExecCfg().Settings)
+					if err != nil {
+						return err
+					}
+					expandedFiles, err := s.ListFiles(ctx)
+					if err != nil {
+						return err
+					}
+					if len(expandedFiles) < 1 {
+						return errors.Errorf(`no files matched uri provided: '%s'`, file)
+					}
+					files = append(files, expandedFiles...)
+				} else {
+					files = append(files, file)
+				}
+			}
 		}
 
 		table := importStmt.Table
@@ -382,7 +407,7 @@ func importPlanHook(
 		ingestDirectly = !ingestSorted
 
 		var tableDetails []jobspb.ImportDetails_Table
-		jobDesc, err := importJobDescription(p, importStmt, nil, files, opts)
+		jobDesc, err := importJobDescription(p, importStmt, nil, filenamePatterns, opts)
 		if err != nil {
 			return err
 		}
@@ -514,7 +539,7 @@ func importPlanHook(
 					return err
 				}
 				tableDescs = []*sqlbase.TableDescriptor{tbl.TableDesc()}
-				descStr, err := importJobDescription(p, importStmt, create.Defs, files, opts)
+				descStr, err := importJobDescription(p, importStmt, create.Defs, filenamePatterns, opts)
 				if err != nil {
 					return err
 				}

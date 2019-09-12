@@ -1482,6 +1482,27 @@ func TestImportIntoCSV(t *testing.T) {
 			``,
 			"",
 		},
+		{
+			"import-into-no-decompress-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
+			testFiles.filesUsingWildcard,
+			` WITH decompress = 'none'`,
+			"",
+		},
+		{
+			"import-into-explicit-gzip-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
+			testFiles.gzipFilesUsingWildcard,
+			` WITH decompress = 'gzip'`,
+			"",
+		},
+		{
+			"import-into-auto-bzip-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			testFiles.gzipFilesUsingWildcard,
+			` WITH decompress = 'auto'`,
+			"",
+		},
 		// NB: successes above, failures below, because we check the i-th job.
 		{
 			"import-into-bad-opt-name",
@@ -1519,6 +1540,20 @@ func TestImportIntoCSV(t *testing.T) {
 			testFiles.files,
 			` WITH decompress = 'gzip'`,
 			"gzip: invalid header",
+		},
+		{
+			"import-no-files-match-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			[]string{`'nodelocal:///data-[0-9][0-9]*'`},
+			` WITH decompress = 'auto'`,
+			`pq: no files matched uri provided`,
+		},
+		{
+			"import-into-no-glob-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH disable_glob_matching`,
+			testFiles.filesUsingWildcard,
+			` WITH disable_glob_matching`,
+			"pq: (.+) no such file or directory",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
