@@ -36,9 +36,7 @@ type indexJoinNode struct {
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
 
-	// props contains the physical properties provided by this node.
-	// These are pre-computed at construction time.
-	props physicalProps
+	reqOrdering ReqOrdering
 }
 
 func (n *indexJoinNode) startExec(params runParams) error {

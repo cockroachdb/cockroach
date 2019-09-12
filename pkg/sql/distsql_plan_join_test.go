@@ -66,8 +66,8 @@ func setTestEqCols(n *joinNode, colNames []string) error {
 	}
 
 	n.mergeJoinOrdering = computeMergeJoinOrdering(
-		left.props.ordering,
-		right.props.ordering,
+		left.reqOrdering,
+		right.reqOrdering,
 		n.pred.leftEqualityIndices,
 		n.pred.rightEqualityIndices,
 	)
@@ -299,8 +299,8 @@ func TestUseInterleavedJoin(t *testing.T) {
 						t.Fatal(err)
 					}
 					join.mergeJoinOrdering = computeMergeJoinOrdering(
-						planPhysicalProps(join.left.plan).ordering,
-						planPhysicalProps(join.right.plan).ordering,
+						planReqOrdering(join.left.plan),
+						planReqOrdering(join.right.plan),
 						join.pred.leftEqualityIndices,
 						join.pred.rightEqualityIndices,
 					)

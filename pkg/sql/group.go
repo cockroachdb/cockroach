@@ -47,7 +47,7 @@ type groupNode struct {
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
 
-	props physicalProps
+	reqOrdering ReqOrdering
 }
 
 func (n *groupNode) startExec(params runParams) error {

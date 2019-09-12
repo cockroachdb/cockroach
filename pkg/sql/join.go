@@ -37,7 +37,7 @@ type joinNode struct {
 	// pred.leftEqualityIndices[i] and right column pred.rightEqualityIndices[i].
 	mergeJoinOrdering sqlbase.ColumnOrdering
 
-	props physicalProps
+	reqOrdering ReqOrdering
 
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns

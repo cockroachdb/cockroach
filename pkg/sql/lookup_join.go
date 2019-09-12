@@ -40,7 +40,7 @@ type lookupJoinNode struct {
 	// equality condition on eqCols.
 	onCond tree.TypedExpr
 
-	props physicalProps
+	reqOrdering ReqOrdering
 }
 
 // CanParallelize indicates whether the fetchers can parallelize the
