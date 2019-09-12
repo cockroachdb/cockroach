@@ -40,7 +40,7 @@ type zigzagJoinNode struct {
 	// equality condition on keyCols.
 	onCond tree.TypedExpr
 
-	props physicalProps
+	reqOrdering ReqOrdering
 }
 
 // zigzagJoinSide contains information about one "side" of the zigzag

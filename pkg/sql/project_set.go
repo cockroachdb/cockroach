@@ -61,8 +61,7 @@ type projectSetNode struct {
 	// each entry in `exprs`.
 	numColsPerGen []int
 
-	// props are the ordering, key props etc.
-	props physicalProps
+	reqOrdering ReqOrdering
 
 	run projectSetRun
 }
