@@ -586,6 +586,7 @@ func init() {
 	IntFlag(demoFlags, &demoCtx.nodes, cliflags.DemoNodes, 1)
 	BoolFlag(demoFlags, &demoCtx.runWorkload, cliflags.RunDemoWorkload, false)
 	VarFlag(demoFlags, &demoCtx.localities, cliflags.DemoNodeLocality)
+	BoolFlag(demoFlags, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas, false)
 	// The --empty flag is only valid for the top level demo command,
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, false)

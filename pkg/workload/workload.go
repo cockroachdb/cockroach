@@ -107,6 +107,9 @@ type Hooks struct {
 	// These are expected to pass after the initial data load as well as after
 	// running queryload.
 	CheckConsistency func(context.Context, *gosql.DB) error
+	// Partition is used to run a partitioning step on the data created by the workload.
+	// TODO (rohany): migrate existing partitioning steps (such as tpcc's) into here.
+	Partition func(*gosql.DB) error
 }
 
 // Meta is used to register a Generator at init time and holds meta information
