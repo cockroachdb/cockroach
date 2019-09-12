@@ -41,7 +41,7 @@ func init() {
 		{5, scalarNoContext(makeOr)},
 		{5, scalarNoContext(makeNot)},
 		{10, makeFunc},
-		{10, func(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+		{10, func(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeConstExpr(s, typ, refs), true
 		}},
 	}
@@ -55,7 +55,7 @@ func init() {
 		{1, scalarNoContext(makeCompareOp)},
 		{1, scalarNoContext(makeIn)},
 		{1, scalarNoContext(makeStringComparison)},
-		{1, func(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+		{1, func(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeScalar(s, typ, refs), true
 		}},
 		{1, scalarNoContext(makeExists)},
@@ -65,13 +65,13 @@ func init() {
 }
 
 // TODO(mjibson): remove this and correctly pass around the Context.
-func scalarNoContext(fn func(*scope, *types.T, colRefs) (tree.TypedExpr, bool)) scalarFn {
-	return func(s *scope, ctx Context, t *types.T, refs colRefs) (tree.TypedExpr, bool) {
+func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)) scalarFn {
+	return func(s *Smither, ctx Context, t *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return fn(s, t, refs)
 	}
 }
 
-type scalarFn func(*scope, Context, *types.T, colRefs) (expr tree.TypedExpr, ok bool)
+type scalarFn func(*Smither, Context, *types.T, colRefs) (expr tree.TypedExpr, ok bool)
 
 type scalarWeight struct {
 	weight int
@@ -88,26 +88,26 @@ func extractWeights(weights []scalarWeight) []int {
 
 // makeScalar attempts to construct a scalar expression of the requested type.
 // If it was unsuccessful, it will return false.
-func makeScalar(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
+func makeScalar(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 	return makeScalarContext(s, emptyCtx, typ, refs)
 }
 
-func makeScalarContext(s *scope, ctx Context, typ *types.T, refs colRefs) tree.TypedExpr {
-	return makeScalarSample(s.schema.scalars, scalars, s, ctx, typ, refs)
+func makeScalarContext(s *Smither, ctx Context, typ *types.T, refs colRefs) tree.TypedExpr {
+	return makeScalarSample(s.scalars, scalars, s, ctx, typ, refs)
 }
 
-func makeBoolExpr(s *scope, refs colRefs) tree.TypedExpr {
+func makeBoolExpr(s *Smither, refs colRefs) tree.TypedExpr {
 	return makeBoolExprContext(s, emptyCtx, refs)
 }
 
-func makeBoolExprContext(s *scope, ctx Context, refs colRefs) tree.TypedExpr {
-	return makeScalarSample(s.schema.bools, bools, s, ctx, types.Bool, refs)
+func makeBoolExprContext(s *Smither, ctx Context, refs colRefs) tree.TypedExpr {
+	return makeScalarSample(s.bools, bools, s, ctx, types.Bool, refs)
 }
 
 func makeScalarSample(
 	sampler *WeightedSampler,
 	weights []scalarWeight,
-	s *scope,
+	s *Smither,
 	ctx Context,
 	typ *types.T,
 	refs colRefs,
@@ -139,8 +139,8 @@ func makeScalarSample(
 	return makeConstExpr(s, typ, refs)
 }
 
-func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ, ok := s.schema.pickAnyType(typ)
+func makeCaseExpr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ, ok := s.pickAnyType(typ)
 	if !ok {
 		return nil, false
 	}
@@ -159,11 +159,11 @@ func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return expr, err == nil
 }
 
-func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
+func makeCoalesceExpr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.vectorizable {
 		return nil, false
 	}
-	typ, ok := s.schema.pickAnyType(typ)
+	typ, ok := s.pickAnyType(typ)
 	if !ok {
 		return nil, false
 	}
@@ -178,8 +178,8 @@ func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, boo
 	), true
 }
 
-func makeConstExpr(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
-	typ, ok := s.schema.pickAnyType(typ)
+func makeConstExpr(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
+	typ, ok := s.pickAnyType(typ)
 	if !ok {
 		// We want to panic here instead of return "nil, false" because
 		// this function should never have a requested type that
@@ -193,46 +193,46 @@ func makeConstExpr(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
 		panic(fmt.Errorf("bad type %v", typ))
 	}
 
-	if s.schema.avoidConsts {
+	if s.avoidConsts {
 		if expr, ok := makeColRef(s, typ, refs); ok {
 			return expr
 		}
 	}
 
 	var datum tree.Datum
-	s.schema.lock.Lock()
+	s.lock.Lock()
 	nullChance := 6
-	if s.schema.vectorizable {
+	if s.vectorizable {
 		nullChance = 0
 	}
-	datum = sqlbase.RandDatumWithNullChance(s.schema.rnd, typ, nullChance)
-	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.schema.simpleDatums {
+	datum = sqlbase.RandDatumWithNullChance(s.rnd, typ, nullChance)
+	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
 		switch f {
 		case types.TupleFamily:
 			// TODO(mjibson): improve
 			datum = tree.DNull
 		case types.StringFamily:
-			p := make([]byte, s.schema.rnd.Intn(5))
+			p := make([]byte, s.rnd.Intn(5))
 			for i := range p {
-				p[i] = byte('A' + s.schema.rnd.Intn(26))
+				p[i] = byte('A' + s.rnd.Intn(26))
 			}
 			datum = tree.NewDString(string(p))
 		case types.BytesFamily:
-			p := make([]byte, s.schema.rnd.Intn(5))
+			p := make([]byte, s.rnd.Intn(5))
 			for i := range p {
-				p[i] = byte('A' + s.schema.rnd.Intn(26))
+				p[i] = byte('A' + s.rnd.Intn(26))
 			}
 			datum = tree.NewDBytes(tree.DBytes(p))
 		case types.IntervalFamily:
 			datum = &tree.DInterval{Duration: duration.MakeDuration(
-				s.schema.rnd.Int63n(3),
-				s.schema.rnd.Int63n(3),
-				s.schema.rnd.Int63n(3),
+				s.rnd.Int63n(3),
+				s.rnd.Int63n(3),
+				s.rnd.Int63n(3),
 			)}
 		case types.JsonFamily:
-			p := make([]byte, s.schema.rnd.Intn(5))
+			p := make([]byte, s.rnd.Intn(5))
 			for i := range p {
-				p[i] = byte('A' + s.schema.rnd.Intn(26))
+				p[i] = byte('A' + s.rnd.Intn(26))
 			}
 			datum = tree.NewDJSON(json.FromString(string(p)))
 		case types.TimestampFamily:
@@ -241,17 +241,17 @@ func makeConstExpr(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
 			datum = tree.MakeDTimestampTZ(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Microsecond)
 		}
 	}
-	s.schema.lock.Unlock()
+	s.lock.Unlock()
 
 	return datum
 }
 
-func makeColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeColRef(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	expr, _, ok := getColRef(s, typ, refs)
 	return expr, ok
 }
 
-func getColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef, bool) {
+func getColRef(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef, bool) {
 	// Filter by needed type.
 	cols := make(colRefs, 0, len(refs))
 	for _, c := range refs {
@@ -262,7 +262,7 @@ func getColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef, b
 	if len(cols) == 0 {
 		return nil, nil, false
 	}
-	col := cols[s.schema.rnd.Intn(len(cols))]
+	col := cols[s.rnd.Intn(len(cols))]
 	return makeTypedExpr(
 		col.item,
 		col.typ,
@@ -288,7 +288,7 @@ func typedParen(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
 	return makeTypedExpr(&tree.ParenExpr{Expr: expr}, typ)
 }
 
-func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeOr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -299,7 +299,7 @@ func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return typedParen(tree.NewTypedOrExpr(left, right), types.Bool), true
 }
 
-func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeAnd(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -310,8 +310,8 @@ func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return typedParen(tree.NewTypedAndExpr(left, right), types.Bool), true
 }
 
-func makeNot(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
+func makeNot(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.vectorizable {
 		return nil, false
 	}
 	switch typ.Family() {
@@ -335,13 +335,13 @@ var compareOps = [...]tree.ComparisonOperator{
 	tree.IsNotDistinctFrom,
 }
 
-func makeCompareOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ, ok := s.schema.pickAnyType(typ)
+func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ, ok := s.pickAnyType(typ)
 	if !ok {
 		return nil, false
 	}
-	op := compareOps[s.schema.rnd.Intn(len(compareOps))]
-	if s.schema.vectorizable && (op == tree.IsDistinctFrom || op == tree.IsNotDistinctFrom) {
+	op := compareOps[s.rnd.Intn(len(compareOps))]
+	if s.vectorizable && (op == tree.IsDistinctFrom || op == tree.IsNotDistinctFrom) {
 		return nil, false
 	}
 	left := makeScalar(s, typ, refs)
@@ -356,8 +356,8 @@ var vecBinOps = map[tree.BinaryOperator]bool{
 	tree.Div:   true,
 }
 
-func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ, ok := s.schema.pickAnyType(typ)
+func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ, ok := s.pickAnyType(typ)
 	if !ok {
 		return nil, false
 	}
@@ -365,12 +365,12 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if len(ops) == 0 {
 		return nil, false
 	}
-	n := s.schema.rnd.Intn(len(ops))
+	n := s.rnd.Intn(len(ops))
 	op := ops[n]
-	if !s.schema.allowedType(op.LeftType, op.RightType) {
+	if !s.allowedType(op.LeftType, op.RightType) {
 		return nil, false
 	}
-	if s.schema.vectorizable && !vecBinOps[op.Operator] {
+	if s.vectorizable && !vecBinOps[op.Operator] {
 		return nil, false
 	}
 	left := makeScalar(s, op.LeftType, refs)
@@ -384,11 +384,11 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	), true
 }
 
-func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
+func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.vectorizable {
 		return nil, false
 	}
-	typ, ok := s.schema.pickAnyType(typ)
+	typ, ok := s.pickAnyType(typ)
 	if !ok {
 		return nil, false
 	}
@@ -404,11 +404,11 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	if len(fns) == 0 {
 		return nil, false
 	}
-	fn := fns[s.schema.rnd.Intn(len(fns))]
-	if s.schema.disableImpureFns && fn.def.Impure {
+	fn := fns[s.rnd.Intn(len(fns))]
+	if s.disableImpureFns && fn.def.Impure {
 		return nil, false
 	}
-	for _, ignore := range s.schema.ignoreFNs {
+	for _, ignore := range s.ignoreFNs {
 		if ignore.MatchString(fn.def.Name) {
 			return nil, false
 		}
@@ -416,7 +416,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
-		if !s.schema.allowedType(argTyp) {
+		if !s.allowedType(argTyp) {
 			return nil, false
 		}
 		var arg tree.TypedExpr
@@ -437,7 +437,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 		args = append(args, castType(arg, argTyp))
 	}
 
-	if fn.def.Class == tree.WindowClass && s.schema.disableWindowFuncs {
+	if fn.def.Class == tree.WindowClass && s.disableWindowFuncs {
 		return nil, false
 	}
 
@@ -445,16 +445,16 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
 	// - we explicitly chose a window function
-	if fn.def.Class == tree.WindowClass || (!s.schema.disableWindowFuncs && !ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
+	if fn.def.Class == tree.WindowClass || (!s.disableWindowFuncs && !ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
 		var parts tree.Exprs
-		s.schema.sample(len(refs), 2, func(i int) {
+		s.sample(len(refs), 2, func(i int) {
 			parts = append(parts, refs[i].item)
 		})
 		var order tree.OrderBy
-		s.schema.sample(len(refs)-len(parts), 2, func(i int) {
+		s.sample(len(refs)-len(parts), 2, func(i int) {
 			order = append(order, &tree.Order{
 				Expr:      refs[i+len(parts)].item,
-				Direction: s.schema.randDirection(),
+				Direction: s.randDirection(),
 			})
 		})
 		var frame *tree.WindowFrame
@@ -488,11 +488,11 @@ var windowFrameModes = []tree.WindowFrameMode{
 	tree.GROUPS,
 }
 
-func randWindowFrameMode(s *scope) tree.WindowFrameMode {
-	return windowFrameModes[s.schema.rnd.Intn(len(windowFrameModes))]
+func randWindowFrameMode(s *Smither) tree.WindowFrameMode {
+	return windowFrameModes[s.rnd.Intn(len(windowFrameModes))]
 }
 
-func makeWindowFrame(s *scope, refs colRefs, orderBy tree.OrderBy) *tree.WindowFrame {
+func makeWindowFrame(s *Smither, refs colRefs, orderBy tree.OrderBy) *tree.WindowFrame {
 	var frameMode tree.WindowFrameMode
 	for {
 		frameMode = randWindowFrameMode(s)
@@ -529,7 +529,7 @@ func makeWindowFrame(s *scope, refs colRefs, orderBy tree.OrderBy) *tree.WindowF
 		}
 	} else {
 		// There are 5 bound types, but only 4 can be used for the start bound.
-		startBound.BoundType = tree.WindowFrameBoundType(s.schema.rnd.Intn(4))
+		startBound.BoundType = tree.WindowFrameBoundType(s.rnd.Intn(4))
 		if startBound.BoundType == tree.OffsetFollowing {
 			// With OffsetFollowing as the start bound, the end bound must be
 			// present and can either be OffsetFollowing or UnboundedFollowing.
@@ -550,7 +550,7 @@ func makeWindowFrame(s *scope, refs colRefs, orderBy tree.OrderBy) *tree.WindowF
 				// choice.
 				endBoundProhibitedChoices = 1
 			}
-			endBound.BoundType = tree.WindowFrameBoundType(endBoundProhibitedChoices + s.schema.rnd.Intn(5-endBoundProhibitedChoices))
+			endBound.BoundType = tree.WindowFrameBoundType(endBoundProhibitedChoices + s.rnd.Intn(5-endBoundProhibitedChoices))
 		}
 		// We will set offsets regardless of the bound type, but they will only be
 		// used when a bound is either OffsetPreceding or OffsetFollowing. Both
@@ -569,8 +569,8 @@ func makeWindowFrame(s *scope, refs colRefs, orderBy tree.OrderBy) *tree.WindowF
 	}
 }
 
-func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
+func makeExists(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.vectorizable {
 		return nil, false
 	}
 	switch typ.Family() {
@@ -579,7 +579,7 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 
-	selectStmt, _, ok := s.makeSelect(s.schema.makeDesiredTypes(), refs)
+	selectStmt, _, ok := s.makeSelect(s.makeDesiredTypes(), refs)
 	if !ok {
 		return nil, false
 	}
@@ -592,14 +592,14 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return subq, true
 }
 
-func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
 		return nil, false
 	}
 
-	t := s.schema.randScalarType()
+	t := s.randScalarType()
 	var rhs tree.TypedExpr
 	if s.coin() {
 		rhs = makeTuple(s, t, refs)
@@ -634,9 +634,9 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	), true
 }
 
-func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	stringComparison := s.schema.randStringComparison()
-	if s.schema.vectorizable {
+func makeStringComparison(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	stringComparison := s.randStringComparison()
+	if s.vectorizable {
 		// Vectorized supports only tree.Like and tree.NotLike.
 		if s.coin() {
 			stringComparison = tree.Like
@@ -656,10 +656,10 @@ func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr,
 	), true
 }
 
-func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
-	n := s.schema.rnd.Intn(5)
+func makeTuple(s *Smither, typ *types.T, refs colRefs) *tree.Tuple {
+	n := s.rnd.Intn(5)
 	// Don't allow empty tuples in simple/postgres mode.
-	if s.schema.simpleDatums && n == 0 {
+	if s.simpleDatums && n == 0 {
 		n++
 	}
 	exprs := make(tree.Exprs, n)
@@ -669,11 +669,11 @@ func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
 	return tree.NewTypedTuple(types.MakeTuple([]types.T{*typ}), exprs)
 }
 
-func makeScalarSubquery(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
+func makeScalarSubquery(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.vectorizable {
 		return nil, false
 	}
-	if s.schema.disableLimits {
+	if s.disableLimits {
 		// This query must use a LIMIT, so bail if they are disabled.
 		return nil, false
 	}
