@@ -43,12 +43,10 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTraceForSession) (p
 	// does not get confused.
 	ageColIdx := sqlbase.GetTraceAgeColumnIdx(n.Compact)
 	node = &sortNode{
-		plan:    node,
-		columns: planColumns(node),
+		plan: node,
 		ordering: sqlbase.ColumnOrdering{
 			sqlbase.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
 		},
-		needSort: true,
 	}
 
 	if n.TraceType == tree.ShowTraceReplica {
