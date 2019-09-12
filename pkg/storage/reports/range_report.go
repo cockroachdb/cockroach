@@ -323,7 +323,7 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 	var zConfig *config.ZoneConfig
 	found, err := visitZones(ctx, r, v.cfg,
 		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
-			if zone.NumReplicas == nil || *zone.NumReplicas == 0 {
+			if !v.zoneHasReport(zone) {
 				return false
 			}
 			zKey = key
@@ -349,4 +349,14 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 	unavailable := liveNodeCount < (len(r.Replicas().Voters())/2 + 1)
 
 	v.report.AddZoneRangeStatus(zKey, unavailable, underReplicated, overReplicated)
+}
+
+// zoneHasReport determines whether a given zone deserves a replication report.
+// A zone deserves a report if it's config overrides replication-related
+// attributes, namely the replication factor or the replication constraints.
+// This is used to determine which zone's report a range counts towards: it'll
+// count towards the lowest ancestor for which this method returns true.
+func (v *replicationStatsVisitor) zoneHasReport(zone *config.ZoneConfig) bool {
+	return (zone.NumReplicas != nil && *zone.NumReplicas != 0) ||
+		zone.Constraints != nil
 }
