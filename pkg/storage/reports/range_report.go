@@ -308,8 +308,14 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 		if zone == nil {
 			continue
 		}
+		v.ensureEntries(MakeZoneKey(i, NoSubzone), zone)
+	}
+}
+
+func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneConfig) {
+	if v.zoneHasReport(zone) {
 		v.report.AddZoneRangeStatus(
-			MakeZoneKey(i, NoSubzone),
+			key,
 			false, /* unavailable */
 			false, /* underReplicated */
 			false /* overReplicated */)
