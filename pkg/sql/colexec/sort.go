@@ -60,7 +60,7 @@ func newSorter(
 
 // spooler is a column vector operator that spools the data from its input.
 type spooler interface {
-	OpNode
+	execinfrapb.OpNode
 
 	// init initializes this spooler and will be called once at the setup time.
 	init()
@@ -379,7 +379,7 @@ func (p *sortOp) ChildCount() int {
 	return 1
 }
 
-func (p *sortOp) Child(nth int) OpNode {
+func (p *sortOp) Child(nth int) execinfrapb.OpNode {
 	if nth == 0 {
 		return p.input
 	}

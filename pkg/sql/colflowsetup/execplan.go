@@ -60,7 +60,7 @@ func wrapRowSource(
 		toWrapInput = c.input
 	} else {
 		var err error
-		toWrapInput, err = execinfra.NewMaterializer(
+		toWrapInput, err = NewMaterializer(
 			flowCtx,
 			processorID,
 			input,

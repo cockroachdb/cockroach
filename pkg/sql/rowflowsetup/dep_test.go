@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package rowflowsetup
 
 import (
 	"testing"
@@ -21,11 +21,9 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec", true,
+		"github.com/cockroachdb/cockroach/pkg/sql/rowflowsetup", true,
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup",
-			"github.com/cockroachdb/cockroach/pkg/sql/rowexec",
-			"github.com/cockroachdb/cockroach/pkg/sql/rowflowsetup",
 		}, nil,
 	)
 }

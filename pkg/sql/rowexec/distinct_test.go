@@ -170,7 +170,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, &rowDisposer{})
+				d, err := NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, &execinfra.RowDisposer{})
 				if err != nil {
 					b.Fatal(err)
 				}

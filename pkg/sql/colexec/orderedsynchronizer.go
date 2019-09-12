@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -40,13 +41,13 @@ type OrderedSynchronizer struct {
 
 var _ StaticMemoryOperator = &OrderedSynchronizer{}
 
-// ChildCount implements the OpNode interface.
+// ChildCount implements the execinfra.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount() int {
 	return len(o.inputs)
 }
 
-// Child implements the OpNode interface.
-func (o *OrderedSynchronizer) Child(nth int) OpNode {
+// Child implements the execinfra.OpNode interface.
+func (o *OrderedSynchronizer) Child(nth int) execinfrapb.OpNode {
 	return o.inputs[nth]
 }
 

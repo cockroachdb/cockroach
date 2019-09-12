@@ -48,7 +48,7 @@ func runProcessorTest(
 		Txn:     txn,
 	}
 
-	p, err := newProcessor(
+	p, err := NewProcessor(
 		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
 		[]execinfra.RowSource{in}, []execinfra.RowReceiver{out}, []execinfra.LocalProcessor{})
 	if err != nil {
@@ -89,24 +89,4 @@ type rowsAccessor interface {
 
 func (s *sorterBase) getRows() *rowcontainer.DiskBackedRowContainer {
 	return s.rows.(*rowcontainer.DiskBackedRowContainer)
-}
-
-// rowDisposer is a distsql.RowReceiver that discards any rows Push()ed.
-type rowDisposer struct{}
-
-var _ execinfra.RowReceiver = &rowDisposer{}
-
-// Push is part of the distsql.RowReceiver interface.
-func (r *rowDisposer) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
-) execinfra.ConsumerStatus {
-	return execinfra.NeedMoreRows
-}
-
-// ProducerDone is part of the RowReceiver interface.
-func (r *rowDisposer) ProducerDone() {}
-
-// Types is part of the RowReceiver interface.
-func (r *rowDisposer) Types() []types.T {
-	return nil
 }

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowexec
+package distsql
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,7 +67,7 @@ func verifyColOperator(
 		inputsColOp[i] = execinfra.NewRepeatableRowSource(inputTypes[i], input)
 	}
 
-	proc, err := newProcessor(ctx, flowCtx, 0, &pspec.Core, &pspec.Post, inputsProc, []execinfra.RowReceiver{nil}, nil)
+	proc, err := rowexec.NewProcessor(ctx, flowCtx, 0, &pspec.Core, &pspec.Post, inputsProc, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
 		return err
 	}
@@ -89,7 +90,7 @@ func verifyColOperator(
 		return err
 	}
 
-	outColOp, err := execinfra.NewMaterializer(
+	outColOp, err := colflowsetup.NewMaterializer(
 		flowCtx,
 		int32(len(inputs))+2,
 		result.Op,

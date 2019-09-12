@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // Operator is a column vector operator that produces a Batch as output.
@@ -35,16 +36,7 @@ type Operator interface {
 	// execution.
 	Next(context.Context) coldata.Batch
 
-	OpNode
-}
-
-// OpNode is an interface to operator-like structures with children.
-type OpNode interface {
-	// ChildCount returns the number of children (inputs) of the operator.
-	ChildCount() int
-
-	// Child returns the nth child (input) of the operator.
-	Child(nth int) OpNode
+	execinfrapb.OpNode
 }
 
 // NonExplainable is a marker interface which identifies an Operator that
@@ -55,23 +47,23 @@ type NonExplainable interface {
 	nonExplainableMarker()
 }
 
-// NewOneInputNode returns an OpNode with a single Operator input.
+// NewOneInputNode returns an execinfra.OpNode with a single Operator input.
 func NewOneInputNode(input Operator) OneInputNode {
 	return OneInputNode{input: input}
 }
 
-// OneInputNode is an OpNode with a single Operator input.
+// OneInputNode is an execinfra.OpNode with a single Operator input.
 type OneInputNode struct {
 	input Operator
 }
 
-// ChildCount implements the OpNode interface.
+// ChildCount implements the execinfra.OpNode interface.
 func (OneInputNode) ChildCount() int {
 	return 1
 }
 
-// Child implements the OpNode interface.
-func (n OneInputNode) Child(nth int) OpNode {
+// Child implements the execinfra.OpNode interface.
+func (n OneInputNode) Child(nth int) execinfrapb.OpNode {
 	if nth == 0 {
 		return n.input
 	}
@@ -85,22 +77,22 @@ func (n OneInputNode) Input() Operator {
 	return n.input
 }
 
-// ZeroInputNode is an OpNode with no inputs.
+// ZeroInputNode is an execinfra.OpNode with no inputs.
 type ZeroInputNode struct{}
 
-// ChildCount implements the OpNode interface.
+// ChildCount implements the execinfra.OpNode interface.
 func (ZeroInputNode) ChildCount() int {
 	return 0
 }
 
-// Child implements the OpNode interface.
-func (ZeroInputNode) Child(nth int) OpNode {
+// Child implements the execinfra.OpNode interface.
+func (ZeroInputNode) Child(nth int) execinfrapb.OpNode {
 	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
-// newTwoInputNode returns an OpNode with two Operator inputs.
+// newTwoInputNode returns an execinfra.OpNode with two Operator inputs.
 func newTwoInputNode(inputOne, inputTwo Operator) twoInputNode {
 	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
 }
@@ -114,7 +106,7 @@ func (twoInputNode) ChildCount() int {
 	return 2
 }
 
-func (n *twoInputNode) Child(nth int) OpNode {
+func (n *twoInputNode) Child(nth int) execinfrapb.OpNode {
 	switch nth {
 	case 0:
 		return n.inputOne

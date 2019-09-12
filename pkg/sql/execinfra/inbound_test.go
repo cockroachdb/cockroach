@@ -81,7 +81,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	}
 
 	streamID := execinfrapb.StreamID(1)
-	outbox := NewOutbox(&flowCtx, staticNodeID, execinfrapb.FlowID{}, streamID)
+	outbox := NewOutbox(&flowCtx, StaticNodeID, execinfrapb.FlowID{}, streamID)
 	outbox.Init(sqlbase.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no

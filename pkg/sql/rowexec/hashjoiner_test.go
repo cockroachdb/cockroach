@@ -550,7 +550,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						// TODO(asubiotto): Get rid of uncleared state between
 						// hashJoiner Run()s to omit instantiation time from benchmarks.
-						h, err := newHashJoiner(flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, &rowDisposer{})
+						h, err := newHashJoiner(flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, &execinfra.RowDisposer{})
 						if err != nil {
 							b.Fatal(err)
 						}

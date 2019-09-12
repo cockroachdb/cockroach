@@ -24,7 +24,7 @@ func TestNoLinkForbidden(t *testing.T) {
 		"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup", true,
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/rowexec",
-			"github.com/cockroachdb/cockroach/pkg/sql/rowplan",
+			"github.com/cockroachdb/cockroach/pkg/sql/rowflowsetup",
 		}, nil,
 	)
 }

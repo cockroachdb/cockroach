@@ -57,7 +57,7 @@ func (c *sortChunksOp) ChildCount() int {
 	return 0
 }
 
-func (c *sortChunksOp) Child(nth int) OpNode {
+func (c *sortChunksOp) Child(nth int) execinfrapb.OpNode {
 	if nth == 0 {
 		return c.input
 	}

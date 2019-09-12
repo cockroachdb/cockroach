@@ -155,7 +155,7 @@ func (f *rowBasedFlow) makeProcessor(
 	output = &copyingRowReceiver{RowReceiver: output}
 
 	outputs := []execinfra.RowReceiver{output}
-	proc, err := newProcessor(
+	proc, err := NewProcessor(
 		ctx,
 		&f.FlowCtx,
 		ps.ProcessorID,

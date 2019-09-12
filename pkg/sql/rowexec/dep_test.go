@@ -24,9 +24,10 @@ func TestNoLinkForbidden(t *testing.T) {
 		"github.com/cockroachdb/cockroach/pkg/sql/rowexec", true,
 		[]string{
 			// TODO(yuzefovich): backfiller processor brings in colexec. Fix this.
+			// Probably the problem is CFetcher.
 			//"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colflowsetup",
-			"github.com/cockroachdb/cockroach/pkg/sql/rowplan",
+			"github.com/cockroachdb/cockroach/pkg/sql/rowflowsetup",
 		}, nil,
 	)
 }

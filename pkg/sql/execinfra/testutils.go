@@ -357,3 +357,23 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 	}
 	return res
 }
+
+// RowDisposer is a RowReceiver that discards any rows Push()ed.
+type RowDisposer struct{}
+
+var _ RowReceiver = &RowDisposer{}
+
+// Push is part of the distsql.RowReceiver interface.
+func (r *RowDisposer) Push(
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) ConsumerStatus {
+	return NeedMoreRows
+}
+
+// ProducerDone is part of the RowReceiver interface.
+func (r *RowDisposer) ProducerDone() {}
+
+// Types is part of the RowReceiver interface.
+func (r *RowDisposer) Types() []types.T {
+	return nil
+}

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package colflowsetup
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -24,7 +25,7 @@ import (
 
 // Materializer converts an exec.Operator input into a RowSource.
 type Materializer struct {
-	ProcessorBase
+	execinfra.ProcessorBase
 	colexec.NonExplainable
 
 	input colexec.Operator
@@ -69,12 +70,12 @@ const materializerProcName = "materializer"
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
 // source).
 func NewMaterializer(
-	flowCtx *FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input colexec.Operator,
 	typs []types.T,
 	post *execinfrapb.PostProcessSpec,
-	output RowReceiver,
+	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
@@ -92,7 +93,7 @@ func NewMaterializer(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
+		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				var trailingMeta []execinfrapb.ProducerMetadata
 				for _, src := range metadataSourcesQueue {
@@ -110,7 +111,7 @@ func NewMaterializer(
 	return m, nil
 }
 
-var _ colexec.OpNode = &Materializer{}
+var _ execinfrapb.OpNode = &Materializer{}
 
 // ChildCount is part of the exec.OpNode interface.
 func (m *Materializer) ChildCount() int {
@@ -118,7 +119,7 @@ func (m *Materializer) ChildCount() int {
 }
 
 // Child is part of the exec.OpNode interface.
-func (m *Materializer) Child(nth int) colexec.OpNode {
+func (m *Materializer) Child(nth int) execinfrapb.OpNode {
 	if nth == 0 {
 		return m.input
 	}
@@ -141,7 +142,7 @@ func (m *Materializer) nextAdapter() {
 // next is the logic of Next() extracted in a separate method to be used by an
 // adapter to be able to wrap the latter with a catcher.
 func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if m.State == StateRunning {
+	if m.State == execinfra.StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
 			m.batch = m.input.Next(m.Ctx)

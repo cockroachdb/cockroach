@@ -848,7 +848,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		// Implicit @1 = @2 constraint.
 	}
 	post := &execinfrapb.PostProcessSpec{}
-	disposer := &rowDisposer{}
+	disposer := &execinfra.RowDisposer{}
 
 	const numCols = 1
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 )
 
@@ -71,13 +72,13 @@ type UnorderedSynchronizer struct {
 	errCh             chan error
 }
 
-// ChildCount implements the OpNode interface.
+// ChildCount implements the execinfra.OpNode interface.
 func (s *UnorderedSynchronizer) ChildCount() int {
 	return len(s.inputs)
 }
 
-// Child implements the OpNode interface.
-func (s *UnorderedSynchronizer) Child(nth int) OpNode {
+// Child implements the execinfra.OpNode interface.
+func (s *UnorderedSynchronizer) Child(nth int) execinfrapb.OpNode {
 	return s.inputs[nth]
 }
 

@@ -139,7 +139,7 @@ type flowCreatorHelper interface {
 	// to be run asynchronously.
 	accumulateAsyncComponent(runFn)
 	// addMaterializer adds a materializer to the flow.
-	addMaterializer(*execinfra.Materializer)
+	addMaterializer(*Materializer)
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -194,7 +194,7 @@ type vectorizedFlowCreator struct {
 
 	// leaves accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
-	leaves []colexec.OpNode
+	leaves []execinfrapb.OpNode
 }
 
 func newVectorizedFlowCreator(
@@ -228,7 +228,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	outputTyps []coltypes.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-) (colexec.OpNode, error) {
+) (execinfrapb.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(op, outputTyps, metadataSourcesQueue)
 	if err != nil {
 		return nil, err
@@ -491,7 +491,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				)
 			}
 		}
-		proc, err := execinfra.NewMaterializer(
+		proc, err := NewMaterializer(
 			flowCtx,
 			pspec.ProcessorID,
 			op,
@@ -521,7 +521,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
 	acc *mon.BoundAccount,
-) (leaves []colexec.OpNode, err error) {
+) (leaves []execinfrapb.OpNode, err error) {
 	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
 	// queue is a queue of indices into processorSpecs, for topologically
 	// ordered processing.
@@ -710,7 +710,7 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 		}))
 }
 
-func (r *vectorizedFlowCreatorHelper) addMaterializer(m *execinfra.Materializer) {
+func (r *vectorizedFlowCreatorHelper) addMaterializer(m *Materializer) {
 	processors := make([]execinfra.Processor, 1)
 	processors[0] = m
 	r.f.SetProcessors(processors)
@@ -749,7 +749,7 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addMaterializer(*execinfra.Materializer) {}
+func (r *noopFlowCreatorHelper) addMaterializer(*Materializer) {}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
@@ -762,7 +762,7 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // EXPLAIN output.
 func SupportsVectorized(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, processorSpecs []execinfrapb.ProcessorSpec,
-) (leaves []colexec.OpNode, err error) {
+) (leaves []execinfrapb.OpNode, err error) {
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(),
 		vectorizedRemoteComponentCreator{},

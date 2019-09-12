@@ -104,7 +104,7 @@ func checkNumInOut(
 	return nil
 }
 
-func newProcessor(
+func NewProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,

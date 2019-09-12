@@ -169,13 +169,13 @@ type hashGrouper struct {
 	buildFinished bool
 }
 
-var _ OpNode = &hashGrouper{}
+var _ execinfrapb.OpNode = &hashGrouper{}
 
 func (op *hashGrouper) ChildCount() int {
 	return 1
 }
 
-func (op *hashGrouper) Child(nth int) OpNode {
+func (op *hashGrouper) Child(nth int) execinfrapb.OpNode {
 	if nth == 0 {
 		return op.builder.spec.source
 	}

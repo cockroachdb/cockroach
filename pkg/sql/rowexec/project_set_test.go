@@ -162,7 +162,7 @@ func BenchmarkProjectSet(b *testing.B) {
 
 				in := execinfra.NewRowBuffer(c.inputTypes, c.input, execinfra.RowBufferArgs{})
 				out := &execinfra.RowBuffer{}
-				p, err := newProcessor(
+				p, err := NewProcessor(
 					context.Background(), &flowCtx, 0, /* processorID */
 					&execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec}, &execinfrapb.PostProcessSpec{},
 					[]execinfra.RowSource{in}, []execinfra.RowReceiver{out}, []execinfra.LocalProcessor{})

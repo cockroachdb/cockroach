@@ -102,7 +102,7 @@ type ProcessorTestCase struct {
 	// before checking for expected output.
 	DisableSort bool
 
-	// ProcessorCoreUnion is the spec to be passed in to newProcessor when
+	// ProcessorCoreUnion is the spec to be passed in to NewProcessor when
 	// creating the processor to run this test case.
 	ProcessorCore execinfrapb.ProcessorCoreUnion
 
@@ -141,7 +141,7 @@ func (p *ProcessorTest) RunTestCases(
 			tc.Output.Types, nil, execinfra.RowBufferArgs{},
 		)
 
-		processor, err := newProcessor(
+		processor, err := NewProcessor(
 			ctx,
 			p.config.FlowCtx,
 			processorID,

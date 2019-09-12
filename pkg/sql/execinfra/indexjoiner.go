@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -60,7 +59,7 @@ type IndexJoiner struct {
 var _ Processor = &IndexJoiner{}
 var _ RowSource = &IndexJoiner{}
 var _ execinfrapb.MetadataSource = &IndexJoiner{}
-var _ colexec.OpNode = &IndexJoiner{}
+var _ execinfrapb.OpNode = &IndexJoiner{}
 
 const indexJoinerProcName = "index joiner"
 
@@ -270,9 +269,9 @@ func (ij *IndexJoiner) ChildCount() int {
 }
 
 // Child is part of the exec.OpNode interface.
-func (ij *IndexJoiner) Child(nth int) colexec.OpNode {
+func (ij *IndexJoiner) Child(nth int) execinfrapb.OpNode {
 	if nth == 0 {
-		if n, ok := ij.input.(colexec.OpNode); ok {
+		if n, ok := ij.input.(execinfrapb.OpNode); ok {
 			return n
 		}
 		panic("input to IndexJoiner is not an exec.OpNode")

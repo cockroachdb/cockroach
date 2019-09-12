@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowexec
+package execinfra
 
 import (
 	"context"
@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -402,9 +401,9 @@ func TestJoinReader(t *testing.T) {
 			t.Run(fmt.Sprintf("%d/%s", i, c.description), func(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(ctx)
-				flowCtx := execinfra.FlowCtx{
+				flowCtx := FlowCtx{
 					EvalCtx: &evalCtx,
-					Cfg: &execinfra.ServerConfig{
+					Cfg: &ServerConfig{
 						Settings:    st,
 						TempStorage: tempEngine,
 						DiskMonitor: &diskMonitor,
@@ -419,10 +418,10 @@ func TestJoinReader(t *testing.T) {
 					}
 					encRows[rowIdx] = encRow
 				}
-				in := execinfra.NewRowBuffer(c.inputTypes, encRows, execinfra.RowBufferArgs{})
+				in := NewRowBuffer(c.inputTypes, encRows, RowBufferArgs{})
 
-				out := &execinfra.RowBuffer{}
-				jr, err := execinfra.NewJoinReader(
+				out := &RowBuffer{}
+				jr, err := NewJoinReader(
 					&flowCtx,
 					0, /* processorID */
 					&execinfrapb.JoinReaderSpec{
@@ -441,7 +440,7 @@ func TestJoinReader(t *testing.T) {
 				}
 
 				// Set a lower batch size to force multiple batches.
-				jr.(*execinfra.JoinReader).SetBatchSize(3 /* batchSize */)
+				jr.(*JoinReader).SetBatchSize(3 /* batchSize */)
 
 				jr.Run(ctx)
 
@@ -513,9 +512,9 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
-	flowCtx := execinfra.FlowCtx{
+	flowCtx := FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &execinfra.ServerConfig{
+		Cfg: &ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
@@ -533,8 +532,8 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 	}
 
-	out := &execinfra.RowBuffer{}
-	jr, err := execinfra.NewJoinReader(
+	out := &RowBuffer{}
+	jr, err := NewJoinReader(
 		&flowCtx,
 		0, /* processorID */
 		&execinfrapb.JoinReaderSpec{
@@ -543,7 +542,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			LookupColumns: []uint32{0},
 			Type:          sqlbase.InnerJoin,
 		},
-		execinfra.NewRowBuffer(sqlbase.OneIntCol, inputRows, execinfra.RowBufferArgs{}),
+		NewRowBuffer(sqlbase.OneIntCol, inputRows, RowBufferArgs{}),
 		&execinfrapb.PostProcessSpec{
 			Projection:    true,
 			OutputColumns: []uint32{2},
@@ -567,7 +566,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		count++
 	}
 	require.Equal(t, numRows, count)
-	require.True(t, jr.(*execinfra.JoinReader).Spilled())
+	require.True(t, jr.(*JoinReader).Spilled())
 }
 
 // TestJoinReaderDrain tests various scenarios in which a joinReader's consumer
@@ -616,9 +615,9 @@ func TestJoinReaderDrain(t *testing.T) {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
-	flowCtx := execinfra.FlowCtx{
+	flowCtx := FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &execinfra.ServerConfig{
+		Cfg: &ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
@@ -632,11 +631,11 @@ func TestJoinReaderDrain(t *testing.T) {
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		in := execinfra.NewRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, execinfra.RowBufferArgs{})
+		in := NewRowBuffer(sqlbase.OneIntCol, sqlbase.EncDatumRows{encRow}, RowBufferArgs{})
 
-		out := &execinfra.RowBuffer{}
+		out := &RowBuffer{}
 		out.ConsumerClosed()
-		jr, err := execinfra.NewJoinReader(
+		jr, err := NewJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
 		)
 		if err != nil {
@@ -650,14 +649,14 @@ func TestJoinReaderDrain(t *testing.T) {
 	// called on the consumer.
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
-		in := execinfra.NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, execinfra.RowBufferArgs{})
-		if status := in.Push(encRow, &execinfrapb.ProducerMetadata{Err: expectedMetaErr}); status != execinfra.NeedMoreRows {
+		in := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
+		if status := in.Push(encRow, &execinfrapb.ProducerMetadata{Err: expectedMetaErr}); status != NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
 
-		out := &execinfra.RowBuffer{}
+		out := &RowBuffer{}
 		out.ConsumerDone()
-		jr, err := execinfra.NewJoinReader(
+		jr, err := NewJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
 		)
 		if err != nil {
@@ -711,12 +710,12 @@ func BenchmarkJoinReader(b *testing.B) {
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	flowCtx := execinfra.FlowCtx{
+	flowCtx := FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg: &execinfra.ServerConfig{
+		Cfg: &ServerConfig{
 			DiskMonitor: diskMonitor,
 			Settings:    st,
 		},
@@ -734,14 +733,14 @@ func BenchmarkJoinReader(b *testing.B) {
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 
 		spec := execinfrapb.JoinReaderSpec{Table: *tableDesc}
-		input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numInputCols))
+		input := NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numInputCols))
 		post := execinfrapb.PostProcessSpec{}
-		output := rowDisposer{}
+		output := RowDisposer{}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			b.SetBytes(int64(numRows * (numCols + numInputCols) * 8))
 			for i := 0; i < b.N; i++ {
-				jr, err := execinfra.NewJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+				jr, err := NewJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
 				if err != nil {
 					b.Fatal(err)
 				}

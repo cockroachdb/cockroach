@@ -53,7 +53,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	}
 
 	vee := newTestVectorizedPanicEmitter(col, execerror.VectorizedInternalPanic)
-	mat, err := execinfra.NewMaterializer(
+	mat, err := NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		vee,
@@ -100,7 +100,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	}
 
 	nvee := newTestVectorizedPanicEmitter(col, nil /* panicFn */)
-	mat, err := execinfra.NewMaterializer(
+	mat, err := NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		nvee,
@@ -134,7 +134,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
-	mat, err := execinfra.NewMaterializer(
+	mat, err := NewMaterializer(
 		&flowCtx,
 		0, /* processorID */
 		&colexec.CallbackOperator{

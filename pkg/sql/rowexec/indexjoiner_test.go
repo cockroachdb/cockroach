@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+// TODO(yuzefovich): move this test file next to indexjoiner.go.
+
 func TestIndexJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
