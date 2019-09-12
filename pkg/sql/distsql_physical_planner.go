@@ -969,32 +969,21 @@ func getOutputColumnsFromScanNode(n *scanNode, remap []int) []uint32 {
 // convertOrdering maps the columns in props.ordering to the output columns of a
 // processor.
 func (dsp *DistSQLPlanner) convertOrdering(
-	props physicalProps, planToStreamColMap []int,
+	reqOrdering ReqOrdering, planToStreamColMap []int,
 ) execinfrapb.Ordering {
-	if len(props.ordering) == 0 {
+	if len(reqOrdering) == 0 {
 		return execinfrapb.Ordering{}
 	}
 	result := execinfrapb.Ordering{
-		Columns: make([]execinfrapb.Ordering_Column, len(props.ordering)),
+		Columns: make([]execinfrapb.Ordering_Column, len(reqOrdering)),
 	}
-	for i, o := range props.ordering {
+	for i, o := range reqOrdering {
 		streamColIdx := o.ColIdx
 		if planToStreamColMap != nil {
 			streamColIdx = planToStreamColMap[o.ColIdx]
 		}
 		if streamColIdx == -1 {
-			// Find any column in the equivalency group that is part of the processor
-			// output.
-			group := props.eqGroups.Find(o.ColIdx)
-			for col, pos := range planToStreamColMap {
-				if pos != -1 && props.eqGroups.Find(col) == group {
-					streamColIdx = pos
-					break
-				}
-			}
-			if streamColIdx == -1 {
-				panic("column in ordering not part of processor output")
-			}
+			panic("column in ordering not part of processor output")
 		}
 		result.Columns[i].ColIdx = uint32(streamColIdx)
 		dir := execinfrapb.Ordering_Column_ASC
@@ -1138,14 +1127,14 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.ResultRouters[i] = pIdx
 	}
 
-	if len(p.ResultRouters) > 1 && len(n.props.ordering) > 0 {
+	if len(p.ResultRouters) > 1 && len(n.reqOrdering) > 0 {
 		// Make a note of the fact that we have to maintain a certain ordering
 		// between the parallel streams.
 		//
 		// This information is taken into account by the AddProjection call below:
 		// specifically, it will make sure these columns are kept even if they are
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
+		p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, scanNodeToTableOrdinalMap))
 	}
 
 	var typs []types.T
@@ -1369,7 +1358,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// We can't do local aggregation, but we can do local distinct processing
 		// to reduce streaming duplicates, and aggregate on the final node.
 
-		ordering := dsp.convertOrdering(planPhysicalProps(n.plan), p.PlanToStreamColMap).Columns
+		ordering := dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap).Columns
 		orderedColsMap := make(map[uint32]struct{})
 		for _, ord := range ordering {
 			orderedColsMap[ord.ColIdx] = struct{}{}
@@ -1806,7 +1795,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 
 		p.ResultTypes = finalOutTypes
-		p.SetMergeOrdering(dsp.convertOrdering(n.props, p.PlanToStreamColMap))
+		p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap))
 	}
 
 	return nil
@@ -1871,7 +1860,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			types,
-			dsp.convertOrdering(n.props, plan.PlanToStreamColMap),
+			dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
 		)
 	} else {
 		// Use a single join reader (if there is a single stream, on that node; if
@@ -1981,7 +1970,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 		post,
 		types,
-		dsp.convertOrdering(planPhysicalProps(n), planToStreamColMap),
+		dsp.convertOrdering(planReqOrdering(n), planToStreamColMap),
 	)
 	plan.PlanToStreamColMap = planToStreamColMap
 	return plan, nil
@@ -2285,7 +2274,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// We can propagate the ordering from either side, we use the left side here.
 	// Note that n.props only has a non-empty ordering for inner joins, where it
 	// uses the mergeJoinOrdering.
-	p.SetMergeOrdering(dsp.convertOrdering(n.props, p.PlanToStreamColMap))
+	p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap))
 	return p, nil
 }
 
@@ -2886,29 +2875,23 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			rightPlan.PlanToStreamColMap)
 	}
 	planToStreamColMap := leftPlan.PlanToStreamColMap
-	planCols := make([]int, 0, len(planToStreamColMap))
 	streamCols := make([]uint32, 0, len(planToStreamColMap))
-	for planCol, streamCol := range planToStreamColMap {
+	for _, streamCol := range planToStreamColMap {
 		if streamCol < 0 {
 			continue
 		}
-		planCols = append(planCols, planCol)
 		streamCols = append(streamCols, uint32(streamCol))
 	}
 
-	leftProps, rightProps := planPhysicalProps(leftLogicalPlan), planPhysicalProps(rightLogicalPlan)
 	var distinctSpecs [2]execinfrapb.ProcessorCoreUnion
 
 	if !n.all {
-		leftProps = leftProps.project(planCols)
-		rightProps = rightProps.project(planCols)
-
 		var distinctOrds [2]execinfrapb.Ordering
 		distinctOrds[0] = execinfrapb.ConvertToMappedSpecOrdering(
-			leftProps.ordering, leftPlan.PlanToStreamColMap,
+			planReqOrdering(leftLogicalPlan), leftPlan.PlanToStreamColMap,
 		)
 		distinctOrds[1] = execinfrapb.ConvertToMappedSpecOrdering(
-			rightProps.ordering, rightPlan.PlanToStreamColMap,
+			planReqOrdering(rightLogicalPlan), rightPlan.PlanToStreamColMap,
 		)
 
 		// Build distinct processor specs for the left and right child plans.

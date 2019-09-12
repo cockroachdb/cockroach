@@ -70,7 +70,8 @@ type scanNode struct {
 
 	spans   []roachpb.Span
 	reverse bool
-	props   physicalProps
+
+	reqOrdering ReqOrdering
 
 	// filter that can be evaluated using only this table/index; it contains
 	// tree.IndexedVar leaves generated using filterVars.
