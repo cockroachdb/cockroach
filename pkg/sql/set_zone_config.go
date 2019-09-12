@@ -240,6 +240,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// descriptor.
 	table, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
 	if err != nil {
+		if n.zoneSpecifier.TargetsIndex() && n.zoneSpecifier.TableOrIndex.Table.TableName == "" {
+			return errors.WithHint(err, "try specifying the index as <tablename>@<indexname>")
+		}
 		return err
 	}
 
