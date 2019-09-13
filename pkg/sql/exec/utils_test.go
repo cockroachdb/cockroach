@@ -413,11 +413,11 @@ func newOpTestSelInput(
 }
 
 func (s *opTestInput) Init() {
-	if len(s.tuples) == 0 {
-		execerror.VectorizedInternalPanic("empty tuple source")
-	}
-
 	if s.typs == nil {
+		if len(s.tuples) == 0 {
+			execerror.VectorizedInternalPanic("empty tuple source with no specified types")
+		}
+
 		// The type schema was not provided, so we need to determine it based on
 		// the input tuple.
 		s.typs = make([]coltypes.T, len(s.tuples[0]))
