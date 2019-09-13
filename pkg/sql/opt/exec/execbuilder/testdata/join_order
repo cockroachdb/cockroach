@@ -35,6 +35,8 @@ SET CLUSTER SETTING sql.defaults.reorder_joins_limit = -1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
+·                    distributed         false            ·                         ·
+·                    vectorized          false            ·                         ·
 render               ·                   ·                (a, b, c, d, b, x, c, y)  ·
  │                   render 0            a                ·                         ·
  │                   render 1            b                ·                         ·
@@ -67,6 +69,8 @@ SET reorder_joins_limit = 3
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
+·                      distributed            false        ·                         ·
+·                      vectorized             true         ·                         ·
 render                 ·                      ·            (a, b, c, d, b, x, c, y)  ·
  │                     render 0               a            ·                         ·
  │                     render 1               b            ·                         ·
