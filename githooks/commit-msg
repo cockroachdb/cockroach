@@ -43,8 +43,10 @@ saveIFS=$IFS
 IFS='
 '
 notes=($($grep -iE '^release note' "$1"))
-IFS=$saveIFS
 
+justification=($($grep -iE '^release justification: \S+' "$1"))
+
+IFS=$saveIFS
 
 informed=
 inform() {
@@ -59,6 +61,12 @@ hint() {
     inform
     echo "- $*" >&2
 }
+
+if [ 0 = ${#justification[*]} ]; then
+    warn "No release justification specified."
+    echo "Try: 'Release justification: This commit is safe for 19.2 because..." >&2
+    echo >&2
+fi
 
 if [ 0 = ${#notes[*]} ]; then
     warn "No release note specified."
