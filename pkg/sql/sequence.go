@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -52,7 +51,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	} else {
 		seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 		val, err = client.IncrementValRetryable(
-			ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
+			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
 		if err != nil {
 			switch err.(type) {
 			case *roachpb.IntegerOverflowError:
@@ -189,7 +188,11 @@ func readOnlyError(s string) error {
 // assignSequenceOptions moves options from the AST node to the sequence options descriptor,
 // starting with defaults and overriding them with user-provided options.
 func assignSequenceOptions(
-	opts *sqlbase.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
+	opts *sqlbase.TableDescriptor_SequenceOpts,
+	optsNode tree.SequenceOptions,
+	setDefaults bool,
+	params *runParams,
+	sequenceID sqlbase.ID,
 ) error {
 	// All other defaults are dependent on the value of increment,
 	// i.e. whether the sequence is ascending or descending.
@@ -261,6 +264,20 @@ func assignSequenceOptions(
 			opts.Start = *option.IntVal
 		case tree.SeqOptVirtual:
 			opts.Virtual = true
+		case tree.SeqOptOwnedBy:
+			if params == nil {
+				return pgerror.Newf(pgcode.Internal,
+					"Trying to add/remove Sequence Owner without access to context")
+			}
+			ctx := params.ctx
+			if err := removeSequenceOwnerIfExists(ctx, params, sequenceID, opts); err != nil {
+				return err
+			}
+			if option.ColumnItemVal != nil {
+				if err := addSequenceOwner(ctx, params, option.ColumnItemVal, sequenceID, opts); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -285,6 +302,73 @@ func assignSequenceOptions(
 			"START value (%d) cannot be less than MINVALUE (%d)", opts.Start, opts.MinValue)
 	}
 
+	return nil
+}
+
+func removeSequenceOwnerIfExists(
+	ctx context.Context,
+	params *runParams,
+	sequenceID sqlbase.ID,
+	opts *sqlbase.TableDescriptor_SequenceOpts,
+) error {
+	p := params.p
+	if opts.SequenceOwner != (sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}) {
+		tableDesc, err := p.Tables().getMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
+		if err != nil {
+			return err
+		}
+		col, err := tableDesc.FindColumnByID(opts.SequenceOwner.OwnerColumnID)
+		if err != nil {
+			return err
+		}
+		// Find an item in colDesc.OwnsSequenceIds which references SequenceID.
+		refIdx := -1
+		for i, id := range col.OwnsSequenceIds {
+			if id == sequenceID {
+				refIdx = i
+			}
+		}
+		if refIdx == -1 {
+			return errors.AssertionFailedf("couldn't find reference from column to this sequence")
+		}
+		col.OwnsSequenceIds = append(col.OwnsSequenceIds[:refIdx], col.OwnsSequenceIds[refIdx+1:]...)
+		if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
+			return err
+		}
+		// Reset the SequenceOwner to empty
+		opts.SequenceOwner = sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}
+	}
+	return nil
+}
+
+func addSequenceOwner(
+	ctx context.Context,
+	params *runParams,
+	columnItem *tree.ColumnItem,
+	sequenceID sqlbase.ID,
+	opts *sqlbase.TableDescriptor_SequenceOpts,
+) error {
+	p := params.p
+	var tableName tree.TableName
+	if columnItem.TableName != nil {
+		tableName = columnItem.TableName.ToTableName()
+	}
+
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, ResolveRequireTableDesc)
+	if err != nil {
+		return err
+	}
+	col, _, err := tableDesc.FindColumnByName(columnItem.ColumnName)
+	if err != nil {
+		return err
+	}
+	col.OwnsSequenceIds = append(col.OwnsSequenceIds, sequenceID)
+
+	opts.SequenceOwner.OwnerColumnID = col.ID
+	opts.SequenceOwner.OwnerTableID = tableDesc.GetID()
+	if err := params.p.writeSchemaChange(params.ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -351,6 +435,21 @@ func maybeAddSequenceDependencies(
 		seqDescs = append(seqDescs, seqDesc)
 	}
 	return seqDescs, nil
+}
+
+// When a table/column is dropped that owns sequences, the sequences must be dropped
+// as well.
+func dropSequencesOwnedByCol(col *sqlbase.ColumnDescriptor, params runParams) error {
+	for _, sequenceID := range col.OwnsSequenceIds {
+		seqDesc, err := params.p.Tables().getMutableTableVersionByID(params.ctx, sequenceID, params.p.txn)
+		if err != nil {
+			return err
+		}
+		if err := params.p.dropSequenceImpl(params.ctx, seqDesc, tree.DropRestrict); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // removeSequenceDependencies:

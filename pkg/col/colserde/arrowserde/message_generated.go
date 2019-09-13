@@ -13,22 +13,23 @@ import flatbuffers "github.com/google/flatbuffers/go"
 /// which may include experimental metadata types. For maximum compatibility,
 /// it is best to send data using RecordBatch
 type MessageHeader = byte
+
 const (
-	MessageHeaderNONE MessageHeader = 0
-	MessageHeaderSchema MessageHeader = 1
+	MessageHeaderNONE            MessageHeader = 0
+	MessageHeaderSchema          MessageHeader = 1
 	MessageHeaderDictionaryBatch MessageHeader = 2
-	MessageHeaderRecordBatch MessageHeader = 3
-	MessageHeaderTensor MessageHeader = 4
-	MessageHeaderSparseTensor MessageHeader = 5
+	MessageHeaderRecordBatch     MessageHeader = 3
+	MessageHeaderTensor          MessageHeader = 4
+	MessageHeaderSparseTensor    MessageHeader = 5
 )
 
 var EnumNamesMessageHeader = map[MessageHeader]string{
-	MessageHeaderNONE:"NONE",
-	MessageHeaderSchema:"Schema",
-	MessageHeaderDictionaryBatch:"DictionaryBatch",
-	MessageHeaderRecordBatch:"RecordBatch",
-	MessageHeaderTensor:"Tensor",
-	MessageHeaderSparseTensor:"SparseTensor",
+	MessageHeaderNONE:            "NONE",
+	MessageHeaderSchema:          "Schema",
+	MessageHeaderDictionaryBatch: "DictionaryBatch",
+	MessageHeaderRecordBatch:     "RecordBatch",
+	MessageHeaderTensor:          "Tensor",
+	MessageHeaderSparseTensor:    "SparseTensor",
 }
 
 /// ----------------------------------------------------------------------
@@ -58,6 +59,7 @@ func (rcv *FieldNode) Table() flatbuffers.Table {
 func (rcv *FieldNode) Length() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(0))
 }
+
 /// The number of value slots in the Arrow array at this level of a nested
 /// tree
 func (rcv *FieldNode) MutateLength(n int64) bool {
@@ -70,6 +72,7 @@ func (rcv *FieldNode) MutateLength(n int64) bool {
 func (rcv *FieldNode) NullCount() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(8))
 }
+
 /// The number of observed nulls. Fields with null_count == 0 may choose not
 /// to write their physical validity bitmap out as a materialized buffer,
 /// instead setting the length of the bitmap buffer to 0.
@@ -85,6 +88,7 @@ func CreateFieldNode(
 	builder.PrependInt64(length)
 	return builder.Offset()
 }
+
 /// A data header describing the shared memory layout of a "record" or "row"
 /// batch. Some systems call this a "row batch" internally and others a "record
 /// batch".
@@ -199,6 +203,7 @@ func RecordBatchStartBuffersVector(
 func RecordBatchEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// For sending dictionary encoding information. Any Field can be
 /// dictionary-encoded, but in this case none of its children may be
 /// dictionary-encoded.
@@ -281,6 +286,7 @@ func DictionaryBatchAddIsDelta(builder *flatbuffers.Builder, isDelta byte) {
 func DictionaryBatchEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Message struct {
 	_tab flatbuffers.Table
 }
