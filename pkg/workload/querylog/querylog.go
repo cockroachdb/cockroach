@@ -542,6 +542,12 @@ func unzip(src, dest string) error {
 		}()
 
 		path := filepath.Join(dest, f.Name)
+		// Check for ZipSlip. More Info: http://bit.ly/2MsjAWE
+		if !strings.HasPrefix(path, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return errors.Errorf("%s: illegal file path while extracting the zip. "+
+				"Such a file path can be dangerous because of ZipSlip vulnerability. "+
+				"Please reconsider whether the zip file is trustworthy.", path)
+		}
 
 		if f.FileInfo().IsDir() {
 			if err = os.MkdirAll(path, f.Mode()); err != nil {
