@@ -902,7 +902,11 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		// #14238
 		{"EXPLAIN SELECT 1", []preparedQueryTest{
-			baseTest.SetArgs().Results("values", "", "").Results("", "size", "1 column, 1 row"),
+			baseTest.SetArgs().
+				Results("", "distributed", "false").
+				Results("", "vectorized", "false").
+				Results("values", "", "").
+				Results("", "size", "1 column, 1 row"),
 		}},
 		// #14245
 		{"SELECT 1::oid = $1", []preparedQueryTest{

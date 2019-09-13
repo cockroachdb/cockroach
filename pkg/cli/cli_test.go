@@ -1374,13 +1374,15 @@ func Example_misc_table() {
 	//     hai
 	// (1 row)
 	// sql --format=table -e explain select s, 'foo' from t.t
-	//     tree    | field | description
-	// +-----------+-------+-------------+
-	//   render    |       |
-	//    └── scan |       |
-	//             | table | t@primary
-	//             | spans | ALL
-	// (4 rows)
+	//     tree    |    field    | description
+	// +-----------+-------------+-------------+
+	//             | distributed | true
+	//             | vectorized  | true
+	//   render    |             |
+	//    └── scan |             |
+	//             | table       | t@primary
+	//             | spans       | ALL
+	// (6 rows)
 }
 
 func Example_user() {

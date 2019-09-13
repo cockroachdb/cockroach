@@ -10,6 +10,8 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
+·                           distributed   false            ·       ·
+·                           vectorized    false            ·       ·
 root                        ·             ·                (a, a)  ·
  ├── hash-join              ·             ·                (a, a)  ·
  │    │                     type          cross            ·       ·
@@ -31,16 +33,20 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t
 ----
-render     ·         ·          (a)  ·
- │         render 0  a          ·    ·
- └── scan  ·         ·          (a)  ·
-·          table     y@primary  ·    ·
-·          spans     ALL        ·    ·
+·          distributed  false      ·    ·
+·          vectorized   true       ·    ·
+render     ·            ·          (a)  ·
+ │         render 0     a          ·    ·
+ └── scan  ·            ·          (a)  ·
+·          table        y@primary  ·    ·
+·          spans        ALL        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
+·                                          distributed    false             ·                   ·
+·                                          vectorized     false             ·                   ·
 root                                       ·              ·                 (a)                 ·
  ├── scan buffer node                      ·              ·                 (a)                 ·
  │                                         label          buffer 1 (t)      ·                   ·
@@ -76,11 +82,13 @@ EXPLAIN (VERBOSE)
   FROM
     w, table39010
 ----
-hash-join  ·      ·                   (col)  ·
- │         type   cross               ·      ·
- ├── scan  ·      ·                   ()     ·
- │         table  table39010@primary  ·      ·
- │         spans  ALL                 ·      ·
- └── scan  ·      ·                   (col)  ·
-·          table  table39010@primary  ·      ·
-·          spans  ALL                 ·      ·
+·          distributed  false               ·      ·
+·          vectorized   false               ·      ·
+hash-join  ·            ·                   (col)  ·
+ │         type         cross               ·      ·
+ ├── scan  ·            ·                   ()     ·
+ │         table        table39010@primary  ·      ·
+ │         spans        ALL                 ·      ·
+ └── scan  ·            ·                   (col)  ·
+·          table        table39010@primary  ·      ·
+·          spans        ALL                 ·      ·

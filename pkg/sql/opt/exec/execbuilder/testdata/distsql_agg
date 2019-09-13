@@ -353,6 +353,8 @@ group-by
 query TTTTT
 EXPLAIN (verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
 ----
+·               distributed  true           ·           ·
+·               vectorized   false          ·           ·
 group           ·            ·              (b, count)  ·
  │              aggregate 0  b              ·           ·
  │              aggregate 1  count_rows()   ·           ·

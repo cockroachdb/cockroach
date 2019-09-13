@@ -62,20 +62,10 @@ type distSQLExplainable interface {
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
-	// Trigger limit propagation.
-	params.p.prepareForDistSQLSupportCheck()
-
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-
-	var recommendation distRecommendation
-	if _, ok := n.plan.(distSQLExplainable); ok {
-		recommendation = shouldDistribute
-	} else {
-		recommendation, _ = distSQLPlanner.checkSupportForNode(n.plan)
-	}
-
+	shouldPlanDistribute, recommendation := willDistributePlan(distSQLPlanner, n.plan, params)
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
+	planCtx.isLocal = !shouldPlanDistribute
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
@@ -124,19 +114,12 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 	}
 
-	var plan PhysicalPlan
-	var err error
-	if planNode, ok := n.plan.(distSQLExplainable); ok {
-		plan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
-	} else {
-		plan, err = distSQLPlanner.createPlanForNode(planCtx, n.plan)
-	}
+	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
 		return err
 	}
 
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
-
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 	diagram, err := distsqlpb.GeneratePlanDiagram(flows)
 	if err != nil {
@@ -238,4 +221,38 @@ func (n *explainDistSQLNode) Close(ctx context.Context) {
 			n.subqueryPlans[i].plan = nil
 		}
 	}
+}
+
+// willDistributePlan checks if the given plan will run with distributed
+// execution. It takes into account whether a distSQL plan can be made at all
+// and the session setting for distSQL.
+func willDistributePlan(
+	distSQLPlanner *DistSQLPlanner, plan planNode, params runParams,
+) (bool, distRecommendation) {
+	// Trigger limit propagation.
+	params.p.prepareForDistSQLSupportCheck()
+	var recommendation distRecommendation
+	if _, ok := plan.(distSQLExplainable); ok {
+		recommendation = shouldDistribute
+	} else {
+		recommendation, _ = distSQLPlanner.checkSupportForNode(plan)
+	}
+	shouldDistribute := shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
+	return shouldDistribute, recommendation
+}
+
+func makePhysicalPlan(
+	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner, plan planNode,
+) (PhysicalPlan, error) {
+	var physPlan PhysicalPlan
+	var err error
+	if planNode, ok := plan.(distSQLExplainable); ok {
+		physPlan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
+	} else {
+		physPlan, err = distSQLPlanner.createPlanForNode(planCtx, plan)
+	}
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+	return physPlan, nil
 }
