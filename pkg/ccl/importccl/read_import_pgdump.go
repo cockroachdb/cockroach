@@ -209,7 +209,9 @@ func removeDefaultRegclass(create *tree.CreateTable) {
 // matching table from SQL statements.
 func readPostgresCreateTable(
 	input io.Reader,
+	ctx context.Context,
 	evalCtx *tree.EvalContext,
+	p sql.PlanHookState,
 	settings *cluster.Settings,
 	match string,
 	parentID sqlbase.ID,
@@ -227,6 +229,7 @@ func readPostgresCreateTable(
 	createSeq := make(map[string]*tree.CreateSequence)
 	tableFKs := make(map[string][]*tree.ForeignKeyConstraintTableDef)
 	ps := newPostgreStream(input, max)
+	params := p.RunParams(ctx)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -241,6 +244,7 @@ func readPostgresCreateTable(
 					hlc.Timestamp{WallTime: walltime},
 					sqlbase.NewDefaultPrivilegeDescriptor(),
 					settings,
+					&params,
 				)
 				if err != nil {
 					return nil, err

@@ -552,6 +552,7 @@ CREATE TABLE pg_catalog.pg_class (
 					relKind = relKindSequence
 				}
 				namespaceOid := h.NamespaceOid(db, scName)
+				relfilenode := defaultOid(table.GetID())
 				if err := addRow(
 					defaultOid(table.ID),      // oid
 					tree.NewDName(table.Name), // relname
@@ -560,7 +561,7 @@ CREATE TABLE pg_catalog.pg_class (
 					oidZero,                   // reloftype (PG creates a composite type in pg_type for each table)
 					tree.DNull,                // relowner
 					cockroachIndexEncodingOid, // relam
-					oidZero,                   // relfilenode
+					relfilenode,               // relfilenode
 					oidZero,                   // reltablespace
 					tree.DNull,                // relpages
 					tree.DNull,                // reltuples
@@ -1038,7 +1039,6 @@ CREATE TABLE pg_catalog.pg_depend (
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
-
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db *sqlbase.DatabaseDescriptor,
@@ -1046,12 +1046,42 @@ CREATE TABLE pg_catalog.pg_depend (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
+			pgConstraintTableOid := defaultOid(pgConstraintsDesc.ID)
+			pgClassTableOid := defaultOid(pgClassDesc.ID)
+			if table.IsSequence() && table.SequenceOpts.SequenceOwner.HasOwner {
+				tableID := table.SequenceOpts.SequenceOwner.OwnerTableID
+				desc, err := tableLookup.getTableByID(tableID)
+				if err != nil {
+					return err
+				}
+				columnIndexMap := desc.ColumnIdxMap()
+				// Postgres expects columns to be 1 indexed, we store them as 0 indexed
+				colPosition := columnIndexMap[table.SequenceOpts.SequenceOwner.OwnerColumnID] + 1
+				refObjID := defaultOid(tableID)
+				refObjSubIDBitArray, err := tree.NewDBitArrayFromInt(int64(colPosition), 4)
+				if err != nil {
+					return err
+				}
+				refObjSubID := refObjSubIDBitArray.AsDInt(0)
+				objID := defaultOid(table.GetID())
+
+				if err := addRow(
+					pgConstraintTableOid, // classid
+					objID,                // objid
+					zeroVal,              // objsubid
+					pgClassTableOid,      // refclassid
+					refObjID,             // refobjid
+					refObjSubID,          // refobjsubid
+					depTypeAuto,          // deptype
+				); err != nil {
+					return err
+				}
+				return nil
+			}
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
-			pgConstraintTableOid := defaultOid(pgConstraintsDesc.ID)
-			pgClassTableOid := defaultOid(pgClassDesc.ID)
 			for _, con := range conInfo {
 				if con.Kind != sqlbase.ConstraintTypeFK {
 					continue

@@ -85,9 +85,6 @@ CREATE SEQUENCE high_minvalue_test MINVALUE 5
 statement error at or near "EOF": syntax error: unimplemented
 CREATE SEQUENCE err_test AS INT2
 
-statement error at or near "EOF": syntax error: unimplemented
-CREATE SEQUENCE err_test OWNED BY someuser
-
 # Verify validation of START vs MINVALUE/MAXVALUE.
 
 statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
@@ -931,3 +928,93 @@ DROP SEQUENCE seq;
 
 statement ok
 SET sql_safe_updates = true
+
+# Sequence Ownership tests
+
+# Sequence can be owned be owned by a table column
+
+statement ok
+CREATE TABLE owner(owner_col INT)
+
+statement ok
+CREATE SEQUENCE owned_seq OWNED BY owner.owner_col
+
+query TTT
+SELECT seqclass.relname AS sequence_name,
+       depclass.relname AS table_name,
+       attrib.attname   as column_name
+FROM   pg_class AS seqclass
+       JOIN pg_depend AS dep
+         ON ( seqclass.relfilenode = dep.objid )
+       JOIN pg_class AS depclass
+         ON ( dep.refobjid = depclass.relfilenode )
+       JOIN pg_attribute AS attrib
+         ON ( attrib.attnum = dep.refobjsubid
+              AND attrib.attrelid = dep.refobjid )
+WHERE seqclass.relkind = 'S'
+----
+owned_seq owner owner_col
+
+# Sequence owner can be removed
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY NONE
+
+statement count 0
+SELECT seqclass.relname AS sequence_name,
+       depclass.relname AS table_name,
+       attrib.attname   as column_name
+FROM   pg_class AS seqclass
+       JOIN pg_depend AS dep
+         ON ( seqclass.relfilenode = dep.objid )
+       JOIN pg_class AS depclass
+         ON ( dep.refobjid = depclass.relfilenode )
+       JOIN pg_attribute AS attrib
+         ON ( attrib.attnum = dep.refobjsubid
+              AND attrib.attrelid = dep.refobjid )
+WHERE seqclass.relkind = 'S'
+
+# cleanup
+statement ok
+DROP TABLE owner
+
+statement ok
+DROP SEQUENCE owned_seq
+
+
+# Sequence is dropped when its owner is dropped
+statement ok
+CREATE SEQUENCE owned_seq;
+
+statement ok
+CREATE TABLE a(a INT DEFAULT nextval('seq'));
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY a.a;
+
+statement error
+DROP TABLE a;
+
+statement error relation "owned_seq" does not exist
+DROP SEQUENCE owned_seq;
+
+
+# DROP TABLE and ALTER TABLE ... DROP COLUMN work correctly with multiple sequence dependencies
+# and Ownership scenarios
+statement ok
+CREATE SEQUENCE owned_seq;
+
+statement ok
+CREATE TABLE a(a INT DEFAULT nextval('seq'), b INT DEFAULT nextval('seq'));
+
+statement ok
+ALTER SEQUENCE owned_seq OWNED BY ab.a;
+
+statement error cannot drop sequence id_seq because other objects depend on it
+ALTER TABLE ab DROP COLUMN a;
+
+statement ok
+DROP TABLE ab
+
+statement error relation "owned_seq" does not exist
+DROP SEQUENCE owned_seq;

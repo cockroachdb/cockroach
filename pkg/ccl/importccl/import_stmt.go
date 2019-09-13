@@ -467,10 +467,10 @@ func importPlanHook(
 				switch format.Format {
 				case roachpb.IOFileFormat_Mysqldump:
 					evalCtx := &p.ExtendedEvalContext().EvalContext
-					tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, defaultCSVTableID, parentID, match, fks, seqVals)
+					tableDescs, err = readMysqlCreateTable(reader, ctx, evalCtx, &p, defaultCSVTableID, parentID, match, fks, seqVals)
 				case roachpb.IOFileFormat_PgDump:
 					evalCtx := &p.ExtendedEvalContext().EvalContext
-					tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
+					tableDescs, err = readPostgresCreateTable(reader, ctx, evalCtx, p, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
 				default:
 					return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 				}

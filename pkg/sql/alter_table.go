@@ -327,6 +327,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			// You can't remove a column that owns a sequence that is depended on
+			// by another column
+			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, col, t.DropBehavior); err != nil {
+				return err
+			}
+			// If the dropped column owns a sequence, drop the sequence as well.
+			if len(col.OwnsSequenceIds) > 0 {
+				if err := dropSequencesOwnedByCol(col, params); err != nil {
+					return err
+				}
+			}
+
 			// You can't drop a column depended on by a view unless CASCADE was
 			// specified.
 			for _, ref := range n.tableDesc.DependedOnBy {
