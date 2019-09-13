@@ -321,7 +321,7 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 	// Get the zone
 	var zKey ZoneKey
 	var zConfig *config.ZoneConfig
-	if err := visitZones(ctx, r, v.cfg,
+	found, err := visitZones(ctx, r, v.cfg,
 		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
 			if zone.NumReplicas == nil || *zone.NumReplicas == 0 {
 				return false
@@ -329,8 +329,13 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 			zKey = key
 			zConfig = zone
 			return true
-		}); err != nil {
+		})
+	if err != nil {
 		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
+	}
+	if !found {
+		log.Errorf(ctx, "no zone config with replication attributes found for range: %s", &r)
+		return
 	}
 
 	underReplicated := *zConfig.NumReplicas > int32(len(r.Replicas().Voters()))

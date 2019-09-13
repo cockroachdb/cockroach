@@ -427,7 +427,7 @@ func (v *constraintConformanceVisitor) visit(ctx context.Context, r roachpb.Rang
 	// Find the applicable constraints, which may be inherited.
 	var constraints []config.Constraints
 	var zKey ZoneKey
-	err := visitZones(ctx, r, v.cfg,
+	_, err := visitZones(ctx, r, v.cfg,
 		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
 			if zone.Constraints == nil {
 				return false
