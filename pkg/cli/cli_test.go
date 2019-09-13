@@ -1377,7 +1377,7 @@ func Example_misc_table() {
 	//     tree    |    field    | description
 	// +-----------+-------------+-------------+
 	//             | distributed | true
-	//             | vectorized  | true
+	//             | vectorized  | false
 	//   render    |             |
 	//    └── scan |             |
 	//             | table       | t@primary
