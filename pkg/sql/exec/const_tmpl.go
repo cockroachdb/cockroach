@@ -130,13 +130,13 @@ func (c constNullOp) Init() {
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
+	if batch.Width() == c.outputIdx {
+		batch.AppendCol(coltypes.Int8)
+	}
 	if n == 0 {
 		return batch
 	}
 
-	if batch.Width() == c.outputIdx {
-		batch.AppendCol(coltypes.Int8)
-	}
 	col := batch.ColVec(c.outputIdx)
 	nulls := col.Nulls()
 	if sel := batch.Selection(); sel != nil {
