@@ -67,7 +67,7 @@ func descForTable(
 		ts := hlc.Timestamp{WallTime: nanos}
 		priv := sqlbase.NewDefaultPrivilegeDescriptor()
 		desc, err := sql.MakeSequenceTableDesc(
-			name, tree.SequenceOptions{}, parent, id-1, ts, priv, settings,
+			name, tree.SequenceOptions{}, parent, id-1, ts, priv, settings, nil,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -164,7 +164,7 @@ func readMysqlCreateFrom(
 	}
 	defer f.Close()
 
-	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, id, expectedParent, name, fks, map[sqlbase.ID]int64{})
+	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, nil, id, expectedParent, name, fks, map[sqlbase.ID]int64{})
 	if err != nil {
 		t.Fatal(err)
 	}

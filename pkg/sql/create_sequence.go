@@ -77,7 +77,7 @@ func doCreateSequence(
 	privs := dbDesc.GetPrivileges()
 
 	desc, err := MakeSequenceTableDesc(name.Table(), opts,
-		dbDesc.ID, id, params.creationTimeForNewTableDescriptor(), privs, params.EvalContext().Settings)
+		dbDesc.ID, id, params.creationTimeForNewTableDescriptor(), privs, params.EvalContext().Settings, &params)
 	if err != nil {
 		return err
 	}
@@ -136,6 +136,7 @@ func MakeSequenceTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	settings *cluster.Settings,
+	params *runParams,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges)
 
@@ -168,7 +169,7 @@ func MakeSequenceTableDesc(
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
-	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */)
+	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */, params, id)
 	if err != nil {
 		return desc, err
 	}

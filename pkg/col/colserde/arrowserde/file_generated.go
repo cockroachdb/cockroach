@@ -118,6 +118,7 @@ func FooterStartRecordBatchesVector(
 func FooterEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Block struct {
 	_tab flatbuffers.Struct
 }
@@ -135,6 +136,7 @@ func (rcv *Block) Table() flatbuffers.Table {
 func (rcv *Block) Offset() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(0))
 }
+
 /// Index to the start of the RecordBlock (note this is past the Message header)
 func (rcv *Block) MutateOffset(n int64) bool {
 	return rcv._tab.MutateInt64(rcv._tab.Pos+flatbuffers.UOffsetT(0), n)
@@ -144,6 +146,7 @@ func (rcv *Block) MutateOffset(n int64) bool {
 func (rcv *Block) MetaDataLength() int32 {
 	return rcv._tab.GetInt32(rcv._tab.Pos + flatbuffers.UOffsetT(8))
 }
+
 /// Length of the metadata
 func (rcv *Block) MutateMetaDataLength(n int32) bool {
 	return rcv._tab.MutateInt32(rcv._tab.Pos+flatbuffers.UOffsetT(8), n)
@@ -154,6 +157,7 @@ func (rcv *Block) MutateMetaDataLength(n int32) bool {
 func (rcv *Block) BodyLength() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(16))
 }
+
 /// Length of the data (this is aligned so there can be a gap between this and
 /// the metatdata).
 func (rcv *Block) MutateBodyLength(n int64) bool {
