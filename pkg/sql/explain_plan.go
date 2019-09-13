@@ -222,8 +222,12 @@ func (p *planner) populateExplain(
 		flows := physicalPlan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 		flowCtx := makeFlowCtx(planCtx, physicalPlan, params)
 
+		ctxSessionData := flowCtx.EvalCtx.SessionData
+		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
 		isVec = true
-		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOff {
+		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
+			isVec = false
+		} else if !vectorizedThresholdMet && ctxSessionData.VectorizeMode == sessiondata.VectorizeAuto {
 			isVec = false
 		} else {
 			for _, flow := range flows {
