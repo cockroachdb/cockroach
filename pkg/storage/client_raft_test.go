@@ -955,6 +955,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// includes the increment).
 	truncArgs := truncateLogArgs(index+1, 1)
 	testutils.SucceedsSoon(t, func() error {
+		mtc.advanceClock(ctx)
 		_, pErr := client.SendWrapped(ctx, newLeaderReplSender, truncArgs)
 		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
 			return pErr.GoError()
