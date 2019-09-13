@@ -1,4 +1,4 @@
-# LogicTest: fakedist
+# LogicTest: 5node-dist
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
@@ -54,7 +54,7 @@ query TTT
 EXECUTE change_stats
 ----
 ·           distributed         true
-·           vectorized          false
+·           vectorized          true
 merge-join  ·                   ·
  │          type                inner
  │          equality            (a) = (c)
