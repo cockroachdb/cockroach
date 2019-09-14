@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -552,30 +551,15 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 
 // ConstructIndexJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructIndexJoin(
-	input exec.Node, table cat.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
+	input exec.Node,
+	table cat.Table,
+	keyCols []exec.ColumnOrdinal,
+	tableCols exec.ColumnOrdinalSet,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	colCfg := makeScanColumnsConfig(table, cols)
-	colDescs := makeColDescList(table, cols)
-
-	// TODO(rytaft): saveTableNode is not yet supported as input to an index
-	// join, so discard the saveTableNode.
-	if saveTable, ok := input.(*saveTableNode); ok {
-		input = saveTable.source
-	}
-
-	// TODO(justin): this would be something besides a scanNode in the general
-	// case of a lookup join.
-	var scan *scanNode
-	switch t := input.(type) {
-	case *scanNode:
-		scan = t
-	case *zeroNode:
-		// zeroNode is possible when the scanNode had a contradiction constraint.
-		return newZeroNode(sqlbase.ResultColumnsFromColDescs(colDescs)), nil
-	default:
-		return nil, fmt.Errorf("%T not supported as input to lookup join", t)
-	}
+	colCfg := makeScanColumnsConfig(table, tableCols)
+	colDescs := makeColDescList(table, tableCols)
 
 	tableScan := ef.planner.Scan()
 
@@ -588,23 +572,22 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan.isSecondaryIndex = false
 	tableScan.disableBatchLimit()
 
-	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(tableScan, scan)
-	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tabDesc.TableDesc(), tableScan.index.ID))
-
-	return &indexJoinNode{
-		index:             scan,
-		table:             tableScan,
-		primaryKeyColumns: primaryKeyColumns,
-		cols:              colDescs,
-		resultColumns:     sqlbase.ResultColumnsFromColDescs(colDescs),
-		run: indexJoinRun{
-			primaryKeyPrefix: primaryKeyPrefix,
-			colIDtoRowIndex:  colIDtoRowIndex,
-		},
+	n := &indexJoinNode{
+		input:         input.(planNode),
+		table:         tableScan,
+		cols:          colDescs,
+		resultColumns: sqlbase.ResultColumnsFromColDescs(colDescs),
 		props: physicalProps{
 			ordering: sqlbase.ColumnOrdering(reqOrdering),
 		},
-	}, nil
+	}
+
+	n.keyCols = make([]int, len(keyCols))
+	for i, c := range keyCols {
+		n.keyCols[i] = int(c)
+	}
+
+	return n, nil
 }
 
 // ConstructLookupJoin is part of the exec.Factory interface.
