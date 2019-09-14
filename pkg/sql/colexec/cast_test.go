@@ -93,9 +93,9 @@ func TestRandomizedCast(t *testing.T) {
 					}
 				}
 				input = append(input, tuple{c.fromPhysType(fromDatum)})
-				output = append(output, tuple{c.toPhysType(toDatum)})
+				output = append(output, tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
 			}
-			runTests(t, []tuples{input}, output, orderedVerifier, []int{1},
+			runTests(t, []tuples{input}, output, orderedVerifier,
 				func(input []Operator) (Operator, error) {
 					return GetCastOperator(input[0], 0 /* inputIdx*/, 1 /* resultIdx */, c.fromTyp, c.toTyp)
 				})

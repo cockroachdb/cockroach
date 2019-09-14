@@ -1552,7 +1552,7 @@ func TestMergeJoiner(t *testing.T) {
 			runner = runTestsWithTyps
 		}
 		runner(t, []tuples{tc.leftTuples, tc.rightTuples}, nil /* typs */, tc.expected, mergeJoinVerifier,
-			tc.expectedOutCols, func(input []Operator) (Operator, error) {
+			func(input []Operator) (Operator, error) {
 				return NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
 					tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings,
 					nil /* filterConstructor */, false /* filterOnlyOnLeft */)

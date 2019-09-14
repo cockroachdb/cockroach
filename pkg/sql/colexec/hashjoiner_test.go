@@ -711,20 +711,7 @@ func TestHashJoinerInt64(t *testing.T) {
 
 		for _, buildDistinct := range buildFlags {
 			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
-				nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
-				nLeftOutCols := uint32(len(tc.leftOutCols))
-				nLeftCols := uint32(len(tc.leftTypes))
-
-				cols := make([]int, nOutCols)
-
-				for i, colIdx := range tc.leftOutCols {
-					cols[i] = int(colIdx)
-				}
-				for i, colIdx := range tc.rightOutCols {
-					cols[uint32(i)+nLeftOutCols] = int(colIdx + nLeftCols)
-				}
-
-				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, cols, func(sources []Operator) (Operator, error) {
+				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
 					leftSource, rightSource := sources[0], sources[1]
 					return NewEqHashJoinerOp(
 						leftSource, rightSource,

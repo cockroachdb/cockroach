@@ -25,7 +25,7 @@ import (
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
-		[]int{0, 1}, func(input []Operator) (Operator, error) {
+		func(input []Operator) (Operator, error) {
 			return &projPlusInt64Int64ConstOp{
 				projConstOpBase: projConstOpBase{
 					OneInputNode: NewOneInputNode(input[0]),
@@ -39,7 +39,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
 	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}},
-		orderedVerifier, []int{0, 1, 2},
+		orderedVerifier,
 		func(input []Operator) (Operator, error) {
 			return &projPlusInt64Int64Op{
 				projOpBase: projOpBase{

@@ -76,7 +76,7 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
-type testRunner func(*testing.T, []tuples, []coltypes.T, tuples, verifier, []int, func([]Operator) (Operator, error))
+type testRunner func(*testing.T, []tuples, []coltypes.T, tuples, verifier, func([]Operator) (Operator, error))
 
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
@@ -89,10 +89,9 @@ func runTests(
 	tups []tuples,
 	expected tuples,
 	verifier verifier,
-	cols []int,
 	constructor func(inputs []Operator) (Operator, error),
 ) {
-	runTestsWithTyps(t, tups, nil /* typs */, expected, verifier, cols, constructor)
+	runTestsWithTyps(t, tups, nil /* typs */, expected, verifier, constructor)
 }
 
 // runTestsWithTyps is the same as runTests with an ability to specify the
@@ -103,10 +102,9 @@ func runTestsWithTyps(
 	typs []coltypes.T,
 	expected tuples,
 	verifier verifier,
-	cols []int,
 	constructor func(inputs []Operator) (Operator, error),
 ) {
-	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, cols, constructor)
+	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, constructor)
 
 	t.Run("allNullsInjection", func(t *testing.T) {
 		// This test replaces all values in the input tuples with nulls and ensures
@@ -155,8 +153,8 @@ func runTestsWithTyps(
 			var originalTuples, tuplesWithNulls tuples
 			for i := uint16(0); i < originalBatch.Length(); i++ {
 				// We checked that the batches have the same length.
-				originalTuples = append(originalTuples, getTupleFromBatch(originalBatch, cols, i))
-				tuplesWithNulls = append(tuplesWithNulls, getTupleFromBatch(batchWithNulls, cols, i))
+				originalTuples = append(originalTuples, getTupleFromBatch(originalBatch, i))
+				tuplesWithNulls = append(tuplesWithNulls, getTupleFromBatch(batchWithNulls, i))
 			}
 			if err := assertTuplesSetsEqual(originalTuples, tuplesWithNulls); err != nil {
 				// err is non-nil which means that the batches are different.
@@ -187,7 +185,6 @@ func runTestsWithoutAllNullsInjection(
 	typs []coltypes.T,
 	expected tuples,
 	verifier verifier,
-	cols []int,
 	constructor func(inputs []Operator) (Operator, error),
 ) {
 	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []Operator) {
@@ -195,7 +192,7 @@ func runTestsWithoutAllNullsInjection(
 		if err != nil {
 			t.Fatal(err)
 		}
-		out := newOpTestOutput(op, cols, expected)
+		out := newOpTestOutput(op, expected)
 		if err := verifier(out); err != nil {
 			t.Fatal(err)
 		}
@@ -671,7 +668,6 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 // match some expected output tuples.
 type opTestOutput struct {
 	OneInputNode
-	cols     []int
 	expected tuples
 
 	curIdx uint16
@@ -679,30 +675,28 @@ type opTestOutput struct {
 }
 
 // newOpTestOutput returns a new opTestOutput, initialized with the given input
-// to verify on the given column indices that the output is exactly equal to
-// the expected tuples.
-func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput {
+// to verify that the output is exactly equal to the expected tuples.
+func newOpTestOutput(input Operator, expected tuples) *opTestOutput {
 	input.Init()
 
 	return &opTestOutput{
 		OneInputNode: NewOneInputNode(input),
-		cols:         cols,
 		expected:     expected,
 	}
 }
 
 // getTupleFromBatch is a helper function that extracts a tuple at index
-// tupleIdx from batch using only columns in cols.
-func getTupleFromBatch(batch coldata.Batch, cols []int, tupleIdx uint16) tuple {
-	ret := make(tuple, len(cols))
+// tupleIdx from batch.
+func getTupleFromBatch(batch coldata.Batch, tupleIdx uint16) tuple {
+	ret := make(tuple, batch.Width())
 	out := reflect.ValueOf(ret)
 	if sel := batch.Selection(); sel != nil {
 		tupleIdx = sel[tupleIdx]
 	}
-	for outIdx, colIdx := range cols {
+	for colIdx := range ret {
 		vec := batch.ColVec(colIdx)
 		if vec.Nulls().NullAt(tupleIdx) {
-			ret[outIdx] = nil
+			ret[colIdx] = nil
 		} else {
 			var val reflect.Value
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
@@ -715,7 +709,7 @@ func getTupleFromBatch(batch coldata.Batch, cols []int, tupleIdx uint16) tuple {
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(int(tupleIdx))
 			}
-			out.Index(outIdx).Set(val)
+			out.Index(colIdx).Set(val)
 		}
 	}
 	return ret
@@ -730,7 +724,7 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 		}
 		r.curIdx = 0
 	}
-	ret := getTupleFromBatch(r.batch, r.cols, r.curIdx)
+	ret := getTupleFromBatch(r.batch, r.curIdx)
 	r.curIdx++
 	return ret
 }
@@ -985,7 +979,7 @@ func TestOpTestInputOutput(t *testing.T) {
 		},
 	}
 	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []Operator) {
-		out := newOpTestOutput(sources[0], []int{0, 1, 2}, inputs[0])
+		out := newOpTestOutput(sources[0], inputs[0])
 
 		if err := out.Verify(); err != nil {
 			t.Fatal(err)
