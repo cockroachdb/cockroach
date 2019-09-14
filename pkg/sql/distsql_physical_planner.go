@@ -408,7 +408,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		if _, err := dsp.checkSupportForNode(n.table); err != nil {
 			return cannotDistribute, err
 		}
-		return dsp.checkSupportForNode(n.index)
+		return dsp.checkSupportForNode(n.input)
 
 	case *lookupJoinNode:
 		if err := dsp.checkExpr(n.onCond); err != nil {
@@ -1845,13 +1845,26 @@ func (dsp *DistSQLPlanner) addAggregators(
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *PlanningCtx, n *indexJoinNode,
 ) (PhysicalPlan, error) {
-	plan, err := dsp.createTableReaders(planCtx, n.index, n.index.desc.PrimaryIndex.ColumnIDs)
+	plan, err := dsp.createPlanForNode(planCtx, n.input)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
 
+	// In "index-join mode", the join reader assumes that the PK cols are a prefix
+	// of the input stream columns (see #40749). We need a projection to make that
+	// happen. The other columns are not used by the join reader.
+	pkCols := make([]uint32, len(n.keyCols))
+	for i := range n.keyCols {
+		streamColOrd := plan.PlanToStreamColMap[n.keyCols[i]]
+		if streamColOrd == -1 {
+			panic("key column not in planToStreamColMap")
+		}
+		pkCols[i] = uint32(streamColOrd)
+	}
+	plan.AddProjection(pkCols)
+
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:      *n.index.desc.TableDesc(),
+		Table:      *n.table.desc.TableDesc(),
 		IndexIdx:   0,
 		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
 	}
@@ -1888,7 +1901,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			types,
-			dsp.convertOrdering(planPhysicalProps(n), plan.PlanToStreamColMap),
+			dsp.convertOrdering(n.props, plan.PlanToStreamColMap),
 		)
 	} else {
 		// Use a single join reader (if there is a single stream, on that node; if

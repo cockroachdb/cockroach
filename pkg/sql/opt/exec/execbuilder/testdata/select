@@ -1314,6 +1314,7 @@ EXPLAIN SELECT price FROM a WHERE item IN ('sock', 'ball')
 render           ·            ·
  └── index-join  ·            ·
       │          table        a@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        a@item
 ·                spans        /"ball"-/"ball"/PrefixEnd /"sock"-/"sock"/PrefixEnd
@@ -1329,6 +1330,7 @@ EXPLAIN SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND pric
 render           ·            ·
  └── index-join  ·            ·
       │          table        a@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        a@p
 ·                spans        /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
