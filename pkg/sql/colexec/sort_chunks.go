@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
@@ -57,7 +58,7 @@ func (c *sortChunksOp) ChildCount() int {
 	return 0
 }
 
-func (c *sortChunksOp) Child(nth int) execinfrapb.OpNode {
+func (c *sortChunksOp) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
 		return c.input
 	}

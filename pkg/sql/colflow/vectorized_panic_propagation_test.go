@@ -46,13 +46,13 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := execinfra.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := colexec.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	vee := newTestVectorizedInternalPanicEmitter(col)
-	mat, err := NewMaterializer(
+	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		vee,
@@ -93,13 +93,13 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := execinfra.NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
+	col, err := colexec.NewColumnarizer(ctx, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	nvee := newTestNonVectorizedPanicEmitter(col)
-	mat, err := NewMaterializer(
+	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
 		nvee,

@@ -17,14 +17,13 @@
 //
 // */}}
 
-package vecbuiltins
+package colexec
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
@@ -34,7 +33,7 @@ type _ROW_NUMBER_STRINGOp struct {
 	rowNumberBase
 }
 
-var _ colexec.Operator = &_ROW_NUMBER_STRINGOp{}
+var _ Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)

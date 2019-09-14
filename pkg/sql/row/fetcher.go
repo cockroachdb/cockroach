@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// debugRowFetch can be used to turn on some low-level debugging logs. We use
+// DebugRowFetch can be used to turn on some low-level debugging logs. We use
 // this to avoid using log.V in the hot path.
-const debugRowFetch = false
+const DebugRowFetch = false
 
 type kvBatchFetcher interface {
 	// nextBatch returns the next batch of rows. Returns false in the first
@@ -43,7 +43,7 @@ type kvBatchFetcher interface {
 	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
 		batchResponse []byte, origSpan roachpb.Span, err error)
-	getRangesInfo() []roachpb.RangeInfo
+	GetRangesInfo() []roachpb.RangeInfo
 }
 
 type tableInfo struct {
@@ -204,7 +204,7 @@ type Fetcher struct {
 
 	// -- Fields updated during a scan --
 
-	kvFetcher      kvFetcher
+	kvFetcher      *KVFetcher
 	indexKey       []byte // the index key of the current row
 	prettyValueBuf *bytes.Buffer
 
@@ -566,7 +566,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, _, err = rf.kvFetcher.nextKV(ctx)
+		ok, rf.kv, _, err = rf.kvFetcher.NextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -893,7 +893,7 @@ func (rf *Fetcher) processKV(
 			}
 		}
 
-		if debugRowFetch {
+		if DebugRowFetch {
 			if hasExtraCols(table) {
 				log.Infof(ctx, "Scan %s -> %s", kv.Key, rf.prettyEncDatums(table.extraTypes, table.extraVals))
 			} else {
@@ -963,7 +963,7 @@ func (rf *Fetcher) processValueSingle(
 				prettyValue = value.String()
 			}
 			table.row[idx] = sqlbase.DatumToEncDatum(typ, value)
-			if debugRowFetch {
+			if DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", kv.Key, value)
 			}
 			return prettyKey, prettyValue, nil
@@ -972,7 +972,7 @@ func (rf *Fetcher) processValueSingle(
 
 	// No need to unmarshal the column value. Either the column was part of
 	// the index key or it isn't needed.
-	if debugRowFetch {
+	if DebugRowFetch {
 		log.Infof(ctx, "Scan %s -> [%d] (skipped)", kv.Key, colID)
 	}
 	return prettyKey, prettyValue, nil
@@ -1011,7 +1011,7 @@ func (rf *Fetcher) processValueBytes(
 				return "", "", err
 			}
 			valueBytes = valueBytes[len:]
-			if debugRowFetch {
+			if DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> [%d] (skipped)", kv.Key, colID)
 			}
 			continue
@@ -1037,7 +1037,7 @@ func (rf *Fetcher) processValueBytes(
 		}
 		table.row[idx] = encValue
 		rf.valueColsFound++
-		if debugRowFetch {
+		if DebugRowFetch {
 			log.Infof(ctx, "Scan %d -> %v", idx, encValue)
 		}
 	}
@@ -1416,10 +1416,10 @@ func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
 		// Not yet initialized.
 		return nil
 	}
-	return f.getRangesInfo()
+	return f.GetRangesInfo()
 }
 
-// GetBytesRead returns total number of bytes read by the underlying kvFetcher.
+// GetBytesRead returns total number of bytes read by the underlying KVFetcher.
 func (rf *Fetcher) GetBytesRead() int64 {
 	return rf.kvFetcher.bytesRead
 }

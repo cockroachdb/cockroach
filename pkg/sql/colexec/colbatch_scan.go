@@ -8,14 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colflow
+package colexec
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -33,16 +32,13 @@ import (
 // should get rid off table readers entirely. We will have to be careful about
 // propagating the metadata though.
 
-// TODO(yuzefovich): once row.CFetcher is moved into colexec, move colBatchScan
-// there as well.
-
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
-	colexec.ZeroInputNode
+	ZeroInputNode
 	spans     roachpb.Spans
 	flowCtx   *execinfra.FlowCtx
-	rf        *row.CFetcher
+	rf        *cFetcher
 	limitHint int64
 	ctx       context.Context
 	// maxResults is non-zero if there is a limit on the total number of rows
@@ -52,7 +48,7 @@ type colBatchScan struct {
 	init bool
 }
 
-var _ colexec.StaticMemoryOperator = &colBatchScan{}
+var _ StaticMemoryOperator = &colBatchScan{}
 
 func (s *colBatchScan) EstimateStaticMemoryUsage() int {
 	return s.rf.EstimateStaticMemoryUsage()
@@ -127,7 +123,7 @@ func newColBatchScan(
 	neededColumns := helper.NeededColumns()
 
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
-	fetcher := row.CFetcher{}
+	fetcher := cFetcher{}
 	if _, _, err := initCRowFetcher(
 		&fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, spec.Visibility,
@@ -149,9 +145,9 @@ func newColBatchScan(
 	}, nil
 }
 
-// initCRowFetcher initializes a row.CFetcher. See initRowFetcher.
+// initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
 func initCRowFetcher(
-	fetcher *row.CFetcher,
+	fetcher *cFetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
 	colIdxMap map[sqlbase.ColumnID]int,

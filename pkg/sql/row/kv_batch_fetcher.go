@@ -78,7 +78,7 @@ type txnKVFetcher struct {
 
 var _ kvBatchFetcher = &txnKVFetcher{}
 
-func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
+func (f *txnKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
 	if !f.returnRangeInfo {
 		panic(errors.AssertionFailedf("GetRangesInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo"))
 	}

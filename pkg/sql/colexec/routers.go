@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -25,7 +26,7 @@ import (
 // routerOutput is an interface implemented by router outputs. It exists for
 // easier test mocking of outputs.
 type routerOutput interface {
-	execinfrapb.OpNode
+	execinfra.OpNode
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
@@ -40,7 +41,7 @@ const defaultRouterOutputBlockedThreshold = coldata.BatchSize * 2
 
 type routerOutputOp struct {
 	// input is a reference to our router.
-	input execinfrapb.OpNode
+	input execinfra.OpNode
 
 	types []coltypes.T
 	// zeroBatch is used to return a 0 length batch in some cases.
@@ -72,7 +73,7 @@ func (o *routerOutputOp) ChildCount() int {
 	return 1
 }
 
-func (o *routerOutputOp) Child(nth int) execinfrapb.OpNode {
+func (o *routerOutputOp) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
 		return o.input
 	}

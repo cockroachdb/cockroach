@@ -59,7 +59,7 @@ type IndexJoiner struct {
 var _ Processor = &IndexJoiner{}
 var _ RowSource = &IndexJoiner{}
 var _ execinfrapb.MetadataSource = &IndexJoiner{}
-var _ execinfrapb.OpNode = &IndexJoiner{}
+var _ OpNode = &IndexJoiner{}
 
 const indexJoinerProcName = "index joiner"
 
@@ -263,18 +263,18 @@ func (ij *IndexJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	return ij.generateMeta(ctx)
 }
 
-// ChildCount is part of the execinfrapb.OpNode interface.
+// ChildCount is part of the OpNode interface.
 func (ij *IndexJoiner) ChildCount() int {
 	return 1
 }
 
-// Child is part of the execinfrapb.OpNode interface.
-func (ij *IndexJoiner) Child(nth int) execinfrapb.OpNode {
+// Child is part of the OpNode interface.
+func (ij *IndexJoiner) Child(nth int) OpNode {
 	if nth == 0 {
-		if n, ok := ij.input.(execinfrapb.OpNode); ok {
+		if n, ok := ij.input.(OpNode); ok {
 			return n
 		}
-		panic("input to IndexJoiner is not an execinfrapb.OpNode")
+		panic("input to IndexJoiner is not an OpNode")
 	}
 	panic(fmt.Sprintf("invalid index %d", nth))
 }

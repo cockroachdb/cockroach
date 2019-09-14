@@ -8,12 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package vecbuiltins
+package colexec
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-)
+import "github.com/cockroachdb/cockroach/pkg/col/coltypes"
 
 // TODO(yuzefovich): add benchmarks.
 
@@ -23,22 +20,22 @@ import (
 // outputColIdx specifies in which exec.Vec the operator should put its output
 // (if there is no such column, a new column is appended).
 func NewRankOperator(
-	input colexec.Operator,
+	input Operator,
 	inputTyps []coltypes.T,
 	dense bool,
 	orderingCols []uint32,
 	outputColIdx int,
 	partitionColIdx int,
-) (colexec.Operator, error) {
+) (Operator, error) {
 	if len(orderingCols) == 0 {
-		return colexec.NewConstOp(input, coltypes.Int64, int64(1), outputColIdx)
+		return NewConstOp(input, coltypes.Int64, int64(1), outputColIdx)
 	}
-	op, outputCol, err := colexec.OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
+	op, outputCol, err := OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
 	if err != nil {
 		return nil, err
 	}
 	initFields := rankInitFields{
-		OneInputNode:    colexec.NewOneInputNode(op),
+		OneInputNode:    NewOneInputNode(op),
 		distinctCol:     outputCol,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,

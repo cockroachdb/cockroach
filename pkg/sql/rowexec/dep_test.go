@@ -23,9 +23,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/sql/rowexec", true,
 		[]string{
-			// TODO(yuzefovich): backfiller processor brings in colexec. Fix this.
-			// Probably the problem is CFetcher.
-			//"github.com/cockroachdb/cockroach/pkg/sql/colexec",
+			"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colflow",
 			"github.com/cockroachdb/cockroach/pkg/sql/rowflow",
 		}, nil,
