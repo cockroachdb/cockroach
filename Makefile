@@ -821,7 +821,7 @@ execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
 $(info Cleaning old generated files.)
 $(shell find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) -delete)
-$(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -delete || true)
+$(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -delete 2>/dev/null)
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1496,9 +1496,6 @@ pkg/sql/colexec/vecbuiltins/row_number.eg.go: pkg/sql/colexec/vecbuiltins/row_nu
 pkg/sql/colexec/zerocolumns.eg.go: pkg/sql/colexec/zerocolumns_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
-	@# Remove generated files with the old suffix to avoid conflicts.
-	@# See https://github.com/cockroachdb/cockroach/pull/32265.
-	@rm -f pkg/sql/colexec/*.og.go
 	execgen $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
@@ -1551,7 +1548,7 @@ unsafe-clean-c-deps:
 .PHONY: clean-execgen-files
 clean-execgen-files:
 	find ./pkg/sql/colexec -type f -name '*.eg.go' -exec rm {} +
-	find ./pkg/sql/exec -type f -name '*.eg.go' -exec rm {} + || true
+	test -d ./pkg/sql/exec && find ./pkg/sql/exec -type f -name '*.eg.go' -exec rm {} + || true
 
 .PHONY: clean
 clean: ## Remove build artifacts.
