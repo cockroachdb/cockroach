@@ -384,14 +384,11 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *sortNode:
 		if v.observer.attr != nil {
-			var columns sqlbase.ResultColumns
-			if n.plan != nil {
-				columns = planColumns(n.plan)
-			}
-			// We use n.ordering and not plan.Ordering() because
-			// plan.Ordering() does not include the added sort columns not
-			// present in the output.
+			columns := planColumns(n.plan)
 			v.observer.attr(name, "order", formatOrdering(n.ordering, columns))
+			if p := n.alreadyOrderedPrefix; p > 0 {
+				v.observer.attr(name, "already ordered", formatOrdering(n.ordering[:p], columns))
+			}
 		}
 		n.plan = v.visit(n.plan)
 

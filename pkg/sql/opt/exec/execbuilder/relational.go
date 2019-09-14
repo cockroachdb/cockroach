@@ -1159,7 +1159,25 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	return b.buildSortedInput(input, sort.ProvidedPhysical().Ordering)
+
+	ordering := sort.ProvidedPhysical().Ordering
+	inputOrdering := sort.Input.ProvidedPhysical().Ordering
+	alreadyOrderedPrefix := 0
+	for i := range inputOrdering {
+		if i == len(ordering) {
+			return execPlan{}, errors.AssertionFailedf("sort ordering already provided by input")
+		}
+		if inputOrdering[i] != ordering[i] {
+			break
+		}
+		alreadyOrderedPrefix = i + 1
+	}
+
+	node, err := b.factory.ConstructSort(input.root, input.sqlOrdering(ordering), alreadyOrderedPrefix)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
 func (b *Builder) buildOrdinality(ord *memo.OrdinalityExpr) (execPlan, error) {
@@ -1908,16 +1926,6 @@ func (b *Builder) getEnvData() exec.ExplainEnvData {
 	}
 
 	return envOpts
-}
-
-// buildSortedInput is a helper method that can be reused to sort any input plan
-// by the given ordering.
-func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execPlan, error) {
-	node, err := b.factory.ConstructSort(input.root, input.sqlOrdering(ordering))
-	if err != nil {
-		return execPlan{}, err
-	}
-	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
 // statementTag returns a string that can be used in an error message regarding
