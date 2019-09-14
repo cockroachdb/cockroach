@@ -192,19 +192,20 @@ distinct   ·            ·            (pk1, pk2)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-·                    distributed  false        ·          ·
-·                    vectorized   false        ·          ·
-render               ·            ·            (a, c)     +a
- │                   render 0     a            ·          ·
- │                   render 1     c            ·          ·
- └── distinct        ·            ·            (a, b, c)  +a
-      │              distinct on  a            ·          ·
-      │              order key    a            ·          ·
-      └── sort       ·            ·            (a, b, c)  +a,-c,+b
-           │         order        +a,-c,+b     ·          ·
-           └── scan  ·            ·            (a, b, c)  +a
-·                    table        abc@primary  ·          ·
-·                    spans        ALL          ·          ·
+·                    distributed      false        ·          ·
+·                    vectorized       false        ·          ·
+render               ·                ·            (a, c)     +a
+ │                   render 0         a            ·          ·
+ │                   render 1         c            ·          ·
+ └── distinct        ·                ·            (a, b, c)  +a
+      │              distinct on      a            ·          ·
+      │              order key        a            ·          ·
+      └── sort       ·                ·            (a, b, c)  +a,-c,+b
+           │         order            +a,-c,+b     ·          ·
+           │         already ordered  +a           ·          ·
+           └── scan  ·                ·            (a, b, c)  +a
+·                    table            abc@primary  ·          ·
+·                    spans            ALL          ·          ·
 
 #################
 # With ORDER BY #

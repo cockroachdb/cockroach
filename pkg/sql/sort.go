@@ -22,6 +22,9 @@ import (
 type sortNode struct {
 	plan     planNode
 	ordering sqlbase.ColumnOrdering
+	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
+	// the prefix ordering[:alreadyOrderedPrefix].
+	alreadyOrderedPrefix int
 }
 
 func (n *sortNode) startExec(runParams) error {

@@ -1230,25 +1230,20 @@ func (dsp *DistSQLPlanner) selectRenders(
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
 func (dsp *DistSQLPlanner) addSorters(p *PhysicalPlan, n *sortNode) {
+	// Sorting is needed; we add a stage of sorting processors.
+	ordering := execinfrapb.ConvertToMappedSpecOrdering(n.ordering, p.PlanToStreamColMap)
 
-	matchLen := planPhysicalProps(n.plan).computeMatch(n.ordering)
-
-	if matchLen < len(n.ordering) {
-		// Sorting is needed; we add a stage of sorting processors.
-		ordering := execinfrapb.ConvertToMappedSpecOrdering(n.ordering, p.PlanToStreamColMap)
-
-		p.AddNoGroupingStage(
-			execinfrapb.ProcessorCoreUnion{
-				Sorter: &execinfrapb.SorterSpec{
-					OutputOrdering:   ordering,
-					OrderingMatchLen: uint32(matchLen),
-				},
+	p.AddNoGroupingStage(
+		execinfrapb.ProcessorCoreUnion{
+			Sorter: &execinfrapb.SorterSpec{
+				OutputOrdering:   ordering,
+				OrderingMatchLen: uint32(n.alreadyOrderedPrefix),
 			},
-			execinfrapb.PostProcessSpec{},
-			p.ResultTypes,
-			ordering,
-		)
-	}
+		},
+		execinfrapb.PostProcessSpec{},
+		p.ResultTypes,
+		ordering,
+	)
 }
 
 // addAggregators adds aggregators corresponding to a groupNode and updates the plan to
