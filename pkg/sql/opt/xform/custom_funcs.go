@@ -1291,7 +1291,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 //
 // Returns a list of column ordinals for each index.
 //
-// See the comment in pkg/sql/distsqlrun/zigzag_joiner.go for more details
+// See the comment in pkg/sql/rowexec/zigzag_joiner.go for more details
 // on the role eqCols and fixed cols play in zigzag joins.
 func eqColsForZigzag(
 	tab cat.Table,

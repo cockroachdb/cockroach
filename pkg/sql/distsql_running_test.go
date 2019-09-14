@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -252,7 +252,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 
 	for i, tc := range errs {
 		recv.Push(nil, /* row */
-			&distsqlpb.ProducerMetadata{
+			&execinfrapb.ProducerMetadata{
 				Err: tc.err,
 			})
 		if !testutils.IsError(rw.Err(), tc.expErr) {

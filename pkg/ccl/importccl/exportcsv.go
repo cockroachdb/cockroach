@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -31,12 +32,12 @@ const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
 
 func newCSVWriterProcessor(
-	flowCtx *distsqlrun.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	spec distsqlpb.CSVWriterSpec,
-	input distsqlrun.RowSource,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
+	spec execinfrapb.CSVWriterSpec,
+	input execinfra.RowSource,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 
 	if err := utilccl.CheckEnterpriseEnabled(
 		flowCtx.Cfg.Settings,
@@ -54,22 +55,22 @@ func newCSVWriterProcessor(
 		input:       input,
 		output:      output,
 	}
-	if err := c.out.Init(&distsqlpb.PostProcessSpec{}, c.OutputTypes(), flowCtx.NewEvalCtx(), output); err != nil {
+	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
 type csvWriter struct {
-	flowCtx     *distsqlrun.FlowCtx
+	flowCtx     *execinfra.FlowCtx
 	processorID int32
-	spec        distsqlpb.CSVWriterSpec
-	input       distsqlrun.RowSource
-	out         distsqlrun.ProcOutputHelper
-	output      distsqlrun.RowReceiver
+	spec        execinfrapb.CSVWriterSpec
+	input       execinfra.RowSource
+	out         execinfra.ProcOutputHelper
+	output      execinfra.RowReceiver
 }
 
-var _ distsqlrun.Processor = &csvWriter{}
+var _ execinfra.Processor = &csvWriter{}
 
 func (sp *csvWriter) OutputTypes() []types.T {
 	res := make([]types.T, len(sqlbase.ExportColumns))
@@ -91,7 +92,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
-		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
+		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 
 		alloc := &sqlbase.DatumAlloc{}
 
@@ -186,7 +187,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err != nil {
 				return err
 			}
-			if cs != distsqlrun.NeedMoreRows {
+			if cs != execinfra.NeedMoreRows {
 				// TODO(dt): presumably this is because our recv already closed due to
 				// another error... so do we really need another one?
 				return errors.New("unexpected closure of consumer")
@@ -200,10 +201,10 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	}()
 
 	// TODO(dt): pick up tracing info in trailing meta
-	distsqlrun.DrainAndClose(
+	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }
 
 func init() {
-	distsqlrun.NewCSVWriterProcessor = newCSVWriterProcessor
+	rowexec.NewCSVWriterProcessor = newCSVWriterProcessor
 }

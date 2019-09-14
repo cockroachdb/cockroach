@@ -689,7 +689,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// We need to set the "exec done" flag early because
 	// curPlan.close(), which will need to observe it, may be closed
-	// during execution (distsqlrun.PlanAndRun).
+	// during execution (PlanAndRun).
 	//
 	// TODO(knz): This is a mis-design. Andrei says "it's OK if
 	// execution closes the plan" but it transfers responsibility to

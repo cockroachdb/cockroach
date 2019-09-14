@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -778,7 +778,7 @@ func (sc *SchemaChanger) distBackfill(
 		var mutationIdx int
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			todoSpans, _, mutationIdx, err = distsqlrun.GetResumeSpans(
+			todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
 				ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
 			return err
 		}); err != nil {
@@ -842,7 +842,7 @@ func (sc *SchemaChanger) distBackfill(
 						otherTableDescs = append(otherTableDescs, *table.TableDesc())
 					}
 				}
-				metaFn := func(_ context.Context, meta *distsqlpb.ProducerMetadata) {
+				metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) {
 					if meta.BulkProcessorProgress != nil {
 						todoSpans = roachpb.SubtractSpans(todoSpans,
 							meta.BulkProcessorProgress.CompletedSpans)
@@ -888,7 +888,7 @@ func (sc *SchemaChanger) distBackfill(
 				// have set in the jobs table not to overwrite their done work.
 				if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 					var err error
-					resumeSpans, _, _, err = distsqlrun.GetResumeSpans(
+					resumeSpans, _, _, err = rowexec.GetResumeSpans(
 						ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
 					return err
 				}); err != nil {
@@ -901,7 +901,7 @@ func (sc *SchemaChanger) distBackfill(
 			// Record what is left to do for the job.
 			// TODO(spaskob): Execute this at a regular cadence.
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				return distsqlrun.SetResumeSpansInJob(ctx, todoSpans, mutationIdx, txn, sc.job)
+				return rowexec.SetResumeSpansInJob(ctx, todoSpans, mutationIdx, txn, sc.job)
 			}); err != nil {
 				return err
 			}
