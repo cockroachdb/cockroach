@@ -98,7 +98,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 				[]coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
 			)
 			in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
-			out := newOpTestOutput(o, []int{0}, data[:len(tc.selection)])
+			out := newOpTestOutput(o, data[:len(tc.selection)])
 			in.Init()
 			for {
 				b := in.Next(ctx)
@@ -204,7 +204,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 			// Should have data available, pushed by our reader goroutine.
 			batches := NewBatchBuffer()
-			out := newOpTestOutput(batches, []int{0}, tc.expected)
+			out := newOpTestOutput(batches, tc.expected)
 			for {
 				b := <-batchChan
 				batches.Add(b)
@@ -258,7 +258,7 @@ func TestRouterOutputNext(t *testing.T) {
 			[]coltypes.T{coltypes.Int64}, ch, blockThreshold, coldata.BatchSize,
 		)
 		in := newOpTestInput(smallBatchSize, data, nil /* typs */)
-		out := newOpTestOutput(o, []int{0}, expected)
+		out := newOpTestOutput(o, expected)
 		in.Init()
 
 		b := in.Next(ctx)
@@ -405,11 +405,7 @@ func TestRouterOutputRandom(t *testing.T) {
 
 			wg.Wait()
 
-			cols := make([]int, len(typs))
-			for i := range typs {
-				cols[i] = i
-			}
-			if err := newOpTestOutput(actual, cols, expected).Verify(); err != nil {
+			if err := newOpTestOutput(actual, expected).Verify(); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -625,7 +621,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 		expected = append(expected, data[i])
 	}
 
-	o := newOpTestOutput(routerOutputs[0], []int{0}, expected)
+	o := newOpTestOutput(routerOutputs[0], expected)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

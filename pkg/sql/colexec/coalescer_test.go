@@ -51,11 +51,7 @@ func TestCoalescer(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		colIndices := make([]int, len(tc.colTypes))
-		for i := 0; i < len(colIndices); i++ {
-			colIndices[i] = i
-		}
-		runTests(t, []tuples{tc.tuples}, tc.tuples, orderedVerifier, colIndices, func(input []Operator) (Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.tuples, orderedVerifier, func(input []Operator) (Operator, error) {
 			return NewCoalescerOp(input[0], tc.colTypes), nil
 		})
 	}

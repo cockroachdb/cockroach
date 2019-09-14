@@ -76,7 +76,7 @@ func TestSelectInInt64(t *testing.T) {
 				return &op, nil
 			}
 			if !c.hasNulls || !c.negate {
-				runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{0}, opConstructor)
+				runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
 			} else {
 				// When the input tuples already have nulls and we have NOT IN
 				// operator, then the nulls injection might not change the output. For
@@ -84,7 +84,7 @@ func TestSelectInInt64(t *testing.T) {
 				// output of length 0; similarly, we will get the same zero-length
 				// output for the corresponding nulls injection test case
 				// "1 NOT IN (NULL, NULL, NULL)".
-				runTestsWithoutAllNullsInjection(t, []tuples{c.inputTuples}, nil /* typs */, c.outputTuples, orderedVerifier, []int{0}, opConstructor)
+				runTestsWithoutAllNullsInjection(t, []tuples{c.inputTuples}, nil /* typs */, c.outputTuples, orderedVerifier, opConstructor)
 			}
 		})
 	}
@@ -159,7 +159,7 @@ func TestProjectInInt64(t *testing.T) {
 		{
 			desc:         "Simple in test",
 			inputTuples:  tuples{{0}, {1}},
-			outputTuples: tuples{{true}, {true}},
+			outputTuples: tuples{{0, true}, {1, true}},
 			filterRow:    []int64{0, 1},
 			hasNulls:     false,
 			negate:       false,
@@ -167,7 +167,7 @@ func TestProjectInInt64(t *testing.T) {
 		{
 			desc:         "Simple not in test",
 			inputTuples:  tuples{{2}},
-			outputTuples: tuples{{true}},
+			outputTuples: tuples{{2, true}},
 			filterRow:    []int64{0, 1},
 			hasNulls:     false,
 			negate:       true,
@@ -175,7 +175,7 @@ func TestProjectInInt64(t *testing.T) {
 		{
 			desc:         "In test with NULLs",
 			inputTuples:  tuples{{1}, {2}, {nil}},
-			outputTuples: tuples{{true}, {nil}, {nil}},
+			outputTuples: tuples{{1, true}, {2, nil}, {nil, nil}},
 			filterRow:    []int64{1},
 			hasNulls:     true,
 			negate:       false,
@@ -183,7 +183,7 @@ func TestProjectInInt64(t *testing.T) {
 		{
 			desc:         "Not in test with NULLs",
 			inputTuples:  tuples{{1}, {2}, {nil}},
-			outputTuples: tuples{{false}, {nil}, {nil}},
+			outputTuples: tuples{{1, false}, {2, nil}, {nil, nil}},
 			filterRow:    []int64{1},
 			hasNulls:     true,
 			negate:       true,
@@ -191,7 +191,7 @@ func TestProjectInInt64(t *testing.T) {
 		{
 			desc:         "Not in test with NULLs and no nulls in filter",
 			inputTuples:  tuples{{1}, {2}, {nil}},
-			outputTuples: tuples{{false}, {true}, {nil}},
+			outputTuples: tuples{{1, false}, {2, true}, {nil, nil}},
 			filterRow:    []int64{1},
 			hasNulls:     false,
 			negate:       true,
@@ -199,7 +199,7 @@ func TestProjectInInt64(t *testing.T) {
 		{
 			desc:         "Test with false values",
 			inputTuples:  tuples{{1}, {2}},
-			outputTuples: tuples{{false}, {false}},
+			outputTuples: tuples{{1, false}, {2, false}},
 			filterRow:    []int64{3},
 			hasNulls:     false,
 			negate:       false,
@@ -208,7 +208,7 @@ func TestProjectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{1},
+			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
 				func(input []Operator) (Operator, error) {
 					op := projectInOpInt64{
 						OneInputNode: NewOneInputNode(input[0]),

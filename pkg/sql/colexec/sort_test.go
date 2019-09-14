@@ -138,11 +138,7 @@ func TestSort(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		cols := make([]int, len(tc.typ))
-		for i := range cols {
-			cols[i] = i
-		}
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
 			return NewSorter(input[0], tc.typ, tc.ordCols)
 		})
 	}
@@ -188,11 +184,7 @@ func TestSortRandomized(t *testing.T) {
 						expected = expected[:k]
 					}
 
-					cols := make([]int, nCols)
-					for i := range cols {
-						cols[i] = i
-					}
-					runTests(t, []tuples{tups}, expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
+					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []Operator) (Operator, error) {
 						if topK {
 							return NewTopKSorter(input[0], typs[:nCols], ordCols, k), nil
 						}

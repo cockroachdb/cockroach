@@ -136,12 +136,10 @@ func TestOrderedSync(t *testing.T) {
 	for _, tc := range testCases {
 		numCols := len(tc.sources[0][0])
 		columnTypes := make([]coltypes.T, numCols)
-		cols := make([]int, numCols)
 		for i := range columnTypes {
 			columnTypes[i] = coltypes.Int64
-			cols[i] = i
 		}
-		runTests(t, tc.sources, tc.expected, orderedVerifier, cols, func(inputs []Operator) (Operator, error) {
+		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []Operator) (Operator, error) {
 			return &OrderedSynchronizer{
 				inputs:      inputs,
 				ordering:    tc.ordering,
@@ -192,7 +190,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		columnTypes: []coltypes.T{coltypes.Int64},
 	}
 	op.Init()
-	out := newOpTestOutput(&op, []int{0}, expected)
+	out := newOpTestOutput(&op, expected)
 	if err := out.Verify(); err != nil {
 		t.Error(err)
 	}

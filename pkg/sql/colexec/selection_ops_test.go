@@ -31,7 +31,7 @@ const (
 
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	tups := tuples{{0}, {1}, {2}, {nil}}
-	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []Operator) (Operator, error) {
 		return &selLTInt64Int64ConstOp{
 			selConstOpBase: selConstOpBase{
 				OneInputNode: NewOneInputNode(input[0]),
@@ -52,7 +52,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{-1, nil},
 		{nil, nil},
 	}
-	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, []int{0, 1}, func(input []Operator) (Operator, error) {
+	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, func(input []Operator) (Operator, error) {
 		return &selLTInt64Int64Op{
 			selOpBase: selOpBase{
 				OneInputNode: NewOneInputNode(input[0]),
