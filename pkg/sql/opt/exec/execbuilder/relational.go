@@ -1184,48 +1184,30 @@ func (b *Builder) buildOrdinality(ord *memo.OrdinalityExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
-	var err error
-	// If the index join child is a sort operator then flip the order so that the
-	// sort is on top of the index join.
-	// TODO(radu): Remove this code once we have support for a more general
-	// lookup join execution path.
-	var ordering opt.Ordering
-	child := join.Input
-	if child.Op() == opt.SortOp {
-		ordering = child.ProvidedPhysical().Ordering
-		child = child.Child(0).(memo.RelExpr)
-	}
-
-	input, err := b.buildRelational(child)
+	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	md := b.mem.Metadata()
+	tab := md.Table(join.Table)
+
+	// TODO(radu): the distsql implementation of index join assumes that the input
+	// starts with the PK columns in order (#40749).
+	pri := tab.Index(cat.PrimaryIndex)
+	keyCols := make([]exec.ColumnOrdinal, pri.KeyColumnCount())
+	for i := range keyCols {
+		keyCols[i] = input.getColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal))
+	}
 
 	cols := join.Cols
 	needed, output := b.getColumns(cols, join.Table)
 	res := execPlan{outputCols: output}
-
-	// Get sort *result column* ordinals. Don't confuse these with *table column*
-	// ordinals, which are used by the needed set. The sort columns should already
-	// be in the needed set, so no need to add anything further to that.
-	var reqOrdering exec.OutputOrdering
-	if ordering == nil {
-		reqOrdering = res.reqOrdering(join)
-	}
-
 	res.root, err = b.factory.ConstructIndexJoin(
-		input.root, md.Table(join.Table), needed, reqOrdering,
+		input.root, tab, keyCols, needed, res.reqOrdering(join),
 	)
 	if err != nil {
 		return execPlan{}, err
-	}
-	if ordering != nil {
-		res, err = b.buildSortedInput(res, ordering)
-		if err != nil {
-			return execPlan{}, err
-		}
 	}
 
 	return res, nil

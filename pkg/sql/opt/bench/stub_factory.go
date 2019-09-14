@@ -141,7 +141,11 @@ func (f *stubFactory) ConstructOrdinality(input exec.Node, colName string) (exec
 }
 
 func (f *stubFactory) ConstructIndexJoin(
-	input exec.Node, table cat.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
+	input exec.Node,
+	table cat.Table,
+	keyCols []exec.ColumnOrdinal,
+	tableCols exec.ColumnOrdinalSet,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

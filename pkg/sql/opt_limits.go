@@ -91,7 +91,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *indexJoinNode:
 		// If we have a limit in the table node (i.e. post-index-join), the
 		// limit in the index is soft.
-		p.applyLimit(n.index, numRows, soft || !isFilterTrue(n.table.filter))
+		p.applyLimit(n.input, numRows, soft || !isFilterTrue(n.table.filter))
 		p.setUnlimited(n.table)
 
 	case *unionNode:
