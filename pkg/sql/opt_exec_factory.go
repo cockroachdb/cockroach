@@ -517,11 +517,12 @@ func (ef *execFactory) ConstructSetOp(
 
 // ConstructSort is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSort(
-	input exec.Node, ordering sqlbase.ColumnOrdering,
+	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	return &sortNode{
-		plan:     input.(planNode),
-		ordering: ordering,
+		plan:                 input.(planNode),
+		ordering:             ordering,
+		alreadyOrderedPrefix: alreadyOrderedPrefix,
 	}, nil
 }
 

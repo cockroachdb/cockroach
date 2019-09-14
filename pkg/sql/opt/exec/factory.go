@@ -191,7 +191,11 @@ type Factory interface {
 
 	// ConstructSort returns a node that performs a resorting of the rows produced
 	// by the input node.
-	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
+	//
+	// When the input is partially sorted we can execute a "segmented" sort. In
+	// this case alreadyOrderedPrefix is non-zero and the input is ordered by
+	// ordering[:alreadyOrderedPrefix].
+	ConstructSort(input Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int) (Node, error)
 
 	// ConstructOrdinality returns a node that appends an ordinality column to
 	// each row in the input node.

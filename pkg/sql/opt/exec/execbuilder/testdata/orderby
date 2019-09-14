@@ -263,17 +263,18 @@ scan  ·            ·
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 30 ORDER BY b, a, d
 ----
-·                     distributed  false
-·                     vectorized   false
-render                ·            ·
- └── sort             ·            ·
-      │               order        +b,+a,+d
-      └── index-join  ·            ·
-           │          table        abc@primary
-           │          key columns  a, b, c
-           └── scan   ·            ·
-·                     table        abc@ba
-·                     spans        /11-/30
+·                     distributed      false
+·                     vectorized       false
+render                ·                ·
+ └── sort             ·                ·
+      │               order            +b,+a,+d
+      │               already ordered  +b,+a
+      └── index-join  ·                ·
+           │          table            abc@primary
+           │          key columns      a, b, c
+           └── scan   ·                ·
+·                     table            abc@ba
+·                     spans            /11-/30
 
 # An inequality should not be enough to force the use of the index.
 query TTT
