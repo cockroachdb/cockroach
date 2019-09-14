@@ -223,9 +223,15 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *indexJoinNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
+			inputCols := planColumns(n.input)
+			cols := make([]string, len(n.keyCols))
+			for i, c := range n.keyCols {
+				cols[i] = inputCols[c].Name
+			}
+			v.observer.attr(name, "key columns", strings.Join(cols, ", "))
 			v.expr(name, "filter", -1, n.table.filter)
 		}
-		v.visitConcrete(n.index)
+		n.input = v.visit(n.input)
 
 	case *lookupJoinNode:
 		if v.observer.attr != nil {

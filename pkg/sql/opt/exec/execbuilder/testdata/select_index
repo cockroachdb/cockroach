@@ -211,11 +211,13 @@ render                ·               ·                    (b, a, c, d, a, c, 
       │               mergeJoinOrder  +"(b=b)"             ·                         ·
       ├── index-join  ·               ·                    (a, b, c, d)              ·
       │    │          table           t@primary            ·                         ·
+      │    │          key columns     a, b                 ·                         ·
       │    └── scan   ·               ·                    (a, b, c)                 ·
       │               table           t@bc                 ·                         ·
       │               spans           /"3"-/"3"/PrefixEnd  ·                         ·
       └── index-join  ·               ·                    (a, b, c, d)              ·
            │          table           t@primary            ·                         ·
+           │          key columns     a, b                 ·                         ·
            └── scan   ·               ·                    (a, b, c)                 ·
 ·                     table           t@bc                 ·                         ·
 ·                     spans           /"3"-/"3"/PrefixEnd  ·                         ·
@@ -726,6 +728,7 @@ EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ·             vectorized   true                     ·           ·
 index-join    ·            ·                        (id, k, v)  -k
  │            table        test2@primary            ·           ·
+ │            key columns  id                       ·           ·
  └── revscan  ·            ·                        (id, k)     -k
 ·             table        test2@test2_k_key        ·           ·
 ·             spans        /!NULL-/"100"/PrefixEnd  ·           ·
@@ -953,6 +956,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
 ·           vectorized   true          ·                   ·
 index-join  ·            ·             (x, y)              ·
  │          table        xy@primary    ·                   ·
+ │          key columns  rowid         ·                   ·
  └── scan   ·            ·             (y, rowid[hidden])  ·
 ·           table        xy@xy_y_idx   ·                   ·
 ·           spans        /NULL-/!NULL  ·                   ·
@@ -964,6 +968,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
 ·           vectorized   true         ·                   ·
 index-join  ·            ·            (x, y)              ·
  │          table        xy@primary   ·                   ·
+ │          key columns  rowid        ·                   ·
  └── scan   ·            ·            (y, rowid[hidden])  ·
 ·           table        xy@xy_y_idx  ·                   ·
 ·           spans        /4-/5        ·                   ·
@@ -977,6 +982,7 @@ render           ·            ·            (x)                 ·
  │               render 0     x            ·                   ·
  └── index-join  ·            ·            (x, y)              ·
       │          table        xy@primary   ·                   ·
+      │          key columns  rowid        ·                   ·
       └── scan   ·            ·            (y, rowid[hidden])  ·
 ·                table        xy@xy_y_idx  ·                   ·
 ·                spans        /1-/2        ·                   ·
@@ -1053,6 +1059,7 @@ EXPLAIN SELECT * FROM noncover WHERE b = 2
 ·           vectorized   true
 index-join  ·            ·
  │          table        noncover@primary
+ │          key columns  a
  └── scan   ·            ·
 ·           table        noncover@b
 ·           spans        /2-/3
@@ -1079,6 +1086,7 @@ EXPLAIN SELECT * FROM noncover WHERE c = 6
 ·           vectorized   true
 index-join  ·            ·
  │          table        noncover@primary
+ │          key columns  a
  └── scan   ·            ·
 ·           table        noncover@c
 ·           spans        /6-/7
@@ -1153,6 +1161,7 @@ EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ·           vectorized   true
 index-join  ·            ·
  │          table        noncover@primary
+ │          key columns  a
  └── scan   ·            ·
 ·           table        noncover@c
 ·           spans        ALL
@@ -1185,6 +1194,7 @@ limit            ·            ·
  │               offset       5
  └── index-join  ·            ·
       │          table        noncover@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        noncover@c
 ·                spans        ALL
@@ -1255,6 +1265,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ·           vectorized   false
 index-join  ·            ·
  │          table        t2@primary
+ │          key columns  a
  └── scan   ·            ·
 ·           table        t2@bc
 ·           spans        /2-/3
@@ -1287,6 +1298,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ·           vectorized   true
 index-join  ·            ·
  │          table        t2@primary
+ │          key columns  a
  └── scan   ·            ·
 ·           table        t2@bc
 ·           spans        /2/!NULL-/3
@@ -1398,6 +1410,7 @@ render           ·            ·           (a)        ·
  │               render 0     a           ·          ·
  └── index-join  ·            ·           (a, b, s)  ·
       │          table        t2@primary  ·          ·
+      │          key columns  a           ·          ·
       └── scan   ·            ·           (a, b)     ·
 ·                table        t2@bc       ·          ·
 ·                spans        /2-/3       ·          ·
@@ -1414,6 +1427,7 @@ render           ·            ·           (w)     ·
  │               render 0     w           ·       ·
  └── index-join  ·            ·           (v, w)  +v
       │          table        t3@primary  ·       ·
+      │          key columns  k           ·       ·
       └── scan   ·            ·           (k, v)  +v
 ·                table        t3@v        ·       ·
 ·                spans        /1-/10      ·       ·

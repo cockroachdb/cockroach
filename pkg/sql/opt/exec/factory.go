@@ -197,11 +197,16 @@ type Factory interface {
 	// each row in the input node.
 	ConstructOrdinality(input Node, colName string) (Node, error)
 
-	// ConstructIndexJoin returns a node that performs an index join.
-	// The input must be created by ConstructScan for the same table; cols is the
-	// set of columns produced by the index join.
+	// ConstructIndexJoin returns a node that performs an index join. The input
+	// contains the primary key (on the columns identified as keyCols).
+	//
+	// The index join produces the given table columns (in ordinal order).
 	ConstructIndexJoin(
-		input Node, table cat.Table, cols ColumnOrdinalSet, reqOrdering OutputOrdering,
+		input Node,
+		table cat.Table,
+		keyCols []ColumnOrdinal,
+		tableCols ColumnOrdinalSet,
+		reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructLookupJoin returns a node that preforms a lookup join.
@@ -519,7 +524,9 @@ const (
 	SubqueryAllRows
 )
 
-// ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
+// ColumnOrdinal is the 0-based ordinal index of a cat.Table column or a column
+// produced by a Node.
+// TODO(radu): separate these two usages for clarity of the interface.
 type ColumnOrdinal int32
 
 // ColumnOrdinalSet contains a set of ColumnOrdinal values as ints.
