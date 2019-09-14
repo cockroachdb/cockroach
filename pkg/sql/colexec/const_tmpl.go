@@ -111,16 +111,24 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
-func NewConstNullOp(input Operator, outputIdx int) Operator {
+func NewConstNullOp(input Operator, outputIdx int, typ coltypes.T) Operator {
 	return &constNullOp{
 		OneInputNode: NewOneInputNode(input),
 		outputIdx:    outputIdx,
+		typ:          typ,
 	}
 }
 
 type constNullOp struct {
 	OneInputNode
 	outputIdx int
+	typ       coltypes.T
+}
+
+var _ StaticMemoryOperator = &constNullOp{}
+
+func (c constNullOp) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes([]coltypes.T{c.typ}, coldata.BatchSize)
 }
 
 func (c constNullOp) Init() {
@@ -130,9 +138,11 @@ func (c constNullOp) Init() {
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
+
 	if batch.Width() == c.outputIdx {
-		batch.AppendCol(coltypes.Int8)
+		batch.AppendCol(c.typ)
 	}
+
 	if n == 0 {
 		return batch
 	}
