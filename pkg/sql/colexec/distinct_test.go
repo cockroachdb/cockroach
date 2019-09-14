@@ -103,7 +103,7 @@ func TestSortedDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0, 1, 2, 3},
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
 				return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
 			})

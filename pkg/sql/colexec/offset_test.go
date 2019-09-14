@@ -54,7 +54,7 @@ func TestOffset(t *testing.T) {
 	for _, tc := range tcs {
 		// The tuples consisting of all nulls still count as separate rows, so if
 		// we replace all values with nulls, we should get the same output.
-		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, unorderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, unorderedVerifier, func(input []Operator) (Operator, error) {
 			return NewOffsetOp(input[0], tc.offset), nil
 		})
 	}

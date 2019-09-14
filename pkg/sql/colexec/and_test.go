@@ -25,43 +25,43 @@ func TestAndOp(t *testing.T) {
 		// All variations of pairs separately first.
 		{
 			tuples:   tuples{{false, true}},
-			expected: tuples{{false}},
+			expected: tuples{{false, true, false}},
 		},
 		{
 			tuples:   tuples{{false, nil}},
-			expected: tuples{{false}},
+			expected: tuples{{false, nil, false}},
 		},
 		{
 			tuples:   tuples{{false, false}},
-			expected: tuples{{false}},
+			expected: tuples{{false, false, false}},
 		},
 		{
 			tuples:   tuples{{true, true}},
-			expected: tuples{{true}},
+			expected: tuples{{true, true, true}},
 		},
 		{
 			tuples:   tuples{{true, false}},
-			expected: tuples{{false}},
+			expected: tuples{{true, false, false}},
 		},
 		{
 			tuples:   tuples{{true, nil}},
-			expected: tuples{{nil}},
+			expected: tuples{{true, nil, nil}},
 			// The case of {nil, nil} is explicitly tested below.
 			skipAllNullsInjection: true,
 		},
 		{
 			tuples:   tuples{{nil, true}},
-			expected: tuples{{nil}},
+			expected: tuples{{nil, true, nil}},
 			// The case of {nil, nil} is explicitly tested below.
 			skipAllNullsInjection: true,
 		},
 		{
 			tuples:   tuples{{nil, false}},
-			expected: tuples{{false}},
+			expected: tuples{{nil, false, false}},
 		},
 		{
 			tuples:   tuples{{nil, nil}},
-			expected: tuples{{nil}},
+			expected: tuples{{nil, nil, nil}},
 		},
 		// Now all variations of pairs combined together to make sure that nothing
 		// funky going on with multiple tuples.
@@ -72,9 +72,9 @@ func TestAndOp(t *testing.T) {
 				{nil, true}, {nil, false}, {nil, nil},
 			},
 			expected: tuples{
-				{false}, {false}, {false},
-				{true}, {false}, {nil},
-				{nil}, {false}, {nil},
+				{false, true, false}, {false, nil, false}, {false, false, false},
+				{true, true, true}, {true, false, false}, {true, nil, nil},
+				{nil, true, nil}, {nil, false, false}, {nil, nil, nil},
 			},
 		},
 	}
@@ -94,7 +94,6 @@ func TestAndOp(t *testing.T) {
 			[]coltypes.T{coltypes.Bool, coltypes.Bool},
 			tc.expected,
 			orderedVerifier,
-			[]int{2},
 			func(input []Operator) (Operator, error) {
 				return NewAndOp(
 					input[0],
