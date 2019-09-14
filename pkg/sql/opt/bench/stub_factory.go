@@ -131,7 +131,7 @@ func (f *stubFactory) ConstructSetOp(
 }
 
 func (f *stubFactory) ConstructSort(
-	input exec.Node, ordering sqlbase.ColumnOrdering,
+	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
