@@ -2612,7 +2612,7 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 // the retrieval of state such as the node ID or statement start time.
 //
 // ATTENTION: Some fields from this struct (particularly, but not exclusively,
-// from SessionData) are also represented in distsqlrun.EvalContext. Whenever
+// from SessionData) are also represented in execinfrapb.EvalContext. Whenever
 // something that affects DistSQL execution is added, it needs to be marshaled
 // through that proto too.
 // TODO(andrei): remove or limit the duplication.

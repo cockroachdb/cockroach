@@ -21,12 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -51,7 +55,7 @@ const clientRejectedMsg string = "client rejected when attempting to run DistSQL
 type runnerRequest struct {
 	ctx        context.Context
 	nodeDialer *nodedialer.Dialer
-	flowReq    *distsqlpb.SetupFlowRequest
+	flowReq    *execinfrapb.SetupFlowRequest
 	nodeID     roachpb.NodeID
 	resultChan chan<- runnerResult
 }
@@ -70,7 +74,7 @@ func (req runnerRequest) run() {
 	if err != nil {
 		res.err = err
 	} else {
-		client := distsqlpb.NewDistSQLClient(conn)
+		client := execinfrapb.NewDistSQLClient(conn)
 		// TODO(radu): do we want a timeout here?
 		resp, err := client.SetupFlow(req.ctx, req.flowReq)
 		if err != nil {
@@ -112,17 +116,17 @@ func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	txnCoordMeta *roachpb.TxnCoordMeta,
-	flows map[roachpb.NodeID]*distsqlpb.FlowSpec,
+	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
-	localState distsqlrun.LocalState,
+	localState distsql.LocalState,
 	vectorizeThresholdMet bool,
-) (context.Context, *distsqlrun.Flow, error) {
+) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlpb.MakeEvalContext(&evalCtx.EvalContext)
-	setupReq := distsqlpb.SetupFlowRequest{
+	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
+	setupReq := execinfrapb.SetupFlowRequest{
 		TxnCoordMeta: txnCoordMeta,
-		Version:      distsqlrun.Version,
+		Version:      execinfra.Version,
 		EvalContext:  evalCtxProto,
 		TraceKV:      evalCtx.Tracing.KVTracingEnabled(),
 	}
@@ -148,10 +152,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
 			// up vectorized flows since the flows will effectively be planned twice.
 			for _, spec := range flows {
-				if _, err := distsqlrun.SupportsVectorized(
-					ctx, &distsqlrun.FlowCtx{
+				if _, err := colflow.SupportsVectorized(
+					ctx, &execinfra.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
-						Cfg: &distsqlrun.ServerConfig{
+						Cfg: &execinfra.ServerConfig{
 							DiskMonitor: &mon.BytesMonitor{},
 							Settings:    dsp.st,
 						},
@@ -170,7 +174,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
 							if rsidx != nil {
 								lp := localState.LocalProcs[*rsidx]
-								if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
+								if z, ok := lp.(rowexec.VectorizeAlwaysException); ok {
 									if z.IsException() {
 										returnVectorizationSetupError = false
 									}
@@ -204,7 +208,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			nodeID:     nodeID,
 			resultChan: resultChan,
 		}
-		defer distsqlplan.ReleaseSetupFlowRequest(&req)
+		defer physicalplan.ReleaseSetupFlowRequest(&req)
 
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
@@ -233,7 +237,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
-	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
+	defer physicalplan.ReleaseSetupFlowRequest(&localReq)
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		return nil, nil, err
@@ -273,7 +277,7 @@ func (dsp *DistSQLPlanner) Run(
 	ctx := planCtx.ctx
 
 	var (
-		localState   distsqlrun.LocalState
+		localState   distsql.LocalState
 		txnCoordMeta *roachpb.TxnCoordMeta
 	)
 	// NB: putting part of evalCtx in localState means it might be mutated down
@@ -305,7 +309,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		json, url, err := distsqlpb.GeneratePlanDiagramURL(flows)
+		json, url, err := execinfrapb.GeneratePlanDiagramURL(flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
@@ -379,7 +383,7 @@ type DistSQLReceiver struct {
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []types.T
 
-	// resultToStreamColMap maps result columns to columns in the distsqlrun results
+	// resultToStreamColMap maps result columns to columns in the rowexec results
 	// stream.
 	resultToStreamColMap []int
 
@@ -408,7 +412,7 @@ type DistSQLReceiver struct {
 	txnAbortedErr atomic.Value
 
 	row    tree.Datums
-	status distsqlrun.ConsumerStatus
+	status execinfra.ConsumerStatus
 	alloc  sqlbase.DatumAlloc
 	closed bool
 
@@ -453,15 +457,15 @@ type rowResultWriter interface {
 }
 
 type metadataResultWriter interface {
-	AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+	AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata)
 }
 
 type metadataCallbackWriter struct {
 	rowResultWriter
-	fn func(ctx context.Context, meta *distsqlpb.ProducerMetadata)
+	fn func(ctx context.Context, meta *execinfrapb.ProducerMetadata)
 }
 
-func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *distsqlpb.ProducerMetadata) {
+func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) {
 	w.fn(ctx, meta)
 }
 
@@ -487,7 +491,7 @@ func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
-var _ distsqlrun.RowReceiver = &DistSQLReceiver{}
+var _ execinfra.RowReceiver = &DistSQLReceiver{}
 
 var receiverSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -576,8 +580,8 @@ func (r *DistSQLReceiver) SetError(err error) {
 
 // Push is part of the RowReceiver interface.
 func (r *DistSQLReceiver) Push(
-	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
-) distsqlrun.ConsumerStatus {
+	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
 	if meta != nil {
 		if meta.TxnCoordMeta != nil {
 			if r.txn != nil {
@@ -648,9 +652,9 @@ func (r *DistSQLReceiver) Push(
 	}
 	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here if we weren't canceled.
-		return distsqlrun.ConsumerClosed
+		return execinfra.ConsumerClosed
 	}
-	if r.status != distsqlrun.NeedMoreRows {
+	if r.status != execinfra.NeedMoreRows {
 		return r.status
 	}
 
@@ -672,7 +676,7 @@ func (r *DistSQLReceiver) Push(
 	// planNodeToRowSource is not set up to handle decoding the row.
 	if r.noColsRequired {
 		r.row = []tree.Datum{}
-		r.status = distsqlrun.ConsumerClosed
+		r.status = execinfra.ConsumerClosed
 	} else {
 		if r.row == nil {
 			r.row = make(tree.Datums, len(r.resultToStreamColMap))
@@ -681,7 +685,7 @@ func (r *DistSQLReceiver) Push(
 			err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
 			if err != nil {
 				r.resultWriter.SetError(err)
-				r.status = distsqlrun.ConsumerClosed
+				r.status = execinfra.ConsumerClosed
 				return r.status
 			}
 			r.row[i] = row[resIdx].Datum
@@ -715,7 +719,7 @@ func (r *DistSQLReceiver) Push(
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
 		// above failed, presumably with an out-of-memory error).
-		r.status = distsqlrun.ConsumerClosed
+		r.status = execinfra.ConsumerClosed
 	}
 	return r.status
 }
@@ -855,7 +859,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRecv := recv.clone()
 	var typ sqlbase.ColTypeInfo
 	var rows *rowcontainer.RowContainer
-	if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
+	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
 		subqueryRecv.noColsRequired = true
 		typ = sqlbase.ColTypeInfoFromColTypes([]types.T{})
 	} else {
@@ -885,11 +889,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		return err
 	}
 	switch subqueryPlan.execMode {
-	case distsqlrun.SubqueryExecModeExists:
+	case rowexec.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know if there is at least one row.
 		hasRows := rows.Len() != 0
 		subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
-	case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
+	case rowexec.SubqueryExecModeAllRows, rowexec.SubqueryExecModeAllRowsNormalized:
 		var result tree.DTuple
 		for rows.Len() > 0 {
 			row := rows.At(0)
@@ -905,11 +909,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 			}
 		}
 
-		if subqueryPlan.execMode == distsqlrun.SubqueryExecModeAllRowsNormalized {
+		if subqueryPlan.execMode == rowexec.SubqueryExecModeAllRowsNormalized {
 			result.Normalize(&evalCtx.EvalContext)
 		}
 		subqueryPlans[planIdx].result = &result
-	case distsqlrun.SubqueryExecModeOneRow:
+	case rowexec.SubqueryExecModeOneRow:
 		switch rows.Len() {
 		case 0:
 			subqueryPlans[planIdx].result = tree.DNull

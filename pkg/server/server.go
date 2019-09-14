@@ -45,8 +45,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,9 +78,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -165,7 +166,7 @@ type Server struct {
 	distSender       *kv.DistSender
 	db               *client.DB
 	pgServer         *pgwire.Server
-	distSQLServer    *distsqlrun.ServerImpl
+	distSQLServer    *distsql.ServerImpl
 	node             *Node
 	registry         *metric.Registry
 	recorder         *status.MetricsRecorder
@@ -511,7 +512,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
 
-	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
+	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
 
 	// Set up Lease Manager
@@ -532,7 +533,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	// Set up the DistSQL server.
-	distSQLCfg := distsqlrun.ServerConfig{
+	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
 		Settings:       st,
 		RuntimeStats:   s.runtime,
@@ -554,7 +555,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		) (storagebase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
-			bulkMon := distsqlrun.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
+			bulkMon := execinfra.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
 			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), ts, opts, bulkMon)
 		},
 
@@ -566,11 +567,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		LeaseManager: s.leaseMgr,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
-		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)
+		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
 
-	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
-	distsqlpb.RegisterDistSQLServer(s.grpc.Server, s.distSQLServer)
+	s.distSQLServer = distsql.NewServer(ctx, distSQLCfg)
+	execinfrapb.RegisterDistSQLServer(s.grpc.Server, s.distSQLServer)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
@@ -650,7 +651,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
-			distsqlrun.Version,
+			execinfra.Version,
 			s.st,
 			// The node descriptor will be set later, once it is initialized.
 			roachpb.NodeDescriptor{},
@@ -689,9 +690,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		execCfg.SchemaChangerTestingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
 	if distSQLRunTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLRunTestingKnobs != nil {
-		execCfg.DistSQLRunTestingKnobs = distSQLRunTestingKnobs.(*distsqlrun.TestingKnobs)
+		execCfg.DistSQLRunTestingKnobs = distSQLRunTestingKnobs.(*execinfra.TestingKnobs)
 	} else {
-		execCfg.DistSQLRunTestingKnobs = new(distsqlrun.TestingKnobs)
+		execCfg.DistSQLRunTestingKnobs = new(execinfra.TestingKnobs)
 	}
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
@@ -722,7 +723,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
-	// circular dependency between the distsqlrun.Server and sql.Server and set
+	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory.
 	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory =
 		func(
