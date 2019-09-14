@@ -40,9 +40,9 @@ func (f *singleKVFetcher) nextBatch(
 	return true, f.kvs[:], nil, roachpb.Span{}, nil
 }
 
-// getRangesInfo implements the kvBatchFetcher interface.
-func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic(errors.AssertionFailedf("getRangesInfo() called on singleKVFetcher"))
+// GetRangesInfo implements the kvBatchFetcher interface.
+func (f *singleKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
+	panic(errors.AssertionFailedf("GetRangesInfo() called on singleKVFetcher"))
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.

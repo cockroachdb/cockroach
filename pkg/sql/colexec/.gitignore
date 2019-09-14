@@ -15,8 +15,11 @@ mergejoiner_leftouter.eg.go
 mergejoiner_leftsemi.eg.go
 mergejoiner_rightouter.eg.go
 min_max_agg.eg.go
+overloads_test_utils.eg.go
 projection_ops.eg.go
 quicksort.eg.go
+rank.eg.go
+row_number.eg.go
 rowstovec.eg.go
 selection_ops.eg.go
 select_in.eg.go
@@ -24,7 +27,4 @@ sort.eg.go
 sum_agg.eg.go
 tuples_differ.eg.go
 vec_comparators.eg.go
-vecbuiltins/rank.eg.go
-vecbuiltins/row_number.eg.go
 zerocolumns.eg.go
-overloads_test_utils.eg.go

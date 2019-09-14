@@ -8,7 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colflow
+// Note that this file is not in pkg/sql/colexec because it instantiates a
+// server, and if it were moved into sql/colexec, that would create a cycle
+// with pkg/server.
+
+package colflow_test
 
 import (
 	"context"
@@ -17,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,13 +52,16 @@ func BenchmarkColBatchScan(b *testing.B) {
 		)
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			spec := execinfrapb.TableReaderSpec{
-				Table: *tableDesc,
-				Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
-			}
-			post := execinfrapb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1},
+			spec := execinfrapb.ProcessorSpec{
+				Core: execinfrapb.ProcessorCoreUnion{
+					TableReader: &execinfrapb.TableReaderSpec{
+						Table: *tableDesc,
+						Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+					}},
+				Post: execinfrapb.PostProcessSpec{
+					Projection:    true,
+					OutputColumns: []uint32{0, 1},
+				},
 			}
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
@@ -70,17 +78,15 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
-				tr, err := newColBatchScan(&flowCtx, &spec, &post)
-				tr.Init()
-				b.StartTimer()
+				res, err := colexec.NewColOperator(ctx, &flowCtx, &spec, nil /* inputs */)
 				if err != nil {
 					b.Fatal(err)
 				}
+				tr := res.Op
+				tr.Init()
+				b.StartTimer()
 				for {
 					bat := tr.Next(ctx)
-					if err != nil {
-						b.Fatal(err)
-					}
 					if bat.Length() == 0 {
 						break
 					}

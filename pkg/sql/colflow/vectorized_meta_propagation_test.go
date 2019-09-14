@@ -65,13 +65,13 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	col, err := NewColumnarizer(ctx, &flowCtx, 1, mts)
+	col, err := colexec.NewColumnarizer(ctx, &flowCtx, 1, mts)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	noop := colexec.NewNoop(col)
-	mat, err := NewMaterializer(
+	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		2, /* processorID */
 		noop,

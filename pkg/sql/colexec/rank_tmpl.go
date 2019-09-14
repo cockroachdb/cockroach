@@ -17,14 +17,13 @@
 //
 // */}}
 
-package vecbuiltins
+package colexec
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
@@ -45,7 +44,7 @@ func _UPDATE_RANK_INCREMENT() {
 // */}}
 
 type rankInitFields struct {
-	colexec.OneInputNode
+	OneInputNode
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new rank needs to be assigned
 	// to the corresponding tuple.
@@ -67,7 +66,7 @@ type _RANK_STRINGOp struct {
 	rankIncrement int64
 }
 
-var _ colexec.Operator = &_RANK_STRINGOp{}
+var _ Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
 	r.Input().Init()

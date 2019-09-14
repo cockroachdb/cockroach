@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -47,7 +47,7 @@ func (o *OrderedSynchronizer) ChildCount() int {
 }
 
 // Child implements the execinfrapb.OpNode interface.
-func (o *OrderedSynchronizer) Child(nth int) execinfrapb.OpNode {
+func (o *OrderedSynchronizer) Child(nth int) execinfra.OpNode {
 	return o.inputs[nth]
 }
 

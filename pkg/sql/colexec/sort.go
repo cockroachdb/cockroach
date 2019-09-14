@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/pkg/errors"
 )
@@ -60,7 +61,7 @@ func newSorter(
 
 // spooler is a column vector operator that spools the data from its input.
 type spooler interface {
-	execinfrapb.OpNode
+	execinfra.OpNode
 
 	// init initializes this spooler and will be called once at the setup time.
 	init()
@@ -379,7 +380,7 @@ func (p *sortOp) ChildCount() int {
 	return 1
 }
 
-func (p *sortOp) Child(nth int) execinfrapb.OpNode {
+func (p *sortOp) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
