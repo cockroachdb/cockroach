@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package row
+package colexec
 
 import (
 	"bytes"
@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -35,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// TODO(yuzefovich): move CFetcher into sql/colexec.
 
 // Only unique secondary indexes have extra columns to decode (namely the
 // primary index columns).
@@ -145,10 +143,10 @@ func (m colIdxMap) get(c sqlbase.ColumnID) (int, bool) {
 	return 0, false
 }
 
-// CFetcher handles fetching kvs and forming table rows for an
+// cFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
 // Usage:
-//   var rf CFetcher
+//   var rf cFetcher
 //   err := rf.Init(..)
 //   // Handle err
 //   err := rf.StartScan(..)
@@ -162,7 +160,7 @@ func (m colIdxMap) get(c sqlbase.ColumnID) (int, bool) {
 //      }
 //      // Process res.colBatch
 //   }
-type CFetcher struct {
+type cFetcher struct {
 	// table is the table that's configured for fetching.
 	table cTableInfo
 
@@ -194,7 +192,7 @@ type CFetcher struct {
 	traceKV bool
 
 	// fetcher is the underlying fetcher that provides KVs.
-	fetcher kvFetcher
+	fetcher *row.KVFetcher
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -231,16 +229,16 @@ type CFetcher struct {
 	}
 
 	// estimatedStaticMemoryUsage is the best guess about how much memory the
-	// CFetcher will use.
+	// cFetcher will use.
 	estimatedStaticMemoryUsage int
 }
 
 // Init sets up a Fetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
-func (rf *CFetcher) Init(
+func (rf *cFetcher) Init(
 	reverse,
-	returnRangeInfo bool, isCheck bool, tables ...FetcherTableArgs,
+	returnRangeInfo bool, isCheck bool, tables ...row.FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
@@ -290,7 +288,7 @@ func (rf *CFetcher) Init(
 	}
 	rf.machine.batch = coldata.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
-	rf.estimatedStaticMemoryUsage = colexec.EstimateBatchSizeBytes(typs, coldata.BatchSize)
+	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, coldata.BatchSize)
 
 	var err error
 
@@ -422,7 +420,7 @@ func (rf *CFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
-func (rf *CFetcher) StartScan(
+func (rf *cFetcher) StartScan(
 	ctx context.Context,
 	txn *client.Txn,
 	spans roachpb.Spans,
@@ -450,12 +448,14 @@ func (rf *CFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVBatchFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
+	f, err := row.NewKVFetcher(
+		txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo,
+	)
 	if err != nil {
 		return err
 	}
+	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
-	rf.fetcher = newKVFetcher(&f)
 	rf.machine.state[0] = stateInitFetch
 	return nil
 }
@@ -550,7 +550,7 @@ const debugState = false
 // index used; columns that are not needed (as per neededCols) are empty. The
 // Batch should not be modified and is only valid until the next call.
 // When there are no more rows, the Batch.Length is 0.
-func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
+func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
 		if debugState {
 			log.Infof(ctx, "State %s", rf.machine.state[0])
@@ -559,7 +559,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKeys, kv, newSpan, err := rf.fetcher.nextKV(ctx)
+			moreKeys, kv, newSpan, err := rf.fetcher.NextKV(ctx)
 			if err != nil {
 				return nil, execerror.NewStorageError(err)
 			}
@@ -568,7 +568,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				continue
 			}
 			if newSpan {
-				rf.machine.curSpan = rf.fetcher.span
+				rf.machine.curSpan = rf.fetcher.Span
 				// TODO(jordan): parse the logical longest common prefix of the span
 				// into a buffer. The logical longest common prefix is the longest
 				// common prefix that contains only full key components. For example,
@@ -661,7 +661,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 		case stateSeekPrefix:
 			for {
-				moreRows, kv, _, err := rf.fetcher.nextKV(ctx)
+				moreRows, kv, _, err := rf.fetcher.NextKV(ctx)
 				if err != nil {
 					return nil, execerror.NewStorageError(err)
 				}
@@ -684,7 +684,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, _, err := rf.fetcher.nextKV(ctx)
+			moreKVs, kv, _, err := rf.fetcher.NextKV(ctx)
 			if err != nil {
 				return nil, execerror.NewStorageError(err)
 			}
@@ -775,20 +775,20 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 // shiftState shifts the state queue to the left, removing the first element and
 // clearing the last element.
-func (rf *CFetcher) shiftState() {
+func (rf *cFetcher) shiftState() {
 	copy(rf.machine.state[:2], rf.machine.state[1:])
 	rf.machine.state[2] = stateInvalid
 }
 
-func (rf *CFetcher) pushState(state fetcherState) {
+func (rf *cFetcher) pushState(state fetcherState) {
 	copy(rf.machine.state[1:], rf.machine.state[:2])
 	rf.machine.state[0] = state
 }
 
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
-func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
-	return colexec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
+func (rf *cFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
+	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
 }
 
 // processValue processes the state machine's current value component, setting
@@ -796,7 +796,7 @@ func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datu
 // is found in the current value component.
 // If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
-func (rf *CFetcher) processValue(
+func (rf *cFetcher) processValue(
 	ctx context.Context, familyID sqlbase.FamilyID,
 ) (prettyKey string, prettyValue string, err error) {
 	table := &rf.table
@@ -931,7 +931,7 @@ func (rf *CFetcher) processValue(
 // processValueSingle processes the given value (of column
 // family.DefaultColumnID), setting values in table.row accordingly. The key is
 // only used for logging.
-func (rf *CFetcher) processValueSingle(
+func (rf *cFetcher) processValueSingle(
 	ctx context.Context,
 	table *cTableInfo,
 	family *sqlbase.ColumnFamilyDescriptor,
@@ -980,7 +980,7 @@ func (rf *CFetcher) processValueSingle(
 			if rf.traceKV {
 				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, *typ).String()
 			}
-			if debugRowFetch {
+			if row.DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
 			}
 			return prettyKey, prettyValue, nil
@@ -989,13 +989,13 @@ func (rf *CFetcher) processValueSingle(
 
 	// No need to unmarshal the column value. Either the column was part of
 	// the index key or it isn't needed.
-	if debugRowFetch {
+	if row.DebugRowFetch {
 		log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
 	}
 	return "", "", nil
 }
 
-func (rf *CFetcher) processValueBytes(
+func (rf *cFetcher) processValueBytes(
 	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
@@ -1038,7 +1038,7 @@ func (rf *CFetcher) processValueBytes(
 				return "", "", err
 			}
 			valueBytes = valueBytes[len:]
-			if debugRowFetch {
+			if row.DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
 			}
 			continue
@@ -1082,13 +1082,13 @@ func (rf *CFetcher) processValueBytes(
 
 // processValueTuple processes the given values (of columns family.ColumnIDs),
 // setting values in the rf.row accordingly. The key is only used for logging.
-func (rf *CFetcher) processValueTuple(
+func (rf *cFetcher) processValueTuple(
 	ctx context.Context, table *cTableInfo, tupleBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	return rf.processValueBytes(ctx, table, tupleBytes, prettyKeyPrefix)
 }
 
-func (rf *CFetcher) fillNulls() error {
+func (rf *cFetcher) fillNulls() error {
 	table := &rf.table
 	if rf.machine.remainingValueColsByIdx.Empty() {
 		return nil
@@ -1120,18 +1120,18 @@ func (rf *CFetcher) fillNulls() error {
 
 // GetRangesInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
-func (rf *CFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	f := rf.fetcher.kvBatchFetcher
+func (rf *cFetcher) GetRangesInfo() []roachpb.RangeInfo {
+	f := rf.fetcher
 	if f == nil {
 		// Not yet initialized.
 		return nil
 	}
-	return f.getRangesInfo()
+	return rf.fetcher.GetRangesInfo()
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
 // rf.machine.nextKV.Key.
-func (rf *CFetcher) getCurrentColumnFamilyID() (sqlbase.FamilyID, error) {
+func (rf *cFetcher) getCurrentColumnFamilyID() (sqlbase.FamilyID, error) {
 	// If the table only has 1 column family, and its ID is 0, we know that the
 	// key has to be the 0th column family.
 	if rf.table.maxColumnFamilyID == 0 {
@@ -1150,7 +1150,7 @@ func (rf *CFetcher) getCurrentColumnFamilyID() (sqlbase.FamilyID, error) {
 }
 
 // EstimateStaticMemoryUsage estimates how much memory is pre-allocated by the
-// CFetcher.
-func (rf *CFetcher) EstimateStaticMemoryUsage() int {
+// cFetcher.
+func (rf *cFetcher) EstimateStaticMemoryUsage() int {
 	return rf.estimatedStaticMemoryUsage
 }

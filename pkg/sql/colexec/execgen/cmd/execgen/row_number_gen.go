@@ -23,7 +23,7 @@ type rowNumberTmplInfo struct {
 }
 
 func genRowNumberOp(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/vecbuiltins/row_number_tmpl.go")
+	d, err := ioutil.ReadFile("pkg/sql/colexec/row_number_tmpl.go")
 	if err != nil {
 		return err
 	}
