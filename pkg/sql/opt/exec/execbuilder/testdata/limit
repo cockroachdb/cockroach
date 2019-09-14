@@ -16,6 +16,7 @@ limit                 ·            ·            (k, v, w)  +v
       │               filter       w > 30       ·          ·
       └── index-join  ·            ·            (k, v, w)  +v
            │          table        t@primary    ·          ·
+           │          key columns  k            ·          ·
            └── scan   ·            ·            (k, v)     +v
 ·                     table        t@t_v_idx    ·          ·
 ·                     spans        /5-/8        ·          ·
@@ -154,6 +155,7 @@ render           ·            ·          (k, w)     ·
  │               render 1     w          ·          ·
  └── index-join  ·            ·          (k, v, w)  ·
       │          table        t@primary  ·          ·
+      │          key columns  k          ·          ·
       └── scan   ·            ·          (k, v)     ·
 ·                table        t@t_v_idx  ·          ·
 ·                spans        /1-/101    ·          ·
@@ -169,6 +171,7 @@ render           ·            ·          (k, w)     ·
  │               render 1     w          ·          ·
  └── index-join  ·            ·          (k, v, w)  +v
       │          table        t@primary  ·          ·
+      │          key columns  k          ·          ·
       └── scan   ·            ·          (k, v)     +v
 ·                table        t@t_v_idx  ·          ·
 ·                spans        /1-/101    ·          ·

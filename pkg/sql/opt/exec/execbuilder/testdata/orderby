@@ -270,6 +270,7 @@ render                ·            ·
       │               order        +b,+a,+d
       └── index-join  ·            ·
            │          table        abc@primary
+           │          key columns  a, b, c
            └── scan   ·            ·
 ·                     table        abc@ba
 ·                     spans        /11-/30
@@ -906,6 +907,7 @@ sort                  ·            ·                (x, y, z)              +x
       │               filter       x = y            ·                      ·
       └── index-join  ·            ·                (x, y, z)              ·
            │          table        xyz@primary      ·                      ·
+           │          key columns  rowid            ·                      ·
            └── scan   ·            ·                (y, z, rowid[hidden])  ·
 ·                     table        xyz@xyz_z_y_idx  ·                      ·
 ·                     spans        /1/!NULL-/2      ·                      ·
