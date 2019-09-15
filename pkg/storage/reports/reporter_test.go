@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -509,10 +508,7 @@ func processTestCase(
 	// And we're going to use keys in user space, otherwise there's special cases
 	// in the zone config lookup that we bump into.
 	objectCounter := keys.MinUserDescID
-	sysCfgBuilder := systemConfigBuilder{
-		// Use a non-zero timestamp for descriptor creation/modification time.
-		ts: hlc.Timestamp{WallTime: 1},
-	}
+	var sysCfgBuilder systemConfigBuilder
 	sysCfgBuilder.setDefaultZoneConfig(tc.defaultZone.toZoneConfig())
 	objects["default"] = MakeZoneKey(keys.RootNamespaceID, NoSubzone)
 	// Assign ids to databases, table, indexes; create descriptors and populate
@@ -730,9 +726,6 @@ func addIndexSubzones(
 type systemConfigBuilder struct {
 	kv                []roachpb.KeyValue
 	defaultZoneConfig *config.ZoneConfig
-
-	// ts is used for the creation time of synthesized descriptors
-	ts hlc.Timestamp
 }
 
 func (b *systemConfigBuilder) setDefaultZoneConfig(cfg config.ZoneConfig) {
@@ -765,36 +758,35 @@ func (b *systemConfigBuilder) build() *config.SystemConfig {
 }
 
 // addTableDesc adds a table descriptor to the SystemConfig.
-func (b *systemConfigBuilder) addTableDesc(id int, tableDesc sqlbase.TableDescriptor) {
-	if tableDesc.ParentID == 0 {
-		panic(fmt.Sprintf("parent not set for table %q", tableDesc.Name))
+func (b *systemConfigBuilder) addTableDesc(id int, desc sqlbase.TableDescriptor) {
+	if desc.ParentID == 0 {
+		panic(fmt.Sprintf("parent not set for table %q", desc.Name))
 	}
 	// Write the table to the SystemConfig, in the descriptors table.
 	k := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
-	desc := &sqlbase.Descriptor{
+	dbDesc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Table{
-			Table: &tableDesc,
+			Table: &desc,
 		},
 	}
-	desc.Table(b.ts)
 	var v roachpb.Value
-	if err := v.SetProto(desc); err != nil {
+	if err := v.SetProto(dbDesc); err != nil {
 		panic(err)
 	}
 	b.kv = append(b.kv, roachpb.KeyValue{Key: k, Value: v})
 }
 
 // addTableDesc adds a database descriptor to the SystemConfig.
-func (b *systemConfigBuilder) addDBDesc(id int, dbDesc sqlbase.DatabaseDescriptor) {
+func (b *systemConfigBuilder) addDBDesc(id int, desc sqlbase.DatabaseDescriptor) {
 	// Write the table to the SystemConfig, in the descriptors table.
 	k := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
-	desc := &sqlbase.Descriptor{
+	dbDesc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Database{
-			Database: &dbDesc,
+			Database: &desc,
 		},
 	}
 	var v roachpb.Value
-	if err := v.SetProto(desc); err != nil {
+	if err := v.SetProto(dbDesc); err != nil {
 		panic(err)
 	}
 	b.kv = append(b.kv, roachpb.KeyValue{Key: k, Value: v})

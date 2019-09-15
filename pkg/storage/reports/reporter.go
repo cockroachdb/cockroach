@@ -346,7 +346,7 @@ func visitAncestors(
 	if err := descVal.GetProto(&desc); err != nil {
 		return false, err
 	}
-	tableDesc := desc.Table(descVal.Timestamp)
+	tableDesc := desc.GetTable()
 	// If it's a database, the parent is the default zone.
 	if tableDesc == nil {
 		return visitDefaultZone(ctx, cfg, visitor), nil

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -612,7 +611,7 @@ func newInternalLookupCtxFromDescriptors(
 			if prefix == nil || prefix.ID == database.ID {
 				dbIDs = append(dbIDs, database.ID)
 			}
-		} else if table := desc.Table(hlc.Timestamp{}); table != nil {
+		} else if table := desc.GetTable(); table != nil {
 			tbDescs[table.ID] = table
 			if prefix == nil || prefix.ID == table.ParentID {
 				// Only make the table visible for iteration if the prefix was included.

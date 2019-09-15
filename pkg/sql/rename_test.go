@@ -49,11 +49,10 @@ func TestRenameTable(t *testing.T) {
 	// Check the table descriptor.
 	desc := &sqlbase.Descriptor{}
 	tableDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(counter))
-	ts, err := kvDB.GetProtoTs(context.TODO(), tableDescKey, desc)
-	if err != nil {
+	if err := kvDB.GetProto(context.TODO(), tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := desc.Table(ts)
+	tableDesc := desc.GetTable()
 	if tableDesc.Name != oldName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", oldName, tableDesc)
 	}
@@ -75,11 +74,10 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor again.
-	ts, err = kvDB.GetProtoTs(context.TODO(), tableDescKey, desc)
-	if err != nil {
+	if err := kvDB.GetProto(context.TODO(), tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc = desc.Table(ts)
+	tableDesc = desc.GetTable()
 	if tableDesc.Name != newName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", newName, tableDesc)
 	}
@@ -105,7 +103,7 @@ func isRenamed(
 	if err := val.GetProto(&descriptor); err != nil {
 		panic("unable to unmarshal table descriptor")
 	}
-	table := descriptor.Table(val.Timestamp)
+	table := descriptor.GetTable()
 	return table.Name == expectedName && table.Version == expectedVersion
 }
 
