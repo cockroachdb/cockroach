@@ -15,20 +15,34 @@ SET vectorize_row_count_threshold = 1000
 
 # There are no stats available, so this should run through the row execution
 # engine.
-query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
+query TTT
+EXPLAIN SELECT count(*) from small
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkc1q6zAQhff3KcRZ3YJK7Cy16s8qm7gkKV0UUxRrMAbJMjMyTQh-92Ib2qbQNl3OmfmOPtAJbXS0toEE5hk5So2OY0UikcdoPli5A0ym0bRdn8a41KgiE8wJqUmeYLCze08bso54kUHDUbKNn2o7boLl440E6z00tp1txahraBR9MmodW4IGx1dRTNYZNRZIst6r1AQyKhNo7I-J3g_UHcpBI_bpQ0mSrQkmH_Tl2rd1zVTbFHmRn1vfF4_r3cumeNr-v7rALtiDChQiH1Uv9Ivi8i-KG5IutkJnet81Z0OpQa6m-fck9lzRA8dqemYei4mbAkeS5m0-D6t2Xo2Cn-H8R3j5BS6Hf28BAAD__xzlxHs=
+·          distributed  true
+·          vectorized   false
+group      ·            ·
+ │         aggregate 0  count_rows()
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        small@primary
+·          spans        ALL
 
 statement ok
 SET vectorize_row_count_threshold = 0
 
 # This should run through the vectorized execution engine because we disabled
 # the threshold.
-query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
+query TTT
+EXPLAIN SELECT count(*) from small
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkT1PwzAQhnd-RXQTSIbGHT2BmLo0qC1iQBFynVOw5NiW74JaVfnvKDEDLZSP8Z7L--Y5-QA-NLjUHRKoZ5BQC4gpGCQKaUT5g0WzA1UKsD72POJagAkJQR2ALTsEBRu9dbhC3WCalSCgQdbWTbUx2U6n_S112jkQsI7akyquQUDVsyqWwSMI2Go2r0hF6DmOeGzhProTROjQsH2zvFdFeVNOjLVzBdsOVVES1IOAHPmQJdYtgpKD-PtBd22bsNUc0kwe33NfPS43L6vqaX159Y23_Ootz3jjDk3PNvjf3ef_cV8hxeAJj7zPNZdDLQCbFvODU-iTwYcUzPSbPFZTbgINEuetzMPC59Uo-DksfwzPT8L1cPEeAAD__yeM11g=
+·          distributed  true
+·          vectorized   true
+group      ·            ·
+ │         aggregate 0  count_rows()
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        small@primary
+·          spans        ALL
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -44,20 +58,34 @@ ALTER TABLE small INJECT STATISTICS '[
 ]'
 
 # This should run through the row execution engine.
-query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
+query TTT
+EXPLAIN SELECT count(*) from small
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkc1q6zAQhff3KcRZ3YJK7Cy16s8qm7gkKV0UUxRrMAbJMjMyTQh-92Ib2qbQNl3OmfmOPtAJbXS0toEE5hk5So2OY0UikcdoPli5A0ym0bRdn8a41KgiE8wJqUmeYLCze08bso54kUHDUbKNn2o7boLl440E6z00tp1txahraBR9MmodW4IGx1dRTNYZNRZIst6r1AQyKhNo7I-J3g_UHcpBI_bpQ0mSrQkmH_Tl2rd1zVTbFHmRn1vfF4_r3cumeNr-v7rALtiDChQiH1Uv9Ivi8i-KG5IutkJnet81Z0OpQa6m-fck9lzRA8dqemYei4mbAkeS5m0-D6t2Xo2Cn-H8R3j5BS6Hf28BAAD__xzlxHs=
+·          distributed  true
+·          vectorized   false
+group      ·            ·
+ │         aggregate 0  count_rows()
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        small@primary
+·          spans        ALL
 
 statement ok
 SET vectorize_row_count_threshold = 1
 
 # This should run through the vectorized execution engine because we lowered
 # the threshold.
-query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM small]
+query TTT
+EXPLAIN SELECT count(*) from small
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkT1PwzAQhnd-RXQTSIbGHT2BmLo0qC1iQBFynVOw5NiW74JaVfnvKDEDLZSP8Z7L--Y5-QA-NLjUHRKoZ5BQC4gpGCQKaUT5g0WzA1UKsD72POJagAkJQR2ALTsEBRu9dbhC3WCalSCgQdbWTbUx2U6n_S112jkQsI7akyquQUDVsyqWwSMI2Go2r0hF6DmOeGzhProTROjQsH2zvFdFeVNOjLVzBdsOVVES1IOAHPmQJdYtgpKD-PtBd22bsNUc0kwe33NfPS43L6vqaX159Y23_Ootz3jjDk3PNvjf3ef_cV8hxeAJj7zPNZdDLQCbFvODU-iTwYcUzPSbPFZTbgINEuetzMPC59Uo-DksfwzPT8L1cPEeAAD__yeM11g=
+·          distributed  true
+·          vectorized   true
+group      ·            ·
+ │         aggregate 0  count_rows()
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        small@primary
+·          spans        ALL
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -76,17 +104,31 @@ ALTER TABLE large INJECT STATISTICS '[
 ]'
 
 # This should run through the vectorized execution engine.
-query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM large]
+query TTT
+EXPLAIN SELECT count(*) from large
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkT1PwzAQhnd-RXQTSIbGHT2BmLo0qC1iQBFynVOw5NiW74JaVfnvKDEDLZSP8Z7L--Y5-QA-NLjUHRKoZ5BQC4gpGCQKaUT5g0WzA1UKsD72POJagAkJQR2ALTsEBRu9dbhC3WCalSCgQdbWTbUx2U6n_a3TqUUQsI7akyquQUDVsyqWwY94q9m8IhWh5zjisYX76E4QoUPD9s3yXhXlTTkx1s4VbDtURUlQDwJy5EOWWLcISg7i7wfdtW3CVnNIM3l8z331uNy8rKqn9eXVN97yq7c84407ND3b4H93n__HfYUUgyc88j7XXA61AGxazA9OoU8GH1Iw02_yWE25CTRInLcyDwufV6Pg57D8MTw_CdfDxXsAAAD__wnh10o=
+·          distributed  true
+·          vectorized   true
+group      ·            ·
+ │         aggregate 0  count_rows()
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        large@primary
+·          spans        ALL
 
 statement ok
 SET vectorize_row_count_threshold = 1000000
 
 # This should run through the row execution engine because we increased the
 # threshold.
-query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT count(*) FROM large]
+query TTT
+EXPLAIN SELECT count(*) from large
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9L80AQxu_vp1ie0yusNOlxT_459dJIW_EgQbbZIQSSbJiZYEvJd5ckoFZQ63Gemd-zP9gT2hho7RsSuGekyC06jgWJRB6j-WAVDnCJRdV2vY5xblFEJrgTtNKa4LDz-5o25APxIoFFIPVVPdV2XDWejze155Jgse18K85cwyLr1Zl1bMeY46sYJh-cGQtEfV0brRpyJhFY7I9K7wfmDvlgEXv9UBL1JcGlg71c-7YsmUqvkRfpufV99rjevWyyp-3_qwvsGn8wDTWRj6YX-kVx-RfFDUkXW6Ezve-akyG3oFDS_HsSey7ogWMxPTOP2cRNQSDReZvOw6qdV6PgZzj9EV5-gfPh31sAAAD__wIExG0=
+·          distributed  true
+·          vectorized   false
+group      ·            ·
+ │         aggregate 0  count_rows()
+ │         scalar       ·
+ └── scan  ·            ·
+·          table        large@primary
+·          spans        ALL

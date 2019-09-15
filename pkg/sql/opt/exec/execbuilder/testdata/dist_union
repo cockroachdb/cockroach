@@ -1,4 +1,4 @@
-# LogicTest: fakedist
+# LogicTest: 5node-dist
 
 statement ok
 CREATE TABLE uniontest (
