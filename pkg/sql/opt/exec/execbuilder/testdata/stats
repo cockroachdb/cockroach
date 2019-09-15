@@ -1,4 +1,4 @@
-# LogicTest: fakedist
+# LogicTest: 5node-dist
 
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.
