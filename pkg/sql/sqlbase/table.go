@@ -481,7 +481,6 @@ func ConditionalGetTableDescFromTxn(
 			return nil, errors.Wrapf(err,
 				"decoding current table descriptor value for id: %d", expectation.ID)
 		}
-		existing.Table(existingKV.Value.Timestamp)
 	}
 	wrapped := WrapDescriptor(expectation)
 	if !existing.Equal(wrapped) {

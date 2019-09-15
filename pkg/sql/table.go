@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -384,36 +383,6 @@ func (tc *TableCollection) getMutableTableVersionByID(
 		return table, nil
 	}
 	return sqlbase.GetMutableTableDescFromID(ctx, txn, tableID)
-}
-
-// releaseTableLeases releases the leases for the tables with ids in
-// the passed slice. Errors are logged but ignored.
-func (tc *TableCollection) releaseTableLeases(ctx context.Context, tables []IDVersion) {
-	// Sort the tables and leases to make it easy to find the leases to release.
-	leasedTables := tc.leasedTables
-	sort.Slice(tables, func(i, j int) bool {
-		return tables[i].id < tables[j].id
-	})
-	sort.Slice(leasedTables, func(i, j int) bool {
-		return leasedTables[i].ID < leasedTables[j].ID
-	})
-
-	filteredLeases := leasedTables[:0] // will store the remaining leases
-	tablesToConsider := tables
-	shouldRelease := func(id sqlbase.ID) (found bool) {
-		for len(tablesToConsider) > 0 && tablesToConsider[0].id < id {
-			tablesToConsider = tablesToConsider[1:]
-		}
-		return len(tablesToConsider) > 0 && tablesToConsider[0].id == id
-	}
-	for _, l := range leasedTables {
-		if !shouldRelease(l.ID) {
-			filteredLeases = append(filteredLeases, l)
-		} else if err := tc.leaseMgr.Release(l); err != nil {
-			log.Warning(ctx, err)
-		}
-	}
-	tc.leasedTables = filteredLeases
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {
@@ -875,7 +844,7 @@ func (p *planner) writeTableDescToBatch(
 		}
 	} else {
 		// Only increment the table descriptor version once in this transaction.
-		if err := tableDesc.MaybeIncrementVersion(ctx, p.txn, p.execCfg.Settings); err != nil {
+		if err := tableDesc.MaybeIncrementVersion(ctx, p.txn); err != nil {
 			return err
 		}
 

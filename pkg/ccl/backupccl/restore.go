@@ -184,7 +184,7 @@ func loadSQLDescsFromBackupsAtTime(
 
 	allDescs := make([]sqlbase.Descriptor, 0, len(byID))
 	for _, desc := range byID {
-		if t := desc.Table(hlc.Timestamp{}); t != nil {
+		if t := desc.GetTable(); t != nil {
 			// A table revisions may have been captured before it was in a DB that is
 			// backed up -- if the DB is missing, filter the table.
 			if byID[t.ParentID] == nil {
@@ -212,7 +212,7 @@ func selectTargets(
 
 	seenTable := false
 	for _, desc := range matched.descs {
-		if desc.Table(hlc.Timestamp{}) != nil {
+		if desc.GetTable() != nil {
 			seenTable = true
 			break
 		}
@@ -1534,7 +1534,7 @@ func doRestorePlan(
 	for _, desc := range sqlDescs {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			databasesByID[dbDesc.ID] = dbDesc
-		} else if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+		} else if tableDesc := desc.GetTable(); tableDesc != nil {
 			tablesByID[tableDesc.ID] = tableDesc
 		}
 	}
@@ -1686,7 +1686,7 @@ func createImportingTables(
 	var tables []*sqlbase.TableDescriptor
 	var oldTableIDs []sqlbase.ID
 	for _, desc := range sqlDescs {
-		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
 			tables = append(tables, tableDesc)
 			oldTableIDs = append(oldTableIDs, tableDesc.ID)
 		}

@@ -157,11 +157,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf(`table "kv" does not exist`)
 	}
 	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	ts, err := kvDB.GetProtoTs(ctx, tbDescKey, desc)
-	if err != nil {
+	if err := kvDB.GetProto(ctx, tbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	tbDesc := desc.Table(ts)
+	tbDesc := desc.GetTable()
 
 	// Add a zone config for both the table and database.
 	cfg := config.DefaultZoneConfig()
@@ -331,11 +330,10 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatalf(`table "kv" does not exist`)
 	}
 	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	ts, err := kvDB.GetProtoTs(ctx, tbDescKey, desc)
-	if err != nil {
+	if err := kvDB.GetProto(ctx, tbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	tbDesc := desc.Table(ts)
+	tbDesc := desc.GetTable()
 
 	tb2NameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv2")
 	gr2, err := kvDB.Get(ctx, tb2NameKey)
@@ -346,11 +344,10 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatalf(`table "kv2" does not exist`)
 	}
 	tb2DescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr2.ValueInt()))
-	ts, err = kvDB.GetProtoTs(ctx, tb2DescKey, desc)
-	if err != nil {
+	if err := kvDB.GetProto(ctx, tb2DescKey, desc); err != nil {
 		t.Fatal(err)
 	}
-	tb2Desc := desc.Table(ts)
+	tb2Desc := desc.GetTable()
 
 	tableSpan := tbDesc.TableSpan()
 	table2Span := tb2Desc.TableSpan()
