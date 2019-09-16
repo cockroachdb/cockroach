@@ -11,15 +11,12 @@
 package sql
 
 import (
-	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func testTableDesc(
@@ -93,31 +90,4 @@ func parseAndNormalizeExpr(t *testing.T, p *planner, sql string, sel *renderNode
 		t.Fatalf("%s: %v", sql, err)
 	}
 	return typedExpr
-}
-
-func TestSplitAndExpr(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testData := []struct {
-		expr     string
-		expected string
-	}{
-		{`f`, `f`},
-		{`f AND g`, `f, g`},
-		{`f OR g`, `f OR g`},
-		{`(f AND g) AND (c AND (d AND e))`, `f, g, c, d, e`},
-	}
-	p := makeTestPlanner()
-	for _, d := range testData {
-		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
-			defer p.extendedEvalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, p)
-			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
-			exprs := splitAndExpr(p.EvalContext(), expr, nil /* exprs */)
-			if s := exprs.String(); d.expected != s {
-				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-			}
-		})
-	}
 }
