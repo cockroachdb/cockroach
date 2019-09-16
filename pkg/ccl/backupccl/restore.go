@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // TableRewriteMap maps old table IDs to new table and parent IDs.
@@ -75,8 +75,26 @@ func loadBackupDescs(
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}
+		for _, d := range desc.Descriptors {
+			// Calls to GetTable are generally frowned upon.
+			// This specific call exists to provide backwards compatibility with
+			// backups created prior to version 19.1. Starting in v19.1 the
+			// ModificationTime is always written in backups for all versions
+			// of table descriptors. In earlier cockroach versions only later
+			// table descriptor versions contain a non-empty ModificationTime.
+			// Later versions of CockroachDB use the MVCC timestamp to fill in
+			// the ModificationTime for table descriptors. When performing a restore
+			// we no longer have access to that MVCC timestamp but we can set it
+			// to a value we know will be safe.
+			if t := d.GetTable(); t == nil {
+				continue
+			} else if t.Version == 1 && t.ModificationTime.IsEmpty() {
+				t.ModificationTime = hlc.Timestamp{WallTime: 1}
+			}
+		}
 		backupDescs[i] = desc
 	}
+
 	if len(backupDescs) == 0 {
 		return nil, errors.Newf("no backups found")
 	}

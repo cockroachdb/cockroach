@@ -3301,35 +3301,36 @@ func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
 // It is vital that users which read table descriptor values from the KV store
 // call this method.
 func (desc *TableDescriptor) maybeSetModificationTimeFromMVCCTimestamp(ts hlc.Timestamp) {
+	// CreateAsOfTime is used for CREATE TABLE ... AS SELECT ... and was
+	// introduced in v19.1. In general it is not critical to set and we definitely
+	// should not assert on its not being set. It's not always sensical to set it
+	// from the passed MVCC timestamp. That being said, starting in 19.2 the
+	// CreateAsOfTime and ModificationTime fields are both unset for the first
+	// Version of a TableDescriptor and the code relies on the value being set
+	// based on the MVCC timestamp.
+	if !ts.IsEmpty() &&
+		desc.ModificationTime.IsEmpty() &&
+		desc.CreateAsOfTime.IsEmpty() &&
+		desc.Version == 1 {
+		desc.CreateAsOfTime = ts
+	}
+
+	// Set the ModificationTime based on the passed ts if we should.
 	// Table descriptors can be updated in place after their version has been
 	// incremented (e.g. to include a schema change lease).
 	// When this happens we permit the ModificationTime to be written explicitly
 	// with the value that lives on the in-memory copy. That value should contain
 	// a timestamp set by this method. Thus if the ModificationTime is set it
 	// must not be after the MVCC timestamp we just read it at.
-	setIfShould := func(name string, cur *hlc.Timestamp, ts hlc.Timestamp) (set bool) {
-		if cur.IsEmpty() && ts.IsEmpty() {
-			log.Fatalf(context.TODO(), "read table descriptor without %s"+
-				"with zero MVCC timestamp", name)
-		}
-		if cur.IsEmpty() {
-			*cur = ts
-			return true
-		}
-		if !ts.IsEmpty() && ts.Less(*cur) {
-			log.Fatalf(context.TODO(), "read table descriptor which has a %s "+
-				"after its MVCC timestamp: has %v, expected %v",
-				name, cur, ts)
-		}
-		return false
-	}
-	setIfShould("ModificationTime", &desc.ModificationTime, ts)
-	if setIfShould("CreationTime", &desc.CreateAsOfTime, ts) && desc.Version != 1 {
-		// This means we never set the creation time and that we're updating a
-		// descriptor which wasn't read using this method. This is pretty bad but
-		// a fatal here seems extreme.
-		log.Errorf(context.TODO(), "set a creation time from MVCC timestamp for version %d",
-			desc.Version)
+	if desc.ModificationTime.IsEmpty() && ts.IsEmpty() {
+		log.Fatalf(context.TODO(), "read table descriptor for %q (%d.%d) without ModificationTime "+
+			"with zero MVCC timestamp", desc.Name, desc.ParentID, desc.ID)
+	} else if desc.ModificationTime.IsEmpty() {
+		desc.ModificationTime = ts
+	} else if !ts.IsEmpty() && ts.Less(desc.ModificationTime) {
+		log.Fatalf(context.TODO(), "read table descriptor %q (%d.%d) which has a ModificationTime "+
+			"after its MVCC timestamp: has %v, expected %v",
+			desc.Name, desc.ParentID, desc.ID, desc.ModificationTime, ts)
 	}
 }
 
