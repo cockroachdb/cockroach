@@ -50,7 +50,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		wg.Done()
 	}()
 
-	inbox, err := NewInbox(typs)
+	inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
