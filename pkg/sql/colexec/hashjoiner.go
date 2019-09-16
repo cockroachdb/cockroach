@@ -86,7 +86,7 @@ type hashJoinerSourceSpec struct {
 
 // hashJoinEqOp performs a hash join on the input tables equality columns.
 // It requires that the output for every input batch in the probe phase fits
-// within col.BatchSize, otherwise the behavior is undefined. A join is performed
+// within col.BatchSize(), otherwise the behavior is undefined. A join is performed
 // and there is no guarantee on the ordering of the output columns.
 //
 // Before the build phase, all equality and output columns from the build table
@@ -157,7 +157,7 @@ type hashJoinerSourceSpec struct {
 // 3. Now, head stores the keyID of the first match in the build table for every
 //    probe table key. ht.same is used to select all build key matches for each
 //    probe key, which are added to the resulting batch. Output batching is done
-//    to ensure that each batch is at most col.BatchSize.
+//    to ensure that each batch is at most col.BatchSize().
 //
 // In the case that an outer join on the probe table side is performed, every
 // single probe row is kept even if its groupID is 0. If a groupID of 0 is
@@ -304,7 +304,7 @@ func (hj *hashJoinEqOp) initEmitting() {
 func (hj *hashJoinEqOp) emitUnmatched() {
 	nResults := uint16(0)
 
-	for nResults < coldata.BatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.size {
+	for nResults < coldata.BatchSize() && hj.emittingUnmatchedState.rowIdx < hj.ht.size {
 		if !hj.prober.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
 			hj.prober.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
 			nResults++
@@ -493,14 +493,14 @@ func makeHashTable(
 
 		bucketSize: bucketSize,
 
-		groupID: make([]uint64, coldata.BatchSize),
-		toCheck: make([]uint16, coldata.BatchSize),
-		differs: make([]bool, coldata.BatchSize),
+		groupID: make([]uint64, coldata.BatchSize()),
+		toCheck: make([]uint16, coldata.BatchSize()),
+		differs: make([]bool, coldata.BatchSize()),
 
-		headID: make([]uint64, coldata.BatchSize),
+		headID: make([]uint64, coldata.BatchSize()),
 
 		keys:    make([]coldata.Vec, len(eqCols)),
-		buckets: make([]uint64, coldata.BatchSize),
+		buckets: make([]uint64, coldata.BatchSize()),
 
 		allowNullEquality: allowNullEquality,
 	}
@@ -634,7 +634,7 @@ func (builder *hashJoinBuilder) exec(ctx context.Context) {
 	nKeyCols := len(builder.spec.eqCols)
 	batchStart := uint64(0)
 	for batchStart < builder.ht.size {
-		batchEnd := batchStart + coldata.BatchSize
+		batchEnd := batchStart + uint64(coldata.BatchSize())
 		if batchEnd > builder.ht.size {
 			batchEnd = builder.ht.size
 		}
@@ -778,7 +778,7 @@ func makeHashJoinProber(
 
 	var probeRowUnmatched []bool
 	if probe.outer {
-		probeRowUnmatched = make([]bool, coldata.BatchSize)
+		probeRowUnmatched = make([]bool, coldata.BatchSize())
 	}
 
 	return &hashJoinProber{
@@ -786,8 +786,8 @@ func makeHashJoinProber(
 
 		batch: coldata.NewMemBatch(outColTypes),
 
-		buildIdx: make([]uint64, coldata.BatchSize),
-		probeIdx: make([]uint16, coldata.BatchSize),
+		buildIdx: make([]uint64, coldata.BatchSize()),
+		probeIdx: make([]uint16, coldata.BatchSize()),
 
 		spec:  probe,
 		build: build,

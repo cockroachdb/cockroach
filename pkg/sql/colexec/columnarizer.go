@@ -24,7 +24,7 @@ import (
 )
 
 // Columnarizer turns an execinfra.RowSource input into an Operator output, by
-// reading the input in chunks of size coldata.BatchSize and converting each
+// reading the input in chunks of size coldata.BatchSize() and converting each
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
 	execinfra.ProcessorBase
@@ -71,13 +71,13 @@ func NewColumnarizer(
 // EstimateStaticMemoryUsage is part of the StaticMemoryOperator
 // interface.
 func (c *Columnarizer) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
+	return EstimateBatchSizeBytes(c.typs, int(coldata.BatchSize()))
 }
 
 // Init is part of the Operator interface.
 func (c *Columnarizer) Init() {
 	c.batch = coldata.NewMemBatch(c.typs)
-	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize)
+	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
 	}
@@ -91,7 +91,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	// Buffer up n rows.
 	nRows := uint16(0)
 	columnTypes := c.OutputTypes()
-	for ; nRows < coldata.BatchSize; nRows++ {
+	for ; nRows < coldata.BatchSize(); nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
 			c.accumulatedMeta = append(c.accumulatedMeta, *meta)

@@ -203,9 +203,9 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	batches := make([]coldata.Batch, numInputs)
 	for i := range batches {
 		batches[i] = coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
-		batches[i].SetLength(coldata.BatchSize)
+		batches[i].SetLength(coldata.BatchSize())
 	}
-	for i := int64(0); i < coldata.BatchSize*numInputs; i++ {
+	for i := int64(0); i < int64(coldata.BatchSize())*numInputs; i++ {
 		batch := batches[i%numInputs]
 		batch.ColVec(0).Int64()[i/numInputs] = i
 	}
@@ -224,7 +224,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	}
 	op.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize * numInputs))
+	b.SetBytes(8 * int64(coldata.BatchSize()) * numInputs)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		op.Next(ctx)

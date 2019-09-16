@@ -41,7 +41,7 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 		typs[i] = availableTyps[rng.Intn(len(availableTyps))]
 	}
 
-	capacity := rng.Intn(coldata.BatchSize) + 1
+	capacity := rng.Intn(int(coldata.BatchSize())) + 1
 	length := rng.Intn(capacity)
 	b := colexec.RandomBatch(rng, typs, capacity, length, rng.Float64())
 	return typs, b
@@ -51,7 +51,7 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 // use the returned batch to assert equality, not as an input to a testing
 // function, since Copy simplifies the internals (e.g. if there are zero
 // elements to copy, copyBatch returns a zero-capacity batch, which is less
-// interesting than testing a batch with a different capacity of BatchSize but
+// interesting than testing a batch with a different capacity of BatchSize() but
 // zero elements).
 func copyBatch(original coldata.Batch) coldata.Batch {
 	typs := make([]coltypes.T, original.Width())
@@ -82,7 +82,7 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 	require.Equal(t, expected.Width(), actual.Width())
 	for colIdx := 0; colIdx < expected.Width(); colIdx++ {
 		// Verify equality of ColVecs (this includes nulls). Since the coldata.Vec
-		// backing array is always of coldata.BatchSize due to the scratch batch
+		// backing array is always of coldata.BatchSize() due to the scratch batch
 		// that the converter keeps around, the coldata.Vec needs to be sliced to
 		// the first length elements to match on length, otherwise the check will
 		// fail.
@@ -200,10 +200,10 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	// numBytes corresponds 1:1 to typs and specifies how many bytes we are
 	// converting on one iteration of the benchmark for the corresponding type in
 	// typs.
-	numBytes := []int64{coldata.BatchSize, fixedLen * coldata.BatchSize, 8 * coldata.BatchSize}
+	numBytes := []int64{int64(coldata.BatchSize()), fixedLen * int64(coldata.BatchSize()), 8 * int64(coldata.BatchSize())}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colexec.RandomBatch(rng, []coltypes.T{typ}, coldata.BatchSize, 0 /* length */, 0 /* nullProbability */)
+		batch := colexec.RandomBatch(rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
@@ -249,7 +249,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 					if len(data) != 1 {
 						b.Fatal("expected arrow batch of length 1")
 					}
-					if data[0].Len() != coldata.BatchSize {
+					if data[0].Len() != int(coldata.BatchSize()) {
 						b.Fatal("unexpected number of elements")
 					}
 				}
@@ -272,7 +272,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 					if result.Width() != 1 {
 						b.Fatal("expected one column")
 					}
-					if result.Length() != coldata.BatchSize {
+					if result.Length() != coldata.BatchSize() {
 						b.Fatal("unexpected number of elements")
 					}
 				}

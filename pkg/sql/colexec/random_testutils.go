@@ -160,7 +160,6 @@ func randomBatchWithSel(
 
 const (
 	defaultMaxSchemaLength = 8
-	defaultBatchSize       = coldata.BatchSize
 	defaultNumBatches      = 4
 )
 
@@ -178,7 +177,7 @@ type RandomDataOpArgs struct {
 	// MaxSchemaLength is the maximum length of the operator's schema, which will
 	// be at least one type.
 	MaxSchemaLength int
-	// BatchSize is the size of batches returned.
+	// BatchSize() is the size of batches returned.
 	BatchSize int
 	// NumBatches is the number of batches returned before the final, zero batch.
 	NumBatches int
@@ -211,7 +210,7 @@ func NewRandomDataOp(rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
 	var (
 		availableTyps   = coltypes.AllTypes
 		maxSchemaLength = defaultMaxSchemaLength
-		batchSize       = defaultBatchSize
+		batchSize       = int(coldata.BatchSize())
 		numBatches      = defaultNumBatches
 	)
 	if args.AvailableTyps != nil {

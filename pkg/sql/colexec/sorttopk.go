@@ -87,7 +87,7 @@ func (t *topKSorter) Init() {
 		typ := t.inputTypes[i]
 		t.comparators[i] = GetVecComparator(typ, 2)
 	}
-	t.output = coldata.NewMemBatchWithSize(t.inputTypes, coldata.BatchSize)
+	t.output = coldata.NewMemBatchWithSize(t.inputTypes, int(coldata.BatchSize()))
 }
 
 func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
@@ -196,8 +196,8 @@ func (t *topKSorter) emit() coldata.Batch {
 		t.output.SetLength(0)
 		return t.output
 	}
-	if toEmit > coldata.BatchSize {
-		toEmit = coldata.BatchSize
+	if toEmit > coldata.BatchSize() {
+		toEmit = coldata.BatchSize()
 	}
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)

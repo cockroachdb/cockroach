@@ -95,7 +95,7 @@ var supportedTypes = func() map[coltypes.T]struct{} {
 
 // BatchToArrow converts the first batch.Length elements of the batch into an
 // arrow []*array.Data. It is assumed that the batch is not larger than
-// coldata.BatchSize. The returned []*array.Data may only be used until the
+// coldata.BatchSize(). The returned []*array.Data may only be used until the
 // next call to BatchToArrow.
 func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, error) {
 	if batch.Width() != len(c.typs) {
@@ -191,7 +191,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 }
 
 // ArrowToBatch converts []*array.Data to a coldata.Batch. There must not be
-// more than coldata.BatchSize elements in data. It's safe to call ArrowToBatch
+// more than coldata.BatchSize() elements in data. It's safe to call ArrowToBatch
 // concurrently.
 //
 // The passed in batch is overwritten, but after this method returns it stays
