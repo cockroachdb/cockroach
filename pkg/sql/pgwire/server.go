@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -31,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -126,17 +127,9 @@ var (
 	sslUnsupported = []byte{'N'}
 )
 
-type closeableReadConn struct {
-	net.TCPConn
-}
-
 // cancelChanMap keeps track of channels that are closed after the associated
 // cancellation function has been called and the cancellation has taken place.
-type cancelChanMap map[chan struct{}]*closeableReadConn
-
-func (c *closeableReadConn) closeRead() {
-	c.CloseRead()
-}
+type cancelChanMap map[chan struct{}]context.CancelFunc
 
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
@@ -396,8 +389,8 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 		if !s.mu.draining {
 			return true
 		}
-		for _, conn := range connCancelMap {
-			conn.closeRead()
+		for _, closeFunc := range connCancelMap {
+			closeFunc()
 		}
 		return false
 	}(); stop {
@@ -420,12 +413,19 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	s.mu.Lock()
 	draining := s.mu.draining
 	if !draining {
-		ctx, _ = contextutil.WithCancel(ctx)
 		done := make(chan struct{})
-		tcpConn := conn.(*closeableReadConn)
-		s.mu.connCancelMap[done] = tcpConn
+		switch c := conn.(type) {
+		case *net.TCPConn:
+			s.mu.connCancelMap[done] = func() {
+				c.CloseRead()
+			}
+		default:
+			var cancel context.CancelFunc
+			ctx, cancel = contextutil.WithCancel(ctx)
+			s.mu.connCancelMap[done] = cancel
+		}
 		defer func() {
-			tcpConn.closeRead()
+			s.mu.connCancelMap[done]()
 			close(done)
 			s.mu.Lock()
 			delete(s.mu.connCancelMap, done)

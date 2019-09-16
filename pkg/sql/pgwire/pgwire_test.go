@@ -335,7 +335,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 
 		// Actually cancel the connection.
 		for _, cancel := range realCancels {
-			cancel.CloseRead()
+			cancel()
 		}
 
 		// Make sure that the connection was disrupted. A retry loop is needed
