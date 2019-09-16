@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // explainVecNode is a planNode that wraps a plan and returns
@@ -61,6 +62,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}()
 	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
+		if len(n.subqueryPlans) > 0 {
+			return errors.New("running EXPLAIN (VEC) on this query is " +
+				"unsupported because of the presence of subqueries")
+		}
 		return err
 	}
 
