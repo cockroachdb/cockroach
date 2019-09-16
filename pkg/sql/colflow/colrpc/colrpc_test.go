@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -32,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -214,7 +217,7 @@ func TestOutboxInbox(t *testing.T) {
 		outbox, err := NewOutbox(input, typs, nil)
 		require.NoError(t, err)
 
-		inbox, err := NewInbox(typs)
+		inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
@@ -444,7 +447,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			inbox, err := NewInbox(typs)
+			inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
 			require.NoError(t, err)
 
 			var (
@@ -505,7 +508,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	outbox, err := NewOutbox(input, typs, nil /* metadataSources */)
 	require.NoError(b, err)
 
-	inbox, err := NewInbox(typs)
+	inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
 	require.NoError(b, err)
 
 	var wg sync.WaitGroup
@@ -530,4 +533,130 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	require.NoError(b, <-streamHandlerErrCh)
 	wg.Wait()
+}
+
+func TestOutboxStreamIDPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	outboxStreamID := execinfrapb.StreamID(1234)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
+	)
+	require.NoError(t, err)
+	dialer := &execinfrapb.MockDialer{Addr: addr}
+	defer dialer.Close()
+
+	typs := []coltypes.T{coltypes.Int64}
+
+	var inTags *logtags.Buffer
+
+	nextDone := make(chan struct{})
+	input := &colexec.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
+		b := coldata.NewMemBatchWithSize(typs, 0)
+		b.SetLength(0)
+		inTags = logtags.FromContext(ctx)
+		nextDone <- struct{}{}
+		return b
+	}}
+
+	outbox, err := NewOutbox(input, typs, nil)
+	require.NoError(t, err)
+
+	outboxDone := make(chan struct{})
+	go func() {
+		outbox.Run(
+			ctx,
+			dialer,
+			roachpb.NodeID(0),
+			execinfrapb.FlowID{UUID: uuid.MakeV4()},
+			outboxStreamID,
+			nil,
+		)
+		outboxDone <- struct{}{}
+	}()
+
+	<-nextDone
+	serverStreamNotification := <-mockServer.InboundStreams
+	close(serverStreamNotification.Donec)
+	<-outboxDone
+
+	// Assert that the ctx passed to Next() has no caller tags (e.g. streamID).
+	require.Equal(t, (*logtags.Buffer)(nil), inTags)
+}
+
+func TestInboxCtxStreamIDTagging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	streamID := execinfrapb.StreamID(1234)
+	ctx := context.Background()
+	inboxInternalCtx := context.Background()
+	taggedCtx := logtags.AddTag(context.Background(), "streamID", streamID)
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	testCases := []struct {
+		name string
+		// test is the body of the test to be run.
+		test func(context.Context, *Inbox)
+	}{
+		{
+			// CtxTaggedInNext verifies that Next adds StreamID to the Context in maybeInit.
+			name: "CtxTaggedInNext",
+			test: func(ctx context.Context, inbox *Inbox) {
+				inbox.Next(ctx)
+			},
+		},
+		{
+			// CtxTaggedInDrainMeta verifies that DrainMeta adds StreamID to the Context in maybeInit.
+			name: "CtxTaggedInDrainMeta",
+			test: func(ctx context.Context, inbox *Inbox) {
+				inbox.DrainMeta(ctx)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			rpcLayer := makeMockFlowStreamRPCLayer()
+
+			typs := []coltypes.T{coltypes.Int64}
+
+			inbox, err := NewInbox(typs, streamID)
+			require.NoError(t, err)
+
+			ctxExtract := make(chan struct{})
+			inbox.ctxInterceptorFn = func(ctx context.Context) {
+				inboxInternalCtx = ctx
+				ctxExtract <- struct{}{}
+			}
+
+			streamHandlerErr := handleStream(ctx, inbox, callbackFlowStreamServer{
+				server: rpcLayer.server,
+				recvCb: nil,
+			}, nil)
+
+			inboxTested := make(chan struct{})
+			go func() {
+				tc.test(ctx, inbox)
+				inboxTested <- struct{}{}
+			}()
+
+			<-ctxExtract
+			require.NoError(t, rpcLayer.client.CloseSend())
+			require.NoError(t, <-streamHandlerErr)
+			<-inboxTested
+
+			// Assert that ctx passed to Next and DrainMeta was not modified.
+			require.Equal(t, (*logtags.Buffer)(nil), logtags.FromContext(ctx))
+			// Assert that inboxInternalCtx has streamID tag, after init is called.
+			require.Equal(t, logtags.FromContext(taggedCtx), logtags.FromContext(inboxInternalCtx))
+
+		})
+	}
 }

@@ -31,7 +31,7 @@ import (
 
 type callbackRemoteComponentCreator struct {
 	newOutboxFn func(colexec.Operator, []coltypes.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInboxFn  func(typs []coltypes.T) (*colrpc.Inbox, error)
+	newInboxFn  func(typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
@@ -40,8 +40,10 @@ func (c callbackRemoteComponentCreator) newOutbox(
 	return c.newOutboxFn(input, typs, metadataSources)
 }
 
-func (c callbackRemoteComponentCreator) newInbox(typs []coltypes.T) (*colrpc.Inbox, error) {
-	return c.newInboxFn(typs)
+func (c callbackRemoteComponentCreator) newInbox(
+	typs []coltypes.T, streamID execinfrapb.StreamID,
+) (*colrpc.Inbox, error) {
+	return c.newInboxFn(typs, streamID)
 }
 
 func intCols(numCols int) []types.T {
@@ -185,8 +187,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
 			return colrpc.NewOutbox(op, typs, sources)
 		},
-		newInboxFn: func(typs []coltypes.T) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(typs)
+		newInboxFn: func(typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
+			inbox, err := colrpc.NewInbox(typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
 		},
