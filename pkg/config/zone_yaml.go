@@ -16,8 +16,9 @@ import (
 	"sort"
 	"strings"
 
-	proto "github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
+	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
+	"gopkg.in/yaml.v2"
 )
 
 var _ yaml.Marshaler = LeasePreference{}
@@ -141,7 +142,8 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 	// constraints.
 	constraintsMap := make(map[string]int32)
 	if err := unmarshal(&constraintsMap); err != nil {
-		return err
+		return errors.New(
+			"invalid constraints format. expected an array of strings or a map of strings to ints")
 	}
 
 	constraintsList := make([]Constraints, 0, len(constraintsMap))
