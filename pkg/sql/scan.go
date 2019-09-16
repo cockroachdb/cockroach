@@ -77,12 +77,6 @@ type scanNode struct {
 	filter     tree.TypedExpr
 	filterVars tree.IndexedVarHelper
 
-	// origFilter is the original filtering expression, which might have gotten
-	// simplified during index selection. For example "k > 0" is converted to a
-	// span and the filter is nil. But we still want to deduce not-null columns
-	// from the original filter.
-	origFilter tree.TypedExpr
-
 	// if non-zero, hardLimit indicates that the scanNode only needs to provide
 	// this many rows (after applying any filter). It is a "hard" guarantee that
 	// Next will only be called this many times.
@@ -412,56 +406,4 @@ func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumn
 	}
 	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil
-}
-
-// initOrdering initializes the ordering info using the selected index. This
-// must be called after index selection is performed.
-func (n *scanNode) initOrdering(exactPrefix int, evalCtx *tree.EvalContext) {
-	if n.index == nil {
-		return
-	}
-	n.props = n.computePhysicalProps(n.index, exactPrefix, n.reverse, evalCtx)
-}
-
-// computePhysicalProps calculates ordering information for table columns
-// assuming that:
-//   - we scan a given index (potentially in reverse order), and
-//   - the first `exactPrefix` columns of the index each have a constant value
-//     (see physicalProps).
-func (n *scanNode) computePhysicalProps(
-	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool, evalCtx *tree.EvalContext,
-) physicalProps {
-	var pp physicalProps
-
-	columnIDs, dirs := index.FullColumnIDs()
-
-	var keySet util.FastIntSet
-	for i, colID := range columnIDs {
-		idx, ok := n.colIdxMap[colID]
-		if !ok {
-			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
-		}
-		if i < exactPrefix {
-			pp.addConstantColumn(idx)
-		} else {
-			dir, err := dirs[i].ToEncodingDirection()
-			if err != nil {
-				panic(err)
-			}
-			if reverse {
-				dir = dir.Reverse()
-			}
-			pp.addOrderColumn(idx, dir)
-		}
-		if !n.cols[idx].Nullable {
-			pp.addNotNullColumn(idx)
-		}
-		keySet.Add(idx)
-	}
-
-	// We included any implicit columns, so the columns form a (possibly weak)
-	// key.
-	pp.addWeakKey(keySet)
-	pp.applyExpr(evalCtx, n.origFilter)
-	return pp
 }
