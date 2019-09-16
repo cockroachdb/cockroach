@@ -149,6 +149,9 @@ func (stats *Reporter) update(
 	replStatsSaver *replicationStatsReportSaver,
 	locSaver *replicationCriticalLocalitiesReportSaver,
 ) error {
+	if stats.executor() == nil {
+		return errors.Errorf( "store config executor not ready")
+	}
 	stats.updateLatestConfig()
 	if stats.latestConfig == nil {
 		return nil
@@ -192,7 +195,7 @@ func (stats *Reporter) update(
 	); err != nil {
 		return errors.Wrap(err, "failed to compute constraint conformance report")
 	}
-
+	
 	if err := constraintConfVisitor.report.Save(
 		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor(),
 	); err != nil {
