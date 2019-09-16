@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -564,10 +565,14 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
 		}
+		// Use math.MaxInt32 as the nextReplicaID as an extra safeguard against creating
+		// new replicas of the RHS. This isn't required for correctness, since the merge
+		// protocol should guarantee that no new replicas of the RHS can ever be
+		// created, but it doesn't hurt to be careful.
 		const rangeIDLocalOnly = true
 		const mustClearRange = false
 		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, merge.RightDesc.NextReplicaID, rangeIDLocalOnly, mustClearRange,
+			ctx, b.batch, b.batch, math.MaxInt32, rangeIDLocalOnly, mustClearRange,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy range before merge")
 		}

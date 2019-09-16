@@ -328,13 +328,8 @@ func (rgcq *replicaGCQueue) process(
 			}
 		}
 
-		// We don't have the last NextReplicaID for the subsumed range, nor can we
-		// obtain it, but that's OK: we can just be conservative and use the maximum
-		// possible replica ID. store.RemoveReplica will write a tombstone using
-		// this maximum possible replica ID, which would normally be problematic, as
-		// it would prevent this store from ever having a new replica of the removed
-		// range. In this case, however, it's copacetic, as subsumed ranges _can't_
-		// have new replicas.
+		// A replica ID of MaxInt32 is written when we know a range to have been
+		// merged. See the Merge case of runPreApplyTriggers() for details.
 		const nextReplicaID = math.MaxInt32
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,
