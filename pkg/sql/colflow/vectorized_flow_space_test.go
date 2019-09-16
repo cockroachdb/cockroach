@@ -127,7 +127,7 @@ func TestVectorizeSpaceError(t *testing.T) {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 				}
 				acc := memMon.MakeBoundAccount()
-				result, err := NewColOperator(ctx, flowCtx, tc.spec, inputs)
+				result, err := colexec.NewColOperator(ctx, flowCtx, tc.spec, inputs)
 				if err != nil {
 					t.Fatal(err)
 				}

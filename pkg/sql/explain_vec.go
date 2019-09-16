@@ -137,19 +137,19 @@ func makeExplainVecPlanningCtx(
 	return planCtx
 }
 
-func shouldOutput(operator execinfrapb.OpNode, verbose bool) bool {
+func shouldOutput(operator execinfra.OpNode, verbose bool) bool {
 	_, nonExplainable := operator.(colexec.NonExplainable)
 	return !nonExplainable || verbose
 }
 
-func formatOpChain(operator execinfrapb.OpNode, node treeprinter.Node, verbose bool) {
+func formatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
 	if shouldOutput(operator, verbose) {
 		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose)
 	} else {
 		doFormatOpChain(operator, node, verbose)
 	}
 }
-func doFormatOpChain(operator execinfrapb.OpNode, node treeprinter.Node, verbose bool) {
+func doFormatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
 	for i := 0; i < operator.ChildCount(); i++ {
 		child := operator.Child(i)
 		if shouldOutput(child, verbose) {

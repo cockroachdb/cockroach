@@ -51,7 +51,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	)
 	flow := colflow.NewVectorizedFlow(base)
 
-	mat, err := colflow.NewMaterializer(
+	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		0, /* processorID */
 		&colexec.CallbackOperator{

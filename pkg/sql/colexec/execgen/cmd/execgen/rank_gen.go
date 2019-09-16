@@ -59,7 +59,7 @@ var (
 )
 
 func genRankOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/colexec/vecbuiltins/rank_tmpl.go")
+	d, err := ioutil.ReadFile("pkg/sql/colexec/rank_tmpl.go")
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -169,13 +170,13 @@ type hashGrouper struct {
 	buildFinished bool
 }
 
-var _ execinfrapb.OpNode = &hashGrouper{}
+var _ execinfra.OpNode = &hashGrouper{}
 
 func (op *hashGrouper) ChildCount() int {
 	return 1
 }
 
-func (op *hashGrouper) Child(nth int) execinfrapb.OpNode {
+func (op *hashGrouper) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
 		return op.builder.spec.source
 	}

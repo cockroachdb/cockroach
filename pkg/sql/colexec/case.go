@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
 type caseOp struct {
@@ -40,7 +40,7 @@ func (c *caseOp) ChildCount() int {
 	return 1 + len(c.caseOps) + 1
 }
 
-func (c *caseOp) Child(nth int) execinfrapb.OpNode {
+func (c *caseOp) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
 		return c.buffer.input
 	} else if nth < len(c.caseOps)+1 {

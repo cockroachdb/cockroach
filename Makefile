@@ -803,6 +803,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/mergejoiner_leftsemi.eg.go \
   pkg/sql/colexec/mergejoiner_rightouter.eg.go \
   pkg/sql/colexec/min_max_agg.eg.go \
+  pkg/sql/colexec/overloads_test_utils.eg.go \
+  pkg/sql/colexec/rank.eg.go \
+  pkg/sql/colexec/row_number.eg.go \
   pkg/sql/colexec/projection_ops.eg.go \
   pkg/sql/colexec/quicksort.eg.go \
   pkg/sql/colexec/rowstovec.eg.go \
@@ -812,10 +815,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/sum_agg.eg.go \
   pkg/sql/colexec/tuples_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
-  pkg/sql/colexec/vecbuiltins/rank.eg.go \
-  pkg/sql/colexec/vecbuiltins/row_number.eg.go \
-  pkg/sql/colexec/zerocolumns.eg.go \
-  pkg/sql/colexec/overloads_test_utils.eg.go
+  pkg/sql/colexec/zerocolumns.eg.go
 
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
@@ -1485,14 +1485,14 @@ pkg/sql/colexec/mergejoiner_leftsemi.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
 pkg/sql/colexec/mergejoiner_rightouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
 pkg/sql/colexec/min_max_agg.eg.go: pkg/sql/colexec/min_max_agg_tmpl.go
 pkg/sql/colexec/quicksort.eg.go: pkg/sql/colexec/quicksort_tmpl.go
+pkg/sql/colexec/rank.eg.go: pkg/sql/colexec/rank_tmpl.go
+pkg/sql/colexec/row_number.eg.go: pkg/sql/colexec/row_number_tmpl.go
 pkg/sql/colexec/rowstovec.eg.go: pkg/sql/colexec/rowstovec_tmpl.go
 pkg/sql/colexec/select_in.eg.go: pkg/sql/colexec/select_in_tmpl.go
 pkg/sql/colexec/sort.eg.go: pkg/sql/colexec/sort_tmpl.go
 pkg/sql/colexec/sum_agg.eg.go: pkg/sql/colexec/sum_agg_tmpl.go
 pkg/sql/colexec/tuples_differ.eg.go: pkg/sql/colexec/tuples_differ_tmpl.go
 pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
-pkg/sql/colexec/vecbuiltins/rank.eg.go: pkg/sql/colexec/vecbuiltins/rank_tmpl.go
-pkg/sql/colexec/vecbuiltins/row_number.eg.go: pkg/sql/colexec/vecbuiltins/row_number_tmpl.go
 pkg/sql/colexec/zerocolumns.eg.go: pkg/sql/colexec/zerocolumns_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen

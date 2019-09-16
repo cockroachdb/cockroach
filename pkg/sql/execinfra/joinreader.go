@@ -130,7 +130,7 @@ type JoinReader struct {
 var _ Processor = &JoinReader{}
 var _ RowSource = &JoinReader{}
 var _ execinfrapb.MetadataSource = &JoinReader{}
-var _ execinfrapb.OpNode = &JoinReader{}
+var _ OpNode = &JoinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -715,18 +715,18 @@ func (jr *JoinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetad
 	return jr.generateMeta(ctx)
 }
 
-// ChildCount is part of the execinfrapb.OpNode interface.
+// ChildCount is part of the OpNode interface.
 func (jr *JoinReader) ChildCount() int {
 	return 1
 }
 
-// Child is part of the execinfrapb.OpNode interface.
-func (jr *JoinReader) Child(nth int) execinfrapb.OpNode {
+// Child is part of the OpNode interface.
+func (jr *JoinReader) Child(nth int) OpNode {
 	if nth == 0 {
-		if n, ok := jr.input.(execinfrapb.OpNode); ok {
+		if n, ok := jr.input.(OpNode); ok {
 			return n
 		}
-		panic("input to JoinReader is not an execinfrapb.OpNode")
+		panic("input to JoinReader is not an OpNode")
 	}
 	panic(fmt.Sprintf("invalid index %d", nth))
 }

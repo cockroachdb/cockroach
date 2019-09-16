@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package row
+package colexec
 
 import (
 	"testing"
@@ -19,7 +19,7 @@ import (
 func TestCFetcherUninitialized(t *testing.T) {
 	// Regression test for #36570: make sure it's okay to call GetRangesInfo even
 	// before the fetcher was fully initialized.
-	var fetcher CFetcher
+	var fetcher cFetcher
 
 	assert.Nil(t, fetcher.GetRangesInfo())
 }

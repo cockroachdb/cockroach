@@ -8,14 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colflow
+package colexec
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -23,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// Materializer converts an colexec.Operator input into a execinfra.RowSource.
+// Materializer converts an Operator input into a execinfra.RowSource.
 type Materializer struct {
 	execinfra.ProcessorBase
-	colexec.NonExplainable
+	NonExplainable
 
-	input colexec.Operator
+	input Operator
 
 	da sqlbase.DatumAlloc
 
@@ -72,7 +71,7 @@ const materializerProcName = "materializer"
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input colexec.Operator,
+	input Operator,
 	typs []types.T,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -111,7 +110,7 @@ func NewMaterializer(
 	return m, nil
 }
 
-var _ execinfrapb.OpNode = &Materializer{}
+var _ execinfra.OpNode = &Materializer{}
 
 // ChildCount is part of the exec.OpNode interface.
 func (m *Materializer) ChildCount() int {
@@ -119,7 +118,7 @@ func (m *Materializer) ChildCount() int {
 }
 
 // Child is part of the exec.OpNode interface.
-func (m *Materializer) Child(nth int) execinfrapb.OpNode {
+func (m *Materializer) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
 		return m.input
 	}
@@ -166,7 +165,7 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 		typs := m.OutputTypes()
 		for colIdx := 0; colIdx < len(typs); colIdx++ {
 			col := m.batch.ColVec(colIdx)
-			m.row[colIdx].Datum = colexec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, typs[colIdx])
+			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(col, rowIdx, m.da, typs[colIdx])
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
