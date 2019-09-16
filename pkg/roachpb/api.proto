@@ -1555,8 +1555,12 @@ message SubsumeResponse {
     (gogoproto.customname) = "MVCCStats"
   ];
 
-  // LeaseAppliedIndex is the lease index of the last applied command at the
-  // time that the Subsume request executed.
+  // LeaseAppliedIndex is the lease applied index of the last applied command
+  // at the time that the Subsume request executed. This is NOT intended to be
+  // the lease index of the SubsumeRequest itself. Instead, it is intended to
+  // provide the sender of the Subsume request with an upper bound on the lease
+  // applied index of the CPut that left an intent on the local copy of the
+  // right-hand range descriptor.
   uint64 lease_applied_index = 4;
 
   // FreezeStart is a timestamp that is guaranteed to be greater than the
