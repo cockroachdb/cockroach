@@ -411,15 +411,41 @@ func TestPutS3(t *testing.T) {
 		t.Skip("AWS_S3_BUCKET env var must be set")
 	}
 
-	testExportStore(t,
-		fmt.Sprintf(
-			"s3://%s/%s?%s=%s&%s=%s",
-			bucket, "backup-test",
-			S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-			S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
-		),
-		false,
-	)
+	ctx := context.TODO()
+	t.Run("auth-empty-no-cred", func(t *testing.T) {
+		_, err := ExportStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"), testSettings)
+		require.EqualError(t, err, fmt.Sprintf(`s3 uri missing %q parameter, auth=""`, S3AccessKeyParam))
+	})
+	t.Run("auth-implicit", func(t *testing.T) {
+		// Only test if default role exists
+		credentialsProvider := credentials.SharedCredentialsProvider{}
+		_, err := credentialsProvider.Retrieve()
+		if err != nil {
+			t.Skip(err)
+		}
+
+		testExportStore(
+			t,
+			fmt.Sprintf(
+				"s3://%s/%s?%s=%s",
+				bucket, "backup-test-default",
+				AuthParam, authParamImplicit,
+			),
+			false,
+		)
+	})
+
+	t.Run("auth-specified", func(t *testing.T) {
+		testExportStore(t,
+			fmt.Sprintf(
+				"s3://%s/%s?%s=%s&%s=%s",
+				bucket, "backup-test",
+				S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+				S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
+			),
+			false,
+		)
+	})
 }
 
 func TestPutS3Endpoint(t *testing.T) {
