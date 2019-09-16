@@ -78,7 +78,7 @@ func getZoneConfig(
 		if err := descVal.GetProto(&desc); err != nil {
 			return 0, nil, 0, nil, err
 		}
-		if tableDesc := desc.Table(descVal.Timestamp); tableDesc != nil {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Look up its parent database zone config.
 			dbID, zone, _, _, err := getZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
@@ -122,7 +122,7 @@ func completeZoneConfig(
 		if err := descVal.GetProto(&desc); err != nil {
 			return err
 		}
-		if tableDesc := desc.Table(descVal.Timestamp); tableDesc != nil {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
 			_, dbzone, _, _, err := getZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
 				return err

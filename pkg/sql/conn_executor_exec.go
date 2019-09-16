@@ -468,10 +468,6 @@ func (ex *connExecutor) execStmtInOpenState(
 // leases will only go down over time: no new conflicting leases can be
 // created as of the time of this call because v-2 can't be leased once
 // v-1 exists.
-//
-// If this method succeeds it is the caller's responsibility to release the
-// executor's table leases after the txn commits so that schema changes can
-// proceed.
 func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error {
 	tables := ex.extraTxnState.tables.getTablesWithNewVersion()
 	if tables == nil {
@@ -481,36 +477,40 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
 	}
+	if !txn.CommitTimestampFixed() {
+		panic("commit timestamp was not fixed")
+	}
 
-	// We potentially hold leases for tables which we've modified which
-	// we need to drop. Say we're updating tables at version V. All leases
-	// for version V-2 need to be dropped immediately, otherwise the check
-	// below that nobody holds leases for version V-2 will fail. Worse yet,
-	// the code below loops waiting for nobody to hold leases on V-2. We also
-	// may hold leases for version V-1 of modified tables that are good to drop
-	// but not as vital for correctness. It's good to drop them because as soon
-	// as this transaction commits jobs may start and will need to wait until
-	// the lease expires. It is safe because V-1 must remain valid until this
-	// transaction commits; if we commit then nobody else could have written
-	// a new V beneath us because we've already laid down an intent.
+	// Release leases here for two reasons:
+	// 1. If there are existing leases at version V-2 for a descriptor
+	// being modified to version V being held the wait loop below that
+	// waits on a cluster wide release of old version leases will hang
+	// until these leases expire.
+	// 2. Once this transaction commits, the schema changers run and
+	// increment the version of the modified descriptors. If one of the
+	// descriptors being modified has a lease being held the schema
+	// changers will stall until the leases expire.
 	//
-	// All this being said, we must retain our leases on tables which we have
-	// not modified to ensure that our writes to those other tables in this
-	// transaction remain valid.
-	ex.extraTxnState.tables.releaseTableLeases(ctx, tables)
+	// The above two cases can be satified by releasing leases for both
+	// cases explicitly, but we prefer to call it here and kill two birds
+	// with one stone.
+	//
+	// It is safe to release leases even though the transaction hasn't yet
+	// committed only because the transaction timestamp has been fixed using
+	// CommitTimestamp().
+	//
+	// releaseLeases can fail to release a lease if the server is shutting
+	// down. This is okay because it will result in the two cases mentioned
+	// above simply hanging until the expiration time for the leases.
+	ex.extraTxnState.tables.releaseLeases(ctx)
 
-	// We know that so long as there are no leases on the updated tables as of
-	// the current provisional commit timestamp for this transaction then if this
-	// transaction ends up committing then there won't have been any created
-	// in the meantime.
-	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.Serialize().Timestamp)
+	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
 	if err != nil {
 		return err
 	}
 	if count == 0 {
 		return nil
 	}
-
 	// Restart the transaction so that it is able to replay itself at a newer timestamp
 	// with the hope that the next time around there will be leases only at the current
 	// version.
@@ -533,9 +533,6 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// We cleanup the transaction and create a new transaction wait time
 	// might be extensive and so we'd better get rid of all the intents.
 	txn.CleanupOnError(ctx, retryErr)
-	// Release the rest of our leases on unmodified tables so we don't hold up
-	// schema changes there and potentially create a deadlock.
-	ex.extraTxnState.tables.releaseLeases(ctx)
 
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
@@ -581,13 +578,6 @@ func (ex *connExecutor) commitSQLTransaction(
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return ex.makeErrEvent(err, stmt)
-	}
-
-	// Now that we've committed, if we modified any table we need to make sure
-	// to release the leases for them so that the schema change can proceed and
-	// we don't block the client.
-	if tables := ex.extraTxnState.tables.getTablesWithNewVersion(); tables != nil {
-		ex.extraTxnState.tables.releaseLeases(ctx)
 	}
 
 	if !isRelease {

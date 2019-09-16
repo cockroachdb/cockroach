@@ -135,7 +135,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		n.dbDesc.ID,
 		id,
 		n.columns,
-		params.creationTimeForNewTableDescriptor(),
+		params.p.txn.CommitTimestamp(),
 		privs,
 		&params.p.semaCtx,
 	)

@@ -3,12 +3,6 @@
 # Schema changes that experienced retriable errors in RELEASE
 # SAVEPOINT would previously deadlock.
 
-# Prevent transaction refreshes so we encounter the necessary
-# TransactionRetryError below.
-
-statement ok
-SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 0;
-
 statement ok
 BEGIN
 
