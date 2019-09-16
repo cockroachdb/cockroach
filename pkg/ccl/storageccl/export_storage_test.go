@@ -411,15 +411,49 @@ func TestPutS3(t *testing.T) {
 		t.Skip("AWS_S3_BUCKET env var must be set")
 	}
 
-	testExportStore(t,
-		fmt.Sprintf(
-			"s3://%s/%s?%s=%s&%s=%s",
-			bucket, "backup-test",
-			S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-			S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
-		),
-		false,
-	)
+	ctx := context.TODO()
+	t.Run("auth-empty-no-cred", func(t *testing.T) {
+		_, err := ExportStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"), testSettings)
+		require.EqualError(t, err, fmt.Sprintf(
+			`%s is set to '%s', but %s is not set`,
+			AuthParam,
+			authParamSpecified,
+			S3AccessKeyParam,
+		))
+	})
+	t.Run("auth-implicit", func(t *testing.T) {
+		// You can create an IAM that can access S3
+		// in the AWS console, then set it up locally.
+		// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
+		// We only run this test if default role exists.
+		credentialsProvider := credentials.SharedCredentialsProvider{}
+		_, err := credentialsProvider.Retrieve()
+		if err != nil {
+			t.Skip(err)
+		}
+
+		testExportStore(
+			t,
+			fmt.Sprintf(
+				"s3://%s/%s?%s=%s",
+				bucket, "backup-test-default",
+				AuthParam, authParamImplicit,
+			),
+			false,
+		)
+	})
+
+	t.Run("auth-specified", func(t *testing.T) {
+		testExportStore(t,
+			fmt.Sprintf(
+				"s3://%s/%s?%s=%s&%s=%s",
+				bucket, "backup-test",
+				S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+				S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
+			),
+			false,
+		)
+	})
 }
 
 func TestPutS3Endpoint(t *testing.T) {
