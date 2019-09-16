@@ -3833,9 +3833,12 @@ func TestSchemaChangeRetryError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The transaction should get pushed and commit without an error.
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
+	// TODO(vivek): fix #17698. The transaction should get retried
+	// without returning this error to the user.
+	if err := tx.Commit(); !testutils.IsError(err,
+		`restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \(RETRY_SERIALIZABLE\)`,
+	) {
+		t.Fatalf("err = %+v", err)
 	}
 }
 

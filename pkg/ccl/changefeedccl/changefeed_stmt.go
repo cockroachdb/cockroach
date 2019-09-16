@@ -200,7 +200,7 @@ func changefeedPlanHook(
 		}
 		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {
-			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+			if tableDesc := desc.GetTable(); tableDesc != nil {
 				targets[tableDesc.ID] = jobspb.ChangefeedTarget{
 					StatementTimeName: tableDesc.Name,
 				}
