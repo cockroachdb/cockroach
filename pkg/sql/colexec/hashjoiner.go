@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -197,7 +197,7 @@ func (hj *hashJoinEqOp) ChildCount() int {
 	return 2
 }
 
-func (hj *hashJoinEqOp) Child(nth int) execinfrapb.OpNode {
+func (hj *hashJoinEqOp) Child(nth int) execinfra.OpNode {
 	switch nth {
 	case 0:
 		return hj.spec.left.source

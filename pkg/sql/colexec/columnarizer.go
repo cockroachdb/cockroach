@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colflow
+package colexec
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -24,15 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// TODO(yuzefovich): once row.CFetcher is moved into colexec, move Columnarizer
-// there as well.
-
-// Columnarizer turns ane execinfra.RowSource input into an colexec.Operator
-// output, by reading the input in chunks of size coldata.BatchSize and
-// converting each chunk into a coldata.Batch column by column.
+// Columnarizer turns an execinfra.RowSource input into an Operator output, by
+// reading the input in chunks of size coldata.BatchSize and converting each
+// chunk into a coldata.Batch column by column.
 type Columnarizer struct {
 	execinfra.ProcessorBase
-	colexec.NonExplainable
+	NonExplainable
 
 	input execinfra.RowSource
 	da    sqlbase.DatumAlloc
@@ -44,7 +40,7 @@ type Columnarizer struct {
 	typs            []coltypes.T
 }
 
-var _ colexec.StaticMemoryOperator = &Columnarizer{}
+var _ StaticMemoryOperator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
@@ -72,13 +68,13 @@ func NewColumnarizer(
 	return c, err
 }
 
-// EstimateStaticMemoryUsage is part of the exec.StaticMemoryOperator
+// EstimateStaticMemoryUsage is part of the StaticMemoryOperator
 // interface.
 func (c *Columnarizer) EstimateStaticMemoryUsage() int {
-	return colexec.EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
+	return EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
 }
 
-// Init is part of the colexec.Operator interface.
+// Init is part of the Operator interface.
 func (c *Columnarizer) Init() {
 	c.batch = coldata.NewMemBatch(c.typs)
 	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize)
@@ -89,7 +85,7 @@ func (c *Columnarizer) Init() {
 	c.input.Start(c.ctx)
 }
 
-// Next is part of the colexec.Operator interface.
+// Next is part of the Operator interface.
 func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
@@ -113,7 +109,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 
 	// Write each column into the output batch.
 	for idx, ct := range columnTypes {
-		err := colexec.EncDatumRowsToColVec(c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
+		err := EncDatumRowsToColVec(c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
 		if err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}
@@ -123,13 +119,13 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 
 // Run is part of the execinfra.Processor interface.
 //
-// columnarizers are not expected to be Run, so we prohibit calling this method
+// Columnarizers are not expected to be Run, so we prohibit calling this method
 // on them.
 func (c *Columnarizer) Run(context.Context) {
 	execerror.VectorizedInternalPanic("Columnarizer should not be Run")
 }
 
-var _ colexec.Operator = &Columnarizer{}
+var _ Operator = &Columnarizer{}
 var _ execinfrapb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
@@ -140,21 +136,21 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	return c.accumulatedMeta
 }
 
-// ChildCount is part of the colexec.Operator interface.
+// ChildCount is part of the Operator interface.
 func (c *Columnarizer) ChildCount() int {
-	if _, ok := c.input.(execinfrapb.OpNode); ok {
+	if _, ok := c.input.(execinfra.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the colexec.Operator interface.
-func (c *Columnarizer) Child(nth int) execinfrapb.OpNode {
+// Child is part of the Operator interface.
+func (c *Columnarizer) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
-		if n, ok := c.input.(execinfrapb.OpNode); ok {
+		if n, ok := c.input.(execinfra.OpNode); ok {
 			return n
 		}
-		execerror.VectorizedInternalPanic("input to Columnarizer is not an execinfrapb.OpNode")
+		execerror.VectorizedInternalPanic("input to Columnarizer is not an execinfra.OpNode")
 	}
 	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.

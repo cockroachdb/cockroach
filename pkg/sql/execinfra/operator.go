@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,10 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfrapb
-
-// TODO(yuzefovich): move this into execinfra once CFetcher is moved out of
-// sql/row.
+package execinfra
 
 // OpNode is an interface to operator-like structures with children.
 type OpNode interface {

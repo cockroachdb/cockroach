@@ -13,33 +13,47 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
-// kvFetcher wraps kvBatchFetcher, providing a nextKV interface that returns the
+// KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
 // next kv from its input.
-type kvFetcher struct {
+type KVFetcher struct {
 	kvBatchFetcher
 
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
 	bytesRead     int64
-	span          roachpb.Span
+	Span          roachpb.Span
 	newSpan       bool
 }
 
-func newKVFetcher(batchFetcher kvBatchFetcher) kvFetcher {
-	return kvFetcher{
+// NewKVFetcher creates a new KVFetcher.
+func NewKVFetcher(
+	txn *client.Txn,
+	spans roachpb.Spans,
+	reverse bool,
+	useBatchLimit bool,
+	firstBatchLimit int64,
+	returnRangeInfo bool,
+) (*KVFetcher, error) {
+	kvBatchFetcher, err := makeKVBatchFetcher(txn, spans, reverse, useBatchLimit, firstBatchLimit, returnRangeInfo)
+	return newKVFetcher(&kvBatchFetcher), err
+}
+
+func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
+	return &KVFetcher{
 		kvBatchFetcher: batchFetcher,
 	}
 }
 
-// nextKV returns the next kv from this fetcher. Returns false if there are no
+// NextKV returns the next kv from this fetcher. Returns false if there are no
 // more kvs to fetch, the kv that was fetched, and any errors that may have
 // occurred.
-func (f *kvFetcher) nextKV(
+func (f *KVFetcher) NextKV(
 	ctx context.Context,
 ) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
 	for {
@@ -66,7 +80,7 @@ func (f *kvFetcher) nextKV(
 			}, newSpan, nil
 		}
 
-		ok, f.kvs, f.batchResponse, f.span, err = f.nextBatch(ctx)
+		ok, f.kvs, f.batchResponse, f.Span, err = f.nextBatch(ctx)
 		if err != nil {
 			return ok, kv, false, err
 		}
