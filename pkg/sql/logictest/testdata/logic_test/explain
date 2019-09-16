@@ -1,0 +1,15 @@
+# LogicTest: local local-vec-off
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+# Test that EXPLAIN (DISTSQL) on a query with a subquery works.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT avg(a) OVER () FROM t)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkDFLBDEQhXt_xfEqhchttky1VnKNJ6doISniZjgCe0nIzKJy7H-X3RR6womW8ybf-8IcEZOnO3cghnmBhlXIJfXEnMoc1Qcb_w7TKISYR5ljq9CnQjBHSJCBYPDoXgfakfNU1g0UPIkLw1KbSzi48tEJFB6yi2xW17CTQhrlq5DF7QlGT-rv0ucQfXqjstanxpun28tOX0FhO4pZde1ZXfsf3Y44p8h0IjvX3ExWgfye6h05jaWn-5L6RVPH7cItgSeWutV12MS6mj_4Hda_wu0P2E4XnwEAAP__EY6e-w==
+
+# Test that explaining a query that contains a subquery the result of which is
+# needed to make the physical plan is rejected. See #40677.
+statement error running EXPLAIN \(DISTSQL\) on this query is unsupported because of the presence of subqueries
+EXPLAIN (DISTSQL) SELECT avg(a) OVER (ROWS (SELECT count(*) FROM t) PRECEDING) FROM t
