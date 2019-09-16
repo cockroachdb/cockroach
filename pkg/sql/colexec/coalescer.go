@@ -18,7 +18,7 @@ import (
 )
 
 // coalescerOp consumes the input operator and coalesces the resulting batches
-// to return full batches of coldata.BatchSize.
+// to return full batches of coldata.BatchSize().
 type coalescerOp struct {
 	OneInputNode
 	NonExplainable
@@ -41,7 +41,7 @@ func NewCoalescerOp(input Operator, colTypes []coltypes.T) Operator {
 }
 
 func (p *coalescerOp) EstimateStaticMemoryUsage() int {
-	return 2 * EstimateBatchSizeBytes(p.inputTypes, coldata.BatchSize)
+	return 2 * EstimateBatchSizeBytes(p.inputTypes, int(coldata.BatchSize()))
 }
 
 func (p *coalescerOp) Init() {
@@ -59,8 +59,8 @@ func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
 	p.buffer = tempBatch
 	p.buffer.SetLength(0)
 
-	for p.group.Length() < coldata.BatchSize {
-		leftover := coldata.BatchSize - p.group.Length()
+	for p.group.Length() < coldata.BatchSize() {
+		leftover := coldata.BatchSize() - p.group.Length()
 		batch := p.input.Next(ctx)
 		batchSize := batch.Length()
 
@@ -112,7 +112,7 @@ func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
 		if batchSize <= leftover {
 			p.group.SetLength(p.group.Length() + batchSize)
 		} else {
-			p.group.SetLength(coldata.BatchSize)
+			p.group.SetLength(coldata.BatchSize())
 			p.buffer.SetLength(batchSize - leftover)
 		}
 	}

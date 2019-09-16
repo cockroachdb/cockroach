@@ -305,7 +305,7 @@ func runTestsWithFn(
 ) {
 	rng, _ := randutil.NewPseudoRand()
 
-	for _, batchSize := range []uint16{1, 2, 3, 16, 1024} {
+	for _, batchSize := range []uint16{1, uint16(math.Trunc(.002 * float64(coldata.BatchSize()))), uint16(math.Trunc(.003 * float64(coldata.BatchSize()))), uint16(math.Trunc(.016 * float64(coldata.BatchSize()))), coldata.BatchSize()} {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
 				inputSources := make([]Operator, len(tups))
@@ -445,7 +445,7 @@ func (s *opTestInput) Init() {
 	}
 	s.batch = coldata.NewMemBatch(s.typs)
 
-	s.selection = make([]uint16, coldata.BatchSize)
+	s.selection = make([]uint16, coldata.BatchSize())
 	for i := range s.selection {
 		s.selection[i] = uint16(i)
 	}
@@ -499,7 +499,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		// than the max batch size, so the test will panic if this part of the slice
 		// is accidentally accessed.
 		for i := range s.selection[batchSize:] {
-			s.selection[int(batchSize)+i] = coldata.BatchSize + 1
+			s.selection[int(batchSize)+i] = coldata.BatchSize() + 1
 		}
 
 		s.batch.SetSelection(true)
@@ -911,7 +911,7 @@ type randomLengthBatchSource struct {
 var _ Operator = &randomLengthBatchSource{}
 
 // newRandomLengthBatchSource returns a new Operator initialized to return a
-// batch of random length between [1, col.BatchSize) forever.
+// batch of random length between [1, col.BatchSize()) forever.
 func newRandomLengthBatchSource(batch coldata.Batch) *randomLengthBatchSource {
 	return &randomLengthBatchSource{
 		internalBatch: batch,
@@ -923,7 +923,7 @@ func (r *randomLengthBatchSource) Init() {
 }
 
 func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
-	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(coldata.BatchSize))))
+	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(coldata.BatchSize()))))
 	return r.internalBatch
 }
 
@@ -1067,7 +1067,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 }
 
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
-// chunks them into BatchSize-sized chunks when Nexted.
+// chunks them into BatchSize()-sized chunks when Nexted.
 type chunkingBatchSource struct {
 	ZeroInputNode
 	typs []coltypes.T
@@ -1104,7 +1104,7 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	if c.curIdx >= c.len {
 		c.batch.SetLength(0)
 	}
-	lastIdx := c.curIdx + coldata.BatchSize
+	lastIdx := c.curIdx + uint64(coldata.BatchSize())
 	if lastIdx > c.len {
 		lastIdx = c.len
 	}

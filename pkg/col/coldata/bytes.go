@@ -65,7 +65,7 @@ func (b *Bytes) Len() int {
 	return len(b.data)
 }
 
-var zeroBytesColumn = make([][]byte, BatchSize)
+var zeroBytesColumn = make([][]byte, BatchSize())
 
 // Zero zeroes out the underlying bytes.
 func (b *Bytes) Zero() {
@@ -330,7 +330,7 @@ func (b *flatBytes) Len() int {
 	return len(b.offsets)
 }
 
-var zeroInt32Slice = make([]int32, BatchSize)
+var zeroInt32Slice = make([]int32, BatchSize())
 
 // Zero zeroes out the underlying bytes. Note that this doesn't change the
 // length. Use this instead of Reset if you need to be able to Get zeroed byte

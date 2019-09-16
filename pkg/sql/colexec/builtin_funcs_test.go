@@ -107,8 +107,8 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		if float64(i) < coldata.BatchSize*selectivity {
+	for i := 0; i < int(coldata.BatchSize()); i++ {
+		if float64(i) < float64(coldata.BatchSize())*selectivity {
 			col[i] = -1
 		} else {
 			col[i] = 1
@@ -116,19 +116,19 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	}
 
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(uint16(i))
 			}
 		}
 	}
 
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := int64(0); i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			sel[i] = uint16(i)
 		}
 	}
@@ -147,7 +147,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	}
 	op := NewBuiltinFunctionOperator(tctx, typedExpr.(*tree.FuncExpr), []types.T{*types.Int}, []int{0}, 1, source)
 
-	b.SetBytes(int64(8 * coldata.BatchSize))
+	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		op.Next(ctx)
@@ -176,12 +176,12 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	sCol := batch.ColVec(1).Int64()
 	eCol := batch.ColVec(2).Int64()
 	outCol := batch.ColVec(3).Bytes()
-	for i := 0; i < coldata.BatchSize; i++ {
+	for i := 0; i < int(coldata.BatchSize()); i++ {
 		bCol.Set(i, []byte("hello there"))
 		sCol[i] = 1
 		eCol[i] = 4
 	}
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
@@ -220,7 +220,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	specOp.Init()
 
 	b.Run("DefaultBuiltinOperator", func(b *testing.B) {
-		b.SetBytes(int64(len("hello there") * coldata.BatchSize))
+		b.SetBytes(int64(len("hello there") * int(coldata.BatchSize())))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			defaultOp.Next(ctx)
@@ -231,7 +231,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	})
 
 	b.Run("SpecializedSubstringOperator", func(b *testing.B) {
-		b.SetBytes(int64(len("hello there") * coldata.BatchSize))
+		b.SetBytes(int64(len("hello there") * int(coldata.BatchSize())))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			specOp.Next(ctx)

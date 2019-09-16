@@ -288,7 +288,7 @@ func (rf *cFetcher) Init(
 	}
 	rf.machine.batch = coldata.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
-	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, coldata.BatchSize)
+	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, int(coldata.BatchSize()))
 
 	var err error
 
@@ -545,7 +545,7 @@ const (
 const debugState = false
 
 // NextBatch processes keys until we complete one batch of rows,
-// coldata.BatchSize in length, which are returned in columnar format as an
+// coldata.BatchSize() in length, which are returned in columnar format as an
 // exec.Batch. The batch contains one Vec per table column, regardless of the
 // index used; columns that are not needed (as per neededCols) are empty. The
 // Batch should not be modified and is only valid until the next call.
@@ -753,7 +753,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
-			if rf.machine.rowIdx >= coldata.BatchSize {
+			if rf.machine.rowIdx >= coldata.BatchSize() {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0

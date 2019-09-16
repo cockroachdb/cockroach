@@ -33,7 +33,7 @@ type ordinalityOp struct {
 var _ StaticMemoryOperator = &ordinalityOp{}
 
 func (c *ordinalityOp) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Int64}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Int64}, int(coldata.BatchSize()))
 }
 
 const colNotAppended = -1

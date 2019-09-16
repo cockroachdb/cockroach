@@ -33,6 +33,6 @@ var _ apd.Decimal
 // */}}
 
 // {{range .}}
-var zero_TYPEColumn = make([]_GOTYPE, coldata.BatchSize)
+var zero_TYPEColumn = make([]_GOTYPE, coldata.BatchSize())
 
 // {{end}}

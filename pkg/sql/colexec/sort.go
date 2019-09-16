@@ -240,7 +240,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		p.state = sortEmitting
 		fallthrough
 	case sortEmitting:
-		newEmitted := p.emitted + uint64(coldata.BatchSize)
+		newEmitted := p.emitted + uint64(coldata.BatchSize())
 		if newEmitted > p.input.getNumTuples() {
 			newEmitted = p.input.getNumTuples()
 		}
