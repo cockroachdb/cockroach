@@ -21706,6 +21706,7 @@ const int ExportStorage_S3::kSecretFieldNumber;
 const int ExportStorage_S3::kTempTokenFieldNumber;
 const int ExportStorage_S3::kEndpointFieldNumber;
 const int ExportStorage_S3::kRegionFieldNumber;
+const int ExportStorage_S3::kAuthFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ExportStorage_S3::ExportStorage_S3()
@@ -21747,6 +21748,10 @@ ExportStorage_S3::ExportStorage_S3(const ExportStorage_S3& from)
   if (from.region().size() > 0) {
     region_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.region_);
   }
+  auth_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.auth().size() > 0) {
+    auth_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.auth_);
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ExportStorage.S3)
 }
 
@@ -21758,6 +21763,7 @@ void ExportStorage_S3::SharedCtor() {
   temp_token_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   endpoint_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   region_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  auth_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
 ExportStorage_S3::~ExportStorage_S3() {
@@ -21773,6 +21779,7 @@ void ExportStorage_S3::SharedDtor() {
   temp_token_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   endpoint_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   region_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  auth_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
 void ExportStorage_S3::SetCachedSize(int size) const {
@@ -21797,6 +21804,7 @@ void ExportStorage_S3::Clear() {
   temp_token_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   endpoint_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   region_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  auth_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   _internal_metadata_.Clear();
 }
 
@@ -21928,6 +21936,22 @@ bool ExportStorage_S3::MergePartialFromCodedStream(
         break;
       }
 
+      // string auth = 8;
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_auth()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->auth().data(), static_cast<int>(this->auth().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.roachpb.ExportStorage.S3.auth"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -22024,6 +22048,16 @@ void ExportStorage_S3::SerializeWithCachedSizes(
       7, this->region(), output);
   }
 
+  // string auth = 8;
+  if (this->auth().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->auth().data(), static_cast<int>(this->auth().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.roachpb.ExportStorage.S3.auth");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      8, this->auth(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ExportStorage.S3)
@@ -22084,6 +22118,13 @@ size_t ExportStorage_S3::ByteSizeLong() const {
         this->region());
   }
 
+  // string auth = 8;
+  if (this->auth().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->auth());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -22129,6 +22170,10 @@ void ExportStorage_S3::MergeFrom(const ExportStorage_S3& from) {
 
     region_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.region_);
   }
+  if (from.auth().size() > 0) {
+
+    auth_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.auth_);
+  }
 }
 
 void ExportStorage_S3::CopyFrom(const ExportStorage_S3& from) {
@@ -22161,6 +22206,8 @@ void ExportStorage_S3::InternalSwap(ExportStorage_S3* other) {
   endpoint_.Swap(&other->endpoint_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   region_.Swap(&other->region_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  auth_.Swap(&other->auth_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
