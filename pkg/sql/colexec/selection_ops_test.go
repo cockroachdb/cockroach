@@ -134,26 +134,26 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col := batch.ColVec(0).Int64()
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		if float64(i) < coldata.BatchSize*selectivity {
+	for i := 0; i < int(coldata.BatchSize()); i++ {
+		if float64(i) < float64(coldata.BatchSize())*selectivity {
 			col[i] = -1
 		} else {
 			col[i] = 1
 		}
 	}
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(uint16(i))
 			}
 		}
 	}
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := int64(0); i < coldata.BatchSize; i++ {
-			sel[i] = uint16(i)
+		for i := uint16(0); i < coldata.BatchSize(); i++ {
+			sel[i] = i
 		}
 	}
 	source := NewRepeatableBatchSource(batch)
@@ -168,7 +168,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	}
 	plusOp.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize))
+	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)
@@ -191,15 +191,15 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		if float64(i) < coldata.BatchSize*selectivity {
+	for i := 0; i < int(coldata.BatchSize()); i++ {
+		if float64(i) < float64(coldata.BatchSize())*selectivity {
 			col1[i], col2[i] = -1, 1
 		} else {
 			col1[i], col2[i] = 1, -1
 		}
 	}
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(uint16(i))
 			}
@@ -208,12 +208,12 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 			}
 		}
 	}
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := int64(0); i < coldata.BatchSize; i++ {
-			sel[i] = uint16(i)
+		for i := uint16(0); i < coldata.BatchSize(); i++ {
+			sel[i] = i
 		}
 	}
 	source := NewRepeatableBatchSource(batch)
@@ -228,7 +228,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	}
 	plusOp.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize * 2))
+	b.SetBytes(int64(8 * coldata.BatchSize() * 2))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)

@@ -37,7 +37,7 @@ type routerOutput interface {
 
 // defaultRouterOutputBlockedThreshold is the number of unread values buffered
 // by the routerOutputOp after which the output is considered blocked.
-const defaultRouterOutputBlockedThreshold = coldata.BatchSize * 2
+var defaultRouterOutputBlockedThreshold = int(coldata.BatchSize() * 2)
 
 type routerOutputOp struct {
 	// input is a reference to our router.
@@ -62,7 +62,7 @@ type routerOutputOp struct {
 	}
 
 	// These fields default to defaultRouterOutputBlockedThreshold and
-	// coldata.BatchSize but are modified by tests to test edge cases.
+	// coldata.BatchSize() but are modified by tests to test edge cases.
 	// blockedThreshold is the number of buffered values above which we consider
 	// a router output to be blocked.
 	blockedThreshold int
@@ -89,7 +89,7 @@ var _ Operator = &routerOutputOp{}
 // it.
 func newRouterOutputOp(types []coltypes.T, unblockedEventsChan chan<- struct{}) *routerOutputOp {
 	return newRouterOutputOpWithBlockedThresholdAndBatchSize(
-		types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, coldata.BatchSize,
+		types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, int(coldata.BatchSize()),
 	)
 }
 
@@ -341,10 +341,10 @@ func newHashRouterWithOutputs(
 		outputs:             outputs,
 		unblockedEventsChan: unblockEventsChan,
 	}
-	r.scratch.buckets = make([]uint64, coldata.BatchSize)
+	r.scratch.buckets = make([]uint64, coldata.BatchSize())
 	r.scratch.selections = make([][]uint16, len(outputs))
 	for i := range r.scratch.selections {
-		r.scratch.selections[i] = make([]uint16, 0, coldata.BatchSize)
+		r.scratch.selections[i] = make([]uint16, 0, coldata.BatchSize())
 	}
 	return r
 }

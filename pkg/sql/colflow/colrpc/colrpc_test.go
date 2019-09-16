@@ -501,7 +501,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	typs := []coltypes.T{coltypes.Int64}
 
 	batch := coldata.NewMemBatch(typs)
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 
 	input := colexec.NewRepeatableBatchSource(batch)
 
@@ -520,7 +520,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
-	b.SetBytes(8 * coldata.BatchSize)
+	b.SetBytes(8 * coldata.BatchSize())
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		inbox.Next(ctx)

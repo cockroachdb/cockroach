@@ -65,5 +65,5 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
-	return acc * batchLength
+	return acc * int(batchLength)
 }

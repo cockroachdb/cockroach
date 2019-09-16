@@ -43,7 +43,7 @@ func TestUnorderedSynchronizer(t *testing.T) {
 
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		source := NewRepeatableBatchSource(RandomBatch(rng, typs, coldata.BatchSize, 0 /* length */, rng.Float64()))
+		source := NewRepeatableBatchSource(RandomBatch(rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64()))
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
 	}
@@ -130,14 +130,14 @@ func BenchmarkUnorderedSynchronizer(b *testing.B) {
 	typs := []coltypes.T{coltypes.Int64}
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		batch := coldata.NewMemBatchWithSize(typs, coldata.BatchSize)
-		batch.SetLength(coldata.BatchSize)
+		batch := coldata.NewMemBatchWithSize(typs, int(coldata.BatchSize()))
+		batch.SetLength(coldata.BatchSize())
 		inputs[i] = NewRepeatableBatchSource(batch)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
 	s := NewUnorderedSynchronizer(inputs, typs, &wg)
-	b.SetBytes(8 * coldata.BatchSize)
+	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Next(ctx)

@@ -32,8 +32,8 @@ import (
 // a one-column coltypes.Int64 batch where each element is its ordinal and an
 // accompanying selection vector that selects every index in tuples.
 func getDataAndFullSelection() (tuples, []uint16) {
-	data := make(tuples, coldata.BatchSize)
-	fullSelection := make([]uint16, coldata.BatchSize)
+	data := make(tuples, coldata.BatchSize())
+	fullSelection := make([]uint16, coldata.BatchSize())
 	for i := range data {
 		data[i] = tuple{i}
 		fullSelection[i] = uint16(i)
@@ -59,14 +59,14 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		name      string
 	}{
 		{
-			inputBatchSize:   coldata.BatchSize,
-			outputBatchSize:  coldata.BatchSize,
+			inputBatchSize:   coldata.BatchSize(),
+			outputBatchSize:  int(coldata.BatchSize()),
 			blockedThreshold: defaultRouterOutputBlockedThreshold,
 			selection:        fullSelection,
 			name:             "OneBatch",
 		},
 		{
-			inputBatchSize:   coldata.BatchSize,
+			inputBatchSize:   coldata.BatchSize(),
 			outputBatchSize:  4,
 			blockedThreshold: defaultRouterOutputBlockedThreshold,
 			selection:        fullSelection,
@@ -74,14 +74,14 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		},
 		{
 			inputBatchSize:   4,
-			outputBatchSize:  coldata.BatchSize,
+			outputBatchSize:  int(coldata.BatchSize()),
 			blockedThreshold: defaultRouterOutputBlockedThreshold,
 			selection:        fullSelection,
 			name:             "MultipleInputBatchesLTOutputSize",
 		},
 		{
-			inputBatchSize:   coldata.BatchSize,
-			outputBatchSize:  coldata.BatchSize,
+			inputBatchSize:   coldata.BatchSize(),
+			outputBatchSize:  int(coldata.BatchSize()),
 			blockedThreshold: defaultRouterOutputBlockedThreshold,
 			selection:        fullSelection[:len(fullSelection)/4],
 			name:             "QuarterSelection",
@@ -177,7 +177,7 @@ func TestRouterOutputNext(t *testing.T) {
 			var wg sync.WaitGroup
 			batchChan := make(chan coldata.Batch)
 			o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
-			in := newOpTestInput(coldata.BatchSize, data, nil /* typs */)
+			in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
 			in.Init()
 			wg.Add(1)
 			go func() {
@@ -255,7 +255,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 		ch := make(chan struct{}, 2)
 		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-			[]coltypes.T{coltypes.Int64}, ch, blockThreshold, coldata.BatchSize,
+			[]coltypes.T{coltypes.Int64}, ch, blockThreshold, int(coldata.BatchSize()),
 		)
 		in := newOpTestInput(smallBatchSize, data, nil /* typs */)
 		out := newOpTestOutput(o, []int{0}, expected)
@@ -301,8 +301,8 @@ func TestRouterOutputRandom(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	const maxValues = coldata.BatchSize * 4
 	var (
+		maxValues        = int(coldata.BatchSize()) * 4
 		blockedThreshold = 1 + rng.Intn(maxValues-1)
 		outputSize       = 1 + rng.Intn(maxValues-1)
 	)
@@ -441,14 +441,14 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	data := make(tuples, coldata.BatchSize)
+	data := make(tuples, coldata.BatchSize())
 	valsYetToSee := make(map[int64]struct{})
 	for i := range data {
 		data[i] = tuple{i}
 		valsYetToSee[int64(i)] = struct{}{}
 	}
 
-	in := newOpTestInput(coldata.BatchSize, data, nil /* typs */)
+	in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
 	in.Init()
 
 	var (
@@ -518,7 +518,7 @@ func TestHashRouterCancellation(t *testing.T) {
 
 	// Never-ending input of 0s.
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	in := NewRepeatableBatchSource(batch)
 
 	unbufferedCh := make(chan struct{})
@@ -607,7 +607,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	sel := randomSel(rng, coldata.BatchSize, rng.Float64())
+	sel := randomSel(rng, coldata.BatchSize(), rng.Float64())
 
 	data, _ := getDataAndFullSelection()
 	typs := []coltypes.T{coltypes.Int64}
@@ -646,12 +646,9 @@ func TestHashRouterRandom(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	const (
-		maxValues  = coldata.BatchSize * 4
-		maxOutputs = coldata.BatchSize
-	)
-
 	var (
+		maxValues        = int(coldata.BatchSize()) * 4
+		maxOutputs       = int(coldata.BatchSize())
 		blockedThreshold = 1 + rng.Intn(maxValues-1)
 		outputSize       = 1 + rng.Intn(maxValues-1)
 		numOutputs       = 1 + rng.Intn(maxOutputs-1)
@@ -784,7 +781,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	// Use only one type. Note: the more types you use, the more you inflate the
 	// numbers.
 	batch := coldata.NewMemBatch(types)
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	input := NewRepeatableBatchSource(batch)
 
 	var wg sync.WaitGroup
@@ -792,7 +789,7 @@ func BenchmarkHashRouter(b *testing.B) {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
 				r, outputs := NewHashRouter(input, types, []int{0}, numOutputs)
-				b.SetBytes(8 * coldata.BatchSize * int64(numInputBatches))
+				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.
 				var expectedDistribution []int
@@ -825,8 +822,8 @@ func BenchmarkHashRouter(b *testing.B) {
 					for i := range actualDistribution {
 						sum += actualDistribution[i]
 					}
-					if sum != numInputBatches*coldata.BatchSize {
-						b.Fatalf("unexpected sum %d, expected %d", sum, numInputBatches*coldata.BatchSize)
+					if sum != numInputBatches*int(coldata.BatchSize()) {
+						b.Fatalf("unexpected sum %d, expected %d", sum, numInputBatches*int(coldata.BatchSize()))
 					}
 					if expectedDistribution == nil {
 						expectedDistribution = make([]int, len(actualDistribution))

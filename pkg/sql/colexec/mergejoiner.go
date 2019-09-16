@@ -386,22 +386,22 @@ func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
 		filterMemUsage = o.filter.EstimateStaticMemoryUsage()
 	}
 	return EstimateBatchSizeBytes(
-		o.getOutColTypes(), coldata.BatchSize,
+		o.getOutColTypes(), int(coldata.BatchSize()),
 	) + // base.output
 		EstimateBatchSizeBytes(
-			o.left.sourceTypes, coldata.BatchSize,
+			o.left.sourceTypes, int(coldata.BatchSize()),
 		) + // base.proberState.lBufferedGroup
 		EstimateBatchSizeBytes(
-			o.right.sourceTypes, coldata.BatchSize,
+			o.right.sourceTypes, int(coldata.BatchSize()),
 		) + // base.proberState.rBufferedGroup
-		4*sizeOfGroup*coldata.BatchSize + // base.groups
+		4*sizeOfGroup*int(coldata.BatchSize()) + // base.groups
 		leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
 		rightDistincter.EstimateStaticMemoryUsage() + // base.right.distincter
 		filterMemUsage
 }
 
 func (o *mergeJoinBase) Init() {
-	o.initWithOutputBatchSize(coldata.BatchSize)
+	o.initWithOutputBatchSize(coldata.BatchSize())
 }
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
@@ -421,7 +421,7 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
 
-	o.groups = makeGroupsBuffer(coldata.BatchSize)
+	o.groups = makeGroupsBuffer(int(coldata.BatchSize()))
 	o.resetBuilderCrossProductState()
 
 	if o.filter != nil {

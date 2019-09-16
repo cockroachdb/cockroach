@@ -54,14 +54,20 @@ type Batch interface {
 
 var _ Batch = &MemBatch{}
 
-// BatchSize is the maximum number of tuples that fit in a column batch.
+const maxBatchSize = 1024
+
+var batchSize = uint16(1024)
+
+// BatchSize() is the maximum number of tuples that fit in a column batch.
 // TODO(jordan): tune
-const BatchSize = 1024
+func BatchSize() uint16 {
+	return batchSize
+}
 
 // NewMemBatch allocates a new in-memory Batch.
 // TODO(jordan): pool these allocations.
 func NewMemBatch(types []coltypes.T) Batch {
-	return NewMemBatchWithSize(types, BatchSize)
+	return NewMemBatchWithSize(types, int(BatchSize()))
 }
 
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
@@ -133,7 +139,7 @@ func (m *MemBatch) SetLength(n uint16) {
 
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(t coltypes.T) {
-	m.b = append(m.b, NewMemColumn(t, BatchSize))
+	m.b = append(m.b, NewMemColumn(t, int(BatchSize())))
 }
 
 // Reset implements the Batch interface.

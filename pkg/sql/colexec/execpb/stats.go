@@ -40,7 +40,7 @@ func (vs *VectorizedStats) Stats() map[string]string {
 	}
 	selectivity := float64(0)
 	if vs.NumBatches > 0 {
-		selectivity = float64(vs.NumTuples) / float64(coldata.BatchSize*vs.NumBatches)
+		selectivity = float64(vs.NumTuples) / float64(int64(coldata.BatchSize())*vs.NumBatches)
 	}
 	return map[string]string{
 		batchesOutputTagSuffix: fmt.Sprintf("%d", vs.NumBatches),
@@ -68,7 +68,7 @@ func (vs *VectorizedStats) StatsForQueryPlan() []string {
 	}
 	selectivity := float64(0)
 	if vs.NumBatches > 0 {
-		selectivity = float64(vs.NumTuples) / float64(coldata.BatchSize*vs.NumBatches)
+		selectivity = float64(vs.NumTuples) / float64(int64(coldata.BatchSize())*vs.NumBatches)
 	}
 	return []string{
 		fmt.Sprintf("%s: %d", batchesOutputQueryPlanSuffix, vs.NumBatches),

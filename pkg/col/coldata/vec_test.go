@@ -24,10 +24,10 @@ func TestMemColumnSlice(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	c := NewMemColumn(coltypes.Int64, BatchSize)
+	c := NewMemColumn(coltypes.Int64, BatchSize())
 
 	ints := c.Int64()
-	for i := uint16(0); i < BatchSize; i++ {
+	for i := uint16(0); i < BatchSize(); i++ {
 		ints[i] = int64(i)
 		if i%2 == 0 {
 			// Set every other value to null.
@@ -38,8 +38,8 @@ func TestMemColumnSlice(t *testing.T) {
 	startSlice := uint16(1)
 	endSlice := uint16(0)
 	for startSlice > endSlice {
-		startSlice = uint16(rng.Intn(BatchSize))
-		endSlice = uint16(1 + rng.Intn(BatchSize))
+		startSlice = uint16(rng.Intn(BatchSize()))
+		endSlice = uint16(1 + rng.Intn(BatchSize()))
 	}
 
 	slice := c.Slice(coltypes.Int64, uint64(startSlice), uint64(endSlice))
@@ -112,12 +112,12 @@ func TestNullRanges(t *testing.T) {
 		},
 	}
 
-	c := NewMemColumn(coltypes.Int64, BatchSize)
+	c := NewMemColumn(coltypes.Int64, BatchSize())
 	for _, tc := range tcs {
 		c.Nulls().UnsetNulls()
 		c.Nulls().SetNullRange(tc.start, tc.end)
 
-		for i := uint64(0); i < BatchSize; i++ {
+		for i := uint64(0); i < BatchSize(); i++ {
 			if i >= tc.start && i < tc.end {
 				if !c.Nulls().NullAt64(i) {
 					t.Fatalf("expected null at %d, start: %d end: %d", i, tc.start, tc.end)
@@ -135,7 +135,7 @@ func TestAppend(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
 	const typ = coltypes.Int64
 
-	src := NewMemColumn(typ, BatchSize)
+	src := NewMemColumn(typ, BatchSize())
 	sel := make([]uint16, len(src.Int64()))
 	for i := range sel {
 		sel[i] = uint16(i)
@@ -150,9 +150,9 @@ func TestAppend(t *testing.T) {
 			name: "AppendSimple",
 			args: SliceArgs{
 				// DestIdx must be specified to append to the end of dest.
-				DestIdx: BatchSize,
+				DestIdx: BatchSize(),
 			},
-			expectedLength: BatchSize * 2,
+			expectedLength: BatchSize() * 2,
 		},
 		{
 			name: "AppendOverwriteSimple",
@@ -160,7 +160,7 @@ func TestAppend(t *testing.T) {
 				// DestIdx 0, the default value, will start appending at index 0.
 				DestIdx: 0,
 			},
-			expectedLength: BatchSize,
+			expectedLength: BatchSize(),
 		},
 		{
 			name: "AppendOverwriteSlice",
@@ -168,7 +168,7 @@ func TestAppend(t *testing.T) {
 				// Start appending at index 10.
 				DestIdx: 10,
 			},
-			expectedLength: BatchSize + 10,
+			expectedLength: BatchSize() + 10,
 		},
 		{
 			name: "AppendSlice",
@@ -196,7 +196,7 @@ func TestAppend(t *testing.T) {
 				Sel:       sel[:len(sel)/2],
 				SrcEndIdx: uint64(len(sel) / 2),
 			},
-			expectedLength: 5 + (BatchSize / 2),
+			expectedLength: 5 + (BatchSize() / 2),
 		},
 	}
 
@@ -205,10 +205,10 @@ func TestAppend(t *testing.T) {
 		tc.args.ColType = typ
 		if tc.args.SrcEndIdx == 0 {
 			// SrcEndIdx is always required.
-			tc.args.SrcEndIdx = BatchSize
+			tc.args.SrcEndIdx = BatchSize()
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			dest := NewMemColumn(typ, BatchSize)
+			dest := NewMemColumn(typ, BatchSize())
 			dest.Append(tc.args)
 			require.Equal(t, tc.expectedLength, len(dest.Int64()))
 		})
@@ -219,7 +219,7 @@ func TestCopy(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
 	const typ = coltypes.Int64
 
-	src := NewMemColumn(typ, BatchSize)
+	src := NewMemColumn(typ, BatchSize())
 	srcInts := src.Int64()
 	for i := range srcInts {
 		srcInts[i] = int64(i + 1)
@@ -257,11 +257,11 @@ func TestCopy(t *testing.T) {
 				SliceArgs: SliceArgs{
 					// Use DestIdx 1 to make sure that it is respected.
 					DestIdx:   1,
-					SrcEndIdx: BatchSize - 1,
+					SrcEndIdx: BatchSize() - 1,
 				},
 			},
 			// expectedSum uses sum of positive integers formula.
-			expectedSum: ((BatchSize - 1) * (BatchSize)) / 2,
+			expectedSum: ((BatchSize() - 1) * (BatchSize())) / 2,
 		},
 		{
 			name: "CopyWithSel",
@@ -286,7 +286,7 @@ func TestCopy(t *testing.T) {
 		tc.args.Src = src
 		tc.args.ColType = typ
 		t.Run(tc.name, func(t *testing.T) {
-			dest := NewMemColumn(typ, BatchSize)
+			dest := NewMemColumn(typ, BatchSize())
 			dest.Copy(tc.args)
 			destInts := dest.Int64()
 			firstNonZero := 0
@@ -307,7 +307,7 @@ func TestCopyNulls(t *testing.T) {
 	const typ = coltypes.Int64
 
 	// Set up the destination vector.
-	dst := NewMemColumn(typ, BatchSize)
+	dst := NewMemColumn(typ, BatchSize())
 	dstInts := dst.Int64()
 	for i := range dstInts {
 		dstInts[i] = int64(1)
@@ -318,7 +318,7 @@ func TestCopyNulls(t *testing.T) {
 	}
 
 	// Set up the source vector.
-	src := NewMemColumn(typ, BatchSize)
+	src := NewMemColumn(typ, BatchSize())
 	srcInts := src.Int64()
 	for i := range srcInts {
 		srcInts[i] = 2
@@ -353,7 +353,7 @@ func TestCopyNulls(t *testing.T) {
 	}
 
 	// Verify that the remaining elements in dst have not been touched.
-	for i := 10; i < BatchSize; i++ {
+	for i := 10; i < BatchSize(); i++ {
 		require.True(t, dstInts[i] == 1, "data in dst outside copy range has been changed")
 		require.True(t, !dst.Nulls().NullAt(uint16(i)), "no extra nulls were added")
 	}
@@ -364,7 +364,7 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 
 	// Set up the destination vector. It is all nulls except for a single
 	// non-null at index 0.
-	dst := NewMemColumn(typ, BatchSize)
+	dst := NewMemColumn(typ, BatchSize())
 	dstInts := dst.Int64()
 	for i := range dstInts {
 		dstInts[i] = 1
@@ -373,7 +373,7 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 	dst.Nulls().UnsetNull(0)
 
 	// Set up the source vector with two nulls.
-	src := NewMemColumn(typ, BatchSize)
+	src := NewMemColumn(typ, BatchSize())
 	srcInts := src.Int64()
 	for i := range srcInts {
 		srcInts[i] = 2
@@ -411,7 +411,7 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 func BenchmarkAppend(b *testing.B) {
 	const typ = coltypes.Int64
 
-	src := NewMemColumn(typ, BatchSize)
+	src := NewMemColumn(typ, BatchSize())
 	sel := make([]uint16, len(src.Int64()))
 
 	benchCases := []struct {
@@ -433,14 +433,14 @@ func BenchmarkAppend(b *testing.B) {
 	for _, bc := range benchCases {
 		bc.args.Src = src
 		bc.args.ColType = typ
-		bc.args.SrcEndIdx = BatchSize
-		dest := NewMemColumn(typ, BatchSize)
+		bc.args.SrcEndIdx = BatchSize()
+		dest := NewMemColumn(typ, BatchSize())
 		b.Run(bc.name, func(b *testing.B) {
-			b.SetBytes(8 * BatchSize)
+			b.SetBytes(8 * BatchSize())
 			for i := 0; i < b.N; i++ {
 				dest.Append(bc.args)
 				// "Reset" dest for another round.
-				dest.SetCol(dest.Int64()[:BatchSize])
+				dest.SetCol(dest.Int64()[:BatchSize()])
 			}
 		})
 	}
@@ -449,7 +449,7 @@ func BenchmarkAppend(b *testing.B) {
 func BenchmarkCopy(b *testing.B) {
 	const typ = coltypes.Int64
 
-	src := NewMemColumn(typ, BatchSize)
+	src := NewMemColumn(typ, BatchSize())
 	sel := make([]uint16, len(src.Int64()))
 
 	benchCases := []struct {
@@ -473,10 +473,10 @@ func BenchmarkCopy(b *testing.B) {
 	for _, bc := range benchCases {
 		bc.args.Src = src
 		bc.args.ColType = typ
-		bc.args.SrcEndIdx = BatchSize
-		dest := NewMemColumn(typ, BatchSize)
+		bc.args.SrcEndIdx = BatchSize()
+		dest := NewMemColumn(typ, BatchSize())
 		b.Run(bc.name, func(b *testing.B) {
-			b.SetBytes(8 * BatchSize)
+			b.SetBytes(8 * BatchSize())
 			for i := 0; i < b.N; i++ {
 				dest.Copy(bc.args)
 			}
