@@ -2684,6 +2684,14 @@ CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLI
                                                                                                               ^`,
 		},
 		{
+			`ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1`,
+			`at or near "idx": syntax error: index name should not be specified in ALTER PARTITION ... OF TABLE
+DETAIL: source SQL:
+ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
+                               ^
+HINT: try ALTER PARTITION ... OF INDEX`,
+		},
+		{
 			`ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1`,
 			`at or near "configure": syntax error: index wildcard unsupported in ALTER PARTITION ... OF TABLE
 DETAIL: source SQL:
