@@ -116,10 +116,12 @@ func (r *Replica) CheckConsistency(
 		inconsistencyCount++
 		var buf bytes.Buffer
 		_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x\n"+
-			"persisted stats: exp %+v, got %+v\n",
+			"persisted stats: exp %+v, got %+v\n"+
+			"stats delta: exp %+v, got %+v\n",
 			result.Replica,
 			expResponse.Checksum, result.Response.Checksum,
 			expResponse.Persisted, result.Response.Persisted,
+			expResponse.Delta, result.Response.Delta,
 		)
 		if expResponse.Snapshot != nil && result.Response.Snapshot != nil {
 			diff := diffRange(expResponse.Snapshot, result.Response.Snapshot)
