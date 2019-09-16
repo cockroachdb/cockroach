@@ -12,7 +12,6 @@ package tpcc
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -85,18 +84,12 @@ func createOrderStatus(
 		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`,
 	)
 
-	// TODO(radu): this is only useful for the heuristic planner.
-	indexStr := "@customer_idx"
-	if o.config.usePostgres {
-		indexStr = ""
-	}
-
 	// Pick the middle row, rounded up, from the selection by last name.
-	o.selectByLastName = o.sr.Define(fmt.Sprintf(`
+	o.selectByLastName = o.sr.Define(`
 		SELECT c_id, c_balance, c_first, c_middle
-		FROM customer%s
+		FROM customer
 		WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $3
-		ORDER BY c_first ASC`, indexStr),
+		ORDER BY c_first ASC`,
 	)
 
 	// Select the customer's order.
