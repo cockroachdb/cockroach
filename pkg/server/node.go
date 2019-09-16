@@ -273,7 +273,12 @@ func NewNode(
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
 	}
-	n.constraintStatsCollector = reports.NewReporter(n.stores, &n.storeCfg)
+	// Tests that use createTestNode (instead of TestServer) will not initialize the
+	// SQLExecutor so we should not create constraint stats collector as it
+	// depends on the internal executor.
+	if n.storeCfg.SQLExecutor != nil {
+		n.constraintStatsCollector = reports.NewReporter(n.stores, &n.storeCfg)
+	}
 	n.perReplicaServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -501,7 +506,9 @@ func (n *Node) start(
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
 
-	n.constraintStatsCollector.Start(ctx, n.stopper)
+	if n.constraintStatsCollector != nil {
+		n.constraintStatsCollector.Start(ctx, n.stopper)
+	}
 
 	allEngines := append([]engine.Engine(nil), initializedEngines...)
 	allEngines = append(allEngines, emptyEngines...)
