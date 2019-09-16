@@ -55,7 +55,7 @@ func (x Status) String() string {
 	return proto.EnumName(Status_name, int32(x))
 }
 func (Status) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{0}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{0}
 }
 
 type Type int32
@@ -93,7 +93,7 @@ var Type_value = map[string]int32{
 }
 
 func (Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{1}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{1}
 }
 
 type Lease struct {
@@ -107,7 +107,7 @@ func (m *Lease) Reset()         { *m = Lease{} }
 func (m *Lease) String() string { return proto.CompactTextString(m) }
 func (*Lease) ProtoMessage()    {}
 func (*Lease) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{0}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{0}
 }
 func (m *Lease) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -150,7 +150,7 @@ func (m *BackupDetails) Reset()         { *m = BackupDetails{} }
 func (m *BackupDetails) String() string { return proto.CompactTextString(m) }
 func (*BackupDetails) ProtoMessage()    {}
 func (*BackupDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{1}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{1}
 }
 func (m *BackupDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -182,7 +182,7 @@ func (m *BackupProgress) Reset()         { *m = BackupProgress{} }
 func (m *BackupProgress) String() string { return proto.CompactTextString(m) }
 func (*BackupProgress) ProtoMessage()    {}
 func (*BackupProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{2}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{2}
 }
 func (m *BackupProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -224,7 +224,7 @@ func (m *RestoreDetails) Reset()         { *m = RestoreDetails{} }
 func (m *RestoreDetails) String() string { return proto.CompactTextString(m) }
 func (*RestoreDetails) ProtoMessage()    {}
 func (*RestoreDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{3}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{3}
 }
 func (m *RestoreDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -258,7 +258,7 @@ func (m *RestoreDetails_TableRewrite) Reset()         { *m = RestoreDetails_Tabl
 func (m *RestoreDetails_TableRewrite) String() string { return proto.CompactTextString(m) }
 func (*RestoreDetails_TableRewrite) ProtoMessage()    {}
 func (*RestoreDetails_TableRewrite) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{3, 0}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{3, 0}
 }
 func (m *RestoreDetails_TableRewrite) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -291,7 +291,7 @@ func (m *RestoreDetails_BackupLocalityInfo) Reset()         { *m = RestoreDetail
 func (m *RestoreDetails_BackupLocalityInfo) String() string { return proto.CompactTextString(m) }
 func (*RestoreDetails_BackupLocalityInfo) ProtoMessage()    {}
 func (*RestoreDetails_BackupLocalityInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{3, 1}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{3, 1}
 }
 func (m *RestoreDetails_BackupLocalityInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -324,7 +324,7 @@ func (m *RestoreProgress) Reset()         { *m = RestoreProgress{} }
 func (m *RestoreProgress) String() string { return proto.CompactTextString(m) }
 func (*RestoreProgress) ProtoMessage()    {}
 func (*RestoreProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{4}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{4}
 }
 func (m *RestoreProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -376,7 +376,7 @@ func (m *ImportDetails) Reset()         { *m = ImportDetails{} }
 func (m *ImportDetails) String() string { return proto.CompactTextString(m) }
 func (*ImportDetails) ProtoMessage()    {}
 func (*ImportDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{5}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{5}
 }
 func (m *ImportDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -413,7 +413,7 @@ func (m *ImportDetails_Table) Reset()         { *m = ImportDetails_Table{} }
 func (m *ImportDetails_Table) String() string { return proto.CompactTextString(m) }
 func (*ImportDetails_Table) ProtoMessage()    {}
 func (*ImportDetails_Table) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{5, 0}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{5, 0}
 }
 func (m *ImportDetails_Table) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -456,7 +456,7 @@ func (m *ImportProgress) Reset()         { *m = ImportProgress{} }
 func (m *ImportProgress) String() string { return proto.CompactTextString(m) }
 func (*ImportProgress) ProtoMessage()    {}
 func (*ImportProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{6}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{6}
 }
 func (m *ImportProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -489,7 +489,7 @@ func (m *ResumeSpanList) Reset()         { *m = ResumeSpanList{} }
 func (m *ResumeSpanList) String() string { return proto.CompactTextString(m) }
 func (*ResumeSpanList) ProtoMessage()    {}
 func (*ResumeSpanList) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{7}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{7}
 }
 func (m *ResumeSpanList) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -524,7 +524,7 @@ func (m *DroppedTableDetails) Reset()         { *m = DroppedTableDetails{} }
 func (m *DroppedTableDetails) String() string { return proto.CompactTextString(m) }
 func (*DroppedTableDetails) ProtoMessage()    {}
 func (*DroppedTableDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{8}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{8}
 }
 func (m *DroppedTableDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -566,7 +566,7 @@ func (m *SchemaChangeDetails) Reset()         { *m = SchemaChangeDetails{} }
 func (m *SchemaChangeDetails) String() string { return proto.CompactTextString(m) }
 func (*SchemaChangeDetails) ProtoMessage()    {}
 func (*SchemaChangeDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{9}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{9}
 }
 func (m *SchemaChangeDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -598,7 +598,7 @@ func (m *SchemaChangeProgress) Reset()         { *m = SchemaChangeProgress{} }
 func (m *SchemaChangeProgress) String() string { return proto.CompactTextString(m) }
 func (*SchemaChangeProgress) ProtoMessage()    {}
 func (*SchemaChangeProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{10}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{10}
 }
 func (m *SchemaChangeProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -631,7 +631,7 @@ func (m *ChangefeedTarget) Reset()         { *m = ChangefeedTarget{} }
 func (m *ChangefeedTarget) String() string { return proto.CompactTextString(m) }
 func (*ChangefeedTarget) ProtoMessage()    {}
 func (*ChangefeedTarget) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{11}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{11}
 }
 func (m *ChangefeedTarget) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -684,7 +684,7 @@ func (m *ChangefeedDetails) Reset()         { *m = ChangefeedDetails{} }
 func (m *ChangefeedDetails) String() string { return proto.CompactTextString(m) }
 func (*ChangefeedDetails) ProtoMessage()    {}
 func (*ChangefeedDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{12}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{12}
 }
 func (m *ChangefeedDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -718,7 +718,7 @@ func (m *ResolvedSpan) Reset()         { *m = ResolvedSpan{} }
 func (m *ResolvedSpan) String() string { return proto.CompactTextString(m) }
 func (*ResolvedSpan) ProtoMessage()    {}
 func (*ResolvedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{13}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{13}
 }
 func (m *ResolvedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -751,7 +751,7 @@ func (m *ChangefeedProgress) Reset()         { *m = ChangefeedProgress{} }
 func (m *ChangefeedProgress) String() string { return proto.CompactTextString(m) }
 func (*ChangefeedProgress) ProtoMessage()    {}
 func (*ChangefeedProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{14}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{14}
 }
 func (m *ChangefeedProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -795,7 +795,7 @@ func (m *CreateStatsDetails) Reset()         { *m = CreateStatsDetails{} }
 func (m *CreateStatsDetails) String() string { return proto.CompactTextString(m) }
 func (*CreateStatsDetails) ProtoMessage()    {}
 func (*CreateStatsDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{15}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{15}
 }
 func (m *CreateStatsDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -830,7 +830,7 @@ func (m *CreateStatsDetails_ColStat) Reset()         { *m = CreateStatsDetails_C
 func (m *CreateStatsDetails_ColStat) String() string { return proto.CompactTextString(m) }
 func (*CreateStatsDetails_ColStat) ProtoMessage()    {}
 func (*CreateStatsDetails_ColStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{15, 0}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{15, 0}
 }
 func (m *CreateStatsDetails_ColStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -862,7 +862,7 @@ func (m *CreateStatsProgress) Reset()         { *m = CreateStatsProgress{} }
 func (m *CreateStatsProgress) String() string { return proto.CompactTextString(m) }
 func (*CreateStatsProgress) ProtoMessage()    {}
 func (*CreateStatsProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{16}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{16}
 }
 func (m *CreateStatsProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -899,8 +899,7 @@ type Payload struct {
 	FinishedMicros int64                                                 `protobuf:"varint,4,opt,name=finished_micros,json=finishedMicros,proto3" json:"finished_micros,omitempty"`
 	DescriptorIDs  []github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ID `protobuf:"varint,6,rep,packed,name=descriptor_ids,json=descriptorIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID" json:"descriptor_ids,omitempty"`
 	Error          string                                                `protobuf:"bytes,8,opt,name=error,proto3" json:"error,omitempty"`
-	// ID 9 is intentionally reserved for lease information.
-	Lease *Lease `protobuf:"bytes,9,opt,name=lease,proto3" json:"lease,omitempty"`
+	Lease          *Lease                                                `protobuf:"bytes,9,opt,name=lease,proto3" json:"lease,omitempty"`
 	// Types that are valid to be assigned to Details:
 	//	*Payload_Backup
 	//	*Payload_Restore
@@ -915,7 +914,7 @@ func (m *Payload) Reset()         { *m = Payload{} }
 func (m *Payload) String() string { return proto.CompactTextString(m) }
 func (*Payload) ProtoMessage()    {}
 func (*Payload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{17}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{17}
 }
 func (m *Payload) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1192,7 +1191,7 @@ func (m *Progress) Reset()         { *m = Progress{} }
 func (m *Progress) String() string { return proto.CompactTextString(m) }
 func (*Progress) ProtoMessage()    {}
 func (*Progress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_jobs_5b938c77160a39f4, []int{18}
+	return fileDescriptor_jobs_6bafa65c6ab5794d, []int{18}
 }
 func (m *Progress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -7926,9 +7925,9 @@ var (
 	ErrIntOverflowJobs   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("jobs/jobspb/jobs.proto", fileDescriptor_jobs_5b938c77160a39f4) }
+func init() { proto.RegisterFile("jobs/jobspb/jobs.proto", fileDescriptor_jobs_6bafa65c6ab5794d) }
 
-var fileDescriptor_jobs_5b938c77160a39f4 = []byte{
+var fileDescriptor_jobs_6bafa65c6ab5794d = []byte{
 	// 2711 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x59, 0x4d, 0x6c, 0xe3, 0xc6,
 	0xf5, 0x17, 0x25, 0x4a, 0xa2, 0x9e, 0x3e, 0x4c, 0x8f, 0xbd, 0x09, 0x23, 0x6c, 0x2c, 0xfd, 0xf5,
