@@ -1535,23 +1535,36 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The range should become available on every node.
-	var r *storage.Replica // from the last store
+	// Wait until all ranges are upreplicated to all nodes.
+	var replicaCount int64
 	testutils.SucceedsSoon(t, func() error {
-		for _, s := range mtc.stores {
-			r = s.LookupReplica(roachpb.RKey("a"))
-			if r == nil {
-				return errors.Errorf("expected replica for 'a'")
+		var replicaCounts [3]int64
+		for i, s := range mtc.stores {
+			var err error
+			mtc.stores[i].VisitReplicas(func(r *storage.Replica) bool {
+				replicaCounts[i]++
+				// Synchronize with the replica's raft processing goroutine.
+				r.RaftLock()
+				defer r.RaftUnlock()
+				if len(r.Desc().InternalReplicas) != 3 {
+					// This fails even after the snapshot has arrived and only
+					// goes through once the replica has applied the conf change.
+					err = errors.Errorf("not fully initialized")
+					return false
+				}
+				return true
+			})
+			if err != nil {
+				return err
+			}
+			if replicaCounts[i] != replicaCounts[0] {
+				return errors.Errorf("not fully upreplicated")
 			}
 			if n := s.ReservationCount(); n != 0 {
 				return errors.Errorf("expected 0 reservations, but found %d", n)
 			}
-			if len(r.Desc().InternalReplicas) != 3 {
-				// This fails even after the snapshot has arrived and only goes through
-				// once the replica has applied the conf change.
-				return errors.Errorf("not fully initialized")
-			}
 		}
+		replicaCount = replicaCounts[0]
 		return nil
 	})
 
@@ -1566,11 +1579,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")
 	}
-	var replicaCount int64
-	mtc.stores[0].VisitReplicas(func(_ *storage.Replica) bool {
-		replicaCount++
-		return true
-	})
 	// We upreplicate each range (once each for n2 and n3), so there should be
 	// exactly 2 * replica learner snaps, one per upreplication.
 	require.Equal(t, 2*replicaCount, learnerApplied)
