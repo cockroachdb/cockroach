@@ -34,7 +34,22 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	scan.initOrdering(0 /* exactPrefix */, p.EvalContext())
+	// Initialize the required ordering.
+	columnIDs, dirs := scan.index.FullColumnIDs()
+	ordering := make(sqlbase.ColumnOrdering, len(columnIDs))
+	for i, colID := range columnIDs {
+		idx, ok := scan.colIdxMap[colID]
+		if !ok {
+			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
+		}
+		ordering[i].ColIdx = idx
+		ordering[i].Direction, err = dirs[i].ToEncodingDirection()
+		if err != nil {
+			return nil, err
+		}
+	}
+	scan.props.ordering = ordering
+
 	scan.spans, err = spansFromConstraint(
 		desc, &desc.PrimaryIndex, nil /* constraint */, exec.ColumnOrdinalSet{}, false /* forDelete */)
 	if err != nil {
@@ -56,6 +71,48 @@ func newTestJoinNode(kvDB *client.DB, leftName, rightName string) (*joinNode, er
 		left:  planDataSource{plan: left},
 		right: planDataSource{plan: right},
 	}, nil
+}
+
+// computeMergeJoinOrdering determines if merge-join can be used to perform a join.
+//
+// It takes the orderings of the two data sources that are to be joined on a set
+// of equality columns (the join condition is that the value for the column
+// colA[i] equals the value for column colB[i]).
+//
+// If merge-join can be used, the function returns a ColumnOrdering that refers
+// to the equality columns by their index in colA/ColB. Specifically column i in
+// the returned ordering refers to column colA[i] for A and colB[i] for B. This
+// is the ordering that must be used by the merge-join.
+//
+// The returned ordering can be partial, i.e. only contains a subset of the
+// equality columns.
+func computeMergeJoinOrdering(
+	a, b sqlbase.ColumnOrdering, colA, colB []int,
+) sqlbase.ColumnOrdering {
+	if len(colA) != len(colB) {
+		panic(fmt.Sprintf("invalid column lists %v; %v", colA, colB))
+	}
+	var result sqlbase.ColumnOrdering
+	for i := 0; i < len(a) && i < len(b); i++ {
+		found := false
+		if a[i].Direction != b[i].Direction {
+			break
+		}
+		for j := range colA {
+			if colA[j] == a[i].ColIdx && colB[j] == b[i].ColIdx {
+				result = append(result, sqlbase.ColumnOrderInfo{
+					ColIdx:    j,
+					Direction: a[i].Direction,
+				})
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+	}
+	return result
 }
 
 func TestInterleavedNodes(t *testing.T) {

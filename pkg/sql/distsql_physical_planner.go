@@ -2874,7 +2874,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		leftLogicalPlan, rightLogicalPlan = rightLogicalPlan, leftLogicalPlan
 	}
 	childPhysicalPlans := []*PhysicalPlan{&leftPlan, &rightPlan}
-	childLogicalPlans := []planNode{leftLogicalPlan, rightLogicalPlan}
 
 	// Check that the left and right side PlanToStreamColMaps are equivalent.
 	// TODO(solon): Are there any valid UNION/INTERSECT/EXCEPT cases where these
@@ -2944,61 +2943,20 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	p.PlanToStreamColMap = planToStreamColMap
 
 	// Merge the plans' result types and merge ordering.
-	// TODO(abhimadan): This merge ordering can still contain columns from child
-	// ORDER BY clauses, which will neither be accessible nor used in ordering
-	// after the UNION. Since they aren't accessible and UNION/EXCEPT/INTERSECT
-	// are not required to propagate orderings from their subqueries, this doesn't
-	// affect correctness. However, it does force us to stream unnecessary data
-	// until the ordering is eventually updated and they are projected out. This
-	// projection happens for every set operation except for UNION ALL, which only
-	// uses the naive ordering propagation below. To fix this, use similar logic
-	// to the distinct case above to get the new ordering, and add a projection in
-	// a no-grouping no-op stage.
 	resultTypes, err := physicalplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
-	mergeOrdering := leftPlan.MergeOrdering
-	if n.unionType != tree.UnionOp {
-		// In INTERSECT and EXCEPT cases where the merge ordering contains columns
-		// that don't appear in the output (e.g. SELECT k FROM kv ORDER BY v), we
-		// cannot keep the ordering, since some ORDER BY columns are not also
-		// equality columns. As a result, create a new ordering that only contains
-		// columns in the result.
-		newOrdering := computeMergeJoinOrdering(leftProps, rightProps, planCols, planCols)
-		mergeOrdering = execinfrapb.ConvertToMappedSpecOrdering(newOrdering, p.PlanToStreamColMap)
-
-		var childResultTypes [2][]types.T
-		for side, plan := range childPhysicalPlans {
-			childResultTypes[side], err = getTypesForPlanResult(
-				childLogicalPlans[side], plan.PlanToStreamColMap,
-			)
-			if err != nil {
-				return PhysicalPlan{}, err
-			}
-		}
-		resultTypes, err = physicalplan.MergeResultTypes(childResultTypes[0], childResultTypes[1])
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
-	} else if err != nil || !mergeOrdering.Equal(rightPlan.MergeOrdering) {
-		// The result types or merge ordering can differ between the two sides in
-		// pathological cases, like if they have incompatible ORDER BY clauses.
-		// Resolve this by collecting results on a single node and adding a
-		// projection to the results that will be unioned.
-		for _, plan := range childPhysicalPlans {
-			plan.AddSingleGroupStage(
-				dsp.nodeDesc.NodeID,
-				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-				execinfrapb.PostProcessSpec{},
-				plan.ResultTypes)
-			plan.AddProjection(streamCols)
-		}
-
-		// Result types should now be mergeable.
-		resultTypes, err = physicalplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
-		mergeOrdering = execinfrapb.Ordering{}
+	if err != nil {
+		return PhysicalPlan{}, err
 	}
+
+	if len(leftPlan.MergeOrdering.Columns) != 0 || len(rightPlan.MergeOrdering.Columns) != 0 {
+		return PhysicalPlan{}, errors.AssertionFailedf("set op inputs should have no orderings")
+	}
+
+	// TODO(radu): for INTERSECT and EXCEPT, the mergeOrdering should be set when
+	// we can use merge joiners below. The optimizer needs to be modified to take
+	// advantage of this optimization and pass down merge orderings. Tracked by
+	// #40797.
+	var mergeOrdering execinfrapb.Ordering
 
 	// Merge processors, streams, result routers, and stage counter.
 	var leftRouters, rightRouters []physicalplan.ProcessorIdx
