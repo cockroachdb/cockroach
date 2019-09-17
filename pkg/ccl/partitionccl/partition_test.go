@@ -108,19 +108,19 @@ type repartitioningTest struct {
 }
 
 // parse fills in the various fields of `partitioningTest.parsed`.
-func (t *partitioningTest) parse() error {
-	if t.parsed.parsed {
+func (pt *partitioningTest) parse() error {
+	if pt.parsed.parsed {
 		return nil
 	}
 
-	t.parsed.tableName = tree.NameStringP(&t.name)
-	t.parsed.createStmt = fmt.Sprintf(t.schema, t.parsed.tableName)
+	pt.parsed.tableName = tree.NameStringP(&pt.name)
+	pt.parsed.createStmt = fmt.Sprintf(pt.schema, pt.parsed.tableName)
 
 	{
 		ctx := context.Background()
-		stmt, err := parser.ParseOne(t.parsed.createStmt)
+		stmt, err := parser.ParseOne(pt.parsed.createStmt)
 		if err != nil {
-			return errors.Wrapf(err, `parsing %s`, t.parsed.createStmt)
+			return errors.Wrapf(err, `parsing %s`, pt.parsed.createStmt)
 		}
 		createTable, ok := stmt.AST.(*tree.CreateTable)
 		if !ok {
@@ -133,15 +133,15 @@ func (t *partitioningTest) parse() error {
 		if err != nil {
 			return err
 		}
-		t.parsed.tableDesc = mutDesc.TableDesc()
-		if err := t.parsed.tableDesc.ValidateTable(); err != nil {
+		pt.parsed.tableDesc = mutDesc.TableDesc()
+		if err := pt.parsed.tableDesc.ValidateTable(); err != nil {
 			return err
 		}
 	}
 
 	var zoneConfigStmts bytes.Buffer
 	// TODO(dan): Can we run all the zoneConfigStmts in a txn?
-	for _, c := range t.configs {
+	for _, c := range pt.configs {
 		var subzoneShort, constraints string
 		configParts := strings.Split(c, `:`)
 		switch len(configParts) {
@@ -172,7 +172,7 @@ func (t *partitioningTest) parse() error {
 		if !strings.HasPrefix(indexName, "@") {
 			panic(errors.Errorf("unsupported config: %s", c))
 		}
-		idxDesc, _, err := t.parsed.tableDesc.FindIndexByName(indexName[1:])
+		idxDesc, _, err := pt.parsed.tableDesc.FindIndexByName(indexName[1:])
 		if err != nil {
 			return errors.Wrapf(err, "could not find index %s", indexName)
 		}
@@ -181,12 +181,12 @@ func (t *partitioningTest) parse() error {
 			if subzone.PartitionName == "" {
 				fmt.Fprintf(&zoneConfigStmts,
 					`ALTER INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
-					t.parsed.tableName, idxDesc.Name, constraints,
+					pt.parsed.tableName, idxDesc.Name, constraints,
 				)
 			} else {
 				fmt.Fprintf(&zoneConfigStmts,
 					`ALTER PARTITION %s OF INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
-					subzone.PartitionName, t.parsed.tableName, idxDesc.Name, constraints,
+					subzone.PartitionName, pt.parsed.tableName, idxDesc.Name, constraints,
 				)
 			}
 		}
@@ -198,10 +198,10 @@ func (t *partitioningTest) parse() error {
 		subzone.Config.Constraints = parsedConstraints.Constraints
 		subzone.Config.InheritedConstraints = parsedConstraints.Inherited
 
-		t.parsed.subzones = append(t.parsed.subzones, subzone)
+		pt.parsed.subzones = append(pt.parsed.subzones, subzone)
 	}
-	t.parsed.zoneConfigStmts = zoneConfigStmts.String()
-	t.parsed.parsed = true
+	pt.parsed.zoneConfigStmts = zoneConfigStmts.String()
+	pt.parsed.parsed = true
 
 	return nil
 }
@@ -209,12 +209,14 @@ func (t *partitioningTest) parse() error {
 // verifyScansFn returns a closure that runs the test's `scans` and returns a
 // descriptive error if any of them fail. It is not required for `parse` to have
 // been called.
-func (t *partitioningTest) verifyScansFn(ctx context.Context, db *gosql.DB) func() error {
+func (pt *partitioningTest) verifyScansFn(
+	ctx context.Context, t *testing.T, db *gosql.DB,
+) func() error {
 	return func() error {
-		for where, expectedNodes := range t.scans {
-			query := fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, tree.NameStringP(&t.name), where)
+		for where, expectedNodes := range pt.scans {
+			query := fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, tree.NameStringP(&pt.name), where)
 			log.Infof(ctx, "query: %s", query)
-			if err := verifyScansOnNode(db, query, expectedNodes); err != nil {
+			if err := verifyScansOnNode(ctx, t, db, query, expectedNodes); err != nil {
 				if log.V(1) {
 					log.Errorf(ctx, "scan verification failed: %s", err)
 				}
@@ -1068,25 +1070,28 @@ func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartition
 	return tests, nil
 }
 
-func verifyScansOnNode(db *gosql.DB, query string, node string) error {
+func verifyScansOnNode(
+	ctx context.Context, t *testing.T, db *gosql.DB, query string, node string,
+) error {
 	// TODO(dan): This is a stopgap. At some point we should have a syntax for
 	// doing this directly (running a query and getting back the nodes it ran on
 	// and attributes/localities of those nodes). Users will also want this to
 	// be sure their partitioning is working.
-	if _, err := db.Exec(fmt.Sprintf(`SET tracing = on; %s; SET tracing = off`, query)); err != nil {
-		return err
-	}
-	rows, err := db.Query(`SELECT concat(tag, ' ', message) FROM [SHOW TRACE FOR SESSION]`)
+	conn, err := db.Conn(ctx)
 	if err != nil {
-		return err
+		t.Fatalf("failed to create conn: %v", err)
 	}
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer func() { _ = conn.Close() }()
+	sqlDB.Exec(t, fmt.Sprintf(`SET tracing = on; %s; SET tracing = off`, query))
+	rows := sqlDB.Query(t, `SELECT concat(tag, ' ', message) FROM [SHOW TRACE FOR SESSION]`)
 	defer rows.Close()
 	var scansWrongNode []string
 	var traceLines []string
 	var traceLine gosql.NullString
 	for rows.Next() {
 		if err := rows.Scan(&traceLine); err != nil {
-			return err
+			t.Fatal(err)
 		}
 		traceLines = append(traceLines, traceLine.String)
 		if strings.Contains(traceLine.String, "read completed") {
@@ -1188,7 +1193,7 @@ func TestInitialPartitioning(t *testing.T) {
 			sqlDB.Exec(t, test.parsed.createStmt)
 			sqlDB.Exec(t, test.parsed.zoneConfigStmts)
 
-			testutils.SucceedsSoon(t, test.verifyScansFn(ctx, db))
+			testutils.SucceedsSoon(t, test.verifyScansFn(ctx, t, db))
 		})
 	}
 }
@@ -1299,7 +1304,7 @@ func TestRepartitioning(t *testing.T) {
 				sqlDB.Exec(t, test.old.parsed.createStmt)
 				sqlDB.Exec(t, test.old.parsed.zoneConfigStmts)
 
-				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, db))
+				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, t, db))
 			}
 
 			{
@@ -1351,8 +1356,7 @@ func TestRepartitioning(t *testing.T) {
 				// sitting around (e.g., when a repartitioning preserves a partition but
 				// does not apply a new zone config). This is fine.
 				sqlDB.Exec(t, test.new.parsed.zoneConfigStmts)
-
-				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, db))
+				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, t, db))
 			}
 		})
 	}
