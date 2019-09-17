@@ -130,10 +130,6 @@ tail:
 	return uintptr(h)
 }
 
-func memhash8(p unsafe.Pointer, h uintptr) uintptr {
-	return memhash(p, h, 1)
-}
-
 func memhash16(p unsafe.Pointer, h uintptr) uintptr {
 	return memhash(p, h, 2)
 }
@@ -171,20 +167,6 @@ func rotl31(x uint64) uint64 {
 // number of (mostly useless) entries keyed with NaNs.
 // To avoid long hash chains, we assign a random number
 // as the hash value for a NaN.
-
-func f32hash(p unsafe.Pointer, h uintptr) uintptr {
-	f := *(*float32)(p)
-	switch {
-	case f == 0:
-		return c1 * (c0 ^ h) // +0, -0
-	case f != f:
-		// TODO(asubiotto): fastrand relies on some stack internals.
-		//return c1 * (c0 ^ h ^ uintptr(fastrand())) // any kind of NaN
-		return c1 * (c0 ^ h ^ uintptr(rand.Uint32()))
-	default:
-		return memhash(p, h, 4)
-	}
-}
 
 func f64hash(p unsafe.Pointer, h uintptr) uintptr {
 	f := *(*float64)(p)

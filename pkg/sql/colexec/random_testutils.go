@@ -64,11 +64,6 @@ func RandomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProba
 			// int64(rng.Uint64()) to get negative numbers, too
 			decs[i].SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		}
-	case coltypes.Int8:
-		ints := vec.Int8()
-		for i := 0; i < n; i++ {
-			ints[i] = int8(rng.Uint64())
-		}
 	case coltypes.Int16:
 		ints := vec.Int16()
 		for i := 0; i < n; i++ {
@@ -83,11 +78,6 @@ func RandomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProba
 		ints := vec.Int64()
 		for i := 0; i < n; i++ {
 			ints[i] = int64(rng.Uint64())
-		}
-	case coltypes.Float32:
-		floats := vec.Float32()
-		for i := 0; i < n; i++ {
-			floats[i] = rng.Float32()
 		}
 	case coltypes.Float64:
 		floats := vec.Float64()
