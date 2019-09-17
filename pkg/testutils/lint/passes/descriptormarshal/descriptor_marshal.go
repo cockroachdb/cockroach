@@ -82,6 +82,7 @@ var allowedFunctions = []string{
 	"(*github.com/cockroachdb/cockroach/pkg/sql/sqlbase.Descriptor).Table",
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TestDefaultExprNil",
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TestKeysPerRow",
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl.readBackupDescriptor",
 }
 
 func isAllowed(obj *types.Func) bool {
