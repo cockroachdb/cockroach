@@ -3315,6 +3315,7 @@ func (desc *TableDescriptor) maybeSetTimeFromMVCCTimestamp(ts hlc.Timestamp) {
 		desc.Version == 1 {
 		desc.CreateAsOfTime = ts
 	}
+
 	// Ensure that if the table is in the process of being added and relies on
 	// CreateAsOfTime that it is now set.
 	if desc.Adding() && desc.IsAs() && desc.CreateAsOfTime.IsEmpty() {
