@@ -46,9 +46,6 @@ type updateNode struct {
 	run updateRun
 }
 
-// updateNode implements the autoCommitNode interface.
-var _ autoCommitNode = &updateNode{}
-
 // Update updates columns for a selection of rows from a table.
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
@@ -772,7 +769,6 @@ func (u *updateNode) Close(ctx context.Context) {
 	updateNodePool.Put(u)
 }
 
-// enableAutoCommit implements the autoCommitNode interface.
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }

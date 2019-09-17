@@ -297,8 +297,10 @@ type Factory interface {
 	// columns are expected to be present except delete-only mutation columns,
 	// since those do not need to participate in an insert operation.
 	//
-	// The rowsNeeded parameter is true if a RETURNING clause needs the inserted
-	// row(s) as output.
+	// If allowAutoCommit is set, the operator is allowed to commit the
+	// transaction (if appropriate, i.e. if it is in an implicit transaction).
+	// This is false if there are multiple mutations in a statement, or the output
+	// of the mutation is processed through side-effecting expressions.
 	//
 	// If skipFKChecks is set, foreign keys are not checked as part of the
 	// execution of the insertion. This is used when the FK checks are planned by
@@ -309,6 +311,7 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
+		allowAutoCommit bool,
 		skipFKChecks bool,
 	) (Node, error)
 
@@ -322,12 +325,21 @@ type Factory interface {
 	// The fetchCols and updateCols sets contain the ordinal positions of the
 	// fetch and update columns in the target table. The input must contain those
 	// columns in the same order as they appear in the table schema, with the
-	// fetch columns first and the update columns second. The rowsNeeded parameter
-	// is true if a RETURNING clause needs the updated row(s) as output.
-	// The passthrough parameter contains all the result columns that are part
-	// of the input node that the update node needs to return (passing through
-	// from the input). The pass through columns are used to return any column
-	// from the FROM tables that are referenced in the RETURNING clause.
+	// fetch columns first and the update columns second.
+	//
+	// The passthrough parameter contains all the result columns that are part of
+	// the input node that the update node needs to return (passing through from
+	// the input). The pass through columns are used to return any column from the
+	// FROM tables that are referenced in the RETURNING clause.
+	//
+	// If allowAutoCommit is set, the operator is allowed to commit the
+	// transaction (if appropriate, i.e. if it is in an implicit transaction).
+	// This is false if there are multiple mutations in a statement, or the output
+	// of the mutation is processed through side-effecting expressions.
+	//
+	// If skipFKChecks is set, foreign keys are not checked as part of the
+	// execution of the insertion. This is used when the FK checks are planned by
+	// the optimizer and are run separately as plan postqueries.
 	ConstructUpdate(
 		input Node,
 		table cat.Table,
@@ -336,6 +348,7 @@ type Factory interface {
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
 		passthrough sqlbase.ResultColumns,
+		allowAutoCommit bool,
 		skipFKChecks bool,
 	) (Node, error)
 
@@ -362,6 +375,11 @@ type Factory interface {
 	// columns {0, 1, 2} of the table. The next 3 columns contain the existing
 	// values of columns {0, 1, 2} of the table. The last column contains the
 	// new value for column {1} of the table.
+	//
+	// If allowAutoCommit is set, the operator is allowed to commit the
+	// transaction (if appropriate, i.e. if it is in an implicit transaction).
+	// This is false if there are multiple mutations in a statement, or the output
+	// of the mutation is processed through side-effecting expressions.
 	ConstructUpsert(
 		input Node,
 		table cat.Table,
@@ -371,6 +389,7 @@ type Factory interface {
 		updateCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
+		allowAutoCommit bool,
 	) (Node, error)
 
 	// ConstructDelete creates a node that implements a DELETE statement. The
@@ -379,13 +398,22 @@ type Factory interface {
 	//
 	// The fetchCols set contains the ordinal positions of the fetch columns in
 	// the target table. The input must contain those columns in the same order
-	// as they appear in the table schema. The rowsNeeded parameter is true if a
-	// RETURNING clause needs the deleted row(s) as output.
+	// as they appear in the table schema.
+	//
+	// If allowAutoCommit is set, the operator is allowed to commit the
+	// transaction (if appropriate, i.e. if it is in an implicit transaction).
+	// This is false if there are multiple mutations in a statement, or the output
+	// of the mutation is processed through side-effecting expressions.
+	//
+	// If skipFKChecks is set, foreign keys are not checked as part of the
+	// execution of the insertion. This is used when the FK checks are planned by
+	// the optimizer and are run separately as plan postqueries.
 	ConstructDelete(
 		input Node,
 		table cat.Table,
 		fetchCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
+		allowAutoCommit bool,
 		skipFKChecks bool,
 	) (Node, error)
 
@@ -393,7 +421,7 @@ type Factory interface {
 	// rows stored in the given table's primary index. This fast path is only
 	// possible when certain conditions hold true (see canUseDeleteRange for more
 	// details). See the comment for ConstructScan for descriptions of the
-	// parameters, since FastDelete combines Delete + Scan into a single operator.
+	// parameters, since DeleteRange combines Delete + Scan into a single operator.
 	ConstructDeleteRange(
 		table cat.Table,
 		needed ColumnOrdinalSet,

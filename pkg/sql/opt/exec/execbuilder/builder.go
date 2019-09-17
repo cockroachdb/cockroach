@@ -56,6 +56,11 @@ type Builder struct {
 	// TODO(justin): set this up so that we can look them up by index lookups
 	// rather than scans.
 	withExprs []builtWithExpr
+
+	// autoCommit is passed through to factory methods for mutation operators. It
+	// allows execution to commit the transaction as part of the mutation itself.
+	// See canAutoCommit().
+	autoCommit bool
 }
 
 // New constructs an instance of the execution node builder using the
@@ -114,6 +119,9 @@ func (b *Builder) build(e opt.Expr) (exec.Node, error) {
 	if !ok {
 		return nil, errors.AssertionFailedf("building execution for non-relational operator %s", log.Safe(e.Op()))
 	}
+
+	b.autoCommit = b.canAutoCommit(rel)
+
 	plan, err := b.buildRelational(rel)
 	if err != nil {
 		return nil, err

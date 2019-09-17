@@ -228,6 +228,7 @@ func (f *stubFactory) ConstructInsert(
 	insertCols exec.ColumnOrdinalSet,
 	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
@@ -241,6 +242,7 @@ func (f *stubFactory) ConstructUpdate(
 	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
+	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
@@ -255,6 +257,7 @@ func (f *stubFactory) ConstructUpsert(
 	updateCols exec.ColumnOrdinalSet,
 	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	allowAutoCommit bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -264,6 +267,7 @@ func (f *stubFactory) ConstructDelete(
 	table cat.Table,
 	fetchCols exec.ColumnOrdinalSet,
 	returnCols exec.ColumnOrdinalSet,
+	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil

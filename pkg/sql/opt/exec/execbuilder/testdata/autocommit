@@ -1,0 +1,299 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+# ------------
+# INSERT tests
+# ------------
+
+# Simple insert should auto-commit.
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab VALUES (1, 1), (2, 2);
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+true
+
+# No auto-commit inside a transaction.
+statement ok
+BEGIN
+
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab VALUES (1, 1), (2, 2);
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+statement ok
+ROLLBACK
+
+# Insert with simple RETURNING statement should auto-commit.
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+true
+
+# TODO(radu): allow non-side-effecting projections.
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a + b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+# Insert with RETURNING statement with side-effects should not auto-commit.
+# In this case division can (in principle) error out.
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a / b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+# Another way to test the scenario above: generate an error and ensure that the
+# mutation was not committed.
+statement error division by zero
+INSERT INTO ab VALUES (1, 0) RETURNING a / b
+
+query I
+SELECT count(*) FROM ab WHERE b=0
+----
+0
+
+# ------------
+# UPSERT tests
+# ------------
+
+# Simple upsert should auto-commit.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO ab VALUES (1, 1), (2, 2);
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+true
+
+# No auto-commit inside a transaction.
+statement ok
+BEGIN
+
+statement ok
+SET TRACING=ON;
+  UPSERT INTO ab VALUES (1, 1), (2, 2);
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+statement ok
+ROLLBACK
+
+# Upsert with simple RETURNING statement should auto-commit.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+true
+
+# TODO(radu): allow non-side-effecting projections.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a + b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+# Upsert with RETURNING statement with side-effects should not auto-commit.
+# In this case division can (in principle) error out.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a / b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+# Another way to test the scenario above: generate an error and ensure that the
+# mutation was not committed.
+statement error division by zero
+UPSERT INTO ab VALUES (1, 0) RETURNING a / b
+
+query I
+SELECT count(*) FROM ab WHERE b=0
+----
+0
+
+# ------------
+# UPDATE tests
+# ------------
+
+# Simple update should auto-commit.
+statement ok
+SET TRACING=ON;
+  UPDATE ab SET b=b+1 WHERE a < 3;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+true
+
+# No auto-commit inside a transaction.
+statement ok
+BEGIN
+
+statement ok
+SET TRACING=ON;
+  UPDATE ab SET b=b+1 WHERE a < 3;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+statement ok
+ROLLBACK
+
+# Update with simple RETURNING statement should auto-commit.
+statement ok
+SET TRACING=ON;
+  UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a, b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+true
+
+# TODO(radu): allow non-side-effecting projections.
+statement ok
+SET TRACING=ON;
+  UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a + b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+# Update with RETURNING statement with side-effects should not auto-commit.
+# In this case division can (in principle) error out.
+statement ok
+SET TRACING=ON;
+  UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a / b;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+# Another way to test the scenario above: generate an error and ensure that the
+# mutation was not committed.
+statement error division by zero
+UPDATE ab SET b=0 WHERE a < 3 RETURNING a / b;
+
+query I
+SELECT count(*) FROM ab WHERE b=0
+----
+0
+
+# -----------------------
+# Tests with foreign keys
+# -----------------------
+
+statement ok
+CREATE TABLE fk_parent (p INT PRIMARY KEY, q INT);
+INSERT INTO fk_parent VALUES (1, 10), (2, 20), (3, 30);
+CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p));
+SET experimental_optimizer_foreign_keys = true
+
+statement ok
+SET TRACING=ON;
+  INSERT INTO fk_child VALUES (1, 1), (2, 2);
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+statement ok
+SET TRACING=ON;
+  UPDATE fk_child SET b=b+1 WHERE a < 2;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+statement ok
+SET TRACING=ON;
+  DELETE FROM fk_parent WHERE p = 3;
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+# -----------------------
+# Multiple mutation tests
+# -----------------------
+
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab (
+    SELECT a*10, b*10 FROM [ INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b ]
+  );
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
+
+statement ok
+SET TRACING=ON;
+  WITH cte AS (INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b)
+  INSERT INTO ab (SELECT a*10, b*10 FROM cte);
+SET TRACING=OFF
+
+query B
+SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
+----
+false
