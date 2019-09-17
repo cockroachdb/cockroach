@@ -96,20 +96,20 @@ proc start_server {argv} {
 proc stop_server {argv} {
     report "BEGIN STOP SERVER"
     # Trigger a normal shutdown.
-    system "$argv quit"
-    # If after 5 seconds the server hasn't shut down, trigger an error.
-    system "for i in `seq 1 5`; do
+	# If after 10 seconds the server hasn't shut down, kill the process and trigger an error.
+    system "kill -TERM `cat server_pid` 2>/dev/null;
+            for i in `seq 1 30`; do
               kill -CONT `cat server_pid` 2>/dev/null || exit 0
               echo still waiting
               sleep 1
             done
             echo 'server still running?'
             # Send an unclean shutdown signal to trigger a stack trace dump.
-            kill -ABRT `cat server_pid`
+            kill -ABRT `cat server_pid` 2>/dev/null
             # Sleep to increase the probability that the stack trace actually
             # makes it to disk before we force-kill the process.
             sleep 1
-            kill -KILL `cat server_pid`
+            kill -KILL `cat server_pid` 2>/dev/null
             exit 1"
 
     report "END STOP SERVER"
@@ -131,13 +131,6 @@ proc flush_server_logs {} {
 
 proc force_stop_server {argv} {
     report "BEGIN FORCE STOP SERVER"
-    system "$argv quit & sleep 1
-            if kill -CONT `cat server_pid` 2>/dev/null; then
-              kill -TERM `cat server_pid`
-              sleep 1
-              if kill -CONT `cat server_pid` 2>/dev/null; then
-                kill -KILL `cat server_pid`
-              fi
-            fi"
+    system "kill -KILL `cat server_pid`"
     report "END FORCE STOP SERVER"
 }
