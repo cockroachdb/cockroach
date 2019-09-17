@@ -60,6 +60,7 @@ func InitRowFetcher(
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
+	batchSize int64,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
@@ -83,6 +84,9 @@ func InitRowFetcher(
 		reverseScan, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
 	); err != nil {
 		return nil, false, err
+	}
+	if batchSize != 0 {
+		fetcher.SetBatchSize(batchSize)
 	}
 
 	return index, isSecondaryIndex, nil

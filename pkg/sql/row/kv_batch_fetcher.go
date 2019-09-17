@@ -22,17 +22,25 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// kvBatchSize is the number of keys we request at a time.
+// defaultKVBatchSize is the number of keys we request at a time.
 // On a single node, 1000 was enough to avoid any performance degradation. On
 // multi-node clusters, we want bigger chunks to make up for the higher latency.
 // TODO(radu): parameters like this should be configurable
-var kvBatchSize int64 = 10000
+var defaultKVBatchSize int64 = 10000
+
+// kvBatchSizeOverride is true if defaultKVBatchSize has been overridden
+// by a call to SetKVBatchSize.
+var kvBatchSizeOverride = false
 
 // SetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
 func SetKVBatchSize(val int64) func() {
-	oldVal := kvBatchSize
-	kvBatchSize = val
-	return func() { kvBatchSize = oldVal }
+	oldVal := defaultKVBatchSize
+	defaultKVBatchSize = val
+	kvBatchSizeOverride = true
+	return func() {
+		defaultKVBatchSize = oldVal
+		kvBatchSizeOverride = false
+	}
 }
 
 // sendFunc is the function used to execute a KV batch; normally
@@ -46,9 +54,10 @@ type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
 	sendFn sendFunc
 	spans  roachpb.Spans
-	// If useBatchLimit is true, batches are limited to kvBatchSize. If
+	// If useBatchLimit is true, batches are limited to batchSize. If
 	// firstBatchLimit is also set, the first batch is limited to that value.
-	// Subsequent batches are larger, up to kvBatchSize.
+	// Subsequent batches are larger, up to batchSize.
+	batchSize       int64
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
@@ -78,9 +87,15 @@ type txnKVFetcher struct {
 
 var _ kvBatchFetcher = &txnKVFetcher{}
 
+func (f *txnKVFetcher) SetBatchSize(batchSize int64) {
+	f.batchSize = batchSize
+}
+
 func (f *txnKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
 	if !f.returnRangeInfo {
-		panic(errors.AssertionFailedf("GetRangesInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo"))
+		panic(errors.AssertionFailedf(
+			"GetRangesInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo",
+		))
 	}
 	return f.rangeInfos
 }
@@ -94,8 +109,12 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	if !f.useBatchLimit {
 		return 0
 	}
-	if f.firstBatchLimit == 0 || f.firstBatchLimit >= kvBatchSize {
-		return kvBatchSize
+	batchSize := f.batchSize
+	if batchSize == 0 || kvBatchSizeOverride {
+		batchSize = defaultKVBatchSize
+	}
+	if f.firstBatchLimit == 0 || f.firstBatchLimit >= batchSize {
+		return batchSize
 	}
 
 	// We grab the first batch according to the limit. If it turns out that we
@@ -118,24 +137,24 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 		//      1000    |    10,000     |     10,000
 		secondBatch := f.firstBatchLimit * 10
 		switch {
-		case secondBatch < kvBatchSize/10:
-			return kvBatchSize / 10
-		case secondBatch > kvBatchSize:
-			return kvBatchSize
+		case secondBatch < batchSize/10:
+			return batchSize / 10
+		case secondBatch > batchSize:
+			return batchSize
 		default:
 			return secondBatch
 		}
 
 	default:
-		return kvBatchSize
+		return batchSize
 	}
 }
 
 // makeKVBatchFetcher initializes a kvBatchFetcher for the given spans.
 //
-// If useBatchLimit is true, batches are limited to kvBatchSize. If
+// If useBatchLimit is true, batches are limited to defaultKVBatchSize. If
 // firstBatchLimit is also set, the first batch is limited to that value.
-// Subsequent batches are larger, up to kvBatchSize.
+// Subsequent batches are larger, up to defaultKVBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
 func makeKVBatchFetcher(
@@ -143,6 +162,7 @@ func makeKVBatchFetcher(
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,
+	batchSize int64,
 	firstBatchLimit int64,
 	returnRangeInfo bool,
 ) (txnKVFetcher, error) {
@@ -154,7 +174,7 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, returnRangeInfo,
+		sendFn, spans, reverse, useBatchLimit, batchSize, firstBatchLimit, returnRangeInfo,
 	)
 }
 
@@ -165,6 +185,7 @@ func makeKVBatchFetcherWithSendFunc(
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,
+	batchSize int64,
 	firstBatchLimit int64,
 	returnRangeInfo bool,
 ) (txnKVFetcher, error) {
@@ -216,6 +237,7 @@ func makeKVBatchFetcherWithSendFunc(
 		spans:           copySpans,
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
+		batchSize:       batchSize,
 		firstBatchLimit: firstBatchLimit,
 		returnRangeInfo: returnRangeInfo,
 	}, nil

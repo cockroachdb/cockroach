@@ -111,6 +111,7 @@ func NewIndexJoiner(
 		false, /* isCheck */
 		&ij.alloc,
 		spec.Visibility,
+		0, /* batchSize */
 	); err != nil {
 		return nil, err
 	}

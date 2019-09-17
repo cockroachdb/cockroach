@@ -444,6 +444,7 @@ func (z *zigzagJoiner) setupInfo(
 		false, /* check */
 		info.alloc,
 		execinfrapb.ScanVisibility_PUBLIC,
+		0, /* batchSize */
 	)
 	if err != nil {
 		return err
