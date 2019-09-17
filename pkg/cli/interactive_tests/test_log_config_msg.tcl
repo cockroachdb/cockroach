@@ -6,11 +6,14 @@ source [file join [file dirname $argv0] common.tcl]
 # flushed and not in the middle of a rotation.
 
 start_server $argv
-stop_server $argv
 
 start_test "Check that the cluster ID is reported at the start of the first log file."
-system "grep -qF '\[config\] clusterID:' logs/db/logs/cockroach.log"
+spawn tail -n 1000 -F logs/db/logs/cockroach.log
+eexpect "\\\[config\\\] clusterID:"
+eexpect "node startup completed"
 end_test
+
+stop_server $argv
 
 
 # Make a server with a tiny log buffer so as to force frequent log rotation.
