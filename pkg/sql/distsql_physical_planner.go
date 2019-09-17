@@ -867,7 +867,7 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
+	n *scanNode, planCtx *PlanningCtx, indexVarMap []int, batchLimit int64,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
@@ -877,7 +877,8 @@ func initTableReaderSpec(
 		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
 
 		// Retain the capacity of the spans slice.
-		Spans: s.Spans[:0],
+		Spans:      s.Spans[:0],
+		BatchLimit: batchLimit,
 	}
 	indexIdx, err := getIndexIdx(n)
 	if err != nil {
@@ -1064,11 +1065,11 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 // one for each node that has spans that we are reading.
 // overridesResultColumns is optional.
 func (dsp *DistSQLPlanner) createTableReaders(
-	planCtx *PlanningCtx, n *scanNode, overrideResultColumns []sqlbase.ColumnID,
+	planCtx *PlanningCtx, n *scanNode, overrideResultColumns []sqlbase.ColumnID, batchLimit int64,
 ) (PhysicalPlan, error) {
 
 	scanNodeToTableOrdinalMap := getScanNodeToTableOrdinalMap(n)
-	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
+	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap, batchLimit)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -1845,7 +1846,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *PlanningCtx, n *indexJoinNode,
 ) (PhysicalPlan, error) {
-	plan, err := dsp.createTableReaders(planCtx, n.index, n.index.desc.PrimaryIndex.ColumnIDs)
+	plan, err := dsp.createTableReaders(
+		planCtx, n.index, n.index.desc.PrimaryIndex.ColumnIDs, 0, /* batchLimit */
+	)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -2313,7 +2316,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 	switch n := node.(type) {
 	case *scanNode:
-		plan, err = dsp.createTableReaders(planCtx, n, nil)
+		plan, err = dsp.createTableReaders(planCtx, n, nil, 0 /* batchLimit */)
 
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(planCtx, n)

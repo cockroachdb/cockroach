@@ -75,6 +75,14 @@ message TableReaderSpec {
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
 
+  // If greater than zero, this is the batch limit that will be used for all
+  // KV batches (excluding the first if limit hint is set) instead of the
+  // default kvBatchSize.
+  //
+  // Not used if there is a limit set in the PostProcessSpec of this processor
+  // (that value will be used for sizing batches instead).
+  optional int64 batch_limit = 10 [(gogoproto.nullable) = false];
+
   // Indicates whether the TableReader is being run as an exhaustive
   // check. This is only true during SCRUB commands.
   optional bool is_check = 6 [(gogoproto.nullable) = false];

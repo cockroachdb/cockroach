@@ -30,7 +30,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	indexDesc sqlbase.IndexDescriptor,
 	readAsOf hlc.Timestamp,
 ) (PhysicalPlan, error) {
-	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */)
+	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */, 0 /* batchLimit */)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}

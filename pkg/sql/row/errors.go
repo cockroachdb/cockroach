@@ -29,7 +29,7 @@ type singleKVFetcher struct {
 	done bool
 }
 
-// nextBatch implements the kvBatchFetcher interface.
+// nextBatch is part of the kvBatchFetcher interface.
 func (f *singleKVFetcher) nextBatch(
 	_ context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
@@ -40,9 +40,14 @@ func (f *singleKVFetcher) nextBatch(
 	return true, f.kvs[:], nil, roachpb.Span{}, nil
 }
 
-// GetRangesInfo implements the kvBatchFetcher interface.
+// GetRangesInfo is part of the kvBatchFetcher interface.
 func (f *singleKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
 	panic(errors.AssertionFailedf("GetRangesInfo() called on singleKVFetcher"))
+}
+
+// SetBatchLimit is part of the kvBatchFetcher interface.
+func (f *singleKVFetcher) SetBatchLimit(limit int64) {
+	panic(errors.AssertionFailedf("SetBatchLimit() called on singleKVFetcher"))
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.

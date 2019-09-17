@@ -38,6 +38,7 @@ type requestedStat struct {
 
 const histogramSamples = 10000
 const histogramBuckets = 200
+const kvBatchLimit = 1000
 
 // maxTimestampAge is the maximum allowed age of a scan timestamp during table
 // stats collection, used when creating statistics AS OF SYSTEM TIME. The
@@ -86,7 +87,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, err
 	}
 
-	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
+	p, err := dsp.createTableReaders(
+		planCtx, &scan, nil /* overrideResultColumns */, kvBatchLimit,
+	)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}

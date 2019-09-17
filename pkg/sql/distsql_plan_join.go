@@ -71,7 +71,9 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		// out to be very useful for computing ordering and remapping the
 		// onCond and columns.
 		var err error
-		if plans[i], err = dsp.createTableReaders(planCtx, t.scan, nil); err != nil {
+		if plans[i], err = dsp.createTableReaders(
+			planCtx, t.scan, nil, 0, /* batchLimit */
+		); err != nil {
 			return PhysicalPlan{}, false, err
 		}
 
