@@ -1016,7 +1016,7 @@ other signals.
 }
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
+	Use:   "status <cluster>",
 	Short: "retrieve the status of nodes in a cluster",
 	Long: `Retrieve the status of nodes in a cluster.
 
