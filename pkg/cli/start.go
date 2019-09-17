@@ -414,7 +414,7 @@ func initTempStorageConfig(
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockrach start' instead")
 
 func runStartSingleNode(cmd *cobra.Command, args []string) error {
-	joinFlag := cmd.Flags().Lookup(cliflags.Join.Name)
+	joinFlag := flagSetForCmd(cmd).Lookup(cliflags.Join.Name)
 	if joinFlag.Changed {
 		return errCannotUseJoin
 	}
@@ -501,8 +501,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	grpcutil.SetSeverity(log.Severity_WARNING)
 
 	// Check the --join flag.
-	pf := cmd.Flags()
-	if !pf.Lookup(cliflags.Join.Name).Changed {
+	if !flagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
 		log.Shout(ctx, log.Severity_WARNING,
 			"running 'cockroach start' without --join is deprecated.\n"+
 				"Consider using 'cockroach start-single-node' or 'cockroach init' instead.")
@@ -981,7 +980,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 }
 
 func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
-	pf := cmd.Flags()
+	pf := flagSetForCmd(cmd)
 
 	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ServerHost.Name).Changed
 	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseHost.Name).Changed

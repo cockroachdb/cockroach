@@ -97,12 +97,13 @@ func (u urlParser) Set(v string) error {
 	}
 
 	cliCtx := u.cliCtx
+	fl := flagSetForCmd(u.cmd)
 
 	// If user name / password information is available, forward it to
 	// --user. We store the password for later re-collection by
 	// makeClientConnURL().
 	if parsedURL.User != nil {
-		f := u.cmd.Flags().Lookup(cliflags.User.Name)
+		f := fl.Lookup(cliflags.User.Name)
 		if f == nil {
 			// A client which does not support --user will also not use
 			// makeClientConnURL(), so we can ignore/forget about the
@@ -141,7 +142,7 @@ func (u urlParser) Set(v string) error {
 	// If a database path is available, forward it to --database.
 	if parsedURL.Path != "" {
 		dbPath := strings.TrimLeft(parsedURL.Path, "/")
-		f := u.cmd.Flags().Lookup(cliflags.Database.Name)
+		f := fl.Lookup(cliflags.Database.Name)
 		if f == nil {
 			// A client which does not support --database does not need this
 			// bit of information, so we can ignore/forget about it. We do
@@ -168,8 +169,6 @@ func (u urlParser) Set(v string) error {
 		}
 
 		cliCtx.extraConnURLOptions = options
-
-		fl := u.cmd.Flags()
 
 		switch sslMode := options.Get("sslmode"); sslMode {
 		case "disable":

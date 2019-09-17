@@ -229,6 +229,14 @@ const maxClusterNameLength = 256
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
+// flagSetForCmd is a replacement for cmd.Flag() that properly merges
+// persistent and local flags, until the upstream bug
+// https://github.com/spf13/cobra/issues/961 has been fixed.
+func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet {
+	_ = cmd.LocalFlags() // force merge persistent+local flags
+	return cmd.Flags()
+}
+
 func init() {
 	initCLIDefaults()
 
@@ -555,7 +563,7 @@ func init() {
 	// Make the other non-SQL client commands also recognize --url in
 	// strict SSL mode.
 	for _, cmd := range clientCmds {
-		if f := cmd.Flags().Lookup(cliflags.URL.Name); f != nil {
+		if f := flagSetForCmd(cmd).Lookup(cliflags.URL.Name); f != nil {
 			// --url already registered above, nothing to do.
 			continue
 		}
@@ -645,11 +653,11 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverSQLPort = serverListenPort
 	}
 	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
-	serverCfg.SplitListenSQL = cmd.Flags().Lookup(cliflags.ListenSQLAddr.Name).Changed
+	serverCfg.SplitListenSQL = flagSetForCmd(cmd).Lookup(cliflags.ListenSQLAddr.Name).Changed
 
 	// Fill in the defaults for --advertise-sql-addr.
-	advSpecified := cmd.Flags().Lookup(cliflags.AdvertiseAddr.Name).Changed ||
-		cmd.Flags().Lookup(cliflags.AdvertiseHost.Name).Changed
+	advSpecified := flagSetForCmd(cmd).Lookup(cliflags.AdvertiseAddr.Name).Changed ||
+		flagSetForCmd(cmd).Lookup(cliflags.AdvertiseHost.Name).Changed
 	if serverSQLAdvertiseAddr == "" {
 		if advSpecified {
 			serverSQLAdvertiseAddr = serverAdvertiseAddr
@@ -704,9 +712,7 @@ func extraClientFlagInit() {
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
-	pf := cmd.Flags()
-
-	vf := pf.Lookup(logflags.LogToStderrName)
+	vf := flagSetForCmd(cmd).Lookup(logflags.LogToStderrName)
 
 	// if `--logtostderr` was not specified and no log directory was
 	// set, or `--logtostderr` was specified but without explicit level,
