@@ -1238,13 +1238,10 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) calculateOutputCount(
 }
 
 func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) Next(ctx context.Context) coldata.Batch {
+	o.output.ResetInternalBatch()
 	for {
 		switch o.state {
 		case mjEntry:
-			if o.needToResetOutput {
-				o.needToResetOutput = false
-				o.output.ResetInternalBatch()
-			}
 			o.initProberState(ctx)
 
 			if o.nonEmptyBufferedGroup() {
@@ -1281,7 +1278,6 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) Next(ctx context.Conte
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)
-				o.needToResetOutput = true
 				o.outputReady = false
 				return o.output
 			}
