@@ -370,17 +370,19 @@ var (
 						v = duration.DecodeDuration(int64(t.Months), int64(t.Days), t.Microseconds*1000)
 					}
 				case string:
+					// Postgres sometimes adds spaces to the end of a string.
+					t = strings.TrimSpace(t)
 					v = strings.Replace(t, "T00:00:00+00:00", "T00:00:00Z", 1)
+				case *pgtype.Numeric:
+					if t.Status == pgtype.Present {
+						v = apd.NewWithBigInt(t.Int, t.Exp)
+					}
+				case int64:
+					v = apd.New(t, 0)
 				}
 				out[i] = v
 			}
 			return out
-		}),
-		cmp.Transformer("pgtype.Numeric", func(x *pgtype.Numeric) interface{} {
-			if x.Status != pgtype.Present {
-				return x
-			}
-			return apd.NewWithBigInt(x.Int, x.Exp)
 		}),
 
 		cmpopts.EquateEmpty(),
