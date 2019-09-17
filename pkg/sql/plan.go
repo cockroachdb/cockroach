@@ -86,19 +86,12 @@ func (r *runParams) creationTimeForNewTableDescriptor() hlc.Timestamp {
 // The following methods apply to planNodes and contain special cases
 // for each type; they thus need to be extended when adding/removing
 // planNode instances:
-// - planMaker.newPlan()
-// - planMaker.doPrepare()
-// - planMaker.setNeededColumns()  (needed_columns.go)
-// - planMaker.expandPlan()        (expand_plan.go)
 // - planVisitor.visit()           (walk.go)
 // - planNodeNames                 (walk.go)
 // - planMaker.optimizeFilters()   (filter_opt.go)
 // - setLimitHint()                (limit_hint.go)
 // - planOrdering()                (plan_ordering.go)
 // - planColumns()                 (plan_columns.go)
-//
-// Also, there are optional interfaces that new nodes may want to implement:
-// - autoCommitNode
 //
 type planNode interface {
 	startExec(params runParams) error
@@ -336,29 +329,6 @@ func (p *planTop) close(ctx context.Context) {
 		}
 	}
 }
-
-// autoCommitNode is implemented by planNodes that might be able to commit the
-// KV txn in which they operate. Some nodes might want to do this to take
-// advantage of the 1PC optimization in case they're running as an implicit
-// transaction.
-// Only the top-level node in a plan is allowed to auto-commit. A node that
-// choses to do so has to be cognizant of all its children: it needs to only
-// auto-commit after all the children have finished performing KV operations
-// and, more generally, after the plan is guaranteed to not produce any
-// execution errors (in case of an error anywhere in the query, we do not want
-// to commit the txn).
-type autoCommitNode interface {
-	// enableAutoCommit is called on the root planNode (if it implements this
-	// interface).
-	enableAutoCommit()
-}
-
-var _ autoCommitNode = &createTableNode{}
-var _ autoCommitNode = &delayedNode{}
-var _ autoCommitNode = &deleteNode{}
-var _ autoCommitNode = &insertNode{}
-var _ autoCommitNode = &updateNode{}
-var _ autoCommitNode = &upsertNode{}
 
 // startExec calls startExec() on each planNode using a depth-first, post-order
 // traversal.  The subqueries, if any, are also started.

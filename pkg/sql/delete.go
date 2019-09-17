@@ -41,9 +41,6 @@ type deleteNode struct {
 	run deleteRun
 }
 
-// deleteNode implements the autoCommitNode interface.
-var _ autoCommitNode = &deleteNode{}
-
 // Delete removes rows from a table.
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
@@ -449,7 +446,6 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 	return true
 }
 
-// enableAutoCommit is part of the autoCommitNode interface.
 func (d *deleteNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }

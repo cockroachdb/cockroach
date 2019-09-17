@@ -50,9 +50,6 @@ type insertNode struct {
 	run insertRun
 }
 
-// insertNode implements the autoCommitNode interface.
-var _ autoCommitNode = &insertNode{}
-
 // Insert inserts rows into the database.
 // Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
@@ -614,7 +611,7 @@ func (n *insertNode) Close(ctx context.Context) {
 	insertNodePool.Put(n)
 }
 
-// enableAutoCommit is part of the autoCommitNode interface.
+// See planner.autoCommit.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
 }
