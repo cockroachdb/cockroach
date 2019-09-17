@@ -80,5 +80,19 @@ interrupt
 eexpect ":/# "
 end_test
 
+
+start_server $argv
+
+start_test "Check that a client can connect using the URL env var"
+send "export COCKROACH_URL=`cat server_url`;\r"
+eexpect ":/# "
+send "$argv sql\r"
+eexpect "defaultdb>"
+interrupt
+eexpect ":/# "
+end_test
+
+stop_server $argv
+
 send "exit 0\r"
 eexpect eof
