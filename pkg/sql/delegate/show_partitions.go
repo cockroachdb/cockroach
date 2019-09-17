@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
 func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Partitions)
 	if n.IsTable {
 		flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
 		tn := n.Table.ToTableName()

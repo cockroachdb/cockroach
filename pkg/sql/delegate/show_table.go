@@ -16,9 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
 	const showCreateQuery = `
     SELECT
 			%[3]s AS table_name,
