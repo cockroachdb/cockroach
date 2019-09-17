@@ -495,7 +495,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc.Server, s.node)
 	storage.RegisterPerReplicaServer(s.grpc.Server, s.node.perReplicaServer)
 	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc.Server)
-	s.replicationReporter = reports.NewReporter(s.node.stores, &s.node.storeCfg)
+	s.replicationReporter = reports.NewReporter(
+		s.db, s.node.stores, s.storePool,
+		s.ClusterSettings(), s.nodeLiveness, internalExecutor)
 
 	s.sessionRegistry = sql.NewSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(

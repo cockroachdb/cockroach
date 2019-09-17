@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -48,8 +49,6 @@ type Reporter struct {
 	localStores *storage.Stores
 	// Constraints constructed from the locality information
 	localityConstraints []config.Constraints
-	// List of all stores known to exist on all nodes.
-	storeCfg *storage.StoreConfig
 	// The store that is the current meta 1 leaseholder
 	meta1LeaseHolder *storage.Store
 	// Latest zone config
@@ -57,7 +56,11 @@ type Reporter struct {
 	// Node liveness by store id
 	nodeLiveStatus map[roachpb.NodeID]storagepb.NodeLivenessStatus
 
-	db *client.DB
+	db        *client.DB
+	liveness  *storage.NodeLiveness
+	settings  *cluster.Settings
+	storePool *storage.StorePool
+	executor  sqlutil.InternalExecutor
 
 	frequencyMu struct {
 		syncutil.Mutex
@@ -67,11 +70,21 @@ type Reporter struct {
 }
 
 // NewReporter creates a Reporter.
-func NewReporter(localStores *storage.Stores, storeCfg *storage.StoreConfig) *Reporter {
+func NewReporter(
+	db *client.DB,
+	localStores *storage.Stores,
+	storePool *storage.StorePool,
+	st *cluster.Settings,
+	liveness *storage.NodeLiveness,
+	executor sqlutil.InternalExecutor,
+) *Reporter {
 	r := Reporter{
-		db:          storeCfg.DB,
+		db:          db,
 		localStores: localStores,
-		storeCfg:    storeCfg,
+		storePool:   storePool,
+		settings:    st,
+		liveness:    liveness,
+		executor:    executor,
 	}
 	r.frequencyMu.changeCh = make(chan struct{})
 	return &r
@@ -82,12 +95,12 @@ func NewReporter(localStores *storage.Stores, storeCfg *storage.StoreConfig) *Re
 func (stats *Reporter) reportInterval() (time.Duration, <-chan struct{}) {
 	stats.frequencyMu.Lock()
 	defer stats.frequencyMu.Unlock()
-	return ReporterInterval.Get(&stats.storeCfg.Settings.SV), stats.frequencyMu.changeCh
+	return ReporterInterval.Get(&stats.settings.SV), stats.frequencyMu.changeCh
 }
 
 // Start the periodic calls to Update().
 func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
-	ReporterInterval.SetOnChange(&stats.storeCfg.Settings.SV, func() {
+	ReporterInterval.SetOnChange(&stats.settings.SV, func() {
 		stats.frequencyMu.Lock()
 		defer stats.frequencyMu.Unlock()
 		// Signal the current waiter (if any), and prepare the channel for future
@@ -95,7 +108,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 		ch := stats.frequencyMu.changeCh
 		close(ch)
 		stats.frequencyMu.changeCh = make(chan struct{})
-		stats.frequencyMu.interval = ReporterInterval.Get(&stats.storeCfg.Settings.SV)
+		stats.frequencyMu.interval = ReporterInterval.Get(&stats.settings.SV)
 	})
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
@@ -160,7 +173,7 @@ func (stats *Reporter) update(
 		log.Errorf(ctx, "unable to update the locality constraints: %s", err)
 	}
 
-	allStores := stats.storeCfg.StorePool.GetStores()
+	allStores := stats.storePool.GetStores()
 	var getStoresFromGossip StoreResolver = func(r roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
 		storeDescs := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
 		// We'll return empty descriptors for stores that gossip doesn't have a
@@ -194,25 +207,21 @@ func (stats *Reporter) update(
 	}
 
 	if err := constraintConfVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor(),
+		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
 	); err != nil {
 		return errors.Wrap(err, "failed to save constraint report")
 	}
 	if err := localityStatsVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor(),
+		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
 	); err != nil {
 		return errors.Wrap(err, "failed to save locality report")
 	}
 	if err := statusVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor(),
+		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
 	); err != nil {
 		return errors.Wrap(err, "failed to save range status report")
 	}
 	return nil
-}
-
-func (stats *Reporter) executor() sqlutil.InternalExecutor {
-	return stats.storeCfg.SQLExecutor
 }
 
 // meta1LeaseHolderStore returns the node store that is the leaseholder of Meta1
@@ -241,7 +250,7 @@ func (stats *Reporter) updateLatestConfig() {
 
 func (stats *Reporter) updateLocalityConstraints() error {
 	localityConstraintsByName := make(map[string]config.Constraints, 16)
-	for _, sd := range stats.storeCfg.StorePool.GetStores() {
+	for _, sd := range stats.storePool.GetStores() {
 		c := config.Constraints{
 			Constraints: make([]config.Constraint, 0),
 		}
@@ -260,7 +269,7 @@ func (stats *Reporter) updateLocalityConstraints() error {
 }
 
 func (stats *Reporter) updateNodeLiveness() {
-	stats.nodeLiveStatus = stats.storeCfg.NodeLiveness.GetLivenessStatusMap()
+	stats.nodeLiveStatus = stats.liveness.GetLivenessStatusMap()
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
