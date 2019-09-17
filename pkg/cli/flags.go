@@ -207,6 +207,14 @@ func (a addrSetter) Set(v string) error {
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
+// flagSetForCmd is a replacement for cmd.Flag() that properly merges
+// persistent and local flags, until the upstream bug
+// https://github.com/spf13/cobra/issues/961 has been fixed.
+func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet {
+	_ = cmd.LocalFlags() // force merge persistent+local flags
+	return cmd.Flags()
+}
+
 func init() {
 	initCLIDefaults()
 
@@ -516,7 +524,7 @@ func init() {
 	// Make the other non-SQL client commands also recognize --url in
 	// strict SSL mode.
 	for _, cmd := range clientCmds {
-		if f := cmd.Flags().Lookup(cliflags.URL.Name); f != nil {
+		if f := flagSetForCmd(cmd).Lookup(cliflags.URL.Name); f != nil {
 			// --url already registered above, nothing to do.
 			continue
 		}
@@ -610,9 +618,7 @@ func extraClientFlagInit() {
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
-	pf := cmd.Flags()
-
-	vf := pf.Lookup(logflags.LogToStderrName)
+	vf := flagSetForCmd(cmd).Lookup(logflags.LogToStderrName)
 
 	// if `--logtostderr` was not specified and no log directory was
 	// set, or `--logtostderr` was specified but without explicit level,

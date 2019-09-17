@@ -78,7 +78,7 @@ func setupTransientServer(
 	// Set up logging. For demo/transient server we use non-standard
 	// behavior where we avoid file creation if possible.
 	df := startCtx.logDirFlag
-	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
+	sf := flagSetForCmd(cmd).Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
 		// User did not request logging flags; shut down logging under
 		// errors and make logs appear on stderr.
