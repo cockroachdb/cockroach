@@ -114,7 +114,7 @@ func TestSnapshotPreemptiveOnUninitializedReplica(t *testing.T) {
 	store, _ := createTestStore(t, testStoreOpts{}, stopper)
 
 	// Create an uninitialized replica.
-	repl, created, err := store.getOrCreateReplica(ctx, 77, 1, nil)
+	repl, created, err := store.getOrCreateReplica(ctx, 77, 1, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,4 +140,16 @@ func TestSnapshotPreemptiveOnUninitializedReplica(t *testing.T) {
 	); !testutils.IsError(err, "intersects existing range") {
 		t.Fatal(err)
 	}
+}
+
+// TestSnapshotPreemptiveRemovedAfterMessageToNonVoter tests that replicas which
+// encounter preemptive snapshots remove all of the data due to that preemptive
+// snapshot.
+//
+// This behavior is critical to provide safety when upgrading from preemptive
+// snapshots. Before learner replicas we would not add a store to a range
+// until we had successfully sent a preemptive snapshot. Furthermore we'd
+// only add that store assuming that the
+func TestPreemptiveSnapshotRemovedAfterMessageTo(t *testing.T) {
+
 }

@@ -3356,6 +3356,10 @@ func (s *Store) HandleSnapshot(
 	})
 }
 
+// learnerReplicaType exists to avoid allocating when marking a replica as a
+// learner in uncoalesceBeats.
+var learnerReplicaType = roachpb.LEARNER
+
 func (s *Store) uncoalesceBeats(
 	ctx context.Context,
 	beats []RaftHeartbeat,
@@ -3392,6 +3396,9 @@ func (s *Store) uncoalesceBeats(
 			},
 			Message: msg,
 			Quiesce: beat.Quiesce,
+		}
+		if beat.ToIsLearner {
+			beatReqs[i].ToReplica.Type = &learnerReplicaType
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -3479,6 +3486,7 @@ func (s *Store) withReplicaForRequest(
 		req.RangeID,
 		req.ToReplica.ReplicaID,
 		&req.FromReplica,
+		req.ToReplica.GetType() == roachpb.VOTER_FULL,
 	)
 	if err != nil {
 		return roachpb.NewError(err)
@@ -4063,6 +4071,7 @@ func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
+	isVoter bool,
 ) (_ *Replica, created bool, _ error) {
 	r := retry.Start(retry.Options{
 		InitialBackoff: time.Microsecond,
@@ -4075,6 +4084,7 @@ func (s *Store) getOrCreateReplica(
 			rangeID,
 			replicaID,
 			creatingReplica,
+			isVoter,
 		)
 		if err == errRetry {
 			continue
@@ -4097,8 +4107,27 @@ func (s *Store) tryGetOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
+	isVoter bool,
 ) (_ *Replica, created bool, err error) {
 	var (
+		removeReplica = func(repl *Replica) error {
+			repl.mu.destroyStatus.Set(err, destroyReasonRemovalPending)
+			isInitialized := repl.isInitializedRLocked()
+			repl.mu.Unlock()
+			defer repl.mu.Lock()
+			if !isInitialized {
+				if err := s.removeUninitializedReplicaRaftMuLocked(ctx, repl, replicaID); err != nil {
+					log.Fatalf(ctx, "failed to remove uninitialized replica: %v", err)
+				}
+			} else {
+				if err := s.removeReplicaImpl(ctx, repl, replicaID, RemoveOptions{
+					DestroyData: true,
+				}); err != nil {
+					log.Fatal(ctx, err)
+				}
+			}
+			return errRetry
+		}
 		handleFromReplicaTooOld = func(repl *Replica) error {
 			if creatingReplica == nil {
 				return nil
@@ -4120,22 +4149,16 @@ func (s *Store) tryGetOrCreateReplica(
 			if log.V(1) {
 				log.Infof(ctx, "found message for newer replica ID: %v %v %v %v %v", repl.mu.replicaID, replicaID, repl.mu.minReplicaID, repl.mu.state.Desc, &repl.mu.destroyStatus)
 			}
-			repl.mu.destroyStatus.Set(err, destroyReasonRemovalPending)
-			isInitialized := repl.isInitializedRLocked()
-			repl.mu.Unlock()
-			defer repl.mu.Lock()
-			if !isInitialized {
-				if err := s.removeUninitializedReplicaRaftMuLocked(ctx, repl, replicaID); err != nil {
-					log.Fatalf(ctx, "failed to remove uninitialized replica: %v", err)
-				}
-			} else {
-				if err := s.removeReplicaImpl(ctx, repl, replicaID, RemoveOptions{
-					DestroyData: true,
-				}); err != nil {
-					log.Fatal(ctx, err)
-				}
+			return removeReplica(repl)
+		}
+		handleNonVoterWithPreemptiveSnapshot = func(repl *Replica) error {
+			if repl.mu.replicaID != 0 || replicaID == 0 || !repl.isInitializedRLocked() || isVoter {
+				return nil
 			}
-			return errRetry
+			if log.V(1) {
+				log.Infof(ctx, "found message for replica ID %v as non-voter but currently not part of the range, destroying preemptive snapshot", replicaID)
+			}
+			return removeReplica(repl)
 		}
 	)
 	// The common case: look up an existing (initialized) replica.
@@ -4156,11 +4179,16 @@ func (s *Store) tryGetOrCreateReplica(
 			repl.raftMu.Unlock()
 			return nil, false, err
 		}
+		if err := handleNonVoterWithPreemptiveSnapshot(repl); err != nil {
+			repl.raftMu.Unlock()
+			return nil, false, err
+		}
 
 		var err error
-		if repl.mu.replicaID == 0 {
+		if repl.mu.replicaID == 0 && replicaID != 0 {
 			// This message is telling us about our replica ID.
-			// This is a common case when dealing with preemptive snapshots.
+			// This is a common case when dealing with preemptive snapshots if we're
+			// initialized.
 			err = repl.setReplicaIDRaftMuLockedMuLocked(repl.AnnotateCtx(ctx), replicaID)
 		} else if replicaID != 0 && repl.mu.replicaID > replicaID {
 			// TODO(ajwerner): probably just silently drop this message.

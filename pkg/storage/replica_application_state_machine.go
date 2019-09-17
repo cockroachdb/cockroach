@@ -439,7 +439,25 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		log.Event(ctx, "applying command")
 	}
 
-	// Acquire the split or merge lock, if necessary. If a split or merge
+	// There's a nasty edge case here which only exists in 19.2 (for subtle
+	// reasons).
+	//
+	// Imagine we're catching up from a pre-emptive snapshot and we come across
+	// a merge, we're not gaurenteed that the RHS is going to be present. One
+	// option might be to destroy the current replica. Unfortunately we might
+	// also gotten raft messages and voted so we'll know our replica ID but our
+	// current view of the range descriptor will not include the current store.
+	//
+	// * One proposal is to just refuse to apply the current command and just spin
+	//   handling raft ready objects but not actually applying any commands but
+	//   detecting the illegal merge and truncating the CommittedEntries slice
+	//   to before the merge prior to calling Advance.
+	// * The other is to permit destroying an initialized replica with
+	//   nextReplicaID == Replica.mu.replicaID if the store is not in
+	//   Replica.mu.state.Desc. We'd need to make sure to preserve the hard state
+	//   in this case.
+
+	// acquire the split or merge lock, if necessary. If a split or merge
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
