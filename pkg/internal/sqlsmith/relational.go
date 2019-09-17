@@ -526,8 +526,13 @@ func makeSelect(s *scope) (tree.Statement, bool) {
 				},
 				From: tree.From{
 					Tables: tree.TableExprs{
-						&tree.Subquery{
-							Select: &tree.ParenSelect{Select: stmt},
+						&tree.AliasedTableExpr{
+							Expr: &tree.Subquery{
+								Select: &tree.ParenSelect{Select: stmt},
+							},
+							As: tree.AliasClause{
+								Alias: s.schema.name("tab"),
+							},
 						},
 					},
 				},
