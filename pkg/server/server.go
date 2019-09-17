@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/reports"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -78,7 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	"github.com/getsentry/raven-go"
+	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -184,12 +185,13 @@ type Server struct {
 	leaseMgr         *sql.LeaseManager
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
-	sessionRegistry    *sql.SessionRegistry
-	jobRegistry        *jobs.Registry
-	statsRefresher     *stats.Refresher
-	engines            Engines
-	internalMemMetrics sql.MemoryMetrics
-	adminMemMetrics    sql.MemoryMetrics
+	sessionRegistry     *sql.SessionRegistry
+	jobRegistry         *jobs.Registry
+	statsRefresher      *stats.Refresher
+	replicationReporter *reports.Reporter
+	engines             Engines
+	internalMemMetrics  sql.MemoryMetrics
+	adminMemMetrics     sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics sql.MemoryMetrics
 }
@@ -493,6 +495,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc.Server, s.node)
 	storage.RegisterPerReplicaServer(s.grpc.Server, s.node.perReplicaServer)
 	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc.Server)
+	s.replicationReporter = reports.NewReporter(
+		s.db, s.node.stores, s.storePool,
+		s.ClusterSettings(), s.nodeLiveness, internalExecutor)
 
 	s.sessionRegistry = sql.NewSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
@@ -1427,6 +1432,7 @@ func (s *Server) Start(ctx context.Context) error {
 		},
 		time.NewTicker,
 	)
+	s.replicationReporter.Start(ctx, s.stopper)
 
 	// Cluster ID should have been determined by this point.
 	if s.rpcContext.ClusterID.Get() == uuid.Nil {
