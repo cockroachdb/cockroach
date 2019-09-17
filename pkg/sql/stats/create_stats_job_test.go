@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -467,7 +467,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}(rowexec.SamplerProgressInterval)
 	rowexec.SamplerProgressInterval = 10
 
-	resetKVBatchSize := row.SetKVBatchSize(10)
+	resetKVBatchSize := sql.SetStatsKVBatchSize(10)
 	defer resetKVBatchSize()
 
 	var allowRequest chan struct{}

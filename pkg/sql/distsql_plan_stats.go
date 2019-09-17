@@ -51,6 +51,16 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 	5*time.Minute,
 )
 
+var statsKVBatchSize int64 = 1000
+
+// SetStatsKVBatchSize changes statsKVBatchSize, and returns a function that
+// restores it.
+func SetStatsKVBatchSize(val int64) func() {
+	oldVal := statsKVBatchSize
+	statsKVBatchSize = val
+	return func() { statsKVBatchSize = oldVal }
+}
+
 func (dsp *DistSQLPlanner) createStatsPlan(
 	planCtx *PlanningCtx,
 	desc *sqlbase.ImmutableTableDescriptor,
@@ -86,7 +96,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, err
 	}
 
-	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
+	p, err := dsp.createTableReaders(
+		planCtx, &scan, nil /* overrideResultColumns */, statsKVBatchSize,
+	)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}

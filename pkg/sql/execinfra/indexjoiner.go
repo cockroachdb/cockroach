@@ -111,6 +111,7 @@ func NewIndexJoiner(
 		false, /* isCheck */
 		&ij.alloc,
 		spec.Visibility,
+		row.DefaultKVBatchSize,
 	); err != nil {
 		return nil, err
 	}

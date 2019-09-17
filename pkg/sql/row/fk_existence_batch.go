@@ -139,7 +139,7 @@ type SpanKVFetcher struct {
 	KVs []roachpb.KeyValue
 }
 
-// nextBatch implements the kvBatchFetcher interface.
+// nextBatch is part of the kvBatchFetcher interface.
 func (f *SpanKVFetcher) nextBatch(
 	_ context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
@@ -151,7 +151,12 @@ func (f *SpanKVFetcher) nextBatch(
 	return true, res, nil, roachpb.Span{}, nil
 }
 
-// GetRangesInfo implements the kvBatchFetcher interface.
+// GetRangesInfo is part of the kvBatchFetcher interface.
 func (f *SpanKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
 	panic(errors.AssertionFailedf("GetRangesInfo() called on SpanKVFetcher"))
+}
+
+// SetBatchSize is part of the kvBatchFetcher interface.
+func (f *SpanKVFetcher) SetBatchSize(batchSize int64) {
+	panic(errors.AssertionFailedf("SetBatchSize() called on SpanKVFetcher"))
 }

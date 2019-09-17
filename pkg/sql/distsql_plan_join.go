@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -71,7 +72,9 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		// out to be very useful for computing ordering and remapping the
 		// onCond and columns.
 		var err error
-		if plans[i], err = dsp.createTableReaders(planCtx, t.scan, nil); err != nil {
+		if plans[i], err = dsp.createTableReaders(
+			planCtx, t.scan, nil, row.DefaultKVBatchSize,
+		); err != nil {
 			return PhysicalPlan{}, false, err
 		}
 
