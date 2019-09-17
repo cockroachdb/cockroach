@@ -401,6 +401,11 @@ ok1  CREATE TABLE ok1 (
 -- Warning: Partitioned table with no zone configurations.
 
 query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.create' AND usage_count > 0
+----
+sql.show.create
+
+query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok1
 ----
 TABLE ok1
@@ -923,3 +928,8 @@ query TTTTTTTT
 SHOW PARTITIONS FROM INDEX """".t@primary
 ----
 " t p1 NULL x t@primary (1) NULL
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.partitions' AND usage_count > 0
+----
+sql.show.partitions
