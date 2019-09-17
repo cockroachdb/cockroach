@@ -140,8 +140,9 @@ func setupTransientServers(
 
 	// Set up logging. For demo/transient server we use non-standard
 	// behavior where we avoid file creation if possible.
-	df := cmd.Flags().Lookup(cliflags.LogDir.Name)
-	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
+	fl := flagSetForCmd(cmd)
+	df := fl.Lookup(cliflags.LogDir.Name)
+	sf := fl.Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
 		// User did not request logging flags; shut down all logging.
 		// Otherwise, the demo command would cause a cockroach-data
@@ -374,7 +375,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 	}
 
 	// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
-	if demoCtx.geoPartitionedReplicas && cmd.Flags().Lookup(cliflags.DemoNodes.Name).Changed {
+	if demoCtx.geoPartitionedReplicas && flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
 		return errors.New("--nodes cannot be used with --geo-partitioned-replicas")
 	}
 
