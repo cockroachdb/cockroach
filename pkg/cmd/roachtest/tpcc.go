@@ -387,6 +387,8 @@ func registerTPCC(r *testRegistry) {
 
 		LoadWarehouses: 2000,
 		EstimatedMax:   1000,
+
+		MinVersion: "v19.1.0",
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:      9,
@@ -503,6 +505,8 @@ type tpccBenchSpec struct {
 	// change (i.e. CockroachDB gets faster!).
 	EstimatedMax int
 
+	// MinVersion to pass to testRegistry.Add.
+	MinVersion string
 	// Tags to pass to testRegistry.Add.
 	Tags []string
 }
@@ -570,10 +574,15 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
 	nodes := makeClusterSpec(numNodes, opts...)
 
+	minVersion := b.MinVersion
+	if minVersion == "" {
+		minVersion = maybeMinVersionForFixturesImport(cloud)
+	}
+
 	r.Add(testSpec{
 		Name:       name,
 		Cluster:    nodes,
-		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		MinVersion: minVersion,
 		Tags:       b.Tags,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
