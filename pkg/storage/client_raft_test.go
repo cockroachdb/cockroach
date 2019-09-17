@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4641,4 +4643,198 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProcessSplitAfterRightHandSideHasBeenRemoved tests cases where we have
+// a follower replica which has received information about the RHS of a split
+// before it has processed that split. The replica can't both have an
+// initialized RHS and process the split but it can have an uninitialized RHS
+// with a higher replica ID than lives in the split and it can have a RHS with
+// an unknown replica ID and a tombstone at exactly the replica ID of the RHS.
+//
+// Starting in 19.2 if a replica discovers from a raft message that it is an
+// old replica then it knows that it has been removed and re-added to the range.
+// In this case the Replica eagerly destroys itself and its data.
+//
+// Given this behavior there are 2 troubling cases with regards to splits.
+//
+//   * In all cases we begin with the s1 processing a presplit snapshot for r20.
+//     Let's assume after the split the store should have r21/3.
+//
+//   * Store 1 receives a message for r21/3 prior to acquiring the split lock
+//     in r21. This will create an uninitialized r21/3 which may write
+//     HardState.
+//
+//   * Before the r20 processes the split r21 is removed and re-added to
+//     s1 as r21/4. s1 receives a raft message destined for r21/4 and proceeds
+//     to destroy its uninitialized r21/3, laying down a tombstone at 4 in the
+//     process.
+//
+//  1) s1 processes the split and finds the RHS to be an uninitialized replica
+//     with a higher replica ID.
+//
+//  2) s1 crashes before processing the split, forgetting the replica ID of the
+//     RHS.
+//
+// In both cases we should not synthesize a HardState for the RHS as it would
+// contain a non-zero Commit index which the RHS, which is known to be a later
+// replica than the split, should not have until it has received a snapshot.
+// Furthermore we must destroy the data that the RHS would have inherited.
+// See https://github.com/cockroachdb/cockroach/issues/40470.
+func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Skip("still WIP")
+	sc := storage.TestStoreConfig(nil)
+	// Newly-started stores (including the "rogue" one) should not GC
+	// their replicas. We'll turn this back on when needed.
+	sc.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+	}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	// We're going to set up the cluster with partitioning so that we can
+	// partition node 0 from the others. We do this by installing
+	// unreliableRaftHandler listeners on all three Stores which we can enable
+	// and disable with an atomic. The handler on the partitioned store filters
+	// out all messages while the handler on the other two stores only filters
+	// out messages from the partitioned store. When activated the configuration
+	// looks like:
+	//
+	//           [0]
+	//          x  x
+	//         /    \
+	//        x      x
+	//      [1]<---->[2]
+	const partStore = 0
+	var partitioned atomic.Value
+	partitioned.Store(false)
+	partRepl, err := mtc.stores[partStore].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partReplDesc, err := partRepl.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []int{0, 1, 2} {
+		s := s
+		h := &unreliableRaftHandler{
+			rangeID: 1,
+			RaftMessageHandler: &mtcStoreRaftMessageHandler{
+				mtc:      mtc,
+				storeIdx: s,
+			},
+		}
+		// Only filter messages from the partitioned store on the other
+		// two stores.
+		h.dropReq = func(req *storage.RaftMessageRequest) bool {
+			return partitioned.Load().(bool) &&
+				(s == partStore || req.FromReplica.StoreID == partRepl.StoreID())
+		}
+		h.dropHB = func(hb *storage.RaftHeartbeat) bool {
+			return partitioned.Load().(bool) &&
+				(s == partStore || hb.FromReplicaID == partReplDesc.ReplicaID)
+		}
+		mtc.transport.Listen(mtc.stores[s].Ident.StoreID, h)
+	}
+
+	// First put the range on all three nodes.
+	raftID := roachpb.RangeID(1)
+	mtc.replicateRange(raftID, 1, 2)
+
+	// Put some data in the range so we'll have something to test for.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for all nodes to catch up.
+	mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5})
+
+	// Now we partition a replica's LHS, perform a split, removes the RHS, add it
+	// back and make sure it votes. Then we'll do the two different cases of
+	// the store and not killing the store before we clear the partition.
+}
+
+// TestUpgradeFromPreemptiveSnapshot exercises scenarios where a store has
+// received a preemptive snapshot for a range and then later is added to the
+// range as a learner.
+//
+// In these cases it is critical that the store destroy the replica created by
+// the preemptive snapshot otherwise the replica may try to catch up across
+// commands which are not safe (namely merges).
+// Before learner replicas we would not add a store to a range until we had
+// successfully sent a preemptive snapshot that contained the range descriptor
+// used in the change replicas request.
+func TestUpgradeFromPreemptiveSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	var proposalFilter atomic.Value
+	noopProposalFilter := storagebase.ReplicaProposalFilter(func(storagebase.ProposalFilterArgs) *roachpb.Error {
+		return nil
+	})
+	blockAllProposalFilter := storagebase.ReplicaProposalFilter(func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		return roachpb.NewError(errors.Errorf("boom"))
+	})
+	setupTestCluster := func(t *testing.T) *testcluster.TestCluster {
+		proposalFilter.Store(noopProposalFilter)
+		tcArgs := base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						BootstrapVersion: &cluster.ClusterVersion{
+							cluster.VersionByKey(cluster.Version19_1),
+						},
+						DisableLoadBasedSplitting: true,
+						DisableMergeQueue:         true,
+						TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+							return proposalFilter.Load().(storagebase.ReplicaProposalFilter)(args)
+						},
+					},
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: 1,
+					},
+				},
+			},
+		}
+		return testcluster.StartTestCluster(t, 4, tcArgs)
+	}
+	t.Run("add after preemptive snapshot before merge", func(t *testing.T) {
+		tc := setupTestCluster(t)
+		defer tc.Stopper().Stop(ctx)
+		scratchStartKey := tc.ScratchRange(t)
+		keyA := append(scratchStartKey[:len(scratchStartKey):len(scratchStartKey)], 'a')
+
+		// Set up a scratch range on n1, n2, and n3.
+		tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1), tc.Target(2))
+		// Split that range.
+		err := tc.Server(0).DB().AdminSplit(ctx, scratchStartKey, keyA, hlc.Timestamp{})
+		require.NoError(t, err)
+		// Prevent n4 from successfully being added by blocking the proposal.
+		proposalFilter.Store(blockAllProposalFilter)
+		// Issue the add to send a preemptive snapshot.
+		_, err = tc.AddReplicas(scratchStartKey, tc.Target(3))
+		// Ensure that the add failed with our proposal filter error.
+		require.True(t, testutils.IsError(err, "boom"), err)
+		// Reset the filter.
+		proposalFilter.Store(noopProposalFilter)
+		// Merge the range back together.
+		err = tc.Server(0).DB().AdminMerge(ctx, scratchStartKey)
+		require.NoError(t, err)
+		// Upgrade the cluster to use learners.
+		_, err = tc.ServerConn(0).
+			Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
+		require.NoError(t, err)
+		// Successfully add node 4, this used to fail as node 4 would attemp to
+		// catch up from the preemptive snapshot across the merge.
+		desc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(3))
+		// Transfer the lease to node 4 and remove node 0 to ensure that it really
+		// is a part of the range.
+		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(3)))
+		tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(0))
+	})
 }

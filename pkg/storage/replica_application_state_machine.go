@@ -439,7 +439,25 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		log.Event(ctx, "applying command")
 	}
 
-	// Acquire the split or merge lock, if necessary. If a split or merge
+	// There's a nasty edge case here which only exists in 19.2 (for subtle
+	// reasons).
+	//
+	// Imagine we're catching up from a pre-emptive snapshot and we come across
+	// a merge, we're not gaurenteed that the RHS is going to be present. One
+	// option might be to destroy the current replica. Unfortunately we might
+	// also gotten raft messages and voted so we'll know our replica ID but our
+	// current view of the range descriptor will not include the current store.
+	//
+	// * One proposal is to just refuse to apply the current command and just spin
+	//   handling raft ready objects but not actually applying any commands but
+	//   detecting the illegal merge and truncating the CommittedEntries slice
+	//   to before the merge prior to calling Advance.
+	// * The other is to permit destroying an initialized replica with
+	//   nextReplicaID == Replica.mu.replicaID if the store is not in
+	//   Replica.mu.state.Desc. We'd need to make sure to preserve the hard state
+	//   in this case.
+
+	// acquire the split or merge lock, if necessary. If a split or merge
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
@@ -590,9 +608,9 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 		if err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
 		}
-		const mustClearRange = false
+		const mustUseClearRange = false
 		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, roachpb.ReplicaID(math.MaxInt32), clearRangeIDLocalOnly, mustClearRange,
+			ctx, b.batch, b.batch, roachpb.ReplicaID(math.MaxInt32), clearRangeIDLocalOnly, mustUseClearRange,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before merge")
 		}
@@ -737,7 +755,8 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// the applied state is stored in this batch, ensure that if the batch ends
 	// up not being durably committed then the entries in this batch will be
 	// applied again upon startup.
-	const sync = false
+	//debugBatch(ctx, b.batch)
+	sync := b.changeRemovesReplica
 	if err := b.batch.Commit(sync); err != nil {
 		return wrapWithNonDeterministicFailure(err, "unable to commit Raft entry batch")
 	}
@@ -791,6 +810,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 // have been applied as of this batch. It also records the Range's mvcc stats.
 func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 	if b.changeRemovesReplica {
+		log.Infof(ctx, "change removes replica")
 		return nil
 	}
 	loader := &b.r.raftMu.stateLoader

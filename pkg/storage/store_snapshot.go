@@ -744,11 +744,19 @@ func (s *Store) shouldAcceptSnapshotData(
 	}
 	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest,
 		func(ctx context.Context, r *Replica) *roachpb.Error {
+			// If the current replica is not initialized then we should accept this
+			// snapshot if it doesn't overlap existing ranges.
 			if !r.IsInitialized() {
 				s.mu.Lock()
 				defer s.mu.Unlock()
 				return roachpb.NewError(s.checkSnapshotOverlapLocked(ctx, snapHeader))
 			}
+			// If the current range is initialized then we need to accept this
+			// this snapshot. There's a hidden nasty case here during 19.2 where
+			// our currently initialized range is due to a preemptive snapshot and
+			// we've now assigned that range a replica ID. Fundamentally at this
+			// point we want to clear out the pre-emptive snapshot because applying
+			// learner snapshot over top is likely going to be problematic.
 			return nil
 		})
 	return pErr.GoError()

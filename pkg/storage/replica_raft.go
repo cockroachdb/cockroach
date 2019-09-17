@@ -1048,6 +1048,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		Term:          msg.Term,
 		Commit:        msg.Commit,
 		Quiesce:       quiesce,
+		ToIsLearner:   toReplica.GetType() == roachpb.LEARNER,
 	}
 	if log.V(4) {
 		log.Infof(ctx, "coalescing beat: %+v", beat)
@@ -1572,7 +1573,8 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
 ) (func(), error) {
-	rightRng, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID, 0, nil)
+	rightRng, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID,
+		0 /* replicaID */, nil /* creatingReplica */, false /* isLearner */)
 	if err != nil {
 		return nil, err
 	}
@@ -1594,7 +1596,14 @@ func (r *Replica) acquireMergeLock(
 	// right-hand replica in place, any snapshots for the right-hand range will
 	// block on raftMu, waiting for the merge to complete, after which the replica
 	// will realize it has been destroyed and reject the snapshot.
-	rightRepl, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID, 0, nil)
+	//
+	// There's one edge case to this requirement: the current Replica may be
+	// catching up from a pre-emptive snapshot. This case only arises in v19.2
+	// while performing the upgrade. If we detect that we're not a part of this
+	// range then it's not safe to apply this merge. In that case we need to
+	// remove the LHS replica synchronously.
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID,
+		0 /* replicaID */, nil /* creatingReplica */, false /* isLearner */)
 	if err != nil {
 		return nil, err
 	}
