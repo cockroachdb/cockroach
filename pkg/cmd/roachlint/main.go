@@ -11,6 +11,7 @@
 package main
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
@@ -22,5 +23,6 @@ func main() {
 		hash.Analyzer,
 		timer.Analyzer,
 		unconvert.Analyzer,
+		descriptormarshal.Analyzer,
 	)
 }

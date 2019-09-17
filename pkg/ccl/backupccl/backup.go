@@ -117,6 +117,23 @@ func readBackupDescriptor(
 	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
 		return BackupDescriptor{}, err
 	}
+	for _, d := range backupDesc.Descriptors {
+		// Calls to GetTable are generally frowned upon.
+		// This specific call exists to provide backwards compatibility with
+		// backups created prior to version 19.1. Starting in v19.1 the
+		// ModificationTime is always written in backups for all versions
+		// of table descriptors. In earlier cockroach versions only later
+		// table descriptor versions contain a non-empty ModificationTime.
+		// Later versions of CockroachDB use the MVCC timestamp to fill in
+		// the ModificationTime for table descriptors. When performing a restore
+		// we no longer have access to that MVCC timestamp but we can set it
+		// to a value we know will be safe.
+		if t := d.GetTable(); t == nil {
+			continue
+		} else if t.Version == 1 && t.ModificationTime.IsEmpty() {
+			t.ModificationTime = hlc.Timestamp{WallTime: 1}
+		}
+	}
 	return backupDesc, err
 }
 
@@ -178,7 +195,7 @@ func getRelevantDescChanges(
 	// obviously interesting to our backup.
 	for _, i := range descs {
 		interestingIDs[i.GetID()] = struct{}{}
-		if t := i.GetTable(); t != nil {
+		if t := i.Table(hlc.Timestamp{}); t != nil {
 			for j := t.ReplacementOf.ID; j != sqlbase.InvalidID; j = priorIDs[j] {
 				interestingIDs[j] = struct{}{}
 			}
@@ -200,7 +217,7 @@ func getRelevantDescChanges(
 			return nil, err
 		}
 		for _, i := range starting {
-			if table := i.GetTable(); table != nil {
+			if table := i.Table(hlc.Timestamp{}); table != nil {
 				// We need to add to interestingIDs so that if we later see a delete for
 				// this ID we still know it is interesting to us, even though we will not
 				// have a parentID at that point (since the delete is a nil desc).
@@ -231,7 +248,7 @@ func getRelevantDescChanges(
 		if _, ok := interestingIDs[change.ID]; ok {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			if table := change.Desc.GetTable(); table != nil {
+			if table := change.Desc.Table(hlc.Timestamp{}); table != nil {
 				if _, ok := interestingParents[table.ParentID]; ok {
 					interestingIDs[table.ID] = struct{}{}
 					interestingChanges = append(interestingChanges, change)
@@ -279,7 +296,8 @@ func getAllDescChanges(
 					return nil, err
 				}
 				r.Desc = &desc
-				if t := desc.GetTable(); t != nil && t.ReplacementOf.ID != sqlbase.InvalidID {
+				t := desc.Table(rev.Timestamp)
+				if t != nil && t.ReplacementOf.ID != sqlbase.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
 			}
@@ -302,6 +320,9 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		if err := row.ValueProto(&sqlDescs[i]); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"%s: unable to unmarshal SQL descriptor", row.Key)
+		}
+		if row.Value != nil {
+			sqlDescs[i].Table(row.Value.Timestamp)
 		}
 	}
 	return sqlDescs, nil
@@ -379,7 +400,7 @@ func spansForAllTableIndexes(
 	// in them that we didn't already get above e.g. indexes or tables that are
 	// not in latest because they were dropped during the time window in question.
 	for _, rev := range revs {
-		if tbl := rev.Desc.GetTable(); tbl != nil {
+		if tbl := rev.Desc.Table(hlc.Timestamp{}); tbl != nil {
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
@@ -1016,7 +1037,7 @@ func backupPlanHook(
 					return err
 				}
 			}
-			if tableDesc := desc.GetTable(); tableDesc != nil {
+			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
 				if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 					return err
 				}
@@ -1083,7 +1104,7 @@ func backupPlanHook(
 			tablesInPrev := make(map[sqlbase.ID]struct{})
 			dbsInPrev := make(map[sqlbase.ID]struct{})
 			for _, d := range prevBackups[len(prevBackups)-1].Descriptors {
-				if t := d.GetTable(); t != nil {
+				if t := d.Table(hlc.Timestamp{}); t != nil {
 					tablesInPrev[t.ID] = struct{}{}
 				}
 			}
@@ -1092,7 +1113,7 @@ func backupPlanHook(
 			}
 
 			for _, d := range targetDescs {
-				if t := d.GetTable(); t != nil {
+				if t := d.Table(hlc.Timestamp{}); t != nil {
 					// If we're trying to use a previous backup for this table, ideally it
 					// actually contains this table.
 					if _, ok := tablesInPrev[t.ID]; ok {
@@ -1504,7 +1525,7 @@ func maybeDowngradeTableDescsInBackupDescriptor(
 	// Copy Descriptors so we can return a shallow copy without mutating the slice.
 	copy(backupDescCopy.Descriptors, backupDesc.Descriptors)
 	for i := range backupDesc.Descriptors {
-		if tableDesc := backupDesc.Descriptors[i].GetTable(); tableDesc != nil {
+		if tableDesc := backupDesc.Descriptors[i].Table(hlc.Timestamp{}); tableDesc != nil {
 			downgraded, newDesc, err := tableDesc.MaybeDowngradeForeignKeyRepresentation(ctx, settings)
 			if err != nil {
 				return nil, err
@@ -1534,7 +1555,7 @@ func maybeUpgradeTableDescsInBackupDescriptors(
 	// descriptors so that they can be looked up.
 	for _, backupDesc := range backupDescs {
 		for _, desc := range backupDesc.Descriptors {
-			if table := desc.GetTable(); table != nil {
+			if table := desc.Table(hlc.Timestamp{}); table != nil {
 				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(table.ID))] =
 					sqlbase.WrapDescriptor(protoutil.Clone(table).(*sqlbase.TableDescriptor))
 			}
@@ -1544,7 +1565,7 @@ func maybeUpgradeTableDescsInBackupDescriptors(
 	for i := range backupDescs {
 		backupDesc := &backupDescs[i]
 		for j := range backupDesc.Descriptors {
-			if table := backupDesc.Descriptors[j].GetTable(); table != nil {
+			if table := backupDesc.Descriptors[j].Table(hlc.Timestamp{}); table != nil {
 				if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, skipFKsWithNoMatchingTable); err != nil {
 					return err
 				}
