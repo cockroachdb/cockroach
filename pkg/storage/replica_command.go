@@ -716,7 +716,7 @@ func (r *Replica) AdminMerge(
 		// Send off this batch, ensuring that intents are placed on both the local
 		// copy and meta2's copy of the right-hand side range descriptor before we
 		// send the Subsume request below. This is the precondition for sending a
-		// Subsume request; see the godoc on the Subsume request for details.
+		// Subsume request; see the godoc on batcheval.Subsume for details.
 		if err := txn.Run(ctx, b); err != nil {
 			return err
 		}
