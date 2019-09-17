@@ -344,7 +344,7 @@ function  Error
 detail    source SQL: foo ^
 
 
-# Test the SHOW INDEXES FROM DATABSE COMMAND
+# Test the SHOW INDEXES FROM DATABASE COMMAND
 statement ok
 CREATE DATABASE showdbindexestest;
 
@@ -374,3 +374,15 @@ SHOW INDEXES FROM DATABASE "$peci@l";
 ----
 table1 primary false 1 key1 ASC false false
 table2 primary false 1 key2 ASC false false
+
+# Test SHOW LOCALITY telemetry.
+query T
+SHOW LOCALITY
+----
+region=test,dc=dc1
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.locality' AND usage_count > 0
+----
+sql.show.locality
+

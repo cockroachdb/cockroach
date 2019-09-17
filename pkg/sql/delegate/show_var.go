@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // ValidVars contains the set of variable names; initialized from the SQL
@@ -28,6 +29,10 @@ var ValidVars = make(map[string]struct{})
 func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
+
+	if name == "locality" {
+		sqltelemetry.IncrementShowCounter(name)
+	}
 
 	if name == "all" {
 		return parse(
