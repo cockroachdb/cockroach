@@ -848,6 +848,8 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 func TestChangefeedTruncateRenameDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/40508")
+
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
