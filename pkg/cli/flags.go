@@ -90,35 +90,25 @@ func AddPersistentPreRunE(cmd *cobra.Command, fn func(*cobra.Command, []string) 
 	}
 }
 
-func setFlagFromEnv(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
-	if flagInfo.EnvVar != "" {
-		if value, set := envutil.EnvString(flagInfo.EnvVar, 2); set {
-			if err := f.Set(flagInfo.Name, value); err != nil {
-				panic(err)
-			}
-		}
-	}
-}
-
 // StringFlag creates a string flag and registers it with the FlagSet.
 func StringFlag(f *pflag.FlagSet, valPtr *string, flagInfo cliflags.FlagInfo, defaultVal string) {
 	f.StringVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
 
-	setFlagFromEnv(f, flagInfo)
+	registerEnvVarDefault(f, flagInfo)
 }
 
 // IntFlag creates an int flag and registers it with the FlagSet.
 func IntFlag(f *pflag.FlagSet, valPtr *int, flagInfo cliflags.FlagInfo, defaultVal int) {
 	f.IntVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
 
-	setFlagFromEnv(f, flagInfo)
+	registerEnvVarDefault(f, flagInfo)
 }
 
 // BoolFlag creates a bool flag and registers it with the FlagSet.
 func BoolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo, defaultVal bool) {
 	f.BoolVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
 
-	setFlagFromEnv(f, flagInfo)
+	registerEnvVarDefault(f, flagInfo)
 }
 
 // DurationFlag creates a duration flag and registers it with the FlagSet.
@@ -127,14 +117,14 @@ func DurationFlag(
 ) {
 	f.DurationVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
 
-	setFlagFromEnv(f, flagInfo)
+	registerEnvVarDefault(f, flagInfo)
 }
 
 // VarFlag creates a custom-variable flag and registers it with the FlagSet.
 func VarFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 	f.VarP(value, flagInfo.Name, flagInfo.Shorthand, flagInfo.Usage())
 
-	setFlagFromEnv(f, flagInfo)
+	registerEnvVarDefault(f, flagInfo)
 }
 
 // StringSlice creates a string slice flag and registers it with the FlagSet.
@@ -142,7 +132,7 @@ func StringSlice(
 	f *pflag.FlagSet, valPtr *[]string, flagInfo cliflags.FlagInfo, defaultVal []string,
 ) {
 	f.StringSliceVar(valPtr, flagInfo.Name, defaultVal, flagInfo.Usage())
-	setFlagFromEnv(f, flagInfo)
+	registerEnvVarDefault(f, flagInfo)
 }
 
 // aliasStrVar wraps a string configuration option and is meant
@@ -229,8 +219,21 @@ const maxClusterNameLength = 256
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
+// flagSetForCmd is a replacement for cmd.Flag() that properly merges
+// persistent and local flags, until the upstream bug
+// https://github.com/spf13/cobra/issues/961 has been fixed.
+func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet {
+	_ = cmd.LocalFlags() // force merge persistent+local flags
+	return cmd.Flags()
+}
+
 func init() {
 	initCLIDefaults()
+	defer func() {
+		if err := processEnvVarDefaults(); err != nil {
+			panic(err)
+		}
+	}()
 
 	// Every command but start will inherit the following setting.
 	AddPersistentPreRunE(cockroachCmd, func(cmd *cobra.Command, _ []string) error {
@@ -555,7 +558,7 @@ func init() {
 	// Make the other non-SQL client commands also recognize --url in
 	// strict SSL mode.
 	for _, cmd := range clientCmds {
-		if f := cmd.Flags().Lookup(cliflags.URL.Name); f != nil {
+		if f := flagSetForCmd(cmd).Lookup(cliflags.URL.Name); f != nil {
 			// --url already registered above, nothing to do.
 			continue
 		}
@@ -624,6 +627,51 @@ func init() {
 	}
 }
 
+// processEnvVarDefaults injects the current value of flag-related
+// environment variables into the initial value of the settings linked
+// to the flags, during initialization and before the command line is
+// actually parsed. For example, it will inject the value of
+// $COCKROACH_URL into the urlParser object linked to the --url flag.
+func processEnvVarDefaults() error {
+	for envVar, d := range envVarDefaults {
+		if err := d.flagSet.Set(d.flagName, d.envValue); err != nil {
+			return errors.Wrapf(err, "setting --%s from %s", d.flagName, envVar)
+		}
+	}
+	return nil
+}
+
+// envVarDefault describes a delayed default initialization of the
+// setting covered by a flag from the value of an environment
+// variable.
+type envVarDefault struct {
+	envValue string
+	flagName string
+	flagSet  *pflag.FlagSet
+}
+
+// envVarDefaults records the initializations from environment variables
+// for processing at the end of initialization, before flag parsing.
+var envVarDefaults = map[string]envVarDefault{}
+
+// registerEnvVarDefault registers a deferred initialization of a flag
+// from an environment variable.
+func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
+	if flagInfo.EnvVar == "" {
+		return
+	}
+	value, set := envutil.EnvString(flagInfo.EnvVar, 2)
+	if !set {
+		// Env var not set. Nothing to do.
+		return
+	}
+	envVarDefaults[flagInfo.EnvVar] = envVarDefault{
+		envValue: value,
+		flagName: flagInfo.Name,
+		flagSet:  f,
+	}
+}
+
 func extraServerFlagInit(cmd *cobra.Command) error {
 	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
@@ -645,11 +693,11 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverSQLPort = serverListenPort
 	}
 	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
-	serverCfg.SplitListenSQL = cmd.Flags().Lookup(cliflags.ListenSQLAddr.Name).Changed
+	serverCfg.SplitListenSQL = flagSetForCmd(cmd).Lookup(cliflags.ListenSQLAddr.Name).Changed
 
 	// Fill in the defaults for --advertise-sql-addr.
-	advSpecified := cmd.Flags().Lookup(cliflags.AdvertiseAddr.Name).Changed ||
-		cmd.Flags().Lookup(cliflags.AdvertiseHost.Name).Changed
+	advSpecified := flagSetForCmd(cmd).Lookup(cliflags.AdvertiseAddr.Name).Changed ||
+		flagSetForCmd(cmd).Lookup(cliflags.AdvertiseHost.Name).Changed
 	if serverSQLAdvertiseAddr == "" {
 		if advSpecified {
 			serverSQLAdvertiseAddr = serverAdvertiseAddr
@@ -704,9 +752,7 @@ func extraClientFlagInit() {
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
-	pf := cmd.Flags()
-
-	vf := pf.Lookup(logflags.LogToStderrName)
+	vf := flagSetForCmd(cmd).Lookup(logflags.LogToStderrName)
 
 	// if `--logtostderr` was not specified and no log directory was
 	// set, or `--logtostderr` was specified but without explicit level,
