@@ -351,9 +351,8 @@ type mergeJoinBase struct {
 	right mergeJoinInput
 
 	// Output buffer definition.
-	output            coldata.Batch
-	needToResetOutput bool
-	outputBatchSize   uint16
+	output          coldata.Batch
+	outputBatchSize uint16
 	// outputReady is a flag to indicate that merge joiner is ready to emit an
 	// output batch.
 	outputReady bool
@@ -402,10 +401,10 @@ func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
 }
 
 func (o *mergeJoinBase) Init() {
-	o.initWithBatchSize(coldata.BatchSize)
+	o.initWithOutputBatchSize(coldata.BatchSize)
 }
 
-func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
+func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
 	o.output = coldata.NewMemBatchWithSize(o.getOutColTypes(), int(outBatchSize))
 	o.left.source.Init()
 	o.right.source.Init()
