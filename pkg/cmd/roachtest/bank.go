@@ -32,8 +32,9 @@ import (
 )
 
 const (
-	bankMaxTransfer = 999
-	bankNumAccounts = 999
+	bankStartingAmount = 999
+	bankMaxTransfer    = 999
+	bankNumAccounts    = 999
 )
 
 type bankClient struct {
@@ -138,7 +139,7 @@ CREATE TABLE bank.accounts (
 		if i > 0 {
 			placeholders.WriteString(", ")
 		}
-		fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
+		fmt.Fprintf(&placeholders, "($%d, %d)", i+1, bankStartingAmount)
 		values = append(values, i)
 	}
 	stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
@@ -177,13 +178,13 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	client := &s.clients[0]
 
 	var sum int
-	var accounts uint64
+	var numAccounts uint64
 	err := retry.ForDuration(30*time.Second, func() error {
 		// Hold the read lock on the client to prevent it being restarted by
 		// chaos monkey.
 		client.RLock()
 		defer client.RUnlock()
-		err := client.db.QueryRowContext(ctx, "SELECT count(*), sum(balance) FROM bank.accounts").Scan(&accounts, &sum)
+		err := client.db.QueryRowContext(ctx, "SELECT count(*), sum(balance) FROM bank.accounts").Scan(&numAccounts, &sum)
 		if err != nil && !pgerror.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}
@@ -192,12 +193,12 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum != 0 {
-		t.Fatalf("the bank is not in good order, total value: %d", sum)
+	if expected := bankStartingAmount * bankNumAccounts; sum != expected {
+		t.Fatalf("the bank is not in good order, total value: %d, expected: %d", sum, expected)
 	}
 
-	if accounts < bankNumAccounts {
-		t.Fatalf("the bank is not in good order, total value: %d", sum)
+	if numAccounts != bankNumAccounts {
+		t.Fatalf("the bank is not in good order, total num accounts: %d, expected: %d", numAccounts, bankNumAccounts)
 	}
 }
 
@@ -248,6 +249,7 @@ func (s *bankState) startChaosMonkey(
 					break
 				}
 				t.l.Printf("round %d: restarting %d\n", curRound, i)
+
 				c.Stop(ctx, c.Node(i))
 				c.Start(ctx, t, c.Node(i))
 				if stopClients {

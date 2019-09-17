@@ -1365,7 +1365,7 @@ func (g *Gossip) bootstrap() {
 			select {
 			case <-g.stalledCh:
 				log.Eventf(ctx, "detected stall; commencing bootstrap")
-				// break
+				// continue
 			case <-g.server.stopper.ShouldStop():
 				return
 			}

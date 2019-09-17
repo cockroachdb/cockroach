@@ -121,7 +121,8 @@ type test struct {
 	// artifactsDir is the path to the directory holding all the artifacts for
 	// this test. It will contain a test.log file and cluster logs.
 	artifactsDir string
-	mu           struct {
+
+	mu struct {
 		syncutil.RWMutex
 		done   bool
 		failed bool
