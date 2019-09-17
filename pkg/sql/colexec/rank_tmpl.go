@@ -27,6 +27,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
+// TODO(yuzefovich): add benchmarks.
+
+// NewRankOperator creates a new Operator that computes window function RANK or
+// DENSE_RANK. dense distinguishes between the two functions. input *must*
+// already be ordered on orderingCols (which should not be empty). outputColIdx
+// specifies in which coldata.Vec the operator should put its output (if there
+// is no such column, a new column is appended).
+func NewRankOperator(
+	input Operator,
+	inputTyps []coltypes.T,
+	dense bool,
+	orderingCols []uint32,
+	outputColIdx int,
+	partitionColIdx int,
+) (Operator, error) {
+	if len(orderingCols) == 0 {
+		return NewConstOp(input, coltypes.Int64, int64(1), outputColIdx)
+	}
+	op, outputCol, err := OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
+	if err != nil {
+		return nil, err
+	}
+	initFields := rankInitFields{
+		OneInputNode:    NewOneInputNode(op),
+		distinctCol:     outputCol,
+		outputColIdx:    outputColIdx,
+		partitionColIdx: partitionColIdx,
+	}
+	if dense {
+		if partitionColIdx != -1 {
+			return &denseRankWithPartitionOp{rankInitFields: initFields}, nil
+		}
+		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil
+	}
+	if partitionColIdx != -1 {
+		return &rankWithPartitionOp{rankInitFields: initFields}, nil
+	}
+	return &rankNoPartitionOp{rankInitFields: initFields}, nil
+}
+
 // {{/*
 
 // _UPDATE_RANK_ is the template function for updating the state of rank
