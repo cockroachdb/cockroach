@@ -77,6 +77,7 @@ func loadBackupDescs(
 		}
 		backupDescs[i] = desc
 	}
+
 	if len(backupDescs) == 0 {
 		return nil, errors.Newf("no backups found")
 	}
