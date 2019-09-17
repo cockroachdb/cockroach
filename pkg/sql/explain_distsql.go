@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -116,6 +117,10 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
+		if len(n.subqueryPlans) > 0 {
+			return errors.New("running EXPLAIN (DISTSQL) on this query is " +
+				"unsupported because of the presence of subqueries")
+		}
 		return err
 	}
 
