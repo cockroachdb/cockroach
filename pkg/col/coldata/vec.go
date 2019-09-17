@@ -145,16 +145,12 @@ func NewMemColumn(t coltypes.T, n int) Vec {
 		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
 	case coltypes.Bytes:
 		return &memColumn{t: t, col: NewBytes(n), nulls: nulls}
-	case coltypes.Int8:
-		return &memColumn{t: t, col: make([]int8, n), nulls: nulls}
 	case coltypes.Int16:
 		return &memColumn{t: t, col: make([]int16, n), nulls: nulls}
 	case coltypes.Int32:
 		return &memColumn{t: t, col: make([]int32, n), nulls: nulls}
 	case coltypes.Int64:
 		return &memColumn{t: t, col: make([]int64, n), nulls: nulls}
-	case coltypes.Float32:
-		return &memColumn{t: t, col: make([]float32, n), nulls: nulls}
 	case coltypes.Float64:
 		return &memColumn{t: t, col: make([]float64, n), nulls: nulls}
 	case coltypes.Decimal:

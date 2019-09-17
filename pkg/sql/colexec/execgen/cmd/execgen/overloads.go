@@ -343,8 +343,8 @@ func init() {
 				switch to {
 				case coltypes.Bool:
 					ov.AssignFunc = castIdentity
-				case coltypes.Int8, coltypes.Int16, coltypes.Int32,
-					coltypes.Int64, coltypes.Float32, coltypes.Float64:
+				case coltypes.Int16, coltypes.Int32,
+					coltypes.Int64, coltypes.Float64:
 					ov.AssignFunc = func(to, from string) string {
 						convStr := `
 							%[1]s = 0
@@ -385,23 +385,6 @@ func init() {
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
-		case coltypes.Int8:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
-					ov.AssignFunc = intToDecimal
-				case coltypes.Int8:
-					ov.AssignFunc = castIdentity
-				case coltypes.Float32:
-					ov.AssignFunc = intToFloat(32)
-				case coltypes.Float64:
-					ov.AssignFunc = intToFloat(64)
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
 		case coltypes.Int16:
 			for _, to := range inputTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
@@ -412,8 +395,6 @@ func init() {
 					ov.AssignFunc = intToDecimal
 				case coltypes.Int16:
 					ov.AssignFunc = castIdentity
-				case coltypes.Float32:
-					ov.AssignFunc = intToFloat(32)
 				case coltypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
@@ -429,8 +410,6 @@ func init() {
 					ov.AssignFunc = intToDecimal
 				case coltypes.Int32:
 					ov.AssignFunc = castIdentity
-				case coltypes.Float32:
-					ov.AssignFunc = intToFloat(32)
 				case coltypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
@@ -446,31 +425,8 @@ func init() {
 					ov.AssignFunc = intToDecimal
 				case coltypes.Int64:
 					ov.AssignFunc = castIdentity
-				case coltypes.Float32:
-					ov.AssignFunc = intToFloat(32)
 				case coltypes.Float64:
 					ov.AssignFunc = intToFloat(64)
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		case coltypes.Float32:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
-					ov.AssignFunc = floatToDecimal
-				case coltypes.Int8:
-					ov.AssignFunc = floatToInt(8, 32)
-				case coltypes.Int16:
-					ov.AssignFunc = floatToInt(16, 32)
-				case coltypes.Int32:
-					ov.AssignFunc = floatToInt(32, 32)
-				case coltypes.Int64:
-					ov.AssignFunc = floatToInt(64, 32)
-				case coltypes.Float32:
-					ov.AssignFunc = castIdentity
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
@@ -482,8 +438,6 @@ func init() {
 					ov.AssignFunc = numToBool
 				case coltypes.Decimal:
 					ov.AssignFunc = floatToDecimal
-				case coltypes.Int8:
-					ov.AssignFunc = floatToInt(8, 64)
 				case coltypes.Int16:
 					ov.AssignFunc = floatToInt(16, 64)
 				case coltypes.Int32:
@@ -1062,9 +1016,7 @@ func registerTypeCustomizers() {
 		}
 	}
 	// Use a customizer of appropriate width when widths are the same.
-	registerTypeCustomizer(coltypePair{coltypes.Float32, coltypes.Float32}, floatCustomizer{width: 32})
 	registerTypeCustomizer(coltypePair{coltypes.Float64, coltypes.Float64}, floatCustomizer{width: 64})
-	registerTypeCustomizer(coltypePair{coltypes.Int8, coltypes.Int8}, intCustomizer{width: 8})
 	registerTypeCustomizer(coltypePair{coltypes.Int16, coltypes.Int16}, intCustomizer{width: 16})
 	registerTypeCustomizer(coltypePair{coltypes.Int32, coltypes.Int32}, intCustomizer{width: 32})
 	registerTypeCustomizer(coltypePair{coltypes.Int64, coltypes.Int64}, intCustomizer{width: 64})
@@ -1109,9 +1061,7 @@ func registerBinOpOutputTypes() {
 		}
 		// Use an output type of the same width when input widths are the same.
 		binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, coltypes.Decimal}] = coltypes.Decimal
-		binOpOutputTypes[binOp][coltypePair{coltypes.Float32, coltypes.Float32}] = coltypes.Float32
 		binOpOutputTypes[binOp][coltypePair{coltypes.Float64, coltypes.Float64}] = coltypes.Float64
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int8, coltypes.Int8}] = coltypes.Int8
 		binOpOutputTypes[binOp][coltypePair{coltypes.Int16, coltypes.Int16}] = coltypes.Int16
 		binOpOutputTypes[binOp][coltypePair{coltypes.Int32, coltypes.Int32}] = coltypes.Int32
 		binOpOutputTypes[binOp][coltypePair{coltypes.Int64, coltypes.Int64}] = coltypes.Int64

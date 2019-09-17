@@ -72,11 +72,9 @@ func NewArrowBatchConverter(typs []coltypes.T) (*ArrowBatchConverter, error) {
 }
 
 const (
-	sizeOfInt8    = int(unsafe.Sizeof(int8(0)))
 	sizeOfInt16   = int(unsafe.Sizeof(int16(0)))
 	sizeOfInt32   = int(unsafe.Sizeof(int32(0)))
 	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
-	sizeOfFloat32 = int(unsafe.Sizeof(float32(0)))
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
 )
 
@@ -85,11 +83,9 @@ var supportedTypes = func() map[coltypes.T]struct{} {
 	for _, t := range []coltypes.T{
 		coltypes.Bool,
 		coltypes.Bytes,
-		coltypes.Int8,
 		coltypes.Int16,
 		coltypes.Int32,
 		coltypes.Int64,
-		coltypes.Float32,
 		coltypes.Float64,
 	} {
 		typs[t] = struct{}{}
@@ -150,10 +146,6 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		)
 
 		switch typ {
-		case coltypes.Int8:
-			ints := vec.Int8()[:n]
-			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-			datumSize = sizeOfInt8
 		case coltypes.Int16:
 			ints := vec.Int16()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
@@ -166,10 +158,6 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			ints := vec.Int64()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
 			datumSize = sizeOfInt64
-		case coltypes.Float32:
-			floats := vec.Float32()[:n]
-			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
-			datumSize = sizeOfFloat32
 		case coltypes.Float64:
 			floats := vec.Float64()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
@@ -262,10 +250,6 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		} else {
 			var col interface{}
 			switch typ {
-			case coltypes.Int8:
-				intArr := array.NewInt8Data(d)
-				col = intArr.Int8Values()
-				arr = intArr
 			case coltypes.Int16:
 				intArr := array.NewInt16Data(d)
 				col = intArr.Int16Values()
@@ -278,10 +262,6 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 				intArr := array.NewInt64Data(d)
 				col = intArr.Int64Values()
 				arr = intArr
-			case coltypes.Float32:
-				floatArr := array.NewFloat32Data(d)
-				col = floatArr.Float32Values()
-				arr = floatArr
 			case coltypes.Float64:
 				floatArr := array.NewFloat64Data(d)
 				col = floatArr.Float64Values()

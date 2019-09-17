@@ -11,18 +11,16 @@ func _() {
 	_ = x[Bool-0]
 	_ = x[Bytes-1]
 	_ = x[Decimal-2]
-	_ = x[Int8-3]
-	_ = x[Int16-4]
-	_ = x[Int32-5]
-	_ = x[Int64-6]
-	_ = x[Float32-7]
-	_ = x[Float64-8]
-	_ = x[Unhandled-9]
+	_ = x[Int16-3]
+	_ = x[Int32-4]
+	_ = x[Int64-5]
+	_ = x[Float64-6]
+	_ = x[Unhandled-7]
 }
 
-const _T_name = "BoolBytesDecimalInt8Int16Int32Int64Float32Float64Unhandled"
+const _T_name = "BoolBytesDecimalInt16Int32Int64Float64Unhandled"
 
-var _T_index = [...]uint8{0, 4, 9, 16, 20, 25, 30, 35, 42, 49, 58}
+var _T_index = [...]uint8{0, 4, 9, 16, 21, 26, 31, 38}
 
 func (i T) String() string {
 	if i < 0 || i >= T(len(_T_index)-1) {

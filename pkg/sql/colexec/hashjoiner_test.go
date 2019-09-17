@@ -547,30 +547,30 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []coltypes.T{coltypes.Bytes, coltypes.Bool, coltypes.Int8, coltypes.Int16, coltypes.Int32, coltypes.Int64, coltypes.Bytes},
-			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int32, coltypes.Int16, coltypes.Int8, coltypes.Bool, coltypes.Bytes},
+			leftTypes:  []coltypes.T{coltypes.Bytes, coltypes.Bool, coltypes.Int16, coltypes.Int32, coltypes.Int64, coltypes.Bytes},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int32, coltypes.Int16, coltypes.Bool, coltypes.Bytes},
 
 			// Test multiple equality columns of different coltypes.
 			leftTuples: tuples{
-				{"foo", false, int8(10), int16(100), int32(1000), int64(10000), "aaa"},
-				{"foo", true, 10, 100, 1000, 10000, "bbb"},
-				{"foo1", false, 10, 100, 1000, 10000, "ccc"},
-				{"foo", false, 20, 100, 1000, 10000, "ddd"},
-				{"foo", false, 10, 200, 1000, 10000, "eee"},
-				{"bar", true, 30, 300, 3000, 30000, "fff"},
+				{"foo", false, int16(100), int32(1000), int64(10000), "aaa"},
+				{"foo", true, 100, 1000, 10000, "bbb"},
+				{"foo1", false, 100, 1000, 10000, "ccc"},
+				{"foo", false, 100, 1000, 10000, "ddd"},
+				{"foo", false, 200, 1000, 10000, "eee"},
+				{"bar", true, 300, 3000, 30000, "fff"},
 			},
 			rightTuples: tuples{
-				{int64(10000), int32(1000), int16(100), int8(10), false, "foo1"},
-				{10000, 1000, 100, 10, false, "foo"},
-				{30000, 3000, 300, 30, true, "bar"},
-				{10000, 1000, 100, 20, false, "foo"},
-				{30000, 3000, 300, 30, false, "bar"},
-				{10000, 1000, 100, 10, false, "random"},
+				{int64(10000), int32(1000), int16(100), false, "foo1"},
+				{10000, 1000, 100, false, "foo"},
+				{30000, 3000, 300, true, "bar"},
+				{10000, 1000, 100, false, "foo"},
+				{30000, 3000, 300, false, "bar"},
+				{10000, 1000, 100, false, "random"},
 			},
 
-			leftEqCols:   []uint32{0, 1, 2, 3, 4, 5},
-			rightEqCols:  []uint32{5, 4, 3, 2, 1, 0},
-			leftOutCols:  []uint32{6},
+			leftEqCols:   []uint32{0, 1, 2, 3, 4},
+			rightEqCols:  []uint32{4, 3, 2, 1, 0},
+			leftOutCols:  []uint32{5},
 			rightOutCols: []uint32{},
 
 			buildDistinct: true,
@@ -583,32 +583,32 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 		{
-			leftTypes:  []coltypes.T{coltypes.Float32, coltypes.Float64},
-			rightTypes: []coltypes.T{coltypes.Float64, coltypes.Float32},
+			leftTypes:  []coltypes.T{coltypes.Float64},
+			rightTypes: []coltypes.T{coltypes.Float64},
 
 			// Test equality columns of type float.
 			leftTuples: tuples{
-				{float32(1.1), float64(33.333)},
-				{float32(1.1), float64(44.4444)},
-				{float32(2.22), float64(55.55555)},
-				{float32(2.22), float64(44.4444)},
+				{float64(33.333)},
+				{float64(44.4444)},
+				{float64(55.55555)},
+				{float64(44.4444)},
 			},
 			rightTuples: tuples{
-				{float64(44.4444), float32(2.22)},
-				{float64(55.55555), float32(1.1)},
-				{float64(33.333), float32(1.1)},
+				{float64(44.4444)},
+				{float64(55.55555)},
+				{float64(33.333)},
 			},
 
-			leftEqCols:   []uint32{0, 1},
-			rightEqCols:  []uint32{1, 0},
-			leftOutCols:  []uint32{0, 1},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
 
 			buildDistinct: true,
 
 			expectedTuples: tuples{
-				{float32(2.22), float64(44.4444)},
-				{float32(1.1), float64(33.333)},
+				{float64(44.4444)},
+				{float64(33.333)},
 			},
 		},
 		{
