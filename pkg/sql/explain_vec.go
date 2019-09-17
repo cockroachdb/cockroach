@@ -16,11 +16,16 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // explainVecNode is a planNode that wraps a plan and returns
@@ -28,7 +33,8 @@ import (
 type explainVecNode struct {
 	optColumnsSlot
 
-	plan planNode
+	options *tree.ExplainOptions
+	plan    planNode
 
 	stmtType tree.StatementType
 
@@ -37,59 +43,41 @@ type explainVecNode struct {
 		// The current row returned by the node.
 		values tree.Datums
 	}
+	subqueryPlans []subquery
 }
 
 type flowWithNode struct {
 	nodeID roachpb.NodeID
-	flow   *distsqlpb.FlowSpec
+	flow   *execinfrapb.FlowSpec
 }
 
 func (n *explainVecNode) startExec(params runParams) error {
-	// Trigger limit propagation.
-	params.p.prepareForDistSQLSupportCheck()
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-
-	var recommendation distRecommendation
-	if _, ok := n.plan.(distSQLExplainable); ok {
-		recommendation = shouldDistribute
-	} else {
-		recommendation, _ = distSQLPlanner.checkSupportForNode(n.plan)
-	}
-
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
-	planCtx.ignoreClose = true
-	planCtx.planner = params.p
-	planCtx.stmtType = n.stmtType
-	planCtx.noEvalSubqueries = true
-
-	var plan PhysicalPlan
-	var err error
-	if planNode, ok := n.plan.(distSQLExplainable); ok {
-		plan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
-	} else {
-		plan, err = distSQLPlanner.createPlanForNode(planCtx, n.plan)
-	}
+	willDistributePlan, _ := willDistributePlan(distSQLPlanner, n.plan, params)
+	outerSubqueries := params.p.curPlan.subqueryPlans
+	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistributePlan)
+	defer func() {
+		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+	}()
+	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
 	if err != nil {
+		if len(n.subqueryPlans) > 0 {
+			return errors.New("running EXPLAIN (VEC) on this query is " +
+				"unsupported because of the presence of subqueries")
+		}
 		return err
 	}
 
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
-
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
+	flowCtx := makeFlowCtx(planCtx, plan, params)
 
-	var localState distsqlrun.LocalState
-	localState.EvalContext = planCtx.EvalContext()
-	if planCtx.isLocal {
-		localState.IsLocal = true
-		localState.LocalProcs = plan.LocalProcessors
-	}
-	flowCtx := &distsqlrun.FlowCtx{
-		NodeID:  planCtx.EvalContext().NodeID,
-		EvalCtx: planCtx.EvalContext(),
-		Cfg:     &distsqlrun.ServerConfig{},
-	}
+	// Temporarily set vectorize to on so that we can get the whole plan back even
+	// if we wouldn't support it due to lack of streaming.
+	origMode := flowCtx.EvalCtx.SessionData.VectorizeMode
+	flowCtx.EvalCtx.SessionData.VectorizeMode = sessiondata.VectorizeExperimentalOn
+	defer func() { flowCtx.EvalCtx.SessionData.VectorizeMode = origMode }()
 
 	sortedFlows := make([]flowWithNode, 0, len(flows))
 	for nodeID, flow := range flows {
@@ -97,29 +85,83 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 	// Sort backward, since the first thing you add to a treeprinter will come last.
 	sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
-	tp := treeprinter.New()
+	tp := treeprinter.NewWithIndent(false /* leftPad */, true /* rightPad */, 0 /* edgeLength */)
 	root := tp.Child("")
+	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		opChains, err := distsqlrun.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
+		opChains, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
 		if err != nil {
 			return err
 		}
 		for _, op := range opChains {
-			formatOpChain(op, node)
+			formatOpChain(op, node, verbose)
 		}
 	}
 	n.run.lines = tp.FormattedRows()
 	return nil
 }
 
-func formatOpChain(operator exec.OpNode, node treeprinter.Node) {
-	doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()))
+func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *execinfra.FlowCtx {
+	var localState distsql.LocalState
+	localState.EvalContext = planCtx.EvalContext()
+	if planCtx.isLocal {
+		localState.IsLocal = true
+		localState.LocalProcs = plan.LocalProcessors
+	}
+	flowCtx := &execinfra.FlowCtx{
+		NodeID:  planCtx.EvalContext().NodeID,
+		EvalCtx: planCtx.EvalContext(),
+		Cfg: &execinfra.ServerConfig{
+			Settings:    params.p.execCfg.Settings,
+			DiskMonitor: &mon.BytesMonitor{},
+		},
+	}
+	return flowCtx
 }
-func doFormatOpChain(operator exec.OpNode, node treeprinter.Node) {
+
+func makeExplainVecPlanningCtx(
+	distSQLPlanner *DistSQLPlanner,
+	params runParams,
+	stmtType tree.StatementType,
+	subqueryPlans []subquery,
+	willDistributePlan bool,
+) *PlanningCtx {
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx.isLocal = !willDistributePlan
+	planCtx.ignoreClose = true
+	planCtx.planner = params.p
+	planCtx.stmtType = stmtType
+	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
+	for i := range planCtx.planner.curPlan.subqueryPlans {
+		p := &planCtx.planner.curPlan.subqueryPlans[i]
+		// Fake subquery results - they're not important for our explain output.
+		p.started = true
+		p.result = tree.DNull
+	}
+	return planCtx
+}
+
+func shouldOutput(operator execinfra.OpNode, verbose bool) bool {
+	_, nonExplainable := operator.(colexec.NonExplainable)
+	return !nonExplainable || verbose
+}
+
+func formatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
+	if shouldOutput(operator, verbose) {
+		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose)
+	} else {
+		doFormatOpChain(operator, node, verbose)
+	}
+}
+func doFormatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
 	for i := 0; i < operator.ChildCount(); i++ {
 		child := operator.Child(i)
-		doFormatOpChain(child, node.Child(reflect.TypeOf(child).String()))
+		if shouldOutput(child, verbose) {
+			doFormatOpChain(child, node.Child(reflect.TypeOf(child).String()), verbose)
+		} else {
+			doFormatOpChain(child, node, verbose)
+		}
 	}
 }
 

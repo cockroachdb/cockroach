@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -631,7 +631,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				return nil
 			}
 			knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-				DistSQL.(*distsqlrun.TestingKnobs).
+				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = waitSinkHook
 
@@ -903,7 +903,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		beforeEmitRowCh := make(chan struct{}, 2)
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsqlrun.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			<-beforeEmitRowCh
@@ -1045,7 +1045,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsqlrun.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		origAfterSinkFlushHook := knobs.AfterSinkFlush
 		var failSink int64
@@ -1124,7 +1124,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		wait := make(chan struct{})
 		resume := make(chan struct{})
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsqlrun.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			if atomic.LoadInt32(&shouldWait) == 0 {
@@ -1206,7 +1206,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		wait := make(chan struct{})
 		resume := make(chan struct{})
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsqlrun.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			if atomic.LoadInt32(&shouldWait) == 0 {
@@ -1404,6 +1404,30 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `ca_cert requires tls_enabled=true`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?&ca_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `param client_cert must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_cert=!`,
+	)
+	sqlDB.ExpectErr(
+		t, `param client_key must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_key=!`,
+	)
+	sqlDB.ExpectErr(
+		t, `client_cert requires tls_enabled=true`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `client_cert requires client_key to be set`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `client_key requires client_cert to be set`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_key=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `invalid client certificate`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_cert=Zm9v&client_key=Zm9v`,
 	)
 
 	// Sanity check kafka sasl parameters.
@@ -1670,7 +1694,7 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 
 	flushCh := make(chan struct{}, 1)
 	defer close(flushCh)
-	knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{
+	knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
 		AfterSinkFlush: func() error {
 			select {
 			case flushCh <- struct{}{}:
@@ -1778,7 +1802,7 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*distsqlrun.TestingKnobs).
+			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		// The RowContainer used internally by the memBuffer seems to request from
 		// the budget in 10240 chunks. Set this number high enough for one but not

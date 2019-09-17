@@ -837,6 +837,24 @@ project
  └── projections
       └── a.arr[0] [type=int, outer=(6)]
 
+# Regression test for #40404.
+norm expect=FoldIndirection
+SELECT (SELECT x[1]) FROM (VALUES(null::oid[])) v(x)
+----
+values
+ ├── columns: x:3(oid)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── tuple [type=tuple{oid}]
+      └── subquery [type=oid]
+           └── values
+                ├── columns: x:2(oid)
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(2)
+                └── (NULL,) [type=tuple{oid}]
+
 # --------------------------------------------------
 # FoldColumnAccess
 # --------------------------------------------------

@@ -1,0 +1,124 @@
+# LogicTest: 5node-dist
+
+statement ok
+CREATE TABLE uniontest (
+  k INT,
+  v INT
+)
+
+query TTT
+EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
+----
+·          distributed  true
+·          vectorized   false
+union      ·            ·
+ ├── scan  ·            ·
+ │         table        uniontest@primary
+ │         spans        ALL
+ └── scan  ·            ·
+·          table        uniontest@primary
+·          spans        ALL
+
+query TTT
+EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
+----
+·          distributed  true
+·          vectorized   true
+append     ·            ·
+ ├── scan  ·            ·
+ │         table        uniontest@primary
+ │         spans        ALL
+ └── scan  ·            ·
+·          table        uniontest@primary
+·          spans        ALL
+
+# Check that EXPLAIN properly releases memory for virtual tables.
+query TTT
+EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
+----
+·                        distributed  false
+·                        vectorized   false
+union                    ·            ·
+ ├── values              ·            ·
+ │                       size         1 column, 1 row
+ └── render              ·            ·
+      └── virtual table  ·            ·
+·                        source       ·
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT)
+
+query TTTTT
+EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
+----
+·                    distributed  true         ·       ·
+·                    vectorized   false        ·       ·
+sort                 ·            ·            (a)     +a
+ │                   order        +a           ·       ·
+ └── union           ·            ·            (a)     ·
+      ├── render     ·            ·            (a)     ·
+      │    │         render 0     a            ·       ·
+      │    └── scan  ·            ·            (a, c)  ·
+      │              table        abc@primary  ·       ·
+      │              spans        ALL          ·       ·
+      └── render     ·            ·            (a)     ·
+           │         render 0     a            ·       ·
+           └── scan  ·            ·            (a, b)  ·
+·                    table        abc@primary  ·       ·
+·                    spans        ALL          ·       ·
+
+# Regression test for #32723.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
+----
+·                      distributed    true             ·                         ·
+·                      vectorized     false            ·                         ·
+render                 ·              ·                (a)                       ·
+ │                     render 0       a                ·                         ·
+ └── union             ·              ·                (a, a)                    ·
+      ├── render       ·              ·                (a, a)                    ·
+      │    │           render 0       a                ·                         ·
+      │    │           render 1       a                ·                         ·
+      │    └── values  ·              ·                (a)                       ·
+      │                size           1 column, 1 row  ·                         ·
+      │                row 0, expr 0  ''               ·                         ·
+      └── render       ·              ·                ("?column?", "?column?")  ·
+           │           render 0       "?column?"       ·                         ·
+           │           render 1       "?column?"       ·                         ·
+           └── values  ·              ·                ("?column?")              ·
+·                      size           1 column, 1 row  ·                         ·
+·                      row 0, expr 0  ''               ·                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
+UNION ALL ((SELECT '', '', 'x') EXCEPT (VALUES ('', '', 'x')))
+----
+·                      distributed    true              ·                                     ·
+·                      vectorized     false             ·                                     ·
+render                 ·              ·                 ("?column?", "?column?", "?column?")  ·
+ │                     render 0       "?column?"        ·                                     ·
+ │                     render 1       "?column?"        ·                                     ·
+ │                     render 2       "?column?"        ·                                     ·
+ └── union             ·              ·                 ("?column?", "?column?", "?column?")  ·
+      ├── render       ·              ·                 ("?column?", "?column?", "?column?")  ·
+      │    │           render 0       "?column?"        ·                                     ·
+      │    │           render 1       "?column?"        ·                                     ·
+      │    │           render 2       "?column?"        ·                                     ·
+      │    └── values  ·              ·                 ("?column?", "?column?")              ·
+      │                size           2 columns, 1 row  ·                                     ·
+      │                row 0, expr 0  ''                ·                                     ·
+      │                row 0, expr 1  'x'               ·                                     ·
+      └── values       ·              ·                 (column1, column2, column3)           ·
+·                      size           3 columns, 1 row  ·                                     ·
+·                      row 0, expr 0  ''                ·                                     ·
+·                      row 0, expr 1  ''                ·                                     ·
+·                      row 0, expr 2  'x'               ·                                     ·
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+# Regression test for #34524. This test is here because the issue still exists
+# in the heuristic planner.
+query I
+(SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
+----

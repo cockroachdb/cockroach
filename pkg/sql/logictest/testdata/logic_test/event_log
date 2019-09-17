@@ -362,6 +362,7 @@ FROM system.eventlog
 WHERE "eventType" = 'set_cluster_setting'
 AND info NOT LIKE '%version%' AND info NOT LIKE '%sql.defaults.distsql%' AND info NOT LIKE '%cluster.secret%'
 AND info NOT LIKE '%sql.stats.automatic_collection.enabled%'
+AND info NOT LIKE '%sql.defaults.vectorize%'
 ORDER BY "timestamp"
 ----
 0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"root"}
@@ -389,7 +390,7 @@ ALTER TABLE a CONFIGURE ZONE DISCARD
 query IT
 SELECT "reportingID", "info"
 FROM system.eventlog
-WHERE "eventType" = 'set_zone_config'
+WHERE "eventType" = 'set_zone_config' and info not like '%system.public%'
 ORDER BY "timestamp"
 ----
 1  {"Target":"TABLE test.public.a","Options":"range_max_bytes = 67108865, range_min_bytes = 16777216","User":"root"}

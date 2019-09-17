@@ -211,20 +211,50 @@ d
 				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
 			},
 		},
+		{
+			name:   "quotes are accepted in a quoted string",
+			create: `s string`,
+			typ:    "CSV",
+			data:   `"abc""de"`,
+			query: map[string][][]string{
+				`SELECT s FROM t`: {{`abc"de`}},
+			},
+		},
+		{
+			name:   "bare quote in the middle of a field that is not quoted",
+			create: `s string`,
+			typ:    "CSV",
+			data:   `abc"de`,
+			err:    `row 1: reading CSV record: parse error on line 1, column 3: bare " in non-quoted-field`,
+		},
+		{
+			name:   "no matching quote in a quoted field",
+			create: `s string`,
+			typ:    "CSV",
+			data:   `"abc"de`,
+			err:    `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
+		},
 
 		// MySQL OUTFILE
 		{
-			name:   "unexpected number of columns",
+			name:   "too many imported columns",
 			create: `i int8`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   "1\t2",
 			err:    "row 1: too many columns, expected 1",
+		},
+		{
+			name:   "unexpected number of columns",
+			create: `a string, b string`,
+			typ:    "DELIMITED",
+			data:   "1,2",
+			err:    "row 1: unexpected number of columns, expected 2 got 1",
 		},
 		{
 			name:   "unmatched field enclosure",
 			create: `i int8`,
 			with:   `WITH fields_enclosed_by = '"'`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   "\"1",
 			err:    "row 1: unmatched field enclosure",
 		},
@@ -232,7 +262,7 @@ d
 			name:   "unmatched literal",
 			create: `i int8`,
 			with:   `WITH fields_escaped_by = '\'`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   `\`,
 			err:    "row 1: unmatched literal",
 		},
@@ -240,7 +270,7 @@ d
 			name:   "weird escape char",
 			create: `s STRING`,
 			with:   `WITH fields_escaped_by = '@'`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   "@N\nN@@\nNULL",
 			query: map[string][][]string{
 				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@"}, {"NULL"}},
@@ -250,7 +280,7 @@ d
 			name:   `null and \N with escape`,
 			create: `s STRING`,
 			with:   `WITH fields_escaped_by = '\'`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   "\\N\n\\\\N\nNULL",
 			query: map[string][][]string{
 				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {`\N`}, {"NULL"}},
@@ -260,7 +290,7 @@ d
 			name:   `\N with trailing char`,
 			create: `s STRING`,
 			with:   `WITH fields_escaped_by = '\'`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   "\\N1",
 			err:    "row 1: unexpected data after null encoding",
 		},
@@ -268,14 +298,14 @@ d
 			name:   `double null`,
 			create: `s STRING`,
 			with:   `WITH fields_escaped_by = '\'`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   "\\N\\N",
 			err:    "row 1: unexpected null encoding",
 		},
 		{
 			name:   `null and \N without escape`,
 			create: `s STRING`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   "\\N\n\\\\N\nNULL",
 			query: map[string][][]string{
 				`SELECT COALESCE(s, '(null)') from t`: {{`\N`}, {`\\N`}, {"(null)"}},
@@ -284,7 +314,7 @@ d
 		{
 			name:   `bytes with escape`,
 			create: `b BYTES`,
-			typ:    "MYSQLOUTFILE",
+			typ:    "DELIMITED",
 			data:   `\x`,
 			query: map[string][][]string{
 				`SELECT * from t`: {{`\x`}},
@@ -682,7 +712,7 @@ COPY t (a, b, c) FROM stdin;
 	t.Run("mysqlout multiple", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE mysqlout; USE mysqlout`)
 		dataString = "1"
-		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) MYSQLOUTFILE DATA ($1, $1)`, srv.URL)
+		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) DELIMITED DATA ($1, $1)`, srv.URL)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
 	})
 }
@@ -997,10 +1027,12 @@ func TestImportCSVStmt(t *testing.T) {
 			schema,
 			testFiles.gzipFiles,
 			` WITH decompress = 'none'`,
-			"expected 2 fields, got",
+			// This returns different errors for `make test` and `make testrace` but
+			// field is in both error messages.
+			`field`,
 		},
 		{
-			"schema-in-file-no-decompress-gzip",
+			"schema-in-file-decompress-gzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
 			schema,
 			testFiles.files,
@@ -1398,7 +1430,9 @@ func TestImportIntoCSV(t *testing.T) {
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.gzipFiles,
 			` WITH decompress = 'none'`,
-			"expected 2 fields, got",
+			// This returns different errors for `make test` and `make testrace` but
+			// field is in both error messages.
+			"field",
 		},
 		{
 			"import-into-no-decompress-gzip",
@@ -2649,7 +2683,7 @@ func TestImportMysqlOutfile(t *testing.T) {
 		t.Run(cfg.name, func(t *testing.T) {
 			var opts []interface{}
 
-			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) MYSQLOUTFILE DATA ($1)`, i)
+			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT8 PRIMARY KEY, s text, b bytea) DELIMITED DATA ($1)`, i)
 			opts = append(opts, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(cfg.filename, baseDir)))
 
 			var flags []string

@@ -20,6 +20,37 @@ SELECT a, CASE WHEN a = 0 THEN 0 WHEN a = 1 THEN 3 ELSE 5 END FROM a LIMIT 6
 2  5
 2  5
 
+# Regression test for 40574.
+statement ok
+CREATE TABLE t40574(pk INTEGER PRIMARY KEY, col0 INTEGER, col1 FLOAT, col2 TEXT, col3 INTEGER, col4 FLOAT, col5 TEXT)
+
+query I
+SELECT pk FROM t40574 WHERE (col0 > 9 AND (col1 <= 6.38 OR col0 =5) AND (col0 = 7 OR col4 = 7))
+----
+
+# OR expression as projection.
+query IB
+SELECT b, b = 0 OR b = 2 FROM a WHERE b < 4
+----
+0  true
+1  false
+2  true
+3  false
+
+# OR expression as selection.
+query I
+SELECT b FROM a WHERE b = 0 OR b = 2
+----
+0
+2
+
+# Check that the right side of an OR isn't evaluated if the left side is true.
+query I
+SELECT b FROM a WHERE b = 0 OR 1/b = 1
+----
+0
+1
+
 statement ok
 CREATE TABLE bools (b BOOL, i INT, PRIMARY KEY (b, i)); INSERT INTO bools VALUES (true, 0), (false, 1), (true, 2), (false, 3);
 
@@ -222,12 +253,45 @@ SELECT a/b, a/c, b/c, b/d, c/d FROM intdecfloat
 statement ok
 RESET vectorize
 
-# AND expressions.
-query II
-SELECT a, b FROM a WHERE a < 2 AND b > 0 AND a * b != 3
+# vectorized decimal arithmetic
+statement ok
+CREATE table decimals (a DECIMAL, b DECIMAL)
+
+statement ok
+INSERT INTO decimals VALUES(123.0E200, 12.3)
+
+statement ok
+SET vectorize = experimental_always
+
+query R
+SELECT a*b FROM decimals
 ----
-0  1
-1  2
+1.51290E+203
+
+query R
+SELECT a/b FROM decimals
+----
+1.0E+201
+
+query R
+SELECT a+b FROM decimals
+----
+12300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012.3
+
+query R
+SELECT a-b FROM decimals
+----
+12299999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999987.7
+
+statement ok
+RESET vectorize
+
+# AND expressions.
+query IIBB
+SELECT a, b, a < 2 AND b > 0 AND a * b != 3, a < 2 AND b < 2 FROM a WHERE a < 2 AND b > 0 AND a * b != 3
+----
+0  1  true  true
+1  2  true  false
 
 statement ok
 CREATE TABLE b (a INT, b STRING, PRIMARY KEY (b,a))
@@ -645,14 +709,14 @@ SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
 # tpar, this query will need an adjustment.
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN 
-    ('querying next range at /Table/71/1/0',
-     'querying next range at /Table/71/1/10',
+    ('querying next range at /Table/73/1/0',
+     'querying next range at /Table/73/1/10',
      '=== SPAN START: kv.DistSender: sending partial batch ==='
     )
 ----
-querying next range at /Table/71/1/0
+querying next range at /Table/73/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
-querying next range at /Table/71/1/10
+querying next range at /Table/73/1/10
 
 # Test for #38858 -- handle aggregates correctly on an empty table.
 statement ok
@@ -702,3 +766,133 @@ CREATE TABLE t_40227 AS SELECT g FROM generate_series(0, 5) AS g
 
 statement ok
 SELECT '' FROM t_40227 AS t1 JOIN t_40227 AS t2 ON true
+
+# Tests for #39417
+statement ok
+CREATE TABLE t39417 (x int8)
+
+statement ok
+INSERT INTO t39417 VALUES (10)
+
+query R
+select (x/1) from t39417
+----
+10
+
+# Regression tests for #39540, an issue caused by shallow copying decimals.
+statement ok
+CREATE TABLE IF NOT EXISTS t_39540 AS
+	SELECT
+		g % 2 = 0 AS _bool, g::DECIMAL AS _decimal
+	FROM
+		generate_series(0, 5) AS g
+
+query R rowsort
+SELECT
+	tab_426212._decimal - tab_426216._decimal
+FROM
+	t_39540 AS tab_426212,
+	t_39540 AS tab_426214,
+	t_39540
+	RIGHT JOIN t_39540 AS tab_426216 ON true
+ORDER BY
+	tab_426214._bool ASC
+----
+1296 values hashing to cad02075a867c3c0564bf80fe665eed6
+
+# Regression test for #40372.
+statement ok
+CREATE TABLE t40372_1 (
+  a INT,
+  b INT,
+  c FLOAT,
+  d FLOAT
+)
+
+statement ok
+INSERT INTO t40372_1 VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+statement ok
+CREATE TABLE t40372_2 (
+  a INT,
+  b FLOAT,
+  c FLOAT,
+  d INT
+)
+
+statement ok
+INSERT INTO t40372_2 VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+query IIRR rowsort
+SELECT * FROM t40372_1 NATURAL JOIN t40372_2
+----
+1  1  1  1
+2  2  2  2
+3  3  3  3
+
+# Test that comparison against a null value selects the value out.
+statement ok
+CREATE TABLE tnull(a INT, b INT)
+
+statement ok
+INSERT INTO tnull VALUES(NULL, 238)
+
+query I rowsort
+SELECT a FROM tnull WHERE (a<=b OR a>=b)
+----
+
+# Test that AND'ing a true value with another true value while one of them is
+# actually NULL returns NULL.
+statement ok
+CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER)
+
+statement ok
+INSERT INTO t1 VALUES(NULL,2,1)
+
+# We need both parenthesis in WHERE clause so that the AND operation under test
+# is not optimized out.
+query I
+SELECT CASE WHEN a <= b THEN 1 ELSE 2 END
+  FROM t1
+ WHERE (a > b - 2 AND a < b + 2) OR (c > a AND c < b)
+----
+
+# Regression tests for NULL expression handling.
+statement ok
+CREATE TABLE t_case_null (x INT)
+
+statement ok
+INSERT INTO t_case_null VALUES (0)
+
+query I
+SELECT CASE WHEN x = 0 THEN 0 ELSE NULL END FROM t_case_null
+----
+0
+
+query I
+SELECT CASE WHEN x = 0 THEN NULL ELSE 0 END FROM t_case_null
+----
+NULL
+
+query I
+SELECT CASE WHEN x = 1 THEN 1 ELSE NULL END FROM t_case_null
+----
+NULL
+
+query I
+SELECT * FROM t_case_null WHERE NULL AND NULL
+----
+
+query I
+SELECT * FROM t_case_null WHERE NULL AND x = 0
+----
+
+query I
+SELECT * FROM t_case_null WHERE x = 0 AND NULL
+----

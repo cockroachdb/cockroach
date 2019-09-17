@@ -208,20 +208,21 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query ITTTTTTTTT colnames
+query IITTTTTTTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-zone_id  target  range_name  database_name  table_name  index_name  partition_name  config_yaml  config_sql  config_protobuf
+zone_id  subzone_id  target  range_name  database_name  table_name  index_name  partition_name
+config_yaml  config_sql  config_protobuf
 
-query ITTTTTTTTTTT colnames
+query ITTTTTTTTTTTTI colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  learner_replicas  split_enforced_until  lease_holder
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  replica_localities learner_replicas  split_enforced_until  lease_holder range_size
 
-query ITTTTTTTTTT colnames
+query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  learner_replicas  split_enforced_until
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  replica_localities learner_replicas  split_enforced_until
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
@@ -239,6 +240,8 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 17  RANGE system
 18  RANGE timeseries
 22  RANGE liveness
+25  TABLE system.public.replication_constraint_stats
+27  TABLE system.public.replication_stats
 53  DATABASE testdb
 54  TABLE testdb.public.foo
 

@@ -91,14 +91,14 @@ type TestServerInterface interface {
 	// The real return type is *kv.DistSender.
 	DistSenderI() interface{}
 
-	// DistSQLServer returns the *distsqlrun.ServerImpl as an interface{}.
+	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 
 	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
-	// server's executor. The argument must be a distsqlplan.SpanResolver
+	// server's executor. The argument must be a physicalplan.SpanResolver
 	// instance.
 	//
 	// This method exists because we cannot pass the fake span resolver with the

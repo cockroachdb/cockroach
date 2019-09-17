@@ -216,6 +216,9 @@ func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
 	case *ZigzagJoinExpr:
 		ensureZigzagJoinInputProps(t, sb)
 		return t.leftProps.Stats.Available
+
+	case *WithScanExpr:
+		return t.BindingProps.Stats.Available
 	}
 
 	available := true
@@ -259,6 +262,7 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		} else {
 			leftProps = e.Child(0).(RelExpr).Relational()
 		}
+
 		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
 		var intersectsRight bool
 		if lookupJoin != nil {
@@ -268,13 +272,11 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		} else {
 			intersectsRight = e.Child(1).(RelExpr).Relational().OutputCols.Intersects(colSet)
 		}
+
+		// It's possible that colSet intersects both left and right if we have a
+		// lookup join that was converted from an index join, so check the left
+		// side first.
 		if intersectsLeft {
-			if intersectsRight {
-				// TODO(radu): what if both sides have columns in colSet?
-				panic(errors.AssertionFailedf(
-					"colSet %v contains both left and right columns", log.Safe(colSet),
-				))
-			}
 			if zigzagJoin != nil {
 				return sb.colStatTable(zigzagJoin.LeftTable, colSet)
 			}
@@ -367,6 +369,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ProjectSetOp:
 		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
 
+	case opt.WithScanOp:
+		return sb.colStatWithScan(colSet, e.(*WithScanExpr))
+
 	case opt.InsertOp, opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
 		return sb.colStatMutation(colSet, e)
 
@@ -379,13 +384,6 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 
 	case opt.WithOp:
 		return sb.colStat(colSet, e.Child(1).(RelExpr))
-
-	case opt.WithScanOp:
-		// This is tricky, since if we deferred to the expression being referenced,
-		// the computation of stats for a WithScan would depend on something
-		// outside of the expression itself. Just call it unknown for now.
-		// TODO(justin): find a real solution for this.
-		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.FakeRelOp:
 		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
@@ -829,19 +827,11 @@ func (sb *statisticsBuilder) buildJoin(
 	rightCols := h.rightProps.OutputCols.Copy()
 	equivReps := h.filtersFD.EquivReps()
 
-	// Estimating selectivity for semi-join and anti-join is error-prone.
-	// For now, just propagate stats from the left side.
-	switch h.joinType {
-	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		s.RowCount = leftStats.RowCount
-		s.Selectivity = 1
-		return
-	}
-
 	// Shortcut if there are no ON conditions. Note that for lookup join, there
 	// are implicit equality conditions on KeyCols.
 	if h.filterIsTrue {
 		s.RowCount = leftStats.RowCount * rightStats.RowCount
+		s.Selectivity = 1
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
@@ -856,13 +846,22 @@ func (sb *statisticsBuilder) buildJoin(
 			// All rows from both sides should be in the result.
 			s.RowCount = max(s.RowCount, leftStats.RowCount)
 			s.RowCount = max(s.RowCount, rightStats.RowCount)
+
+		case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+			s.RowCount = leftStats.RowCount
+
+		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+			// Don't set the row count to 0 since we can't guarantee that the
+			// cardinality is 0.
+			s.RowCount = epsilon
+			s.Selectivity = epsilon
 		}
-		s.Selectivity = 1
 		return
 	}
 
 	// Shortcut if the ON condition is false or there is a contradiction.
 	if h.filters.IsFalse() {
+		s.Selectivity = 0
 		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 			s.RowCount = 0
@@ -878,8 +877,14 @@ func (sb *statisticsBuilder) buildJoin(
 		case opt.FullJoinOp:
 			// All rows from both sides should be in the result.
 			s.RowCount = leftStats.RowCount + rightStats.RowCount
+
+		case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+			s.RowCount = 0
+
+		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+			s.RowCount = leftStats.RowCount
+			s.Selectivity = 1
 		}
-		s.Selectivity = 0
 		return
 	}
 
@@ -902,9 +907,37 @@ func (sb *statisticsBuilder) buildJoin(
 	// Calculate selectivity and row count
 	// -----------------------------------
 	s.RowCount = leftStats.RowCount * rightStats.RowCount
+
+	// Save the initial row count before ON conditions are applied.
 	inputRowCount := s.RowCount
+
+	switch h.joinType {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// Treat anti join as if it were a semi join for the selectivity
+		// calculations. It will be fixed below.
+		s.RowCount = leftStats.RowCount
+		inputRowCount = leftStats.RowCount
+		s.ApplySelectivity(sb.selectivityFromEquivalenciesSemiJoin(
+			equivReps, h.leftProps.OutputCols, h.rightProps.OutputCols, &h.filtersFD, join, s,
+		))
+
+	default:
+		if h.rightProps.FuncDeps.ColsAreStrictKey(h.selfJoinCols) {
+			// This is like an index join, so apply a selectivity that will result
+			// in leftStats.RowCount rows.
+			if rightStats.RowCount != 0 {
+				s.ApplySelectivity(1 / rightStats.RowCount)
+			}
+		} else {
+			// Add the self join columns to equivReps so they are included in the
+			// calculation for selectivityFromEquivalencies below.
+			equivReps.UnionWith(h.selfJoinCols)
+		}
+
+		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
+	}
+
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, join, s))
-	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 	// Update distinct counts based on equivalencies; this should happen after
@@ -914,16 +947,24 @@ func (sb *statisticsBuilder) buildJoin(
 	// Update null counts for non-nullable columns.
 	sb.updateNullCountsFromProps(join, relProps, inputRowCount)
 
-	s.ApplySelectivity(sb.joinSelectivityFromNullCounts(
-		constrainedCols,
-		join,
-		s,
-		inputRowCount,
-		leftCols,
-		leftStats.RowCount,
-		rightCols,
-		rightStats.RowCount,
-	))
+	switch h.joinType {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// Keep only column stats from the left side.
+		s.ColStats.RemoveIntersecting(h.rightProps.OutputCols)
+		s.ApplySelectivity(sb.selectivityFromNullCounts(constrainedCols, join, s, inputRowCount))
+
+	default:
+		s.ApplySelectivity(sb.joinSelectivityFromNullCounts(
+			constrainedCols,
+			join,
+			s,
+			inputRowCount,
+			leftCols,
+			leftStats.RowCount,
+			rightCols,
+			rightStats.RowCount,
+		))
+	}
 
 	// The above calculation is for inner joins. Other joins need to remove stats
 	// that involve outer columns.
@@ -960,6 +1001,18 @@ func (sb *statisticsBuilder) buildJoin(
 		leftJoinRowCount := max(innerJoinRowCount, leftStats.RowCount)
 		rightJoinRowCount := max(innerJoinRowCount, rightStats.RowCount)
 		s.RowCount = leftJoinRowCount + rightJoinRowCount - innerJoinRowCount
+	}
+
+	// Fix the stats for anti join.
+	switch h.joinType {
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		s.RowCount = max(leftStats.RowCount-s.RowCount, epsilon)
+		s.Selectivity = max(1-s.Selectivity, epsilon)
+
+		// Converting column stats is error-prone. If any column stats are needed,
+		// colStatJoin will use the selectivity calculated above to estimate the
+		// column stats from the input.
+		s.ColStats.Clear()
 	}
 
 	// Loop through all colSets added in this step, and adjust null counts and
@@ -2048,6 +2101,42 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	return colStat
 }
 
+// +----------+
+// | WithScan |
+// +----------+
+
+func (sb *statisticsBuilder) buildWithScan(withScan *WithScanExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(withScan)
+
+	inputStats := withScan.BindingProps.Stats
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatWithScan(
+	colSet opt.ColSet, withScan *WithScanExpr,
+) *props.ColumnStatistic {
+	s := &withScan.Relational().Stats
+	withProps := withScan.BindingProps
+	inColSet := translateColSet(colSet, withScan.OutCols, withScan.InCols)
+
+	// TODO(rytaft): This would be more accurate if we could access the WithExpr
+	// itself.
+	inColStat := sb.colStatLeaf(inColSet, &withProps.Stats, &withProps.FuncDeps, withProps.NotNullCols)
+
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCount(colStat, s.RowCount)
+	return colStat
+}
+
 // +--------------------------------+
 // | Insert, Update, Upsert, Delete |
 // +--------------------------------+
@@ -2269,6 +2358,120 @@ func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational) bool
 	// a constraint on a key column), don't bother adding the overhead of
 	// creating a histogram.
 	return relProps.Cardinality.Max >= minCardinalityForHistogram
+}
+
+// rowsProcessed calculates and returns the number of rows processed by the
+// relational expression. It is currently only supported for joins.
+func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
+	semiAntiJoinToInnerJoin := func(joinType opt.Operator) opt.Operator {
+		switch joinType {
+		case opt.SemiJoinOp, opt.AntiJoinOp:
+			return opt.InnerJoinOp
+		case opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+			return opt.InnerJoinApplyOp
+		default:
+			return joinType
+		}
+	}
+
+	switch t := e.(type) {
+	case *LookupJoinExpr:
+		var lookupJoinPrivate *LookupJoinPrivate
+		switch t.JoinType {
+		case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+			// The number of rows processed for semi and anti joins is closer to the
+			// number of output rows for an equivalent inner join.
+			copy := t.LookupJoinPrivate
+			copy.JoinType = semiAntiJoinToInnerJoin(t.JoinType)
+			lookupJoinPrivate = &copy
+
+		default:
+			if t.On.IsTrue() {
+				// If there are no additional ON filters, the number of rows processed
+				// equals the number of output rows.
+				return e.Relational().Stats.RowCount
+			}
+			lookupJoinPrivate = &t.LookupJoinPrivate
+		}
+
+		// We need to determine the row count of the join before the
+		// ON conditions are applied.
+		withoutOn := e.Memo().MemoizeLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
+		return withoutOn.Relational().Stats.RowCount
+
+	case *MergeJoinExpr:
+		var mergeJoinPrivate *MergeJoinPrivate
+		switch t.JoinType {
+		case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+			// The number of rows processed for semi and anti joins is closer to the
+			// number of output rows for an equivalent inner join.
+			copy := t.MergeJoinPrivate
+			copy.JoinType = semiAntiJoinToInnerJoin(t.JoinType)
+			mergeJoinPrivate = &copy
+
+		default:
+			if t.On.IsTrue() {
+				// If there are no additional ON filters, the number of rows processed
+				// equals the number of output rows.
+				return e.Relational().Stats.RowCount
+			}
+			mergeJoinPrivate = &t.MergeJoinPrivate
+		}
+
+		// We need to determine the row count of the join before the
+		// ON conditions are applied.
+		withoutOn := e.Memo().MemoizeMergeJoin(t.Left, t.Right, nil /* on */, mergeJoinPrivate)
+		return withoutOn.Relational().Stats.RowCount
+
+	default:
+		if !opt.IsJoinOp(e) {
+			panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", log.Safe(e.Op())))
+		}
+
+		leftCols := e.Child(0).(RelExpr).Relational().OutputCols
+		rightCols := e.Child(1).(RelExpr).Relational().OutputCols
+		filters := e.Child(2).(*FiltersExpr)
+
+		// Remove ON conditions that are not equality conditions,
+		on := ExtractJoinEqualityFilters(leftCols, rightCols, *filters)
+
+		switch t := e.(type) {
+		// The number of rows processed for semi and anti joins is closer to the
+		// number of output rows for an equivalent inner join.
+		case *SemiJoinExpr:
+			e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+		case *SemiJoinApplyExpr:
+			e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+		case *AntiJoinExpr:
+			e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+		case *AntiJoinApplyExpr:
+			e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+
+		default:
+			if len(on) == len(*filters) {
+				// No filters were removed.
+				return e.Relational().Stats.RowCount
+			}
+
+			switch t := e.(type) {
+			case *InnerJoinExpr:
+				e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			case *InnerJoinApplyExpr:
+				e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+			case *LeftJoinExpr:
+				e = e.Memo().MemoizeLeftJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			case *LeftJoinApplyExpr:
+				e = e.Memo().MemoizeLeftJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+			case *RightJoinExpr:
+				e = e.Memo().MemoizeRightJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			case *FullJoinExpr:
+				e = e.Memo().MemoizeFullJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			default:
+				panic(errors.AssertionFailedf("join type %v not handled", log.Safe(e.Op())))
+			}
+		}
+		return e.Relational().Stats.RowCount
+	}
 }
 
 func min(a float64, b float64) float64 {
@@ -2998,6 +3201,60 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 	selectivity = 1.0
 	if maxDistinctCount > 1 {
 		selectivity = 1 / maxDistinctCount
+	}
+	return selectivity
+}
+
+// selectivityFromEquivalenciesSemiJoin determines the selectivity of equality
+// constraints on a semi join. It must be called before applyEquivalencies.
+func (sb *statisticsBuilder) selectivityFromEquivalenciesSemiJoin(
+	equivReps, leftOutputCols, rightOutputCols opt.ColSet,
+	filterFD *props.FuncDepSet,
+	e RelExpr,
+	s *props.Statistics,
+) (selectivity float64) {
+	selectivity = 1.0
+	equivReps.ForEach(func(i opt.ColumnID) {
+		equivGroup := filterFD.ComputeEquivGroup(i)
+		selectivity *= sb.selectivityFromEquivalencySemiJoin(
+			equivGroup, leftOutputCols, rightOutputCols, e, s,
+		)
+	})
+	return selectivity
+}
+
+func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
+	equivGroup, leftOutputCols, rightOutputCols opt.ColSet, e RelExpr, s *props.Statistics,
+) (selectivity float64) {
+	// Find the minimum (maximum) input distinct count for all columns in this
+	// equivalency group from the right (left).
+	minDistinctCountRight := math.MaxFloat64
+	maxDistinctCountLeft := float64(0)
+	equivGroup.ForEach(func(i opt.ColumnID) {
+		// If any of the distinct counts were updated by the filter, we want to use
+		// the updated value.
+		colSet := opt.MakeColSet(i)
+		colStat, ok := s.ColStats.Lookup(colSet)
+		if !ok {
+			colStat = sb.colStatFromInput(colSet, e)
+		}
+		if leftOutputCols.Contains(i) {
+			if maxDistinctCountLeft < colStat.DistinctCount {
+				maxDistinctCountLeft = colStat.DistinctCount
+			}
+		} else if rightOutputCols.Contains(i) {
+			if minDistinctCountRight > colStat.DistinctCount {
+				minDistinctCountRight = colStat.DistinctCount
+			}
+		}
+	})
+	if maxDistinctCountLeft > s.RowCount {
+		maxDistinctCountLeft = s.RowCount
+	}
+
+	selectivity = 1.0
+	if maxDistinctCountLeft > minDistinctCountRight {
+		selectivity = minDistinctCountRight / maxDistinctCountLeft
 	}
 	return selectivity
 }

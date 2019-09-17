@@ -613,27 +613,31 @@ SELECT *
 FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
-indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation           indclass  indoption  indexprs  indpred
-543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
-543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477             0         0          NULL      NULL
-543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477  0 0       0 0        NULL      NULL
-1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                    0 0       0 0        NULL      NULL
-1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                      0         0          NULL      NULL
-1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                      0         0          NULL      NULL
-1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
-2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477  0 0       0 0        NULL      NULL
-2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                  0 0 0     0 0 0      NULL      NULL
-2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0           0 0       0 0        NULL      NULL
-2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
-2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3903121477           0 0       0 0        NULL      NULL
-3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
-3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                    0 0       0 0        NULL      NULL
-3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                0 0 0 0   0 0 0 0    NULL      NULL
-3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477             0         0          NULL      NULL
-4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                    0 0       0 0        NULL      NULL
+indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation               indclass  indoption  indexprs  indpred
+543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477                 0         0          NULL      NULL
+543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477                 0         0          NULL      NULL
+543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       0 0        NULL      NULL
+803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     0 0 0      NULL      NULL
+1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 3903121477 3903121477  0 0 0 0   0 0 0 0    NULL      NULL
+1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                        0 0       0 0        NULL      NULL
+1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         0          NULL      NULL
+1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         0          NULL      NULL
+1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         0          NULL      NULL
+1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                          0         0          NULL      NULL
+1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         0          NULL      NULL
+1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         0          NULL      NULL
+2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         0          NULL      NULL
+2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       0 0        NULL      NULL
+2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     0 0 0      NULL      NULL
+2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0               0 0       0 0        NULL      NULL
+2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         0          NULL      NULL
+2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3903121477               0 0       0 0        NULL      NULL
+3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         0          NULL      NULL
+3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       0 0        NULL      NULL
+3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                    0 0 0 0   0 0 0 0    NULL      NULL
+3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       0 0        NULL      NULL
+3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         0          NULL      NULL
+4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       0 0        NULL      NULL
 
 # From #26504
 query OOI colnames
@@ -648,8 +652,16 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 543291289   0                           1
 543291291   0                           1
 543291291   0                           2
+803027558   0                           1
+803027558   0                           2
+803027558   0                           3
+1062763829  0                           1
+1062763829  0                           2
+1062763829  0                           3
+1062763829  0                           4
 1276104432  0                           1
 1276104432  0                           2
+1322500096  0                           1
 1582236367  0                           1
 1628632028  0                           1
 1628632029  0                           1
@@ -673,6 +685,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 3706522183  0                           2
 3706522183  0                           3
 3706522183  0                           4
+3752917847  0                           1
+3752917847  0                           2
 3966258450  0                           1
 4225994721  0                           1
 4225994721  0                           2
@@ -1526,6 +1540,7 @@ default_transaction_read_only        off                 NULL      NULL        N
 distsql                              off                 NULL      NULL        NULL        string
 enable_zigzag_join                   on                  NULL      NULL        NULL        string
 experimental_force_split_at          off                 NULL      NULL        NULL        string
+experimental_optimizer_foreign_keys  off                 NULL      NULL        NULL        string
 experimental_serial_normalization    rowid               NULL      NULL        NULL        string
 extra_float_digits                   0                   NULL      NULL        NULL        string
 force_savepoint_restart              off                 NULL      NULL        NULL        string
@@ -1536,7 +1551,6 @@ locality                             region=test,dc=dc1  NULL      NULL        N
 lock_timeout                         0                   NULL      NULL        NULL        string
 max_index_keys                       32                  NULL      NULL        NULL        string
 node_id                              1                   NULL      NULL        NULL        string
-optimizer_foreign_keys               off                 NULL      NULL        NULL        string
 reorder_joins_limit                  4                   NULL      NULL        NULL        string
 results_buffer_size                  16384               NULL      NULL        NULL        string
 row_security                         off                 NULL      NULL        NULL        string
@@ -1556,7 +1570,7 @@ transaction_priority                 normal              NULL      NULL        N
 transaction_read_only                off                 NULL      NULL        NULL        string
 transaction_status                   NoTxn               NULL      NULL        NULL        string
 vectorize                            auto                NULL      NULL        NULL        string
-vectorize_row_count_threshold        1000                NULL      NULL        NULL        string
+vectorize_row_count_threshold        0                   NULL      NULL        NULL        string
 
 query TTTTTTT colnames
 SELECT
@@ -1580,6 +1594,7 @@ default_transaction_read_only        off                 NULL  user     NULL    
 distsql                              off                 NULL  user     NULL      off                 off
 enable_zigzag_join                   on                  NULL  user     NULL      on                  on
 experimental_force_split_at          off                 NULL  user     NULL      off                 off
+experimental_optimizer_foreign_keys  off                 NULL  user     NULL      off                 off
 experimental_serial_normalization    rowid               NULL  user     NULL      rowid               rowid
 extra_float_digits                   0                   NULL  user     NULL      0                   2
 force_savepoint_restart              off                 NULL  user     NULL      off                 off
@@ -1590,7 +1605,6 @@ locality                             region=test,dc=dc1  NULL  user     NULL    
 lock_timeout                         0                   NULL  user     NULL      0                   0
 max_index_keys                       32                  NULL  user     NULL      32                  32
 node_id                              1                   NULL  user     NULL      1                   1
-optimizer_foreign_keys               off                 NULL  user     NULL      off                 off
 reorder_joins_limit                  4                   NULL  user     NULL      4                   4
 results_buffer_size                  16384               NULL  user     NULL      16384               16384
 row_security                         off                 NULL  user     NULL      off                 off
@@ -1610,7 +1624,7 @@ transaction_priority                 normal              NULL  user     NULL    
 transaction_read_only                off                 NULL  user     NULL      off                 off
 transaction_status                   NoTxn               NULL  user     NULL      NoTxn               NoTxn
 vectorize                            auto                NULL  user     NULL      auto                auto
-vectorize_row_count_threshold        1000                NULL  user     NULL      1000                1000
+vectorize_row_count_threshold        0                   NULL  user     NULL      0                   0
 
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
@@ -1630,6 +1644,7 @@ default_transaction_read_only        NULL    NULL     NULL     NULL        NULL
 distsql                              NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                   NULL    NULL     NULL     NULL        NULL
 experimental_force_split_at          NULL    NULL     NULL     NULL        NULL
+experimental_optimizer_foreign_keys  NULL    NULL     NULL     NULL        NULL
 experimental_serial_normalization    NULL    NULL     NULL     NULL        NULL
 extra_float_digits                   NULL    NULL     NULL     NULL        NULL
 force_savepoint_restart              NULL    NULL     NULL     NULL        NULL
@@ -1641,7 +1656,6 @@ lock_timeout                         NULL    NULL     NULL     NULL        NULL
 max_index_keys                       NULL    NULL     NULL     NULL        NULL
 node_id                              NULL    NULL     NULL     NULL        NULL
 optimizer                            NULL    NULL     NULL     NULL        NULL
-optimizer_foreign_keys               NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                  NULL    NULL     NULL     NULL        NULL
 results_buffer_size                  NULL    NULL     NULL     NULL        NULL
 row_security                         NULL    NULL     NULL     NULL        NULL

@@ -26,7 +26,7 @@ import (
 // constraints.
 //
 // For a more detailed description of zigzag joins, as well as when they can
-// be planned, see the comment in distsqlrun/zigzagjoiner.go.
+// be planned, see the comment in rowexec/zigzagjoiner.go.
 type zigzagJoinNode struct {
 	// sides contains information about each individual "side" of a
 	// zigzag join. Must contain 2 or more zigzagJoinSides.

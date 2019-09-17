@@ -319,9 +319,6 @@ func registerJepsen(r *testRegistry) {
 				// initialized.
 				Cluster: makeClusterSpec(6, reuseTagged("jepsen")),
 				Run: func(ctx context.Context, t *test, c *cluster) {
-					if testName == "multi-register" {
-						t.Skip("#36431", "" /* details */)
-					}
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}

@@ -174,6 +174,7 @@ const (
 	// ReplicationManual means that the split and replication queues of all
 	// servers are stopped, and the test must manually control splitting and
 	// replication through the TestServer.
-	// Note that the server starts with a number of system ranges.
+	// Note that the server starts with a number of system ranges,
+	// all with a single replica on node 1.
 	ReplicationManual
 )

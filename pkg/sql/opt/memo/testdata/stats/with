@@ -31,17 +31,17 @@ ALTER TABLE a INJECT STATISTICS '[
 ]'
 ----
 
-build colstat=4 colstat=5 colstat=6
+build colstat=4 colstat=5 colstat=6 disable=InlineWith
 WITH foo AS (SELECT * FROM a) SELECT * FROM foo
 ----
 with &1 (foo)
  ├── columns: x:4(int!null) y:5(int) s:6(string)
  ├── stats: [rows=5000]
- ├── key: (1)
- ├── fd: (1)-->(2-4), (2)-->(5), (3)-->(6)
+ ├── key: (4)
+ ├── fd: (4)-->(5,6)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    ├── stats: [rows=5000]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=500, null(2)=50, distinct(3)=500, null(3)=50]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── with-scan &1 (foo)
@@ -50,6 +50,128 @@ with &1 (foo)
       │    ├──  a.x:1(int) => x:4(int)
       │    ├──  a.y:2(int) => y:5(int)
       │    └──  a.s:3(string) => s:6(string)
-      ├── stats: [rows=5000]
-      ├── key: (1)
-      └── fd: (1)-->(2-4), (2)-->(5), (3)-->(6)
+      ├── stats: [rows=5000, distinct(4)=5000, null(4)=0, distinct(5)=500, null(5)=50, distinct(6)=500, null(6)=50]
+      ├── key: (4)
+      └── fd: (4)-->(5,6)
+
+# Regression test for #40296.
+opt disable=InlineWith
+WITH
+	t0 AS ((VALUES (0, 0:::OID, NULL, '')) UNION (VALUES (NULL, 0:::OID,'1970-09-08'::DATE, NULL)))
+SELECT
+	NULL
+FROM
+	a, t0
+WHERE
+	EXISTS(
+		WITH
+			t1 AS (SELECT NULL)
+		SELECT
+			t0.column2, a.y
+	);
+----
+with &1 (t0)
+ ├── columns: "?column?":27(unknown)
+ ├── stats: [rows=1e-06]
+ ├── fd: ()-->(27)
+ ├── union
+ │    ├── columns: column1:9(int) column2:10(oid!null) column3:11(date) column4:12(string)
+ │    ├── left columns: column1:1(int) column2:2(oid) column3:13(date) column4:4(string)
+ │    ├── right columns: column1:5(int) column2:6(oid) column3:7(date) column4:8(string)
+ │    ├── cardinality: [1 - 2]
+ │    ├── stats: [rows=2, distinct(10)=0.2, null(10)=0, distinct(9-12)=2, null(9-12)=2]
+ │    ├── key: (9-12)
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null) column2:2(oid!null) column4:4(string!null) column3:13(date)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1, distinct(1,2,4,13)=1, null(1,2,4,13)=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2,4,13)
+ │    │    └── (0, 0, '', NULL) [type=tuple{int, oid, string, date}]
+ │    └── values
+ │         ├── columns: column1:5(int) column2:6(oid!null) column3:7(date!null) column4:8(string)
+ │         ├── cardinality: [1 - 1]
+ │         ├── stats: [rows=1, distinct(5-8)=1, null(5-8)=1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(5-8)
+ │         └── (NULL, 0, '1970-09-08', NULL) [type=tuple{int, oid, date, string}]
+ └── project
+      ├── columns: "?column?":27(unknown)
+      ├── stats: [rows=1e-06]
+      ├── fd: ()-->(27)
+      ├── select
+      │    ├── columns: x:14(int!null) column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string) true_agg:25(bool!null)
+      │    ├── stats: [rows=1e-06, distinct(14)=1e-06, null(14)=0, distinct(18)=1e-06, null(18)=0, distinct(25)=1e-06, null(25)=0]
+      │    ├── key: (14,17-20)
+      │    ├── fd: (14,17-20)-->(25)
+      │    ├── group-by
+      │    │    ├── columns: x:14(int!null) column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string) true_agg:25(bool)
+      │    │    ├── grouping columns: x:14(int!null) column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string)
+      │    │    ├── stats: [rows=10000, distinct(14)=5000, null(14)=0, distinct(18)=0.2, null(18)=0, distinct(25)=10000, null(25)=10000, distinct(14,17-20)=10000, null(14,17-20)=10000]
+      │    │    ├── key: (14,17-20)
+      │    │    ├── fd: (14,17-20)-->(25)
+      │    │    ├── project
+      │    │    │    ├── columns: true:24(bool!null) x:14(int!null) column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string)
+      │    │    │    ├── stats: [rows=10000, distinct(14)=5000, null(14)=0, distinct(18)=0.2, null(18)=0, distinct(14,17-20)=10000, null(14,17-20)=10000]
+      │    │    │    ├── key: (14,17-20)
+      │    │    │    ├── fd: ()-->(24)
+      │    │    │    ├── inner-join-apply
+      │    │    │    │    ├── columns: x:14(int!null) a.y:15(int) column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string) column2:22(oid) y:23(int)
+      │    │    │    │    ├── stats: [rows=10000, distinct(14)=5000, null(14)=0, distinct(18)=0.2, null(18)=0, distinct(14,17-20)=10000, null(14,17-20)=10000]
+      │    │    │    │    ├── key: (14,17-20)
+      │    │    │    │    ├── fd: (14)-->(15), (14,17-20)-->(22,23)
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    ├── columns: x:14(int!null) a.y:15(int)
+      │    │    │    │    │    ├── stats: [rows=5000, distinct(14)=5000, null(14)=0]
+      │    │    │    │    │    ├── key: (14)
+      │    │    │    │    │    └── fd: (14)-->(15)
+      │    │    │    │    ├── inner-join-apply
+      │    │    │    │    │    ├── columns: column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string) column2:22(oid) y:23(int)
+      │    │    │    │    │    ├── outer: (15)
+      │    │    │    │    │    ├── cardinality: [1 - 2]
+      │    │    │    │    │    ├── stats: [rows=2, distinct(18)=0.2, null(18)=0, distinct(17-20)=2, null(17-20)=2]
+      │    │    │    │    │    ├── key: (17-20)
+      │    │    │    │    │    ├── fd: (17-20)-->(22,23)
+      │    │    │    │    │    ├── with-scan &1 (t0)
+      │    │    │    │    │    │    ├── columns: column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string)
+      │    │    │    │    │    │    ├── mapping:
+      │    │    │    │    │    │    │    ├──  column1:9(int) => column1:17(int)
+      │    │    │    │    │    │    │    ├──  column2:10(oid) => column2:18(oid)
+      │    │    │    │    │    │    │    ├──  column3:11(date) => column3:19(date)
+      │    │    │    │    │    │    │    └──  column4:12(string) => column4:20(string)
+      │    │    │    │    │    │    ├── cardinality: [1 - 2]
+      │    │    │    │    │    │    ├── stats: [rows=2, distinct(18)=0.2, null(18)=0, distinct(17-20)=2, null(17-20)=2]
+      │    │    │    │    │    │    └── key: (17-20)
+      │    │    │    │    │    ├── with &2 (t1)
+      │    │    │    │    │    │    ├── columns: column2:22(oid) y:23(int)
+      │    │    │    │    │    │    ├── outer: (15,18)
+      │    │    │    │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    ├── stats: [rows=1]
+      │    │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    │    ├── fd: ()-->(22,23)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: "?column?":21(unknown)
+      │    │    │    │    │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │    ├── stats: [rows=1]
+      │    │    │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    │    │    ├── fd: ()-->(21)
+      │    │    │    │    │    │    │    └── (NULL,) [type=tuple{unknown}]
+      │    │    │    │    │    │    └── values
+      │    │    │    │    │    │         ├── columns: column2:22(oid) y:23(int)
+      │    │    │    │    │    │         ├── outer: (15,18)
+      │    │    │    │    │    │         ├── cardinality: [1 - 1]
+      │    │    │    │    │    │         ├── stats: [rows=1]
+      │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │         ├── fd: ()-->(22,23)
+      │    │    │    │    │    │         └── (column2, a.y) [type=tuple{oid, int}]
+      │    │    │    │    │    └── filters (true)
+      │    │    │    │    └── filters (true)
+      │    │    │    └── projections
+      │    │    │         └── true [type=bool]
+      │    │    └── aggregations
+      │    │         └── const-not-null-agg [type=bool, outer=(24)]
+      │    │              └── variable: true [type=bool]
+      │    └── filters
+      │         └── true_agg IS NOT NULL [type=bool, outer=(25), constraints=(/25: (/NULL - ]; tight)]
+      └── projections
+           └── null [type=unknown]

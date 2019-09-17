@@ -240,7 +240,29 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// descriptor.
 	table, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
 	if err != nil {
+		if n.zoneSpecifier.TargetsIndex() && n.zoneSpecifier.TableOrIndex.Table.TableName == "" {
+			return errors.WithHint(err, "try specifying the index as <tablename>@<indexname>")
+		}
 		return err
+	}
+
+	if n.zoneSpecifier.TargetsPartition() && len(n.zoneSpecifier.TableOrIndex.Index) == 0 && !n.allIndexes {
+		// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
+		// index has the specified partition.
+		partitionName := string(n.zoneSpecifier.Partition)
+		indexes := table.FindIndexesWithPartition(partitionName)
+		switch len(indexes) {
+		case 0:
+			return fmt.Errorf("partition %q does not exist on table %q", partitionName, table.Name)
+		case 1:
+			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].Name)
+		default:
+			err := fmt.Errorf(
+				"partition %q exists on multiple indexes of table %q", partitionName, table.Name)
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+			err = errors.WithHint(err, "try ALTER PARTITION ... OF INDEX ...")
+			return err
+		}
 	}
 
 	// If this is an ALTER ALL PARTITIONS statement, we need to find all indexes
@@ -652,11 +674,11 @@ func validateZoneAttrsAndLocalities(
 	node:
 		for _, node := range nodes.Nodes {
 			for _, store := range node.StoreStatuses {
-				// We could alternatively use config.storeHasConstraint here to catch
-				// typos in prohibited constraints as well, but as noted in the
-				// function-level comment that could break very reasonable use cases
-				// for prohibited constraints.
-				if config.StoreMatchesConstraint(store.Desc, constraint) {
+				// We could alternatively use config.StoreMatchesConstraint here to
+				// catch typos in prohibited constraints as well, but as noted in the
+				// function-level comment that could break very reasonable use cases for
+				// prohibited constraints.
+				if config.StoreSatisfiesConstraint(store.Desc, constraint) {
 					found = true
 					break node
 				}

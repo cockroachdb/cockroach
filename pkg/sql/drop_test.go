@@ -28,8 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -39,8 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // Returns an error if a zone config for the specified table or
@@ -506,7 +505,7 @@ func TestDropIndex(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 			AsyncExecQuickly:  true,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if clearIndexAttempt && (sp.Key != nil || sp.EndKey != nil) {
 					emptySpan = false
@@ -635,30 +634,18 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 		t.Fatal("zone config for index does not exist")
 	}
 
-	// Verify that dropping the index fails with a "CCL required" error.
+	// Verify that dropping the index works.
 	_, err = sqlDBRaw.Exec(`DROP INDEX t.kv@foo`)
-	if pqErr, ok := err.(*pq.Error); !ok || string(pqErr.Code) != pgcode.CCLRequired {
-		t.Fatalf("expected pq error with CCLRequired code, but got %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify that the index and its zone config still exist.
-	if !sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
-		t.Fatal("zone config for index no longer exists")
+	if sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
+		t.Fatal("zone config for index still exists")
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
 	// declares column families.
 
-	// Manually remove the zone config. (Again, doing this through the normal
-	// channels requires a CCL binary.)
-	sqlDB.Exec(t, `DELETE FROM system.zones WHERE id = $1`, tableDesc.ID)
-
-	// Verify the index can now be properly dropped from an OSS binary.
-	sqlDB.Exec(t, `DROP INDEX t.kv@foo`)
-	if sqlutils.ZoneConfigExists(t, sqlDB, "INDEX t.public.kv@foo") {
-		t.Fatal("zone config for index still exists after dropping index")
-	}
-	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")

@@ -1215,7 +1215,8 @@ CREATE TABLE crdb_internal.create_statements (
 				if err != nil {
 					return err
 				}
-				if len(zoneConfig.Constraints) > 0 {
+				// If all constraints are default, then don't show anything.
+				if !zoneConfig.Equal(config.ZoneConfig{}) {
 					sqlString := string(tree.MustBeDString(row[2]))
 					zoneConfigStmts[tableName] = append(zoneConfigStmts[tableName], sqlString)
 				}
@@ -1264,6 +1265,19 @@ CREATE TABLE crdb_internal.create_statements (
 						if err := zoneRows.Append(tree.NewDString(s)); err != nil {
 							return err
 						}
+					}
+				} else {
+					// If there are partitions applied to this table and no zone configurations, display a warning.
+					hasPartitions := false
+					for i := range table.Indexes {
+						if table.Indexes[i].Partitioning.NumColumns != 0 {
+							hasPartitions = true
+							break
+						}
+					}
+					hasPartitions = hasPartitions || table.PrimaryIndex.Partitioning.NumColumns != 0
+					if hasPartitions {
+						stmt += "\n-- Warning: Partitioned table with no zone configurations."
 					}
 				}
 
@@ -1867,9 +1881,12 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	table_name,
 	index_name,
 	replicas,
+	replica_localities,
 	learner_replicas,
 	split_enforced_until,
-	crdb_internal.lease_holder(start_key) AS lease_holder
+	crdb_internal.lease_holder(start_key) AS lease_holder,
+	(crdb_internal.range_stats(start_key)->>'key_bytes')::INT +
+	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT AS range_size
 FROM crdb_internal.ranges_no_leases
 `,
 	resultColumns: sqlbase.ResultColumns{
@@ -1882,9 +1899,11 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
+		{Name: "replica_localities", Typ: types.StringArray},
 		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
+		{Name: "range_size", Typ: types.Int},
 	},
 }
 
@@ -1904,9 +1923,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   database_name        STRING NOT NULL,
   table_name           STRING NOT NULL,
   index_name           STRING NOT NULL,
-	replicas             INT[] NOT NULL,
+  replicas             INT[] NOT NULL,	
+  replica_localities   STRING[] NOT NULL,
 	learner_replicas     INT[] NOT NULL,
-  split_enforced_until TIMESTAMP
+	split_enforced_until TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
@@ -1943,6 +1963,17 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err != nil {
 			return nil, err
 		}
+
+		// Map node descriptors to localities
+		descriptors, err := getAllNodeDescriptors(p)
+		if err != nil {
+			return nil, err
+		}
+		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
+		for _, desc := range descriptors {
+			nodeIDToLocality[desc.NodeID] = desc.Locality
+		}
+
 		var desc roachpb.RangeDescriptor
 
 		i := 0
@@ -1981,6 +2012,14 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
+			replicaLocalityArr := tree.NewDArray(types.String)
+			for _, id := range voterReplicas {
+				replicaLocality := nodeIDToLocality[roachpb.NodeID(id)].String()
+				if err := replicaLocalityArr.Append(tree.NewDString(replicaLocality)); err != nil {
+					return nil, err
+				}
+			}
+
 			var dbName, tableName, indexName string
 			if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
 				parent := parents[id]
@@ -2010,6 +2049,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
 				votersArr,
+				replicaLocalityArr,
 				learnersArr,
 				splitEnforcedUntil,
 			}, nil
@@ -2052,6 +2092,7 @@ var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
+  subzone_id       INT NOT NULL,
   target           STRING,
   range_name       STRING,
   database_name    STRING,
@@ -2110,7 +2151,7 @@ CREATE TABLE crdb_internal.zones (
 				configProto.Subzones = nil
 				configProto.SubzoneSpans = nil
 
-				if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &configProto); err != nil {
+				if err := generateZoneConfigIntrospectionValues(values, r[0], tree.NewDInt(tree.DInt(0)), zoneSpecifier, &configProto); err != nil {
 					return err
 				}
 				if err := addRow(values...); err != nil {
@@ -2123,7 +2164,7 @@ CREATE TABLE crdb_internal.zones (
 				if err != nil {
 					return err
 				}
-				for _, s := range subzones {
+				for i, s := range subzones {
 					index, err := table.FindIndexByID(sqlbase.IndexID(s.IndexID))
 					if err != nil {
 						if err == sqlbase.ErrIndexGCMutationsList {
@@ -2138,7 +2179,7 @@ CREATE TABLE crdb_internal.zones (
 						zoneSpecifier = &zs
 					}
 
-					if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &s.Config); err != nil {
+					if err := generateZoneConfigIntrospectionValues(values, r[0], tree.NewDInt(tree.DInt(i+1)), zoneSpecifier, &s.Config); err != nil {
 						return err
 					}
 					if err := addRow(values...); err != nil {
@@ -2149,6 +2190,34 @@ CREATE TABLE crdb_internal.zones (
 		}
 		return nil
 	},
+}
+
+func getAllNodeDescriptors(p *planner) ([]roachpb.NodeDescriptor, error) {
+	g := p.ExecCfg().Gossip
+	var descriptors []roachpb.NodeDescriptor
+	if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
+		bytes, err := i.Value.GetBytes()
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to extract bytes for key %q", key)
+		}
+
+		var d roachpb.NodeDescriptor
+		if err := protoutil.Unmarshal(bytes, &d); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to parse value for key %q", key)
+		}
+
+		// Don't use node descriptors with NodeID 0, because that's meant to
+		// indicate that the node has been removed from the cluster.
+		if d.NodeID != 0 {
+			descriptors = append(descriptors, d)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return descriptors, nil
 }
 
 // crdbInternalGossipNodesTable exposes local information about the cluster nodes.
@@ -2180,28 +2249,9 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		}
 
 		g := p.ExecCfg().Gossip
-		var descriptors []roachpb.NodeDescriptor
-		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
-			bytes, err := i.Value.GetBytes()
-			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"failed to extract bytes for key %q", key)
-			}
-
-			var d roachpb.NodeDescriptor
-			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"failed to parse value for key %q", key)
-			}
-
-			// Don't use node descriptors with NodeID 0, because that's meant to
-			// indicate that the node has been removed from the cluster.
-			if d.NodeID != 0 {
-				descriptors = append(descriptors, d)
-			}
+		descriptors, err := getAllNodeDescriptors(p)
+		if err != nil {
 			return nil
-		}); err != nil {
-			return err
 		}
 
 		alive := make(map[roachpb.NodeID]tree.DBool)

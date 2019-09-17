@@ -17,14 +17,22 @@
 # rows by using grouping columns that are statically known to form a strong key.
 # By definition, a strong key does not allow duplicate values, so the GroupBy is
 # redundant and can be eliminated.
+#
+# Since a DistinctOn operator can serve as a projection operator, we need to
+# replace it with a Project so that the correct columns are projected. The
+# project itself may be eliminated later by other rules.
 [EliminateDistinct, Normalize]
 (DistinctOn
     $input:*
-    *
+    $aggs:*
     $groupingPrivate:* & (GroupingColsAreKey $groupingPrivate $input)
 )
 =>
-$input
+(Project
+  $input
+  []
+  (GroupingOutputCols $groupingPrivate $aggs)
+)
 
 # EliminateGroupByProject discards a nested Project operator that is only
 # removing columns from its input (and not synthesizing new ones). That's

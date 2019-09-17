@@ -1243,6 +1243,11 @@ func (t *T) Identical(other *T) bool {
 	return t.InternalType.Identical(&other.InternalType)
 }
 
+// Equal is for use in generated protocol buffer code only.
+func (t *T) Equal(other T) bool {
+	return t.Identical(&other)
+}
+
 // Size returns the size, in bytes, of this type once it has been marshaled to
 // a byte buffer. This is typically called to determine the size of the buffer
 // that needs to be allocated before calling Marshal.

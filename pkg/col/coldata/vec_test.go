@@ -143,12 +143,12 @@ func TestAppend(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		args           AppendArgs
+		args           SliceArgs
 		expectedLength int
 	}{
 		{
 			name: "AppendSimple",
-			args: AppendArgs{
+			args: SliceArgs{
 				// DestIdx must be specified to append to the end of dest.
 				DestIdx: BatchSize,
 			},
@@ -156,7 +156,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendOverwriteSimple",
-			args: AppendArgs{
+			args: SliceArgs{
 				// DestIdx 0, the default value, will start appending at index 0.
 				DestIdx: 0,
 			},
@@ -164,7 +164,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendOverwriteSlice",
-			args: AppendArgs{
+			args: SliceArgs{
 				// Start appending at index 10.
 				DestIdx: 10,
 			},
@@ -172,7 +172,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendSlice",
-			args: AppendArgs{
+			args: SliceArgs{
 				DestIdx:     20,
 				SrcStartIdx: 10,
 				SrcEndIdx:   20,
@@ -181,7 +181,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendWithSel",
-			args: AppendArgs{
+			args: SliceArgs{
 				DestIdx:     5,
 				SrcStartIdx: 10,
 				SrcEndIdx:   20,
@@ -191,10 +191,10 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendWithHalfSel",
-			args: AppendArgs{
+			args: SliceArgs{
 				DestIdx:   5,
 				Sel:       sel[:len(sel)/2],
-				SrcEndIdx: uint16(len(sel) / 2),
+				SrcEndIdx: uint64(len(sel) / 2),
 			},
 			expectedLength: 5 + (BatchSize / 2),
 		},
@@ -243,35 +243,39 @@ func TestCopy(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		args        CopyArgs
+		args        CopySliceArgs
 		expectedSum int
 	}{
 		{
 			name:        "CopyNothing",
-			args:        CopyArgs{},
+			args:        CopySliceArgs{},
 			expectedSum: 0,
 		},
 		{
 			name: "CopyBatchSizeMinus1WithOffset1",
-			args: CopyArgs{
-				// Use DestIdx 1 to make sure that it is respected.
-				DestIdx:   1,
-				SrcEndIdx: BatchSize - 1,
+			args: CopySliceArgs{
+				SliceArgs: SliceArgs{
+					// Use DestIdx 1 to make sure that it is respected.
+					DestIdx:   1,
+					SrcEndIdx: BatchSize - 1,
+				},
 			},
 			// expectedSum uses sum of positive integers formula.
 			expectedSum: ((BatchSize - 1) * (BatchSize)) / 2,
 		},
 		{
 			name: "CopyWithSel",
-			args: CopyArgs{
-				// Set sel, but this should be ignored in favor of Sel64.
-				Sel: sel,
+			args: CopySliceArgs{
+				SliceArgs: SliceArgs{
+					// Set sel, but this should be ignored in favor of Sel64.
+					Sel:         sel,
+					DestIdx:     25,
+					SrcStartIdx: 1,
+					SrcEndIdx:   2,
+				},
 				// Since sel64 and sel refer to the same indices, slice sel64 to be able
 				// to tell which sel was used.
-				Sel64:       sel64[1:],
-				DestIdx:     25,
-				SrcStartIdx: 1,
-				SrcEndIdx:   2,
+				Sel64: sel64[1:],
 			},
 			// We'll have just the third element in the resulting slice.
 			expectedSum: 3,
@@ -324,12 +328,14 @@ func TestCopyNulls(t *testing.T) {
 		src.Nulls().SetNull(uint16(i))
 	}
 
-	copyArgs := CopyArgs{
-		ColType:     typ,
-		Src:         src,
-		DestIdx:     3,
-		SrcStartIdx: 3,
-		SrcEndIdx:   10,
+	copyArgs := CopySliceArgs{
+		SliceArgs: SliceArgs{
+			ColType:     typ,
+			Src:         src,
+			DestIdx:     3,
+			SrcStartIdx: 3,
+			SrcEndIdx:   10,
+		},
 	}
 
 	dst.Copy(copyArgs)
@@ -353,6 +359,55 @@ func TestCopyNulls(t *testing.T) {
 	}
 }
 
+func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
+	const typ = coltypes.Int64
+
+	// Set up the destination vector. It is all nulls except for a single
+	// non-null at index 0.
+	dst := NewMemColumn(typ, BatchSize)
+	dstInts := dst.Int64()
+	for i := range dstInts {
+		dstInts[i] = 1
+	}
+	dst.Nulls().SetNulls()
+	dst.Nulls().UnsetNull(0)
+
+	// Set up the source vector with two nulls.
+	src := NewMemColumn(typ, BatchSize)
+	srcInts := src.Int64()
+	for i := range srcInts {
+		srcInts[i] = 2
+	}
+	src.Nulls().SetNull(0)
+	src.Nulls().SetNull(3)
+
+	// Using a small selection vector and SelOnDest, perform a copy and verify
+	// that nulls in between the selected tuples weren't unset.
+	copyArgs := CopySliceArgs{
+		SelOnDest: true,
+		SliceArgs: SliceArgs{
+			ColType:     typ,
+			Src:         src,
+			SrcStartIdx: 1,
+			SrcEndIdx:   3,
+			Sel:         []uint16{0, 1, 3},
+		},
+	}
+
+	dst.Copy(copyArgs)
+
+	// 0 was not null in dest and null in source, but it wasn't selected. Not null.
+	require.False(t, dst.Nulls().NullAt(0))
+	// 1 was null in dest and not null in source: it becomes not null.
+	require.False(t, dst.Nulls().NullAt(1))
+	// 2 wasn't included in the selection vector: it stays null.
+	require.True(t, dst.Nulls().NullAt(2))
+	// 3 was null in dest and null in source: it stays null.
+	require.True(t, dst.Nulls().NullAt(3))
+	// 4 wasn't included: it stays null.
+	require.True(t, dst.Nulls().NullAt(4))
+}
+
 func BenchmarkAppend(b *testing.B) {
 	const typ = coltypes.Int64
 
@@ -361,15 +416,15 @@ func BenchmarkAppend(b *testing.B) {
 
 	benchCases := []struct {
 		name string
-		args AppendArgs
+		args SliceArgs
 	}{
 		{
 			name: "AppendSimple",
-			args: AppendArgs{},
+			args: SliceArgs{},
 		},
 		{
 			name: "AppendWithSel",
-			args: AppendArgs{
+			args: SliceArgs{
 				Sel: sel,
 			},
 		},
@@ -399,16 +454,18 @@ func BenchmarkCopy(b *testing.B) {
 
 	benchCases := []struct {
 		name string
-		args CopyArgs
+		args CopySliceArgs
 	}{
 		{
 			name: "CopySimple",
-			args: CopyArgs{},
+			args: CopySliceArgs{},
 		},
 		{
 			name: "CopyWithSel",
-			args: CopyArgs{
-				Sel: sel,
+			args: CopySliceArgs{
+				SliceArgs: SliceArgs{
+					Sel: sel,
+				},
 			},
 		},
 	}

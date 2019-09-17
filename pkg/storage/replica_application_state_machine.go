@@ -439,7 +439,11 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// command was rejected with a below-Raft forced error then its replicated
 	// result was just cleared and this will be a no-op.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-		return nil, wrapWithNonDeterministicFailure(err, "unable to acquire split lock")
+		kind := "merge"
+		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
+			kind = "split"
+		}
+		return nil, wrapWithNonDeterministicFailure(err, "unable to acquire "+kind+" lock")
 	} else if splitMergeUnlock != nil {
 		// Set the splitMergeUnlock on the replicaAppBatch to be called
 		// after the batch has been applied (see replicaAppBatch.commit).
@@ -880,19 +884,34 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	}
 
 	// Mark the command as applied and return it as an apply.AppliedCommand.
+	// NB: Commands which were reproposed at a higher MaxLeaseIndex will not be
+	// considered local at this point as their proposal will have been detached
+	// in prepareLocalResult().
 	if cmd.IsLocal() {
-		if !cmd.Rejected() {
-			if cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
-				log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
-			}
-			if cmd.proposal.applied {
-				// If the command already applied then we shouldn't be "finishing" its
-				// application again because it should only be able to apply successfully
-				// once. We expect that when any reproposal for the same command attempts
-				// to apply it will be rejected by the below raft lease sequence or lease
-				// index check in checkForcedErr.
-				log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
-			}
+		rejected := cmd.Rejected()
+		higherReproposalsExist := cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
+		if !rejected && higherReproposalsExist {
+			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
+		}
+		if !rejected && cmd.proposal.applied {
+			// If the command already applied then we shouldn't be "finishing" its
+			// application again because it should only be able to apply successfully
+			// once. We expect that when any reproposal for the same command attempts
+			// to apply it will be rejected by the below raft lease sequence or lease
+			// index check in checkForcedErr.
+			log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
+		}
+		// If any reproposals at a higher MaxLeaseIndex exist we know that they will
+		// never successfully apply, remove them from the map to avoid future
+		// reproposals. If there is no command referencing this proposal at a higher
+		// MaxLeaseIndex then it will already have been removed (see
+		// shouldRemove in replicaDecoder.retrieveLocalProposals()). It is possible
+		// that a later command in this batch referred to this proposal but it must
+		// have failed because it carried the same MaxLeaseIndex.
+		if higherReproposalsExist {
+			sm.r.mu.Lock()
+			delete(sm.r.mu.proposals, cmd.idKey)
+			sm.r.mu.Unlock()
 		}
 		cmd.proposal.applied = true
 	}

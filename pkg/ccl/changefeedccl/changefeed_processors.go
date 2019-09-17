@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -33,10 +33,10 @@ import (
 )
 
 type changeAggregator struct {
-	distsqlrun.ProcessorBase
+	execinfra.ProcessorBase
 
-	flowCtx *distsqlrun.FlowCtx
-	spec    distsqlpb.ChangeAggregatorSpec
+	flowCtx *execinfra.FlowCtx
+	spec    execinfrapb.ChangeAggregatorSpec
 	memAcc  mon.BoundAccount
 
 	// cancel shuts down the processor, both the `Next()` flow and the poller.
@@ -68,17 +68,17 @@ type changeAggregator struct {
 	resolvedSpanBuf encDatumRowBuffer
 }
 
-var _ distsqlrun.Processor = &changeAggregator{}
-var _ distsqlrun.RowSource = &changeAggregator{}
+var _ execinfra.Processor = &changeAggregator{}
+var _ execinfra.RowSource = &changeAggregator{}
 
 func newChangeAggregatorProcessor(
-	flowCtx *distsqlrun.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	spec distsqlpb.ChangeAggregatorSpec,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
+	spec execinfrapb.ChangeAggregatorSpec,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsqlrun.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
 	ca := &changeAggregator{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -86,14 +86,14 @@ func newChangeAggregatorProcessor(
 	}
 	if err := ca.Init(
 		ca,
-		&distsqlpb.PostProcessSpec{},
+		&execinfrapb.PostProcessSpec{},
 		nil, /* types */
 		flowCtx,
 		processorID,
 		output,
 		memMonitor,
-		distsqlrun.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				ca.close()
 				return nil
 			},
@@ -237,8 +237,8 @@ func (ca *changeAggregator) close() {
 }
 
 // Next is part of the RowSource interface.
-func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for ca.State == distsqlrun.StateRunning {
+func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
 			return ca.changedRowBuf.Pop(), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
@@ -303,15 +303,15 @@ const (
 )
 
 type changeFrontier struct {
-	distsqlrun.ProcessorBase
+	execinfra.ProcessorBase
 
-	flowCtx *distsqlrun.FlowCtx
-	spec    distsqlpb.ChangeFrontierSpec
+	flowCtx *execinfra.FlowCtx
+	spec    execinfrapb.ChangeFrontierSpec
 	memAcc  mon.BoundAccount
 	a       sqlbase.DatumAlloc
 
 	// input returns rows from one or more changeAggregator processors
-	input distsqlrun.RowSource
+	input execinfra.RowSource
 
 	// sf contains the current resolved timestamp high-water for the tracked
 	// span set.
@@ -350,18 +350,18 @@ type changeFrontier struct {
 	metricsID int
 }
 
-var _ distsqlrun.Processor = &changeFrontier{}
-var _ distsqlrun.RowSource = &changeFrontier{}
+var _ execinfra.Processor = &changeFrontier{}
+var _ execinfra.RowSource = &changeFrontier{}
 
 func newChangeFrontierProcessor(
-	flowCtx *distsqlrun.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	spec distsqlpb.ChangeFrontierSpec,
-	input distsqlrun.RowSource,
-	output distsqlrun.RowReceiver,
-) (distsqlrun.Processor, error) {
+	spec execinfrapb.ChangeFrontierSpec,
+	input execinfra.RowSource,
+	output execinfra.RowReceiver,
+) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := distsqlrun.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
 	cf := &changeFrontier{
 		flowCtx: flowCtx,
 		spec:    spec,
@@ -370,18 +370,18 @@ func newChangeFrontierProcessor(
 		sf:      makeSpanFrontier(spec.TrackedSpans...),
 	}
 	if err := cf.Init(
-		cf, &distsqlpb.PostProcessSpec{},
+		cf, &execinfrapb.PostProcessSpec{},
 		input.OutputTypes(),
 		flowCtx,
 		processorID,
 		output,
 		memMonitor,
-		distsqlrun.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				cf.close()
 				return nil
 			},
-			InputsToDrain: []distsqlrun.RowSource{cf.input},
+			InputsToDrain: []execinfra.RowSource{cf.input},
 		},
 	); err != nil {
 		return nil, err
@@ -501,8 +501,8 @@ func (cf *changeFrontier) closeMetrics() {
 }
 
 // Next is part of the RowSource interface.
-func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	for cf.State == distsqlrun.StateRunning {
+func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for cf.State == execinfra.StateRunning {
 		if !cf.passthroughBuf.IsEmpty() {
 			return cf.passthroughBuf.Pop(), nil
 		} else if !cf.resolvedBuf.IsEmpty() {

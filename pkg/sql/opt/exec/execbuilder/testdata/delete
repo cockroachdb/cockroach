@@ -60,49 +60,57 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-tree          field  description
-delete range  ·      ·
-·             from   unindexed
-·             spans  ALL
+tree          field        description
+·             distributed  false
+·             vectorized   false
+delete range  ·            ·
+·             from         unindexed
+·             spans        ALL
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
-count                     ·         ·
- └── delete               ·         ·
-      │                   from      unindexed
-      │                   strategy  deleter
-      └── render          ·         ·
-           └── limit      ·         ·
-                │         count     10
-                └── scan  ·         ·
-·                         table     unindexed@primary
-·                         spans     ALL
-·                         filter    v = 7
+·                         distributed  false
+·                         vectorized   false
+count                     ·            ·
+ └── delete               ·            ·
+      │                   from         unindexed
+      │                   strategy     deleter
+      └── render          ·            ·
+           └── limit      ·            ·
+                │         count        10
+                └── scan  ·            ·
+·                         table        unindexed@primary
+·                         spans        ALL
+·                         filter       v = 7
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-count                     ·         ·
- └── delete               ·         ·
-      │                   from      unindexed
-      │                   strategy  deleter
-      └── render          ·         ·
-           └── limit      ·         ·
-                │         count     10
-                └── scan  ·         ·
-·                         table     unindexed@primary
-·                         spans     ALL
-·                         filter    v = 5
+·                         distributed  false
+·                         vectorized   false
+count                     ·            ·
+ └── delete               ·            ·
+      │                   from         unindexed
+      │                   strategy     deleter
+      └── render          ·            ·
+           └── limit      ·            ·
+                │         count        10
+                └── scan  ·            ·
+·                         table        unindexed@primary
+·                         spans        ALL
+·                         filter       v = 5
 
 # Check fast DELETE.
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE k > 0
 ----
-delete range  ·      ·
-·             from   unindexed
-·             spans  /1-
+·             distributed  false
+·             vectorized   false
+delete range  ·            ·
+·             from         unindexed
+·             spans        /1-
 
 # Check fast DELETE with reverse scans (not supported by optimizer).
 query error DELETE statement requires LIMIT when ORDER BY is used
@@ -112,48 +120,56 @@ EXPLAIN DELETE FROM unindexed WHERE true ORDER BY k DESC
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
 ----
-count           ·         ·
- └── delete     ·         ·
-      │         from      unindexed
-      │         strategy  deleter
-      └── scan  ·         ·
-·               table     unindexed@primary
-·               spans     /1-
-·               limit     1
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         unindexed
+      │         strategy     deleter
+      └── scan  ·            ·
+·               table        unindexed@primary
+·               spans        /1-
+·               limit        1
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-count           ·         ·
- └── delete     ·         ·
-      │         from      indexed
-      │         strategy  deleter
-      └── scan  ·         ·
-·               table     indexed@indexed_value_idx
-·               spans     /5-/6
-·               limit     10
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         indexed
+      │         strategy     deleter
+      └── scan  ·            ·
+·               table        indexed@indexed_value_idx
+·               spans        /5-/6
+·               limit        10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-count           ·         ·
- └── delete     ·         ·
-      │         from      indexed
-      │         strategy  deleter
-      └── scan  ·         ·
-·               table     indexed@indexed_value_idx
-·               spans     ALL
-·               limit     10
+·               distributed  false
+·               vectorized   false
+count           ·            ·
+ └── delete     ·            ·
+      │         from         indexed
+      │         strategy     deleter
+      └── scan  ·            ·
+·               table        indexed@indexed_value_idx
+·               spans        ALL
+·               limit        10
 
 # TODO(andyk): Prune columns so that index-join is not necessary.
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-run             ·         ·
- └── delete     ·         ·
-      │         from      indexed
-      │         strategy  deleter
-      └── scan  ·         ·
-·               table     indexed@indexed_value_idx
-·               spans     /5-/6
-·               limit     10
+·               distributed  false
+·               vectorized   false
+run             ·            ·
+ └── delete     ·            ·
+      │         from         indexed
+      │         strategy     deleter
+      └── scan  ·            ·
+·               table        indexed@indexed_value_idx
+·               spans        /5-/6
+·               limit        10

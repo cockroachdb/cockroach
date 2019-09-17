@@ -12,6 +12,8 @@ package coltypes
 
 import (
 	"fmt"
+	"strings"
+	"text/template"
 
 	"github.com/cockroachdb/apd"
 )
@@ -140,9 +142,9 @@ var (
 	_ = Bool.GoTypeSliceName
 	_ = Bool.Get
 	_ = Bool.Set
-	_ = Bool.Swap
 	_ = Bool.Slice
 	_ = Bool.CopySlice
+	_ = Bool.CopyVal
 	_ = Bool.AppendSlice
 	_ = Bool.AppendVal
 	_ = Bool.Len
@@ -159,34 +161,34 @@ func (t T) GoTypeSliceName() string {
 }
 
 // Get is a function that should only be used in templates.
-func (t T) Get(safe string, target, i string) string {
-	if safe != "safe" && safe != "unsafe" {
-		panic(fmt.Sprintf("unknown safe argument %s, use either safe or unsafe", safe))
-	}
-	if t == Bytes {
-		getString := fmt.Sprintf("%s.Get(%s)", target, i)
-		if safe == "safe" {
-			getString = "append([]byte(nil), " + getString + "...)"
-		}
-		return getString
+func (t T) Get(target, i string) string {
+	switch t {
+	case Bytes:
+		return fmt.Sprintf("%s.Get(%s)", target, i)
 	}
 	return fmt.Sprintf("%s[%s]", target, i)
 }
 
-// Set is a function that should only be used in templates.
-func (t T) Set(target, i, new string) string {
-	if t == Bytes {
-		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
+// CopyVal is a function that should only be used in templates.
+func (t T) CopyVal(dest, src string) string {
+	switch t {
+	case Bytes:
+		return fmt.Sprintf("%[1]s = append(%[1]s[:0], %[2]s...)", dest, src)
+	case Decimal:
+		return fmt.Sprintf("%s.Set(&%s)", dest, src)
 	}
-	return fmt.Sprintf("%s[%s] = %s", target, i, new)
+	return fmt.Sprintf("%s = %s", dest, src)
 }
 
-// Swap is a function that should only be used in templates.
-func (t T) Swap(target, i, j string) string {
-	if t == Bytes {
-		return fmt.Sprintf("%s.Swap(%s, %s)", target, i, j)
+// Set is a function that should only be used in templates.
+func (t T) Set(target, i, new string) string {
+	switch t {
+	case Bytes:
+		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
+	case Decimal:
+		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
 	}
-	return fmt.Sprintf("%[1]s[%[2]s], %[1]s[%[3]s] = %[1]s[%[3]s], %[1]s[%[2]s]", target, i, j)
+	return fmt.Sprintf("%s[%s] = %s", target, i, new)
 }
 
 // Slice is a function that should only be used in templates.
@@ -199,26 +201,84 @@ func (t T) Slice(target, start, end string) string {
 
 // CopySlice is a function that should only be used in templates.
 func (t T) CopySlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
-	if t == Bytes {
-		return fmt.Sprintf("%s.CopySlice(%s, %s, %s, %s)", target, src, destIdx, srcStartIdx, srcEndIdx)
+	var tmpl string
+	switch t {
+	case Bytes:
+		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
+	case Decimal:
+		tmpl = `{
+  __tgt_slice := {{.Tgt}}[{{.TgtIdx}}:]
+  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
+  for __i := range __src_slice {
+    __tgt_slice[__i].Set(&__src_slice[__i])
+  }
+}`
+	default:
+		tmpl = `copy({{.Tgt}}[{{.TgtIdx}}:], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}])`
 	}
-	return fmt.Sprintf("copy(%s[%s:], %s[%s:%s])", target, destIdx, src, srcStartIdx, srcEndIdx)
+	args := map[string]string{
+		"Tgt":      target,
+		"Src":      src,
+		"TgtIdx":   destIdx,
+		"SrcStart": srcStartIdx,
+		"SrcEnd":   srcEndIdx,
+	}
+	var buf strings.Builder
+	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
+		panic(err)
+	}
+	return buf.String()
 }
 
 // AppendSlice is a function that should only be used in templates.
 func (t T) AppendSlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
-	if t == Bytes {
-		return fmt.Sprintf("%s.AppendSlice(%s, %s, %s, %s)", target, src, destIdx, srcStartIdx, srcEndIdx)
+	var tmpl string
+	switch t {
+	case Bytes:
+		tmpl = `{{.Tgt}}.AppendSlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
+	case Decimal:
+		tmpl = `{
+  __desiredCap := {{.TgtIdx}} + {{.SrcEnd}} - {{.SrcStart}}
+  if cap({{.Tgt}}) >= __desiredCap {
+  	{{.Tgt}} = {{.Tgt}}[:__desiredCap]
+  } else {
+    __new_slice := make([]apd.Decimal, __desiredCap)
+    copy(__new_slice, {{.Tgt}})
+    {{.Tgt}} = __new_slice
+  }
+  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
+  __dst_slice := {{.Tgt}}[{{.TgtIdx}}:]
+  for __i := range __src_slice {
+    __dst_slice[__i].Set(&__src_slice[__i])
+  }
+}`
+	default:
+		tmpl = `{{.Tgt}} = append({{.Tgt}}[:{{.TgtIdx}}], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]...)`
 	}
-	return fmt.Sprintf("%[1]s = append(%[1]s[:%s], %s[%s:%s]...)", target, destIdx, src, srcStartIdx, srcEndIdx)
+	args := map[string]string{
+		"Tgt":      target,
+		"Src":      src,
+		"TgtIdx":   destIdx,
+		"SrcStart": srcStartIdx,
+		"SrcEnd":   srcEndIdx,
+	}
+	var buf strings.Builder
+	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
+		panic(err)
+	}
+	return buf.String()
 }
 
 // AppendVal is a function that should only be used in templates.
 func (t T) AppendVal(target, v string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
+	case Decimal:
+		return fmt.Sprintf(`%[1]s = append(%[1]s, apd.Decimal{})
+%[1]s[len(%[1]s)-1].Set(&%[2]s)`, target, v)
 	}
-	return fmt.Sprintf("%[1]s = append(%[1]s, %s)", target, v)
+	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
 
 // Len is a function that should only be used in templates.
@@ -239,8 +299,13 @@ func (t T) Range(loopVariableIdent string, target string) string {
 
 // Zero is a function that should only be used in templates.
 func (t T) Zero(target string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf("%s.Zero()", target)
+	case Decimal:
+		return fmt.Sprintf(`for n := 0; n < len(%[1]s); n++ {
+    %[1]s[n].SetInt64(0)
+}`, target)
 	}
 	return fmt.Sprintf("for n := 0; n < len(%[1]s); n += copy(%[1]s[n:], zero%sColumn) {}", target, t.String())
 }

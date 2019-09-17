@@ -9,6 +9,8 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 query TTT
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
+·                 distributed   false
+·                 vectorized    false
 root              ·             ·
  ├── split        ·             ·
  │    └── values  ·             ·
@@ -26,6 +28,8 @@ ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 query TTT
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
+·               distributed   false
+·               vectorized    false
 root            ·             ·
  ├── values     ·             ·
  │              size          1 column, 1 row
@@ -41,6 +45,8 @@ root            ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
+·                    distributed   false                                                                        ·          ·
+·                    vectorized    false                                                                        ·          ·
 root                 ·             ·                                                                            (a, b, c)  ·
  ├── scan            ·             ·                                                                            (a, b, c)  ·
  │                   table         abc@primary                                                                  ·          ·
@@ -72,6 +78,8 @@ root                 ·             ·                                          
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc)
 ----
+·           distributed         false        ·    ·
+·           vectorized          true         ·    ·
 merge-join  ·                   ·            (a)  ·
  │          type                semi         ·    ·
  │          equality            (a) = (a)    ·    ·
@@ -88,15 +96,19 @@ merge-join  ·                   ·            (a)  ·
 query TTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
-sort         ·      ·
- │           order  +foo1
- └── values  ·      ·
-·            size   3 columns, 3 rows
+·            distributed  false
+·            vectorized   false
+sort         ·            ·
+ │           order        +foo1
+ └── values  ·            ·
+·            size         3 columns, 3 rows
 
 # the subquery's plan must be visible in EXPLAIN
 query TTT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
+·                 distributed   false
+·                 vectorized    false
 root              ·             ·
  ├── values       ·             ·
  │                size          1 column, 2 rows
@@ -125,6 +137,8 @@ WHERE
     OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
+·               distributed   false                                                                                                       ·                   ·
+·               vectorized    false                                                                                                       ·                   ·
 root            ·             ·                                                                                                           (col0)              ·
  ├── render     ·             ·                                                                                                           (col0)              ·
  │    │         render 0      col0                                                                                                        ·                   ·
@@ -151,6 +165,8 @@ CREATE TABLE b (x INT PRIMARY KEY, z INT);
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
 ----
+·           distributed         false      ·       ·
+·           vectorized          true       ·       ·
 merge-join  ·                   ·          (x, y)  ·
  │          type                semi       ·       ·
  │          equality            (x) = (x)  ·       ·
@@ -167,6 +183,8 @@ merge-join  ·                   ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
+·               distributed        false            ·          ·
+·               vectorized         false            ·          ·
 hash-join       ·                  ·                (x, y)     ·
  │              type               semi             ·          ·
  │              equality           (x) = (column5)  ·          ·
@@ -183,6 +201,8 @@ hash-join       ·                  ·                (x, y)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
 ----
+·           distributed         false      ·       ·
+·           vectorized          true       ·       ·
 merge-join  ·                   ·          (x, y)  ·
  │          type                anti       ·       ·
  │          equality            (x) = (x)  ·       ·
@@ -199,6 +219,8 @@ merge-join  ·                   ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
+·               distributed        false            ·          ·
+·               vectorized         false            ·          ·
 hash-join       ·                  ·                (x, z)     ·
  │              type               anti             ·          ·
  │              equality           (x) = (column5)  ·          ·
@@ -215,6 +237,8 @@ hash-join       ·                  ·                (x, z)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
 ----
+·               distributed    false              ·          ·
+·               vectorized     false              ·          ·
 root            ·              ·                  ("array")  ·
  ├── values     ·              ·                  ("array")  ·
  │              size           1 column, 1 row    ·          ·
@@ -231,12 +255,14 @@ root            ·              ·                  ("array")  ·
 query TTTTT
 EXPLAIN(verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
-apply-join  ·      ·            (a, b, c)  ·
- │          type   semi         ·          ·
- │          pred   column1 = a  ·          ·
- └── scan   ·      ·            (a, b, c)  ·
-·           table  abc@primary  ·          ·
-·           spans  ALL          ·          ·
+·           distributed  false        ·          ·
+·           vectorized   false        ·          ·
+apply-join  ·            ·            (a, b, c)  ·
+ │          type         semi         ·          ·
+ │          pred         column1 = a  ·          ·
+ └── scan   ·            ·            (a, b, c)  ·
+·           table        abc@primary  ·          ·
+·           spans        ALL          ·          ·
 
 # Case where the EXISTS subquery still has outer columns in the subquery
 # (regression test for #28816).

@@ -333,6 +333,8 @@ func TestReplicateRange(t *testing.T) {
 func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/40351")
+
 	sc := storage.TestStoreConfig(nil)
 	// Disable periodic gossip activities. The periodic gossiping of the first
 	// range can cause spurious lease transfers which cause this test to fail.
@@ -953,6 +955,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// includes the increment).
 	truncArgs := truncateLogArgs(index+1, 1)
 	testutils.SucceedsSoon(t, func() error {
+		mtc.advanceClock(ctx)
 		_, pErr := client.SendWrapped(ctx, newLeaderReplSender, truncArgs)
 		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
 			return pErr.GoError()
@@ -1568,16 +1571,11 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		replicaCount++
 		return true
 	})
-	// It's hard to make generalizations about exactly how many snapshots happen
-	// of each type. Almost all of them are learner snaps, but there is a race
-	// where the raft snapshot queue sometimes starts the snapshot first. Further,
-	// if the raft snapshot is at a higher index, we may even reject the learner
-	// snap. We definitely get at least one snapshot per replica and the race is
-	// rare enough that the majority of them should be learner snaps.
-	if expected := 2 * replicaCount; expected < learnerApplied+raftApplied {
-		t.Fatalf("expected at least %d snapshots, but found %d learner snaps and %d raft snaps",
-			expected, learnerApplied, raftApplied)
-	}
+	// We upreplicate each range (once each for n2 and n3), so there should be
+	// exactly 2 * replica learner snaps, one per upreplication.
+	require.Equal(t, 2*replicaCount, learnerApplied)
+	// Ideally there would be zero raft snaps, but etcd/raft is picky about
+	// getting a snapshot at exactly the index it asked for.
 	if raftApplied > learnerApplied {
 		t.Fatalf("expected more learner snaps %d than raft snaps %d", learnerApplied, raftApplied)
 	}
@@ -4365,6 +4363,9 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 // traffic on the SystemClass connection.
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/40496")
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
@@ -4430,8 +4431,17 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		disabled.Store(true)
 		repl1, err := mtc.stores[0].GetReplica(1)
 		require.Nil(t, err)
-		// Transfer the lease on range 1
-		lease, _ := repl1.GetLease()
+		// Transfer the lease on range 1. Make sure there's no pending transfer.
+		var lease roachpb.Lease
+		testutils.SucceedsSoon(t, func() error {
+			var next roachpb.Lease
+			lease, next = repl1.GetLease()
+			if next != (roachpb.Lease{}) {
+				return fmt.Errorf("lease transfer in process, next = %v", next)
+			}
+			return nil
+		})
+
 		var target int
 		for i := roachpb.StoreID(1); i <= numReplicas; i++ {
 			if lease.Replica.StoreID != i {
@@ -4439,7 +4449,11 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 				break
 			}
 		}
-		mtc.transferLease(ctx, 1, int(lease.Replica.StoreID-1), target)
+		// Use SucceedsSoon to deal with rare stress cases where the lease
+		// transfer may fail.
+		testutils.SucceedsSoon(t, func() error {
+			return mtc.transferLeaseNonFatal(ctx, 1, target, int(lease.Replica.StoreID-1))
+		})
 		// Set a relatively short timeout so that this test doesn't take too long.
 		// We should always hit it.
 		withTimeout, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
@@ -4448,15 +4462,22 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		_, pErr = client.SendWrapped(withTimeout, mtc.stores[0].TestSender(), putReq)
 		require.NotNil(t, pErr, "expected an error when sending to a disconnected store")
 		// Transfer the lease back to demonstrate that the system range is still live.
-		mtc.transferLease(ctx, 1, target, int(lease.Replica.StoreID-1))
+		testutils.SucceedsSoon(t, func() error {
+			return mtc.transferLeaseNonFatal(ctx, 1, target, int(lease.Replica.StoreID-1))
+		})
+
 		// Heal the partition, the previous proposal may now succeed but it may have
 		// have been canceled.
 		disabled.Store(false)
 		// Overwrite with a new value and ensure that it propagates.
 		putReq.Value.SetInt(3)
-		_, pErr = client.SendWrapped(ctx, mtc.stores[0].TestSender(), putReq)
-		require.Nil(t, pErr, "expected to succeed after healing the partition")
-		mtc.waitForValues(keyA, []int64{3, 3, 3})
+		// Retry because failures in stress due to liveness epoch failures can
+		// happen.
+		testutils.SucceedsSoon(t, func() error {
+			_, pErr = client.SendWrapped(ctx, mtc.stores[0].TestSender(), putReq)
+			return pErr.GoError()
+		})
+		mtc.waitForValuesT(t, keyA, []int64{3, 3, 3})
 	}
 	t.Run("initial_run", runTest)
 	mtc.restart()

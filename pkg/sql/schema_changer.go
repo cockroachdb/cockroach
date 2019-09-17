@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -655,7 +655,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 				}
 
 				isLocal := err != nil || rec == cannotDistribute
-				out := distsqlpb.ProcessorCoreUnion{BulkRowWriter: &distsqlpb.BulkRowWriterSpec{
+				out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 					Table: *table,
 				}}
 
@@ -1315,17 +1315,24 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	}
 
 	descs, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *client.Txn) error {
-		if jobSucceeded {
-			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-				return errors.Wrapf(err,
-					"failed to mark job %d as successful", errors.Safe(*sc.job.ID()))
-			}
-		} else {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
-				return RunningStatusWaitingGC, nil
-			}); err != nil {
-				return errors.Wrapf(err,
-					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
+		// If the job already has a terminal status, we shouldn't need to update
+		// its status again. One way this may happen is when a table is dropped
+		// all jobs that mutate that table are marked successful. So if is a job
+		// that mutates a table that is dropped in the same txn, then it will
+		// already be successful. These jobs don't need their status to be updated.
+		if !sc.job.WithTxn(txn).CheckTerminalStatus(ctx) {
+			if jobSucceeded {
+				if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+					return errors.Wrapf(err,
+						"failed to mark job %d as successful", errors.Safe(*sc.job.ID()))
+				}
+			} else {
+				if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+					return RunningStatusWaitingGC, nil
+				}); err != nil {
+					return errors.Wrapf(err,
+						"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
+				}
 			}
 		}
 

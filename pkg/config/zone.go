@@ -438,9 +438,11 @@ func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 	}
 }
 
-// StoreMatchesConstraint returns whether a store matches the given constraint.
-func StoreMatchesConstraint(store roachpb.StoreDescriptor, constraint Constraint) bool {
-	hasConstraint := storeHasConstraint(store, constraint)
+// StoreSatisfiesConstraint checks whether a store satisfies the given constraint.
+// If the constraint is of the PROHIBITED type, satisfying it means the store
+// not matching the constraint's spec.
+func StoreSatisfiesConstraint(store roachpb.StoreDescriptor, constraint Constraint) bool {
+	hasConstraint := StoreMatchesConstraint(store, constraint)
 	if (constraint.Type == Constraint_REQUIRED && !hasConstraint) ||
 		(constraint.Type == Constraint_PROHIBITED && hasConstraint) {
 		return false
@@ -448,10 +450,11 @@ func StoreMatchesConstraint(store roachpb.StoreDescriptor, constraint Constraint
 	return true
 }
 
-// storeHasConstraint returns whether a store's attributes or node's locality
-// matches the key value pair in the constraint. It notably ignores whether
-// the constraint is required, prohibited, positive, or otherwise.
-func storeHasConstraint(store roachpb.StoreDescriptor, c Constraint) bool {
+// StoreMatchesConstraint returns whether a store's attributes or node's
+// locality match the constraint's spec. It notably ignores whether the
+// constraint is required, prohibited, positive, or otherwise.
+// Also see StoreSatisfiesConstraint().
+func StoreMatchesConstraint(store roachpb.StoreDescriptor, c Constraint) bool {
 	if c.Key == "" {
 		for _, attrs := range []roachpb.Attributes{store.Attrs, store.Node.Attrs} {
 			for _, attr := range attrs.Attrs {
@@ -460,11 +463,11 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c Constraint) bool {
 				}
 			}
 		}
-	} else {
-		for _, tier := range store.Node.Locality.Tiers {
-			if c.Key == tier.Key && c.Value == tier.Value {
-				return true
-			}
+		return false
+	}
+	for _, tier := range store.Node.Locality.Tiers {
+		if c.Key == tier.Key && c.Value == tier.Value {
+			return true
 		}
 	}
 	return false
@@ -472,7 +475,7 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c Constraint) bool {
 
 // DeleteTableConfig removes any configuration that applies to the table
 // targeted by this ZoneConfig, leaving only its subzone configs, if any. After
-// calling DeleteTableConfig, IsZubzonePlaceholder will return true.
+// calling DeleteTableConfig, IsSubzonePlaceholder will return true.
 //
 // Only table zones can have subzones, so it does not make sense to call this
 // method on non-table ZoneConfigs.
@@ -514,8 +517,8 @@ func (z *ZoneConfig) GetSubzone(indexID uint32, partition string) *Subzone {
 }
 
 // GetSubzoneForKeySuffix returns the ZoneConfig for the subzone that contains
-// keySuffix, if it exists.
-func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) *Subzone {
+// keySuffix, if it exists and its position in the subzones slice.
+func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (*Subzone, int32) {
 	// TODO(benesch): Use binary search instead.
 	for _, s := range z.SubzoneSpans {
 		// The span's Key is stored with the prefix removed, so we can compare
@@ -523,10 +526,10 @@ func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) *Subzone {
 		if (s.Key.Compare(keySuffix) <= 0) &&
 			((s.EndKey == nil && bytes.HasPrefix(keySuffix, s.Key)) || s.EndKey.Compare(keySuffix) > 0) {
 			copySubzone := z.Subzones[s.SubzoneIndex]
-			return &copySubzone
+			return &copySubzone, s.SubzoneIndex
 		}
 	}
-	return nil
+	return nil, -1
 }
 
 // SetSubzone installs subzone into the ZoneConfig, overwriting any existing

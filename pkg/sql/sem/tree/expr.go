@@ -453,12 +453,12 @@ func NewTypedComparisonExprWithSubOp(
 }
 
 // NewTypedIndirectionExpr returns a new IndirectionExpr that is verified to be well-typed.
-func NewTypedIndirectionExpr(expr, index TypedExpr) *IndirectionExpr {
+func NewTypedIndirectionExpr(expr, index TypedExpr, typ *types.T) *IndirectionExpr {
 	node := &IndirectionExpr{
 		Expr:        expr,
 		Indirection: ArraySubscripts{&ArraySubscript{Begin: index}},
 	}
-	node.typ = expr.(TypedExpr).ResolvedType().ArrayContents()
+	node.typ = typ
 	return node
 }
 
@@ -1326,7 +1326,8 @@ func (node *FuncExpr) IsDistSQLBlacklist() bool {
 	return node.fnProps != nil && node.fnProps.DistsqlBlacklist
 }
 
-// CanHandleNulls returns whether or not
+// CanHandleNulls returns whether or not the function can handle null
+// arguments.
 func (node *FuncExpr) CanHandleNulls() bool {
 	return node.fnProps != nil && node.fnProps.NullableArgs
 }

@@ -743,9 +743,7 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 
 	// Statistics
 	// ----------
-	if !b.disableStats {
-		b.sb.statsFromChild(with, 1)
-	}
+	// Passed through from the call above to b.buildProps.
 }
 
 func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.Relational) {
@@ -780,8 +778,9 @@ func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.R
 	rel.FuncDeps = props.FuncDepSet{}
 	rel.FuncDeps.CopyFrom(&ref.BindingProps.FuncDeps)
 	for i := range ref.InCols {
-		rel.FuncDeps.AddSynthesizedCol(opt.MakeColSet(ref.InCols[i]), ref.OutCols[i])
+		rel.FuncDeps.AddEquivalency(ref.InCols[i], ref.OutCols[i])
 	}
+	rel.FuncDeps.ProjectCols(ref.OutCols.ToSet())
 
 	// Cardinality
 	// -----------
@@ -789,7 +788,10 @@ func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.R
 
 	// Statistics
 	// ----------
-	// Copied from the referenced expression.
+	rel.Stats = props.Statistics{}
+	if !b.disableStats {
+		b.sb.buildWithScan(ref, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
@@ -1586,6 +1588,14 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 	if relational.OutputCols.Empty() {
 		md := join.Memo().Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
+
+		// Include the key columns in the output columns.
+		index := md.Table(join.Table).Index(join.Index)
+		for i := range join.KeyCols {
+			indexColID := join.Table.ColumnID(index.Column(i).Ordinal)
+			relational.OutputCols.Add(indexColID)
+		}
+
 		relational.NotNullCols = tableNotNullCols(md, join.Table)
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		relational.Cardinality = props.AnyCardinality
@@ -1679,6 +1689,8 @@ type joinPropsHelper struct {
 	filterNotNullCols opt.ColSet
 	filterIsTrue      bool
 	filterIsFalse     bool
+
+	selfJoinCols opt.ColSet
 }
 
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
@@ -1702,6 +1714,10 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 			h.filterNotNullCols.Add(colID)
 			h.filterNotNullCols.Add(indexColID)
 			h.filtersFD.AddEquivalency(colID, indexColID)
+			if colID == indexColID {
+				// This can happen if an index join was converted into a lookup join.
+				h.selfJoinCols.Add(colID)
+			}
 		}
 
 		// Lookup join has implicit equality conditions on KeyCols.

@@ -52,6 +52,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
@@ -1334,33 +1335,27 @@ func TestStoreSendBadRange(t *testing.T) {
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
 func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Replica {
+	ctx := context.Background()
 	repl := store.LookupReplica(key)
-	if repl == nil {
-		t.Fatalf("couldn't lookup range for key %q", key)
-	}
-	desc, err := store.NewRangeDescriptor(
-		context.Background(), splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NotNil(t, repl)
+	rangeID, err := store.AllocateRangeID(ctx)
+	require.NoError(t, err)
+	desc := roachpb.NewRangeDescriptor(
+		rangeID, splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
 	cv := store.ClusterSettings().Version.Version().Version
-	if _, err := stateloader.WriteInitialState(
+	_, err = stateloader.WriteInitialState(
 		context.Background(), store.engine, enginepb.MVCCStats{}, *desc, roachpb.Lease{},
 		hlc.Timestamp{}, cv, stateloader.TruncatedStateUnreplicated,
-	); err != nil {
-		t.Fatal(err)
-	}
+	)
+	require.NoError(t, err)
 	newRng, err := NewReplica(desc, store, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	newLeftDesc := *repl.Desc()
 	newLeftDesc.EndKey = splitKey
-	if err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng, newLeftDesc); err != nil {
-		t.Fatal(err)
-	}
+	err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng, newLeftDesc)
+	require.NoError(t, err)
 	return newRng
 }
 
@@ -1397,8 +1392,10 @@ func TestStoreSendOutOfRange(t *testing.T) {
 // allocated in successive blocks.
 func TestStoreRangeIDAllocation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	store, _ := createTestStore(t,
 		testStoreOpts{
 			// This test was written before test stores could start with more than one
@@ -1410,16 +1407,9 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	// Range IDs should be allocated from ID 2 (first allocated range)
 	// to rangeIDAllocCount * 3 + 1.
 	for i := 0; i < rangeIDAllocCount*3; i++ {
-		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
-		desc, err := store.NewRangeDescriptor(context.Background(),
-			roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)),
-			roachpb.MakeReplicaDescriptors(replicas))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if desc.RangeID != roachpb.RangeID(2+i) {
-			t.Errorf("expected range id %d; got %d", 2+i, desc.RangeID)
-		}
+		rangeID, err := store.AllocateRangeID(ctx)
+		require.NoError(t, err)
+		require.EqualValues(t, 2+i, rangeID)
 	}
 }
 
@@ -2873,7 +2863,8 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	s := tc.store
 	ctx := context.Background()
 
-	// Clobber the existing range so we can test nonoverlapping placeholders.
+	// Clobber the existing range and recreated it with an uninitialized
+	// descriptor so we can test nonoverlapping placeholders.
 	repl1, err := s.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
@@ -2884,11 +2875,19 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
 	cv := s.ClusterSettings().Version.Version().Version
 	if _, err := stateloader.WriteInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(), roachpb.Lease{},
+		ctx, s.Engine(), enginepb.MVCCStats{}, uninitDesc, roachpb.Lease{},
 		hlc.Timestamp{}, cv, stateloader.TruncatedStateUnreplicated,
 	); err != nil {
+		t.Fatal(err)
+	}
+	uninitRepl1, err := NewReplica(&uninitDesc, s, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.addReplicaToRangeMapLocked(uninitRepl1); err != nil {
 		t.Fatal(err)
 	}
 

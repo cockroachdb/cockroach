@@ -3195,22 +3195,71 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 // Regression test for #21146. This verifies the behavior of when the
 // application of some split command (part of the lhs's log) is delayed on some
 // store and meanwhile the rhs has rebalanced away and back, ending up with a
-// larger ReplicaID than the split thinks it will have.
+// larger ReplicaID than the split thinks it will have. Additionally we remove
+// the LHS replica on the same store before the split and re-add it after, so
+// that when the connectivity restores the LHS will apply a split trigger while
+// it is not a part of the descriptor.
+//
+// Or, in pictures (s3 looks like s1 throughout and is omitted):
+//
+//     s1:  [----r1@all-------------]
+//     s2:  [----r1@all-------------]
+// Remove s2:
+//     s1:  [----r1@s1s3------------]
+//     s2:  [----r1@all-------------] (outdated)
+// Split r1:
+//     s1:  [-r1@s1s3-|--r2@s1s3----]
+//     s2:  [----r1@all-------------] (outdated)
+// Add s2:
+//     s1:  [-r1@all-|--r2@s1s3-----]
+//     s2:  [----r1@all-------------] (outdated)
+// Add learner to s2 on r2 (remains uninitialized due to LHS state blocking it):
+//     s1:  [-r1@s1s3-|--r2@all-----]
+//     s2:  [----r1@all-------------] (outdated), uninitialized replica r2/3
+// Remove and re-add learner multiple times: r2/3 becomes r2/100
+//     (diagram looks the same except for replacing r2/3)
+//
+// When connectivity is restored, r1@s2 will start to catch up on the raft log
+// after it learns of its new replicaID. It first processes the replication
+// change that removes it and switches to a desc that doesn't contain itself as
+// a replica. Next it sees the split trigger that once caused a crash because
+// the store tried to look up itself and failed. This being handled correctly,
+// the split trigger next has to look up the right hand side, which surprisingly
+// has a higher replicaID than that seen in the split trigger. This too needs to
+// be tolerated.
 func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	blockPromoteCh := make(chan struct{})
+	var skipLearnerSnaps int32
+	withoutLearnerSnap := func(fn func()) {
+		atomic.StoreInt32(&skipLearnerSnaps, 1)
+		fn()
+		atomic.StoreInt32(&skipLearnerSnaps, 0)
+	}
 	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-		ReplicaAddStopAfterLearnerSnapshot: func() bool {
-			<-blockPromoteCh
+		ReplicaSkipLearnerSnapshot: func() bool {
+			return atomic.LoadInt32(&skipLearnerSnaps) != 0
+		},
+		ReplicaAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
+			if atomic.LoadInt32(&skipLearnerSnaps) != 0 {
+				return false
+			}
+			if len(targets) > 0 && targets[0].StoreID == 2 {
+				<-blockPromoteCh
+			}
 			return false
 		},
 		ReplicaAddSkipLearnerRollback: func() bool {
 			return true
 		},
+		// We rely on replicas remaining where they are even when they are removed
+		// from the range as this lets us set up a split trigger that will apply
+		// on a replica that is (at the time of the split trigger) not a member.
+		DisableReplicaGCQueue: true,
 	}}
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
@@ -3218,6 +3267,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 
 	k := tc.ScratchRange(t)
 	desc := tc.LookupRangeOrFatal(t, k)
+
+	// Add a replica on n3 which we'll need to achieve quorum while we cut off n2 below.
+	tc.AddReplicasOrFatal(t, k, tc.Target(2))
 
 	// First construct a range with a learner replica on the second node (index 1)
 	// and split it, ending up with an orphaned learner on each side of the split.
@@ -3237,23 +3289,40 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	})
 
 	_, kRHS := k, k.Next()
+	// Remove the LHS on the isolated store, split the range, and re-add it.
+	tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
 	descLHS, descRHS := tc.SplitRangeOrFatal(t, kRHS)
+	withoutLearnerSnap(func() {
+		// NB: can't use AddReplicas since that waits for the target to be up
+		// to date, which it won't in this case.
+		//
+		// We avoid sending a snapshot because that snapshot would include the
+		// split trigger and we want that to be processed via the log.
+		d, err := tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, descLHS.StartKey.AsRawKey(), descLHS, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, tc.Target(1)),
+		)
+		require.NoError(t, err)
+		descLHS = *d
+	})
 
 	close(blockPromoteCh)
 	if err := g.Wait(); !testutils.IsError(err, `descriptor changed`) {
 		t.Fatalf(`expected "descriptor changed" error got: %+v`, err)
 	}
 
-	// Now repeatedly remove and re-add the learner on the rhs, so it has a
+	// Now repeatedly re-add the learner on the rhs, so it has a
 	// different replicaID than the split trigger expects.
-	for i := 0; i < 5; i++ {
-		_, err := tc.RemoveReplicas(kRHS, tc.Target(1))
-		require.NoError(t, err)
-		_, err = tc.AddReplicas(kRHS, tc.Target(1))
+	add := func() {
+		_, err := tc.AddReplicas(kRHS, tc.Target(1))
 		if !testutils.IsError(err, `snapshot intersects existing range`) {
 			t.Fatalf(`expected snapshot intersects existing range" error got: %+v`, err)
 		}
 	}
+	for i := 0; i < 5; i++ {
+		add()
+		tc.RemoveReplicasOrFatal(t, kRHS, tc.Target(1))
+	}
+	add()
 
 	// Normally AddReplicas will return the latest version of the RangeDescriptor,
 	// but because we're getting snapshot errors and using the

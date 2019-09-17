@@ -263,7 +263,6 @@ message Payload {
   ];
   reserved 7;
   string error = 8;
-  // ID 9 is intentionally reserved for lease information.
   Lease lease = 9;
   oneof details {
     BackupDetails backup = 10;

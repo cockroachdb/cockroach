@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/petermattis/pebble"
+	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 )
 

@@ -99,19 +99,38 @@ var ingestDelayTime = settings.RegisterDurationSetting(
 // traces of every iterator allocated. DO NOT ENABLE in production code.
 const debugIteratorLeak = false
 
-//export rocksDBV
-func rocksDBV(sevLvl C.int, infoVerbosity C.int) bool {
-	sev := log.Severity(sevLvl)
-	return sev == log.Severity_INFO && log.V(int32(infoVerbosity)) ||
-		sev == log.Severity_WARNING ||
-		sev == log.Severity_ERROR ||
-		sev == log.Severity_FATAL
+var rocksdbLogger *log.SecondaryLogger
+
+// InitRocksDBLogger initializes the logger to use for RocksDB log messages. If
+// not called, WARNING, ERROR, and FATAL logs will be output to the normal
+// CockroachDB log.
+func InitRocksDBLogger(ctx context.Context) {
+	rocksdbLogger = log.NewSecondaryLogger(ctx, nil, "rocksdb",
+		true /* enableGC */, false /* forceSyncWrites */, false /* enableMsgCount */)
 }
 
 //export rocksDBLog
-func rocksDBLog(sevLvl C.int, s *C.char, n C.int) {
+func rocksDBLog(usePrimaryLog C.bool, sevLvl C.int, s *C.char, n C.int) {
+	sev := log.Severity(sevLvl)
+	if !usePrimaryLog {
+		if rocksdbLogger != nil {
+			// NB: No need for the rocksdb tag if we're logging to a rocksdb specific
+			// file.
+			rocksdbLogger.LogSev(context.Background(), sev, C.GoStringN(s, n))
+			return
+		}
+
+		// Only log INFO logs to the normal CockroachDB log at --v=3 and
+		// above. This only applies when we're not using the primary log for
+		// RocksDB generated messages (which is utilized by the encryption-at-rest
+		// code).
+		if sev == log.Severity_INFO && !log.V(3) {
+			return
+		}
+	}
+
 	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
-	switch log.Severity(sevLvl) {
+	switch sev {
 	case log.Severity_WARNING:
 		log.Warning(ctx, C.GoStringN(s, n))
 	case log.Severity_ERROR:
@@ -2213,8 +2232,8 @@ func (r *rocksDBIterator) destroy() {
 func (r *rocksDBIterator) Stats() IteratorStats {
 	stats := C.DBIterStats(r.iter)
 	return IteratorStats{
-		TimeBoundNumSSTs:           int(C.ulonglong(stats.timebound_num_ssts)),
-		InternalDeleteSkippedCount: int(C.ulonglong(stats.internal_delete_skipped_count)),
+		TimeBoundNumSSTs:           int(stats.timebound_num_ssts),
+		InternalDeleteSkippedCount: int(stats.internal_delete_skipped_count),
 	}
 }
 
@@ -2913,28 +2932,32 @@ func (fr *RocksDBSstFileReader) Close() {
 }
 
 // CheckForKeyCollisions indicates if the two iterators collide on any keys.
-func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
+func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) (enginepb.MVCCStats, error) {
 	existingIterGetter := existingIter.(dbIteratorGetter)
 	sstableIterGetter := sstIter.(dbIteratorGetter)
 	var intentErr C.DBString
+	var skippedKVStats C.MVCCStatsResult
+	emptyStats := enginepb.MVCCStats{}
 
-	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter(), &intentErr)
+	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter(), &skippedKVStats, &intentErr)
 
 	err := statusToError(state.status)
 	if err != nil {
 		if err.Error() == "WriteIntentError" {
 			var e roachpb.WriteIntentError
 			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
-				return errors.Wrap(err, "failed to decode write intent error")
+				return emptyStats, errors.Wrap(err, "failed to decode write intent error")
 			}
-			return &e
+			return emptyStats, &e
 		} else if err.Error() == "InlineError" {
-			return errors.Errorf("inline values are unsupported when checking for key collisions")
+			return emptyStats, errors.Errorf("inline values are unsupported when checking for key collisions")
 		}
 		err = errors.Wrap(&RocksDBError{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
+		return emptyStats, err
 	}
 
-	return err
+	skippedStats, err := cStatsToGoStats(skippedKVStats, 0)
+	return skippedStats, err
 }
 
 // RocksDBSstFileWriter creates a file suitable for importing with

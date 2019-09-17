@@ -252,7 +252,7 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) opt.ScalarExp
 	// Case 2: The input is a constant DArray.
 	if memo.CanExtractConstDatum(input) {
 		inputD := memo.ExtractConstDatum(input)
-		texpr := tree.NewTypedIndirectionExpr(inputD, indexD)
+		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, input.DataType().ArrayContents())
 		result, err := texpr.Eval(c.f.evalCtx)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType())

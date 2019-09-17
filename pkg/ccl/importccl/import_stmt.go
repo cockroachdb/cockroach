@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -243,7 +243,7 @@ func importPlanHook(
 				}
 				format.Csv.Skip = uint32(skip)
 			}
-		case "MYSQLOUTFILE":
+		case "DELIMITED":
 			telemetry.Count("import.format.mysqlout")
 			format.Format = roachpb.IOFileFormat_MysqlOutfile
 			format.MysqlOut = roachpb.MySQLOutfileOptions{
@@ -558,7 +558,7 @@ func doDistributedCSVTransform(
 	files []string,
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
-	tables map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
@@ -744,8 +744,14 @@ func prepareExistingTableDescForIngestion(
 	// upgrade and downgrade, because IMPORT does not operate in mixed-version
 	// states.
 	// TODO(jordan,lucy): remove this comment once 19.2 is released.
-	err := txn.CPutDeprecated(ctx, sqlbase.MakeDescMetadataKey(desc.ID),
-		sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(desc))
+	existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, desc)
+	if err != nil {
+		return nil, errors.Wrap(err, "another operation is currently operating on the table")
+	}
+	err = txn.CPut(ctx,
+		sqlbase.MakeDescMetadataKey(desc.ID),
+		sqlbase.WrapDescriptor(&importing),
+		existingDesc)
 	if err != nil {
 		return nil, errors.Wrap(err, "another operation is currently operating on the table")
 	}
@@ -858,7 +864,7 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
-	tables := make(map[string]*distsqlpb.ReadImportDataSpec_ImportTable, len(details.Tables))
+	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
@@ -872,9 +878,9 @@ func (r *importResumer) Resume(
 
 		for _, i := range details.Tables {
 			if i.Name != "" {
-				tables[i.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+				tables[i.Name] = &execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else if i.Desc != nil {
-				tables[i.Desc.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+				tables[i.Desc.Name] = &execinfrapb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else {
 				return errors.Errorf("invalid table specification")
 			}
@@ -995,7 +1001,9 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			tableDesc.DropTime = 1
-			b.CPutDeprecated(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
+			var existingIDVal roachpb.Value
+			existingIDVal.SetInt(int64(tableDesc.ID))
+			b.CPut(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, &existingIDVal)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
@@ -1004,7 +1012,14 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version
 		// states.
 		// TODO(jordan,lucy): remove this comment once 19.2 is released.
-		b.CPutDeprecated(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
+		existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl.Desc)
+		if err != nil {
+			return errors.Wrap(err, "rolling back tables")
+		}
+		b.CPut(
+			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.WrapDescriptor(&tableDesc),
+			existingDesc)
 	}
 	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
 }
@@ -1054,7 +1069,14 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version
 		// states.
 		// TODO(jordan,lucy): remove this comment once 19.2 is released.
-		b.CPutDeprecated(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
+		existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl.Desc)
+		if err != nil {
+			return errors.Wrap(err, "publishing tables")
+		}
+		b.CPut(
+			sqlbase.MakeDescMetadataKey(tableDesc.ID),
+			sqlbase.WrapDescriptor(&tableDesc),
+			existingDesc)
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "publishing tables")

@@ -521,50 +521,115 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	txnReqs := make([]roachpb.RequestUnion, 3)
-	txnReqs[0].MustSetInner(&roachpb.BeginTransactionRequest{})
-	txnReqs[1].MustSetInner(&roachpb.PutRequest{})
-	txnReqs[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true})
-	txnReqsNoRefresh := make([]roachpb.RequestUnion, 3)
-	txnReqsNoRefresh[0].MustSetInner(&roachpb.BeginTransactionRequest{})
-	txnReqsNoRefresh[1].MustSetInner(&roachpb.PutRequest{})
-	txnReqsNoRefresh[2].MustSetInner(&roachpb.EndTransactionRequest{Commit: true, NoRefreshSpans: true})
+	withSeq := func(req roachpb.Request, seq enginepb.TxnSeq) roachpb.Request {
+		h := req.Header()
+		h.Sequence = seq
+		req.SetHeader(h)
+		return req
+	}
+	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
+		ru := make([]roachpb.RequestUnion, len(reqs))
+		for i, r := range reqs {
+			ru[i].MustSetInner(r)
+		}
+		return ru
+	}
+
+	noReqs := makeReqs()
+	getReq := makeReqs(withSeq(&roachpb.GetRequest{}, 0))
+	putReq := makeReqs(withSeq(&roachpb.PutRequest{}, 1))
+	etReq := makeReqs(withSeq(&roachpb.EndTransactionRequest{Commit: true}, 1))
+	txnReqs := makeReqs(
+		withSeq(&roachpb.BeginTransactionRequest{}, 0),
+		withSeq(&roachpb.PutRequest{}, 1),
+		withSeq(&roachpb.EndTransactionRequest{Commit: true}, 2),
+	)
+	txnReqsNoRefresh := makeReqs(
+		withSeq(&roachpb.BeginTransactionRequest{}, 0),
+		withSeq(&roachpb.PutRequest{}, 1),
+		withSeq(&roachpb.EndTransactionRequest{Commit: true, NoRefreshSpans: true}, 2),
+	)
+	txnReqsRequire1PC := makeReqs(
+		withSeq(&roachpb.BeginTransactionRequest{}, 0),
+		withSeq(&roachpb.PutRequest{}, 1),
+		withSeq(&roachpb.EndTransactionRequest{Commit: true, Require1PC: true}, 2),
+	)
+
 	testCases := []struct {
-		bu      []roachpb.RequestUnion
-		isTxn   bool
-		isWTO   bool
-		isTSOff bool
-		exp1PC  bool
+		ru          []roachpb.RequestUnion
+		isTxn       bool
+		isRestarted bool
+		isWTO       bool
+		isTSOff     bool
+		exp1PC      bool
 	}{
-		{[]roachpb.RequestUnion{}, false, false, false, false},
-		{[]roachpb.RequestUnion{}, true, false, false, false},
-		{[]roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Get{Get: &roachpb.GetRequest{}}}}, true, false, false, false},
-		{[]roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Put{Put: &roachpb.PutRequest{}}}}, true, false, false, false},
-		{txnReqs[0 : len(txnReqs)-1], true, false, false, false},
-		{txnReqs[1:], true, false, false, false},
-		{txnReqs, true, false, false, true},
-		{txnReqs, true, true, false, false},
-		{txnReqs, true, false, true, false},
-		{txnReqs, true, true, true, false},
-		{txnReqsNoRefresh, true, false, false, true},
-		{txnReqsNoRefresh, true, true, false, true},
-		{txnReqsNoRefresh, true, false, true, true},
-		{txnReqsNoRefresh, true, true, true, true},
+		{ru: noReqs, isTxn: false, exp1PC: false},
+		{ru: noReqs, isTxn: true, exp1PC: false},
+		{ru: getReq, isTxn: true, exp1PC: false},
+		{ru: putReq, isTxn: true, exp1PC: false},
+		{ru: etReq, isTxn: true, exp1PC: true},
+		{ru: etReq, isTxn: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs[0:2], isTxn: true, exp1PC: false},
+		{ru: txnReqs[1:], isTxn: true, exp1PC: true},
+		{ru: txnReqs[2:], isTxn: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, exp1PC: true},
+		{ru: txnReqs, isTxn: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsNoRefresh[0:2], isTxn: true, exp1PC: false},
+		{ru: txnReqsNoRefresh[1:], isTxn: true, exp1PC: true},
+		{ru: txnReqsNoRefresh[2:], isTxn: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isTSOff: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, isTSOff: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC[0:2], isTxn: true, exp1PC: false},
+		{ru: txnReqsRequire1PC[1:], isTxn: true, exp1PC: true},
+		{ru: txnReqsRequire1PC[2:], isTxn: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, exp1PC: true},
+		{ru: txnReqsRequire1PC, isTxn: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, exp1PC: true},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	for i, c := range testCases {
-		ba := roachpb.BatchRequest{Requests: c.bu}
+		ba := roachpb.BatchRequest{Requests: c.ru}
 		if c.isTxn {
 			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, clock)
+			if c.isRestarted {
+				ba.Txn.Restart(-1, 0, clock.Now())
+			}
 			if c.isWTO {
 				ba.Txn.WriteTooOld = true
 			}
 			if c.isTSOff {
 				ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			}
+		} else {
+			require.False(t, c.isRestarted)
+			require.False(t, c.isWTO)
+			require.False(t, c.isTSOff)
 		}
-		if is1PC := isOnePhaseCommit(&ba, &StoreTestingKnobs{}); is1PC != c.exp1PC {
+		if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
 			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
 		}
 	}
@@ -10486,14 +10551,14 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.Timestamp.Forward(now)
+				clone.Timestamp = clone.Timestamp.Add(0, 1)
 				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
-				record.Timestamp.Forward(pushTs)
-				record.LastHeartbeat.Forward(pushTs)
+				record.Timestamp = record.Timestamp.Add(0, 1)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},
@@ -10543,7 +10608,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(pushTs)
+				record.Timestamp = record.Timestamp.Add(0, 1)
 				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
@@ -10577,7 +10642,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "heartbeat transaction with epoch bump after end transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
 				return sendWrappedWithErr(etH, &et)
 			},
@@ -10587,7 +10652,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
-				clone.Restart(-1, 0, now.Add(0, 1))
+				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
@@ -11050,7 +11115,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "begin transaction after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11063,7 +11128,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "heartbeat transaction after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11076,7 +11141,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "heartbeat transaction with epoch bump after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11086,7 +11151,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
-				clone.Restart(-1, 0, now.Add(0, 1))
+				clone.Restart(-1, 0, now)
 				hb, hbH := heartbeatArgs(clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
@@ -11095,7 +11160,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "end transaction (stage) after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11109,7 +11174,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "end transaction (abort) after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11123,7 +11188,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			name: "end transaction (commit) after push transaction (abort)",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
@@ -11447,7 +11512,9 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			defer setTxnAutoGC(!c.disableTxnAutoGC)()
 
 			txn := newTransaction(c.name, roachpb.Key(c.name), 1, tc.Clock())
+			manual.Increment(99)
 			runTs := tc.Clock().Now()
+
 			if c.setup != nil {
 				if err := c.setup(txn, runTs); err != nil {
 					t.Fatalf("failed during test setup: %+v", err)
@@ -11568,16 +11635,35 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 	)
 }
 
-// TestHighestMaxLeaseIndexReproposalFinishesCommand exercises a case where a
-// command is reproposed twice at different MaxLeaseIndex values to ultimately
-// fail with an error which cannot be reproposed (say due to a lease transfer
-// or change to the gc threshold). This test works to exercise the invariant
-// that when a proposal has been reproposed at different MaxLeaseIndex value
-// the client is ultimately acknowledged with an error from a reproposal with
-// the largest index. The test verfies this condition by asserting that the
+// TestProposalNotAcknowledgedOrReproposedAfterApplication exercises a case
+// where a command is reproposed twice at different MaxLeaseIndex values to
+// ultimately fail with an error which cannot be reproposed (say due to a lease
+// transfer or change to the gc threshold). This test works to exercise the
+// invariant that when a proposal has been reproposed at different MaxLeaseIndex
+// values are not additionally reproposed or acknowledged after applying
+// locally. The test verfies this condition by asserting that the
 // span used to trace the execution of the proposal is not used after the
-// proposal has been finished.
-func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
+// proposal has been finished as it would be if the proposal were reproposed
+// after applying locally.
+//
+// The test does the following things:
+//
+//  * Propose cmd at an initial MaxLeaseIndex.
+//  * Refresh that cmd immediately.
+//  * Fail the initial command with an injected error which will lead to a
+//    reproposal at a higher MaxLeaseIndex.
+//  * Simultaneously update the lease sequence number on the replica so all
+//    future commands will fail with NotLeaseHolderError.
+//  * Enable unconditional refreshes of commands after a raft ready so that
+//    higher MaxLeaseIndex commands are refreshed.
+//
+// This order of events ensures that there will be a committed command which
+// experiences the lease mismatch error but does not carry the highest
+// MaxLeaseIndex for the proposal. The test attempts to verify that once a
+// proposal has been acknowledged it will not be reproposed or acknowledged
+// again by asserting that the proposal's context is not reused after it is
+// finished by the waiting client.
+func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Set the trace infrastructure to log if a span is used after being finished.
@@ -11608,12 +11694,12 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 	// In the TestingProposalFilter we populater cmdID with the id of the proposal
 	// which corresponds to txnID.
 	var cmdID storagebase.CmdIDKey
-	// After we evalAndPropose the command we populate prop with the ProposalData
-	// value to enable reproposing the same command more than once.
-	var prop *ProposalData
 	// seen is used to detect the first application of our proposal.
 	var seen bool
 	cfg.TestingKnobs = StoreTestingKnobs{
+		// Constant reproposals are the worst case which this test is trying to
+		// examine.
+		EnableUnconditionalRefreshesInRaftReady: true,
 		// Set the TestingProposalFilter in order to know the CmdIDKey for our
 		// request by detecting its txnID.
 		TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
@@ -11629,30 +11715,21 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 				return 0, nil
 			}
 			seen = true
-			// Repropose on a separate location to not mess with the
-			// goldenProtosBelowRaft checks.
-			reproposed := make(chan struct{})
-			go func() {
-				if _, pErr := tc.repl.propose(prop.ctx, prop); pErr != nil {
-					panic(pErr)
-				}
-				close(reproposed)
-			}()
-			<-reproposed
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
-			// Flush the proposalBuf to ensure that the reproposal makes it into the
-			// Replica's proposal map.
-			if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
-				panic(err)
-			}
+
 			// Increase the lease sequence so that future reproposals will fail with
 			// NotLeaseHolderError. This mimics the outcome of a leaseholder change
 			// slipping in between the application of the first proposal and the
 			// reproposals.
 			tc.repl.mu.state.Lease.Sequence++
 			// This return value will force another retry which will carry a yet
-			// higher MaxLeaseIndex and will trigger our invariant violation.
+			// higher MaxLeaseIndex. The first reproposal will fail and return to the
+			// client but the second (which hasn't been applied due to the
+			// MaxCommittedSizePerReady setting) will be reproposed again. This test
+			// ensure that it does not reuse the original proposal's context for that
+			// reproposal by ensuring that no event is recorded after the original
+			// proposal has been finished.
 			return int(proposalIllegalLeaseIndex),
 				roachpb.NewErrorf("forced error that can be reproposed at a higher index")
 		},
@@ -11678,8 +11755,6 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 
 	// Hold the RaftLock to ensure that after evalAndPropose our proposal is in
 	// the proposal map. Entries are only removed from that map underneath raft.
-	// We want to grab the proposal so that we can shove in an extra reproposal
-	// while the first proposal is being applied.
 	tc.repl.RaftLock()
 	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
 	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, lease, &ba, &allSpans, endCmds{})
@@ -11693,6 +11768,8 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 		errCh <- res.Err
 	}()
 
+	// While still holding the raftMu, repropose the initial proposal so we know
+	// that there will be two instances
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
@@ -11700,7 +11777,6 @@ func TestHighestMaxLeaseIndexReproposalFinishesCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
-		prop = tc.repl.mu.proposals[cmdID]
 	}()
 	tc.repl.RaftUnlock()
 

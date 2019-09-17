@@ -1,0 +1,137 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "sql/execinfrapb/data.proto";
+import "sql/execinfrapb/processors_base.proto";
+import "sql/execinfrapb/processors_sql.proto";
+import "sql/execinfrapb/processors_bulk_io.proto";
+import "sql/execinfrapb/processors_changefeeds.proto";
+import "sql/execinfrapb/processors_table_stats.proto";
+import "gogoproto/gogo.proto";
+
+// Each processor has the following components:
+//  - one or more input synchronizers; each one merges rows between one or more
+//    input streams;
+//
+//  - a processor "core" which encapsulates the inner logic of each processor;
+//
+//  - a post-processing stage which allows "inline" post-processing on results
+//    (like projection or filtering);
+//
+//  - one or more output synchronizers; each one directs rows to one or more
+//  output streams.
+//
+//
+// == Internal columns ==
+//
+// The core outputs rows of a certain schema to the post-processing stage. We
+// call this the "internal schema" (or "internal columns") and it differs for
+// each type of core. Column indices in a PostProcessSpec refers to these
+// internal columns. Some columns may be unused by the post-processing stage;
+// processor implementations are internally optimized to not produce values for
+// such unneeded columns.
+message ProcessorSpec {
+  // In most cases, there is one input.
+  repeated InputSyncSpec input = 1 [(gogoproto.nullable) = false];
+
+  optional ProcessorCoreUnion core = 2 [(gogoproto.nullable) = false];
+
+  optional PostProcessSpec post = 4 [(gogoproto.nullable) = false];
+
+  // In most cases, there is one output.
+  repeated OutputRouterSpec output = 3 [(gogoproto.nullable) = false];
+
+  // An optional identifier that can be used to correlate processors that are
+  // part of the same stage (e.g. multiple joiners that are part of a
+  // distributed join). This has no consequence on the running of flows, but is
+  // useful for plan diagrams.
+  optional int32 stage_id = 5 [(gogoproto.nullable) = false,
+                               (gogoproto.customname) = "StageID"];
+
+  // processor_id uniquely identifies a processor within a physical plan. This
+  // has no consequence on the running of flows, but is useful for plan
+  // diagrams and linking information like tracing spans and log messages to
+  // processors.
+  optional int32 processor_id = 6 [(gogoproto.nullable) = false,
+                                  (gogoproto.customname) = "ProcessorID"];
+}
+
+message ProcessorCoreUnion {
+  option (gogoproto.onlyone) = true;
+
+  optional NoopCoreSpec noop = 1;
+  optional TableReaderSpec tableReader = 2;
+  optional JoinReaderSpec joinReader = 3;
+  optional SorterSpec sorter = 4;
+  optional AggregatorSpec aggregator = 5;
+  optional DistinctSpec distinct = 7;
+  optional MergeJoinerSpec mergeJoiner = 8;
+  optional HashJoinerSpec hashJoiner = 9;
+  optional ValuesCoreSpec values = 10;
+  optional BackfillerSpec backfiller = 11;
+  optional ReadImportDataSpec readImport = 13;
+  optional SSTWriterSpec SSTWriter = 14;
+  optional CSVWriterSpec CSVWriter = 20;
+  optional SamplerSpec Sampler = 15;
+  optional SampleAggregatorSpec SampleAggregator = 16;
+  optional InterleavedReaderJoinerSpec interleavedReaderJoiner = 17;
+  optional MetadataTestSenderSpec metadataTestSender = 18;
+  optional MetadataTestReceiverSpec metadataTestReceiver = 19;
+  optional ZigzagJoinerSpec zigzagJoiner = 21;
+  optional ProjectSetSpec projectSet = 22;
+  optional WindowerSpec windower = 23;
+  optional LocalPlanNodeSpec localPlanNode = 24;
+  optional ChangeAggregatorSpec changeAggregator = 25;
+  optional ChangeFrontierSpec changeFrontier = 26;
+  optional OrdinalitySpec ordinality = 27;
+  optional BulkRowWriterSpec bulkRowWriter = 28;
+
+  reserved 6, 12;
+}
+
+// NoopCoreSpec indicates a "no-op" processor core. This is used when we just
+// need post-processing or when only a synchronizer is required (e.g. at the
+// final endpoint).
+message NoopCoreSpec {
+}
+
+// LocalPlanNodeSpec is the specification for a local planNode wrapping
+// processor. It's created for situations where a planNode has no DistSQL
+// processor equivalent, and constrains the plan to live on the gateway node.
+// This spec contains just an index, which is used by the execution engine to
+// find the planNode instance this processor is executing in an array of local
+// planNodes. See LocalProcessors and LocalProcessorIndexes on
+// distsqlplan.PhysicalPlan.
+message LocalPlanNodeSpec {
+  optional uint32 RowSourceIdx = 1;
+  optional uint32 NumInputs = 2;
+  optional string Name = 3;
+}
+
+message MetadataTestSenderSpec {
+  optional string id = 1 [(gogoproto.nullable) = false,
+                         (gogoproto.customname) = "ID"];
+}
+
+message MetadataTestReceiverSpec {
+  repeated string sender_ids = 1 [(gogoproto.customname) = "SenderIDs"];
+}
+

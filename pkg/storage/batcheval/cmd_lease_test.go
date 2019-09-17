@@ -129,9 +129,13 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	// Learners are not allowed to become leaseholders for now, see the comments
 	// in TransferLease and RequestLease.
 	_, err := TransferLease(ctx, nil, cArgs, nil)
-	require.EqualError(t, err, `cannot transfer lease to replica of type LEARNER`)
+	require.EqualError(t, err, `replica of type LEARNER cannot hold lease`)
 
 	cArgs.Args = &roachpb.RequestLeaseRequest{}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
-	require.EqualError(t, err, `cannot transfer lease to replica of type LEARNER`)
+
+	const exp = `cannot replace lease repl=(n0,s0):? seq=0 start=0.000000000,0 exp=<nil> ` +
+		`with repl=(n0,s0):? seq=0 start=0.000000000,0 exp=<nil>: ` +
+		`replica of type LEARNER cannot hold lease`
+	require.EqualError(t, err, exp)
 }

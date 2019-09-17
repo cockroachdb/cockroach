@@ -1374,13 +1374,15 @@ func Example_misc_table() {
 	//     hai
 	// (1 row)
 	// sql --format=table -e explain select s, 'foo' from t.t
-	//     tree    | field | description
-	// +-----------+-------+-------------+
-	//   render    |       |
-	//    └── scan |       |
-	//             | table | t@primary
-	//             | spans | ALL
-	// (4 rows)
+	//     tree    |    field    | description
+	// +-----------+-------------+-------------+
+	//             | distributed | true
+	//             | vectorized  | false
+	//   render    |             |
+	//    └── scan |             |
+	//             | table       | t@primary
+	//             | spans       | ALL
+	// (6 rows)
 }
 
 func Example_user() {
@@ -2089,6 +2091,8 @@ ORDER BY name ASC`)
 		assert.NoError(t, rows.Scan(&table))
 		tables = append(tables, table)
 	}
+	tables = append(tables, "system.jobs", "system.descriptor", "system.namespace")
+	sort.Strings(tables)
 
 	var exp []string
 	exp = append(exp, debugZipTablesPerNode...)
@@ -2127,6 +2131,9 @@ writing ` + os.DevNull + `
   debug/crdb_internal.cluster_sessions.txt
   debug/crdb_internal.cluster_settings.txt
   debug/crdb_internal.jobs.txt
+  debug/system.jobs.txt
+  debug/system.descriptor.txt
+  debug/system.namespace.txt
   debug/crdb_internal.kv_node_status.txt
   debug/crdb_internal.kv_store_status.txt
   debug/crdb_internal.schema_changes.txt
@@ -2171,6 +2178,10 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/18.json
   debug/nodes/1/ranges/19.json
   debug/nodes/1/ranges/20.json
+  debug/nodes/1/ranges/21.json
+  debug/nodes/1/ranges/22.json
+  debug/nodes/1/ranges/23.json
+  debug/nodes/1/ranges/24.json
   debug/schema/defaultdb@details.json
   debug/schema/postgres@details.json
   debug/schema/system@details.json
@@ -2182,6 +2193,10 @@ writing ` + os.DevNull + `
   debug/schema/system/locations.json
   debug/schema/system/namespace.json
   debug/schema/system/rangelog.json
+  debug/schema/system/replication_constraint_stats.json
+  debug/schema/system/replication_critical_localities.json
+  debug/schema/system/replication_stats.json
+  debug/schema/system/reports_meta.json
   debug/schema/system/role_members.json
   debug/schema/system/settings.json
   debug/schema/system/table_statistics.json

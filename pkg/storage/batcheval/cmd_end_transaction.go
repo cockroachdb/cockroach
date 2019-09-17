@@ -402,33 +402,34 @@ func IsEndTransactionTriggeringRetryError(
 	}
 
 	// A transaction can still avoid a retry under certain conditions.
-	if retry && canForwardSerializableTimestamp(txn, args.NoRefreshSpans) {
+	if retry && CanForwardCommitTimestampWithoutRefresh(txn, args) {
 		retry, reason = false, 0
 	}
 
-	if !retry {
-		if IsEndTransactionExceedingDeadline(txn.Timestamp, args) {
-			exceededBy := txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
-			fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
-			extraMsg = fmt.Sprintf(
-				"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
-					"original timestamp %s ago (%s)",
-				exceededBy, txn.Timestamp, args.Deadline, fromStart, txn.OrigTimestamp)
-			retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
-		}
+	// However, a transaction must obey its deadline, if set.
+	if !retry && IsEndTransactionExceedingDeadline(txn.Timestamp, args) {
+		exceededBy := txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
+		fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
+		extraMsg = fmt.Sprintf(
+			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
+				"original timestamp %s ago (%s)",
+			exceededBy, txn.Timestamp, args.Deadline, fromStart, txn.OrigTimestamp)
+		retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
 	}
-
 	return retry, reason, extraMsg
 }
 
-// canForwardSerializableTimestamp returns whether a serializable txn can
-// be safely committed with a forwarded timestamp. This requires that
+// CanForwardCommitTimestampWithoutRefresh returns whether a txn can be
+// safely committed with a timestamp above its read timestamp without
+// requiring a read refresh (see txnSpanRefresher). This requires that
 // the transaction's timestamp has not leaked and that the transaction
 // has encountered no spans which require refreshing at the forwarded
 // timestamp. If either of those conditions are true, a client-side
 // retry is required.
-func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bool) bool {
-	return !txn.OrigTimestampWasObserved && noRefreshSpans
+func CanForwardCommitTimestampWithoutRefresh(
+	txn *roachpb.Transaction, args *roachpb.EndTransactionRequest,
+) bool {
+	return !txn.OrigTimestampWasObserved && args.NoRefreshSpans
 }
 
 const intentResolutionBatchSize = 500
@@ -643,7 +644,11 @@ func RunCommitTrigger(
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
-		newDesc.StickyBit = &sbt.StickyBit
+		if sbt.StickyBit != (hlc.Timestamp{}) {
+			newDesc.StickyBit = &sbt.StickyBit
+		} else {
+			newDesc.StickyBit = nil
+		}
 		var res result.Result
 		res.Replicated.State = &storagepb.ReplicaState{
 			Desc: &newDesc,
@@ -1109,15 +1114,16 @@ func changeReplicasTrigger(
 
 	var desc roachpb.RangeDescriptor
 	if change.Desc != nil {
+		// Trigger proposed by a 19.2+ node (and we're a 19.2+ node as well).
 		desc = *change.Desc
 	} else {
+		// Trigger proposed by a 19.1 node. Reconstruct descriptor from deprecated
+		// fields.
 		desc = *rec.Desc()
 		desc.SetReplicas(roachpb.MakeReplicaDescriptors(change.DeprecatedUpdatedReplicas))
 		desc.NextReplicaID = change.DeprecatedNextReplicaID
 	}
 
-	// TODO(tschottdorf): duplication of Desc with the trigger below, should
-	// likely remove it from the trigger.
 	pd.Replicated.State = &storagepb.ReplicaState{
 		Desc: &desc,
 	}

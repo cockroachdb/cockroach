@@ -1670,23 +1670,79 @@ ROLLBACK
 statement ok
 ALTER TABLE t DROP CONSTRAINT fk
 
-statement ok
-ALTER TABLE t ADD CONSTRAINT fk_not_valid FOREIGN KEY (a) REFERENCES t2 NOT VALID
+# TODO(lucy): This part of the test is flaky and sometimes fails with a
+# TransactionRetryWithProtoRefreshError (see #40200), so it's being skipped
+# and investigated.
 
-statement ok
-BEGIN
-
-statement ok
-ALTER TABLE t DROP CONSTRAINT fk_not_valid
-
-# The constraint was unvalidated, so it doesn't need to go through the schema
-# changer and is dropped immediately.
-statement ok
-INSERT INTO t VALUES (1)
-
-statement ok
-COMMIT
+# statement ok
+# ALTER TABLE t ADD CONSTRAINT fk_not_valid FOREIGN KEY (a) REFERENCES t2 NOT VALID
+#
+# statement ok
+# BEGIN
+#
+# statement ok
+# ALTER TABLE t DROP CONSTRAINT fk_not_valid
+#
+# # The constraint was unvalidated, so it doesn't need to go through the schema
+# # changer and is dropped immediately.
+# statement ok
+# INSERT INTO t VALUES (1)
+#
+# statement ok
+# COMMIT
 
 statement ok
 DROP TABLE t, t2
 
+subtest delete_index_in_other_table
+
+# Test setup
+statement ok
+BEGIN;
+
+statement ok
+CREATE TABLE a ();
+
+statement ok
+CREATE TABLE b ( key INT );
+
+statement ok
+CREATE INDEX b_idx ON b (key);
+
+statement ok
+COMMIT;
+
+# Try to delete an index in the same transaction
+statement ok
+BEGIN;
+
+statement ok
+DROP TABLE a;
+
+statement ok
+DROP INDEX b_idx CASCADE;
+
+statement ok
+COMMIT;
+
+# Test that deleting an index on a table that gets dropped in the same
+# transaction is allowed.
+subtest delete_index_and_table_in_txn
+
+statement ok
+CREATE TABLE people (id INT PRIMARY KEY, name STRING);
+
+statement ok
+CREATE INDEX people_name_index ON people (name);
+
+statement ok
+BEGIN;
+
+statement ok
+DROP INDEX people@people_name_index;
+
+statement ok
+DROP TABLE people;
+
+statement ok
+COMMIT;

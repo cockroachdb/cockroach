@@ -666,7 +666,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	if len(*filters) != 0 {
 		onExpr, err = b.buildScalar(&ctx, filters)
 		if err != nil {
-			return execPlan{}, nil
+			return execPlan{}, err
 		}
 	}
 
@@ -1238,6 +1238,10 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	allCols := joinOutputMap(input.outputCols, lookupColMap)
 
 	res := execPlan{outputCols: allCols}
+	if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
+		// For semi and anti join, only the left columns are output.
+		res.outputCols = input.outputCols
+	}
 
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),

@@ -152,14 +152,17 @@ SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 0 .render 1 (@3)[date] (cid int, date date, value decimal) 
 0 .render 2 (@2)[decimal] (cid int, date date, value decimal) 
 1 hash-join  (cid int, date date, value decimal) 
-1 .type semi (cid int, date date, value decimal) 
+1 .type inner (cid int, date date, value decimal) 
 1 .equality (date) = (date) (cid int, date date, value decimal) 
+1 .right cols are key  (cid int, date date, value decimal) 
 2 scan  (cid int, date date, value decimal) 
 2 .table orders@primary (cid int, date date, value decimal) 
 2 .spans ALL (cid int, date date, value decimal) 
-2 scan  (cid int, date date, value decimal) 
-2 .table orders@primary (cid int, date date, value decimal) 
-2 .spans ALL (cid int, date date, value decimal) 
+2 distinct  (cid int, date date, value decimal) 
+2 .distinct on date (cid int, date date, value decimal) 
+3 scan  (cid int, date date, value decimal) 
+3 .table orders@primary (cid int, date date, value decimal) 
+3 .spans ALL (cid int, date date, value decimal) 
 
 plan-tree
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
@@ -176,9 +179,11 @@ children:
 - name: hash-join
   attrs:
   - key: type
-    value: semi
+    value: inner
   - key: equality
     value: (date) = (date)
+  - key: right cols are key
+    value: ""
   children:
   - name: scan
     attrs:
@@ -187,13 +192,18 @@ children:
     - key: spans
       value: ALL
     children: []
-  - name: scan
+  - name: distinct
     attrs:
-    - key: table
-      value: orders@primary
-    - key: spans
-      value: ALL
-    children: []
+    - key: distinct on
+      value: date
+    children:
+    - name: scan
+      attrs:
+      - key: table
+        value: orders@primary
+      - key: spans
+        value: ALL
+      children: []
 
 exec
 CREATE TABLE t.movies (

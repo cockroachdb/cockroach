@@ -31,19 +31,23 @@ ALTER TABLE def INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
-tree         field     description  columns             ordering
-lookup-join  ·         ·            (a, b, c, d, e, f)  ·
- │           table     def@primary  ·                   ·
- │           type      inner        ·                   ·
- │           equality  (b) = (f)    ·                   ·
- └── scan    ·         ·            (a, b, c)           ·
-·            table     abc@primary  ·                   ·
-·            spans     ALL          ·                   ·
+tree         field        description  columns             ordering
+·            distributed  true         ·                   ·
+·            vectorized   true         ·                   ·
+lookup-join  ·            ·            (a, b, c, d, e, f)  ·
+ │           table        def@primary  ·                   ·
+ │           type         inner        ·                   ·
+ │           equality     (b) = (f)    ·                   ·
+ └── scan    ·            ·            (a, b, c)           ·
+·            table        abc@primary  ·                   ·
+·            spans        ALL          ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 ----
 tree         field                  description      columns             ordering
+·            distributed            true             ·                   ·
+·            vectorized             true             ·                   ·
 lookup-join  ·                      ·                (a, b, c, d, e, f)  ·
  │           table                  def@primary      ·                   ·
  │           type                   inner            ·                   ·
@@ -56,54 +60,62 @@ lookup-join  ·                      ·                (a, b, c, d, e, f)  ·
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
-tree         field     description  columns             ordering
-lookup-join  ·         ·            (a, b, c, d, e, f)  ·
- │           table     def@primary  ·                   ·
- │           type      inner        ·                   ·
- │           equality  (b) = (f)    ·                   ·
- │           pred      @5 > 1       ·                   ·
- └── scan    ·         ·            (a, b, c)           ·
-·            table     abc@primary  ·                   ·
-·            spans     /2-          ·                   ·
+tree         field        description  columns             ordering
+·            distributed  true         ·                   ·
+·            vectorized   true         ·                   ·
+lookup-join  ·            ·            (a, b, c, d, e, f)  ·
+ │           table        def@primary  ·                   ·
+ │           type         inner        ·                   ·
+ │           equality     (b) = (f)    ·                   ·
+ │           pred         @5 > 1       ·                   ·
+ └── scan    ·            ·            (a, b, c)           ·
+·            table        abc@primary  ·                   ·
+·            spans        /2-          ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
-tree         field     description  columns             ordering
-lookup-join  ·         ·            (a, b, c, d, e, f)  ·
- │           table     def@primary  ·                   ·
- │           type      inner        ·                   ·
- │           equality  (a) = (f)    ·                   ·
- │           pred      @6 > 1       ·                   ·
- └── scan    ·         ·            (a, b, c)           ·
-·            table     abc@primary  ·                   ·
-·            spans     /2-          ·                   ·
+tree         field        description  columns             ordering
+·            distributed  true         ·                   ·
+·            vectorized   true         ·                   ·
+lookup-join  ·            ·            (a, b, c, d, e, f)  ·
+ │           table        def@primary  ·                   ·
+ │           type         inner        ·                   ·
+ │           equality     (a) = (f)    ·                   ·
+ │           pred         @6 > 1       ·                   ·
+ └── scan    ·            ·            (a, b, c)           ·
+·            table        abc@primary  ·                   ·
+·            spans        /2-          ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-tree         field     description  columns             ordering
-lookup-join  ·         ·            (a, b, c, d, e, f)  ·
- │           table     def@primary  ·                   ·
- │           type      inner        ·                   ·
- │           equality  (b) = (f)    ·                   ·
- │           pred      @1 >= @5     ·                   ·
- └── scan    ·         ·            (a, b, c)           ·
-·            table     abc@primary  ·                   ·
-·            spans     ALL          ·                   ·
+tree         field        description  columns             ordering
+·            distributed  true         ·                   ·
+·            vectorized   true         ·                   ·
+lookup-join  ·            ·            (a, b, c, d, e, f)  ·
+ │           table        def@primary  ·                   ·
+ │           type         inner        ·                   ·
+ │           equality     (b) = (f)    ·                   ·
+ │           pred         @1 >= @5     ·                   ·
+ └── scan    ·            ·            (a, b, c)           ·
+·            table        abc@primary  ·                   ·
+·            spans        ALL          ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 ----
-tree         field     description  columns             ordering
-lookup-join  ·         ·            (a, b, c, d, e, f)  ·
- │           table     def@primary  ·                   ·
- │           type      inner        ·                   ·
- │           equality  (b) = (f)    ·                   ·
- │           pred      @1 >= @5     ·                   ·
- └── scan    ·         ·            (a, b, c)           ·
-·            table     abc@primary  ·                   ·
-·            spans     ALL          ·                   ·
+tree         field        description  columns             ordering
+·            distributed  true         ·                   ·
+·            vectorized   true         ·                   ·
+lookup-join  ·            ·            (a, b, c, d, e, f)  ·
+ │           table        def@primary  ·                   ·
+ │           type         inner        ·                   ·
+ │           equality     (b) = (f)    ·                   ·
+ │           pred         @1 >= @5     ·                   ·
+ └── scan    ·            ·            (a, b, c)           ·
+·            table        abc@primary  ·                   ·
+·            spans        ALL          ·                   ·
 
 # Verify a distsql plan.
 statement ok
@@ -137,6 +149,8 @@ NULL       /1       {1}       1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
 ----
+·                 distributed            true                         ·                         ·
+·                 vectorized             true                         ·                         ·
 render            ·                      ·                            (a, b, c, d)              ·
  │                render 0               a                            ·                         ·
  │                render 1               b                            ·                         ·
@@ -187,6 +201,8 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
 tree                   field        description        columns                       ordering
+·                      distributed  true               ·                             ·
+·                      vectorized   true               ·                             ·
 distinct               ·            ·                  (title)                       weak-key(title); +title
  │                     distinct on  title              ·                             ·
  │                     order key    title              ·                             ·
@@ -217,25 +233,27 @@ ALTER TABLE authors INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-tree                        field        description        columns                                   ordering
-distinct                    ·            ·                  (name)                                    weak-key(name)
- │                          distinct on  name               ·                                         ·
- └── render                 ·            ·                  (name)                                    ·
-      │                     render 0     name               ·                                         ·
-      └── hash-join         ·            ·                  (title, shelf, title, shelf, name, book)  ·
-           │                type         inner              ·                                         ·
-           │                equality     (title) = (book)   ·                                         ·
-           ├── lookup-join  ·            ·                  (title, shelf, title, shelf)              ·
-           │    │           table        books2@primary     ·                                         ·
-           │    │           type         inner              ·                                         ·
-           │    │           equality     (title) = (title)  ·                                         ·
-           │    │           pred         @2 != @4           ·                                         ·
-           │    └── scan    ·            ·                  (title, shelf)                            ·
-           │                table        books@primary      ·                                         ·
-           │                spans        ALL                ·                                         ·
-           └── scan         ·            ·                  (name, book)                              ·
-·                           table        authors@primary    ·                                         ·
-·                           spans        ALL                ·                                         ·
+tree                      field        description        columns                                   ordering
+·                         distributed  true               ·                                         ·
+·                         vectorized   false              ·                                         ·
+distinct                  ·            ·                  (name)                                    weak-key(name)
+ │                        distinct on  name               ·                                         ·
+ └── render               ·            ·                  (name)                                    ·
+      │                   render 0     name               ·                                         ·
+      └── lookup-join     ·            ·                  (name, book, title, shelf, title, shelf)  ·
+           │              table        books2@primary     ·                                         ·
+           │              type         inner              ·                                         ·
+           │              equality     (title) = (title)  ·                                         ·
+           │              pred         @4 != @6           ·                                         ·
+           └── hash-join  ·            ·                  (name, book, title, shelf)                ·
+                │         type         inner              ·                                         ·
+                │         equality     (book) = (title)   ·                                         ·
+                ├── scan  ·            ·                  (name, book)                              ·
+                │         table        authors@primary    ·                                         ·
+                │         spans        ALL                ·                                         ·
+                └── scan  ·            ·                  (title, shelf)                            ·
+·                         table        books@primary      ·                                         ·
+·                         spans        ALL                ·                                         ·
 
 # Verify data placement.
 query TTTI colnames
@@ -244,50 +262,51 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE b
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {5}       5
 
-# TODO(radu): this doesn't seem to be a lookup join, but it should be.
-
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyck89q3DAQh-99CndOCSjYku0cDAEdemhK2ZS0t7IHxZruqnE0RpKhJey7F9mlWZu10s1Rf76Zb362nsGSxo16Qg_Nd-DAoIYtg95Ri96Ti9vTpVv9C5qCgbH9EOL2lkFLDqF5hmBCh9DAhq6oz2tgoDEo043XDgxoCC-QD2qH0Fwf2FFhni78TT10eI9Ko8uLWXnonXlS7rd8IHr0wOBrr6xvsitgcDeEJpOcyRLWLPg5Fp_I2L8SPCEhgMFnosehz36SsRnZaBF9NpkU2fubTNbHdoLJksl61VG8NSlxWlINYR-_7OmsxKpHuerx0n6w5DQ61Mt_4PUrJ4b5qPw-ho4uL-ezdPgjXEh-eePMbh8upLj8N8N6kNU5QX4wPhjbhryad5Z8tX49q__KW7lH35P1-F-PpYjpoN7hlLanwbX4xVE7tpmWdyM3bmj0YTq9nha3djqKgscwT8IiDYskXM1gvoTLM2CxhKskXKe16yRcLODt4d2fAAAA__8CwK1z
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyck89q3DAQh-99CnVOCSjsyn9SEAR06KEpZbekvZU9KNZ0V42jMZIMLWHfvcgubGxipZujpPlG3_xsPYEjgxv9iAHkDxDAoYYdh85TgyGQT9tj0a35DXLNwbquj2l7x6EhjyCfINrYIkjY0BV1qxo4GIzatkPZkQP18QSFqPcI8vrInzUW-cbf9X2Ld6gN-tV60h46bx-1_6N0Hw_Jl8O3Trsg2RVw2PZRMiW4KmDJQ7zVQ7zscU_0sGRRLloUixany3tH3qBHM8_39ZIXRvmkw-EzWYd-VUwnafFnvFDF5Y23-0O8UOJykiRXJVfV4iTlOXkmgX9xlpk4k-AXooe-Y7_IOkZOMpWA7Yapir2_YerDyXFRrTpH7aMN0bomrqqpWKZ_Pen_ylu5w9CRC_hfj2WdviCaPY5_RKDeN_jVUzNcMy63AzdsGAxxPL0eF7duPEqCz2GRhcsJLOZwcQZczOEyC1d57SoL13m4zsLrGbw7vvsbAAD__5P3rXQ=
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
-tree                 field     description       columns              ordering
-render               ·         ·                 (name)               +name
- │                   render 0  name              ·                    ·
- └── lookup-join     ·         ·                 (name, book, title)  +name
-      │              table     books2@primary    ·                    ·
-      │              type      inner             ·                    ·
-      │              equality  (book) = (title)  ·                    ·
-      └── sort       ·         ·                 (name, book)         +name
-           │         order     +name             ·                    ·
-           └── scan  ·         ·                 (name, book)         ·
-·                    table     authors@primary   ·                    ·
-·                    spans     ALL               ·                    ·
+tree                 field        description       columns              ordering
+·                    distributed  true              ·                    ·
+·                    vectorized   false             ·                    ·
+render               ·            ·                 (name)               +name
+ │                   render 0     name              ·                    ·
+ └── lookup-join     ·            ·                 (name, book, title)  +name
+      │              table        books2@primary    ·                    ·
+      │              type         inner             ·                    ·
+      │              equality     (book) = (title)  ·                    ·
+      └── sort       ·            ·                 (name, book)         +name
+           │         order        +name             ·                    ·
+           └── scan  ·            ·                 (name, book)         ·
+·                    table        authors@primary   ·                    ·
+·                    spans        ALL               ·                    ·
 
 # Cross joins should not be planned as lookup joins.
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
-tree            field     description     columns                                         ordering
-render          ·         ·               (title, edition, shelf, title, edition, shelf)  ·
- │              render 0  title           ·                                               ·
- │              render 1  edition         ·                                               ·
- │              render 2  shelf           ·                                               ·
- │              render 3  title           ·                                               ·
- │              render 4  edition         ·                                               ·
- │              render 5  shelf           ·                                               ·
- └── hash-join  ·         ·               (title, edition, shelf, title, edition, shelf)  ·
-      │         type      cross           ·                                               ·
-      ├── scan  ·         ·               (title, edition, shelf)                         ·
-      │         table     books2@primary  ·                                               ·
-      │         spans     ALL             ·                                               ·
-      └── scan  ·         ·               (title, edition, shelf)                         ·
-·               table     books@primary   ·                                               ·
-·               spans     ALL             ·                                               ·
-
+tree            field        description     columns                                         ordering
+·               distributed  true            ·                                               ·
+·               vectorized   false           ·                                               ·
+render          ·            ·               (title, edition, shelf, title, edition, shelf)  ·
+ │              render 0     title           ·                                               ·
+ │              render 1     edition         ·                                               ·
+ │              render 2     shelf           ·                                               ·
+ │              render 3     title           ·                                               ·
+ │              render 4     edition         ·                                               ·
+ │              render 5     shelf           ·                                               ·
+ └── hash-join  ·            ·               (title, edition, shelf, title, edition, shelf)  ·
+      │         type         cross           ·                                               ·
+      ├── scan  ·            ·               (title, edition, shelf)                         ·
+      │         table        books2@primary  ·                                               ·
+      │         spans        ALL             ·                                               ·
+      └── scan  ·            ·               (title, edition, shelf)                         ·
+·               table        books@primary   ·                                               ·
+·               spans        ALL             ·                                               ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
@@ -339,21 +358,25 @@ ALTER TABLE large INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.a, large.c FROM small JOIN large ON small.a = large.b
 ----
-render            ·         ·              (a, c)     ·
- │                render 0  a              ·          ·
- │                render 1  c              ·          ·
- └── lookup-join  ·         ·              (a, b, c)  ·
-      │           table     large@bc       ·          ·
-      │           type      inner          ·          ·
-      │           equality  (a) = (b)      ·          ·
-      └── scan    ·         ·              (a)        ·
-·                 table     small@primary  ·          ·
-·                 spans     ALL            ·          ·
+·                 distributed  true           ·          ·
+·                 vectorized   true           ·          ·
+render            ·            ·              (a, c)     ·
+ │                render 0     a              ·          ·
+ │                render 1     c              ·          ·
+ └── lookup-join  ·            ·              (a, b, c)  ·
+      │           table        large@bc       ·          ·
+      │           type         inner          ·          ·
+      │           equality     (a) = (b)      ·          ·
+      └── scan    ·            ·              (a)        ·
+·                 table        small@primary  ·          ·
+·                 spans        ALL            ·          ·
 
 # Lookup join on non-covering secondary index
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = large.b
 ----
+·                      distributed            true             ·             ·
+·                      vectorized             true             ·             ·
 render                 ·                      ·                (a, d)        ·
  │                     render 0               a                ·             ·
  │                     render 1               d                ·             ·
@@ -378,29 +401,33 @@ render                 ·                      ·                (a, d)        �
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
 ----
-lookup-join  ·         ·              (b, a)  ·
- │           table     large@primary  ·       ·
- │           type      left outer     ·       ·
- │           equality  (b) = (a)      ·       ·
- └── scan    ·         ·              (b)     ·
-·            table     small@primary  ·       ·
-·            spans     ALL            ·       ·
+·            distributed  true           ·       ·
+·            vectorized   true           ·       ·
+lookup-join  ·            ·              (b, a)  ·
+ │           table        large@primary  ·       ·
+ │           type         left outer     ·       ·
+ │           equality     (b) = (a)      ·       ·
+ └── scan    ·            ·              (b)     ·
+·            table        small@primary  ·       ·
+·            spans        ALL            ·       ·
 
 # Left join should preserve input order.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
-render            ·         ·              (a, b)     +a
- │                render 0  a              ·          ·
- │                render 1  b              ·          ·
- └── lookup-join  ·         ·              (a, a, b)  +a
-      │           table     large@primary  ·          ·
-      │           type      left outer     ·          ·
-      │           equality  (a) = (a)      ·          ·
-      │           pred      (@3 % 6) = 0   ·          ·
-      └── scan    ·         ·              (a)        +a
-·                 table     small@primary  ·          ·
-·                 spans     ALL            ·          ·
+·                 distributed  true           ·          ·
+·                 vectorized   true           ·          ·
+render            ·            ·              (a, b)     +a
+ │                render 0     a              ·          ·
+ │                render 1     b              ·          ·
+ └── lookup-join  ·            ·              (a, a, b)  +a
+      │           table        large@primary  ·          ·
+      │           type         left outer     ·          ·
+      │           equality     (a) = (a)      ·          ·
+      │           pred         (@3 % 6) = 0   ·          ·
+      └── scan    ·            ·              (a)        +a
+·                 table        small@primary  ·          ·
+·                 spans        ALL            ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a]
@@ -411,21 +438,25 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlcGK2zwUhff_U4gLP7RUxp
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b
 ----
-render            ·         ·              (c, c)     ·
- │                render 0  c              ·          ·
- │                render 1  c              ·          ·
- └── lookup-join  ·         ·              (c, b, c)  ·
-      │           table     large@bc       ·          ·
-      │           type      left outer     ·          ·
-      │           equality  (c) = (b)      ·          ·
-      └── scan    ·         ·              (c)        ·
-·                 table     small@primary  ·          ·
-·                 spans     ALL            ·          ·
+·                 distributed  true           ·          ·
+·                 vectorized   true           ·          ·
+render            ·            ·              (c, c)     ·
+ │                render 0     c              ·          ·
+ │                render 1     c              ·          ·
+ └── lookup-join  ·            ·              (c, b, c)  ·
+      │           table        large@bc       ·          ·
+      │           type         left outer     ·          ·
+      │           equality     (c) = (b)      ·          ·
+      └── scan    ·            ·              (c)        ·
+·                 table        small@primary  ·          ·
+·                 spans        ALL            ·          ·
 
 # Left join against non-covering secondary index
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b
 ----
+·                      distributed            true             ·             ·
+·                      vectorized             true             ·             ·
 render                 ·                      ·                (c, d)        ·
  │                     render 0               c                ·             ·
  │                     render 1               d                ·             ·
@@ -446,17 +477,19 @@ render                 ·                      ·                (c, d)        �
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
 ----
-render            ·         ·              (c, c)     ·
- │                render 0  c              ·          ·
- │                render 1  c              ·          ·
- └── lookup-join  ·         ·              (c, b, c)  ·
-      │           table     large@bc       ·          ·
-      │           type      left outer     ·          ·
-      │           equality  (c) = (b)      ·          ·
-      │           pred      @3 < 20        ·          ·
-      └── scan    ·         ·              (c)        ·
-·                 table     small@primary  ·          ·
-·                 spans     ALL            ·          ·
+·                 distributed  true           ·          ·
+·                 vectorized   true           ·          ·
+render            ·            ·              (c, c)     ·
+ │                render 0     c              ·          ·
+ │                render 1     c              ·          ·
+ └── lookup-join  ·            ·              (c, b, c)  ·
+      │           table        large@bc       ·          ·
+      │           type         left outer     ·          ·
+      │           equality     (c) = (b)      ·          ·
+      │           pred         @3 < 20        ·          ·
+      └── scan    ·            ·              (c)        ·
+·                 table        small@primary  ·          ·
+·                 spans        ALL            ·          ·
 
 # Left join with ON filter on non-covering index
 # TODO(radu): this doesn't use lookup join yet, the current rules don't cover
@@ -464,19 +497,21 @@ render            ·         ·              (c, c)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
-render          ·         ·              (c, d)     ·
- │              render 0  c              ·          ·
- │              render 1  d              ·          ·
- └── hash-join  ·         ·              (b, d, c)  ·
-      │         type      right outer    ·          ·
-      │         equality  (b) = (c)      ·          ·
-      ├── scan  ·         ·              (b, d)     ·
-      │         table     large@primary  ·          ·
-      │         spans     ALL            ·          ·
-      │         filter    d < 30         ·          ·
-      └── scan  ·         ·              (c)        ·
-·               table     small@primary  ·          ·
-·               spans     ALL            ·          ·
+·               distributed  true           ·          ·
+·               vectorized   false          ·          ·
+render          ·            ·              (c, d)     ·
+ │              render 0     c              ·          ·
+ │              render 1     d              ·          ·
+ └── hash-join  ·            ·              (b, d, c)  ·
+      │         type         right outer    ·          ·
+      │         equality     (b) = (c)      ·          ·
+      ├── scan  ·            ·              (b, d)     ·
+      │         table        large@primary  ·          ·
+      │         spans        ALL            ·          ·
+      │         filter       d < 30         ·          ·
+      └── scan  ·            ·              (c)        ·
+·               table        small@primary  ·          ·
+·               spans        ALL            ·          ·
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
@@ -495,16 +530,18 @@ CREATE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-render            ·         ·                (a)              ·
- │                render 0  a                ·                ·
- └── lookup-join  ·         ·                (a, d, e, a, d)  ·
-      │           table     u@idx            ·                ·
-      │           type      inner            ·                ·
-      │           equality  (d, a) = (d, a)  ·                ·
-      └── scan    ·         ·                (a, d, e)        ·
-·                 table     t@primary        ·                ·
-·                 spans     ALL              ·                ·
-·                 filter    e = 5            ·                ·
+·                 distributed  true             ·                ·
+·                 vectorized   true             ·                ·
+render            ·            ·                (a)              ·
+ │                render 0     a                ·                ·
+ └── lookup-join  ·            ·                (a, d, e, a, d)  ·
+      │           table        u@idx            ·                ·
+      │           type         inner            ·                ·
+      │           equality     (d, a) = (d, a)  ·                ·
+      └── scan    ·            ·                (a, d, e)        ·
+·                 table        t@primary        ·                ·
+·                 spans        ALL              ·                ·
+·                 filter       e = 5            ·                ·
 
 # Test unique version of same index. (Lookup join should not use column a.)
 statement ok
@@ -516,17 +553,19 @@ CREATE UNIQUE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-render            ·         ·          (a)              ·
- │                render 0  a          ·                ·
- └── lookup-join  ·         ·          (a, d, e, a, d)  ·
-      │           table     u@idx      ·                ·
-      │           type      inner      ·                ·
-      │           equality  (d) = (d)  ·                ·
-      │           pred      @1 = @4    ·                ·
-      └── scan    ·         ·          (a, d, e)        ·
-·                 table     t@primary  ·                ·
-·                 spans     ALL        ·                ·
-·                 filter    e = 5      ·                ·
+·                 distributed  true       ·                ·
+·                 vectorized   true       ·                ·
+render            ·            ·          (a)              ·
+ │                render 0     a          ·                ·
+ └── lookup-join  ·            ·          (a, d, e, a, d)  ·
+      │           table        u@idx      ·                ·
+      │           type         inner      ·                ·
+      │           equality     (d) = (d)  ·                ·
+      │           pred         @1 = @4    ·                ·
+      └── scan    ·            ·          (a, d, e)        ·
+·                 table        t@primary  ·                ·
+·                 spans        ALL        ·                ·
+·                 filter       e = 5      ·                ·
 
 # Test index with first primary key column explicit and the rest implicit.
 statement ok
@@ -538,16 +577,18 @@ CREATE INDEX idx ON u (d, a)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-render            ·         ·                      (a)                    ·
- │                render 0  a                      ·                      ·
- └── lookup-join  ·         ·                      (a, b, d, e, a, b, d)  ·
-      │           table     u@idx                  ·                      ·
-      │           type      inner                  ·                      ·
-      │           equality  (d, a, b) = (d, a, b)  ·                      ·
-      └── scan    ·         ·                      (a, b, d, e)           ·
-·                 table     t@primary              ·                      ·
-·                 spans     ALL                    ·                      ·
-·                 filter    e = 5                  ·                      ·
+·                 distributed  true                   ·                      ·
+·                 vectorized   true                   ·                      ·
+render            ·            ·                      (a)                    ·
+ │                render 0     a                      ·                      ·
+ └── lookup-join  ·            ·                      (a, b, d, e, a, b, d)  ·
+      │           table        u@idx                  ·                      ·
+      │           type         inner                  ·                      ·
+      │           equality     (d, a, b) = (d, a, b)  ·                      ·
+      └── scan    ·            ·                      (a, b, d, e)           ·
+·                 table        t@primary              ·                      ·
+·                 spans        ALL                    ·                      ·
+·                 filter       e = 5                  ·                      ·
 
 # Test index with middle primary key column explicit and the rest implicit.
 statement ok
@@ -559,16 +600,18 @@ CREATE INDEX idx ON u (d, b)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-render            ·         ·                      (a)                    ·
- │                render 0  a                      ·                      ·
- └── lookup-join  ·         ·                      (a, b, d, e, a, b, d)  ·
-      │           table     u@idx                  ·                      ·
-      │           type      inner                  ·                      ·
-      │           equality  (d, b, a) = (d, b, a)  ·                      ·
-      └── scan    ·         ·                      (a, b, d, e)           ·
-·                 table     t@primary              ·                      ·
-·                 spans     ALL                    ·                      ·
-·                 filter    e = 5                  ·                      ·
+·                 distributed  true                   ·                      ·
+·                 vectorized   true                   ·                      ·
+render            ·            ·                      (a)                    ·
+ │                render 0     a                      ·                      ·
+ └── lookup-join  ·            ·                      (a, b, d, e, a, b, d)  ·
+      │           table        u@idx                  ·                      ·
+      │           type         inner                  ·                      ·
+      │           equality     (d, b, a) = (d, b, a)  ·                      ·
+      └── scan    ·            ·                      (a, b, d, e)           ·
+·                 table        t@primary              ·                      ·
+·                 spans        ALL                    ·                      ·
+·                 filter       e = 5                  ·                      ·
 
 # Test index with last primary key column explicit and the rest implicit.
 statement ok
@@ -580,40 +623,46 @@ CREATE INDEX idx ON u (d, c)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
 ----
-render            ·         ·          (a)              ·
- │                render 0  a          ·                ·
- └── lookup-join  ·         ·          (a, d, e, a, d)  ·
-      │           table     u@idx      ·                ·
-      │           type      inner      ·                ·
-      │           equality  (d) = (d)  ·                ·
-      │           pred      @1 = @4    ·                ·
-      └── scan    ·         ·          (a, d, e)        ·
-·                 table     t@primary  ·                ·
-·                 spans     ALL        ·                ·
-·                 filter    e = 5      ·                ·
+·                 distributed  true       ·                ·
+·                 vectorized   true       ·                ·
+render            ·            ·          (a)              ·
+ │                render 0     a          ·                ·
+ └── lookup-join  ·            ·          (a, d, e, a, d)  ·
+      │           table        u@idx      ·                ·
+      │           type         inner      ·                ·
+      │           equality     (d) = (d)  ·                ·
+      │           pred         @1 = @4    ·                ·
+      └── scan    ·            ·          (a, d, e)        ·
+·                 table        t@primary  ·                ·
+·                 spans        ALL        ·                ·
+·                 filter       e = 5      ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
-render            ·         ·            (d, e, f, a, b, c)  ·
- │                render 0  d            ·                   ·
- │                render 1  e            ·                   ·
- │                render 2  f            ·                   ·
- │                render 3  a            ·                   ·
- │                render 4  b            ·                   ·
- │                render 5  c            ·                   ·
- └── lookup-join  ·         ·            (a, b, c, d, e, f)  +a
-      │           table     def@primary  ·                   ·
-      │           type      inner        ·                   ·
-      │           equality  (a) = (f)    ·                   ·
-      └── scan    ·         ·            (a, b, c)           +a
-·                 table     abc@primary  ·                   ·
-·                 spans     ALL          ·                   ·
+·                 distributed  true         ·                   ·
+·                 vectorized   true         ·                   ·
+render            ·            ·            (d, e, f, a, b, c)  ·
+ │                render 0     d            ·                   ·
+ │                render 1     e            ·                   ·
+ │                render 2     f            ·                   ·
+ │                render 3     a            ·                   ·
+ │                render 4     b            ·                   ·
+ │                render 5     c            ·                   ·
+ └── lookup-join  ·            ·            (a, b, c, d, e, f)  +a
+      │           table        def@primary  ·                   ·
+      │           type         inner        ·                   ·
+      │           equality     (a) = (f)    ·                   ·
+      └── scan    ·            ·            (a, b, c)           +a
+·                 table        abc@primary  ·                   ·
+·                 spans        ALL          ·                   ·
 
 # Test that we don't get a lookup join if we force a merge join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
+·           distributed     true         ·                   ·
+·           vectorized      false        ·                   ·
 merge-join  ·               ·            (d, e, f, a, b, c)  +f
  │          type            inner        ·                   ·
  │          equality        (f) = (a)    ·                   ·
@@ -629,119 +678,109 @@ merge-join  ·               ·            (d, e, f, a, b, c)  +f
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
-sort            ·         ·            (d, e, f, a, b, c)  +f
- │              order     +f           ·                   ·
- └── hash-join  ·         ·            (d, e, f, a, b, c)  ·
-      │         type      inner        ·                   ·
-      │         equality  (f) = (a)    ·                   ·
-      ├── scan  ·         ·            (d, e, f)           ·
-      │         table     def@primary  ·                   ·
-      │         spans     ALL          ·                   ·
-      └── scan  ·         ·            (a, b, c)           ·
-·               table     abc@primary  ·                   ·
-·               spans     ALL          ·                   ·
+·               distributed  true         ·                   ·
+·               vectorized   false        ·                   ·
+sort            ·            ·            (d, e, f, a, b, c)  +f
+ │              order        +f           ·                   ·
+ └── hash-join  ·            ·            (d, e, f, a, b, c)  ·
+      │         type         inner        ·                   ·
+      │         equality     (f) = (a)    ·                   ·
+      ├── scan  ·            ·            (d, e, f)           ·
+      │         table        def@primary  ·                   ·
+      │         spans        ALL          ·                   ·
+      └── scan  ·            ·            (a, b, c)           ·
+·               table        abc@primary  ·                   ·
+·               spans        ALL          ·                   ·
 
 # Test lookup semi and anti join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
-render            ·         ·            (a, b, c)  ·
- │                render 0  a            ·          ·
- │                render 1  b            ·          ·
- │                render 2  c            ·          ·
- └── lookup-join  ·         ·            (a, b, c)  ·
-      │           table     def@primary  ·          ·
-      │           type      semi         ·          ·
-      │           equality  (a) = (f)    ·          ·
-      └── scan    ·         ·            (a, b, c)  ·
-·                 table     abc@primary  ·          ·
-·                 spans     ALL          ·          ·
+·            distributed  true         ·          ·
+·            vectorized   true         ·          ·
+lookup-join  ·            ·            (a, b, c)  ·
+ │           table        def@primary  ·          ·
+ │           type         semi         ·          ·
+ │           equality     (a) = (f)    ·          ·
+ └── scan    ·            ·            (a, b, c)  ·
+·            table        abc@primary  ·          ·
+·            spans        ALL          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
-render            ·         ·            (a, b, c)  ·
- │                render 0  a            ·          ·
- │                render 1  b            ·          ·
- │                render 2  c            ·          ·
- └── lookup-join  ·         ·            (a, b, c)  ·
-      │           table     def@primary  ·          ·
-      │           type      anti         ·          ·
-      │           equality  (a) = (f)    ·          ·
-      └── scan    ·         ·            (a, b, c)  ·
-·                 table     abc@primary  ·          ·
-·                 spans     ALL          ·          ·
+·            distributed  true         ·          ·
+·            vectorized   true         ·          ·
+lookup-join  ·            ·            (a, b, c)  ·
+ │           table        def@primary  ·          ·
+ │           type         anti         ·          ·
+ │           equality     (a) = (f)    ·          ·
+ └── scan    ·            ·            (a, b, c)  ·
+·            table        abc@primary  ·          ·
+·            spans        ALL          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-render            ·                      ·                (a, b, c)        ·
- │                render 0               a                ·                ·
- │                render 1               b                ·                ·
- │                render 2               c                ·                ·
- └── lookup-join  ·                      ·                (a, b, c, e, f)  ·
-      │           table                  def@primary      ·                ·
-      │           type                   inner            ·                ·
-      │           equality               (a, c) = (f, e)  ·                ·
-      │           equality cols are key  ·                ·                ·
-      └── scan    ·                      ·                (a, b, c)        ·
-·                 table                  abc@primary      ·                ·
-·                 spans                  ALL              ·                ·
+·            distributed            true             ·          ·
+·            vectorized             true             ·          ·
+lookup-join  ·                      ·                (a, b, c)  ·
+ │           table                  def@primary      ·          ·
+ │           type                   semi             ·          ·
+ │           equality               (a, c) = (f, e)  ·          ·
+ │           equality cols are key  ·                ·          ·
+ └── scan    ·                      ·                (a, b, c)  ·
+·            table                  abc@primary      ·          ·
+·            spans                  ALL              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-render            ·                      ·                (a, b, c)  ·
- │                render 0               a                ·          ·
- │                render 1               b                ·          ·
- │                render 2               c                ·          ·
- └── lookup-join  ·                      ·                (a, b, c)  ·
-      │           table                  def@primary      ·          ·
-      │           type                   anti             ·          ·
-      │           equality               (a, c) = (f, e)  ·          ·
-      │           equality cols are key  ·                ·          ·
-      └── scan    ·                      ·                (a, b, c)  ·
-·                 table                  abc@primary      ·          ·
-·                 spans                  ALL              ·          ·
+·            distributed            true             ·          ·
+·            vectorized             true             ·          ·
+lookup-join  ·                      ·                (a, b, c)  ·
+ │           table                  def@primary      ·          ·
+ │           type                   anti             ·          ·
+ │           equality               (a, c) = (f, e)  ·          ·
+ │           equality cols are key  ·                ·          ·
+ └── scan    ·                      ·                (a, b, c)  ·
+·            table                  abc@primary      ·          ·
+·            spans                  ALL              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-render            ·         ·              (a, b, c)  ·
- │                render 0  a              ·          ·
- │                render 1  b              ·          ·
- │                render 2  c              ·          ·
- └── lookup-join  ·         ·              (a, b, c)  ·
-      │           table     def@primary    ·          ·
-      │           type      semi           ·          ·
-      │           equality  (a) = (f)      ·          ·
-      │           pred      (@4 + @2) > 1  ·          ·
-      └── scan    ·         ·              (a, b, c)  ·
-·                 table     abc@primary    ·          ·
-·                 spans     ALL            ·          ·
+·            distributed  true           ·          ·
+·            vectorized   true           ·          ·
+lookup-join  ·            ·              (a, b, c)  ·
+ │           table        def@primary    ·          ·
+ │           type         semi           ·          ·
+ │           equality     (a) = (f)      ·          ·
+ │           pred         (@4 + @2) > 1  ·          ·
+ └── scan    ·            ·              (a, b, c)  ·
+·            table        abc@primary    ·          ·
+·            spans        ALL            ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-render            ·         ·              (a, b, c)  ·
- │                render 0  a              ·          ·
- │                render 1  b              ·          ·
- │                render 2  c              ·          ·
- └── lookup-join  ·         ·              (a, b, c)  ·
-      │           table     def@primary    ·          ·
-      │           type      anti           ·          ·
-      │           equality  (a) = (f)      ·          ·
-      │           pred      (@4 + @2) > 1  ·          ·
-      └── scan    ·         ·              (a, b, c)  ·
-·                 table     abc@primary    ·          ·
-·                 spans     ALL            ·          ·
+·            distributed  true           ·          ·
+·            vectorized   true           ·          ·
+lookup-join  ·            ·              (a, b, c)  ·
+ │           table        def@primary    ·          ·
+ │           type         anti           ·          ·
+ │           equality     (a) = (f)      ·          ·
+ │           pred         (@4 + @2) > 1  ·          ·
+ └── scan    ·            ·              (a, b, c)  ·
+·            table        abc@primary    ·          ·
+·            spans        ALL            ·          ·
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)
   SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlEFr2zAUx-_7FOJdJ-NIdtLUp1w6SOmS0eY2ctCiR-fN0TOSDCsl3304HqtdWlngQ3q0lD__X35PvGcwpHGjjuig-A4COEjgkAGHHDjMYc-htnRA58i2P-kCa_0HihmH0tSNb4_3HA5kEYpn8KWvEArYqR8V3qPSaNMZcNDoVVmda2pbHpV9Wrmjqirg8FAr4wqWpIIpo5lg5H-iBQ7bxhdsJfhKwv7EgRr_0ue8ekQoxInHM91Saf4hzYdIu6caC3Z382XHHm6-rtntdr0B_p9UK6-Awx3R76Zmv6g0jEyLFgcp34V8YSOr0aIeYq3EZ9if3vgnG0qoTsVQ7Hv12aBexM9NRM0tFUkqp05uhKo3ucXlJifj1ck4dTJJs6nqRqh66q4upy6LV5fFqcuSNJ-qboSqp255OXV5vLo8Tl2epPOp6kaoeuquP8aqfQPyHl1NxmHUFp21exj1I3Z721FjD_jN0uFc031uz7nzgUbnu1vRfaxNd9UC9sMiGJaDsHgdluHmkeosmM7D4XwK9zwYXoSbF1Oar4LhZbh5OaX5Ojyr2cgzCT-y193706e_AQAA__8Shyy4
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll9v2jAUxd_3KdB92lSjxE7Cn0iTeNhLJ62dur1NPLjEg0g0RraRVlV89wkyKSKBe-0F6Fsp-XGPfc65yhtUulAP8kVZyH8BBwYCGCTAIAUGGcwZbIxeKGu12T9SA_fFH8hjBmW12br9v-cMFtooyN_AlW6tIIef8nmtnpQslIliYFAoJ8v1YczGlC_SvM7si1yvgcGPjaxsPhhGfCCrYsAH2q2UAQaPW5cPZpzNBMx3DPTW_ZvXjHl-HaykXR0PmHGY7-YMrJNLBTnfsf_TnZ3WXUgnu7JFLds2uluiG0EiRNCX0rqyWriIx51TMng0hTKqQMclZ8c1U3T9O-0Jd_VFnteUBWkK8y3tp5s1T22rU8-dPNo3ZZbqqy4rZSI-Ov7dtfrtPs743afPplyu6j-xmDZHyS5uwYMe6k0keOtEp8ePjsZz_wZwr-ZGfBiJW3Q3QPnIp7uIcM_yEoqaovCLlJe_QwnG1ymB8PdS-KVQDKPkFikMUD72SuF54Z4pJBQ1KRQXSaF4hxROrpPCxN_LxC-FyTBKb5HCAOUTrxSeF-6ZQkJRk8LkIilM3iGF0-ukMPX3MvVLYTqMslukMED51CuFe-HBySNUNMlLL5K89PbJE_H1X0VPSHhSdqMrq7zeMuP9IVSxVPW9WL01C_Xd6MVhTP3x8cAdXmQKZV39bVp_uK_qr_YC_eFpH5gnvehxH1pwnOZtOj6ij-C4DQsUJk6dBLglwuBpH7jlVig97kO33OrQKXrhGX7hGW414fWoT7lwmCgXDlPlImiiXDhNlWuM3vgEv_BJn3JN-wSF91qkBE2YTdCU2xRO2E3g5DLFtyknKsZ77VPeWS1BnndWS5DnOE15jtOk5wROeY7jpOf4WuUjwvPOhgnyHN8wlOedFRPkOU5TnuM06TmBU57jOOk5vl5FTLw2dbZMiOcCXzJtz-e7D38DAAD__xe8Uow=
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)
@@ -769,6 +808,8 @@ INSERT INTO b VALUES(1)
 query TTT
 EXPLAIN SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
 ----
+·                      distributed  true
+·                      vectorized   false
 group                  ·            ·
  │                     aggregate 0  count_rows()
  │                     scalar       ·
@@ -803,3 +844,601 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/$lo
 ----
 Scan /Table/63/1/{1-2}
 Scan /Table/63/1/{1/10001/0-2}
+
+
+# Regression test for #40562.
+
+statement ok
+CREATE TABLE public.region
+(
+    r_regionkey int PRIMARY KEY,
+    r_name char(25) NOT NULL,
+    r_comment varchar(152)
+)
+
+statement ok
+ALTER TABLE public.region INJECT STATISTICS '[
+  {
+    "columns": ["r_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["r_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5,
+    "distinct_count": 5
+  }
+]'
+
+statement ok
+CREATE TABLE public.nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    n_comment varchar(152),
+    INDEX n_rk (n_regionkey ASC),
+    CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) references public.region (r_regionkey)
+)
+
+statement ok
+ALTER TABLE public.nation INJECT STATISTICS '[
+  {
+    "columns": ["n_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["n_regionkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["n_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 25,
+    "distinct_count": 25
+  }
+]'
+
+statement ok
+CREATE TABLE public.supplier
+(
+    s_suppkey int PRIMARY KEY,
+    s_name char(25) NOT NULL,
+    s_address varchar(40) NOT NULL,
+    s_nationkey int NOT NULL,
+    s_phone char(15) NOT NULL,
+    s_acctbal float NOT NULL,
+    s_comment varchar(101) NOT NULL,
+    INDEX s_nk (s_nationkey ASC),
+    CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.supplier INJECT STATISTICS '[
+  {
+    "columns": ["s_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["s_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+CREATE TABLE public.part
+(
+    p_partkey int PRIMARY KEY,
+    p_name varchar(55) NOT NULL,
+    p_mfgr char(25) NOT NULL,
+    p_brand char(10) NOT NULL,
+    p_type varchar(25) NOT NULL,
+    p_size int NOT NULL,
+    p_container char(10) NOT NULL,
+    p_retailprice float NOT NULL,
+    p_comment varchar(23) NOT NULL
+)
+
+statement ok
+ALTER TABLE public.part INJECT STATISTICS '[
+  {
+    "columns": ["p_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["p_mfgr"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["p_brand"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["p_type"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 150
+  },
+  {
+    "columns": ["p_size"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["p_container"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 40
+  },
+  {
+    "columns": ["p_retailprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 20000
+  },
+  {
+    "columns": ["p_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 130000
+  }
+]'
+
+statement ok
+CREATE TABLE public.partsupp
+(
+    ps_partkey int NOT NULL,
+    ps_suppkey int NOT NULL,
+    ps_availqty int NOT NULL,
+    ps_supplycost float NOT NULL,
+    ps_comment varchar(199) NOT NULL,
+    PRIMARY KEY (ps_partkey, ps_suppkey),
+    INDEX ps_sk (ps_suppkey ASC),
+    CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) references public.part (p_partkey),
+    CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) references public.supplier (s_suppkey)
+)
+
+statement ok
+ALTER TABLE public.partsupp INJECT STATISTICS '[
+  {
+    "columns": ["ps_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["ps_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_availqty"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["ps_supplycost"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["ps_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 800000,
+    "distinct_count": 800000
+  }
+]'
+
+statement ok
+CREATE TABLE public.customer
+(
+    c_custkey int PRIMARY KEY,
+    c_name varchar(25) NOT NULL,
+    c_address varchar(40) NOT NULL,
+    c_nationkey int NOT NULL NOT NULL,
+    c_phone char(15) NOT NULL,
+    c_acctbal float NOT NULL,
+    c_mktsegment char(10) NOT NULL,
+    c_comment varchar(117) NOT NULL,
+    INDEX c_nk (c_nationkey ASC),
+    CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) references public.nation (n_nationkey)
+)
+
+statement ok
+ALTER TABLE public.customer INJECT STATISTICS '[
+  {
+    "columns": ["c_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_address"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_nationkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 25
+  },
+  {
+    "columns": ["c_phone"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_acctbal"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  },
+  {
+    "columns": ["c_mktsegment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["c_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  }
+]'
+
+statement ok
+CREATE TABLE public.orders
+(
+    o_orderkey int PRIMARY KEY,
+    o_custkey int NOT NULL,
+    o_orderstatus char(1) NOT NULL,
+    o_totalprice float NOT NULL,
+    o_orderdate date NOT NULL,
+    o_orderpriority char(15) NOT NULL,
+    o_clerk char(15) NOT NULL,
+    o_shippriority int NOT NULL,
+    o_comment varchar(79) NOT NULL,
+    INDEX o_ck (o_custkey ASC),
+    INDEX o_od (o_orderdate ASC),
+    CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) references public.customer (c_custkey)
+)
+
+statement ok
+ALTER TABLE public.orders INJECT STATISTICS '[
+  {
+    "columns": ["o_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_custkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["o_orderstatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["o_totalprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["o_orderdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["o_orderpriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["o_clerk"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["o_shippriority"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["o_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1500000,
+    "distinct_count": 1500000
+  }
+]'
+
+statement ok
+CREATE TABLE public.lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float NOT NULL,
+    l_extendedprice float NOT NULL,
+    l_discount float NOT NULL,
+    l_tax float NOT NULL,
+    l_returnflag char(1) NOT NULL,
+    l_linestatus char(1) NOT NULL,
+    l_shipdate date NOT NULL,
+    l_commitdate date NOT NULL,
+    l_receiptdate date NOT NULL,
+    l_shipinstruct char(25) NOT NULL,
+    l_shipmode char(10) NOT NULL,
+    l_comment varchar(44) NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC),
+    CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) references public.orders (o_orderkey),
+    CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) references public.part (p_partkey),
+    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey)
+)
+
+statement ok
+ALTER TABLE public.lineitem INJECT STATISTICS '[
+  {
+    "columns": ["l_orderkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1500000
+  },
+  {
+    "columns": ["l_partkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["l_suppkey"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["l_linenumber"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_quantity"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["l_extendedprice"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["l_discount"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 11
+  },
+  {
+    "columns": ["l_tax"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 9
+  },
+  {
+    "columns": ["l_returnflag"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 3
+  },
+  {
+    "columns": ["l_linestatus"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2
+  },
+  {
+    "columns": ["l_shipdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_commitdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_receiptdate"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 2500
+  },
+  {
+    "columns": ["l_shipinstruct"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4
+  },
+  {
+    "columns": ["l_shipmode"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 7
+  },
+  {
+    "columns": ["l_comment"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 6001215,
+    "distinct_count": 4500000
+  }
+]'
+
+query TTT
+EXPLAIN SELECT s_name, count(*) AS numwait
+    FROM supplier, lineitem AS l1, orders, nation
+   WHERE s_suppkey = l1.l_suppkey
+     AND o_orderkey = l1.l_orderkey
+     AND o_orderstatus = 'F'
+     AND l1.l_receiptdate > l1.l_commitdate
+     AND EXISTS(
+            SELECT *
+              FROM lineitem AS l2
+             WHERE l2.l_orderkey = l1.l_orderkey
+               AND l2.l_suppkey != l1.l_suppkey
+         )
+     AND NOT EXISTS(
+                SELECT *
+                  FROM lineitem AS l3
+                 WHERE l3.l_orderkey = l1.l_orderkey
+                   AND l3.l_receiptdate > l3.l_commitdate
+             )
+     AND s_nationkey = n_nationkey
+     AND n_name = 'SAUDI ARABIA'
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+   LIMIT 100;
+----
+·                                                   distributed            true
+·                                                   vectorized             false
+limit                                               ·                      ·
+ │                                                  count                  100
+ └── sort                                           ·                      ·
+      │                                             order                  -numwait,+s_name
+      └── group                                     ·                      ·
+           │                                        aggregate 0            s_name
+           │                                        aggregate 1            count_rows()
+           │                                        group by               s_name
+           └── render                               ·                      ·
+                └── lookup-join                     ·                      ·
+                     │                              table                  orders@primary
+                     │                              type                   inner
+                     │                              equality               (l_orderkey) = (o_orderkey)
+                     │                              equality cols are key  ·
+                     │                              pred                   @11 = 'F'
+                     └── lookup-join                ·                      ·
+                          │                         table                  nation@primary
+                          │                         type                   inner
+                          │                         equality               (s_nationkey) = (n_nationkey)
+                          │                         equality cols are key  ·
+                          │                         pred                   @9 = 'SAUDI ARABIA'
+                          └── lookup-join           ·                      ·
+                               │                    table                  supplier@primary
+                               │                    type                   inner
+                               │                    equality               (l_suppkey) = (s_suppkey)
+                               │                    equality cols are key  ·
+                               └── lookup-join      ·                      ·
+                                    │               table                  lineitem@primary
+                                    │               type                   semi
+                                    │               equality               (l_orderkey) = (l_orderkey)
+                                    │               pred                   @6 != @2
+                                    └── merge-join  ·                      ·
+                                         │          type                   anti
+                                         │          equality               (l_orderkey) = (l_orderkey)
+                                         │          mergeJoinOrder         +"(l_orderkey=l_orderkey)"
+                                         ├── scan   ·                      ·
+                                         │          table                  lineitem@primary
+                                         │          spans                  ALL
+                                         │          filter                 l_receiptdate > l_commitdate
+                                         └── scan   ·                      ·
+·                                                   table                  lineitem@primary
+·                                                   spans                  ALL
+·                                                   filter                 l_receiptdate > l_commitdate

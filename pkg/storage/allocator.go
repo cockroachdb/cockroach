@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/constraint"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -504,7 +505,7 @@ func (a *Allocator) allocateTargetFromList(
 	candidateReplicas []roachpb.ReplicaDescriptor,
 	options scorerOptions,
 ) (*roachpb.StoreDescriptor, string) {
-	analyzedConstraints := analyzeConstraints(
+	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, candidateReplicas, zone)
 	candidates := allocateCandidates(
 		sl, analyzedConstraints, candidateReplicas, a.storePool.getLocalities(candidateReplicas),
@@ -567,7 +568,7 @@ func (a Allocator) RemoveTarget(
 	}
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
-	analyzedConstraints := analyzeConstraints(
+	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
@@ -661,7 +662,7 @@ func (a Allocator) RebalanceTarget(
 		}
 	}
 
-	analyzedConstraints := analyzeConstraints(
+	analyzedConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, zone)
 	options := a.scorerOptions()
 	results := rebalanceCandidates(
@@ -1241,7 +1242,7 @@ func (a Allocator) preferredLeaseholders(
 			if !ok {
 				continue
 			}
-			if subConstraintsCheck(storeDesc, preference.Constraints) {
+			if constraint.SubConstraintsCheck(storeDesc, preference.Constraints) {
 				preferred = append(preferred, repl)
 			}
 		}

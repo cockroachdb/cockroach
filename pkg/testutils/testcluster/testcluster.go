@@ -143,6 +143,18 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	}
 	tc.stopper = stop.NewStopper()
 
+	// Check if any of the args have a locality set.
+	noLocalities := true
+	for _, arg := range args.ServerArgsPerNode {
+		if len(arg.Locality.Tiers) > 0 {
+			noLocalities = false
+			break
+		}
+	}
+	if len(args.ServerArgs.Locality.Tiers) > 0 {
+		noLocalities = false
+	}
+
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
 		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
@@ -151,9 +163,9 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			serverArgs = args.ServerArgs
 		}
 
-		// If there are multiple nodes, place them in different localities by
-		// default.
-		if nodes > 0 {
+		// If no localities are specified in the args, we'll generate some
+		// automatically.
+		if noLocalities {
 			tiers := []roachpb.Tier{
 				{Key: "region", Value: "test"},
 				{Key: "dc", Value: fmt.Sprintf("dc%d", i+1)},

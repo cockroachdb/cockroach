@@ -68,7 +68,7 @@ func (rtl *replicationTestKnobs) withStopAfterJointConfig(f func()) {
 
 func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
 	var k replicationTestKnobs
-	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func() bool {
+	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func(_ []roachpb.ReplicationTarget) bool {
 		return atomic.LoadInt64(&k.replicaAddStopAfterLearnerAtomic) > 0
 	}
 	k.storeKnobs.ReplicaAddStopAfterJointConfig = func() bool {
@@ -616,7 +616,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	// added.
 	<-blockUntilSnapshotCh
 
-	// Removes the learner on node 3 out from under the replicate queue. This
+	// Remove the learner on node 3 out from under the replicate queue. This
 	// simulates a second replicate queue running concurrently. The first thing
 	// this second replicate queue would do is remove any learners it sees,
 	// leaving the 2 voters.
@@ -782,6 +782,9 @@ func TestLearnerAdminRelocateRange(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
+
+	_, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.atomic_replication_changes.enabled = true`)
+	require.NoError(t, err)
 
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {

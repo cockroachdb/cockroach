@@ -1141,6 +1141,9 @@ func setupAndInitializeLoggingAndProfiling(
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
 		log.StartGCDaemon(ctx)
+
+		// We have a valid logging directory. Configure RocksDB to log into it.
+		engine.InitRocksDBLogger(ctx)
 	}
 
 	outputDirectory := "."

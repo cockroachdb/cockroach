@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 const maxSettings = 256
@@ -643,12 +644,21 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 }
 
 func TestMaxSettingsPanics(t *testing.T) {
+	var origRegistry = make(map[string]settings.Setting)
+	for k, v := range settings.Registry {
+		origRegistry[k] = v
+	}
+	defer func() {
+		settings.Registry = origRegistry
+	}()
+
 	// Register too many settings which will cause a panic which is caught and converted to an error.
 	_, err := batchRegisterSettings(t, t.Name(), maxSettings-len(settings.Keys()))
 	expectedErr := "too many settings; increase maxSettings"
 	if err == nil || err.Error() != expectedErr {
 		t.Errorf("expected error %v, but got %v", expectedErr, err)
 	}
+
 }
 
 func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name string, err error) {
@@ -671,4 +681,43 @@ func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name stri
 		settings.RegisterValidatedIntSetting(name, "desc", 0, nil)
 	}
 	return name, err
+}
+
+var overrideBool = settings.RegisterBoolSetting("override.bool", "desc", true)
+var overrideInt = settings.RegisterIntSetting("override.int", "desc", 0)
+var overrideDuration = settings.RegisterDurationSetting("override.duration", "desc", time.Second)
+var overrideFloat = settings.RegisterFloatSetting("override.float", "desc", 1.0)
+
+func TestOverride(t *testing.T) {
+	sv := &settings.Values{}
+	sv.Init(settings.TestOpaque)
+
+	// Test override for bool setting.
+	require.Equal(t, true, overrideBool.Get(sv))
+	overrideBool.Override(sv, false)
+	require.Equal(t, false, overrideBool.Get(sv))
+	u := settings.NewUpdater(sv)
+	u.ResetRemaining()
+	require.Equal(t, false, overrideBool.Get(sv))
+
+	// Test override for int setting.
+	require.Equal(t, int64(0), overrideInt.Get(sv))
+	overrideInt.Override(sv, 42)
+	require.Equal(t, int64(42), overrideInt.Get(sv))
+	u.ResetRemaining()
+	require.Equal(t, int64(42), overrideInt.Get(sv))
+
+	// Test override for duration setting.
+	require.Equal(t, time.Second, overrideDuration.Get(sv))
+	overrideDuration.Override(sv, 42*time.Second)
+	require.Equal(t, 42*time.Second, overrideDuration.Get(sv))
+	u.ResetRemaining()
+	require.Equal(t, 42*time.Second, overrideDuration.Get(sv))
+
+	// Test override for float setting.
+	require.Equal(t, 1.0, overrideFloat.Get(sv))
+	overrideFloat.Override(sv, 42.0)
+	require.Equal(t, 42.0, overrideFloat.Get(sv))
+	u.ResetRemaining()
+	require.Equal(t, 42.0, overrideFloat.Get(sv))
 }

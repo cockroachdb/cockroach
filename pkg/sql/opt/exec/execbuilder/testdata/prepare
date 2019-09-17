@@ -1,4 +1,4 @@
-# LogicTest: fakedist
+# LogicTest: 5node-dist
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
@@ -11,10 +11,12 @@ PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 query TTT
 EXECUTE change_index
 ----
-scan  ·       ·
-·     table   ab@primary
-·     spans   ALL
-·     filter  b = 10
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        ab@primary
+·     spans        ALL
+·     filter       b = 10
 
 statement ok
 CREATE INDEX bindex ON ab (b)
@@ -22,9 +24,11 @@ CREATE INDEX bindex ON ab (b)
 query TTT
 EXECUTE change_index
 ----
-scan  ·      ·
-·     table  ab@bindex
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        ab@bindex
+·     spans        /10-/11
 
 statement ok
 DROP INDEX bindex
@@ -32,10 +36,12 @@ DROP INDEX bindex
 query TTT
 EXECUTE change_index
 ----
-scan  ·       ·
-·     table   ab@primary
-·     spans   ALL
-·     filter  b = 10
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        ab@primary
+·     spans        ALL
+·     filter       b = 10
 
 ## Statistics change: Create statistics and ensure that the plan is recalculated.
 statement ok
@@ -47,6 +53,8 @@ PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
 query TTT
 EXECUTE change_stats
 ----
+·           distributed         true
+·           vectorized          true
 merge-join  ·                   ·
  │          type                inner
  │          equality            (a) = (c)
@@ -69,6 +77,8 @@ CREATE STATISTICS s FROM ab
 query TTT retry
 EXECUTE change_stats
 ----
+·            distributed            true
+·            vectorized             true
 lookup-join  ·                      ·
  │           table                  cd@primary
  │           type                   inner

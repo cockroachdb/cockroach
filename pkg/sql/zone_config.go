@@ -18,12 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -37,7 +35,7 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 
 // getZoneConfig recursively looks up entries in system.zones until an
 // entry that applies to the object with the specified id is
-// found. Returns the ID of the matching ID, its zone config, and an
+// found. Returns the ID of the matching zone, its zone config, and an
 // optional placeholder ID and config if the looked-for ID was a table
 // with a zone config specifying only indexes and/or partitions.
 //
@@ -213,21 +211,6 @@ func GetZoneConfigInTxn(
 		}
 	}
 	return zoneID, zone, subzone, nil
-}
-
-// GenerateSubzoneSpans is a hook point for a CCL function that constructs from
-// a TableDescriptor the entries mapping zone config spans to subzones for use
-// in the SubzoneSpans field of config.ZoneConfig. If no CCL hook is installed,
-// it returns an error that directs users to use a CCL binary.
-var GenerateSubzoneSpans = func(
-	st *cluster.Settings,
-	clusterID uuid.UUID,
-	tableDesc *sqlbase.TableDescriptor,
-	subzones []config.Subzone,
-	newSubzones bool,
-) ([]config.SubzoneSpan, error) {
-	return nil, sqlbase.NewCCLRequiredError(errors.New(
-		"setting zone configs on indexes or partitions requires a CCL binary"))
 }
 
 func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {

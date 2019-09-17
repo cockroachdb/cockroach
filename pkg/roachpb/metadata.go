@@ -100,6 +100,24 @@ func (a Attributes) String() string {
 	return strings.Join(a.Attrs, ",")
 }
 
+// NewRangeDescriptor returns a RangeDescriptor populated from the input.
+func NewRangeDescriptor(
+	rangeID RangeID, start, end RKey, replicas ReplicaDescriptors,
+) *RangeDescriptor {
+	repls := append([]ReplicaDescriptor(nil), replicas.All()...)
+	for i := range repls {
+		repls[i].ReplicaID = ReplicaID(i + 1)
+	}
+	desc := &RangeDescriptor{
+		RangeID:       rangeID,
+		StartKey:      start,
+		EndKey:        end,
+		NextReplicaID: ReplicaID(len(repls) + 1),
+	}
+	desc.SetReplicas(MakeReplicaDescriptors(repls))
+	return desc
+}
+
 // RSpan returns the RangeDescriptor's resolved span.
 func (r *RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
@@ -145,7 +163,12 @@ func (r *RangeDescriptor) SetReplicaType(
 		desc := &r.InternalReplicas[i]
 		if desc.StoreID == storeID && desc.NodeID == nodeID {
 			prevTyp := desc.GetType()
-			desc.Type = &typ
+			if typ != VOTER_FULL {
+				desc.Type = &typ
+			} else {
+				// For 19.1 compatibility.
+				desc.Type = nil
+			}
 			return *desc, prevTyp, true
 		}
 	}
@@ -157,11 +180,16 @@ func (r *RangeDescriptor) SetReplicaType(
 func (r *RangeDescriptor) AddReplica(
 	nodeID NodeID, storeID StoreID, typ ReplicaType,
 ) ReplicaDescriptor {
+	var typPtr *ReplicaType
+	// For 19.1 compatibility, use nil instead of VOTER_FULL.
+	if typ != VOTER_FULL {
+		typPtr = &typ
+	}
 	toAdd := ReplicaDescriptor{
 		NodeID:    nodeID,
 		StoreID:   storeID,
 		ReplicaID: r.NextReplicaID,
-		Type:      &typ,
+		Type:      typPtr,
 	}
 	rs := r.Replicas()
 	rs.AddReplica(toAdd)
@@ -295,6 +323,9 @@ func (r *RangeDescriptor) String() string {
 	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.GetGeneration())
 	if !r.GetGenerationComparable() {
 		buf.WriteString("?")
+	}
+	if s := r.GetStickyBit(); !s.IsEmpty() {
+		fmt.Fprintf(&buf, ", sticky=%s", s)
 	}
 	buf.WriteString("]")
 

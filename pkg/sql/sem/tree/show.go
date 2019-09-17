@@ -212,12 +212,12 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 		ctx.WriteString("AUTOMATIC ")
 	}
 	ctx.WriteString("JOBS")
+	if node.Block {
+		ctx.WriteString(" WHEN COMPLETE")
+	}
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(node.Jobs)
-	}
-	if node.Block {
-		ctx.WriteString(" WHEN COMPLETE")
 	}
 }
 
@@ -393,7 +393,7 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 // ShowRanges represents a SHOW RANGES statement.
 type ShowRanges struct {
 	TableOrIndex TableIndexName
-	DatabaseName string
+	DatabaseName Name
 }
 
 // Format implements the NodeFormatter interface.
@@ -401,7 +401,7 @@ func (node *ShowRanges) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW RANGES FROM ")
 	if node.DatabaseName != "" {
 		ctx.WriteString("DATABASE ")
-		ctx.WriteString(node.DatabaseName)
+		ctx.FormatNode(&node.DatabaseName)
 	} else if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
 		ctx.FormatNode(&node.TableOrIndex)
@@ -450,9 +450,8 @@ func (node *ShowHistogram) Format(ctx *FmtCtx) {
 
 // ShowPartitions represents a SHOW PARTITIONS statement.
 type ShowPartitions struct {
-	Object string
-
-	IsDB bool
+	IsDB     bool
+	Database Name
 
 	IsIndex bool
 	Index   TableIndexName
@@ -464,10 +463,13 @@ type ShowPartitions struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowPartitions) Format(ctx *FmtCtx) {
 	if node.IsDB {
-		ctx.Printf("SHOW PARTITIONS FROM DATABASE %s", node.Object)
+		ctx.Printf("SHOW PARTITIONS FROM DATABASE ")
+		ctx.FormatNode(&node.Database)
 	} else if node.IsIndex {
-		ctx.Printf("SHOW PARTITIONS FROM INDEX %s", node.Object)
+		ctx.Printf("SHOW PARTITIONS FROM INDEX ")
+		ctx.FormatNode(&node.Index)
 	} else {
-		ctx.Printf("SHOW PARTITIONS FROM TABLE %s", node.Object)
+		ctx.Printf("SHOW PARTITIONS FROM TABLE ")
+		ctx.FormatNode(node.Table)
 	}
 }

@@ -1,7 +1,7 @@
 # LogicTest: local
 
 statement ok
-SET optimizer_foreign_keys = true
+SET experimental_optimizer_foreign_keys = true
 
 statement ok
 CREATE TABLE parent (p INT PRIMARY KEY, other INT)
@@ -12,6 +12,8 @@ CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
 ----
+·                                          distributed            false              ·                   ·
+·                                          vectorized             false              ·                   ·
 root                                       ·                      ·                  ()                  ·
  ├── count                                 ·                      ·                  ()                  ·
  │    └── insert                           ·                      ·                  ()                  ·
@@ -44,6 +46,8 @@ CREATE TABLE xy (x INT, y INT)
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO child SELECT x,y FROM xy
 ----
+·                                          distributed         false           ·       ·
+·                                          vectorized          false           ·       ·
 root                                       ·                   ·               ()      ·
  ├── count                                 ·                   ·               ()      ·
  │    └── insert                           ·                   ·               ()      ·

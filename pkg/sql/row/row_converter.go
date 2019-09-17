@@ -30,11 +30,6 @@ func (i KVInserter) CPut(key, value interface{}, expValue *roachpb.Value) {
 	panic("unimplemented")
 }
 
-// CPutDeprecated is not implmented.
-func (i KVInserter) CPutDeprecated(key, value, expValue interface{}) {
-	panic("unimplemented")
-}
-
 // Del is not implemented.
 func (i KVInserter) Del(key ...interface{}) {
 	panic("unimplemented")
@@ -303,24 +298,41 @@ func NewDatumRowConverter(
 	return c, nil
 }
 
+const rowIDBits = 64 - builtins.NodeIDBits
+
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
-func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex int64) error {
+func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
 	if c.hidden >= 0 {
-		// We don't want to call unique_rowid() for the hidden PK column because
-		// it is not idempotent. The sampling from the first stage will be useless
-		// during the read phase, producing a single range split with all of the
-		// data. Instead, we will call our own function that mimics that function,
-		// but more-or-less guarantees that it will not interfere with the numbers
-		// that will be produced by it. The lower 15 bits mimic the node id, but as
-		// the CSV file number. The upper 48 bits are the line number and mimic the
-		// timestamp. It would take a file with many more than 2**32 lines to even
-		// begin approaching what unique_rowid would return today, so we assume it
-		// to be safe. Since the timestamp is won't overlap, it is safe to use any
-		// number in the node id portion. The 15 bits in that portion should account
-		// for up to 32k CSV files in a single IMPORT. In the case of > 32k files,
-		// the data is xor'd so the final bits are flipped instead of set.
-		c.Datums[c.hidden] = tree.NewDInt(builtins.GenerateUniqueID(fileIndex, uint64(rowIndex)))
+		// We don't want to call unique_rowid() for the hidden PK column because it
+		// is not idempotent and has unfortunate overlapping of output spans since
+		// it puts the uniqueness-ensuring per-generator part (nodeID) in the
+		// low-bits. Instead, make our own IDs that attempt to keep each generator
+		// (sourceID) writing to its own key-space with sequential rowIndexes
+		// mapping to sequential unique IDs, by putting the rowID in the lower
+		// bits. To avoid collisions with the SQL-genenerated IDs (at least for a
+		// very long time) we also flip the top bit to 1.
+		//
+		// Producing sequential keys in non-overlapping spans for each source yields
+		// observed improvements in ingestion performance of ~2-3x and even more
+		// significant reductions in required compactions during IMPORT.
+		//
+		// TODO(dt): Note that currently some callers (e.g. CSV IMPORT, which can be
+		// used on a table more than once) offset their rowIndex by a wall-time at
+		// which their overall job is run, so that subsequent ingestion jobs pick
+		// different row IDs for the i'th row and don't collide. However such
+		// time-offset rowIDs mean each row imported consumes some unit of time that
+		// must then elapse before the next IMPORT could run without colliding e.g.
+		// a 100m row file would use 10µs/row or ~17min worth of IDs. For now it is
+		// likely that IMPORT's write-rate is still the limiting factor, but this
+		// scheme means rowIndexes are very large (1 yr in 10s of µs is about 2^42).
+		// Finding an alternative scheme for avoiding collisions (like sourceID *
+		// fileIndex*desc.Version) could improve on this. For now, if this
+		// best-effort collision avoidance scheme doesn't work in some cases we can
+		// just recommend an explicit PK as a workaround.
+		avoidCollisionsWithSQLsIDs := uint64(1 << 63)
+		rowID := (uint64(sourceID) << rowIDBits) ^ uint64(rowIndex)
+		c.Datums[c.hidden] = tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | rowID))
 	}
 
 	// TODO(justin): we currently disallow computed columns in import statements.

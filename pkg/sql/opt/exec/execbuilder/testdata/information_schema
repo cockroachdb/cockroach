@@ -3,13 +3,17 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
 ----
-virtual table  ·       ·  (catalog_name, schema_name, default_character_set_name, sql_path)  ·
-·              source  ·  ·                                                                  ·
+·              distributed  false  ·                                                                  ·
+·              vectorized   false  ·                                                                  ·
+virtual table  ·            ·      (catalog_name, schema_name, default_character_set_name, sql_path)  ·
+·              source       ·      ·                                                                  ·
 
 query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
-filter              ·       ·
- │                  filter  table_name = 'foo'
- └── virtual table  ·       ·
-·                   source  ·
+·                   distributed  false
+·                   vectorized   false
+filter              ·            ·
+ │                  filter       table_name = 'foo'
+ └── virtual table  ·            ·
+·                   source       ·

@@ -493,6 +493,7 @@ show_partitions_stmt ::=
 	'SHOW' 'PARTITIONS' 'FROM' 'TABLE' table_name
 	| 'SHOW' 'PARTITIONS' 'FROM' 'DATABASE' database_name
 	| 'SHOW' 'PARTITIONS' 'FROM' 'INDEX' table_index_name
+	| 'SHOW' 'PARTITIONS' 'FROM' 'INDEX' table_name '@' '*'
 
 show_jobs_stmt ::=
 	'SHOW' 'AUTOMATIC' 'JOBS'
@@ -1036,7 +1037,8 @@ sort_clause ::=
 	'ORDER' 'BY' sortby_list
 
 limit_clause ::=
-	'LIMIT' select_limit_value
+	'LIMIT' 'ALL'
+	| 'LIMIT' a_expr
 	| 'FETCH' first_or_next opt_select_fetch_first_value row_or_rows 'ONLY'
 
 target_list ::=
@@ -1409,10 +1411,6 @@ opt_index_flags ::=
 
 sortby_list ::=
 	( sortby ) ( ( ',' sortby ) )*
-
-select_limit_value ::=
-	a_expr
-	| 'ALL'
 
 first_or_next ::=
 	'FIRST'

@@ -427,6 +427,30 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:b9896d01af74ea562a587ee910c31e4cc4151c776e2b1b432cf0e91fa210c1ba"
+  name = "github.com/cockroachdb/pebble"
+  packages = [
+    ".",
+    "cache",
+    "internal/arenaskl",
+    "internal/base",
+    "internal/batchskl",
+    "internal/bytealloc",
+    "internal/crc",
+    "internal/humanize",
+    "internal/manifest",
+    "internal/rangedel",
+    "internal/rate",
+    "internal/rawalloc",
+    "internal/record",
+    "sstable",
+    "vfs",
+  ]
+  pruneopts = "UT"
+  revision = "81a672554d538e50d6a7e11ae8b2878f093f6e32"
+
+[[projects]]
+  branch = "master"
   digest = "1:7fd6f030a3e71e62c6a04a74b7d1777995b39730cd5cc905aab2b726f3455863"
   name = "github.com/cockroachdb/returncheck"
   packages = ["."]
@@ -1307,29 +1331,6 @@
   revision = "b0b1615b78e5ee59739545bb38426383b2cda4c9"
 
 [[projects]]
-  branch = "master"
-  digest = "1:b70a442c8948d6a72c8bbc39c61a07b0c6513f7ce854abcda975de319bab2692"
-  name = "github.com/petermattis/pebble"
-  packages = [
-    ".",
-    "cache",
-    "internal/arenaskl",
-    "internal/base",
-    "internal/batchskl",
-    "internal/bytealloc",
-    "internal/crc",
-    "internal/humanize",
-    "internal/rangedel",
-    "internal/rate",
-    "internal/rawalloc",
-    "internal/record",
-    "sstable",
-    "vfs",
-  ]
-  pruneopts = "UT"
-  revision = "213fac439da9e95051ccc2c17279574e80a59c8c"
-
-[[projects]]
   digest = "1:e39a5ee8fcbec487f8fc68863ef95f2b025e0739b0e4aa55558a2b4cf8f0ecf0"
   name = "github.com/pierrec/lz4"
   packages = [
@@ -1508,7 +1509,7 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
-  digest = "1:a893ff8345b4fea61f22af749d8bbe6c546e9ed36b52bb80da25e991a884cc8e"
+  digest = "1:f698db2531840e4891a848b4dbf8c1acfd3536571d6a161422a182a6ac03741c"
   name = "go.etcd.io/etcd"
   packages = [
     "raft",
@@ -1518,7 +1519,7 @@
     "raft/tracker",
   ]
   pruneopts = "UT"
-  revision = "9b29151d3072511f574e7272a5348504086013fa"
+  revision = "4a2b4c8f7e0a3754fdd5a3341a27c2431c2a5385"
 
 [[projects]]
   digest = "1:3b5a3bc35810830ded5e26ef9516e933083a2380d8e57371fdfde3c70d7c6952"
@@ -1948,6 +1949,10 @@
     "github.com/cockroachdb/gostdlib/cmd/gofmt",
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     "github.com/cockroachdb/logtags",
+    "github.com/cockroachdb/pebble",
+    "github.com/cockroachdb/pebble/cache",
+    "github.com/cockroachdb/pebble/sstable",
+    "github.com/cockroachdb/pebble/vfs",
     "github.com/cockroachdb/returncheck",
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
@@ -2024,10 +2029,6 @@
     "github.com/opentracing/opentracing-go/log",
     "github.com/openzipkin-contrib/zipkin-go-opentracing",
     "github.com/petermattis/goid",
-    "github.com/petermattis/pebble",
-    "github.com/petermattis/pebble/cache",
-    "github.com/petermattis/pebble/sstable",
-    "github.com/petermattis/pebble/vfs",
     "github.com/pkg/errors",
     "github.com/pmezard/go-difflib/difflib",
     "github.com/prometheus/client_golang/prometheus",

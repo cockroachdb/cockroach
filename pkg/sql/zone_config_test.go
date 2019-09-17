@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var configID = sqlbase.ID(1)
@@ -81,15 +82,16 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 
 // TODO(benesch,ridwansharif): modernize these tests to avoid hardcoding
 // expectations about descriptor IDs and zone config encoding.
-// TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
+// TestGetZoneConfig exercises config.getZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	defaultZoneConfig := config.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
-	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
+	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 21)
 	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
+	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
@@ -323,8 +325,9 @@ func TestCascadingZoneConfig(t *testing.T) {
 	defaultZoneConfig := config.DefaultZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
-	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
+	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 21)
 	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
+	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,

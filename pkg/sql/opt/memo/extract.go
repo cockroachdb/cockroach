@@ -178,6 +178,32 @@ func ExtractJoinEqualityColumns(
 	return leftEq, rightEq
 }
 
+// ExtractJoinEqualityFilters returns the filters containing pairs of columns
+// (one from the left side, one from the right side) which are constrained to
+// be equal in a join (and have equivalent types).
+func ExtractJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) FiltersExpr {
+	// We want to avoid allocating a new slice unless strictly necessary.
+	var newFilters FiltersExpr
+	for i := range on {
+		condition := on[i].Condition
+		ok, _, _ := isJoinEquality(leftCols, rightCols, condition)
+		if ok {
+			if newFilters != nil {
+				newFilters = append(newFilters, on[i])
+			}
+		} else {
+			if newFilters == nil {
+				newFilters = make(FiltersExpr, i, len(on)-1)
+				copy(newFilters, on[:i])
+			}
+		}
+	}
+	if newFilters != nil {
+		return newFilters
+	}
+	return on
+}
+
 func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, ok bool) {
 	if eq, ok := condition.(*EqExpr); ok {
 		if leftVar, ok := eq.Left.(*VariableExpr); ok {

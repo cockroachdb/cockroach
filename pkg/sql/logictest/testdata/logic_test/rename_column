@@ -120,7 +120,9 @@ species
 query TTT
 EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
 ----
-alter table  ·  ·
+·            distributed  false
+·            vectorized   false
+alter table  ·            ·
 
 # Verify that EXPLAIN did not actually rename the column
 query T

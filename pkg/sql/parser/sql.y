@@ -878,7 +878,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <bool> opt_using_gin_btree
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
-%type <tree.Expr> select_limit_value
 %type <tree.Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
 %type <empty> first_or_next
@@ -1171,8 +1170,14 @@ alter_table_stmt:
 // ALTER PARTITION <name> <command>
 //
 // Commands:
-//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <zoneconfig>
-//   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
+//   -- Alter a single partition which exists on any of a table's indexes.
+//   ALTER PARTITION <partition> OF TABLE <tablename> CONFIGURE ZONE <zoneconfig>
+//
+//   -- Alter a partition of a specific index.
+//   ALTER PARTITION <partition> OF INDEX <tablename>@<indexname> CONFIGURE ZONE <zoneconfig>
+//
+//   -- Alter all partitions with the same name across a table's indexes.
+//   ALTER PARTITION <partition> OF INDEX <tablename>@* CONFIGURE ZONE <zoneconfig>
 //
 // Zone configurations:
 //   DISCARD
@@ -1499,6 +1504,12 @@ alter_zone_partition_stmt:
     }
     s.AllIndexes = true
     $$.val = s
+  }
+| ALTER PARTITION partition_name OF TABLE table_name '@' '*' error
+  {
+    err := errors.New("index wildcard unsupported in ALTER PARTITION ... OF TABLE")
+    err = errors.WithHint(err, "try ALTER PARTITION <partition> OF INDEX <tablename>@*")
+    return setErr(sqllex, err)
   }
 
 var_set_list:
@@ -1860,7 +1871,7 @@ import_format:
 //
 // Formats:
 //    CSV
-//    MYSQLOUTFILE
+//    DELIMITED
 //    MYSQLDUMP
 //    PGCOPY
 //    PGDUMP
@@ -3446,15 +3457,19 @@ show_columns_stmt:
 show_partitions_stmt:
   SHOW PARTITIONS FROM TABLE table_name
   {
-    $$.val = &tree.ShowPartitions{Object: $5.unresolvedObjectName().String(), IsTable: true, Table: $5.unresolvedObjectName()}
+    $$.val = &tree.ShowPartitions{IsTable: true, Table: $5.unresolvedObjectName()}
   }
 | SHOW PARTITIONS FROM DATABASE database_name
   {
-    $$.val = &tree.ShowPartitions{Object: $5, IsDB: true}
+    $$.val = &tree.ShowPartitions{IsDB: true, Database: tree.Name($5)}
   }
 | SHOW PARTITIONS FROM INDEX table_index_name
   {
-    $$.val = &tree.ShowPartitions{Object: $5.newTableIndexName().String(), IsIndex: true, Index: $5.tableIndexName()}
+    $$.val = &tree.ShowPartitions{IsIndex: true, Index: $5.tableIndexName()}
+  }
+| SHOW PARTITIONS FROM INDEX table_name '@' '*'
+  {
+    $$.val = &tree.ShowPartitions{IsTable: true, Table: $5.unresolvedObjectName()}
   }
 | SHOW PARTITIONS error // SHOW HELP: SHOW PARTITIONS
 
@@ -3855,7 +3870,7 @@ show_ranges_stmt:
   }
 | SHOW RANGES FROM DATABASE database_name 
   {
-    $$.val = &tree.ShowRanges{DatabaseName: $5}
+    $$.val = &tree.ShowRanges{DatabaseName: tree.Name($5)}
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
 
@@ -6092,6 +6107,7 @@ select_limit:
     $$.val = $1.limit()
     if $2.limit() != nil {
       $$.val.(*tree.Limit).Count = $2.limit().Count
+      $$.val.(*tree.Limit).LimitAll = $2.limit().LimitAll
     }
   }
 | limit_clause
@@ -6102,7 +6118,11 @@ opt_limit_clause:
 | /* EMPTY */ { $$.val = (*tree.Limit)(nil) }
 
 limit_clause:
-  LIMIT select_limit_value
+  LIMIT ALL
+  {
+    $$.val = &tree.Limit{LimitAll: true}
+  }
+| LIMIT a_expr
   {
     if $2.expr() == nil {
       $$.val = (*tree.Limit)(nil)
@@ -6127,13 +6147,6 @@ offset_clause:
 | OFFSET c_expr row_or_rows
   {
     $$.val = &tree.Limit{Offset: $2.expr()}
-  }
-
-select_limit_value:
-  a_expr
-| ALL
-  {
-    $$.val = tree.Expr(nil)
   }
 
 // Allowing full expressions without parentheses causes various parsing

@@ -540,45 +540,34 @@ FROM
 WHERE
   subq.col1;
 ----
-with &1 (subq)
+project
  ├── columns: "?column?":26(int!null)
- ├── stats: [rows=1]
+ ├── stats: [rows=0.95099005]
  ├── fd: ()-->(26)
- ├── project
- │    ├── columns: col1:23(bool) tab1.g:18(int4!null)
- │    ├── stats: [rows=333333.333]
- │    ├── inner-join (hash)
- │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.g:18(int4!null) tab1.j:21(float!null)
- │    │    ├── stats: [rows=333333.333, distinct(10)=100, null(10)=0, distinct(18)=100, null(18)=0, distinct(21)=100, null(21)=0]
- │    │    ├── scan tab0
- │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
- │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0]
- │    │    ├── scan tab1
- │    │    │    ├── columns: tab1.e:16(varchar) tab1.f:17("char") tab1.g:18(int4!null) tab1.j:21(float!null)
- │    │    │    └── stats: [rows=1000, distinct(18)=100, null(18)=0, distinct(21)=100, null(21)=0]
- │    │    └── filters
- │    │         └── tab0.j IN (tab1.j,) [type=bool, outer=(10,21)]
- │    └── projections
- │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h, tab1.e, tab0.f, tab0.e::STRING), tab1.f, '') THEN true ELSE false END [type=bool, outer=(5,6,8,16,17)]
- └── project
-      ├── columns: "?column?":26(int!null)
-      ├── stats: [rows=1]
-      ├── fd: ()-->(26)
-      ├── select
-      │    ├── columns: col0:24(int4!null) col1:25(bool!null)
-      │    ├── stats: [rows=1, distinct(24)=1, null(24)=0, distinct(25)=1, null(25)=0]
-      │    ├── fd: ()-->(25)
-      │    ├── with-scan &1 (subq)
-      │    │    ├── columns: col0:24(int4!null) col1:25(bool)
-      │    │    ├── mapping:
-      │    │    │    ├──  tab1.g:18(int4) => col0:24(int4)
-      │    │    │    └──  col1:23(bool) => col1:25(bool)
-      │    │    ├── stats: [rows=333333.333]
-      │    │    └── fd: (18)-->(24), (23)-->(25)
-      │    └── filters
-      │         └── variable: col1 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
-      └── projections
-           └── const: 1 [type=int]
+ ├── select
+ │    ├── columns: col1:25(bool!null)
+ │    ├── stats: [rows=0.95099005, distinct(25)=0.95099005, null(25)=0]
+ │    ├── fd: ()-->(25)
+ │    ├── project
+ │    │    ├── columns: col1:25(bool)
+ │    │    ├── stats: [rows=333333.333, distinct(25)=333333.333, null(25)=16336.65]
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
+ │    │    │    ├── stats: [rows=333333.333, distinct(10)=100, null(10)=0, distinct(21)=100, null(21)=0, distinct(5,6,8,16,17)=333333.333, null(5,6,8,16,17)=16336.65]
+ │    │    │    ├── scan tab0
+ │    │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
+ │    │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0, distinct(5,6,8)=1000, null(5,6,8)=29.701]
+ │    │    │    ├── scan tab1
+ │    │    │    │    ├── columns: tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
+ │    │    │    │    └── stats: [rows=1000, distinct(21)=100, null(21)=0, distinct(16,17)=1000, null(16,17)=19.9]
+ │    │    │    └── filters
+ │    │    │         └── tab0.j IN (tab1.j,) [type=bool, outer=(10,21)]
+ │    │    └── projections
+ │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h, tab1.e, tab0.f, tab0.e::STRING), tab1.f, '') THEN true ELSE false END [type=bool, outer=(5,6,8,16,17)]
+ │    └── filters
+ │         └── variable: col1 [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
+ └── projections
+      └── const: 1 [type=int]
 
 # ---------------------
 # Tests with Histograms

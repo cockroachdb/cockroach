@@ -18,7 +18,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -43,7 +43,7 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 
 	capacity := rng.Intn(coldata.BatchSize) + 1
 	length := rng.Intn(capacity)
-	b := exec.RandomBatch(rng, typs, capacity, length, rng.Float64())
+	b := colexec.RandomBatch(rng, typs, capacity, length, rng.Float64())
 	return typs, b
 }
 
@@ -61,10 +61,12 @@ func copyBatch(original coldata.Batch) coldata.Batch {
 	b := coldata.NewMemBatchWithSize(typs, int(original.Length()))
 	b.SetLength(original.Length())
 	for colIdx, col := range original.ColVecs() {
-		b.ColVec(colIdx).Copy(coldata.CopyArgs{
-			ColType:   typs[colIdx],
-			Src:       col,
-			SrcEndIdx: uint64(original.Length()),
+		b.ColVec(colIdx).Copy(coldata.CopySliceArgs{
+			SliceArgs: coldata.SliceArgs{
+				ColType:   typs[colIdx],
+				Src:       col,
+				SrcEndIdx: uint64(original.Length()),
+			},
 		})
 	}
 	return b
@@ -201,7 +203,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	numBytes := []int64{coldata.BatchSize, fixedLen * coldata.BatchSize, 8 * coldata.BatchSize}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := exec.RandomBatch(rng, []coltypes.T{typ}, coldata.BatchSize, 0 /* length */, 0 /* nullProbability */)
+		batch := colexec.RandomBatch(rng, []coltypes.T{typ}, coldata.BatchSize, 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}

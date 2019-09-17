@@ -379,6 +379,8 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN PAUSE JOBS SELECT a`},
 		{`SHOW JOBS SELECT a`},
 		{`EXPLAIN SHOW JOBS SELECT a`},
+		{`SHOW JOBS WHEN COMPLETE SELECT a`},
+		{`EXPLAIN SHOW JOBS WHEN COMPLETE SELECT a`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
@@ -974,6 +976,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'`},
 		{`SELECT a FROM t1 AS OF SYSTEM TIME -('a' || 'b')::INTERVAL`},
 
+		{`SELECT * FROM t LIMIT ALL`},
+		{`SELECT EXISTS ((((TABLE error FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE)) AS is FROM ident`},
+
 		{`SELECT a FROM t LIMIT a`},
 		{`SELECT a FROM t OFFSET b`},
 		{`SELECT a FROM t LIMIT a OFFSET b`},
@@ -1314,7 +1319,7 @@ func TestParse(t *testing.T) {
 
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
-		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' MYSQLOUTFILE DATA ('path/to/some/file', $1)`},
+		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' DELIMITED DATA ('path/to/some/file', $1)`},
 		{`IMPORT TABLE foo (id INT8 PRIMARY KEY, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
 		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
@@ -1346,17 +1351,15 @@ func TestParse(t *testing.T) {
 	}
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
-		t.Run(d.sql, func(t *testing.T) {
-			stmts, err := p.Parse(d.sql)
-			if err != nil {
-				t.Fatalf("%s: expected success, but found %s", d.sql, err)
-			}
-			s := stmts.String()
-			if d.sql != s {
-				t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
-			}
-			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
-		})
+		stmts, err := p.Parse(d.sql)
+		if err != nil {
+			t.Fatalf("%s: expected success, but found %s", d.sql, err)
+		}
+		s := stmts.String()
+		if d.sql != s {
+			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
+		}
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 	}
 }
 
@@ -1764,6 +1767,8 @@ func TestParse2(t *testing.T) {
 		{`EXPLAIN PAUSE JOB a`, `EXPLAIN PAUSE JOBS VALUES (a)`},
 		{`SHOW JOB a`, `SHOW JOBS VALUES (a)`},
 		{`EXPLAIN SHOW JOB a`, `EXPLAIN SHOW JOBS VALUES (a)`},
+		{`SHOW JOB WHEN COMPLETE a`, `SHOW JOBS WHEN COMPLETE VALUES (a)`},
+		{`EXPLAIN SHOW JOB WHEN COMPLETE a`, `EXPLAIN SHOW JOBS WHEN COMPLETE VALUES (a)`},
 		{`CANCEL QUERY a`, `CANCEL QUERIES VALUES (a)`},
 		{`CANCEL QUERY IF EXISTS a`, `CANCEL QUERIES IF EXISTS VALUES (a)`},
 		{`CANCEL SESSION a`, `CANCEL SESSIONS VALUES (a)`},
@@ -2677,6 +2682,14 @@ CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
 DETAIL: source SQL:
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
                                                                                                               ^`,
+		},
+		{
+			`ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1`,
+			`at or near "configure": syntax error: index wildcard unsupported in ALTER PARTITION ... OF TABLE
+DETAIL: source SQL:
+ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
+                                 ^
+HINT: try ALTER PARTITION <partition> OF INDEX <tablename>@*`,
 		},
 	}
 	for _, d := range testData {

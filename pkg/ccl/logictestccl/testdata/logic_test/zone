@@ -26,9 +26,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-scan  ·      ·
-·     table  t@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@secondary
+·     spans        /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -66,9 +68,11 @@ ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-scan  ·      ·
-·     table  t@tertiary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@tertiary
+·     spans        /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -106,9 +110,11 @@ ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-scan  ·      ·
-·     table  t@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@secondary
+·     spans        /10-/11
 
 # ------------------------------------------------------------------------------
 # Swap location of primary and secondary indexes and ensure that primary index
@@ -124,9 +130,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-scan  ·      ·
-·     table  t@primary
-·     spans  /10-/10/#
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@primary
+·     spans        /10-/10/#
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -161,9 +169,11 @@ PREPARE p AS SELECT tree, field, description FROM [EXPLAIN SELECT k, v FROM t WH
 query TTT retry
 EXECUTE p
 ----
-scan  ·      ·
-·     table  t@primary
-·     spans  /10-/10/#
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@primary
+·     spans        /10-/10/#
 
 statement ok
 ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
@@ -174,9 +184,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query TTT retry
 EXECUTE p
 ----
-scan  ·      ·
-·     table  t@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@secondary
+·     spans        /10-/11
 
 statement ok
 DEALLOCATE p
@@ -197,9 +209,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-scan  ·      ·
-·     table  t@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@secondary
+·     spans        /10-/11
 
 # ------------------------------------------------------------------------------
 # Move secondary lease preference to dc3 and put tertiary lease preference in
@@ -217,9 +231,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-scan  ·      ·
-·     table  t@tertiary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@tertiary
+·     spans        /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -267,9 +283,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-scan  ·      ·
-·     table  t@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@secondary
+·     spans        /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -307,9 +325,11 @@ PREPARE p AS SELECT tree, field, description FROM [EXPLAIN SELECT k, v FROM t WH
 query TTT retry
 EXECUTE p
 ----
-scan  ·      ·
-·     table  t@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@secondary
+·     spans        /10-/11
 
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE
@@ -318,9 +338,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc2]]'
 query TTT retry
 EXECUTE p
 ----
-scan  ·      ·
-·     table  t@primary
-·     spans  /10-/10/#
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t@primary
+·     spans        /10-/10/#
 
 statement ok
 DEALLOCATE p
@@ -345,9 +367,11 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING lease_preferences='[[+region=t
 query TTT retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-scan  ·      ·
-·     table  t36642@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t36642@secondary
+·     spans        /10-/11
 
 statement ok
 ALTER INDEX t36642@tertiary CONFIGURE ZONE USING lease_preferences='[[+region=test,+dc=dc1]]'
@@ -358,9 +382,11 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING lease_preferences='[[+region=t
 query TTT retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-scan  ·      ·
-·     table  t36642@tertiary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t36642@tertiary
+·     spans        /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -408,9 +434,11 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query TTT retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-scan  ·      ·
-·     table  t36644@secondary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t36644@secondary
+·     spans        /10-/11
 
 statement ok
 ALTER INDEX t36644@secondary CONFIGURE ZONE USING lease_preferences='[[+dc=dc3]]'
@@ -422,9 +450,11 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query TTT retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-scan  ·      ·
-·     table  t36644@tertiary
-·     spans  /10-/11
+·     distributed  true
+·     vectorized   true
+scan  ·            ·
+·     table        t36644@tertiary
+·     spans        /10-/11
 
 subtest regression_35756
 
@@ -511,32 +541,34 @@ CREATE INDEX "my index" ON "my table" (x) PARTITION BY LIST (x) (
 ALTER DATABASE "my database" CONFIGURE ZONE USING num_replicas = 1;
 ALTER TABLE "my table" CONFIGURE ZONE USING num_replicas = 1;
 ALTER INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1;
-ALTER PARTITION "my partition" OF TABLE "my table" CONFIGURE ZONE USING num_replicas = 1;
+ALTER PARTITION "my partition" OF INDEX "my table"@primary CONFIGURE ZONE USING num_replicas = 1;
 ALTER PARTITION "my partition" OF INDEX "my table"@"my index" CONFIGURE ZONE USING num_replicas = 1
 
 query TTTTTT
 SELECT target, range_name, database_name, table_name, index_name, partition_name
 FROM crdb_internal.zones
 ----
-RANGE default                                                                 default   NULL         NULL      NULL       NULL
-DATABASE system                                                               NULL      system       NULL      NULL       NULL
-TABLE system.public.jobs                                                      NULL      system       jobs      NULL       NULL
-RANGE meta                                                                    meta      NULL         NULL      NULL       NULL
-RANGE system                                                                  system    NULL         NULL      NULL       NULL
-RANGE liveness                                                                liveness  NULL         NULL      NULL       NULL
-TABLE test.public.t                                                           NULL      test         t         NULL       NULL
-INDEX test.public.t@secondary                                                 NULL      test         t         secondary  NULL
-INDEX test.public.t@tertiary                                                  NULL      test         t         tertiary   NULL
-INDEX test.public.t36642@secondary                                            NULL      test         t36642    secondary  NULL
-INDEX test.public.t36642@tertiary                                             NULL      test         t36642    tertiary   NULL
-INDEX test.public.t36644@secondary                                            NULL      test         t36644    secondary  NULL
-INDEX test.public.t36644@tertiary                                             NULL      test         t36644    tertiary   NULL
-PARTITION x1_idx OF INDEX test.public.t38391@foo                              NULL      test         t38391    foo        x1_idx
-DATABASE "my database"                                                        NULL      my database  NULL      NULL       NULL
-TABLE "my database".public."my table"                                         NULL      my database  my table  NULL       NULL
-INDEX "my database".public."my table"@"my index"                              NULL      my database  my table  my index   NULL
-PARTITION "my partition" OF INDEX "my database".public."my table"@primary     NULL      my database  my table  primary    my partition
-PARTITION "my partition" OF INDEX "my database".public."my table"@"my index"  NULL      my database  my table  my index   my partition
+RANGE default                                                                 default   NULL         NULL                          NULL       NULL
+DATABASE system                                                               NULL      system       NULL                          NULL       NULL
+TABLE system.public.jobs                                                      NULL      system       jobs                          NULL       NULL
+RANGE meta                                                                    meta      NULL         NULL                          NULL       NULL
+RANGE system                                                                  system    NULL         NULL                          NULL       NULL
+RANGE liveness                                                                liveness  NULL         NULL                          NULL       NULL
+TABLE system.public.replication_constraint_stats                              NULL      system       replication_constraint_stats  NULL       NULL
+TABLE system.public.replication_stats                                         NULL      system       replication_stats             NULL       NULL
+TABLE test.public.t                                                           NULL      test         t                             NULL       NULL
+INDEX test.public.t@secondary                                                 NULL      test         t                             secondary  NULL
+INDEX test.public.t@tertiary                                                  NULL      test         t                             tertiary   NULL
+INDEX test.public.t36642@secondary                                            NULL      test         t36642                        secondary  NULL
+INDEX test.public.t36642@tertiary                                             NULL      test         t36642                        tertiary   NULL
+INDEX test.public.t36644@secondary                                            NULL      test         t36644                        secondary  NULL
+INDEX test.public.t36644@tertiary                                             NULL      test         t36644                        tertiary   NULL
+PARTITION x1_idx OF INDEX test.public.t38391@foo                              NULL      test         t38391                        foo        x1_idx
+DATABASE "my database"                                                        NULL      my database  NULL                          NULL       NULL
+TABLE "my database".public."my table"                                         NULL      my database  my table                      NULL       NULL
+INDEX "my database".public."my table"@"my index"                              NULL      my database  my table                      my index   NULL
+PARTITION "my partition" OF INDEX "my database".public."my table"@primary     NULL      my database  my table                      primary    my partition
+PARTITION "my partition" OF INDEX "my database".public."my table"@"my index"  NULL      my database  my table                      my index   my partition
 
 # Test the zone information being displayed in SHOW CREATE
 statement ok
@@ -567,6 +599,25 @@ ALTER PARTITION p1 OF INDEX "my database".public.show_test@primary CONFIGURE ZON
 ALTER PARTITION p2 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
   constraints = '[+dc=dc2]'
 
+# test warnings on table creation
+statement ok
+CREATE TABLE warning (x INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE warning PARTITION BY LIST (x) (PARTITION p1 VALUES IN (1))
+
+query TT
+SHOW CREATE warning
+----
+warning  CREATE TABLE warning (
+         x INT8 NOT NULL,
+         CONSTRAINT "primary" PRIMARY KEY (x ASC),
+         FAMILY "primary" (x)
+) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN ((1))
+)
+-- Warning: Partitioned table with no zone configurations.
+
 subtest alter_partition_across_all_indexes
 
 statement ok
@@ -580,9 +631,15 @@ CREATE INDEX x1 ON t2 (x) PARTITION BY LIST (x) (
 );
 CREATE INDEX x2 ON t2 (x) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN (1),
-  PARTITION p2 VALUES IN (2)
-);
+  PARTITION p2 VALUES IN (2),
+  PARTITION p3 VALUES IN (3)
+)
+
+statement ok
 ALTER PARTITION p1 OF INDEX t2@* CONFIGURE ZONE USING num_replicas = 1
+
+statement error index "t2" does not exist\nHINT: try specifying the index as <tablename>@<indexname>
+ALTER PARTITION p1 OF INDEX t2 CONFIGURE ZONE USING num_replicas = 1
 
 query TT
 SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@%'
@@ -593,3 +650,45 @@ PARTITION p1 OF INDEX "my database".public.t2@x1       ALTER PARTITION p1 OF IND
                                                        num_replicas = 1
 PARTITION p1 OF INDEX "my database".public.t2@x2       ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
                                                        num_replicas = 1
+
+# ALTER PARTITION ... OF TABLE should only succeed if the partition name is
+# unique across all indexes.
+statement error pq: partition "p1" exists on multiple indexes of table "t2"
+ALTER PARTITION p1 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
+
+statement ok
+ALTER PARTITION p3 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
+
+query TT
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@x2%'
+----
+PARTITION p1 OF INDEX "my database".public.t2@x2  ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
+                                                  num_replicas = 1
+PARTITION p3 OF INDEX "my database".public.t2@x2  ALTER PARTITION p3 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
+                                                  num_replicas = 1
+
+statement error pq: partition "p4" does not exist on table "t2"
+ALTER PARTITION p4 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
+
+# regression for #40417
+statement ok
+CREATE TABLE t40417 (x INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE t40417 PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1));
+
+statement ok
+ALTER PARTITION p1 OF TABLE t40417 CONFIGURE ZONE USING num_replicas = 1
+
+query TT
+SHOW CREATE TABLE t40417
+----
+t40417  CREATE TABLE t40417 (
+        x INT8 NOT NULL,
+        CONSTRAINT "primary" PRIMARY KEY (x ASC),
+        FAMILY "primary" (x)
+) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN ((1))
+);
+ALTER PARTITION p1 OF INDEX "my database".public.t40417@primary CONFIGURE ZONE USING
+  num_replicas = 1

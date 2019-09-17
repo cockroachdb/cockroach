@@ -13,6 +13,7 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,27 +25,49 @@ import (
 func TestShowRangesWithLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numNodes = 4
+	const numNodes = 3
 	ctx := context.Background()
-	tcArgs := base.TestClusterArgs{}
-
-	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `ALTER TABLE t SPLIT AT SELECT i FROM generate_series(0, 20) AS g(i)`)
 
-	const nodeColIdx = 4
-	const localityColIdx = 5
+	const leaseHolderIdx = 0
+	const leaseHolderLocalityIdx = 1
+	const replicasColIdx = 2
+	const localitiesColIdx = 3
+	replicas := make([]int, 3)
 
-	result := sqlDB.QueryStr(t, `SHOW RANGES FROM TABLE t`)
+	// TestClusters get some localities by default.
+	q := `SELECT lease_holder, lease_holder_locality, replicas, replica_localities from [SHOW RANGES FROM TABLE t]`
+	result := sqlDB.QueryStr(t, q)
 	for _, row := range result {
-		// Because StartTestCluster changes the locality no matter what the
-		// arguments are, we expect whatever the test server sets up.
-		locality := fmt.Sprintf("region=test,dc=dc%s", row[nodeColIdx])
-		if row[localityColIdx] != locality {
-			t.Fatalf("expected %s found %s", locality, row[localityColIdx])
+		// Verify the leaseholder localities.
+		leaseHolder := row[leaseHolderIdx]
+		leaseHolderLocalityExpected := fmt.Sprintf(`region=test,dc=dc%s`, leaseHolder)
+		if row[leaseHolderLocalityIdx] != leaseHolderLocalityExpected {
+			t.Fatalf("expected %s found %s", leaseHolderLocalityExpected, row[leaseHolderLocalityIdx])
+		}
+
+		// Verify the replica localities.
+		_, err := fmt.Sscanf(row[replicasColIdx], "{%d,%d,%d}", &replicas[0], &replicas[1], &replicas[2])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var builder strings.Builder
+		builder.WriteString("{")
+		for i, replica := range replicas {
+			builder.WriteString(fmt.Sprintf(`"region=test,dc=dc%d"`, replica))
+			if i != len(replicas)-1 {
+				builder.WriteString(",")
+			}
+		}
+		builder.WriteString("}")
+		expected := builder.String()
+		if row[localitiesColIdx] != expected {
+			t.Fatalf("expected %s found %s", expected, row[localitiesColIdx])
 		}
 	}
 }

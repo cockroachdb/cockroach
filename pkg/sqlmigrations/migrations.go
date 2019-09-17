@@ -169,8 +169,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
 		// TODO(mberhault): bake into v2.2.
-		name:   "repeat: ensure admin role privileges in all descriptors",
-		workFn: ensureMaxPrivileges,
+		name: "repeat: ensure admin role privileges in all descriptors",
 	},
 	{
 		// Introduced in v2.1.
@@ -200,8 +199,32 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
 	{
-		// Introduced in v2.2.
-		// TODO(knz): bake this migration into v2.3.
+		name:                "create system.replication_constraint_stats table",
+		workFn:              createReplicationConstraintStatsTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReplicationConstraintStatsTableID),
+	},
+	{
+		name:                "create system.replication_critical_localities table",
+		workFn:              createReplicationCriticalLocalitiesTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReplicationCriticalLocalitiesTableID),
+	},
+	{
+		name:                "create system.reports_meta table",
+		workFn:              createReportsMetaTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReportsMetaTableID),
+	},
+	{
+		name:                "create system.replication_stats table",
+		workFn:              createReplicationStatsTable,
+		includedInBootstrap: true,
+		newDescriptorIDs:    staticIDs(keys.ReplicationStatsTableID),
+	},
+	{
+		// Introduced in v19.1.
+		// TODO(knz): bake this migration into v19.2.
 		name:   "propagate the ts purge interval to the new setting names",
 		workFn: retireOldTsPurgeIntervalSettings,
 	},
@@ -478,8 +501,10 @@ func (m *Manager) EnsureMigrations(ctx context.Context, filter MigrationFilter) 
 		sqlExecutor: m.sqlExecutor,
 	}
 	for _, migration := range backwardCompatibleMigrations {
-		if migration.workFn == nil {
-			// Migration has been baked in. Ignore it.
+		if migration.workFn == nil || // has the migration been baked in?
+			// is the migration unnecessary?
+			(migration.includedInBootstrap &&
+				filter == ExcludeMigrationsIncludedInBootstrap) {
 			continue
 		}
 
@@ -552,6 +577,34 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 
 func createCommentTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.CommentsTable)
+}
+
+func createReplicationConstraintStatsTable(ctx context.Context, r runner) error {
+	if err := createSystemTable(ctx, r, sqlbase.ReplicationConstraintStatsTable); err != nil {
+		return err
+	}
+	_, err := r.sqlExecutor.Exec(ctx, "add-constraints-ttl", nil, /* txn */
+		fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = %d",
+			sqlbase.ReplicationConstraintStatsTable.Name, int(sqlbase.ReplicationConstraintStatsTableTTL.Seconds())))
+	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationConstraintStatsTable.Name)
+}
+
+func createReplicationCriticalLocalitiesTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ReplicationCriticalLocalitiesTable)
+}
+
+func createReplicationStatsTable(ctx context.Context, r runner) error {
+	if err := createSystemTable(ctx, r, sqlbase.ReplicationStatsTable); err != nil {
+		return err
+	}
+	_, err := r.sqlExecutor.Exec(ctx, "add-replication-status-ttl", nil, /* txn */
+		fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = %d",
+			sqlbase.ReplicationStatsTable.Name, int(sqlbase.ReplicationStatsTableTTL.Seconds())))
+	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationStatsTable.Name)
+}
+
+func createReportsMetaTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ReportsMetaTable)
 }
 
 func runStmtAsRootWithRetry(
@@ -664,133 +717,6 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           `
 	return runStmtAsRootWithRetry(
 		ctx, r, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
-}
-
-// ensureMaxPrivileges ensures that all descriptors have privileges
-// for the admin role, and that root and user privileges do not exceed
-// the allowed privileges.
-//
-// TODO(mberhault): Remove this migration in v2.1.
-func ensureMaxPrivileges(ctx context.Context, r runner) error {
-	tableDescFn := func(desc *sqlbase.TableDescriptor) (bool, error) {
-		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
-	}
-	databaseDescFn := func(desc *sqlbase.DatabaseDescriptor) (bool, error) {
-		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
-	}
-	return upgradeDescsWithFn(ctx, r, tableDescFn, databaseDescFn)
-}
-
-var upgradeDescBatchSize int64 = 10
-
-// upgradeTableDescsWithFn runs the provided upgrade functions on each table
-// and database descriptor, persisting any upgrades if the function indicates that the
-// descriptor was changed.
-// Upgrade functions may be nil to perform nothing for the corresponding descriptor type.
-// If it returns an error some descriptors could have been upgraded.
-func upgradeDescsWithFn(
-	ctx context.Context,
-	r runner,
-	upgradeTableDescFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
-	upgradeDatabaseDescFn func(desc *sqlbase.DatabaseDescriptor) (upgraded bool, err error),
-) error {
-	// use multiple transactions to prevent blocking reads on the
-	// table descriptors while running this upgrade process.
-	startKey := sqlbase.MakeAllDescsMetadataKey()
-	span := &roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}
-	for span != nil {
-		// It's safe to use multiple transactions here because it is assumed
-		// that a new table created will be created upgraded.
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			// Scan a limited batch of keys.
-			b := txn.NewBatch()
-			b.Header.MaxSpanRequestKeys = upgradeDescBatchSize
-			b.Scan(span.Key, span.EndKey)
-			if err := txn.Run(ctx, b); err != nil {
-				return err
-			}
-			result := b.Results[0]
-			kvs := result.Rows
-			// Store away the span for the next batch.
-			span = result.ResumeSpan
-
-			var idVersions []sql.IDVersion
-			var now hlc.Timestamp
-			b = txn.NewBatch()
-			for _, kv := range kvs {
-				var sqlDesc sqlbase.Descriptor
-				if err := kv.ValueProto(&sqlDesc); err != nil {
-					return err
-				}
-				switch t := sqlDesc.Union.(type) {
-				case *sqlbase.Descriptor_Table:
-					if table := sqlDesc.GetTable(); table != nil && upgradeTableDescFn != nil {
-						if upgraded, err := upgradeTableDescFn(table); err != nil {
-							return err
-						} else if upgraded {
-							// It's safe to ignore the DROP state here and
-							// unconditionally increment the version. For proof, see
-							// TestDropTableWhileUpgradingFormat.
-							//
-							// In fact, it's of the utmost importance that this migration
-							// upgrades every last old-format table descriptor, including those
-							// that are dropping. Otherwise, the user could upgrade to a version
-							// without support for reading the old format before the drop
-							// completes, leaving a broken table descriptor and the table's
-							// remaining data around forever. This isn't just a theoretical
-							// concern: consider that dropping a large table can take several
-							// days, while upgrading to a new version can take as little as a
-							// few minutes.
-							now = txn.CommitTimestamp()
-							idVersions = append(idVersions, sql.NewIDVersionPrev(table))
-							table.Version++
-							// Use ValidateTable() instead of Validate()
-							// because of #26422. We still do not know why
-							// a table can reference a dropped database.
-							if err := table.ValidateTable(); err != nil {
-								return err
-							}
-
-							b.Put(kv.Key, sqlbase.WrapDescriptor(table))
-						}
-					}
-				case *sqlbase.Descriptor_Database:
-					if database := sqlDesc.GetDatabase(); database != nil && upgradeDatabaseDescFn != nil {
-						if upgraded, err := upgradeDatabaseDescFn(database); err != nil {
-							return err
-						} else if upgraded {
-							if err := database.Validate(); err != nil {
-								return err
-							}
-
-							b.Put(kv.Key, sqlbase.WrapDescriptor(database))
-						}
-					}
-
-				default:
-					return errors.Errorf("Descriptor.Union has unexpected type %T", t)
-				}
-			}
-			if err := txn.SetSystemConfigTrigger(); err != nil {
-				return err
-			}
-			if idVersions != nil {
-				count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, now)
-				if err != nil {
-					return err
-				}
-				if count > 0 {
-					return errors.Errorf(
-						`penultimate schema version is leased, upgrade again with no outstanding schema changes`,
-					)
-				}
-			}
-			return txn.Run(ctx, b)
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {

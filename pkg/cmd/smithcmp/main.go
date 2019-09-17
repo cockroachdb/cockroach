@@ -24,6 +24,7 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -207,11 +208,33 @@ func compareConns(stmt string, smitherName string, conns map[string]*Conn) error
 	return nil
 }
 
-func compareVals(a, b interface{}) error {
-	if diff := cmp.Diff(a, b, cmpOptions...); diff != "" {
-		return errors.New(diff)
+func compareVals(a, b [][]interface{}) error {
+	if len(a) != len(b) {
+		return errors.Errorf("size difference: %d != %d", len(a), len(b))
 	}
-	return nil
+	if len(a) == 0 {
+		return nil
+	}
+	g, _ := errgroup.WithContext(context.Background())
+	// Split up the slices into subslices of equal length and compare those in parallel.
+	n := len(a) / runtime.NumCPU()
+	if n < 1 {
+		n = len(a)
+	}
+	for i := 0; i < len(a); i++ {
+		start, end := i, i+n
+		if end > len(a) {
+			end = len(a)
+		}
+		g.Go(func() error {
+			if diff := cmp.Diff(a[start:end], b[start:end], cmpOptions...); diff != "" {
+				return errors.New(diff)
+			}
+			return nil
+		})
+		i += n
+	}
+	return g.Wait()
 }
 
 var (

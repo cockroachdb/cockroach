@@ -1707,10 +1707,15 @@ func TestPropagateTxnOnError(t *testing.T) {
 	}
 
 	// Set the initial value on the target key "b".
-	origVal := "val"
-	if err := db.Put(ctx, keyB, origVal); err != nil {
+	origVal := roachpb.MakeValueFromString("val")
+	if err := db.Put(ctx, keyB, &origVal); err != nil {
 		t.Fatal(err)
 	}
+	// After using origVal as an arg to CPut, we're not allowed to modify it.
+	// Passing it back to CPut again (which is the whole point of keeping it
+	// around) will clear and re-init the checksum, so defensively copy it before
+	// we save it.
+	origVal = roachpb.Value{RawBytes: append([]byte(nil), origVal.RawBytes...)}
 
 	// The following txn creates a batch request that is split into three
 	// requests: Put, CPut, and Put. The CPut operation will get a
@@ -1738,7 +1743,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 		b := txn.NewBatch()
 		b.Put(keyA, "val")
-		b.CPutDeprecated(keyB, "new_val", origVal)
+		b.CPut(keyB, "new_val", &origVal)
 		b.Put(keyC, "val2")
 		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
@@ -2459,9 +2464,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			// Parallel commits do not support the canForwardSerializableTimestamp
-			// optimization. That's ok because we need to removed that optimization
-			// anyway. See #36431.
 			txnCoordRetry: true,
 		},
 		{
@@ -2544,9 +2546,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
-			// Parallel commits do not support the canForwardSerializableTimestamp
-			// optimization. That's ok because we need to removed that optimization
-			// anyway. See #36431.
 			txnCoordRetry: true,
 		},
 		{
