@@ -520,12 +520,12 @@ func (b *Builder) buildExistsSubquery(
 
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.
-	root, err := b.build(exists.Input)
+	plan, err := b.buildRelational(exists.Input)
 	if err != nil {
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryExists, types.Bool, root, exists.OriginalExpr), nil
+	return b.addSubquery(exec.SubqueryExists, types.Bool, plan.root, exists.OriginalExpr), nil
 }
 
 func (b *Builder) buildSubquery(
@@ -547,12 +547,12 @@ func (b *Builder) buildSubquery(
 
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.
-	root, err := b.build(input)
+	plan, err := b.buildRelational(input)
 	if err != nil {
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryOneRow, subquery.Typ, root, subquery.OriginalExpr), nil
+	return b.addSubquery(exec.SubqueryOneRow, subquery.Typ, plan.root, subquery.OriginalExpr), nil
 }
 
 // addSubquery adds an entry to b.subqueries and creates a tree.Subquery

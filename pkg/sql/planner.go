@@ -129,8 +129,8 @@ type planner struct {
 	// transaction along with other KV operations. Committing the txn might be
 	// beneficial because it may enable the 1PC optimization.
 	//
-	// NOTE: This member is for internal use of the planner only. PlanNodes that
-	// want to do 1PC transactions have to implement the autoCommitNode interface.
+	// NOTE: plan node must be configured appropriately to actually perform an
+	// auto-commit. This is dependent on information from the optimizer.
 	autoCommit bool
 
 	// discardRows is set if we want to discard any results rather than sending
