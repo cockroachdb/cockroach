@@ -306,10 +306,11 @@ func (s LeaseStore) WaitForOneVersion(
 		// Get the current version of the table descriptor non-transactionally.
 		//
 		// TODO(pmattis): Do an inconsistent read here?
-		if err := s.db.GetProto(ctx, descKey, desc); err != nil {
+		ts, err := s.db.GetProtoTs(ctx, descKey, desc)
+		if err != nil {
 			return 0, err
 		}
-		tableDesc = desc.GetTable()
+		tableDesc = desc.Table(ts)
 		if tableDesc == nil {
 			return 0, errors.Errorf("ID %d is not a table", tableID)
 		}
@@ -404,7 +405,7 @@ func (s LeaseStore) PublishMultiple(
 						descsToUpdate[id].Version, versions[id])
 				}
 
-				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn); err != nil {
+				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn, s.settings); err != nil {
 					return err
 				}
 				if err := descsToUpdate[id].ValidateTable(); err != nil {
@@ -553,10 +554,11 @@ func (s LeaseStore) getForExpiration(
 		prevTimestamp := expiration.Prev()
 		txn.SetFixedTimestamp(ctx, prevTimestamp)
 		var desc sqlbase.Descriptor
-		if err := txn.GetProto(ctx, descKey, &desc); err != nil {
+		ts, err := txn.GetProtoTs(ctx, descKey, &desc)
+		if err != nil {
 			return err
 		}
-		tableDesc := desc.GetTable()
+		tableDesc := desc.Table(ts)
 		if tableDesc == nil {
 			return sqlbase.ErrDescriptorNotFound
 		}

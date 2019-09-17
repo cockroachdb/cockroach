@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -96,7 +97,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	// in case more fields need to be added to the output.
 	fmt.Printf("Descriptors:\n")
 	for _, d := range desc.Descriptors {
-		if desc := d.GetTable(); desc != nil {
+		if desc := d.Table(hlc.Timestamp{}); desc != nil {
 			fmt.Printf("	%d: %s (table)\n", d.GetID(), d.GetName())
 		}
 		if desc := d.GetDatabase(); desc != nil {
