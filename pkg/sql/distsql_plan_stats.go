@@ -51,6 +51,20 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 	5*time.Minute,
 )
 
+// statsKVBatchSize is the KV batch size used for stats. It is smaller than
+// row.DefaultKVBatchSize in order to reduce memory used by stats jobs.
+// TODO(rytaft): ideally the KV client would determine the batch size based
+// on total number of bytes rather than number of rows.
+var statsKVBatchSize int64 = 1000
+
+// SetStatsKVBatchSize changes statsKVBatchSize, and returns a function that
+// restores it.
+func SetStatsKVBatchSize(val int64) func() {
+	oldVal := statsKVBatchSize
+	statsKVBatchSize = val
+	return func() { statsKVBatchSize = oldVal }
+}
+
 func (dsp *DistSQLPlanner) createStatsPlan(
 	planCtx *PlanningCtx,
 	desc *sqlbase.ImmutableTableDescriptor,
@@ -86,7 +100,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, err
 	}
 
-	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
+	p, err := dsp.createTableReaders(
+		planCtx, &scan, nil /* overrideResultColumns */, statsKVBatchSize,
+	)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}

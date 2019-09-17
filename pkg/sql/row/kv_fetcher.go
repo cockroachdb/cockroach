@@ -40,7 +40,8 @@ func NewKVFetcher(
 	firstBatchLimit int64,
 	returnRangeInfo bool,
 ) (*KVFetcher, error) {
-	kvBatchFetcher, err := makeKVBatchFetcher(txn, spans, reverse, useBatchLimit, firstBatchLimit, returnRangeInfo)
+	kvBatchFetcher, err := makeKVBatchFetcher(
+		txn, spans, reverse, useBatchLimit, DefaultKVBatchSize, firstBatchLimit, returnRangeInfo)
 	return newKVFetcher(&kvBatchFetcher), err
 }
 

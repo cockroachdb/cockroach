@@ -44,6 +44,11 @@ type kvBatchFetcher interface {
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
 		batchResponse []byte, origSpan roachpb.Span, err error)
 	GetRangesInfo() []roachpb.RangeInfo
+
+	// SetBatchSize sets the batch size that will be used for all KV batches
+	// (with the possible exception of the first batch) unless batch limits
+	// are disabled.
+	SetBatchSize(batchSize int64)
 }
 
 type tableInfo struct {
@@ -205,6 +210,7 @@ type Fetcher struct {
 	// -- Fields updated during a scan --
 
 	kvFetcher      *KVFetcher
+	kvBatchSize    int64
 	indexKey       []byte // the index key of the current row
 	prettyValueBuf *bytes.Buffer
 
@@ -448,7 +454,13 @@ func (rf *Fetcher) StartScan(
 
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
-		txn, spans, rf.reverse, limitBatches, rf.firstBatchLimit(limitHint), rf.returnRangeInfo,
+		txn,
+		spans,
+		rf.reverse,
+		limitBatches,
+		rf.kvBatchSize,
+		rf.firstBatchLimit(limitHint),
+		rf.returnRangeInfo,
 	)
 	if err != nil {
 		return err
@@ -526,6 +538,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		spans,
 		rf.reverse,
 		limitBatches,
+		rf.kvBatchSize,
 		rf.firstBatchLimit(limitHint),
 		rf.returnRangeInfo,
 	)
@@ -1411,7 +1424,7 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 // GetRangesInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
 func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
-	f := rf.kvFetcher.kvBatchFetcher
+	f := rf.kvFetcher
 	if f == nil {
 		// Not yet initialized.
 		return nil
@@ -1419,8 +1432,23 @@ func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
 	return f.GetRangesInfo()
 }
 
+// SetBatchSize sets the batch size for the underlying kvBatchFetcher.
+func (rf *Fetcher) SetBatchSize(batchSize int64) {
+	rf.kvBatchSize = batchSize
+	f := rf.kvFetcher
+	if f == nil {
+		// Not yet initialized.
+		return
+	}
+	f.SetBatchSize(batchSize)
+}
+
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.
 func (rf *Fetcher) GetBytesRead() int64 {
+	if rf.kvFetcher == nil {
+		// Not yet initialized.
+		return 0
+	}
 	return rf.kvFetcher.bytesRead
 }
 

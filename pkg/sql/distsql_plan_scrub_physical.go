@@ -13,6 +13,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,7 +31,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	indexDesc sqlbase.IndexDescriptor,
 	readAsOf hlc.Timestamp,
 ) (PhysicalPlan, error) {
-	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */)
+	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */, row.DefaultKVBatchSize)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
