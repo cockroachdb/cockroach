@@ -606,7 +606,7 @@ func (r *testRunner) runTest(
 
 				if err := issues.Post(
 					context.Background(),
-					fmt.Sprintf("roachtest: %s failed", t.Name()),
+					fmt.Sprintf("roachtest-%s: %s failed", branch, t.Name()),
 					"roachtest", t.Name(), msg, artifacts, authorEmail, []string{"O-roachtest"},
 				); err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
