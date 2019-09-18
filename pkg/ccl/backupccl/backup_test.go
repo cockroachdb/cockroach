@@ -243,19 +243,16 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	// made in backupRestoreTestSetup.) These are wrapped with SucceedsSoon()
 	// because EXPERIMENTAL_RELOCATE can fail if there are other replication
 	// changes happening.
-	testutils.SucceedsSoon(t, func() error {
-		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`)
-		return nil
-	})
-	testutils.SucceedsSoon(t, func() error {
-		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`)
-		return nil
-	})
-	testutils.SucceedsSoon(t, func() error {
-		sqlDB.Exec(t, `ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`)
-		return nil
-	})
-
+	for _, stmt := range []string{
+		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
+		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`,
+		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`,
+	} {
+		testutils.SucceedsSoon(t, func() error {
+			_, err := sqlDB.DB.ExecContext(ctx, stmt)
+			return err
+		})
+	}
 	const localFoo1 = localFoo + "/1"
 	const localFoo2 = localFoo + "/2"
 	const localFoo3 = localFoo + "/3"
