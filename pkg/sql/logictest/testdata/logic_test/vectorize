@@ -896,3 +896,8 @@ SELECT * FROM t_case_null WHERE NULL AND x = 0
 query I
 SELECT * FROM t_case_null WHERE x = 0 AND NULL
 ----
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.vec.on' AND usage_count > 0
+----
+sql.exec.vec.on

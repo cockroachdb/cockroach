@@ -54,3 +54,8 @@ query III
 SELECT pk, a, b FROM tab0 WHERE a < 10 AND b = 2 ORDER BY a DESC, pk;
 ----
 0 1 2
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.distsql.on' AND usage_count > 0
+----
+sql.exec.distsql.on
