@@ -108,15 +108,18 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	if err != nil {
 		return nil, err
 	}
+
 	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
 		return nil, err
 	}
 
-	// TODO (rohany): The dummy query to force resolution of the index
-	// is a dirty hack that needs to be fixed.
+	// Force resolution of the index.
+	_, _, err = cat.ResolveTableIndex(d.ctx, d.catalog, flags, &n.Index)
+	if err != nil {
+		return nil, err
+	}
+
 	const showIndexPartitionsQuery = `
-	WITH
-		dummy AS (SELECT * FROM %[5]s.%[3]s@%[4]s LIMIT 0)
 	SELECT
 		tables.database_name,
 		tables.name AS table_name,
