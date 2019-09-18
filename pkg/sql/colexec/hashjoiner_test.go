@@ -23,14 +23,41 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
-func TestHashJoinerInt64(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+// TODO(yuzefovich): add unit tests for cases with ON expression.
+type hjTestCase struct {
+	leftTypes  []coltypes.T
+	rightTypes []coltypes.T
 
+	leftTuples  tuples
+	rightTuples tuples
+
+	leftEqCols  []uint32
+	rightEqCols []uint32
+
+	leftOutCols  []uint32
+	rightOutCols []uint32
+
+	buildRightSide bool
+	buildDistinct  bool
+
+	// The default joinType is sqlbase.JoinType_INNER if this value is not set.
+	joinType sqlbase.JoinType
+
+	expectedTuples tuples
+}
+
+var (
+	floats = []float64{0.314, 3.14, 31.4, 314}
+	decs   []apd.Decimal
+	tcs    []hjTestCase
+)
+
+func init() {
 	// Set up the apd.Decimal values used in tests.
-	floats := []float64{0.314, 3.14, 31.4, 314}
-	decs := make([]apd.Decimal, len(floats))
+	decs = make([]apd.Decimal, len(floats))
 	for i, f := range floats {
 		_, err := decs[i].SetFloat64(f)
 		if err != nil {
@@ -38,28 +65,7 @@ func TestHashJoinerInt64(t *testing.T) {
 		}
 	}
 
-	// TODO(yuzefovich): add unit tests for cases with ON expression.
-	tcs := []struct {
-		leftTypes  []coltypes.T
-		rightTypes []coltypes.T
-
-		leftTuples  tuples
-		rightTuples tuples
-
-		leftEqCols  []uint32
-		rightEqCols []uint32
-
-		leftOutCols  []uint32
-		rightOutCols []uint32
-
-		buildRightSide bool
-		buildDistinct  bool
-
-		// The default joinType is sqlbase.JoinType_INNER if this value is not set.
-		joinType sqlbase.JoinType
-
-		expectedTuples tuples
-	}{
+	tcs = []hjTestCase{
 		{
 			leftTypes:  []coltypes.T{coltypes.Int64},
 			rightTypes: []coltypes.T{coltypes.Int64},
@@ -700,7 +706,10 @@ func TestHashJoinerInt64(t *testing.T) {
 			},
 		},
 	}
+}
 
+func TestHashJoiner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, tc := range tcs {
 		inputs := []tuples{tc.leftTuples, tc.rightTuples}
 
@@ -711,17 +720,9 @@ func TestHashJoinerInt64(t *testing.T) {
 
 		for _, buildDistinct := range buildFlags {
 			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
-				nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
-				nLeftOutCols := uint32(len(tc.leftOutCols))
-				nLeftCols := uint32(len(tc.leftTypes))
-
-				cols := make([]int, nOutCols)
-
-				for i, colIdx := range tc.leftOutCols {
-					cols[i] = int(colIdx)
-				}
-				for i, colIdx := range tc.rightOutCols {
-					cols[uint32(i)+nLeftOutCols] = int(colIdx + nLeftCols)
+				cols := make([]int, len(tc.leftOutCols)+len(tc.rightOutCols))
+				for i := range cols {
+					cols[i] = i
 				}
 
 				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, cols, func(sources []Operator) (Operator, error) {
@@ -736,6 +737,30 @@ func TestHashJoinerInt64(t *testing.T) {
 				})
 			})
 
+		}
+	}
+}
+
+func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, tc := range tcs {
+		leftSource := newOpTestInput(1, tc.leftTuples, tc.leftTypes)
+		rightSource := newOpTestInput(1, tc.rightTuples, tc.rightTypes)
+		hjOp, err := NewEqHashJoinerOp(
+			leftSource, rightSource,
+			tc.leftEqCols, tc.rightEqCols,
+			tc.leftOutCols, tc.rightOutCols,
+			tc.leftTypes, tc.rightTypes,
+			tc.buildRightSide, tc.buildDistinct,
+			tc.joinType)
+		require.NoError(t, err)
+		hjOp.Init()
+		for {
+			b := hjOp.Next(context.Background())
+			if b.Length() == 0 {
+				break
+			}
+			require.Equal(t, len(tc.leftOutCols)+(len(tc.rightOutCols)), b.Width())
 		}
 	}
 }

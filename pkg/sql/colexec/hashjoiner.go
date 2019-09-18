@@ -295,8 +295,8 @@ func (hj *hashJoinEqOp) initEmitting() {
 	hj.runningState = hjEmittingUnmatched
 
 	// Set all elements in the probe columns of the output batch to null.
-	for _, colIdx := range hj.prober.spec.outCols {
-		outCol := hj.prober.batch.ColVec(int(colIdx + hj.prober.probeColOffset))
+	for i := range hj.prober.spec.outCols {
+		outCol := hj.prober.batch.ColVec(i + hj.prober.probeColOffset)
 		outCol.Nulls().SetNulls()
 	}
 }
@@ -312,10 +312,10 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 		hj.emittingUnmatchedState.rowIdx++
 	}
 
-	for i, colIdx := range hj.prober.build.outCols {
-		outCol := hj.prober.batch.ColVec(int(colIdx + hj.prober.buildColOffset))
-		valCol := hj.ht.vals[hj.ht.outCols[i]]
-		colType := hj.ht.valTypes[hj.ht.outCols[i]]
+	for outColIdx, inColIdx := range hj.ht.outCols {
+		outCol := hj.prober.batch.ColVec(outColIdx + hj.prober.buildColOffset)
+		valCol := hj.ht.vals[inColIdx]
+		colType := hj.ht.valTypes[inColIdx]
 
 		outCol.Copy(
 			coldata.CopySliceArgs{
@@ -726,8 +726,8 @@ type hashJoinProber struct {
 	// buildColOffset and probeColOffset represent the index in the initial batch
 	// to copy the build/probe table columns. This offset depends on whether the
 	// build table is the left table.
-	buildColOffset uint32
-	probeColOffset uint32
+	buildColOffset int
+	probeColOffset int
 
 	// spec holds the specifications for the source operator used in the probe
 	// phase.
@@ -754,30 +754,26 @@ func makeHashJoinProber(
 	buildRightSide bool,
 	buildDistinct bool,
 ) *hashJoinProber {
-	// Prepare the output batch by allocating with the correct column types.
-	nBuildCols := uint32(len(build.sourceTypes))
-
 	var outColTypes []coltypes.T
-	var buildColOffset, probeColOffset uint32
+	var buildColOffset, probeColOffset int
 	if buildRightSide {
-		if len(build.outCols) == 0 {
-			// We do not have output columns from the right side in case of LEFT SEMI
-			// and LEFT ANTI joins, and we should not have the corresponding columns
-			// in the output batch, so we only have the types from the left side in
-			// outColTypes.
-			outColTypes = probe.sourceTypes
-		} else {
-			outColTypes = append(probe.sourceTypes, build.sourceTypes...)
+		for _, probeOutCol := range probe.outCols {
+			outColTypes = append(outColTypes, probe.sourceTypes[probeOutCol])
 		}
-		buildColOffset = uint32(len(probe.sourceTypes))
+		for _, buildOutCol := range build.outCols {
+			outColTypes = append(outColTypes, build.sourceTypes[buildOutCol])
+		}
+		buildColOffset = len(probe.outCols)
 		probeColOffset = 0
 	} else {
-		// Note that we don't need to check whether probe.outCols is non-empty
-		// before populating outColTypes because LEFT SEMI and LEFT ANTI joins will
-		// always build the right side.
-		outColTypes = append(build.sourceTypes, probe.sourceTypes...)
+		for _, buildOutCol := range build.outCols {
+			outColTypes = append(outColTypes, build.sourceTypes[buildOutCol])
+		}
+		for _, probeOutCol := range probe.outCols {
+			outColTypes = append(outColTypes, probe.sourceTypes[probeOutCol])
+		}
 		buildColOffset = 0
-		probeColOffset = nBuildCols
+		probeColOffset = len(build.outCols)
 	}
 
 	var probeRowUnmatched []bool
@@ -957,14 +953,14 @@ func (ht *hashTable) check(nToCheck uint16, sel []uint16) uint16 {
 	return nDiffers
 }
 
-// congregate uses the probeIdx and buildidx pairs to stitch together the
+// congregate uses the probeIdx and buildIdx pairs to stitch together the
 // resulting join rows and add them to the output batch with the left table
 // columns preceding the right table columns.
 func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, batchSize uint16) {
-	for i, colIdx := range prober.build.outCols {
-		outCol := prober.batch.ColVec(int(colIdx + prober.buildColOffset))
-		valCol := prober.ht.vals[prober.ht.outCols[i]]
-		colType := prober.ht.valTypes[prober.ht.outCols[i]]
+	for outColIdx, inColIdx := range prober.ht.outCols {
+		outCol := prober.batch.ColVec(outColIdx + prober.buildColOffset)
+		valCol := prober.ht.vals[inColIdx]
+		colType := prober.ht.valTypes[inColIdx]
 
 		outCol.Copy(
 			coldata.CopySliceArgs{
@@ -987,10 +983,10 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		}
 	}
 
-	for _, colIdx := range prober.spec.outCols {
-		outCol := prober.batch.ColVec(int(colIdx + prober.probeColOffset))
-		valCol := batch.ColVec(int(colIdx))
-		colType := prober.spec.sourceTypes[colIdx]
+	for outColIdx, inColIdx := range prober.spec.outCols {
+		outCol := prober.batch.ColVec(outColIdx + prober.probeColOffset)
+		valCol := batch.ColVec(int(inColIdx))
+		colType := prober.spec.sourceTypes[inColIdx]
 
 		outCol.Copy(
 			coldata.CopySliceArgs{
