@@ -967,6 +967,13 @@ Maximum size of each log file.
 `,
 	}
 
+	LogFileArchive = FlagInfo{
+		Name: "log-file-archive",
+		Description: `
+Archive log file or not, default value: false.
+`,
+	}
+
 	LogFileVerbosity = FlagInfo{
 		Name: "log-file-verbosity",
 		Description: `

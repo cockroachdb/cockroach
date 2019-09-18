@@ -419,6 +419,9 @@ func init() {
 			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileMaxSizeName)).Value,
 			cliflags.LogFileMaxSize)
 		VarFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileArchiveName)).Value,
+			cliflags.LogFileArchive)
+		VarFlag(f,
 			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileVerbosityThresholdName)).Value,
 			cliflags.LogFileVerbosity)
 	}
