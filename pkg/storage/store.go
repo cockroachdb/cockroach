@@ -3300,6 +3300,9 @@ func (s *Store) HandleSnapshot(
 	})
 }
 
+// learnerType exists to avoid allocating on every coalesced beat to a learner.
+var learnerType = roachpb.LEARNER
+
 func (s *Store) uncoalesceBeats(
 	ctx context.Context,
 	beats []RaftHeartbeat,
@@ -3336,6 +3339,9 @@ func (s *Store) uncoalesceBeats(
 			},
 			Message: msg,
 			Quiesce: beat.Quiesce,
+		}
+		if beat.ToIsLearner {
+			beatReqs[i].ToReplica.Type = &learnerType
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -3423,6 +3429,7 @@ func (s *Store) withReplicaForRequest(
 		req.RangeID,
 		req.ToReplica.ReplicaID,
 		&req.FromReplica,
+		req.ToReplica.GetType() == roachpb.LEARNER,
 	)
 	if err != nil {
 		return roachpb.NewError(err)
@@ -4010,6 +4017,7 @@ func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
+	isLearner bool,
 ) (_ *Replica, created bool, _ error) {
 	// We need a retry loop as the replica we find in the map may be in the
 	// process of being removed or may need to be removed.
@@ -4026,6 +4034,7 @@ func (s *Store) getOrCreateReplica(
 			rangeID,
 			replicaID,
 			creatingReplica,
+			isLearner,
 		)
 		if err == errRetry {
 			continue
@@ -4048,8 +4057,27 @@ func (s *Store) tryGetOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
+	isLearner bool,
 ) (_ *Replica, created bool, err error) {
 	var (
+		removeReplica = func(repl *Replica) error {
+			repl.mu.destroyStatus.Set(err, destroyReasonRemovalPending)
+			isInitialized := repl.isInitializedRLocked()
+			repl.mu.Unlock()
+			defer repl.mu.Lock()
+			if !isInitialized {
+				if err := s.removeUninitializedReplicaRaftMuLocked(ctx, repl, replicaID); err != nil {
+					log.Fatalf(ctx, "failed to remove uninitialized replica: %v", err)
+				}
+			} else {
+				if err := s.removeReplicaImpl(ctx, repl, replicaID, RemoveOptions{
+					DestroyData: true,
+				}); err != nil {
+					log.Fatal(ctx, err)
+				}
+			}
+			return errRetry
+		}
 		handleFromReplicaTooOld = func(repl *Replica) error {
 			if creatingReplica == nil {
 				return nil
@@ -4071,22 +4099,20 @@ func (s *Store) tryGetOrCreateReplica(
 			if log.V(1) {
 				log.Infof(ctx, "found message for replica ID %d which is newer than %v", replicaID, repl)
 			}
-			repl.mu.destroyStatus.Set(err, destroyReasonRemovalPending)
-			isInitialized := repl.isInitializedRLocked()
-			repl.mu.Unlock()
-			defer repl.mu.Lock()
-			if !isInitialized {
-				if err := s.removeUninitializedReplicaRaftMuLocked(ctx, repl, replicaID); err != nil {
-					log.Fatalf(ctx, "failed to remove uninitialized replica: %v", err)
-				}
-			} else {
-				if err := s.removeReplicaImpl(ctx, repl, replicaID, RemoveOptions{
-					DestroyData: true,
-				}); err != nil {
-					log.Fatal(ctx, err)
-				}
+			return removeReplica(repl)
+		}
+		handleNonVoterWithPreemptiveSnapshot = func(repl *Replica) error {
+			if replicaID == 0 && isLearner {
+				log.Fatalf(ctx, "cannot have zero replicaID and be a learner")
 			}
-			return errRetry
+			// replicaID must be non-zero if isLearner.
+			if repl.mu.replicaID != 0 || !repl.isInitializedRLocked() || !isLearner {
+				return nil
+			}
+			if log.V(1) {
+				log.Infof(ctx, "found message for replica ID %v as non-voter but currently not part of the range, destroying preemptive snapshot", replicaID)
+			}
+			return removeReplica(repl)
 		}
 	)
 	// The common case: look up an existing (initialized) replica.
@@ -4107,18 +4133,27 @@ func (s *Store) tryGetOrCreateReplica(
 			repl.raftMu.Unlock()
 			return nil, false, err
 		}
+		if err := handleNonVoterWithPreemptiveSnapshot(repl); err != nil {
+			repl.raftMu.Unlock()
+			return nil, false, err
+		}
 
+		// If this is intended for replicaID 0 then it's either a preemptive
+		// snapshot or a split/merge lock in which case we'll let it go through.
+		if replicaID == 0 {
+			return repl, false, nil
+		}
 		var err error
 		if repl.mu.replicaID == 0 {
 			// This message is telling us about our replica ID.
 			// This is a common case when dealing with preemptive snapshots.
 			err = repl.setReplicaIDRaftMuLockedMuLocked(repl.AnnotateCtx(ctx), replicaID)
-		} else if replicaID != 0 && repl.mu.replicaID > replicaID {
+		} else if repl.mu.replicaID > replicaID {
 			// The sender is behind and is sending to an old replica.
 			// We could silently drop this message but this way we'll inform the
 			// sender that they may no longer exist.
 			err = roachpb.NewRangeNotFoundError(rangeID, s.StoreID())
-		} else if replicaID != 0 && repl.mu.replicaID != replicaID {
+		} else if repl.mu.replicaID != replicaID {
 			// This case should have been caught by handleToReplicaTooOld.
 			log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
 				replicaID, repl)
