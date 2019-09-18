@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // delegateShowRanges implements the SHOW RANGES statement:
@@ -28,6 +29,7 @@ import (
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.
 func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Ranges)
 	if n.DatabaseName != "" {
 		const dbQuery = `
 		SELECT
