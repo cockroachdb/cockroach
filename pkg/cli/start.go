@@ -886,7 +886,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 }
 
 func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
-	pf := cmd.Flags()
+	pf := flagSetForCmd(cmd)
 
 	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ServerHost.Name).Changed
 	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseHost.Name).Changed
