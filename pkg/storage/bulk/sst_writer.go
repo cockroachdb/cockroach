@@ -13,6 +13,7 @@ package bulk
 import (
 	"bytes"
 	"io"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -108,7 +109,9 @@ var pebbleOpts = func() *pebble.Options {
 // MakeSSTWriter creates a new SSTWriter.
 func MakeSSTWriter() SSTWriter {
 	f := &memFile{}
-	sst := sstable.NewWriter(f, pebbleOpts, pebble.LevelOptions{BlockSize: 64 * 1024})
+	// Setting the IndexBlockSize to MaxInt disables twoLevelIndexes in Pebble.
+	// TODO(pbardea): Remove the IndexBlockSize option when #TODO is resolved.
+	sst := sstable.NewWriter(f, pebbleOpts, pebble.LevelOptions{BlockSize: 64 * 1024, IndexBlockSize: math.MaxInt32})
 	return SSTWriter{fw: sst, f: f}
 }
 
