@@ -118,9 +118,10 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 	ls := newStores(log.AmbientContext{}, clock)
 	numStores := 10
-	for i := 0; i < numStores; i++ {
+	for i := 1; i <= numStores; i++ {
 		storeID := roachpb.StoreID(i)
 		rangeID := roachpb.RangeID(i)
+		replicaID := roachpb.ReplicaID(1)
 
 		memEngine := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		stopper.AddCloser(memEngine)
@@ -135,10 +136,16 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		ls.AddStore(store)
 
 		desc := &roachpb.RangeDescriptor{
-			RangeID:          rangeID,
-			StartKey:         roachpb.RKey("a"),
-			EndKey:           roachpb.RKey("b"),
-			InternalReplicas: []roachpb.ReplicaDescriptor{{StoreID: storeID}},
+			RangeID:  rangeID,
+			StartKey: roachpb.RKey("a"),
+			EndKey:   roachpb.RKey("b"),
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{
+					StoreID:   storeID,
+					ReplicaID: replicaID,
+					NodeID:    1,
+				},
+			},
 		}
 
 		replica, err := NewReplica(desc, store, 0)

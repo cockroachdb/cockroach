@@ -168,12 +168,8 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(
 	if r.mu.replicaID != 0 {
 		log.Fatalf(ctx, "cannot set replica ID from anything other than 0, currently %d",
 			r.mu.replicaID)
-	}
-	if replicaID == 0 {
-		// If the incoming message does not have a new replica ID it is a
-		// preemptive snapshot. We'll update minReplicaID if the snapshot is
-		// accepted.
-		return nil
+	} else if replicaID == 0 {
+		log.Fatalf(ctx, "cannot set replica ID from anything to 0: %v", r)
 	}
 	if replicaID < r.mu.tombstoneMinReplicaID {
 		return &roachpb.RaftGroupDeletedError{}
