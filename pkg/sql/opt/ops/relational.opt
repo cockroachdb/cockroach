@@ -64,6 +64,11 @@ define ScanPrivate {
 
     # Flags modify how the table is scanned, such as which index is used to scan.
     Flags ScanFlags
+
+    # PartitionConstrainedScan records whether or not we were able to use partitions
+    # to constrain the lookup spans further. This flag is used to record telemetry
+    # about how often this optimization is getting applied.
+    PartitionConstrainedScan bool
 }
 
 # VirtualScan returns a result set containing every row in a virtual table.
