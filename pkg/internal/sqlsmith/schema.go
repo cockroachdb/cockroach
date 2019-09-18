@@ -47,6 +47,13 @@ func (s *Smither) ReloadSchemas() error {
 		return err
 	}
 	s.indexes, err = extractIndexes(s.db, s.tables)
+	s.columns = make(map[tree.TableName]map[tree.Name]*tree.ColumnTableDef)
+	for _, ref := range s.tables {
+		s.columns[*ref.TableName] = make(map[tree.Name]*tree.ColumnTableDef)
+		for _, col := range ref.Columns {
+			s.columns[*ref.TableName][col.Name] = col
+		}
+	}
 	return err
 }
 
@@ -184,7 +191,16 @@ func extractIndexes(
 
 	for _, t := range tables {
 		indexes := map[tree.Name]*tree.CreateIndex{}
-		rows, err := db.Query(fmt.Sprintf(`SELECT index_name, column_name, storing, direction = 'ASC' FROM [SHOW INDEXES FROM %s]`, t.TableName))
+		// Ignore rowid indexes since those columns aren't known to
+		// sqlsmith.
+		rows, err := db.Query(fmt.Sprintf(`
+			SELECT
+			    index_name, column_name, storing, direction = 'ASC'
+			FROM
+			    [SHOW INDEXES FROM %s]
+			WHERE
+			    column_name != 'rowid'
+			`, t.TableName))
 		if err != nil {
 			return nil, err
 		}
