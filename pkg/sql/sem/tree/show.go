@@ -394,6 +394,7 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 type ShowRanges struct {
 	TableOrIndex TableIndexName
 	DatabaseName Name
+	AllIndexes   bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -408,6 +409,9 @@ func (node *ShowRanges) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString("TABLE ")
 		ctx.FormatNode(&node.TableOrIndex)
+		if node.AllIndexes {
+			ctx.WriteString("@*")
+		}
 	}
 }
 

@@ -3858,8 +3858,10 @@ show_zone_stmt:
 // %Help: SHOW RANGES - list ranges
 // %Category: Misc
 // %Text:
+// SHOW RANGES FROM DATABASE <databasename>
 // SHOW RANGES FROM TABLE <tablename>
 // SHOW RANGES FROM INDEX [ <tablename> @ ] <indexname>
+// SHOW RANGES FROM INDEX <tablename>@*
 show_ranges_stmt:
   SHOW RANGES FROM TABLE table_name
   {
@@ -3873,6 +3875,11 @@ show_ranges_stmt:
 | SHOW RANGES FROM DATABASE database_name 
   {
     $$.val = &tree.ShowRanges{DatabaseName: tree.Name($5)}
+  }
+| SHOW RANGES FROM INDEX table_name '@' '*'
+  {
+    name := $5.unresolvedObjectName().ToTableName()
+    $$.val = &tree.ShowRanges{TableOrIndex: tree.TableIndexName{Table: name}, AllIndexes: true}
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
 
