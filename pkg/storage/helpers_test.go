@@ -221,16 +221,6 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 	)
 }
 
-func (r *Replica) ReplicaID() roachpb.ReplicaID {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.ReplicaIDLocked()
-}
-
-func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
-	return r.mu.replicaID
-}
-
 func (r *Replica) AssertState(ctx context.Context, reader engine.Reader) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()

@@ -13,6 +13,7 @@ package storage
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -128,28 +130,28 @@ func TestQueuePriorityQueue(t *testing.T) {
 	pq.sl = make([]*replicaItem, count)
 	for i := 0; i < count; {
 		pq.sl[i] = &replicaItem{
-			value:    roachpb.RangeID(i),
+			rangeID:  roachpb.RangeID(i),
 			priority: float64(i),
 			index:    i,
 		}
-		expRanges[3-i] = pq.sl[i].value
+		expRanges[3-i] = pq.sl[i].rangeID
 		i++
 	}
 	heap.Init(&pq)
 
 	// Insert a new item and then modify its priority.
 	priorityItem := &replicaItem{
-		value:    -1,
+		rangeID:  -1,
 		priority: 1.0,
 	}
 	heap.Push(&pq, priorityItem)
 	pq.update(priorityItem, 4.0)
-	expRanges[0] = priorityItem.value
+	expRanges[0] = priorityItem.rangeID
 
 	// Take the items out; they should arrive in decreasing priority order.
 	for i := 0; pq.Len() > 0; i++ {
 		item := heap.Pop(&pq).(*replicaItem)
-		if item.value != expRanges[i] {
+		if item.rangeID != expRanges[i] {
 			t.Errorf("%d: unexpected range with priority %f", i, item.priority)
 		}
 	}
@@ -1097,6 +1099,42 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 
 	pQueue.processBlocker <- struct{}{}
 	assertProcessedAndProcessing(3, 0)
+}
+
+// TestBaseQueueReplicaChange ensures that if a replica is added to the queue
+// with a non-zero replica ID then it is only popped if the retrieved replica
+// from the getReplica() function has the same replica ID.
+func TestBaseQueueChangeReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// The testContext exists only to construct the baseQueue.
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			return true, 1.0
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{
+		maxSize:              defaultQueueMaxSize,
+		acceptsUnsplitRanges: true,
+	})
+	r := &fakeReplica{id: 1, replicaID: 1}
+	bq.mu.Lock()
+	bq.getReplica = func(rangeID roachpb.RangeID) (replicaInQueue, error) {
+		if rangeID != 1 {
+			panic(fmt.Errorf("expected range id 1, got %d", rangeID))
+		}
+		return r, nil
+	}
+	bq.mu.Unlock()
+	bq.maybeAdd(ctx, r, tc.store.Clock().Now())
+	require.Equal(t, r, bq.pop())
+	bq.maybeAdd(ctx, r, tc.store.Clock().Now())
+	r.replicaID = 2
+	require.Nil(t, bq.pop())
 }
 
 func TestBaseQueueRequeue(t *testing.T) {
