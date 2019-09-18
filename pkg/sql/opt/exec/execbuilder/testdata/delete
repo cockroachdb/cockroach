@@ -173,3 +173,21 @@ run             ·            ·
 ·               table        indexed@indexed_value_idx
 ·               spans        /5-/6
 ·               limit        10
+
+# Ensure that index hints in DELETE statements force the choice of a specific index
+# as described in #38799.
+statement ok
+CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b))
+
+query TTTTT
+EXPLAIN (VERBOSE) DELETE FROM t38799@foo
+----
+·               distributed  false       ·       ·
+·               vectorized   false       ·       ·
+count           ·            ·           ()      ·
+ └── delete     ·            ·           ()      ·
+      │         from         t38799      ·       ·
+      │         strategy     deleter     ·       ·
+      └── scan  ·            ·           (a, b)  ·
+·               table        t38799@foo  ·       ·
+·               spans        ALL         ·       ·

@@ -283,6 +283,133 @@ update abcde
                 │    └── variable: c [type=int]
                 └── const: 1 [type=int]
 
+# UPDATE with index hints.
+exec-ddl
+CREATE TABLE xyzw (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX foo (z, y)
+)
+----
+
+build
+UPDATE xyzw@primary SET x=2 WHERE z=1
+----
+update xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── update-mapping:
+ │    └──  column9:9 => x:1
+ └── project
+      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── select
+      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── scan xyzw
+      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    └── flags: force-index=primary
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: z [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           └── const: 2 [type=int]
+
+build
+UPDATE xyzw@foo SET x=2 WHERE z=1
+----
+update xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── update-mapping:
+ │    └──  column9:9 => x:1
+ └── project
+      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── select
+      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── scan xyzw
+      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    └── flags: force-index=foo
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: z [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           └── const: 2 [type=int]
+
+build
+UPDATE xyzw@{FORCE_INDEX=foo,ASC} SET x=2 WHERE z=1
+----
+update xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── update-mapping:
+ │    └──  column9:9 => x:1
+ └── project
+      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── select
+      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── scan xyzw
+      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    └── flags: force-index=foo,fwd
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: z [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           └── const: 2 [type=int]
+
+build
+UPDATE xyzw@{FORCE_INDEX=foo,DESC} SET x=2 WHERE z=1
+----
+update xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── update-mapping:
+ │    └──  column9:9 => x:1
+ └── project
+      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── select
+      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── scan xyzw,rev
+      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    └── flags: force-index=foo,rev
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: z [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           └── const: 2 [type=int]
+
+build
+UPDATE xyzw@{NO_INDEX_JOIN} SET x=2 WHERE z=1
+----
+update xyzw
+ ├── columns: <none>
+ ├── fetch columns: x:5(int) y:6(int) z:7(int) w:8(int)
+ ├── update-mapping:
+ │    └──  column9:9 => x:1
+ └── project
+      ├── columns: column9:9(int!null) x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      ├── select
+      │    ├── columns: x:5(int!null) y:6(int) z:7(int!null) w:8(int)
+      │    ├── scan xyzw
+      │    │    ├── columns: x:5(int!null) y:6(int) z:7(int) w:8(int)
+      │    │    └── flags: no-index-join
+      │    └── filters
+      │         └── eq [type=bool]
+      │              ├── variable: z [type=int]
+      │              └── const: 1 [type=int]
+      └── projections
+           └── const: 2 [type=int]
+
+build
+UPDATE xyzw@bad_idx SET x=2 WHERE z=1
+----
+error: index "bad_idx" not found
+
+
 # Infer types.
 build
 UPDATE xyz SET y=1, z=1
