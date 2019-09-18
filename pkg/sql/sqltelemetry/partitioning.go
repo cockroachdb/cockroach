@@ -16,18 +16,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 )
 
-// PartitioningTelemetryType is an enum used to represent the different partitioning related operations
-// that we are recording telemetry for.
+// PartitioningTelemetryType is an enum used to represent the different
+// partitioning related operations that we are recording telemetry for.
 type PartitioningTelemetryType int
 
 const (
 	_ PartitioningTelemetryType = iota
-	// AlterAllPartitions represents an ALTER ALL PARTITIONS statment (ALTER PARTITION OF INDEX t@*)
+	// AlterAllPartitions represents an ALTER ALL PARTITIONS
+	// statement (ALTER PARTITION OF INDEX t@*)
 	AlterAllPartitions
+	// PartitionConstrainedScan represents when the optimizer was
+	// able to use partitioning to constrain a scan.
+	PartitionConstrainedScan
 )
 
 var partitioningTelemetryMap = map[PartitioningTelemetryType]string{
-	AlterAllPartitions: "alter-all-partitions",
+	AlterAllPartitions:       "alter-all-partitions",
+	PartitionConstrainedScan: "partition-constrained-scan",
 }
 
 func (p PartitioningTelemetryType) String() string {
@@ -43,7 +48,8 @@ func init() {
 	}
 }
 
-// IncrementPartitioningCounter is used to increment the telemetry counter for a particular partitioning operation.
+// IncrementPartitioningCounter is used to increment the telemetry
+// counter for a particular partitioning operation.
 func IncrementPartitioningCounter(partitioningType PartitioningTelemetryType) {
 	telemetry.Inc(partitioningTelemetryCounters[partitioningType])
 }
