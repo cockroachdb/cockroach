@@ -85,6 +85,7 @@ var (
 		{1, makeUpdateReturning},
 	}
 	nonMutatingTableExprs = tableExprWeights{
+		{40, makeMergeJoinExpr},
 		{40, makeEquiJoinExpr},
 		{20, makeSchemaTable},
 		{10, makeJoinExpr},
@@ -93,6 +94,7 @@ var (
 	}
 	vectorizableTableExprs = tableExprWeights{
 		{20, makeEquiJoinExpr},
+		{20, makeMergeJoinExpr},
 		{20, makeSchemaTable},
 	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
@@ -269,6 +271,107 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 		Cond:  &tree.OnJoinCond{Expr: cond},
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
+	return joinExpr, joinRefs, true
+}
+
+func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	// A merge join is an equijoin where both sides are sorted in the same
+	// direction. Do this by looking for two indexes that have column
+	// prefixes that are the same type and direction. Identical indexes
+	// are fine.
+
+	// Start with some random index.
+	leftTableName, leftIdx, ok := s.getRandIndex()
+	if !ok {
+		return nil, nil, false
+	}
+
+	leftAlias := s.name("tab")
+	rightAlias := s.name("tab")
+	leftAliasName := tree.NewUnqualifiedTableName(leftAlias)
+	rightAliasName := tree.NewUnqualifiedTableName(rightAlias)
+
+	// Now look for one that satisfies our contraints (some shared prefix
+	// of type + direction), might end up being the same one. We rely on
+	// Go's non-deterministic map iteration ordering for randomness.
+	rightTableName, cols := func() (*tree.TableIndexName, [][2]colRef) {
+		s.lock.RLock()
+		defer s.lock.RUnlock()
+		for tbl, idxs := range s.indexes {
+			for idxName, idx := range idxs {
+				rightTableName := &tree.TableIndexName{
+					Table: tbl,
+					Index: tree.UnrestrictedName(idxName),
+				}
+				// cols keeps track of matching column pairs.
+				var cols [][2]colRef
+				for _, rightColElem := range idx.Columns {
+					rightCol := s.columns[tbl][rightColElem.Column]
+					leftColElem := leftIdx.Columns[len(cols)]
+					leftCol := s.columns[leftTableName.Table][leftColElem.Column]
+					if rightColElem.Direction != leftColElem.Direction {
+						break
+					}
+					if !rightCol.Type.Equivalent(leftCol.Type) {
+						break
+					}
+					cols = append(cols, [2]colRef{
+						{
+							typ:  leftCol.Type,
+							item: tree.NewColumnItem(leftAliasName, leftColElem.Column),
+						},
+						{
+							typ:  rightCol.Type,
+							item: tree.NewColumnItem(rightAliasName, rightColElem.Column),
+						},
+					})
+				}
+				if len(cols) > 0 {
+					return rightTableName, cols
+				}
+			}
+		}
+		// Since we can always match leftIdx we should never get here.
+		panic("unreachable")
+	}()
+
+	// joinRefs are limited to columns in the indexes (even if they don't
+	// appear in the join condition) because non-stored columns will cause
+	// a hash join.
+	var joinRefs colRefs
+	for _, pair := range cols {
+		joinRefs = append(joinRefs, &pair[0], &pair[1])
+	}
+
+	var cond tree.TypedExpr
+	// Pick some prefix of the available columns. Not randomized because it
+	// needs to match the index column order.
+	for (cond == nil || s.coin()) && len(cols) > 0 {
+		v := cols[0]
+		cols = cols[1:]
+		expr := tree.NewTypedComparisonExpr(
+			tree.EQ,
+			typedParen(v[0].item, v[0].typ),
+			typedParen(v[1].item, v[1].typ),
+		)
+		if cond == nil {
+			cond = expr
+		} else {
+			cond = tree.NewTypedAndExpr(cond, expr)
+		}
+	}
+
+	joinExpr := &tree.JoinTableExpr{
+		Left: &tree.AliasedTableExpr{
+			Expr: &leftTableName.Table,
+			As:   tree.AliasClause{Alias: leftAlias},
+		},
+		Right: &tree.AliasedTableExpr{
+			Expr: &rightTableName.Table,
+			As:   tree.AliasClause{Alias: rightAlias},
+		},
+		Cond: &tree.OnJoinCond{Expr: cond},
+	}
 	return joinExpr, joinRefs, true
 }
 
