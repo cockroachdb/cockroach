@@ -2808,3 +2808,97 @@ anti-join-apply
  │         └── abcde.a = k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
  └── filters
       └── abcde.a = "family".a [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# --------------------------------------------------
+# PruneUnionAllCols
+# --------------------------------------------------
+
+opt expect=PruneUnionAllCols
+SELECT a FROM (
+  SELECT a, b FROM abcde
+  UNION ALL
+  SELECT * FROM xy
+)
+----
+union-all
+ ├── columns: a:8(int!null)
+ ├── left columns: abcde.a:1(int)
+ ├── right columns: x:6(int)
+ ├── scan abcde@bc
+ │    ├── columns: abcde.a:1(int!null)
+ │    └── key: (1)
+ └── scan xy
+      ├── columns: x:6(int!null)
+      └── key: (6)
+
+opt expect=PruneUnionAllCols
+SELECT count(*) FROM (
+  SELECT a, b FROM abcde
+  UNION ALL
+  SELECT * FROM xy
+)
+----
+scalar-group-by
+ ├── columns: count:10(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(10)
+ ├── union-all
+ │    ├── scan abcde@bc
+ │    └── scan xy
+ └── aggregations
+      └── count-rows [type=int]
+
+opt expect=PruneUnionAllCols
+SELECT 1 FROM a INNER JOIN (SELECT a, b FROM abcde UNION ALL SELECT * from xy) AS b ON a.i=b.b
+----
+project
+ ├── columns: "?column?":14(int!null)
+ ├── fd: ()-->(14)
+ ├── inner-join (hash)
+ │    ├── columns: i:2(int!null) b:13(int!null)
+ │    ├── fd: (2)==(13), (13)==(2)
+ │    ├── union-all
+ │    │    ├── columns: b:13(int)
+ │    │    ├── left columns: abcde.b:6(int)
+ │    │    ├── right columns: y:11(int)
+ │    │    ├── scan abcde@bc
+ │    │    │    └── columns: abcde.b:6(int)
+ │    │    └── scan xy
+ │    │         └── columns: y:11(int)
+ │    ├── scan a
+ │    │    └── columns: i:2(int)
+ │    └── filters
+ │         └── i = b [type=bool, outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
+ └── projections
+      └── const: 1 [type=int]
+
+# Test that even when one side of the UnionAll input has a greater
+# number of prunable columns than the other (neither the top-level
+# Project nor the UnionAll need any input columns, but the right-hand
+# Scan has a filter and cannot prune column x), a Project is added to
+# ensure that both inputs to the UnionAll have the same number of
+# columns.
+opt expect=PruneUnionAllCols
+SELECT 1 FROM (
+  SELECT a, b FROM abcde
+  UNION ALL
+  SELECT * from xy WHERE x=1
+)
+----
+project
+ ├── columns: "?column?":10(int!null)
+ ├── fd: ()-->(10)
+ ├── union-all
+ │    ├── scan abcde@bc
+ │    └── project
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── scan xy
+ │              ├── columns: x:6(int!null)
+ │              ├── constraint: /6: [/1 - /1]
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              └── fd: ()-->(6)
+ └── projections
+      └── const: 1 [type=int]

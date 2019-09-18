@@ -1594,30 +1594,18 @@ right-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── inner-join (hash)
- │    │    ├── columns: company_id:6(int!null) employees_id:7(int!null) id:12(int!null) clazz_:13(int!null)
+ │    │    ├── columns: company_id:6(int!null) employees_id:7(int!null) id:12(int!null)
  │    │    ├── fd: (7)==(12), (12)==(7)
  │    │    ├── union-all
- │    │    │    ├── columns: id:12(int!null) clazz_:13(int!null)
- │    │    │    ├── left columns: employee.id:8(int) clazz_:9(int)
- │    │    │    ├── right columns: manager.id:10(int) clazz_:11(int)
- │    │    │    ├── project
- │    │    │    │    ├── columns: clazz_:9(int!null) employee.id:8(int!null)
- │    │    │    │    ├── key: (8)
- │    │    │    │    ├── fd: ()-->(9)
- │    │    │    │    ├── scan employee
- │    │    │    │    │    ├── columns: employee.id:8(int!null)
- │    │    │    │    │    └── key: (8)
- │    │    │    │    └── projections
- │    │    │    │         └── const: 0 [type=int]
- │    │    │    └── project
- │    │    │         ├── columns: clazz_:11(int!null) manager.id:10(int!null)
- │    │    │         ├── key: (10)
- │    │    │         ├── fd: ()-->(11)
- │    │    │         ├── scan manager
- │    │    │         │    ├── columns: manager.id:10(int!null)
- │    │    │         │    └── key: (10)
- │    │    │         └── projections
- │    │    │              └── const: 1 [type=int]
+ │    │    │    ├── columns: id:12(int!null)
+ │    │    │    ├── left columns: employee.id:8(int)
+ │    │    │    ├── right columns: manager.id:10(int)
+ │    │    │    ├── scan employee
+ │    │    │    │    ├── columns: employee.id:8(int!null)
+ │    │    │    │    └── key: (8)
+ │    │    │    └── scan manager
+ │    │    │         ├── columns: manager.id:10(int!null)
+ │    │    │         └── key: (10)
  │    │    ├── scan employees1_
  │    │    │    ├── columns: company_id:6(int!null) employees_id:7(int!null)
  │    │    │    └── key: (6,7)
