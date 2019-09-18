@@ -348,6 +348,21 @@ func runWorkload(
 	return nil
 }
 
+func incrementTelemetryCounters(cmd *cobra.Command) {
+	if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
+		incrementDemoCounter(nodes)
+	}
+	if demoCtx.localities != nil {
+		incrementDemoCounter(demoLocality)
+	}
+	if demoCtx.runWorkload {
+		incrementDemoCounter(withLoad)
+	}
+	if demoCtx.geoPartitionedReplicas {
+		incrementDemoCounter(geoPartitionedReplicas)
+	}
+}
+
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 	if gen == nil && !demoCtx.useEmptyDatabase {
 		// Use a default dataset unless prevented by --empty.
@@ -390,6 +405,9 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 			return configErr
 		}
 	}
+
+	// Record some telemetry about what flags are being used.
+	incrementTelemetryCounters(cmd)
 
 	// Th geo-partitioned replicas demo only works on a 9 node cluster, so set the node count as such.
 	// Ignore input user localities so that the nodes have the same attributes/localities as expected.
