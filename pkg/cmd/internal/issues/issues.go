@@ -253,7 +253,7 @@ func DefaultStressFailureTitle(packageName, testName string) string {
 
 func (p *poster) post(
 	ctx context.Context,
-	title, packageName, testName, message, authorEmail string,
+	title, packageName, testName, message, artifacts, authorEmail string,
 	extraLabels []string,
 ) error {
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
@@ -277,7 +277,15 @@ Failed test: %[3]s`
 	const messageTemplate = "\n\n```\n%s\n```"
 
 	body := func(packageName, testName, message string) string {
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL(), packageName, testName) + messageTemplate
+		// If the test has artifacts, link straight to them.
+		// Otherwise, link to the build log in TeamCity.
+		var testURL *url.URL
+		if artifacts != "" {
+			testURL = p.teamcityArtifactsURL(artifacts)
+		} else {
+			testURL = p.teamcityBuildLogURL()
+		}
+		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), testURL, packageName, testName) + messageTemplate
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
 		// can calculate the maximum amount of error text we can include in the
@@ -347,10 +355,10 @@ Failed test: %[3]s`
 	return nil
 }
 
-func (p *poster) teamcityURL() *url.URL {
+func (p *poster) teamcityURL(tab, fragment string) *url.URL {
 	options := url.Values{}
 	options.Add("buildId", p.buildID)
-	options.Add("tab", "buildLog")
+	options.Add("tab", tab)
 
 	u, err := url.Parse(p.serverURL)
 	if err != nil {
@@ -359,7 +367,16 @@ func (p *poster) teamcityURL() *url.URL {
 	u.Scheme = "https"
 	u.Path = "viewLog.html"
 	u.RawQuery = options.Encode()
+	u.Fragment = fragment
 	return u
+}
+
+func (p *poster) teamcityBuildLogURL() *url.URL {
+	return p.teamcityURL("buildLog", "")
+}
+
+func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
+	return p.teamcityURL("artifacts", artifacts)
 }
 
 func (p *poster) parameters() string {
@@ -405,18 +422,18 @@ var defaultP struct {
 // existing open issue.
 func Post(
 	ctx context.Context,
-	title, packageName, testName, message, authorEmail string,
+	title, packageName, testName, message, artifacts, authorEmail string,
 	extraLabels []string,
 ) error {
 	defaultP.Do(func() {
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	err := defaultP.post(ctx, title, packageName, testName, message, authorEmail, extraLabels)
+	err := defaultP.post(ctx, title, packageName, testName, message, artifacts, authorEmail, extraLabels)
 	if !isInvalidAssignee(err) {
 		return err
 	}
-	return defaultP.post(ctx, title, packageName, testName, message, "tobias.schottdorf@gmail.com", extraLabels)
+	return defaultP.post(ctx, title, packageName, testName, message, artifacts, "tobias.schottdorf@gmail.com", extraLabels)
 }
 
 // CanPost returns true if the github API token environment variable is set.
