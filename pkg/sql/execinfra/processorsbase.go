@@ -876,13 +876,17 @@ func GetInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
 	if !ok {
 		return InputStats{}, false
 	}
-	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
-		isc.InputStats.StallTime = 0
-	}
-	return isc.InputStats, true
+	return getStatsInner(flowCtx, isc.InputStats), true
 }
 
-// GetFetcherInputStats is a utilitty function to check whether the given input
+func getStatsInner(flowCtx *FlowCtx, stats InputStats) InputStats {
+	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
+		stats.StallTime = 0
+	}
+	return stats
+}
+
+// GetFetcherInputStats is a utility function to check whether the given input
 // is collecting row fetcher stats, returning true and the stats if so. If
 // false is returned, the input is not collecting row fetcher stats.
 func GetFetcherInputStats(flowCtx *FlowCtx, f RowFetcher) (InputStats, bool) {
@@ -890,15 +894,11 @@ func GetFetcherInputStats(flowCtx *FlowCtx, f RowFetcher) (InputStats, bool) {
 	if !ok {
 		return InputStats{}, false
 	}
-	is, ok := GetInputStats(flowCtx, rfsc.inputStatCollector)
-	if !ok {
-		return InputStats{}, false
-	}
 	// Add row fetcher start scan stall time to Next() stall time.
 	if !flowCtx.Cfg.TestingKnobs.DeterministicStats {
-		is.StallTime += rfsc.startScanStallTime
+		rfsc.stats.StallTime += rfsc.startScanStallTime
 	}
-	return is, true
+	return getStatsInner(flowCtx, rfsc.stats), true
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with

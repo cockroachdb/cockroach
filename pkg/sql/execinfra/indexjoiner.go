@@ -121,7 +121,7 @@ func NewIndexJoiner(
 		ij.fetcher = NewRowFetcherStatCollector(&fetcher)
 		ij.FinishTrace = ij.outputStatsToTrace
 	} else {
-		ij.fetcher = &RowFetcherWrapper{Fetcher: &fetcher}
+		ij.fetcher = &fetcher
 	}
 
 	ij.neededFamilies = sqlbase.NeededColumnFamilyIDs(
@@ -141,7 +141,6 @@ func (ij *IndexJoiner) SetBatchSize(batchSize int) {
 // Start is part of the RowSource interface.
 func (ij *IndexJoiner) Start(ctx context.Context) context.Context {
 	ij.input.Start(ctx)
-	ij.fetcher.Start(ctx)
 	return ij.StartInternal(ctx, indexJoinerProcName)
 }
 
@@ -184,9 +183,9 @@ func (ij *IndexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 			ij.fetcherReady = true
 			ij.spans = ij.spans[:0]
 		}
-		row, meta := ij.fetcher.Next()
-		if meta != nil {
-			ij.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
+		row, _, _, err := ij.fetcher.NextRow(ij.Ctx)
+		if err != nil {
+			ij.MoveToDraining(scrub.UnwrapScrubError(err))
 			return nil, ij.DrainHelper()
 		}
 		if row == nil {

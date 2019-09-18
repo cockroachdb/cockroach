@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -98,44 +97,13 @@ func (is InputStats) RoundStallTime() time.Duration {
 	return is.StallTime.Round(time.Microsecond)
 }
 
-// RowFetcherWrapper is used only by processors that need to wrap calls to
-// Fetcher.NextRow() in a RowSource implementation.
-type RowFetcherWrapper struct {
-	ctx context.Context
-	*row.Fetcher
-}
-
-var _ RowSource = &RowFetcherWrapper{}
-
-// Start is part of the RowSource interface.
-func (w *RowFetcherWrapper) Start(ctx context.Context) context.Context {
-	w.ctx = ctx
-	return ctx
-}
-
-// Next calls NextRow() on the underlying Fetcher. If an error is encountered,
-// it is returned via a ProducerMetadata.
-func (w *RowFetcherWrapper) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	row, _, _, err := w.NextRow(w.ctx)
-	if err != nil {
-		return row, &execinfrapb.ProducerMetadata{Err: err}
-	}
-	return row, nil
-}
-
-// OutputTypes is part of the RowSource interface.
-func (w RowFetcherWrapper) OutputTypes() []types.T { return nil }
-
-// ConsumerDone is part of the RowSource interface.
-func (w RowFetcherWrapper) ConsumerDone() {}
-
-// ConsumerClosed is part of the RowSource interface.
-func (w RowFetcherWrapper) ConsumerClosed() {}
-
-// RowFetcherStatCollector is a RowFetcherWrapper that collects stats.
+// RowFetcherStatCollector is a wrapper on top of a row.Fetcher that collects stats.
+//
+// Only row.Fetcher methods that collect stats are overridden.
 type RowFetcherStatCollector struct {
-	*RowFetcherWrapper
-	inputStatCollector *InputStatCollector
+	*row.Fetcher
+	// stats contains the collected stats.
+	stats              InputStats
 	startScanStallTime time.Duration
 }
 
@@ -143,16 +111,20 @@ var _ RowFetcher = &RowFetcherStatCollector{}
 
 // NewRowFetcherStatCollector returns a new RowFetcherStatCollector.
 func NewRowFetcherStatCollector(f *row.Fetcher) *RowFetcherStatCollector {
-	fWrapper := &RowFetcherWrapper{Fetcher: f}
-	return &RowFetcherStatCollector{
-		RowFetcherWrapper:  fWrapper,
-		inputStatCollector: NewInputStatCollector(fWrapper),
-	}
+	return &RowFetcherStatCollector{Fetcher: f}
 }
 
-// Next is part of the RowSource interface.
-func (c *RowFetcherStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	return c.inputStatCollector.Next()
+// NextRow is part of the RowFetcher interface.
+func (c *RowFetcherStatCollector) NextRow(
+	ctx context.Context,
+) (sqlbase.EncDatumRow, *sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
+	start := timeutil.Now()
+	row, t, i, err := c.Fetcher.NextRow(ctx)
+	if row != nil {
+		c.stats.NumRows++
+	}
+	c.stats.StallTime += timeutil.Since(start)
+	return row, t, i, err
 }
 
 // StartScan is part of the RowFetcher interface.
@@ -165,7 +137,7 @@ func (c *RowFetcherStatCollector) StartScan(
 	traceKV bool,
 ) error {
 	start := timeutil.Now()
-	err := c.RowFetcherWrapper.StartScan(ctx, txn, spans, limitBatches, limitHint, traceKV)
+	err := c.Fetcher.StartScan(ctx, txn, spans, limitBatches, limitHint, traceKV)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -182,7 +154,7 @@ func (c *RowFetcherStatCollector) StartInconsistentScan(
 	traceKV bool,
 ) error {
 	start := timeutil.Now()
-	err := c.RowFetcherWrapper.StartInconsistentScan(
+	err := c.Fetcher.StartInconsistentScan(
 		ctx, db, initialTimestamp, maxTimestampAge, spans, limitBatches, limitHint, traceKV,
 	)
 	c.startScanStallTime += timeutil.Since(start)

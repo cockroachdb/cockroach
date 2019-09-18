@@ -131,7 +131,7 @@ func newScrubTableReader(
 	); err != nil {
 		return nil, err
 	}
-	tr.fetcher = &execinfra.RowFetcherWrapper{Fetcher: &fetcher}
+	tr.fetcher = &fetcher
 
 	tr.spans = make(roachpb.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {

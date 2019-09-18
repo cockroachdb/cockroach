@@ -134,7 +134,7 @@ func newTableReader(
 		tr.fetcher = execinfra.NewRowFetcherStatCollector(&fetcher)
 		tr.FinishTrace = tr.outputStatsToTrace
 	} else {
-		tr.fetcher = &execinfra.RowFetcherWrapper{Fetcher: &fetcher}
+		tr.fetcher = &fetcher
 	}
 
 	return tr, nil
@@ -154,8 +154,6 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
 
-	// This call doesn't do much; the real "starting" is below.
-	tr.fetcher.Start(ctx)
 	limitBatches := execinfra.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
@@ -195,16 +193,9 @@ func (tr *tableReader) Release() {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
-		row, meta := tr.fetcher.Next()
-
-		if meta != nil {
-			if meta.Err != nil {
-				tr.MoveToDraining(nil /* err */)
-			}
-			return nil, meta
-		}
-		if row == nil {
-			tr.MoveToDraining(nil /* err */)
+		row, _, _, err := tr.fetcher.NextRow(tr.Ctx)
+		if row == nil || err != nil {
+			tr.MoveToDraining(err)
 			break
 		}
 
