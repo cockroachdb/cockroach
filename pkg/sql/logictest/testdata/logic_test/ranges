@@ -408,3 +408,8 @@ query TT
 SELECT start_key, end_key FROM [SHOW RANGES FROM INDEX """".t@primary]
 ----
 NULL NULL
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.ranges' AND usage_count > 0
+----
+sql.show.ranges
