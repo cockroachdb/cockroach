@@ -1,0 +1,217 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package colexec
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+)
+
+type andOrTestCase struct {
+	tuples                []tuple
+	expected              []tuple
+	skipAllNullsInjection bool
+}
+
+var (
+	andTestCases []andOrTestCase
+	orTestCases  []andOrTestCase
+)
+
+func init() {
+	andTestCases = []andOrTestCase{
+		// All variations of pairs separately first.
+		{
+			tuples:   tuples{{false, true}},
+			expected: tuples{{false}},
+		},
+		{
+			tuples:   tuples{{false, nil}},
+			expected: tuples{{false}},
+		},
+		{
+			tuples:   tuples{{false, false}},
+			expected: tuples{{false}},
+		},
+		{
+			tuples:   tuples{{true, true}},
+			expected: tuples{{true}},
+		},
+		{
+			tuples:   tuples{{true, false}},
+			expected: tuples{{false}},
+		},
+		{
+			tuples:   tuples{{true, nil}},
+			expected: tuples{{nil}},
+			// The case of {nil, nil} is explicitly tested below.
+			skipAllNullsInjection: true,
+		},
+		{
+			tuples:   tuples{{nil, true}},
+			expected: tuples{{nil}},
+			// The case of {nil, nil} is explicitly tested below.
+			skipAllNullsInjection: true,
+		},
+		{
+			tuples:   tuples{{nil, false}},
+			expected: tuples{{false}},
+		},
+		{
+			tuples:   tuples{{nil, nil}},
+			expected: tuples{{nil}},
+		},
+		// Now all variations of pairs combined together to make sure that nothing
+		// funky going on with multiple tuples.
+		{
+			tuples: tuples{
+				{false, true}, {false, nil}, {false, false},
+				{true, true}, {true, false}, {true, nil},
+				{nil, true}, {nil, false}, {nil, nil},
+			},
+			expected: tuples{
+				{false}, {false}, {false},
+				{true}, {false}, {nil},
+				{nil}, {false}, {nil},
+			},
+		},
+	}
+
+	orTestCases = []andOrTestCase{
+		// All variations of pairs separately first.
+		{
+			tuples:   tuples{{false, true}},
+			expected: tuples{{true}},
+		},
+		{
+			tuples:   tuples{{false, nil}},
+			expected: tuples{{nil}},
+			// The case of {nil, nil} is explicitly tested below.
+			skipAllNullsInjection: true,
+		},
+		{
+			tuples:   tuples{{false, false}},
+			expected: tuples{{false}},
+		},
+		{
+			tuples:   tuples{{true, true}},
+			expected: tuples{{true}},
+		},
+		{
+			tuples:   tuples{{true, false}},
+			expected: tuples{{true}},
+		},
+		{
+			tuples:   tuples{{true, nil}},
+			expected: tuples{{true}},
+		},
+		{
+			tuples:   tuples{{nil, true}},
+			expected: tuples{{true}},
+		},
+		{
+			tuples:   tuples{{nil, false}},
+			expected: tuples{{nil}},
+			// The case of {nil, nil} is explicitly tested below.
+			skipAllNullsInjection: true,
+		},
+		{
+			tuples:   tuples{{nil, nil}},
+			expected: tuples{{nil}},
+		},
+		// Now all variations of pairs combined together to make sure that nothing
+		// funky going on with multiple tuples.
+		{
+			tuples: tuples{
+				{false, true}, {false, nil}, {false, false},
+				{true, true}, {true, false}, {true, nil},
+				{nil, true}, {nil, false}, {nil, nil},
+			},
+			expected: tuples{
+				{true}, {nil}, {false},
+				{true}, {true}, {true},
+				{true}, {nil}, {nil},
+			},
+		},
+	}
+}
+
+func TestAndOrOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
+
+	for _, test := range []struct {
+		operation string
+		cases     []andOrTestCase
+	}{
+		{
+			operation: "AND",
+			cases:     andTestCases,
+		},
+		{
+			operation: "OR",
+			cases:     orTestCases,
+		},
+	} {
+		t.Run(test.operation, func(t *testing.T) {
+			for _, tc := range test.cases {
+				var runner testRunner
+				if tc.skipAllNullsInjection {
+					// We're omitting all nulls injection test. See comments for each such
+					// test case.
+					runner = runTestsWithoutAllNullsInjection
+				} else {
+					runner = runTestsWithTyps
+				}
+				runner(
+					t,
+					[]tuples{tc.tuples},
+					[]coltypes.T{coltypes.Bool, coltypes.Bool},
+					tc.expected,
+					orderedVerifier,
+					func(input []Operator) (Operator, error) {
+						spec := &execinfrapb.ProcessorSpec{
+							Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []types.T{*types.Bool, *types.Bool}}},
+							Core: execinfrapb.ProcessorCoreUnion{
+								Noop: &execinfrapb.NoopCoreSpec{},
+							},
+							Post: execinfrapb.PostProcessSpec{
+								RenderExprs: []execinfrapb.Expression{{Expr: fmt.Sprintf("@1 %s @2", test.operation)}},
+							},
+						}
+						result, err := NewColOperator(ctx, flowCtx, spec, input)
+						if err != nil {
+							return nil, err
+						}
+						return result.Op, nil
+					})
+			}
+		})
+	}
+}
