@@ -13,7 +13,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -1138,8 +1141,13 @@ func setupPartitioningTestCluster(
 ) (*gosql.DB, *sqlutils.SQLRunner, func()) {
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(3)
-
+	storeDirs, err := ioutil.TempDir("", "PartitioningTest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Infof(ctx, "creating store dirs %v", storeDirs)
 	tsArgs := func(attr, locality string) base.TestServerArgs {
+		storePath := filepath.Join(storeDirs, attr)
 		return base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
@@ -1153,7 +1161,7 @@ func setupPartitioningTestCluster(
 			},
 			ScanInterval: 100 * time.Millisecond,
 			StoreSpecs: []base.StoreSpec{
-				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
+				{Path: storePath, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
 			},
 			UseDatabase: "data",
 			Locality: roachpb.Locality{
@@ -1191,6 +1199,7 @@ func setupPartitioningTestCluster(
 
 	return tc.Conns[0], sqlDB, func() {
 		tc.Stopper().Stop(context.Background())
+		os.RemoveAll(storeDirs)
 	}
 }
 

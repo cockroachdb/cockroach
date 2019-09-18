@@ -95,6 +95,11 @@ func run() error {
 		return fmt.Errorf("%v\n%s", err, out)
 	}
 	nodes := strings.Count(string(out), "\n") - 1
+	const tmpDir = "/mnt/data1/tmp"
+	cmd = exec.Command("roachprod", "run", cluster, "--", "mkdir", "-p", tmpDir)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to make TMPDIR at %s: %v", tmpDir, err)
+	}
 
 	const stressBin = "bin.docker_amd64/stress"
 	cmd = exec.Command("roachprod", "put", cluster, stressBin)
@@ -204,7 +209,7 @@ func run() error {
 			var stderr bytes.Buffer
 			cmd := exec.Command("roachprod",
 				"ssh", fmt.Sprintf("%s:%d", cluster, i), "--",
-				fmt.Sprintf("GOTRACEBACK=all ./stress %s", strings.Join(os.Args[2:], " ")))
+				fmt.Sprintf("TMPDIR="+tmpDir+" GOTRACEBACK=all ./stress %s", strings.Join(os.Args[2:], " ")))
 			cmd.Stdout = stdoutW
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
