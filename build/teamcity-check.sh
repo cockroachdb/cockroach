@@ -10,7 +10,7 @@ tc_prepare
 tc_start_block "Ensure commit message contains a release justification"
 # Ensure master branch commits have a release justification until 19.2 goes out the door.
 if [[ $(git log -n1 | grep -ci "Release justification: \S\+") == 0 ]]; then
-  echo "Build Failed. No Release justification in commit message." >&2
+  echo "Build Failed. No Release justification in the commit message or in the PR description." >&2
   echo "Commits must have a Release justification of the form:" >&2
   echo "Release justification: <some description of why this commit is safe to add to the release branch.>" >&2
   exit 1
