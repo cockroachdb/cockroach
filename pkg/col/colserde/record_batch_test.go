@@ -60,13 +60,6 @@ func randomDataFromType(rng *rand.Rand, t coltypes.T, n int, nullProbability flo
 			}
 		}
 		builder.(*array.BooleanBuilder).AppendValues(data, valid)
-	case coltypes.Int8:
-		builder = array.NewInt8Builder(memory.DefaultAllocator)
-		data := make([]int8, n)
-		for i := range data {
-			data[i] = int8(rng.Uint64())
-		}
-		builder.(*array.Int8Builder).AppendValues(data, valid)
 	case coltypes.Int16:
 		builder = array.NewInt16Builder(memory.DefaultAllocator)
 		data := make([]int16, n)
@@ -88,13 +81,6 @@ func randomDataFromType(rng *rand.Rand, t coltypes.T, n int, nullProbability flo
 			data[i] = int64(rng.Uint64())
 		}
 		builder.(*array.Int64Builder).AppendValues(data, valid)
-	case coltypes.Float32:
-		builder = array.NewFloat32Builder(memory.DefaultAllocator)
-		data := make([]float32, n)
-		for i := range data {
-			data[i] = rng.Float32() * math.MaxFloat32
-		}
-		builder.(*array.Float32Builder).AppendValues(data, valid)
 	case coltypes.Float64:
 		builder = array.NewFloat64Builder(memory.DefaultAllocator)
 		data := make([]float64, n)

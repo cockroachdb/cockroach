@@ -42,9 +42,6 @@ if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
 		}`,
 			target, r, target, l, target,
 		)
-	case coltypes.Float32:
-		// TODO(asubiotto): Might not want to support this.
-		return fmt.Sprintf("%s = %s / float32(%s)", target, l, r)
 	case coltypes.Float64:
 		return fmt.Sprintf("%s = %s / float64(%s)", target, l, r)
 	default:
@@ -87,7 +84,7 @@ func genAvgAgg(wr io.Writer) error {
 	}
 
 	// TODO(asubiotto): Support more coltypes.
-	supportedTypes := []coltypes.T{coltypes.Decimal, coltypes.Float32, coltypes.Float64}
+	supportedTypes := []coltypes.T{coltypes.Decimal, coltypes.Float64}
 	spm := make(map[coltypes.T]int)
 	for i, typ := range supportedTypes {
 		spm[typ] = i

@@ -35,8 +35,6 @@ func FromColumnType(ct *types.T) coltypes.T {
 		return coltypes.Decimal
 	case types.IntFamily:
 		switch ct.Width() {
-		case 8:
-			return coltypes.Int8
 		case 16:
 			return coltypes.Int16
 		case 32:

@@ -20,11 +20,9 @@ import (
 
 const (
 	sizeOfBool    = int(unsafe.Sizeof(true))
-	sizeOfInt8    = int(unsafe.Sizeof(int8(0)))
 	sizeOfInt16   = int(unsafe.Sizeof(int16(0)))
 	sizeOfInt32   = int(unsafe.Sizeof(int32(0)))
 	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
-	sizeOfFloat32 = int(unsafe.Sizeof(float32(0)))
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
 )
 
@@ -45,16 +43,12 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// much space each byte array takes up. Use some default value as a
 			// heuristic right now.
 			acc += 100
-		case coltypes.Int8:
-			acc += sizeOfInt8
 		case coltypes.Int16:
 			acc += sizeOfInt16
 		case coltypes.Int32:
 			acc += sizeOfInt32
 		case coltypes.Int64:
 			acc += sizeOfInt64
-		case coltypes.Float32:
-			acc += sizeOfFloat32
 		case coltypes.Float64:
 			acc += sizeOfFloat64
 		case coltypes.Decimal:
