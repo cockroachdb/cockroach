@@ -602,11 +602,12 @@ func (r *testRunner) runTest(
 				}
 				msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
 					branch, cloud, output)
+				artifacts := fmt.Sprintf("/%s", t.Name())
 
 				if err := issues.Post(
 					context.Background(),
 					fmt.Sprintf("roachtest: %s failed", t.Name()),
-					"roachtest", t.Name(), msg, authorEmail, []string{"O-roachtest"},
+					"roachtest", t.Name(), msg, artifacts, authorEmail, []string{"O-roachtest"},
 				); err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 				}

@@ -76,6 +76,7 @@ func TestPost(t *testing.T) {
 		packageName string
 		testName    string
 		message     string
+		artifacts   string
 		author      string
 	}{
 		{
@@ -92,6 +93,14 @@ func TestPost(t *testing.T) {
 			message:     "F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] on-disk and in-memory state diverged:",
 			author:      "bran",
 		},
+		{
+			name:        "with artifacts",
+			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
+			testName:    "kv/splits/nodes=3/quiesce=true",
+			message:     "The test failed on branch=master, cloud=gce:",
+			artifacts:   "/kv/splits/nodes=3/quiesce=true",
+			author:      "bran",
+		},
 	}
 
 	for _, c := range testCases {
@@ -101,6 +110,11 @@ func TestPost(t *testing.T) {
 				name = name + "-existing-issue"
 			}
 			t.Run(name, func(t *testing.T) {
+				expURL := fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)
+				if c.artifacts != "" {
+					expURL = fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=artifacts#%s", serverURL, buildID, c.artifacts)
+				}
+
 				reString := fmt.Sprintf(`(?s)\ASHA: https://github.com/cockroachdb/cockroach/commits/%s
 
 Parameters:
@@ -124,7 +138,7 @@ Failed test: %s`,
 					regexp.QuoteMeta(parameters),
 					c.testName,
 					c.packageName,
-					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)),
+					regexp.QuoteMeta(expURL),
 				)
 
 				issueBodyRe, err := regexp.Compile(
@@ -249,7 +263,7 @@ Failed test: %s`,
 				ctx := context.Background()
 				if err := p.post(
 					ctx, DefaultStressFailureTitle(c.packageName, c.testName),
-					c.packageName, c.testName, c.message, c.author, nil,
+					c.packageName, c.testName, c.message, c.artifacts, c.author, nil,
 				); err != nil {
 					t.Fatal(err)
 				}
