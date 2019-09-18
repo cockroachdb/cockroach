@@ -168,7 +168,7 @@ type ResetCounters bool
 const (
 	// Quantized returns counts quantized to order of magnitude.
 	Quantized QuantizeCounts = true
-	// Raw returns the raw, unquanitzed counter values.
+	// Raw returns the raw, unquantized counter values.
 	Raw QuantizeCounts = false
 	// ResetCounts resets the counter to zero after fetching its value.
 	ResetCounts ResetCounters = true
