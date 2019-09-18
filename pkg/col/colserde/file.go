@@ -345,12 +345,6 @@ func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeBinary
-		case coltypes.Int8:
-			arrowserde.IntStart(fb)
-			arrowserde.IntAddBitWidth(fb, 8)
-			arrowserde.IntAddIsSigned(fb, 1)
-			fbTypOffset = arrowserde.IntEnd(fb)
-			fbTyp = arrowserde.TypeInt
 		case coltypes.Int16:
 			arrowserde.IntStart(fb)
 			arrowserde.IntAddBitWidth(fb, 16)
@@ -369,11 +363,6 @@ func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 			arrowserde.IntAddIsSigned(fb, 1)
 			fbTypOffset = arrowserde.IntEnd(fb)
 			fbTyp = arrowserde.TypeInt
-		case coltypes.Float32:
-			arrowserde.FloatingPointStart(fb)
-			arrowserde.FloatingPointAddPrecision(fb, arrowserde.PrecisionSINGLE)
-			fbTypOffset = arrowserde.FloatingPointEnd(fb)
-			fbTyp = arrowserde.TypeFloatingPoint
 		case coltypes.Float64:
 			arrowserde.FloatingPointStart(fb)
 			arrowserde.FloatingPointAddPrecision(fb, arrowserde.PrecisionDOUBLE)
@@ -443,8 +432,6 @@ func typeFromField(field *arrowserde.Field) (coltypes.T, error) {
 		intType.Init(typeTab.Bytes, typeTab.Pos)
 		if intType.IsSigned() > 0 {
 			switch intType.BitWidth() {
-			case 8:
-				return coltypes.Int8, nil
 			case 16:
 				return coltypes.Int16, nil
 			case 32:
@@ -461,8 +448,6 @@ func typeFromField(field *arrowserde.Field) (coltypes.T, error) {
 		switch floatType.Precision() {
 		case arrowserde.PrecisionDOUBLE:
 			return coltypes.Float64, nil
-		case arrowserde.PrecisionSINGLE:
-			return coltypes.Float32, nil
 		default:
 			return coltypes.Unhandled, errors.Errorf(`unhandled float precision %d`, floatType.Precision())
 		}

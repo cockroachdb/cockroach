@@ -30,16 +30,12 @@ const (
 	Bytes
 	// Decimal is a column of type apd.Decimal
 	Decimal
-	// Int8 is a column of type int8
-	Int8
 	// Int16 is a column of type int16
 	Int16
 	// Int32 is a column of type int32
 	Int32
 	// Int64 is a column of type int64
 	Int64
-	// Float32 is a column of type float32
-	Float32
 	// Float64 is a column of type float64
 	Float64
 
@@ -57,13 +53,13 @@ var AllTypes []T
 var CompatibleTypes map[T][]T
 
 // NumberTypes is a slice containing all numeric types.
-var NumberTypes = []T{Int8, Int16, Int32, Int64, Float32, Float64, Decimal}
+var NumberTypes = []T{Int16, Int32, Int64, Float64, Decimal}
 
 // IntTypes is a slice containing all int types.
-var IntTypes = []T{Int8, Int16, Int32, Int64}
+var IntTypes = []T{Int16, Int32, Int64}
 
 // FloatTypes is a slice containing all float types.
-var FloatTypes = []T{Float32, Float64}
+var FloatTypes = []T{Float64}
 
 func init() {
 	for i := Bool; i < Unhandled; i++ {
@@ -74,11 +70,9 @@ func init() {
 	CompatibleTypes[Bool] = append(CompatibleTypes[Bool], Bool)
 	CompatibleTypes[Bytes] = append(CompatibleTypes[Bytes], Bytes)
 	CompatibleTypes[Decimal] = append(CompatibleTypes[Decimal], NumberTypes...)
-	CompatibleTypes[Int8] = append(CompatibleTypes[Int8], NumberTypes...)
 	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], NumberTypes...)
 	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], NumberTypes...)
 	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], NumberTypes...)
-	CompatibleTypes[Float32] = append(CompatibleTypes[Float32], NumberTypes...)
 	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], NumberTypes...)
 }
 
@@ -86,8 +80,6 @@ func init() {
 // runtime.
 func FromGoType(v interface{}) T {
 	switch t := v.(type) {
-	case int8:
-		return Int8
 	case int16:
 		return Int16
 	case int32:
@@ -96,8 +88,6 @@ func FromGoType(v interface{}) T {
 		return Int64
 	case bool:
 		return Bool
-	case float32:
-		return Float32
 	case float64:
 		return Float64
 	case []byte:
@@ -120,16 +110,12 @@ func (t T) GoTypeName() string {
 		return "[]byte"
 	case Decimal:
 		return "apd.Decimal"
-	case Int8:
-		return "int8"
 	case Int16:
 		return "int16"
 	case Int32:
 		return "int32"
 	case Int64:
 		return "int64"
-	case Float32:
-		return "float32"
 	case Float64:
 		return "float64"
 	default:
