@@ -186,3 +186,9 @@ select
  │    └── constraint: /1/2/3/4: [ - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/7 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/7 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/7 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/7 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/7 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/7 - ]
  └── filters
       └── (val > 6) AND (val < 9)
+
+# Test telemetry about this optimization works.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.partitioning.partition-constrained-scan' AND usage_count > 0
+----
+sql.partitioning.partition-constrained-scan
