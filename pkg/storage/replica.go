@@ -610,6 +610,13 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
+// ReplicaID returns the ID for the Replica.
+func (r *Replica) ReplicaID() roachpb.ReplicaID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.replicaID
+}
+
 // cleanupFailedProposal cleans up after a proposal that has failed. It
 // clears any references to the proposal and releases associated quota.
 // It requires that both Replica.mu and Replica.raftMu are exclusively held.

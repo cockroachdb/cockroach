@@ -85,13 +85,13 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	}
 	bq := newBaseQueue("test", impl, store, nil /* Gossip */, cfg)
 	bq.getReplica = func(id roachpb.RangeID) (replicaInQueue, error) {
-		return &fakeReplica{id: id}, nil
+		return &fakeReplica{rangeID: id}, nil
 	}
 	bq.Start(stopper)
 
 	var g errgroup.Group
 	for i := 1; i <= num; i++ {
-		r := &fakeReplica{id: roachpb.RangeID(i)}
+		r := &fakeReplica{rangeID: roachpb.RangeID(i)}
 		for j := 0; j < 5; j++ {
 			g.Go(func() error {
 				_, err := bq.testingAdd(ctx, r, 1.0)
@@ -100,7 +100,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		}
 		if rand.Intn(5) == 0 {
 			g.Go(func() error {
-				bq.MaybeRemove(r.id)
+				bq.MaybeRemove(r.rangeID)
 				return nil
 			})
 		}
@@ -145,18 +145,20 @@ func (fakeQueueImpl) purgatoryChan() <-chan time.Time {
 }
 
 type fakeReplica struct {
-	id roachpb.RangeID
+	rangeID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
 }
 
 func (fr *fakeReplica) AnnotateCtx(ctx context.Context) context.Context { return ctx }
 func (fr *fakeReplica) StoreID() roachpb.StoreID {
 	return 1
 }
-func (fr *fakeReplica) GetRangeID() roachpb.RangeID         { return fr.id }
+func (fr *fakeReplica) GetRangeID() roachpb.RangeID         { return fr.rangeID }
+func (fr *fakeReplica) ReplicaID() roachpb.ReplicaID        { return fr.replicaID }
 func (fr *fakeReplica) IsInitialized() bool                 { return true }
 func (fr *fakeReplica) IsDestroyed() (DestroyReason, error) { return destroyReasonAlive, nil }
 func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
-	return &roachpb.RangeDescriptor{RangeID: fr.id, EndKey: roachpb.RKey("z")}
+	return &roachpb.RangeDescriptor{RangeID: fr.rangeID, EndKey: roachpb.RKey("z")}
 }
 func (fr *fakeReplica) maybeInitializeRaftGroup(context.Context) {}
 func (fr *fakeReplica) redirectOnOrAcquireLease(
