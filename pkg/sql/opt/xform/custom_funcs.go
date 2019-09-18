@@ -612,6 +612,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
 		newScanPrivate.Constraint = constraint
+		// Write down if we were able to use partitions to constrain the scan.
+		newScanPrivate.PartitionConstrainedScan = isIndexPartitioned
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.

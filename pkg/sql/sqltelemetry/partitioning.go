@@ -22,12 +22,15 @@ type PartitioningTelemetryType int
 
 const (
 	_ PartitioningTelemetryType = iota
-	// AlterAllPartitions represents an ALTER ALL PARTITIONS statment (ALTER PARTITION OF INDEX t@*)
+	// AlterAllPartitions represents an ALTER ALL PARTITIONS statement (ALTER PARTITION OF INDEX t@*)
 	AlterAllPartitions
+	// PartitionConstrainedScan represents when the optimizer was able to use partitioning to constrain a scan.
+	PartitionConstrainedScan
 )
 
 var partitioningTelemetryMap = map[PartitioningTelemetryType]string{
-	AlterAllPartitions: "alter-all-partitions",
+	AlterAllPartitions:       "alter-all-partitions",
+	PartitionConstrainedScan: "partition-constrained-scan",
 }
 
 func (p PartitioningTelemetryType) String() string {
