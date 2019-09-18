@@ -897,7 +897,6 @@ query I
 SELECT * FROM t_case_null WHERE x = 0 AND NULL
 ----
 
-
 # Regression test for #40732.
 statement ok
 CREATE TABLE t40732 AS SELECT g::INT8 AS _int8,
@@ -935,3 +934,8 @@ ORDER BY col_2976
 4
 4
 4
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.query.is-vectorized' AND usage_count > 0
+----
+sql.exec.query.is-vectorized
