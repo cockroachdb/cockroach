@@ -18,10 +18,8 @@ eexpect id
 eexpect "3 rows"
 eexpect eof
 
-# Remove the additional nodes.
-system "$argv quit --port=26258"
-system "$argv quit --port=26259"
-
 end_test
 
-stop_server $argv
+# Kill the cluster. We don't care about what happens next in this test,
+# and this makes the test complete faster.
+system "kill -KILL `cat server_pid` `cat server_pid2` `cat server_pid3`"
