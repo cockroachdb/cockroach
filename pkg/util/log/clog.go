@@ -14,8 +14,10 @@
 package log
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -1325,6 +1327,48 @@ func (l *loggingT) gcOldFiles() {
 			continue
 		}
 		path := filepath.Join(dir, f.Name)
+
+		// archive log file
+		if LogFileArchive {
+			var tf io.Writer
+			if tf, err = os.Create(path + ".tar.gz"); err != nil {
+				fmt.Fprintln(OrigStderr, err)
+				return
+			}
+
+			gz := gzip.NewWriter(tf)
+			defer gz.Close()
+			tw := tar.NewWriter(gz)
+			defer tw.Close()
+
+			fi, err := os.Stat(path)
+			if err != nil {
+				fmt.Fprintln(OrigStderr, err)
+				return
+			}
+			fih, err := tar.FileInfoHeader(fi, "")
+			if err != nil {
+				fmt.Fprintln(OrigStderr, err)
+				return
+			}
+			if err := tw.WriteHeader(fih); err != nil {
+				fmt.Fprintln(OrigStderr, err)
+				return
+			}
+
+			fs, err := os.Open(path)
+			defer fs.Close()
+			if err != nil {
+				fmt.Fprintln(OrigStderr, err)
+				return
+			}
+
+			if _, err := io.Copy(tw, fs); err != nil {
+				fmt.Fprintln(OrigStderr, err)
+				return
+			}
+		}
+		// remove previous log file
 		if err := os.Remove(path); err != nil {
 			fmt.Fprintln(OrigStderr, err)
 		}

@@ -21,7 +21,7 @@ func init() {
 		&logging.noStderrRedirect,
 		&logging.logDir, &showLogs, &noColor,
 		&logging.vmodule,
-		&LogFileMaxSize, &LogFilesCombinedMaxSize,
+		&LogFileMaxSize, &LogFilesCombinedMaxSize, &LogFileArchive,
 	)
 	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.

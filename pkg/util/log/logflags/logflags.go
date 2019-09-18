@@ -65,6 +65,7 @@ const (
 	NoRedirectStderrName          = "no-redirect-stderr"
 	ShowLogsName                  = "show-logs"
 	LogFileMaxSizeName            = "log-file-max-size"
+	LogFileArchiveName            = "log-file-archive"
 	LogFilesCombinedMaxSizeName   = "log-dir-max-size"
 	LogFileVerbosityThresholdName = "log-file-verbosity"
 )
@@ -77,7 +78,7 @@ func InitFlags(
 	showLogs *bool,
 	nocolor *bool,
 	vmodule flag.Value,
-	logFileMaxSize, logFilesCombinedMaxSize *int64,
+	logFileMaxSize, logFilesCombinedMaxSize *int64, logFileArchive *bool,
 ) {
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
 	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")
@@ -86,4 +87,5 @@ func InitFlags(
 	flag.BoolVar(showLogs, ShowLogsName, *showLogs, "print logs instead of saving them in files")
 	flag.Var(humanizeutil.NewBytesValue(logFileMaxSize), LogFileMaxSizeName, "maximum size of each log file")
 	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), LogFilesCombinedMaxSizeName, "maximum combined size of all log files")
+	flag.BoolVar(logFileArchive, LogFileArchiveName, *logFileArchive, "archive log file or not")
 }

@@ -44,6 +44,10 @@ var LogFileMaxSize int64 = 10 << 20 // 10MiB
 // to LogFileMaxSize larger.
 var LogFilesCombinedMaxSize = LogFileMaxSize * 10 // 100MiB
 
+// LogFilesArchive default value is false. when it is true and maximum total size in bytes for log
+// files is larger than `LogFilesCombinedMaxSize`, will archive previous log file instead of delete it only
+var LogFileArchive = false
+
 // DirName overrides (if non-empty) the choice of directory in
 // which to write logs. See createLogDirs for the full list of
 // possible destinations. Note that the default is to log to stderr
