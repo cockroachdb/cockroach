@@ -14,6 +14,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -142,13 +143,13 @@ func (pt *partitioningTest) parse() error {
 	var zoneConfigStmts bytes.Buffer
 	// TODO(dan): Can we run all the zoneConfigStmts in a txn?
 	for _, c := range pt.configs {
-		var subzoneShort, constraints string
+		var subzoneShort, leasePreferences string
 		configParts := strings.Split(c, `:`)
 		switch len(configParts) {
 		case 1:
 			subzoneShort = configParts[0]
 		case 2:
-			subzoneShort, constraints = configParts[0], configParts[1]
+			subzoneShort, leasePreferences = configParts[0], configParts[1]
 		default:
 			panic(errors.Errorf("unsupported config: %s", c))
 		}
@@ -177,16 +178,19 @@ func (pt *partitioningTest) parse() error {
 			return errors.Wrapf(err, "could not find index %s", indexName)
 		}
 		subzone.IndexID = uint32(idxDesc.ID)
+		constraints := strings.Replace(leasePreferences, "n", "zone=dc", -1)
 		if len(constraints) > 0 {
 			if subzone.PartitionName == "" {
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
-					pt.parsed.tableName, idxDesc.Name, constraints,
+					`ALTER INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]', lease_preferences = '[[%q]]';
+`,
+					pt.parsed.tableName, idxDesc.Name, constraints, leasePreferences,
 				)
 			} else {
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER PARTITION %s OF INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
-					subzone.PartitionName, pt.parsed.tableName, idxDesc.Name, constraints,
+					`ALTER PARTITION %s OF INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]', lease_preferences = '[[%s]]';
+`,
+					subzone.PartitionName, pt.parsed.tableName, idxDesc.Name, constraints, leasePreferences,
 				)
 			}
 		}
@@ -197,6 +201,15 @@ func (pt *partitioningTest) parse() error {
 		}
 		subzone.Config.Constraints = parsedConstraints.Constraints
 		subzone.Config.InheritedConstraints = parsedConstraints.Inherited
+		var parsedLeasePreferences config.ConstraintsList
+		if err := yaml.UnmarshalStrict([]byte("["+leasePreferences+"]"), &parsedLeasePreferences); err != nil {
+			return errors.Wrapf(err, "parsing lease preferences: %s", constraints)
+		}
+		for _, c := range parsedLeasePreferences.Constraints {
+			subzone.Config.LeasePreferences = append(subzone.Config.LeasePreferences,
+				config.LeasePreference{Constraints: c.Constraints})
+		}
+		subzone.Config.InheritedLeasePreferences = parsedLeasePreferences.Inherited
 
 		pt.parsed.subzones = append(pt.parsed.subzones, subzone)
 	}
@@ -1095,7 +1108,8 @@ func verifyScansOnNode(
 		}
 		traceLines = append(traceLines, traceLine.String)
 		if strings.Contains(traceLine.String, "read completed") {
-			if strings.Contains(traceLine.String, "SystemCon") {
+			if strings.Contains(traceLine.String, "SystemCon") ||
+				strings.Contains(traceLine.String, "Min-") {
 				// Ignore trace lines for the system config range (abbreviated as
 				// "SystemCon" in pretty printing of the range descriptor). A read might
 				// be performed to the system config range to update the table lease.
@@ -1123,9 +1137,9 @@ func setupPartitioningTestCluster(
 	ctx context.Context, t testing.TB,
 ) (*gosql.DB, *sqlutils.SQLRunner, func()) {
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = proto.Int32(1)
+	cfg.NumReplicas = proto.Int32(3)
 
-	tsArgs := func(attr string) base.TestServerArgs {
+	tsArgs := func(attr, locality string) base.TestServerArgs {
 		return base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
@@ -1142,14 +1156,31 @@ func setupPartitioningTestCluster(
 				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
 			},
 			UseDatabase: "data",
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "zone",
+						Value: locality,
+					},
+				},
+			},
 		}
 	}
-	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
-		0: tsArgs("n1"),
-		1: tsArgs("n2"),
-		2: tsArgs("n3"),
-	}}
-	tc := testcluster.StartTestCluster(t, 3, tcArgs)
+	const numNodes = 9
+	const datacenters = 3
+	tcArgs := func(numNodes int) base.TestClusterArgs {
+		serverArgs := make(map[int]base.TestServerArgs)
+		for i := 0; i < numNodes; i++ {
+			serverArgs[i] = tsArgs(
+				"n"+strconv.Itoa(i+1),
+				"dc"+strconv.Itoa((i%datacenters)+1),
+			)
+		}
+		return base.TestClusterArgs{
+			ServerArgsPerNode: serverArgs,
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, tcArgs(numNodes))
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
@@ -1302,6 +1333,7 @@ func TestRepartitioning(t *testing.T) {
 					t.Fatalf("%+v", err)
 				}
 				sqlDB.Exec(t, test.old.parsed.createStmt)
+				fmt.Println(test.old.parsed.zoneConfigStmts)
 				sqlDB.Exec(t, test.old.parsed.zoneConfigStmts)
 
 				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, t, db))
