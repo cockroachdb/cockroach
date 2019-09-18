@@ -297,7 +297,14 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 			var ranges int
 			const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
 			if err := db.QueryRow(q).Scan(&ranges); err != nil {
-				t.Fatalf("failed to get range count: %v", err)
+				// TODO(rafi): Remove experimental_ranges query once we stop testing
+				// 19.1 or earlier.
+				if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
+					err = db.QueryRow("SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]").Scan(&ranges)
+				}
+				if err != nil {
+					t.Fatalf("failed to get range count: %v", err)
+				}
 			}
 			return ranges
 		}
