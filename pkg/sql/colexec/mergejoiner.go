@@ -69,7 +69,6 @@ type mjBuilderState struct {
 // loops to materialize the cross product. Useful for picking up where we left
 // off.
 type mjBuilderCrossProductState struct {
-	colIdx         int
 	groupsIdx      int
 	curSrcStartIdx int
 	numRepeatsIdx  int
@@ -249,7 +248,6 @@ func NewMergeJoinOp(
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
 const (
-	zeroMJCPColIdx    = 0
 	zeroMJCPGroupsIdx = 0
 	// The sentinel value for curSrcStartIdx is -1, as this:
 	// a) indicates that a src has not been started
@@ -260,7 +258,6 @@ const (
 
 // Package level struct for easy access to the MJCP zero state.
 var zeroMJBuilderState = mjBuilderCrossProductState{
-	colIdx:         zeroMJCPColIdx,
 	groupsIdx:      zeroMJCPGroupsIdx,
 	curSrcStartIdx: zeroMJCPCurSrcStartIdx,
 	numRepeatsIdx:  zeroMJCPNumRepeatsIdx,
@@ -268,7 +265,6 @@ var zeroMJBuilderState = mjBuilderCrossProductState{
 
 func (s *mjBuilderCrossProductState) reset() {
 	s.setBuilderColumnState(zeroMJBuilderState)
-	s.colIdx = zeroMJCPColIdx
 }
 
 func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCrossProductState) {
@@ -368,13 +364,14 @@ type mergeJoinBase struct {
 }
 
 func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
-	if len(o.right.outCols) == 0 {
-		// We do not have output columns from the right input in case of LEFT SEMI
-		// and LEFT ANTI joins, and we should not have the corresponding columns in
-		// the output batch, so we simply return the types of the left input.
-		return o.left.sourceTypes
+	outColTypes := make([]coltypes.T, 0, len(o.left.outCols)+len(o.right.outCols))
+	for _, leftOutCol := range o.left.outCols {
+		outColTypes = append(outColTypes, o.left.sourceTypes[leftOutCol])
 	}
-	return append(o.left.sourceTypes, o.right.sourceTypes...)
+	for _, rightOutCol := range o.right.outCols {
+		outColTypes = append(outColTypes, o.right.sourceTypes[rightOutCol])
+	}
+	return outColTypes
 }
 
 func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {

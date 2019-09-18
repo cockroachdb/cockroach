@@ -896,3 +896,42 @@ SELECT * FROM t_case_null WHERE NULL AND x = 0
 query I
 SELECT * FROM t_case_null WHERE x = 0 AND NULL
 ----
+
+
+# Regression test for #40732.
+statement ok
+CREATE TABLE t40732 AS SELECT g::INT8 AS _int8,
+                              g::FLOAT8 AS _float8,
+                              '2001-01-01'::DATE
+                              + g AS _date,
+                              g % 2 = 1 AS _bool,
+                              g::DECIMAL AS _decimal,
+                              g::STRING AS _string,
+                              g::STRING::BYTES AS _bytes
+                         FROM generate_series(1, 5) AS g
+
+statement ok
+INSERT INTO t40732 DEFAULT VALUES
+
+query I
+SELECT *
+  FROM (
+          SELECT tab_1541._int8 AS col_2976
+            FROM t40732 AS tab_1538
+            JOIN t40732 AS tab_1539
+            JOIN t40732 AS tab_1540 ON
+                  tab_1539._float8 = tab_1540._float8
+            JOIN t40732 AS tab_1541 ON
+                  tab_1540._int8 = tab_1541._int8 ON
+                  tab_1538._float8 = tab_1540._float8,
+                 t40732 AS tab_1542
+           WHERE tab_1542._bool > tab_1540._bool
+       )
+ORDER BY col_2976
+----
+2
+2
+2
+4
+4
+4
