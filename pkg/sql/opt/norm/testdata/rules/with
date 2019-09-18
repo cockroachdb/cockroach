@@ -30,6 +30,7 @@ with &1 (foo)
       ├── cardinality: [2 - 2]
       ├── stats: [rows=2]
       ├── cost: 0.05
+      ├── prune: (4)
       ├── cte-uses: map[1:2]
       ├── with-scan &1 (foo)
       │    ├── columns: "?column?":2(int!null)

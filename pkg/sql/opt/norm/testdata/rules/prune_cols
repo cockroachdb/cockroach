@@ -2808,3 +2808,43 @@ anti-join-apply
  │         └── abcde.a = k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
  └── filters
       └── abcde.a = "family".a [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# --------------------------------------------------
+# PruneUnionAllCols
+# --------------------------------------------------
+
+opt expect=PruneUnionAllCols
+SELECT a FROM (
+  SELECT a, b FROM abcde
+  UNION ALL
+  SELECT * FROM xy
+)
+----
+union-all
+ ├── columns: a:8(int!null)
+ ├── left columns: abcde.a:1(int)
+ ├── right columns: x:6(int)
+ ├── scan abcde@bc
+ │    ├── columns: abcde.a:1(int!null)
+ │    └── key: (1)
+ └── scan xy
+      ├── columns: x:6(int!null)
+      └── key: (6)
+
+opt expect=PruneUnionAllCols
+SELECT count(*) FROM (
+  SELECT a, b FROM abcde
+  UNION ALL
+  SELECT * FROM xy
+)
+----
+scalar-group-by
+ ├── columns: count:10(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(10)
+ ├── union-all
+ │    ├── scan abcde@bc
+ │    └── scan xy
+ └── aggregations
+      └── count-rows [type=int]

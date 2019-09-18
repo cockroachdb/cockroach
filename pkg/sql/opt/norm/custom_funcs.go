@@ -1172,6 +1172,44 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 	return items
 }
 
+// PruneSetPrivate returns a SetPrivate based on the given SetPrivate, but with unneeded input
+// and output columns discarded.
+func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *memo.SetPrivate {
+	prunedSet := memo.SetPrivate{}
+	for idx, outCol := range set.OutCols {
+		if needed.Contains(outCol) {
+			prunedSet.LeftCols = append(prunedSet.LeftCols, set.LeftCols[idx])
+			prunedSet.RightCols = append(prunedSet.RightCols, set.RightCols[idx])
+			prunedSet.OutCols = append(prunedSet.OutCols, outCol)
+		}
+	}
+	return &prunedSet
+}
+
+// NeededColMapLeft returns the subset of a SetPrivate's LeftCols that corresponds to the
+// needed subset of OutCols. This is useful for pruning columns in set operations.
+func (c *CustomFuncs) NeededColMapLeft(needed opt.ColSet, set *memo.SetPrivate) opt.ColSet {
+	return c.neededColMapSide(needed, set.OutCols, set.LeftCols)
+}
+
+// NeededColMapRight returns the subset of a SetPrivate's RightCols that corresponds to the
+// needed subset of OutCols. This is useful for pruning columns in set operations.
+func (c *CustomFuncs) NeededColMapRight(needed opt.ColSet, set *memo.SetPrivate) opt.ColSet {
+	return c.neededColMapSide(needed, set.OutCols, set.RightCols)
+}
+
+// neededColMapSide implements the logic for NeededColMapLeft and NeededColMapRight.
+func (c *CustomFuncs) neededColMapSide(needed opt.ColSet, toList, fromList opt.ColList) opt.ColSet {
+	neededFromCols := opt.ColSet{}
+	for idx, fromCol := range fromList {
+		toCol := toList[idx]
+		if needed.Contains(toCol) {
+			neededFromCols.Add(fromCol)
+		}
+	}
+	return neededFromCols
+}
+
 // CanMapOnSetOp determines whether the filter can be mapped to either
 // side of a set operator.
 func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {

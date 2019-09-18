@@ -30,7 +30,6 @@
 # at the end of their journey. See the PruneCols comment for more details.
 # =============================================================================
 
-
 # PruneProjectCols discards columns from a nested project which are not used by
 # the outer project.
 [PruneProjectCols, Normalize]
@@ -523,3 +522,31 @@
     $passthrough
 )
 
+# PruneUnionAllCols prunes columns from the left and right input relations that
+# are never used. Since UNION ALL preserves duplicates, any column may be pruned
+# if it is not needed, which is not generally true of set operators.
+[PruneUnionAllCols, Normalize]
+(Project
+    (UnionAll
+        $left:*
+        $right:*
+        $colmap:*)
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $left
+            $neededLeft:(NeededColMapLeft
+                $needed:(UnionCols
+                    (ProjectionOuterCols $projections) $passthrough
+                )
+                $colmap
+            )
+        ) &
+        (CanPruneCols $right $neededRight:(NeededColMapRight $needed $colmap))
+)
+=>
+(UnionAll
+    (PruneCols $left $neededLeft)
+    (PruneCols $right $neededRight)
+    (PruneSetPrivate $needed $colmap)
+)
