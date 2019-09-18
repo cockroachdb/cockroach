@@ -349,6 +349,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	statusHeaderNoLocality := []string{
 		"id", "address", "sql_address", "build", "started_at", "updated_at", "is_available", "is_live",
 	}
+	statusHeaderNoLocalityNoSQLAddress := []string{
+		"id", "address", "build", "started_at", "updated_at", "is_available", "is_live",
+	}
 	getStatusCsvOutput := func(ids []string, numCols int) [][]string {
 		var res [][]string
 		switch numCols {
@@ -356,8 +359,16 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 			res = append(res, statusHeaderNoLocality)
 		case len(statusHeaderWithLocality):
 			res = append(res, statusHeaderWithLocality)
+		case len(statusHeaderNoLocalityNoSQLAddress):
+			res = append(res, statusHeaderNoLocalityNoSQLAddress)
 		default:
-			t.Fatalf("Expected status output numCols to be either %d or %d, found %d", len(statusHeaderNoLocality), len(statusHeaderWithLocality), numCols)
+			t.Fatalf(
+				"Expected status output numCols to be either %d, %d or %d, found %d",
+				len(statusHeaderNoLocalityNoSQLAddress),
+				len(statusHeaderNoLocality),
+				len(statusHeaderWithLocality),
+				numCols,
+			)
 		}
 		for _, id := range ids {
 			build := []string{id}
