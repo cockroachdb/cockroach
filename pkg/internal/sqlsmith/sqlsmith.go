@@ -58,6 +58,7 @@ type Smither struct {
 	db             *gosql.DB
 	lock           syncutil.RWMutex
 	tables         []*tableRef
+	columns        map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
 	indexes        map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	nameCounts     map[string]int
 	alters         *WeightedSampler
@@ -336,6 +337,7 @@ CREATE TABLE IF NOT EXISTS tab_orig AS
 		generate_series(1, 5) AS g;
 
 INSERT INTO tab_orig DEFAULT VALUES;
+CREATE INDEX on tab_orig (_int8, _float8, _date);
 `
 
 	// VecSeedTable is like SeedTable except only types supported by vectorized
@@ -354,5 +356,6 @@ CREATE TABLE IF NOT EXISTS tab_orig AS
 		generate_series(1, 5) AS g;
 
 INSERT INTO tab_orig DEFAULT VALUES;
+CREATE INDEX on tab_orig (_int8, _float8, _date);
 `
 )
