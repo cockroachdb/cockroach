@@ -26,7 +26,6 @@ import (
 // RowFetcher is an interface used to abstract a row fetcher so that a stat
 // collector wrapper can be plugged in.
 type RowFetcher interface {
-	RowSource
 	StartScan(
 		_ context.Context, _ *client.Txn, _ roachpb.Spans, limitBatches bool, limitHint int64, traceKV bool,
 	) error
@@ -40,6 +39,9 @@ type RowFetcher interface {
 		limitHint int64,
 		traceKV bool,
 	) error
+
+	NextRow(ctx context.Context) (
+		sqlbase.EncDatumRow, *sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error)
 
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)
