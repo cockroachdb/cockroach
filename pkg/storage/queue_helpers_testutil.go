@@ -23,7 +23,7 @@ import (
 func (bq *baseQueue) testingAdd(
 	ctx context.Context, repl replicaInQueue, priority float64,
 ) (bool, error) {
-	return bq.addInternal(ctx, repl.Desc(), priority)
+	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
 }
 
 func forceScanAndProcess(s *Store, q *baseQueue) error {
