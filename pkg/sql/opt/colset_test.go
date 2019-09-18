@@ -37,3 +37,30 @@ func BenchmarkColSet(b *testing.B) {
 		}
 	})
 }
+
+func TestTranslateColSet(t *testing.T) {
+	test := func(t *testing.T, colSetIn ColSet, from ColList, to ColList, expected ColSet) {
+		t.Helper()
+
+		actual := TranslateColSet(colSetIn, from, to)
+		if !actual.Equals(expected) {
+			t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
+		}
+	}
+
+	colSetIn, from, to := MakeColSet(1, 2, 3), ColList{1, 2, 3}, ColList{4, 5, 6}
+	test(t, colSetIn, from, to, MakeColSet(4, 5, 6))
+
+	colSetIn, from, to = MakeColSet(2, 3), ColList{1, 2, 3}, ColList{4, 5, 6}
+	test(t, colSetIn, from, to, MakeColSet(5, 6))
+
+	// colSetIn and colSetOut might not be the same length.
+	colSetIn, from, to = MakeColSet(1, 2), ColList{1, 1, 2}, ColList{4, 5, 6}
+	test(t, colSetIn, from, to, MakeColSet(4, 5, 6))
+
+	colSetIn, from, to = MakeColSet(1, 2, 3), ColList{1, 2, 3}, ColList{4, 5, 4}
+	test(t, colSetIn, from, to, MakeColSet(4, 5))
+
+	colSetIn, from, to = MakeColSet(2), ColList{1, 2, 2}, ColList{4, 5, 6}
+	test(t, colSetIn, from, to, MakeColSet(5, 6))
+}

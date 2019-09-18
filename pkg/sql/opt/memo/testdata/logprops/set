@@ -183,6 +183,7 @@ union
  │    ├── left columns: column1:1(int)
  │    ├── right columns: column1:2(int)
  │    ├── cardinality: [5 - 5]
+ │    ├── prune: (3)
  │    ├── values
  │    │    ├── columns: column1:1(int!null)
  │    │    ├── cardinality: [3 - 3]

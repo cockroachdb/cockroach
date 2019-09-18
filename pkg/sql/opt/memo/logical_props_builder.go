@@ -764,7 +764,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *pr
 
 	// Not Null Columns
 	// ----------------
-	rel.NotNullCols = translateColSet(bindingProps.NotNullCols, withScan.InCols, withScan.OutCols)
+	rel.NotNullCols = opt.TranslateColSet(bindingProps.NotNullCols, withScan.InCols, withScan.OutCols)
 
 	// Outer Columns
 	// -------------
