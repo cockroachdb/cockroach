@@ -1549,3 +1549,16 @@ render     ·            ·
  └── scan  ·            ·
 ·          table        t4@primary
 ·          spans        /10-/11
+
+# Regression test for #40890: a point lookup on a single column family of a
+# table should still work properly in the face of a constraint disjunction.
+query TTT
+EXPLAIN SELECT a FROM t4 WHERE a in (1, 5) and b in (1, 5)
+----
+·          distributed  false
+·          vectorized   true
+render     ·            ·
+ └── scan  ·            ·
+·          table        t4@primary
+·          spans        /1/1/0-/1/1/1 /1/5/0-/1/5/1 /5/1/0-/5/1/1 /5/5/0-/5/5/1
+·          parallel     ·

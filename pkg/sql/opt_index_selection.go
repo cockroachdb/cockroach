@@ -167,7 +167,7 @@ func appendSpansFromConstraintSpan(
 		s.Key.Equal(s.EndKey) {
 		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(tableDesc.ColumnIdxMap(), tableDesc.Families, needed)
 		if len(neededFamilyIDs) < len(tableDesc.Families) {
-			return sqlbase.SplitSpanIntoSeparateFamilies(s, neededFamilyIDs), nil
+			return append(spans, sqlbase.SplitSpanIntoSeparateFamilies(s, neededFamilyIDs)...), nil
 		}
 	}
 
