@@ -1505,6 +1505,12 @@ alter_zone_partition_stmt:
     s.AllIndexes = true
     $$.val = s
   }
+| ALTER PARTITION partition_name OF TABLE table_name '@' error
+  {
+    err := errors.New("index name should not be specified in ALTER PARTITION ... OF TABLE")
+    err = errors.WithHint(err, "try ALTER PARTITION ... OF INDEX")
+    return setErr(sqllex, err)
+  }
 | ALTER PARTITION partition_name OF TABLE table_name '@' '*' error
   {
     err := errors.New("index wildcard unsupported in ALTER PARTITION ... OF TABLE")
