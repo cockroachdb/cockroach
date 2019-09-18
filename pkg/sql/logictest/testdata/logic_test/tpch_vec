@@ -665,13 +665,13 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
                   │       │ ├ *colexec.colBatchScan
                   │       │ └ *colexec.colBatchScan
                   │       ├ *colexec.constBoolOp
-                  │       │ └ *colexec.andOp
+                  │       │ └ *colexec.andProjOp
+                  │       │   ├ *colexec.projEQBytesBytesConstOp
                   │       │   └ *colexec.projEQBytesBytesConstOp
-                  │       │     └ *colexec.projEQBytesBytesConstOp
                   │       ├ *colexec.constBoolOp
-                  │       │ └ *colexec.andOp
+                  │       │ └ *colexec.andProjOp
+                  │       │   ├ *colexec.projEQBytesBytesConstOp
                   │       │   └ *colexec.projEQBytesBytesConstOp
-                  │       │     └ *colexec.projEQBytesBytesConstOp
                   │       └ *colexec.constBoolOp
                   └ *colexec.colBatchScan
 
@@ -877,38 +877,35 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
               │ └ *colexec.selGEInt64Int64ConstOp
               │   └ *colexec.colBatchScan
               ├ *colexec.constBoolOp
-              │ └ *colexec.caseOp
-              │   ├ *colexec.constBoolOp
-              │   │ └ *colexec.andOp
-              │   │   └ *colexec.projLEInt64Int64ConstOp
-              │   │     └ *colexec.andOp
-              │   │       └ *colexec.projLEFloat64Float64ConstOp
-              │   │         └ *colexec.andOp
-              │   │           └ *colexec.projGEFloat64Float64ConstOp
-              │   │             └ *colexec.andOp
-              │   │               └ *colexec.projectInOpBytes
-              │   │                 └ *colexec.projEQBytesBytesConstOp
-              │   ├ *colexec.constBoolOp
-              │   │ └ *colexec.andOp
-              │   │   └ *colexec.projLEInt64Int64ConstOp
-              │   │     └ *colexec.andOp
-              │   │       └ *colexec.projLEFloat64Float64ConstOp
-              │   │         └ *colexec.andOp
-              │   │           └ *colexec.projGEFloat64Float64ConstOp
-              │   │             └ *colexec.andOp
-              │   │               └ *colexec.projectInOpBytes
-              │   │                 └ *colexec.projEQBytesBytesConstOp
-              │   └ *colexec.constBoolOp
+              │ └ *colexec.orProjOp
+              │   ├ *colexec.andProjOp
+              │   │ ├ *colexec.andProjOp
+              │   │ │ ├ *colexec.andProjOp
+              │   │ │ │ ├ *colexec.andProjOp
+              │   │ │ │ │ ├ *colexec.projEQBytesBytesConstOp
+              │   │ │ │ │ └ *colexec.projectInOpBytes
+              │   │ │ │ └ *colexec.projGEFloat64Float64ConstOp
+              │   │ │ └ *colexec.projLEFloat64Float64ConstOp
+              │   │ └ *colexec.projLEInt64Int64ConstOp
+              │   └ *colexec.andProjOp
+              │     ├ *colexec.andProjOp
+              │     │ ├ *colexec.andProjOp
+              │     │ │ ├ *colexec.andProjOp
+              │     │ │ │ ├ *colexec.projEQBytesBytesConstOp
+              │     │ │ │ └ *colexec.projectInOpBytes
+              │     │ │ └ *colexec.projGEFloat64Float64ConstOp
+              │     │ └ *colexec.projLEFloat64Float64ConstOp
+              │     └ *colexec.projLEInt64Int64ConstOp
               ├ *colexec.constBoolOp
-              │ └ *colexec.andOp
+              │ └ *colexec.andProjOp
+              │   ├ *colexec.andProjOp
+              │   │ ├ *colexec.andProjOp
+              │   │ │ ├ *colexec.andProjOp
+              │   │ │ │ ├ *colexec.projEQBytesBytesConstOp
+              │   │ │ │ └ *colexec.projectInOpBytes
+              │   │ │ └ *colexec.projGEFloat64Float64ConstOp
+              │   │ └ *colexec.projLEFloat64Float64ConstOp
               │   └ *colexec.projLEInt64Int64ConstOp
-              │     └ *colexec.andOp
-              │       └ *colexec.projLEFloat64Float64ConstOp
-              │         └ *colexec.andOp
-              │           └ *colexec.projGEFloat64Float64ConstOp
-              │             └ *colexec.andOp
-              │               └ *colexec.projectInOpBytes
-              │                 └ *colexec.projEQBytesBytesConstOp
               └ *colexec.constBoolOp
 
 # Query 20
