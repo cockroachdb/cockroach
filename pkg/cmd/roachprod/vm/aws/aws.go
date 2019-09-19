@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
@@ -137,7 +136,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"-ebs-volume-type=io1")
 
 	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", defaultCreateZones,
-		"aws availability zones to use for cluster creation, at most one zone per region will be used")
+		"aws availability zones to use for cluster creation, the cluster will be spread out evenly by region (if geo) and then by AZ within a region")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -217,28 +216,35 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return errors.Errorf("Please specify a valid region.")
 	}
 
-	// Only use one region if we're not creating a distributed cluster
+	// Only use one region if we're not creating a distributed cluster.
 	if !opts.GeoDistributed {
 		regions = []string{regions[0]}
 	}
 
-	// Choose a random availability zone for each region.
-	zones := make([]string, len(regions))
+	// Distribute the nodes amongst availability zones.
+	zonesPerRegion := len(names) / len(regions)
+	leftover := len(names) % len(regions)
+	var zones []string
 	for i, region := range regions {
 		regionZones, err := p.regionZones(region, p.opts.CreateZones)
 		if err != nil {
 			return err
 		}
-		zones[i] = regionZones[rand.Int31n(int32(len(regionZones)))]
+		totalZonesPerRegion := zonesPerRegion
+		if leftover > i {
+			totalZonesPerRegion++
+		}
+		for j := 0; j < totalZonesPerRegion; j++ {
+			zoneIndex := j % len(regionZones)
+			zones = append(zones, regionZones[zoneIndex])
+		}
 	}
-	nodeZones := vm.ZonePlacement(len(zones), len(names))
-
 	var g errgroup.Group
 	const rateLimit = 2 // per second
 	limiter := rate.NewLimiter(rateLimit, 2 /* buckets */)
 	for i := range names {
 		capName := names[i]
-		placement := zones[nodeZones[i]]
+		placement := zones[i]
 		res := limiter.Reserve()
 		g.Go(func() error {
 			time.Sleep(res.Delay())
