@@ -359,6 +359,18 @@ func (rf *Fetcher) Init(
 			}
 		}
 
+		// In order to track #40410 more effectively, check that the contents of
+		// table.neededValueColsByIdx are valid.
+		for idx, ok := table.neededValueColsByIdx.Next(0); ok; idx, ok = table.neededValueColsByIdx.Next(idx + 1) {
+			if idx >= len(table.row) || idx < 0 {
+				return errors.AssertionFailedf(
+					"neededValueColsByIdx contains an invalid index. column %d requested, but table has %d columns",
+					idx,
+					len(table.row),
+				)
+			}
+		}
+
 		// - If there is more than one table, we have to decode the index key to
 		//   figure out which table the row belongs to.
 		// - If there are interleaves, we need to read the index key in order to
