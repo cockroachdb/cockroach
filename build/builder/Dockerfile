@@ -22,6 +22,8 @@ FROM ubuntu:xenial-20170915
 # patch - crosstool-ng
 # texinfo - crosstool-ng
 # xz-utils - crosstool-ng / msan
+# libxml2-dev - osxcross
+# libssl-dev - osxcross
 RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     autoconf \
@@ -41,6 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     patch \
     texinfo \
     xz-utils \
+    libxml2-dev \
+    libssl-dev \
  && apt-get clean
 
 RUN mkdir crosstool-ng \
