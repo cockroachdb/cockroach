@@ -400,8 +400,6 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 	return t.buildVersion.AtLeast(vers)
 }
 
-var _ = (*test)(nil).IsBuildVersion // avoid unused lint
-
 // teamCityEscape escapes a string for use as <value> in a key='<value>' attribute
 // in TeamCity build output marker.
 // Documentation here: https://confluence.jetbrains.com/display/TCD10/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-Escapedvalues
