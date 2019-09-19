@@ -299,7 +299,9 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
-				Extra:      "--wait=false --tolerate-errors",
+				// We limit the number of workers because the default results in a lot
+				// of connections which can lead to OOM issues (see #40566).
+				Extra: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
 				During: func(ctx context.Context) error {
 					return runAndLogStmts(ctx, t, c, "addindex", []string{
 						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
@@ -409,7 +411,9 @@ func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Durati
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
-				Extra:      "--wait=false --tolerate-errors",
+				// We limit the number of workers because the default results in a lot
+				// of connections which can lead to OOM issues (see #40566).
+				Extra: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
 				During: func(ctx context.Context) error {
 					if t.IsBuildVersion(`v19.2.0`) {
 						if err := runAndLogStmts(ctx, t, c, "mixed-schema-changes-19.2", []string{
