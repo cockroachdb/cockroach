@@ -185,6 +185,12 @@ type Config struct {
 	// existing cluster into using a new cluster name.
 	DisableClusterNameVerification bool
 
+	// EnforceClusterNameInCertificate, when set, requires the
+	// cluster name to match one of the cluster names specified
+	// in client certificates.
+	// If either is specified, both must be set.
+	EnforceClusterNameInCertificate bool
+
 	// SplitListenSQL indicates whether to listen for SQL
 	// clients on a separate address from RPC requests.
 	SplitListenSQL bool
@@ -249,6 +255,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
+	cfg.EnforceClusterNameInCertificate = false
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.

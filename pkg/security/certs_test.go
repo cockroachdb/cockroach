@@ -125,7 +125,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 	// Try generating node certs without CA certs present.
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, false, []string{"localhost"},
+		512, time.Hour*48, false, []string{"localhost"}, nil,
 	); err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
@@ -139,7 +139,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, false, []string{"localhost"},
+		512, time.Hour*48, false, []string{"localhost"}, nil,
 	); err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -159,14 +159,14 @@ func generateBaseCerts(certsDir string) error {
 
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, true, []string{"127.0.0.1"},
+		512, time.Hour*48, true, []string{"127.0.0.1"}, nil,
 	); err != nil {
 		return errors.Errorf("could not generate Node pair: %v", err)
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, true, security.RootUser, false,
+		512, time.Hour*48, true, security.RootUser, nil, false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}
@@ -190,7 +190,7 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, true, []string{"127.0.0.1"},
+		512, time.Hour*48, true, []string{"127.0.0.1"}, nil,
 	); err != nil {
 		return errors.Errorf("could not generate Node pair: %v", err)
 	}
@@ -204,14 +204,14 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		512, time.Hour*48, true, security.NodeUser, false,
+		512, time.Hour*48, true, security.NodeUser, nil, false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		512, time.Hour*48, true, security.RootUser, false,
+		512, time.Hour*48, true, security.RootUser, nil, false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}

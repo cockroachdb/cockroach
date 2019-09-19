@@ -375,10 +375,13 @@ func init() {
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
 		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification, false)
+
+		// Enforcement of cluster name (--cluster-name) in client (SQL and internal) certificates.
+		BoolFlag(f, &baseCfg.EnforceClusterNameInCertificate, cliflags.EnforceClusterNameInCertificate, false)
+
 		// We also hide it from help for 'start-single-node'.
 		if cmd == startSingleNodeCmd {
 			_ = f.MarkHidden(cliflags.Join.Name)
-			_ = f.MarkHidden(cliflags.ClusterName.Name)
 			_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
 		}
 
@@ -432,6 +435,8 @@ func init() {
 	for _, cmd := range []*cobra.Command{createNodeCertCmd, createClientCertCmd} {
 		f := cmd.Flags()
 		DurationFlag(f, &certificateLifetime, cliflags.CertificateLifetime, defaultCertLifetime)
+		// Only the node and client certificates have a cluster name.
+		VarFlag(f, clusterNameSetter{&certificateClusterName}, cliflags.CertificateClusterName)
 	}
 
 	// The remaining flags are shared between all cert-generating functions.

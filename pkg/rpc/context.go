@@ -110,31 +110,25 @@ func spanInclusionFuncForClient(
 	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
 }
 
-func requireSuperUser(ctx context.Context) error {
-	// TODO(marc): grpc's authentication model (which gives credential access in
-	// the request handler) doesn't really fit with the current design of the
-	// security package (which assumes that TLS state is only given at connection
-	// time) - that should be fixed.
+// checkTLSSuperUser is called for secure mode only. It checks the request context
+// for a valid super user ("node" or "root") as well as cluster name if specified at startup.
+func checkTLSSuperUser(ctx context.Context, authCtx security.AuthContext) error {
 	if grpcutil.IsLocalRequestContext(ctx) {
 		// This is an in-process request. Bypass authentication check.
-	} else if peer, ok := peer.FromContext(ctx); ok {
-		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
-			certUser, err := security.GetCertificateUser(&tlsInfo.State)
-			if err != nil {
-				return err
-			}
-			// TODO(benesch): the vast majority of RPCs should be limited to just
-			// NodeUser. This is not a security concern, as RootUser has access to
-			// read and write all data, merely good hygiene. For example, there is
-			// no reason to permit the root user to send raw Raft RPCs.
-			if certUser != security.NodeUser && certUser != security.RootUser {
-				return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
-			}
-		}
-	} else {
+		return nil
+	}
+
+	peer, ok := peer.FromContext(ctx)
+	if !ok {
+		return errors.New("internal authentication error: peer info is not available in request context")
+	}
+
+	tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
+	if !ok {
 		return errors.New("internal authentication error: TLSInfo is not available in request context")
 	}
-	return nil
+
+	return security.AuthenticateRPC(authCtx, &tlsInfo.State)
 }
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
@@ -240,11 +234,18 @@ func NewServerWithInterceptor(
 	}
 
 	if !ctx.Insecure {
+		// Authentication context for the node. Does not change during its lifetime.
+		authContext := security.AuthContext{
+			Insecure:                        false,
+			ClusterName:                     ctx.ClusterName(),
+			EnforceClusterNameInCertificate: ctx.enforceClusterNameInCertificate,
+		}
+
 		prevUnaryInterceptor := unaryInterceptor
 		unaryInterceptor = func(
 			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 		) (interface{}, error) {
-			if err := requireSuperUser(ctx); err != nil {
+			if err := checkTLSSuperUser(ctx, authContext); err != nil {
 				return nil, err
 			}
 			if prevUnaryInterceptor != nil {
@@ -256,7 +257,7 @@ func NewServerWithInterceptor(
 		streamInterceptor = func(
 			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 		) error {
-			if err := requireSuperUser(stream.Context()); err != nil {
+			if err := checkTLSSuperUser(stream.Context(), authContext); err != nil {
 				return err
 			}
 			if prevStreamInterceptor != nil {
@@ -397,8 +398,9 @@ type Context struct {
 	NodeID    base.NodeIDContainer
 	version   *cluster.ExposedClusterVersion
 
-	clusterName                    string
-	disableClusterNameVerification bool
+	clusterName                     string
+	disableClusterNameVerification  bool
+	enforceClusterNameInCertificate bool
 
 	metrics Metrics
 
@@ -459,11 +461,12 @@ func NewContextWithTestingKnobs(
 		breakerClock: breakerClock{
 			clock: hlcClock,
 		},
-		rpcCompression:                 enableRPCCompression,
-		version:                        version,
-		clusterName:                    baseCtx.ClusterName,
-		disableClusterNameVerification: baseCtx.DisableClusterNameVerification,
-		testingKnobs:                   knobs,
+		rpcCompression:                  enableRPCCompression,
+		version:                         version,
+		clusterName:                     baseCtx.ClusterName,
+		disableClusterNameVerification:  baseCtx.DisableClusterNameVerification,
+		enforceClusterNameInCertificate: baseCtx.EnforceClusterNameInCertificate,
+		testingKnobs:                    knobs,
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))

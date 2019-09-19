@@ -30,14 +30,17 @@ import (
 const (
 	// Make certs valid a day before to handle clock issues, specifically
 	// boot2docker: https://github.com/boot2docker/boot2docker/issues/69
-	validFrom     = -time.Hour * 24
-	maxPathLength = 1
-	caCommonName  = "Cockroach CA"
+	validFrom         = -time.Hour * 24
+	maxPathLength     = 1
+	caCommonName      = "Cockroach CA"
+	clusternamePrefix = "cluster-name="
 )
 
 // newTemplate returns a partially-filled template.
-// It should be further populated based on whether the cert is for a CA or node.
-func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, error) {
+// It should be further populated based on the type of certificate (CA/server/client).
+func newTemplate(
+	commonName string, clusterNames []string, lifetime time.Duration,
+) (*x509.Certificate, error) {
 	// Generate a random serial number.
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -49,11 +52,17 @@ func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, 
 	notBefore := now.Add(validFrom)
 	notAfter := now.Add(lifetime)
 
+	populatedClusterNames := make([]string, len(clusterNames))
+	for i, n := range clusterNames {
+		populatedClusterNames[i] = clusternamePrefix + n
+	}
+
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Cockroach"},
-			CommonName:   commonName,
+			Organization:       []string{"Cockroach"},
+			CommonName:         commonName,
+			OrganizationalUnit: populatedClusterNames,
 		},
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
@@ -67,7 +76,7 @@ func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, 
 // GenerateCA generates a CA certificate and signs it using the signer (a private key).
 // It returns the DER-encoded certificate.
 func GenerateCA(signer crypto.Signer, lifetime time.Duration) ([]byte, error) {
-	template, err := newTemplate(caCommonName, lifetime)
+	template, err := newTemplate(caCommonName, nil, lifetime)
 	if err != nil {
 		return nil, err
 	}
@@ -109,15 +118,17 @@ func checkLifetimeAgainstCA(cert, ca *x509.Certificate) error {
 // GenerateServerCert generates a server certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the node public key, the certificate lifetime,
 // and the list of hosts/ip addresses this certificate applies to.
+// If non-empty, the list of `clusterNames` is added as repeated `cluster-name=<name>` to the subject's OU.
 func GenerateServerCert(
 	caCert *x509.Certificate,
 	caPrivateKey crypto.PrivateKey,
 	nodePublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	hosts []string,
+	clusterNames []string,
 ) ([]byte, error) {
 	// Create template for user "NodeUser".
-	template, err := newTemplate(NodeUser, lifetime)
+	template, err := newTemplate(NodeUser, clusterNames, lifetime)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +138,7 @@ func GenerateServerCert(
 		return nil, err
 	}
 
-	// Only server authentication is allowed.
+	// Dual-purpose certificate: allow server and client authentication.
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
@@ -156,7 +167,7 @@ func GenerateUIServerCert(
 	hosts []string,
 ) ([]byte, error) {
 	// Use the first host as the CN. We still place all in the alternative subject name.
-	template, err := newTemplate(hosts[0], lifetime)
+	template, err := newTemplate(hosts[0], nil, lifetime)
 	if err != nil {
 		return nil, err
 	}
@@ -187,21 +198,22 @@ func GenerateUIServerCert(
 // GenerateClientCert generates a client certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the client public key, the certificate lifetime,
 // and the username.
+// If non-empty, the list of `clusterNames` is added as repeated `cluster-name=<name>` to the subject's OU.
 func GenerateClientCert(
 	caCert *x509.Certificate,
 	caPrivateKey crypto.PrivateKey,
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	user string,
+	clusterNames []string,
 ) ([]byte, error) {
 
-	// TODO(marc): should we add extra checks?
 	if len(user) == 0 {
 		return nil, errors.Errorf("user cannot be empty")
 	}
 
 	// Create template for "user".
-	template, err := newTemplate(user, lifetime)
+	template, err := newTemplate(user, clusterNames, lifetime)
 	if err != nil {
 		return nil, err
 	}

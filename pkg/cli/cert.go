@@ -13,6 +13,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ var certificateLifetime time.Duration
 var allowCAKeyReuse bool
 var overwriteFiles bool
 var generatePKCS8Key bool
+var certificateClusterName string
 
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
@@ -132,9 +134,14 @@ Creation fails if the CA expiration time is before the desired certificate expir
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 // TODO(marc): there is currently no way to specify which CA cert to use if more
-// than one is present. We shoult try to load each certificate along with the key
+// than one is present. We should try to load each certificate along with the key
 // and pick the one that works. That way, the key specifies the certificate.
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
+	var clusterNames []string
+	if certificateClusterName != "" {
+		clusterNames = []string{certificateClusterName}
+	}
+
 	return errors.Wrap(
 		security.CreateNodePair(
 			baseCfg.SSLCertsDir,
@@ -142,7 +149,8 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 			keySize,
 			certificateLifetime,
 			overwriteFiles,
-			args),
+			args,
+			clusterNames),
 		"failed to generate node certificate and key")
 }
 
@@ -177,6 +185,11 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(err, "failed to generate client certificate and key")
 	}
 
+	var clusterNames []string
+	if certificateClusterName != "" {
+		clusterNames = []string{certificateClusterName}
+	}
+
 	return errors.Wrap(
 		security.CreateClientPair(
 			baseCfg.SSLCertsDir,
@@ -185,6 +198,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 			certificateLifetime,
 			overwriteFiles,
 			username,
+			clusterNames,
 			generatePKCS8Key),
 		"failed to generate client certificate and key")
 }
@@ -255,16 +269,26 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 	if cert := cm.NodeCert(); cert != nil {
 		var addresses []string
+		var clusterNames []string
 		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
 			addresses = cert.ParsedCertificates[0].DNSNames
 			for _, ip := range cert.ParsedCertificates[0].IPAddresses {
 				addresses = append(addresses, ip.String())
 			}
+
+			clusterNames = security.ClusterNamesFromList(cert.ParsedCertificates[0].Subject.OrganizationalUnit)
 		} else {
 			addresses = append(addresses, "<unknown>")
 		}
 
-		addRow(cert, fmt.Sprintf("addresses: %s", strings.Join(addresses, ",")))
+		var note string
+		if len(clusterNames) > 0 {
+			sort.Strings(clusterNames)
+			note = fmt.Sprintf("cluster names: %s, ", strings.Join(clusterNames, ","))
+		}
+		note += fmt.Sprintf("addresses: %s", strings.Join(addresses, ","))
+
+		addRow(cert, note)
 	}
 
 	if cert := cm.UICert(); cert != nil {
@@ -283,13 +307,21 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 	for _, cert := range cm.ClientCerts() {
 		var user string
+		var clusterNames []string
 		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
 			user = cert.ParsedCertificates[0].Subject.CommonName
+			clusterNames = security.ClusterNamesFromList(cert.ParsedCertificates[0].Subject.OrganizationalUnit)
 		} else {
 			user = "<unknown>"
 		}
 
-		addRow(cert, fmt.Sprintf("user: %s", user))
+		var note string
+		if len(clusterNames) > 0 {
+			sort.Strings(clusterNames)
+			note = fmt.Sprintf("cluster names: %s, ", strings.Join(clusterNames, ","))
+		}
+		note += fmt.Sprintf("user: %s", user)
+		addRow(cert, note)
 	}
 
 	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows, alignment))

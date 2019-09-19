@@ -12,6 +12,8 @@ package security
 
 import (
 	"crypto/tls"
+	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -23,11 +25,19 @@ const (
 	RootUser = "root"
 )
 
+// AuthContext describes the authentication settings for the cluster.
+// These are based on command-line flags and do not change during the lifetime of a node.
+type AuthContext struct {
+	Insecure                        bool
+	ClusterName                     string
+	EnforceClusterNameInCertificate bool
+}
+
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster.
 type UserAuthHook func(string, bool) error
 
-// GetCertificateUser extract the username from a client certificate.
+// GetCertificateUser extracts the username from a client certificate.
 func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	if tlsState == nil {
 		return "", errors.Errorf("request is not using TLS")
@@ -41,15 +51,87 @@ func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	return tlsState.PeerCertificates[0].Subject.CommonName, nil
 }
 
+// CheckCertificateClusterName checks whether the cluster-name is set in the peer certificate.
+func CheckCertificateClusterName(authCtx AuthContext, tlsState *tls.ConnectionState) error {
+	if tlsState == nil {
+		return errors.Errorf("request is not using TLS")
+	}
+	if len(tlsState.PeerCertificates) == 0 {
+		return errors.Errorf("no client certificates in request")
+	}
+
+	if !authCtx.EnforceClusterNameInCertificate {
+		return nil
+	}
+
+	// The cluster name given to the node must match exactly one of the cluster names
+	// in the peer certificate Subject.OrganizationUnit fields.
+	// If one is set but not the other, this counts as a mismatch.
+	certClusterNames := ClusterNamesFromList(tlsState.PeerCertificates[0].Subject.OrganizationalUnit)
+	nodeHasClusterName := len(authCtx.ClusterName) > 0
+	certHasClusterName := len(certClusterNames) > 0
+
+	// --cluster-name not specified.
+	if !nodeHasClusterName {
+		if certHasClusterName {
+			return fmt.Errorf("client certificate is valid for clusters [%s], but no --cluster-name set on node",
+				strings.Join(certClusterNames, ","))
+		}
+		return nil
+	}
+
+	// certificate has no cluster names specified.
+	if !certHasClusterName {
+		if nodeHasClusterName {
+			return fmt.Errorf("cluster name is %q, but client certificate does not specify any clusters",
+				authCtx.ClusterName)
+		}
+		return nil
+	}
+
+	// --cluster-name is set and certificate has cluster names.
+	for _, certName := range certClusterNames {
+		if certName == authCtx.ClusterName {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("cluster name is %q, but client certificate only allows clusters [%s]",
+		authCtx.ClusterName, strings.Join(certClusterNames, ","))
+}
+
+// AuthenticateRPC verifies that the TLS state from an RPC context is allowed.
+// authCtx.Insecure is not checked as this is only called in secure mode.
+func AuthenticateRPC(authCtx AuthContext, tlsState *tls.ConnectionState) error {
+	certUser, err := GetCertificateUser(tlsState)
+	if err != nil {
+		return err
+	}
+
+	// TODO(benesch): the vast majority of RPCs should be limited to just
+	// NodeUser. This is not a security concern, as RootUser has access to
+	// read and write all data, merely good hygiene. For example, there is
+	// no reason to permit the root user to send raw Raft RPCs.
+	if certUser != NodeUser && certUser != RootUser {
+		return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
+	}
+
+	return CheckCertificateClusterName(authCtx, tlsState)
+}
+
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
+func UserAuthCertHook(authCtx AuthContext, tlsState *tls.ConnectionState) (UserAuthHook, error) {
 	var certUser string
 
-	if !insecureMode {
+	if !authCtx.Insecure {
 		var err error
 		certUser, err = GetCertificateUser(tlsState)
 		if err != nil {
+			return nil, err
+		}
+
+		if err := CheckCertificateClusterName(authCtx, tlsState); err != nil {
 			return nil, err
 		}
 	}
@@ -65,7 +147,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
-		if insecureMode {
+		if authCtx.Insecure {
 			return nil
 		}
 
@@ -82,7 +164,9 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
-func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
+func UserAuthPasswordHook(
+	authCtx AuthContext, password string, hashedPassword []byte,
+) UserAuthHook {
 	return func(requestedUser string, clientConnection bool) error {
 		if len(requestedUser) == 0 {
 			return errors.New("user is missing")
@@ -92,7 +176,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 			return errors.New("password authentication is only available for client connections")
 		}
 
-		if insecureMode {
+		if authCtx.Insecure {
 			return nil
 		}
 

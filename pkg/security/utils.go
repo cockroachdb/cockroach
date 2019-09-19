@@ -10,7 +10,10 @@
 
 package security
 
-import "crypto/x509"
+import (
+	"crypto/x509"
+	"strings"
+)
 
 // KeyUsageToString returns the list of key usages described by the bitmask.
 // This list may not up-to-date with https://golang.org/pkg/crypto/x509/#KeyUsage
@@ -79,4 +82,24 @@ func ExtKeyUsageToString(eku x509.ExtKeyUsage) string {
 	default:
 		return "unknown"
 	}
+}
+
+// ClusterNamesFromList takes in a list of strings.
+// When a string of the form `cluster-name=<identifier>` is encountered, `<identifier>` is
+// added to the returned list.
+func ClusterNamesFromList(strList []string) []string {
+	ret := []string{}
+	prefixLength := len(clusternamePrefix)
+	for _, s := range strList {
+		if len(s) <= prefixLength {
+			// Skip strings that are too short of have an empty cluster name.
+			continue
+		}
+		if !strings.HasPrefix(s, clusternamePrefix) {
+			continue
+		}
+
+		ret = append(ret, s[prefixLength:])
+	}
+	return ret
 }

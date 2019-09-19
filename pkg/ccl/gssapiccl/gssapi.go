@@ -42,9 +42,9 @@ const (
 // https:github.com/postgres/postgres/blob/0f9cdd7dca694d487ab663d463b308919f591c02/src/backend/libpq/auth.c#L1090
 func authGSS(
 	c pgwire.AuthConn,
-	tlsState tls.ConnectionState,
-	insecure bool,
-	hashedPassword []byte,
+	_ tls.ConnectionState,
+	_ security.AuthContext,
+	_ []byte,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
