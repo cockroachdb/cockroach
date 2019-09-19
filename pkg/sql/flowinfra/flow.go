@@ -77,6 +77,9 @@ type Flow interface {
 	// IsLocal returns whether this flow does not have any remote execution.
 	IsLocal() bool
 
+	// IsVectorized returns whether this flow will run with vectorized execution.
+	IsVectorized() bool
+
 	// GetFlowCtx returns the flow context of this flow.
 	GetFlowCtx() *execinfra.FlowCtx
 
@@ -292,6 +295,11 @@ func (f *FlowBase) startInternal(ctx context.Context, doneFn func()) (context.Co
 // IsLocal returns whether this flow does not have any remote execution.
 func (f *FlowBase) IsLocal() bool {
 	return len(f.inboundStreams) == 0
+}
+
+// IsVectorized returns whether this flow will run with vectorized execution.
+func (f *FlowBase) IsVectorized() bool {
+	return f.isVectorized
 }
 
 // Start is part of the Flow interface.
