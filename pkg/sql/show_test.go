@@ -803,6 +803,9 @@ func TestShowSessionPrivileges(t *testing.T) {
 			}
 			counts[userName]++
 		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
 		if counts[security.RootUser] == 0 {
 			t.Fatalf("root session is unable to see its own session: %+v", counts)
 		}
@@ -823,6 +826,9 @@ func TestShowSessionPrivileges(t *testing.T) {
 				t.Fatal(err)
 			}
 			counts[userName]++
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
 		}
 		if counts["nonroot"] == 0 {
 			t.Fatal("non-root session is unable to see its own session")
