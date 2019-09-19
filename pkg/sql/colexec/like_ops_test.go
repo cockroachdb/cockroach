@@ -87,7 +87,7 @@ func TestLikeOperators(t *testing.T) {
 		},
 	} {
 		runTests(
-			t, []tuples{tc.tups}, tc.expected, orderedVerifier, []int{0},
+			t, []tuples{tc.tups}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
 				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)

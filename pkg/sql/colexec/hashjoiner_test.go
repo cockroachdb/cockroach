@@ -721,12 +721,7 @@ func TestHashJoiner(t *testing.T) {
 
 		for _, buildDistinct := range buildFlags {
 			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
-				cols := make([]int, len(tc.leftOutCols)+len(tc.rightOutCols))
-				for i := range cols {
-					cols[i] = i
-				}
-
-				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, cols, func(sources []Operator) (Operator, error) {
+				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
 					leftSource, rightSource := sources[0], sources[1]
 					return NewEqHashJoinerOp(
 						leftSource, rightSource,

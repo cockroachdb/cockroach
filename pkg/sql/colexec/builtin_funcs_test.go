@@ -63,7 +63,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 			inputCols:    []int{0},
 			inputTuples:  tuples{{1}, {-1}},
 			inputTypes:   []types.T{*types.Int},
-			outputTuples: tuples{{1}, {1}},
+			outputTuples: tuples{{1, 1}, {-1, 1}},
 			outputTypes:  []types.T{*types.Int, *types.Int},
 		},
 		{
@@ -72,7 +72,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 			inputCols:    []int{0},
 			inputTuples:  tuples{{"Hello"}, {"The"}},
 			inputTypes:   []types.T{*types.String},
-			outputTuples: tuples{{5}, {3}},
+			outputTuples: tuples{{"Hello", 5}, {"The", 3}},
 			outputTypes:  []types.T{*types.String, *types.Int},
 		},
 	}
@@ -81,7 +81,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier, []int{1},
+			runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
 				func(input []Operator) (Operator, error) {
 					expr, err := parser.ParseExpr(tc.expr)
 					if err != nil {

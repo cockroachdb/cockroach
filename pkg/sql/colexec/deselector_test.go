@@ -62,7 +62,7 @@ func TestDeselector(t *testing.T) {
 	for _, tc := range tcs {
 		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.sel, func(t *testing.T, input []Operator) {
 			op := NewDeselectorOp(input[0], tc.colTypes)
-			out := newOpTestOutput(op, []int{0}, tc.expected)
+			out := newOpTestOutput(op, tc.expected)
 
 			if err := out.Verify(); err != nil {
 				t.Fatal(err)
