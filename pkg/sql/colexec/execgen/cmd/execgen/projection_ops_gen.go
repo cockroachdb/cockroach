@@ -61,6 +61,12 @@ func replaceProjTmplVariables(tmpl string) string {
 	assignRe := regexp.MustCompile(`_ASSIGN\((.*),(.*),(.*)\)`)
 	tmpl = assignRe.ReplaceAllString(tmpl, "{{.Assign $1 $2 $3}}")
 
+	tmpl = strings.Replace(tmpl, "_HAS_NULLS", "$hasNulls", -1)
+	setProjectionRe := makeFunctionRegex("_SET_PROJECTION", 1)
+	tmpl = setProjectionRe.ReplaceAllString(tmpl, `{{template "setProjection" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
+	setSingleTupleProjectionRe := makeFunctionRegex("_SET_SINGLE_TUPLE_PROJECTION", 1)
+	tmpl = setSingleTupleProjectionRe.ReplaceAllString(tmpl, `{{template "setSingleTupleProjection" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
+
 	return tmpl
 }
 
@@ -92,7 +98,7 @@ func genProjNonConstOps(wr io.Writer) error {
 	s := string(t)
 	s = replaceProjTmplVariables(s)
 
-	tmpl, err := template.New("proj_non_const_ops").Parse(s)
+	tmpl, err := template.New("proj_non_const_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
@@ -122,12 +128,11 @@ func getLTypToRTypToOverloads() map[coltypes.T]map[coltypes.T][]*overload {
 func init() {
 	projConstOpsGenerator := func(isConstLeft bool) generator {
 		return func(wr io.Writer) error {
-			// First we get the template for the projection operators.
 			tmplString, err := getProjConstOpTmplString(isConstLeft)
 			if err != nil {
 				return err
 			}
-			tmpl, err := template.New("proj_const_ops").Parse(tmplString)
+			tmpl, err := template.New("proj_const_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(tmplString)
 			if err != nil {
 				return err
 			}

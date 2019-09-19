@@ -98,32 +98,10 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	// {{end}}
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec._RET_TYP()
-	if sel := batch.Selection(); sel != nil {
-		sel = sel[:n]
-		for _, i := range sel {
-			arg := execgen.UNSAFEGET(col, int(i))
-			// {{if _IS_CONST_LEFT}}
-			_ASSIGN("projCol[i]", "p.constArg", "arg")
-			// {{else}}
-			_ASSIGN("projCol[i]", "arg", "p.constArg")
-			// {{end}}
-		}
-	} else {
-		col = execgen.SLICE(col, 0, int(n))
-		colLen := execgen.LEN(col)
-		_ = _RET_UNSAFEGET(projCol, colLen-1)
-		for execgen.RANGE(i, col) {
-			arg := execgen.UNSAFEGET(col, i)
-			// {{if _IS_CONST_LEFT}}
-			_ASSIGN("projCol[i]", "p.constArg", "arg")
-			// {{else}}
-			_ASSIGN("projCol[i]", "arg", "p.constArg")
-			// {{end}}
-		}
-	}
 	if vec.Nulls().MaybeHasNulls() {
-		nulls := vec.Nulls().Copy()
-		projVec.SetNulls(&nulls)
+		_SET_PROJECTION(true)
+	} else {
+		_SET_PROJECTION(false)
 	}
 	return batch
 }
@@ -133,6 +111,64 @@ func (p _OP_CONST_NAME) Init() {
 }
 
 // {{end}}
+
+// {{/*
+func _SET_PROJECTION(_HAS_NULLS bool) {
+	// */}}
+	// {{define "setProjection" -}}
+	// {{$hasNulls := $.HasNulls}}
+	// {{with $.Overload}}
+	// {{if _HAS_NULLS}}
+	colNulls := vec.Nulls()
+	// {{end}}
+	if sel := batch.Selection(); sel != nil {
+		sel = sel[:n]
+		for _, i := range sel {
+			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
+		}
+	} else {
+		col = execgen.SLICE(col, 0, int(n))
+		colLen := execgen.LEN(col)
+		_ = _RET_UNSAFEGET(projCol, colLen-1)
+		for execgen.RANGE(i, col) {
+			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
+		}
+	}
+	// {{if _HAS_NULLS}}
+	colNullsCopy := colNulls.Copy()
+	projVec.SetNulls(&colNullsCopy)
+	// {{end}}
+	// {{end}}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{/*
+func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
+	// {{define "setSingleTupleProjection" -}}
+	// {{$hasNulls := $.HasNulls}}
+	// {{with $.Overload}}
+	// {{if _HAS_NULLS}}
+	if !colNulls.NullAt(uint16(i)) {
+		// We only want to perform the projection operation if the value is not null.
+		// {{end}}
+		arg := execgen.UNSAFEGET(col, int(i))
+		// {{if _IS_CONST_LEFT}}
+		_ASSIGN("projCol[i]", "p.constArg", "arg")
+		// {{else}}
+		_ASSIGN("projCol[i]", "arg", "p.constArg")
+		// {{end}}
+		// {{if _HAS_NULLS }}
+	}
+	// {{end}}
+	// {{end}}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
 
 // {{/*
 // The outer range is a coltypes.T (the left type). The middle range is also a
