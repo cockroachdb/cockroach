@@ -61,6 +61,10 @@ func replaceProjTmplVariables(tmpl string) string {
 	assignRe := regexp.MustCompile(`_ASSIGN\((.*),(.*),(.*)\)`)
 	tmpl = assignRe.ReplaceAllString(tmpl, "{{.Assign $1 $2 $3}}")
 
+	tmpl = strings.Replace(tmpl, "_HAS_NULLS", "$hasNulls", -1)
+	setProjectionRe := makeFunctionRegex("_SET_PROJECTION", 1)
+	tmpl = setProjectionRe.ReplaceAllString(tmpl, `{{template "setProjection" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
+
 	return tmpl
 }
 
@@ -92,7 +96,7 @@ func genProjNonConstOps(wr io.Writer) error {
 	s := string(t)
 	s = replaceProjTmplVariables(s)
 
-	tmpl, err := template.New("proj_non_const_ops").Parse(s)
+	tmpl, err := template.New("proj_non_const_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
@@ -127,7 +131,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			tmpl, err := template.New("proj_const_ops").Parse(tmplString)
+			tmpl, err := template.New("proj_const_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(tmplString)
 			if err != nil {
 				return err
 			}

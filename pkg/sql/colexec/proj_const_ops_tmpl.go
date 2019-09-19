@@ -95,32 +95,10 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	// {{end}}
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec._RET_TYP()
-	if sel := batch.Selection(); sel != nil {
-		sel = sel[:n]
-		for _, i := range sel {
-			arg := execgen.UNSAFEGET(col, int(i))
-			// {{if _IS_CONST_LEFT}}
-			_ASSIGN("projCol[i]", "p.constArg", "arg")
-			// {{else}}
-			_ASSIGN("projCol[i]", "arg", "p.constArg")
-			// {{end}}
-		}
-	} else {
-		col = execgen.SLICE(col, 0, int(n))
-		colLen := execgen.LEN(col)
-		_ = _RET_UNSAFEGET(projCol, colLen-1)
-		for execgen.RANGE(i, col) {
-			arg := execgen.UNSAFEGET(col, i)
-			// {{if _IS_CONST_LEFT}}
-			_ASSIGN("projCol[i]", "p.constArg", "arg")
-			// {{else}}
-			_ASSIGN("projCol[i]", "arg", "p.constArg")
-			// {{end}}
-		}
-	}
 	if vec.Nulls().MaybeHasNulls() {
-		nulls := vec.Nulls().Copy()
-		projVec.SetNulls(&nulls)
+		_SET_PROJECTION(true)
+	} else {
+		_SET_PROJECTION(false)
 	}
 	return batch
 }
@@ -130,3 +108,57 @@ func (p _OP_CONST_NAME) Init() {
 }
 
 // {{end}}
+
+// {{/*
+func _SET_PROJECTION(_HAS_NULLS bool) {
+	// */}}
+	// {{define "setProjection" -}}
+	// {{$hasNulls := $.HasNulls}}
+	// {{with $.Overload}}
+	// {{if _HAS_NULLS}}
+	projColNulls := projVec.Nulls()
+	colNulls := vec.Nulls()
+	// {{end}}
+	if sel := batch.Selection(); sel != nil {
+		sel = sel[:n]
+		for _, i := range sel {
+			// {{if _HAS_NULLS}}
+			if colNulls.NullAt(i) {
+				projColNulls.SetNull(i)
+			} else
+			// {{end}}
+			{
+				arg := execgen.UNSAFEGET(col, int(i))
+				// {{if _IS_CONST_LEFT}}
+				_ASSIGN("projCol[i]", "p.constArg", "arg")
+				// {{else}}
+				_ASSIGN("projCol[i]", "arg", "p.constArg")
+				// {{end}}
+			}
+		}
+	} else {
+		col = execgen.SLICE(col, 0, int(n))
+		colLen := execgen.LEN(col)
+		_ = _RET_UNSAFEGET(projCol, colLen-1)
+		for execgen.RANGE(i, col) {
+			// {{if _HAS_NULLS}}
+			if colNulls.NullAt(uint16(i)) {
+				projColNulls.SetNull(uint16(i))
+			} else
+			// {{end}}
+			{
+				arg := execgen.UNSAFEGET(col, i)
+				// {{if _IS_CONST_LEFT}}
+				_ASSIGN("projCol[i]", "p.constArg", "arg")
+				// {{else}}
+				_ASSIGN("projCol[i]", "arg", "p.constArg")
+				// {{end}}
+			}
+		}
+	}
+	// {{end}}
+	// {{end}}
+	// {{/*
+}
+
+// */}}

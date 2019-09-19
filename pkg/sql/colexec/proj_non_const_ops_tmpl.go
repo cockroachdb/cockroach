@@ -78,7 +78,7 @@ func _RET_UNSAFEGET(_, _ interface{}) interface{} {
 
 // */}}
 
-// {{define "projOp" }}
+// {{define "projOp"}}
 
 type _OP_NAME struct {
 	projOpBase
@@ -103,27 +103,12 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1._L_TYP()
 	col2 := vec2._R_TYP()
-	if sel := batch.Selection(); sel != nil {
-		sel = sel[:n]
-		for _, i := range sel {
-			arg1 := _L_UNSAFEGET(col1, int(i))
-			arg2 := _R_UNSAFEGET(col2, int(i))
-			_ASSIGN("projCol[i]", "arg1", "arg2")
-		}
-	} else {
-		col1 = execgen.SLICE(col1, 0, int(n))
-		colLen := execgen.LEN(col1)
-		_ = _RET_UNSAFEGET(projCol, colLen-1)
-		_ = _R_UNSAFEGET(col2, colLen-1)
-		for execgen.RANGE(i, col1) {
-			arg1 := _L_UNSAFEGET(col1, i)
-			arg2 := _R_UNSAFEGET(col2, i)
-			_ASSIGN("projCol[i]", "arg1", "arg2")
-		}
-	}
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
-		projVec.SetNulls(vec1.Nulls().Or(vec2.Nulls()))
+		_SET_PROJECTION(true)
+	} else {
+		_SET_PROJECTION(false)
 	}
+
 	return batch
 }
 
@@ -132,6 +117,56 @@ func (p _OP_NAME) Init() {
 }
 
 // {{end}}
+
+// {{/*
+func _SET_PROJECTION(_HAS_NULLS bool) {
+	// */}}
+	// {{define "setProjection" -}}
+	// {{$hasNulls := $.HasNulls}}
+	// {{with $.Overload}}
+	// {{if _HAS_NULLS}}
+	projColNulls := projVec.Nulls()
+	col1Nulls := vec1.Nulls()
+	col2Nulls := vec2.Nulls()
+	// {{end}}
+	if sel := batch.Selection(); sel != nil {
+		sel = sel[:n]
+		for _, i := range sel {
+			// {{if _HAS_NULLS}}
+			if col1Nulls.NullAt(i) || col2Nulls.NullAt(i) {
+				projColNulls.SetNull(i)
+			} else
+			// {{end}}
+			{
+				arg1 := _L_UNSAFEGET(col1, int(i))
+				arg2 := _R_UNSAFEGET(col2, int(i))
+				_ASSIGN("projCol[i]", "arg1", "arg2")
+			}
+		}
+	} else {
+		col1 = execgen.SLICE(col1, 0, int(n))
+		colLen := execgen.LEN(col1)
+		_ = _RET_UNSAFEGET(projCol, colLen-1)
+		_ = _R_UNSAFEGET(col2, colLen-1)
+		for execgen.RANGE(i, col1) {
+			// {{if _HAS_NULLS}}
+			if col1Nulls.NullAt(uint16(i)) || col2Nulls.NullAt(uint16(i)) {
+				projColNulls.SetNull(uint16(i))
+			} else
+			// {{end}}
+			{
+				arg1 := _L_UNSAFEGET(col1, i)
+				arg2 := _R_UNSAFEGET(col2, i)
+				_ASSIGN("projCol[i]", "arg1", "arg2")
+			}
+		}
+	}
+	// {{end}}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
 
 // {{/*
 // The outer range is a coltypes.T (the left type). The middle range is also a
