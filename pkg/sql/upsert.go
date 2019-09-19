@@ -42,9 +42,6 @@ type upsertNode struct {
 	run upsertRun
 }
 
-// upsertNode implements the autoCommitNode interface.
-var _ autoCommitNode = &upsertNode{}
-
 func (p *planner) newUpsertNode(
 	ctx context.Context,
 	n *tree.Insert,
@@ -418,7 +415,6 @@ func (n *upsertNode) Close(ctx context.Context) {
 	upsertNodePool.Put(n)
 }
 
-// enableAutoCommit is part of the autoCommitNode interface.
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
 }

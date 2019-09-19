@@ -881,13 +881,6 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 func (ef *execFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery, postqueries []exec.Node,
 ) (exec.Plan, error) {
-	// Enable auto-commit if the planner setting allows it, and there are no
-	// postqueries.
-	if ef.planner.autoCommit && len(postqueries) == 0 {
-		if ac, ok := root.(autoCommitNode); ok {
-			ac.enableAutoCommit()
-		}
-	}
 	// No need to spool at the root.
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.source
@@ -1252,6 +1245,7 @@ func (ef *execFactory) ConstructInsert(
 	insertColOrdSet exec.ColumnOrdinalSet,
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
+	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1321,6 +1315,10 @@ func (ef *execFactory) ConstructInsert(
 		},
 	}
 
+	if allowAutoCommit && ef.planner.autoCommit {
+		ins.enableAutoCommit()
+	}
+
 	// serialize the data-modifying plan to ensure that no data is
 	// observed that hasn't been validated first. See the comments
 	// on BatchedNext() in plan_batch.go.
@@ -1341,6 +1339,7 @@ func (ef *execFactory) ConstructUpdate(
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
+	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
@@ -1463,6 +1462,10 @@ func (ef *execFactory) ConstructUpdate(
 		},
 	}
 
+	if allowAutoCommit && ef.planner.autoCommit {
+		upd.enableAutoCommit()
+	}
+
 	// Serialize the data-modifying plan to ensure that no data is observed that
 	// hasn't been validated first. See the comments on BatchedNext() in
 	// plan_batch.go.
@@ -1501,6 +1504,7 @@ func (ef *execFactory) ConstructUpsert(
 	updateColOrdSet exec.ColumnOrdinalSet,
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	allowAutoCommit bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1611,6 +1615,10 @@ func (ef *execFactory) ConstructUpsert(
 		},
 	}
 
+	if allowAutoCommit && ef.planner.autoCommit {
+		ups.enableAutoCommit()
+	}
+
 	// Serialize the data-modifying plan to ensure that no data is observed that
 	// hasn't been validated first. See the comments on BatchedNext() in
 	// plan_batch.go.
@@ -1677,6 +1685,7 @@ func (ef *execFactory) ConstructDelete(
 	table cat.Table,
 	fetchColOrdSet exec.ColumnOrdinalSet,
 	returnColOrdSet exec.ColumnOrdinalSet,
+	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
@@ -1684,7 +1693,7 @@ func (ef *execFactory) ConstructDelete(
 	tabDesc := table.(*optTable).desc
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
 
-	// Determine the foreign key tables involved in the update.
+	// Determine the foreign key tables involved in the delete.
 	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckDeletes, nil /* checkHelper */)
 	if err != nil {
 		return nil, err
@@ -1759,6 +1768,10 @@ func (ef *execFactory) ConstructDelete(
 			rowsNeeded:     rowsNeeded,
 			rowIdxToRetIdx: rowIdxToRetIdx,
 		},
+	}
+
+	if allowAutoCommit && ef.planner.autoCommit {
+		del.enableAutoCommit()
 	}
 
 	// Serialize the data-modifying plan to ensure that no data is observed that

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -152,6 +153,7 @@ func (tb *tableWriterBase) finalize(
 	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor,
 ) (err error) {
 	if tb.autoCommit == autoCommitEnabled {
+		log.Event(ctx, "autocommit enabled")
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.

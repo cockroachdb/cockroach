@@ -365,11 +365,6 @@ func (n *createTableNode) startExec(params runParams) error {
 	return nil
 }
 
-// enableAutoCommit is part of the autoCommitNode interface.
-func (n *createTableNode) enableAutoCommit() {
-	n.run.autoCommit = autoCommitEnabled
-}
-
 func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
 func (*createTableNode) Values() tree.Datums          { return tree.Datums{} }
 
