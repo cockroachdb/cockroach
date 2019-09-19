@@ -411,11 +411,18 @@ func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Durati
 				Warehouses: warehouses,
 				Extra:      "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
+					if t.IsBuildVersion(`v19.2.0`) {
+						if err := runAndLogStmts(ctx, t, c, "mixed-schema-changes-19.2", []string{
+							// CREATE TABLE AS with a specified primary key was added in 19.2.
+							`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id)) AS select o_w_id, o_d_id, o_id from tpcc.order;`,
+						}); err != nil {
+							return err
+						}
+					}
 					return runAndLogStmts(ctx, t, c, "mixed-schema-changes", []string{
 						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
 
 						`CREATE TABLE tpcc.customerpks (c_w_id INT, c_d_id INT, c_id INT, FOREIGN KEY (c_w_id, c_d_id, c_id) REFERENCES tpcc.customer (c_w_id, c_d_id, c_id));`,
-						`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id)) AS select o_w_id, o_d_id, o_id from tpcc.order;`,
 
 						`ALTER TABLE tpcc.order ADD COLUMN orderdiscount INT DEFAULT 0;`,
 						`ALTER TABLE tpcc.order ADD CONSTRAINT nodiscount CHECK (orderdiscount = 0);`,
