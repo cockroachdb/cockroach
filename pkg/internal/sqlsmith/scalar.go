@@ -199,6 +199,10 @@ func makeConstExpr(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 		}
 	}
 
+	return makeConstDatum(s, typ)
+}
+
+func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	var datum tree.Datum
 	s.lock.Lock()
 	nullChance := 6
@@ -601,7 +605,7 @@ func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	t := s.randScalarType()
 	var rhs tree.TypedExpr
-	if s.coin() {
+	if s.vectorizable || s.coin() {
 		rhs = makeTuple(s, t, refs)
 	} else {
 		selectStmt, _, ok := s.makeSelect([]*types.T{t}, refs)
@@ -659,12 +663,16 @@ func makeStringComparison(s *Smither, typ *types.T, refs colRefs) (tree.TypedExp
 func makeTuple(s *Smither, typ *types.T, refs colRefs) *tree.Tuple {
 	n := s.rnd.Intn(5)
 	// Don't allow empty tuples in simple/postgres mode.
-	if s.simpleDatums && n == 0 {
+	if n == 0 && (s.simpleDatums || s.vectorizable) {
 		n++
 	}
 	exprs := make(tree.Exprs, n)
 	for i := range exprs {
-		exprs[i] = makeScalar(s, typ, refs)
+		if s.vectorizable || s.d9() == 1 {
+			exprs[i] = makeConstDatum(s, typ)
+		} else {
+			exprs[i] = makeScalar(s, typ, refs)
+		}
 	}
 	return tree.NewTypedTuple(types.MakeTuple([]types.T{*typ}), exprs)
 }
