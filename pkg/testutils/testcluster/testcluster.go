@@ -391,6 +391,16 @@ func (tc *TestCluster) Target(serverIdx int) roachpb.ReplicationTarget {
 	}
 }
 
+// Targets creates a slice of ReplicationTarget where each entry corresponds to
+// a call to tc.Target() for serverIdx in serverIdxs.
+func (tc *TestCluster) Targets(serverIdxs ...int) []roachpb.ReplicationTarget {
+	ret := make([]roachpb.ReplicationTarget, 0, len(serverIdxs))
+	for _, serverIdx := range serverIdxs {
+		ret = append(ret, tc.Target(serverIdx))
+	}
+	return ret
+}
+
 func (tc *TestCluster) changeReplicas(
 	changeType roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
