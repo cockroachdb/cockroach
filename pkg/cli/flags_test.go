@@ -43,6 +43,7 @@ func TestStdFlagToPflag(t *testing.T) {
 		switch f.Name {
 		case logflags.LogDirName,
 			logflags.LogFileMaxSizeName,
+			logflags.LogFileArchiveName,
 			logflags.LogFilesCombinedMaxSizeName,
 			logflags.LogFileVerbosityThresholdName:
 			return
