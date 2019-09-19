@@ -109,20 +109,12 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 		RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`,
 	)
 
-	// TODD(radu): this is no longer necessary with the optimizer. Keep it for now
-	// for comparisons against the heuristic planner.
-	custIndexStr := "@customer_idx"
-	if config.usePostgres {
-		custIndexStr = ""
-	}
-
 	// 2.5.2.2 Case 2: Pick the middle row, rounded up, from the selection by last name.
-	p.selectByLastName = p.sr.Define(fmt.Sprintf(`
+	p.selectByLastName = p.sr.Define(`
 		SELECT c_id
-		FROM customer%s
+		FROM customer
 		WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $3
 		ORDER BY c_first ASC`,
-		custIndexStr),
 	)
 
 	// Update customer with payment.
