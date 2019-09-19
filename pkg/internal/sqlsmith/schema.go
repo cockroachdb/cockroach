@@ -73,29 +73,39 @@ func (s *Smither) getIndexes(table tree.TableName) map[tree.Name]*tree.CreateInd
 }
 
 func (s *Smither) getRandTableIndex(
-	table tree.TableName,
-) (*tree.TableIndexName, *tree.CreateIndex, bool) {
+	table, alias tree.TableName,
+) (*tree.TableIndexName, *tree.CreateIndex, colRefs, bool) {
 	indexes := s.getIndexes(table)
 	if len(indexes) == 0 {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 	names := make([]tree.Name, 0, len(indexes))
 	for n := range indexes {
 		names = append(names, n)
 	}
 	idx := indexes[names[s.rnd.Intn(len(names))]]
+	var refs colRefs
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	for _, col := range idx.Columns {
+		refs = append(refs, &colRef{
+			typ:  s.columns[table][col.Column].Type,
+			item: tree.NewColumnItem(&alias, col.Column),
+		})
+	}
 	return &tree.TableIndexName{
-		Table: table,
+		Table: alias,
 		Index: tree.UnrestrictedName(idx.Name),
-	}, idx, true
+	}, idx, refs, true
 }
 
-func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, bool) {
+func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, colRefs, bool) {
 	tableRef, ok := s.getRandTable()
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
-	return s.getRandTableIndex(*tableRef.TableName)
+	name := *tableRef.TableName
+	return s.getRandTableIndex(name, name)
 }
 
 func extractTables(db *gosql.DB) ([]*tableRef, error) {

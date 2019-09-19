@@ -36,21 +36,22 @@ func (s *Smither) makeSelectStmt(
 }
 
 func makeSchemaTable(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	expr, _, exprRefs, ok := s.getSchemaTable()
+	expr, _, _, exprRefs, ok := s.getSchemaTable()
 	return expr, exprRefs, ok
 }
 
-func (s *Smither) getSchemaTable() (tree.TableExpr, *tableRef, colRefs, bool) {
+func (s *Smither) getSchemaTable() (tree.TableExpr, *tree.TableName, *tableRef, colRefs, bool) {
 	table, ok := s.getRandTable()
 	if !ok {
-		return nil, nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 	alias := s.name("tab")
-	expr, refs := s.tableExpr(table, tree.NewUnqualifiedTableName(alias))
+	name := tree.NewUnqualifiedTableName(alias)
+	expr, refs := s.tableExpr(table, name)
 	return &tree.AliasedTableExpr{
 		Expr: expr,
 		As:   tree.AliasClause{Alias: alias},
-	}, table, refs, true
+	}, name, table, refs, true
 }
 
 func (s *Smither) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr, colRefs) {
@@ -281,7 +282,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	// are fine.
 
 	// Start with some random index.
-	leftTableName, leftIdx, ok := s.getRandIndex()
+	leftTableName, leftIdx, _, ok := s.getRandIndex()
 	if !ok {
 		return nil, nil, false
 	}
@@ -518,6 +519,10 @@ func makeSelectClause(
 func (s *Smither) makeSelectClause(
 	desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (clause *tree.SelectClause, selectRefs, orderByRefs colRefs, tables tableRefs, ok bool) {
+	if desiredTypes == nil && s.d9() == 1 {
+		return s.makeOrderedAggregate()
+	}
+
 	clause = &tree.SelectClause{}
 
 	var fromRefs colRefs
@@ -607,6 +612,63 @@ func (s *Smither) makeSelectClause(
 
 	return clause, selectRefs, orderByRefs, withTables, true
 }
+
+func (s *Smither) makeOrderedAggregate() (
+	clause *tree.SelectClause,
+	selectRefs, orderByRefs colRefs,
+	tables tableRefs,
+	ok bool,
+) {
+	// We need a SELECT with a GROUP BY on ordered columns. Choose a random
+	// table and index from that table and pick a random prefix from it.
+	tableExpr, tableAlias, table, tableColRefs, ok := s.getSchemaTable()
+	_, _, idxRefs, ok := s.getRandTableIndex(*table.TableName, *tableAlias)
+	if !ok {
+		return nil, nil, nil, nil, false
+	}
+
+	var groupBy tree.GroupBy
+	for (len(groupBy) < 1 || s.coin()) && len(groupBy) < len(idxRefs) {
+		groupBy = append(groupBy, idxRefs[len(groupBy)].item)
+	}
+	idxRefs = idxRefs[:len(groupBy)]
+	alias := s.name("col")
+	selectRefs = colRefs{
+		{
+			typ:  types.Int,
+			item: &tree.ColumnItem{ColumnName: alias},
+		},
+	}
+	return &tree.SelectClause{
+		Exprs: tree.SelectExprs{
+			{
+				Expr: countStar,
+				As:   tree.UnrestrictedName(alias),
+			},
+		},
+		From: tree.From{
+			Tables: tree.TableExprs{tableExpr},
+		},
+		Where:   s.makeWhere(tableColRefs),
+		GroupBy: groupBy,
+		Having:  s.makeHaving(idxRefs),
+	}, selectRefs, idxRefs, tableRefs{table}, true
+}
+
+var countStar = func() tree.TypedExpr {
+	fn := tree.FunDefs["count"]
+	typ := types.Int
+	return tree.NewTypedFuncExpr(
+		tree.ResolvableFunctionReference{FunctionReference: fn},
+		0, /* aggQualifier */
+		tree.TypedExprs{tree.UnqualifiedStar{}},
+		nil, /* filter */
+		nil, /* window */
+		typ,
+		&fn.FunctionProperties,
+		fn.Definition[0].(*tree.Overload),
+	)
+}()
 
 func makeSelect(s *Smither) (tree.Statement, bool) {
 	stmt, refs, ok := s.makeSelect(nil, nil)
@@ -702,7 +764,7 @@ func makeDelete(s *Smither) (tree.Statement, bool) {
 }
 
 func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
-	table, tableRef, tableRefs, ok := s.getSchemaTable()
+	table, _, tableRef, tableRefs, ok := s.getSchemaTable()
 	if !ok {
 		return nil, nil, false
 	}
@@ -746,7 +808,7 @@ func makeUpdate(s *Smither) (tree.Statement, bool) {
 }
 
 func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
-	table, tableRef, tableRefs, ok := s.getSchemaTable()
+	table, _, tableRef, tableRefs, ok := s.getSchemaTable()
 	if !ok {
 		return nil, nil, false
 	}
@@ -825,7 +887,7 @@ func makeInsert(s *Smither) (tree.Statement, bool) {
 // used only in the optional returning section. Hence the irregular return
 // signature.
 func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
-	table, tableRef, _, ok := s.getSchemaTable()
+	table, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, nil, false
 	}
