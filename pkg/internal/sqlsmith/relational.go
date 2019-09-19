@@ -604,7 +604,12 @@ func (s *Smither) makeSelectClause(
 	}
 	clause.Exprs = selectList
 
-	if !s.vectorizable && s.d100() == 1 {
+	// TODO(mjibson): Vectorized only supports ordered distinct, and so
+	// this often produces queries that won't vec. However since it will
+	// also sometimes produce vec queries with the distinctChainOps node,
+	// we allow this here. Teach this how to correctly limit itself to
+	// distinct only on ordered columns.
+	if s.d100() == 1 {
 		clause.Distinct = true
 		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
 		orderByRefs = selectRefs
