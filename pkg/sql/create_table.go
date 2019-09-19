@@ -44,6 +44,11 @@ type createTableNode struct {
 	run createTableRun
 }
 
+type sequenceDependencyResolver struct {
+	colIndex int
+	expr     tree.TypedExpr
+}
+
 // CreateTable creates a table.
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
@@ -1077,6 +1082,10 @@ func MakeTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.MutableTableDescriptor, error) {
+	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
+	// been populated.
+	sequenceDependencyMap := make(map[*tree.ColumnTableDef]sequenceDependencyResolver)
+
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges)
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
@@ -1094,22 +1103,18 @@ func MakeTableDesc(
 				return desc, err
 			}
 
+			desc.AddColumn(col)
 			if d.HasDefaultExpr() {
-				changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, col, expr)
-				if err != nil {
-					return desc, err
-				}
-				for _, changedSeqDesc := range changedSeqDescs {
-					affected[changedSeqDesc.ID] = changedSeqDesc
-				}
+				// This resolution must be delayed until ColumnIDs have been populated.
+				sequenceDependencyMap[d] = sequenceDependencyResolver{colIndex: len(desc.Columns) - 1, expr: expr}
 			}
 
-			desc.AddColumn(col)
 			if idx != nil {
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
 					return desc, err
 				}
 			}
+
 			if d.HasColumnFamily() {
 				// Pass true for `create` and `ifNotExists` because when we're creating
 				// a table, we always want to create the specified family if it doesn't
@@ -1273,7 +1278,18 @@ func MakeTableDesc(
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
-			// Check after all ResolveFK calls.
+			// Once all the IDs have been allocated, we can add the Sequence dependencies
+			// as maybeAddSequenceDependencies requires ColumnIDs to be correct.
+			if d.HasDefaultExpr() {
+				sdr := sequenceDependencyMap[d]
+				changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, &desc.Columns[sdr.colIndex], sdr.expr, affected)
+				if err != nil {
+					return desc, err
+				}
+				for _, changedSeqDesc := range changedSeqDescs {
+					affected[changedSeqDesc.ID] = changedSeqDesc
+				}
+			}
 
 		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
 			// Pass, handled above.
