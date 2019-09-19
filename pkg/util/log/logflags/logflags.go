@@ -78,7 +78,8 @@ func InitFlags(
 	showLogs *bool,
 	nocolor *bool,
 	vmodule flag.Value,
-	logFileMaxSize, logFilesCombinedMaxSize *int64, logFileArchive *bool,
+	logFileMaxSize, logFilesCombinedMaxSize *int64,
+	logFileArchive *bool,
 ) {
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
 	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")

@@ -1336,11 +1336,19 @@ func (l *loggingT) gcOldFiles() {
 				return
 			}
 
+			// writer for gzip and tar
 			gz := gzip.NewWriter(tf)
-			defer gz.Close()
 			tw := tar.NewWriter(gz)
-			defer tw.Close()
+			defer func() {
+				if err := gz.Close(); err != nil {
+					fmt.Fprintln(OrigStderr, err)
+				}
+				if err := tw.Close(); err != nil {
+					fmt.Fprintln(OrigStderr, err)
+				}
+			}()
 
+			// get file info header and write to Writer
 			fi, err := os.Stat(path)
 			if err != nil {
 				fmt.Fprintln(OrigStderr, err)
@@ -1356,13 +1364,17 @@ func (l *loggingT) gcOldFiles() {
 				return
 			}
 
+			// open file and write to Writer
 			fs, err := os.Open(path)
-			defer fs.Close()
+			defer func() {
+				if err := fs.Close(); err != nil {
+					fmt.Fprintln(OrigStderr, err)
+				}
+			}()
 			if err != nil {
 				fmt.Fprintln(OrigStderr, err)
 				return
 			}
-
 			if _, err := io.Copy(tw, fs); err != nil {
 				fmt.Fprintln(OrigStderr, err)
 				return
