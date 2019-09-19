@@ -375,11 +375,19 @@ func init() {
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
 		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification, false)
-		// We also hide it from help for 'start-single-node'.
 		if cmd == startSingleNodeCmd {
+			// Even though all server flags are supported for
+			// 'start-single-node', we intend that command to be used by
+			// beginners / developers running on a single machine. To
+			// enhance the UX, we hide the flags since they are not directly
+			// relevant when running a single node.
 			_ = f.MarkHidden(cliflags.Join.Name)
 			_ = f.MarkHidden(cliflags.ClusterName.Name)
 			_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
+			_ = f.MarkHidden(cliflags.MaxOffset.Name)
+			_ = f.MarkHidden(cliflags.LocalityAdvertiseAddr.Name)
+			_ = f.MarkHidden(cliflags.AdvertiseAddr.Name)
+			_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
 		}
 
 		// Engine flags.
