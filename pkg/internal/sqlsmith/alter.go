@@ -72,7 +72,7 @@ func makeCreateTable(s *Smither) (tree.Statement, bool) {
 }
 
 func makeDropTable(s *Smither) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
@@ -84,7 +84,7 @@ func makeDropTable(s *Smither) (tree.Statement, bool) {
 }
 
 func makeRenameTable(s *Smither) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
@@ -103,7 +103,7 @@ func makeRenameTable(s *Smither) (tree.Statement, bool) {
 }
 
 func makeRenameColumn(s *Smither) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
@@ -117,7 +117,7 @@ func makeRenameColumn(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterColumnType(s *Smither) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
@@ -136,7 +136,7 @@ func makeAlterColumnType(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAddColumn(s *Smither) (tree.Statement, bool) {
-	_, tableRef, colRefs, ok := s.getSchemaTable()
+	_, _, tableRef, colRefs, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
@@ -170,7 +170,7 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 }
 
 func makeDropColumn(s *Smither) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
@@ -188,7 +188,7 @@ func makeDropColumn(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateIndex(s *Smither) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
@@ -225,7 +225,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 }
 
 func makeDropIndex(s *Smither) (tree.Statement, bool) {
-	tin, _, ok := s.getRandIndex()
+	tin, _, _, ok := s.getRandIndex()
 	return &tree.DropIndex{
 		IndexList:    tree.TableIndexNames{tin},
 		DropBehavior: s.randDropBehavior(),
@@ -233,7 +233,7 @@ func makeDropIndex(s *Smither) (tree.Statement, bool) {
 }
 
 func makeRenameIndex(s *Smither) (tree.Statement, bool) {
-	tin, _, ok := s.getRandIndex()
+	tin, _, _, ok := s.getRandIndex()
 	return &tree.RenameIndex{
 		Index:   tin,
 		NewName: tree.UnrestrictedName(s.name("idx")),
