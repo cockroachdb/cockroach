@@ -281,6 +281,7 @@ func init() {
 			flag.DefValue = "NONE"
 		case logflags.LogDirName,
 			logflags.LogFileMaxSizeName,
+			logflags.LogFileArchiveName,
 			logflags.LogFilesCombinedMaxSizeName,
 			logflags.LogFileVerbosityThresholdName:
 			// The --log-dir* and --log-file* flags are specified only for the
