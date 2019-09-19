@@ -297,6 +297,7 @@ func maybeAddSequenceDependencies(
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
+	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 ) ([]*MutableTableDescriptor, error) {
 	seqNames, err := getUsedSequenceNames(expr)
 	if err != nil {
@@ -324,12 +325,28 @@ func maybeAddSequenceDependencies(
 				return nil, err
 			}
 		}
+		// If we had already modified this Sequence as part of this transaction,
+		// we only want to modify a single instance of it instead of overwriting it.
+		// So replace seqDesc with the descriptor that was previously modified.
+		if prev, ok := backrefs[seqDesc.ID]; ok {
+			seqDesc = prev
+		}
 		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 		// Add reference from sequence descriptor to column.
-		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, sqlbase.TableDescriptor_Reference{
-			ID:        tableDesc.ID,
-			ColumnIDs: []sqlbase.ColumnID{col.ID},
-		})
+		refIdx := -1
+		for i, reference := range seqDesc.DependedOnBy {
+			if reference.ID == tableDesc.ID {
+				refIdx = i
+			}
+		}
+		if refIdx == -1 {
+			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, sqlbase.TableDescriptor_Reference{
+				ID:        tableDesc.ID,
+				ColumnIDs: []sqlbase.ColumnID{col.ID},
+			})
+		} else {
+			seqDesc.DependedOnBy[refIdx].ColumnIDs = append(seqDesc.DependedOnBy[refIdx].ColumnIDs, col.ID)
+		}
 		seqDescs = append(seqDescs, seqDesc)
 	}
 	return seqDescs, nil
@@ -349,17 +366,44 @@ func removeSequenceDependencies(
 		if err != nil {
 			return err
 		}
-		// Find an item in seqDesc.DependedOnBy which references tableDesc.
-		refIdx := -1
+		// Find the item in seqDesc.DependedOnBy which references tableDesc and col.
+		refTableIdx := -1
+		refColIdx := -1
+	found:
 		for i, reference := range seqDesc.DependedOnBy {
 			if reference.ID == tableDesc.ID {
-				refIdx = i
+				refTableIdx = i
+				for j, colRefID := range seqDesc.DependedOnBy[i].ColumnIDs {
+					if colRefID == col.ID {
+						refColIdx = j
+						break found
+					}
+					// Before #40852, columnIDs stored in the SeqDesc were 0 as they hadn't
+					// been allocated then. The 0 check prevents older descs from breaking.
+					// Do not break though, as we still want to search in case the actual ID
+					// exists.
+					if colRefID == 0 {
+						refColIdx = j
+					}
+				}
 			}
 		}
-		if refIdx == -1 {
+		if refColIdx == -1 {
 			return errors.AssertionFailedf("couldn't find reference from sequence to this column")
 		}
-		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
+		// Remove the column ID from the sequence descriptors list of things that
+		// depend on it. If the column was the only column that depended on the
+		// sequence, remove the table reference from the sequence as well.
+		seqDesc.DependedOnBy[refTableIdx].ColumnIDs = append(
+			seqDesc.DependedOnBy[refTableIdx].ColumnIDs[:refColIdx],
+			seqDesc.DependedOnBy[refTableIdx].ColumnIDs[refColIdx+1:]...)
+
+		if len(seqDesc.DependedOnBy[refTableIdx].ColumnIDs) == 0 {
+			seqDesc.DependedOnBy = append(
+				seqDesc.DependedOnBy[:refTableIdx],
+				seqDesc.DependedOnBy[refTableIdx+1:]...)
+		}
+
 		if err := params.p.writeSchemaChange(params.ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
