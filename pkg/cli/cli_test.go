@@ -625,6 +625,24 @@ func Example_sql() {
 	// invalid syntax
 }
 
+func Example_sql_watch() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{`sql`, `-e`, `create table d(x int); insert into d values(3)`})
+	c.RunWithArgs([]string{`sql`, `--watch`, `.1s`, `-e`, `update d set x=x-1 returning 1/x as dec`})
+
+	// Output:
+	// sql -e create table d(x int); insert into d values(3)
+	// INSERT 1
+	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
+	// dec
+	// 0.5
+	// dec
+	// 1
+	// pq: division by zero
+}
+
 func Example_sql_format() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
