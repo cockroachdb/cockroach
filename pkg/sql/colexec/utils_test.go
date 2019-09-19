@@ -525,24 +525,29 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 			outputIdx := s.selection[j]
 			injectRandomNull := s.injectRandomNulls && rng.Float64() < 0.5
 			if tups[j][i] == nil || s.injectAllNulls || injectRandomNull {
-				// Set garbage data in the value to make sure NULL gets handled
-				// correctly.
 				vec.Nulls().SetNull(outputIdx)
-				if typ == coltypes.Decimal {
-					d := apd.Decimal{}
-					_, err := d.SetFloat64(rng.Float64())
-					if err != nil {
-						execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
+				if rng.Float64() < 0.5 {
+					// With 50% probability we set garbage data in the value to make sure
+					// that it doesn't affect the computation when the value is actually
+					// NULL. For the other 50% of cases we leave the data unset which
+					// exercises other scenarios (like division by zero when the value is
+					// actually NULL).
+					if typ == coltypes.Decimal {
+						d := apd.Decimal{}
+						_, err := d.SetFloat64(rng.Float64())
+						if err != nil {
+							execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
+						}
+						col.Index(int(outputIdx)).Set(reflect.ValueOf(d))
+					} else if typ == coltypes.Bytes {
+						newBytes := make([]byte, rng.Intn(16)+1)
+						rng.Read(newBytes)
+						setColVal(vec, int(outputIdx), newBytes)
+					} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
+						setColVal(vec, int(outputIdx), val.Interface())
+					} else {
+						execerror.VectorizedInternalPanic(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
 					}
-					col.Index(int(outputIdx)).Set(reflect.ValueOf(d))
-				} else if typ == coltypes.Bytes {
-					newBytes := make([]byte, rng.Intn(16)+1)
-					rng.Read(newBytes)
-					setColVal(vec, int(outputIdx), newBytes)
-				} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
-					setColVal(vec, int(outputIdx), val.Interface())
-				} else {
-					execerror.VectorizedInternalPanic(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
 				}
 			} else {
 				setColVal(vec, int(outputIdx), tups[j][i])

@@ -51,7 +51,7 @@ func genLikeOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	tmpl, err = tmpl.Parse(projTemplate)
+	tmpl, err = tmpl.Funcs(template.FuncMap{"buildDict": buildDict}).Parse(projTemplate)
 	if err != nil {
 		return err
 	}
