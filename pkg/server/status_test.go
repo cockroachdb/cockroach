@@ -137,6 +137,60 @@ func TestStatusJson(t *testing.T) {
 	}
 }
 
+// TestHealthTelemetry confirms that hits on some status endpoints increment
+// feature telemetry counters.
+func TestHealthTelemetry(t *testing.T) {
+
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	rows, _ := db.Query("SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'web-ui%' AND usage_count > 0;")
+	if rows.Next() {
+		t.Fatal("expected 0 rows, got non-zero")
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var details serverpb.DetailsResponse
+	if err := serverutils.GetJSONProto(s, "/health", &details); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCounts := map[string]int{
+		"web-ui.health": 1,
+		"web-ui.prometheus.vars": 1,
+	}
+
+	rows, _ = db.Query("SELECT feature_name, usage_count FROM crdb_internal.feature_usage WHERE feature_name LIKE 'web-ui%' AND usage_count > 0;")
+	for rows.Next() {
+		var featureName string
+		var usageCount int
+
+		if err := rows.Scan(&featureName, &usageCount); err != nil {
+			t.Fatal(err)
+		}
+
+		if count, ok := expectedCounts[featureName]; ok {
+			if count != usageCount {
+				t.Fatalf("expected %d count for feature %s, got %d", count, featureName, usageCount)
+			}
+			delete(expectedCounts, featureName)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(expectedCounts) > 0 {
+		t.Fatalf("%d expected telemetry counters not emitted", len(expectedCounts))
+	}
+}
+
 // TestStatusGossipJson ensures that the output response for the full gossip
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {

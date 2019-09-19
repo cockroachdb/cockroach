@@ -608,6 +608,7 @@ func (s *statusServer) Details(
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
+	telemetry.Count("web-ui.health")
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
@@ -1164,6 +1165,7 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	telemetry.Count("web-ui.prometheus.vars")
 }
 
 // Ranges returns range info for the specified node.
