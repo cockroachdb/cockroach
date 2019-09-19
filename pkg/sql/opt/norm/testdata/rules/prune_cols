@@ -1657,23 +1657,6 @@ project
            └── ntile [type=int, outer=(2)]
                 └── variable: t.public.a.i [type=int]
 
-# Ensure OFFSET expressions don't get pruned.
-norm
-SELECT ntile(i) OVER (ORDER BY i RANGE BETWEEN f::INT PRECEDING AND CURRENT ROW) FROM a
-----
-project
- ├── columns: ntile:5(int)
- └── window partition=() ordering=+2
-      ├── columns: i:2(int) f:3(float) ntile:5(int)
-      ├── scan a
-      │    └── columns: i:2(int) f:3(float)
-      └── windows
-           └── windows-item: range from offset to current-row [type=int, outer=(2,3)]
-                └── window-from-offset [type=int]
-                     ├── ntile [type=int]
-                     │    └── variable: i [type=int]
-                     └── f::INT8 [type=int]
-
 # Ensure filter cols don't get pruned.
 norm
 SELECT

@@ -1140,7 +1140,6 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 var (
 	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
-	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, "GROUPS offset cannot contain variables")
 )
 
 // analyzeWindowFrame performs semantic analysis of offset expressions of
@@ -1175,16 +1174,6 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 			}
 		}
 	case tree.GROUPS:
-		if startBound != nil && startBound.HasOffset() {
-			if tree.ContainsVars(startBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
-		if endBound != nil && endBound.HasOffset() {
-			if tree.ContainsVars(endBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
 		if len(windowDef.OrderBy) == 0 {
 			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
 		}
