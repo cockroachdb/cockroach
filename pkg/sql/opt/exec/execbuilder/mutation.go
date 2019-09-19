@@ -76,6 +76,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		insertOrds,
 		returnOrds,
 		checkOrds,
+		b.autoCommit,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -150,6 +151,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		passthroughCols,
+		b.autoCommit,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -222,6 +224,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
+		b.autoCommit,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -266,6 +269,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 		tab,
 		fetchColOrds,
 		returnColOrds,
+		b.autoCommit,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -479,4 +483,56 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		b.postqueries = append(b.postqueries, node)
 	}
 	return nil
+}
+
+// canAutoCommit determines if it is safe to auto commit the mutation contained
+// in the expression.
+//
+// Mutations can commit the transaction as part of the same KV request,
+// potentially taking advantage of the 1PC optimization. This is not ok to do in
+// general; a sufficient set of conditions is:
+//   1. There is a single mutation in the query.
+//   2. The mutation has no planned FK checks (which run after the mutation).
+//   3. The mutation is the root operator, or it is directly under a Project
+//      with no side-effecting expressions.
+//
+// An example of why we can't allow side-effecting expressions: if the
+// projection encounters a division-by-zero error, the mutation shouldn't have
+// been committed.
+//
+// Note that there are other necessary conditions related to execution
+// (specifically, that the transaction is implicit); it is up to the exec
+// factory to take that into account as well.
+func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
+	if !rel.Relational().CanMutate {
+		// No mutations in the expression.
+		return false
+	}
+
+	switch rel.Op() {
+	case opt.InsertOp, opt.UpsertOp, opt.UpdateOp, opt.DeleteOp:
+		// Check that there aren't any more mutations in the input.
+		// TODO(radu): this can go away when all mutations are under top-level
+		// With ops.
+		if rel.Child(0).(memo.RelExpr).Relational().CanMutate {
+			return false
+		}
+		// Check that there aren't any FK checks planned.
+		fkChecks := rel.Child(1).(*memo.FKChecksExpr)
+		return len(*fkChecks) == 0
+
+	case opt.ProjectOp:
+		// Allow Project on top, as long as the expressions are not side-effecting.
+		//
+		// TODO(radu): for now, we only allow passthrough projections because not all
+		// builtins that can error out are marked as side-effecting.
+		proj := rel.(*memo.ProjectExpr)
+		if len(proj.Projections) != 0 {
+			return false
+		}
+		return b.canAutoCommit(proj.Input)
+
+	default:
+		return false
+	}
 }

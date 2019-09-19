@@ -25,6 +25,10 @@ import (
 // deleteRangeNode implements DELETE on a primary index satisfying certain
 // conditions that permit the direct use of the DeleteRange kv operation,
 // instead of many point deletes.
+//
+// Note: deleteRangeNode can't autocommit, because it has to delete in batches,
+// and it won't know whether or not there is more work to do until after a batch
+// is returned. This property precludes using auto commit.
 type deleteRangeNode struct {
 	// interleavedFastPath is true if we can take the fast path despite operating
 	// on an interleaved table.
@@ -41,7 +45,6 @@ type deleteRangeNode struct {
 	rowCount int
 }
 
-var _ autoCommitNode = &deleteRangeNode{}
 var _ planNode = &deleteRangeNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ batchedPlanNode = &deleteRangeNode{}
@@ -220,10 +223,3 @@ func (*deleteRangeNode) Values() tree.Datums {
 
 // Close implements the planNode interface.
 func (*deleteRangeNode) Close(ctx context.Context) {}
-
-// enableAutoCommit implements the autoCommitNode interface.
-func (d *deleteRangeNode) enableAutoCommit() {
-	// DeleteRange can't autocommit, because it has to delete in batches, and it
-	// won't know whether or not there is more work to do until after a batch is
-	// returned. This property precludes using auto commit.
-}
