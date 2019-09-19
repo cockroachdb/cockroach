@@ -67,6 +67,7 @@ type tpcc struct {
 	scatter bool
 
 	partitions        int
+	clientPartitions  int
 	affinityPartition int
 	wPart             *partitioner
 	zoneCfg           zoneConfig
@@ -146,6 +147,7 @@ var tpccMeta = workload.Meta{
 			`db`:                 {RuntimeOnly: true},
 			`mix`:                {RuntimeOnly: true},
 			`partitions`:         {RuntimeOnly: true},
+			`client-partitions`:  {RuntimeOnly: true},
 			`partition-affinity`: {RuntimeOnly: true},
 			`partition-strategy`: {RuntimeOnly: true},
 			`zones`:              {RuntimeOnly: true},
@@ -179,6 +181,7 @@ var tpccMeta = workload.Meta{
 			numConnsPerWarehouse,
 		))
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
+		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
 		g.flags.Var(&g.zoneCfg.strategy, `partition-strategy`, `Partition tables according to which strategy [replication, leases]`)
 		g.flags.StringSliceVar(&g.zoneCfg.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
@@ -220,14 +223,33 @@ func (w *tpcc) Hooks() workload.Hooks {
 				return errors.Errorf(`--partitions must be positive`)
 			}
 
-			if w.affinityPartition < -1 {
-				return errors.Errorf(`if specified, --partition-affinity should be greater than or equal to 0`)
-			} else if w.affinityPartition >= w.partitions {
-				return errors.Errorf(`--partition-affinity out of bounds of --partitions`)
-			}
+			if w.clientPartitions > 0 {
 
-			if len(w.zoneCfg.zones) > 0 && (len(w.zoneCfg.zones) != w.partitions) {
-				return errors.Errorf(`--zones should have the sames length as --partitions.`)
+				if w.partitions > 1 {
+					return errors.Errorf(`cannot specify both --partitions and --client-partitions;
+					--partitions actually partitions underlying data.
+					--client-partitions only modifies client behavior to access a subset of warehouses. Must be used with --partition-affinity`)
+				}
+
+				if w.affinityPartition == -1 {
+					return errors.Errorf(`--client-partitions must be used with --partition-affinity.`)
+				}
+
+				if w.affinityPartition >= w.clientPartitions {
+					return errors.Errorf(`--partition-affinity out of bounds of --client-partitions`)
+				}
+
+			} else {
+
+				if w.affinityPartition < -1 {
+					return errors.Errorf(`if specified, --partition-affinity should be greater than or equal to 0`)
+				} else if w.affinityPartition >= w.partitions {
+					return errors.Errorf(`--partition-affinity out of bounds of --partitions`)
+				}
+
+				if len(w.zoneCfg.zones) > 0 && (len(w.zoneCfg.zones) != w.partitions) {
+					return errors.Errorf(`--zones should have the sames length as --partitions.`)
+				}
 			}
 
 			w.initNonUniformRandomConstants()
@@ -262,7 +284,13 @@ func (w *tpcc) Hooks() workload.Hooks {
 			// Create a partitioner to help us partition the warehouses. The base-case is
 			// where w.warehouses == w.activeWarehouses and w.partitions == 1.
 			var err error
-			w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.partitions)
+			if w.clientPartitions > 0 {
+				// This partitioner will not actually be used to partiton the data, but instead
+				// is only used to limit the warehouses the client attempts to manipulate.
+				w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.clientPartitions)
+			} else {
+				w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.partitions)
+			}
 			if err != nil {
 				return errors.Wrap(err, "error creating partitioner")
 			}
@@ -569,11 +597,19 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	if err := g.Wait(); err != nil {
 		return workload.QueryLoad{}, err
 	}
+	var partitionDBs [][]*workload.MultiConnPool
+	if w.clientPartitions > 0 {
+		// Client partitons simply emulates the behavior of data partitions
+		// w/r/t database connections, though all of the connections will
+		// be for the same partition.
+		partitionDBs = make([][]*workload.MultiConnPool, w.clientPartitions)
+	} else {
+		// Assign each DB connection pool to a local partition. This assumes that
+		// dbs[i] is a machine that holds partition "i % *partitions". If we have an
+		// affinity partition, all connections will be for the same partition.
+		partitionDBs = make([][]*workload.MultiConnPool, w.partitions)
+	}
 
-	// Assign each DB connection pool to a local partition. This assumes that
-	// dbs[i] is a machine that holds partition "i % *partitions". If we have an
-	// affinity partition, all connections will be for the same partition.
-	partitionDBs := make([][]*workload.MultiConnPool, w.partitions)
 	if w.affinityPartition >= 0 {
 		// All connections are for our local partition.
 		partitionDBs[w.affinityPartition] = dbs
