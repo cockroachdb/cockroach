@@ -130,8 +130,13 @@ var _ execinfrapb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
 func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if src, ok := c.input.(execinfrapb.MetadataSource); ok {
-		c.accumulatedMeta = append(c.accumulatedMeta, src.DrainMeta(ctx)...)
+	c.MoveToDraining(nil /* err */)
+	for {
+		meta := c.DrainHelper()
+		if meta == nil {
+			break
+		}
+		c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 	}
 	return c.accumulatedMeta
 }
