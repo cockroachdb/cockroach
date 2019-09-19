@@ -1077,6 +1077,10 @@ func MakeTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.MutableTableDescriptor, error) {
+	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
+	// been populated.
+	columnSequenceExprMap := make(map[int]tree.TypedExpr)
+
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges)
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
@@ -1094,22 +1098,18 @@ func MakeTableDesc(
 				return desc, err
 			}
 
+			desc.AddColumn(col)
 			if d.HasDefaultExpr() {
-				changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, col, expr)
-				if err != nil {
-					return desc, err
-				}
-				for _, changedSeqDesc := range changedSeqDescs {
-					affected[changedSeqDesc.ID] = changedSeqDesc
-				}
+				// This resolution must be delayed until ColumnIDs have been populated.
+				columnSequenceExprMap[len(desc.Columns)-1] = expr
 			}
 
-			desc.AddColumn(col)
 			if idx != nil {
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
 					return desc, err
 				}
 			}
+
 			if d.HasColumnFamily() {
 				// Pass true for `create` and `ifNotExists` because when we're creating
 				// a table, we always want to create the specified family if it doesn't
@@ -1251,6 +1251,20 @@ func MakeTableDesc(
 			return desc, err
 		}
 		desc.PrimaryIndex.Partitioning = partitioning
+	}
+
+	// Once all the IDs have been allocated, we can add the Sequence dependencies
+	// as maybeAddSequenceDependencies requires ColumnIDs to be correct.
+	for i := range desc.Columns {
+		if expr, ok := columnSequenceExprMap[i]; ok {
+			changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, &desc.Columns[i], expr, affected)
+			if err != nil {
+				return desc, err
+			}
+			for _, changedSeqDesc := range changedSeqDescs {
+				affected[changedSeqDesc.ID] = changedSeqDesc
+			}
+		}
 	}
 
 	// With all structural elements in place and IDs allocated, we can resolve the
