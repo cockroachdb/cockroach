@@ -192,11 +192,7 @@ func TestSortChunks(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		cols := make([]int, len(tc.typ))
-		for i := range cols {
-			cols[i] = i
-		}
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
 			return NewSortChunks(input[0], tc.typ, tc.ordCols, tc.matchLen)
 		})
 	}
@@ -236,11 +232,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				copy(expected, tups)
 				sort.Slice(expected, less(expected, ordCols))
 
-				cols := make([]int, nCols)
-				for i := range cols {
-					cols[i] = i
-				}
-				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
+				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, func(input []Operator) (Operator, error) {
 					return NewSortChunks(input[0], typs[:nCols], ordCols, matchLen)
 				})
 			}
