@@ -104,6 +104,12 @@ var (
 	// endpoint to be usable.
 	remoteDebuggingErr = grpcstatus.Error(
 		codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+
+	// Counter to count accesses to the prometheus vars endpoint /_status/vars .
+	telemetryPrometheusVars = telemetry.GetCounterOnce("monitoring.prometheus.vars")
+
+	// Counter to count accesses to the health check endpoint /health .
+	telemetryHealthCheck = telemetry.GetCounterOnce("monitoring.health.details")
 )
 
 type metricMarshaler interface {
@@ -608,6 +614,7 @@ func (s *statusServer) Details(
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
+	telemetry.Inc(telemetryHealthCheck)
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
@@ -1164,6 +1171,7 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	telemetry.Inc(telemetryPrometheusVars)
 }
 
 // Ranges returns range info for the specified node.
