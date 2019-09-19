@@ -1423,7 +1423,7 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 // GetRangesInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
 func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
-	f := rf.kvFetcher.kvBatchFetcher
+	f := rf.kvFetcher
 	if f == nil {
 		// Not yet initialized.
 		return nil
@@ -1433,7 +1433,12 @@ func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
 
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.
 func (rf *Fetcher) GetBytesRead() int64 {
-	return rf.kvFetcher.bytesRead
+	f := rf.kvFetcher
+	if f == nil {
+		// Not yet initialized.
+		return 0
+	}
+	return f.bytesRead
 }
 
 // Only unique secondary indexes have extra columns to decode (namely the

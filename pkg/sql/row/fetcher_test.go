@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 )
 
 type initFetcherArgs struct {
@@ -1051,4 +1052,13 @@ func TestRowFetcherReset(t *testing.T) {
 
 func idLookupKey(tableID TableID, indexID sqlbase.IndexID) uint64 {
 	return (uint64(tableID) << 32) | uint64(indexID)
+}
+
+func TestFetcherUninitialized(t *testing.T) {
+	// Regression test for #39013: make sure it's okay to call GetRangesInfo and
+	// GetBytesReader even before the fetcher was fully initialized.
+	var fetcher Fetcher
+
+	assert.Nil(t, fetcher.GetRangesInfo())
+	assert.Zero(t, fetcher.GetBytesRead())
 }
