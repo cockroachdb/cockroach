@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
