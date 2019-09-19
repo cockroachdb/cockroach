@@ -1542,7 +1542,9 @@ func execChangeReplicasTxn(
 	descKey := keys.RangeDescriptorKey(referenceDesc.StartKey)
 
 	check := func(kvDesc *roachpb.RangeDescriptor) bool {
-		if chgs.leaveJoint() {
+		// NB: We might fail to find the range if the range has been merged away
+		// in which case we definitely want to fail the check below.
+		if kvDesc != nil && kvDesc.RangeID == referenceDesc.RangeID && chgs.leaveJoint() {
 			// If there are no changes, we're trying to leave a joint config,
 			// so that's all we care about. But since leaving a joint config
 			// is done opportunistically whenever one is encountered, this is
