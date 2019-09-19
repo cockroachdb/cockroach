@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -372,8 +373,8 @@ func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
 func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testing.Short() {
-		t.Skip("short flag - #38565")
+	if testing.Short() || testutils.NightlyStress() || util.RaceEnabled {
+		t.Skip("https://github.com/cockroachdb/cockroach/issues/38565")
 	}
 	ctx := context.Background()
 

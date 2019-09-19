@@ -1590,7 +1590,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:aa2a7acc4a2f78d9bc0e6ffc795e24221d25f1b1d56fb472f834e377ebed7d28"
+  digest = "1:82820ce5a7424a7d8f4dacade484422acb0145f2315874c70ea88cf54253d19c"
   name = "golang.org/x/net"
   packages = [
     "context",
@@ -1607,7 +1607,7 @@
     "trace",
   ]
   pruneopts = "UT"
-  revision = "915654e7eabcea33ae277abbecf52f0d8b7a9fdc"
+  revision = "a8b05e9114ab0cb08faec337c959aed24b68bf50"
 
 [[projects]]
   branch = "master"
@@ -2089,6 +2089,7 @@
     "golang.org/x/tools/go/analysis/multichecker",
     "golang.org/x/tools/go/analysis/passes/inspect",
     "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
+    "golang.org/x/tools/go/ast/astutil",
     "golang.org/x/tools/go/ast/inspector",
     "golang.org/x/tools/go/buildutil",
     "golang.org/x/tools/go/packages",
