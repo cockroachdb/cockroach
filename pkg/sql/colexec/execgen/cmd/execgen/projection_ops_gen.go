@@ -71,7 +71,7 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	} else {
 		col = {{.LTyp.Slice "col" "0" "int(n)"}}
 		colLen := {{.LTyp.Len "col"}}
-		_ = projCol[colLen-1]
+		_ = {{.RetTyp.Get "projCol" "colLen-1"}}
 		for {{.LTyp.Range "i" "col"}} {
 			arg := {{.LTyp.Get "col" "i"}}
 			{{(.Assign "projCol[i]" "arg" "p.constArg")}}
@@ -121,7 +121,7 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	} else {
 		col = {{.RTyp.Slice "col" "0" "int(n)"}}
 		colLen := {{.RTyp.Len "col"}}
-		_ = projCol[colLen-1]
+		_ = {{.RetTyp.Get "projCol" "colLen-1"}}
 		for {{.RTyp.Range "i" "col"}} {
 			arg := {{.RTyp.Get "col" "i"}}
 			{{(.Assign "projCol[i]" "p.constArg" "arg")}}
@@ -173,11 +173,11 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	} else {
 		col1 = {{.LTyp.Slice "col1" "0" "int(n)"}}
 		colLen := {{.LTyp.Len "col1"}}
-		_ = projCol[colLen-1]
-		_ = {{.LTyp.Get "col2" "colLen-1"}}
+		_ = {{.RetTyp.Get "projCol" "colLen-1"}}
+		_ = {{.RTyp.Get "col2" "colLen-1"}}
 		for {{.LTyp.Range "i" "col1"}} {
 			arg1 := {{.LTyp.Get "col1" "i"}}
-			arg2 := {{.LTyp.Get "col2" "i"}}
+			arg2 := {{.RTyp.Get "col2" "i"}}
 			{{(.Assign "projCol[i]" "arg1" "arg2")}}
 		}
 	}
