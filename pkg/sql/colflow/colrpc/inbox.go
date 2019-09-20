@@ -148,7 +148,7 @@ func NewInbox(typs []coltypes.T, streamID execinfrapb.StreamID) (*Inbox, error) 
 
 // EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
 func (i *Inbox) EstimateStaticMemoryUsage() int {
-	return colexec.EstimateBatchSizeBytes(i.typs, coldata.BatchSize)
+	return colexec.EstimateBatchSizeBytes(i.typs, int(coldata.BatchSize()))
 }
 
 // maybeInitLocked calls Inbox.initLocked if the inbox is not initialized and

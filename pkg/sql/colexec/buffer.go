@@ -38,7 +38,7 @@ func NewBufferOp(input Operator) Operator {
 	return &bufferOp{
 		input: input,
 		batch: &selectionBatch{
-			sel: make([]uint16, coldata.BatchSize),
+			sel: make([]uint16, coldata.BatchSize()),
 		},
 	}
 }

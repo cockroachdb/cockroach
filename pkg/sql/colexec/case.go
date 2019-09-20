@@ -55,7 +55,7 @@ func (c *caseOp) Child(nth int) execinfra.OpNode {
 
 func (c *caseOp) EstimateStaticMemoryUsage() int {
 	// We statically use a single selection vector, origSel.
-	return coldata.BatchSize * sizeOfInt16
+	return int(coldata.BatchSize()) * sizeOfInt16
 }
 
 // NewCaseOp returns an operator that runs a case statement.
@@ -83,7 +83,7 @@ func NewCaseOp(
 		thenIdxs:  thenIdxs,
 		outputIdx: outputIdx,
 		typ:       typ,
-		origSel:   make([]uint16, coldata.BatchSize),
+		origSel:   make([]uint16, coldata.BatchSize()),
 	}
 }
 

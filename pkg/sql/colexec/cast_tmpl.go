@@ -117,7 +117,7 @@ type castOpNullAny struct {
 var _ StaticMemoryOperator = &castOpNullAny{}
 
 func (c *castOpNullAny) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{c.toType}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{c.toType}, int(coldata.BatchSize()))
 }
 
 func (c *castOpNullAny) Init() {
@@ -173,7 +173,7 @@ type castOp_FROMTYPE_TOTYPE struct {
 var _ StaticMemoryOperator = &castOp_FROMTYPE_TOTYPE{}
 
 func (c *castOp_FROMTYPE_TOTYPE) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{c.toType}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{c.toType}, int(coldata.BatchSize()))
 }
 
 func (c *castOp_FROMTYPE_TOTYPE) Init() {

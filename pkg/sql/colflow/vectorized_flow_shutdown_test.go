@@ -217,7 +217,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						runOutboxInbox(ctxRemote, cancelRemote, hashRouterOutputs[i], inboxes[i], streamID, outboxMetadataSources)
 					} else {
 						batch := coldata.NewMemBatch(typs)
-						batch.SetLength(coldata.BatchSize)
+						batch.SetLength(coldata.BatchSize())
 						runOutboxInbox(ctxRemote, cancelRemote, colexec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++

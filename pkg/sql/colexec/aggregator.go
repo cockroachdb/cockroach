@@ -104,7 +104,7 @@ type orderedAggregator struct {
 		// resumeIdx is the index at which the aggregation functions should start
 		// writing to on the next iteration of Next().
 		resumeIdx int
-		// outputSize is col.BatchSize by default.
+		// outputSize is col.BatchSize() by default.
 		outputSize int
 	}
 
@@ -243,11 +243,11 @@ func makeAggregateFuncs(
 }
 
 func (a *orderedAggregator) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes(a.outputTypes, coldata.BatchSize*2)
+	return EstimateBatchSizeBytes(a.outputTypes, int(coldata.BatchSize()*2))
 }
 
 func (a *orderedAggregator) initWithOutputBatchSize(outputSize uint16) {
-	a.initWithInputAndOutputBatchSize(coldata.BatchSize, int(outputSize))
+	a.initWithInputAndOutputBatchSize(int(coldata.BatchSize()), int(outputSize))
 }
 
 func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSize int) {
@@ -265,7 +265,7 @@ func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSiz
 }
 
 func (a *orderedAggregator) Init() {
-	a.initWithInputAndOutputBatchSize(coldata.BatchSize, coldata.BatchSize)
+	a.initWithInputAndOutputBatchSize(int(coldata.BatchSize()), int(coldata.BatchSize()))
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
