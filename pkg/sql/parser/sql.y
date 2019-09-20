@@ -2166,10 +2166,6 @@ comment_stmt:
 
     $$.val = &tree.CommentOnColumn{ColumnItem: columnItem, Comment: $6.strPtr()}
   }
-| COMMENT ON error
-  {
-    return unimplementedWithIssue(sqllex, 19472)
-  }
 
 comment_text:
   SCONST
