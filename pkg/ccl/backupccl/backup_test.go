@@ -1893,6 +1893,19 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, localFoo)
 	atomic.StoreInt32(&allowErrors, 0)
 
+	// TODO(pbardea): Without this wait we see this test falke under stress.
+	// See #40951 for the tracking issue.
+	for i := 0; i < 5; i++ {
+		_, err := tc.Conns[1].Exec("SELECT * FROM bank.bank LIMIT 1")
+		if err != nil {
+			t.Logf("%s", err)
+			time.Sleep(time.Second)
+			continue
+		}
+		t.Logf("found the table")
+		break
+	}
+
 	bad := sqlDB.QueryStr(t, `SELECT id, balance, payload FROM data.bank WHERE id != balance`)
 	for _, r := range bad {
 		t.Errorf("bad row ID %s = bal %s (payload: %q)", r[0], r[1], r[2])
