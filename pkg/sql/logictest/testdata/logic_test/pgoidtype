@@ -313,3 +313,9 @@ SELECT proargtypes::REGTYPE[] FROM pg_proc WHERE proname = 'obj_description'
 ----
 {oid}
 {oid,text}
+
+# Ensure that you can get a regtype for the trigger type.
+query I
+SELECT 'trigger'::REGTYPE::INT
+----
+-1
