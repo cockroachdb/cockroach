@@ -39,7 +39,7 @@ type aggregatorTestCase struct {
 	aggCols   [][]uint32
 	input     tuples
 	expected  tuples
-	// {output}BatchSize if not 0 are passed in to NewOrderedAggregator to
+	// {output}BatchSize() if not 0 are passed in to NewOrderedAggregator to
 	// divide input/output batches.
 	batchSize       int
 	outputBatchSize int
@@ -115,10 +115,10 @@ func (tc *aggregatorTestCase) init() error {
 		tc.colTypes = defaultColTyps
 	}
 	if tc.batchSize == 0 {
-		tc.batchSize = coldata.BatchSize
+		tc.batchSize = int(coldata.BatchSize())
 	}
 	if tc.outputBatchSize == 0 {
-		tc.outputBatchSize = coldata.BatchSize
+		tc.outputBatchSize = int(coldata.BatchSize())
 	}
 	return nil
 }
@@ -466,13 +466,13 @@ func TestAggregatorRandom(t *testing.T) {
 	// to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
-	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
+	for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 4, int(coldata.BatchSize()) / 2} {
 		for _, numInputBatches := range []int{1, 2, 64} {
 			for _, hasNulls := range []bool{true, false} {
 				for _, agg := range aggTypes {
 					t.Run(fmt.Sprintf("%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls),
 						func(t *testing.T) {
-							nTuples := coldata.BatchSize * numInputBatches
+							nTuples := int(coldata.BatchSize()) * numInputBatches
 							typs := []coltypes.T{coltypes.Int64, coltypes.Float64}
 							cols := []coldata.Vec{
 								coldata.NewMemColumn(typs[0], nTuples),
@@ -592,10 +592,10 @@ func TestAggregatorRandom(t *testing.T) {
 								}
 								i++
 							}
-							totalInputRows := numInputBatches * coldata.BatchSize
+							totalInputRows := numInputBatches * int(coldata.BatchSize())
 							nOutputRows := totalInputRows / groupSize
-							expBatches := (nOutputRows / coldata.BatchSize)
-							if nOutputRows%coldata.BatchSize != 0 {
+							expBatches := nOutputRows / int(coldata.BatchSize())
+							if nOutputRows%int(coldata.BatchSize()) != 0 {
 								expBatches++
 							}
 							if i != expBatches {
@@ -625,14 +625,14 @@ func BenchmarkAggregator(b *testing.B) {
 		b.Run(fName, func(b *testing.B) {
 			for _, agg := range aggTypes {
 				for _, typ := range []coltypes.T{coltypes.Int64, coltypes.Decimal} {
-					for _, groupSize := range []int{1, 2, coldata.BatchSize / 2, coldata.BatchSize} {
+					for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 2, int(coldata.BatchSize())} {
 						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
 								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
 									groupSize, hasNulls, numInputBatches),
 									func(b *testing.B) {
 										colTypes := []coltypes.T{coltypes.Int64, typ}
-										nTuples := numInputBatches * coldata.BatchSize
+										nTuples := numInputBatches * int(coldata.BatchSize())
 										cols := []coldata.Vec{coldata.NewMemColumn(coltypes.Int64, nTuples), coldata.NewMemColumn(typ, nTuples)}
 										groups := cols[0].Int64()
 										curGroup := -1

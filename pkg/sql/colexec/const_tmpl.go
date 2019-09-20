@@ -128,7 +128,7 @@ type constNullOp struct {
 var _ StaticMemoryOperator = &constNullOp{}
 
 func (c constNullOp) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{c.typ}, coldata.BatchSize)
+	return EstimateBatchSizeBytes([]coltypes.T{c.typ}, int(coldata.BatchSize()))
 }
 
 func (c constNullOp) Init() {

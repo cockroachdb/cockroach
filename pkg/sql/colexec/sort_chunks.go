@@ -185,7 +185,7 @@ type chunker struct {
 	// buffered indicates the number of currently buffered tuples.
 	buffered uint64
 	// bufferedColumns is a buffer to store tuples when a chunk is bigger than
-	// col.BatchSize or when the chunk is the last in the last read batch (we
+	// col.BatchSize() or when the chunk is the last in the last read batch (we
 	// don't know yet where the end of such chunk is).
 	bufferedColumns []coldata.Vec
 
@@ -222,7 +222,7 @@ func (s *chunker) init() {
 	for i := 0; i < len(s.inputTypes); i++ {
 		s.bufferedColumns[i] = coldata.NewMemColumn(s.inputTypes[i], 0)
 	}
-	s.partitionCol = make([]bool, coldata.BatchSize)
+	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]uint64, 0, 16)
 }
 

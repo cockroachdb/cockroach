@@ -119,7 +119,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)
 	lastB := int64(0)
-	for i := 0; i < coldata.BatchSize; i++ {
+	for i := 0; i < int(coldata.BatchSize()); i++ {
 		// 1/4 chance of changing each distinct coldata.
 		if rng.Float64() > 0.75 {
 			lastA++
@@ -130,7 +130,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 		aCol[i] = lastA
 		bCol[i] = lastB
 	}
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
@@ -143,14 +143,14 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	for _, nulls := range []bool{false, true} {
 		b.Run(fmt.Sprintf("nulls=%t", nulls), func(b *testing.B) {
 			if nulls {
-				n := coldata.NewNulls(coldata.BatchSize)
+				n := coldata.NewNulls(int(coldata.BatchSize()))
 				// Setting one value to null is enough to trigger the null handling
 				// logic for the entire batch.
 				n.SetNull(0)
 				batch.ColVec(1).SetNulls(&n)
 				batch.ColVec(2).SetNulls(&n)
 			}
-			b.SetBytes(int64(8 * coldata.BatchSize * 3))
+			b.SetBytes(int64(8 * coldata.BatchSize() * 3))
 			for i := 0; i < b.N; i++ {
 				distinct.Next(ctx)
 			}

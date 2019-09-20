@@ -57,21 +57,21 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col := batch.ColVec(0).Int64()
-	for i := int64(0); i < coldata.BatchSize; i++ {
+	for i := 0; i < int(coldata.BatchSize()); i++ {
 		col[i] = 1
 	}
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(uint16(i))
 			}
 		}
 	}
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := int64(0); i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			sel[i] = uint16(i)
 		}
 	}
@@ -88,7 +88,7 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 	}
 	plusOp.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize))
+	b.SetBytes(int64(8 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)
 	}
@@ -191,14 +191,14 @@ func benchmarkProjOp(
 	case coltypes.Int64:
 		col1 := batch.ColVec(0).Int64()
 		col2 := batch.ColVec(1).Int64()
-		for i := int64(0); i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			col1[i] = 1
 			col2[i] = 1
 		}
 	case coltypes.Int32:
 		col1 := batch.ColVec(0).Int32()
 		col2 := batch.ColVec(1).Int32()
-		for i := int32(0); i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			col1[i] = 1
 			col2[i] = 1
 		}
@@ -206,7 +206,7 @@ func benchmarkProjOp(
 		b.Fatalf("unsupported type: %s", intType)
 	}
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(uint16(i))
 			}
@@ -215,12 +215,12 @@ func benchmarkProjOp(
 			}
 		}
 	}
-	batch.SetLength(coldata.BatchSize)
+	batch.SetLength(coldata.BatchSize())
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := int64(0); i < coldata.BatchSize; i++ {
-			sel[i] = uint16(i)
+		for i := uint16(0); i < coldata.BatchSize(); i++ {
+			sel[i] = i
 		}
 	}
 	source := NewRepeatableBatchSource(batch)
@@ -229,7 +229,7 @@ func benchmarkProjOp(
 	op := makeProjOp(source, intType)
 	op.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize * 2))
+	b.SetBytes(int64(8 * coldata.BatchSize() * 2))
 	for i := 0; i < b.N; i++ {
 		op.Next(ctx)
 	}

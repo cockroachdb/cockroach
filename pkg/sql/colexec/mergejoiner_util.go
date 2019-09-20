@@ -209,7 +209,7 @@ func newMJBufferedGroup(types []coltypes.T) *mjBufferedGroup {
 		colVecs: make([]coldata.Vec, len(types)),
 	}
 	for i, t := range types {
-		bg.colVecs[i] = coldata.NewMemColumn(t, coldata.BatchSize)
+		bg.colVecs[i] = coldata.NewMemColumn(t, int(coldata.BatchSize()))
 	}
 	return bg
 }

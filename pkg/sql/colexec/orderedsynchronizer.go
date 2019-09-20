@@ -64,7 +64,7 @@ func NewOrderedSynchronizer(
 
 // EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
 func (o *OrderedSynchronizer) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes(o.columnTypes, coldata.BatchSize)
+	return EstimateBatchSizeBytes(o.columnTypes, int(coldata.BatchSize()))
 }
 
 // Next is part of the Operator interface.
@@ -78,7 +78,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	}
 	o.output.ResetInternalBatch()
 	outputIdx := uint16(0)
-	for outputIdx < coldata.BatchSize {
+	for outputIdx < coldata.BatchSize() {
 		// Determine the batch with the smallest row.
 		minBatch := -1
 		for i := range o.inputs {

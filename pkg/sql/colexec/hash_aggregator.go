@@ -121,7 +121,7 @@ func NewHashAggregator(
 		return nil, err
 	}
 
-	distinctCol := make([]bool, coldata.BatchSize)
+	distinctCol := make([]bool, coldata.BatchSize())
 
 	grouper := &hashGrouper{
 		builder:     builder,
@@ -153,7 +153,7 @@ type hashGrouper struct {
 	ht      *hashTable
 
 	// sel is an ordered list of indices to select representing the input rows.
-	// This selection vector is much bigger than coldata.BatchSize and should be
+	// This selection vector is much bigger than coldata.BatchSize() and should be
 	// batched with the hashGrouper operator.
 	sel []uint64
 	// distinct represents whether each corresponding row is part of a new group.
@@ -228,11 +228,11 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 	}
 
 	// Create and return the next batch of input to a maximum size of
-	// coldata.BatchSize. The rows in the new batch is specified by the corresponding
+	// coldata.BatchSize(). The rows in the new batch is specified by the corresponding
 	// slice in the selection vector.
 	nSelected := uint16(0)
 
-	batchEnd := op.batchStart + uint64(coldata.BatchSize)
+	batchEnd := op.batchStart + uint64(coldata.BatchSize())
 	if batchEnd > op.ht.size {
 		batchEnd = op.ht.size
 	}

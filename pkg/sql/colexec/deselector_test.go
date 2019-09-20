@@ -86,16 +86,16 @@ func BenchmarkDeselector(b *testing.B) {
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize; i++ {
+		for i := 0; i < int(coldata.BatchSize()); i++ {
 			col[i] = int64(i)
 		}
 	}
 	for _, probOfOmitting := range []float64{0.1, 0.9} {
-		sel := randomSel(rng, coldata.BatchSize, probOfOmitting)
+		sel := randomSel(rng, coldata.BatchSize(), probOfOmitting)
 		batchLen := uint16(len(sel))
 
 		for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
-			b.Run(fmt.Sprintf("rows=%d/after selection=%d", nBatches*coldata.BatchSize, nBatches*int(batchLen)), func(b *testing.B) {
+			b.Run(fmt.Sprintf("rows=%d/after selection=%d", nBatches*int(coldata.BatchSize()), nBatches*int(batchLen)), func(b *testing.B) {
 				// We're measuring the amount of data that is not selected out.
 				b.SetBytes(int64(8 * nBatches * int(batchLen) * nCols))
 				batch.SetSelection(true)

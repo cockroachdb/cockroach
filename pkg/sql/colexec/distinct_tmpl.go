@@ -39,7 +39,7 @@ import (
 func OrderedDistinctColsToOperators(
 	input Operator, distinctCols []uint32, typs []coltypes.T,
 ) (Operator, []bool, error) {
-	distinctCol := make([]bool, coldata.BatchSize)
+	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
 	input = fnOp{
 		OneInputNode: NewOneInputNode(input),
@@ -61,7 +61,7 @@ func OrderedDistinctColsToOperators(
 	}
 	distinctChain := &distinctChainOps{
 		resettableOperator:         r,
-		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, coldata.BatchSize),
+		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, int(coldata.BatchSize())),
 	}
 	return distinctChain, distinctCol, nil
 }
