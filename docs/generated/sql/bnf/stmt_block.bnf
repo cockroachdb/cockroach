@@ -178,6 +178,7 @@ show_stmt ::=
 	| show_jobs_stmt
 	| show_queries_stmt
 	| show_ranges_stmt
+	| show_range_for_row_stmt
 	| show_roles_stmt
 	| show_schemas_stmt
 	| show_sequences_stmt
@@ -511,6 +512,10 @@ show_ranges_stmt ::=
 	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
 	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
 	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name
+
+show_range_for_row_stmt ::=
+	'SHOW' 'RANGE' 'FROM' 'TABLE' table_name 'FOR' 'ROW' '(' expr_list ')'
+	| 'SHOW' 'RANGE' 'FROM' 'INDEX' table_index_name 'FOR' 'ROW' '(' expr_list ')'
 
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
