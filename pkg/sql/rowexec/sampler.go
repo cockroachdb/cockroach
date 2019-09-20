@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -174,8 +175,8 @@ func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
 }
 
 // Run is part of the Processor interface.
-func (s *samplerProcessor) Run(ctx context.Context) {
-	s.input.Start(ctx)
+func (s *samplerProcessor) Run(ctx context.Context, txn *client.Txn) {
+	s.input.Start(ctx, txn)
 	s.StartInternal(ctx, samplerProcName)
 
 	earlyExit, err := s.mainLoop(s.Ctx)

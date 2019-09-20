@@ -247,6 +247,7 @@ type zigzagJoiner struct {
 
 	// returnedMeta contains all the metadata that zigzag joiner has emitted.
 	returnedMeta []execinfrapb.ProducerMetadata
+	txn          *client.Txn
 }
 
 // Batch size is a parameter which determines how many rows should be fetched
@@ -344,7 +345,8 @@ func valuesSpecToEncDatum(
 }
 
 // Start is part of the RowSource interface.
-func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
+func (z *zigzagJoiner) Start(ctx context.Context, txn *client.Txn) context.Context {
+	z.txn = txn
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.evalCtx = z.FlowCtx.NewEvalCtx()
 	z.cancelChecker = sqlbase.NewCancelChecker(ctx)
@@ -897,7 +899,7 @@ func (z *zigzagJoiner) collectAllMatches(
 
 // Next is part of the RowSource interface.
 func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	txn := z.FlowCtx.Txn
+	txn := z.txn
 
 	if !z.started {
 		z.started = true

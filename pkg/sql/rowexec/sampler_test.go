@@ -64,7 +64,7 @@ func runSampler(
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Run(context.Background())
+	p.Run(context.Background(), nil /* txn */)
 
 	// Verify we have numSamples distinct rows.
 	res := make([]int, 0, numSamples)
@@ -219,7 +219,7 @@ func TestSamplerSketch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Run(context.Background())
+	p.Run(context.Background(), nil /* txn */)
 
 	// Collect the rows, excluding metadata.
 	rows = rows[:0]

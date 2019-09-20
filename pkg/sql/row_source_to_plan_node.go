@@ -65,7 +65,7 @@ func makeRowSourceToPlanNode(
 }
 
 func (r *rowSourceToPlanNode) startExec(params runParams) error {
-	r.source.Start(params.ctx)
+	r.source.Start(params.ctx, params.p.Txn())
 	return nil
 }
 

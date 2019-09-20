@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -56,8 +57,8 @@ func newNoopProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (n *noopProcessor) Start(ctx context.Context) context.Context {
-	n.input.Start(ctx)
+func (n *noopProcessor) Start(ctx context.Context, txn *client.Txn) context.Context {
+	n.input.Start(ctx, txn)
 	return n.StartInternal(ctx, noopProcName)
 }
 

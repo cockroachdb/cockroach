@@ -1025,3 +1025,8 @@ func (txn *Txn) deadline() *hlc.Timestamp {
 	defer txn.mu.Unlock()
 	return txn.mu.deadline
 }
+
+// GatewayNodeID exposes the transaction's gateway node.
+func (txn *Txn) GatewayNodeID() roachpb.NodeID {
+	return txn.gatewayNodeID
+}

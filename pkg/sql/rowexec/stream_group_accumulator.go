@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -57,8 +58,8 @@ func makeStreamGroupAccumulator(
 	}
 }
 
-func (s *streamGroupAccumulator) start(ctx context.Context) {
-	s.src.Start(ctx)
+func (s *streamGroupAccumulator) start(ctx context.Context, txn *client.Txn) {
+	s.src.Start(ctx, txn)
 }
 
 // nextGroup returns the next group from the inputs. The returned slice is not safe

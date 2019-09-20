@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
@@ -69,6 +70,8 @@ type Outbox struct {
 	// Used to pass a clean context to the input.Next.
 	runnerCtx context.Context
 }
+
+var _ execinfra.OpNode = &Outbox{}
 
 // NewOutbox creates a new Outbox.
 func NewOutbox(

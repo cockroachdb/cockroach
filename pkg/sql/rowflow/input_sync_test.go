@@ -118,7 +118,7 @@ func TestOrderedSync(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		src.Start(context.Background())
+		src.Start(context.Background(), nil /* txn */)
 		var retRows sqlbase.EncDatumRows
 		for {
 			row, meta := src.Next()
@@ -158,7 +158,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	o.Start(ctx)
+	o.Start(ctx, nil /* txn */)
 
 	// Call ConsumerDone before Next has been called.
 	o.ConsumerDone()

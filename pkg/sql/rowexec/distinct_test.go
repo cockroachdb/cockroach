@@ -126,7 +126,7 @@ func TestDistinct(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			d.Run(context.Background())
+			d.Run(context.Background(), nil /* txn */)
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -175,7 +175,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(context.Background())
+				d.Run(context.Background(), nil /* txn */)
 				input.Reset()
 			}
 		})

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -38,9 +39,11 @@ type Columnarizer struct {
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
 	typs            []coltypes.T
+	txn             *client.Txn
 }
 
 var _ StaticMemoryOperator = &Columnarizer{}
+var _ KVOp = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
@@ -68,6 +71,11 @@ func NewColumnarizer(
 	return c, err
 }
 
+// SetTxn implements the KVOp interface.
+func (c *Columnarizer) SetTxn(_ context.Context, txn *client.Txn) {
+	c.txn = txn
+}
+
 // EstimateStaticMemoryUsage is part of the StaticMemoryOperator
 // interface.
 func (c *Columnarizer) EstimateStaticMemoryUsage() int {
@@ -82,7 +90,7 @@ func (c *Columnarizer) Init() {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
 	}
 	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
-	c.input.Start(c.ctx)
+	c.input.Start(c.ctx, c.txn)
 }
 
 // Next is part of the Operator interface.

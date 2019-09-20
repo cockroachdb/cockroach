@@ -216,29 +216,11 @@ func (ds *ServerImpl) setupFlow(
 	)
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 
-	// Figure out what txn the flow needs to run in, if any.
-	// For local flows, the txn comes from localState.Txn. For non-local ones, we
-	// create a txn based on the request's TxnCoordMeta.
-	var txn *client.Txn
-	if !localState.IsLocal {
-		if meta := req.TxnCoordMeta; meta != nil {
-			if meta.Txn.Status != roachpb.PENDING {
-				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
-					meta.Txn)
-			}
-			// The flow will run in a LeafTxn because we do not want each distributed
-			// Txn to heartbeat the transaction.
-			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
-		}
-	} else {
-		txn = localState.Txn
-	}
-
+	// NB: evalCtx.Txn is filled later.
 	var evalCtx *tree.EvalContext
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
 		evalCtx.Mon = &monitor
-		evalCtx.Txn = txn
 	} else {
 		location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
 		if err != nil {
@@ -293,7 +275,6 @@ func (ds *ServerImpl) setupFlow(
 			// TODO(andrei): This is wrong. Each processor should override Ctx with its
 			// own context.
 			Context:          ctx,
-			Txn:              txn,
 			Planner:          &sqlbase.DummyEvalPlanner{},
 			SessionAccessor:  &sqlbase.DummySessionAccessor{},
 			Sequence:         &sqlbase.DummySequenceOperators{},
@@ -317,7 +298,6 @@ func (ds *ServerImpl) setupFlow(
 		Cfg:            &ds.ServerConfig,
 		ID:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
-		Txn:            txn,
 		NodeID:         nodeID,
 		TraceKV:        req.TraceKV,
 		Local:          localState.IsLocal,
@@ -428,7 +408,9 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 		defer ctxCancel()
 		f.AddStartable(mbox)
 		ds.Metrics.FlowStart()
-		if err := f.Run(ctx, func() {}); err != nil {
+
+		txn := makeRemoteFlowTxn(ctx, req, ds.FlowDB)
+		if err := f.Run(ctx, txn, func() {} /* doneFn */); err != nil {
 			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 				"The error should have gone to the consumer.", err)
 		}
@@ -438,6 +420,22 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 		return err
 	}
 	return mbox.Err()
+}
+
+// makeRemoteFlow creates a LeafTxn.
+func makeRemoteFlowTxn(
+	ctx context.Context, req *execinfrapb.SetupFlowRequest, db *client.DB,
+) *client.Txn {
+	meta := req.TxnCoordMeta
+	if meta == nil {
+		return nil
+	}
+	if meta.Txn.Status != roachpb.PENDING {
+		log.Fatalf(ctx, "cannot create flow in non-PENDING txn: %s", meta.Txn)
+	}
+	// The flow will run in a LeafTxn because we do not want each distributed
+	// Txn to heartbeat the transaction.
+	return client.NewTxnWithCoordMeta(ctx, db, req.Flow.Gateway, client.LeafTxn, *meta)
 }
 
 // SetupFlow is part of the DistSQLServer interface.
@@ -452,7 +450,7 @@ func (ds *ServerImpl) SetupFlow(
 	ctx = ds.AnnotateCtx(context.Background())
 	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
 	if err == nil {
-		err = ds.flowScheduler.ScheduleFlow(ctx, f)
+		err = ds.flowScheduler.ScheduleFlow(ctx, f, makeRemoteFlowTxn(ctx, req, ds.FlowDB))
 	}
 	if err != nil {
 		// We return flow deployment errors in the response so that they are

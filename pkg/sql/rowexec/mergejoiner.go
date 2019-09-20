@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -111,8 +112,8 @@ func newMergeJoiner(
 }
 
 // Start is part of the RowSource interface.
-func (m *mergeJoiner) Start(ctx context.Context) context.Context {
-	m.streamMerger.start(ctx)
+func (m *mergeJoiner) Start(ctx context.Context, txn *client.Txn) context.Context {
+	m.streamMerger.start(ctx, txn)
 	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	return ctx

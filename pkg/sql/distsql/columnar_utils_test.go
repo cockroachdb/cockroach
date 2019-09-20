@@ -104,8 +104,8 @@ func verifyColOperator(
 		return err
 	}
 
-	outProc.Start(ctx)
-	outColOp.Start(ctx)
+	outProc.Start(ctx, nil /* txn */)
+	outColOp.Start(ctx, nil /* txn */)
 	defer outProc.ConsumerClosed()
 	defer outColOp.ConsumerClosed()
 

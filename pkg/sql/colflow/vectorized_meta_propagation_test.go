@@ -97,7 +97,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mtr.Start(ctx)
+	mtr.Start(ctx, nil /* txn */)
 
 	rowCount, metaCount := 0, 0
 	for {

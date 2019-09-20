@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -65,7 +66,7 @@ func newReadImportDataProcessor(
 	return cp, nil
 }
 
-func (cp *readImportDataProcessor) Run(ctx context.Context) {
+func (cp *readImportDataProcessor) Run(ctx context.Context, _ *client.Txn) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
 	defer tracing.FinishSpan(span)
 

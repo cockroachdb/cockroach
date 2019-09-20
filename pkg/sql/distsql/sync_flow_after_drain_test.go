@@ -73,7 +73,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Start(ctx, func() {}); err != nil {
+	if err := flow.Start(ctx, nil /* txn */, func() {} /* doneFn */); err != nil {
 		t.Fatal(err)
 	}
 	flow.Wait()

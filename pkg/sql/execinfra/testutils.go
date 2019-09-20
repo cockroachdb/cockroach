@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -53,7 +54,9 @@ func (r *RepeatableRowSource) OutputTypes() []types.T {
 }
 
 // Start is part of the RowSource interface.
-func (r *RepeatableRowSource) Start(ctx context.Context) context.Context { return ctx }
+func (r *RepeatableRowSource) Start(ctx context.Context, _ *client.Txn) context.Context {
+	return ctx
+}
 
 // Next is part of the RowSource interface.
 func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {

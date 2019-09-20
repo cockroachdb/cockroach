@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -50,6 +51,7 @@ type indexSkipTableReader struct {
 
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
+	txn     *client.Txn
 }
 
 const indexSkipTableReaderProcName = "index skip table reader"
@@ -151,7 +153,8 @@ func newIndexSkipTableReader(
 	return t, nil
 }
 
-func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
+func (t *indexSkipTableReader) Start(ctx context.Context, txn *client.Txn) context.Context {
+	t.txn = txn
 	t.StartInternal(ctx, indexSkipTableReaderProcName)
 	return ctx
 }
@@ -165,7 +168,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 
 		// Start a scan to get the smallest value within this span.
 		err := t.fetcher.StartScan(
-			t.Ctx, t.FlowCtx.Txn, t.spans[t.currentSpan:t.currentSpan+1],
+			t.Ctx, t.txn, t.spans[t.currentSpan:t.currentSpan+1],
 			true, 1 /* batch size limit */, t.FlowCtx.TraceKV,
 		)
 		if err != nil {
@@ -260,7 +263,7 @@ func (t *indexSkipTableReader) generateMeta(ctx context.Context) []execinfrapb.P
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, t.FlowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, t.txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta

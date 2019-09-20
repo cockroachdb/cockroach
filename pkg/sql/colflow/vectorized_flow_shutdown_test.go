@@ -253,7 +253,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)
-				materializer.Start(ctxLocal)
+				materializer.Start(ctxLocal, nil /* txn */)
 
 				for i := 0; i < 10; i++ {
 					row, meta := materializer.Next()

@@ -14,6 +14,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -115,7 +116,7 @@ func (ca *changeAggregator) OutputTypes() []types.T {
 }
 
 // Start is part of the RowSource interface.
-func (ca *changeAggregator) Start(ctx context.Context) context.Context {
+func (ca *changeAggregator) Start(ctx context.Context, _ *client.Txn) context.Context {
 	ctx, ca.cancel = context.WithCancel(ctx)
 	// StartInternal called at the beginning of the function because there are
 	// early returns if errors are detected.
@@ -412,8 +413,8 @@ func (cf *changeFrontier) OutputTypes() []types.T {
 }
 
 // Start is part of the RowSource interface.
-func (cf *changeFrontier) Start(ctx context.Context) context.Context {
-	cf.input.Start(ctx)
+func (cf *changeFrontier) Start(ctx context.Context, txn *client.Txn) context.Context {
+	cf.input.Start(ctx, txn)
 
 	// StartInternal called at the beginning of the function because there are
 	// early returns if errors are detected.

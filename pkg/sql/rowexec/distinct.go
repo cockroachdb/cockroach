@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -135,14 +136,14 @@ func NewDistinct(
 }
 
 // Start is part of the RowSource interface.
-func (d *Distinct) Start(ctx context.Context) context.Context {
-	d.input.Start(ctx)
+func (d *Distinct) Start(ctx context.Context, txn *client.Txn) context.Context {
+	d.input.Start(ctx, txn)
 	return d.StartInternal(ctx, distinctProcName)
 }
 
 // Start is part of the RowSource interface.
-func (d *SortedDistinct) Start(ctx context.Context) context.Context {
-	d.input.Start(ctx)
+func (d *SortedDistinct) Start(ctx context.Context, txn *client.Txn) context.Context {
+	d.input.Start(ctx, txn)
 	return d.StartInternal(ctx, sortedDistinctProcName)
 }
 

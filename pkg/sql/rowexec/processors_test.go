@@ -424,7 +424,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		noop.Start(ctx)
+		noop.Start(ctx, nil /* txn */)
 		origCtx := noop.Ctx
 
 		// The context should be valid after Start but before Next is called in case

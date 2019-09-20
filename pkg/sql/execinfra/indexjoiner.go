@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -54,6 +55,7 @@ type IndexJoiner struct {
 	neededFamilies []sqlbase.FamilyID
 
 	alloc sqlbase.DatumAlloc
+	txn   *client.Txn
 }
 
 var _ Processor = &IndexJoiner{}
@@ -139,8 +141,9 @@ func (ij *IndexJoiner) SetBatchSize(batchSize int) {
 }
 
 // Start is part of the RowSource interface.
-func (ij *IndexJoiner) Start(ctx context.Context) context.Context {
-	ij.input.Start(ctx)
+func (ij *IndexJoiner) Start(ctx context.Context, txn *client.Txn) context.Context {
+	ij.txn = txn
+	ij.input.Start(ctx, txn)
 	return ij.StartInternal(ctx, indexJoinerProcName)
 }
 
@@ -174,7 +177,7 @@ func (ij *IndexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 			}
 			// Scan the primary index for this batch.
 			err := ij.fetcher.StartScan(
-				ij.Ctx, ij.FlowCtx.Txn, ij.spans, false /* limitBatches */, 0, /* limitHint */
+				ij.Ctx, ij.txn, ij.spans, false /* limitBatches */, 0, /* limitHint */
 				ij.FlowCtx.TraceKV)
 			if err != nil {
 				ij.MoveToDraining(err)
@@ -251,7 +254,7 @@ func (ij *IndexJoiner) outputStatsToTrace() {
 }
 
 func (ij *IndexJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if meta := GetTxnCoordMeta(ctx, ij.FlowCtx.Txn); meta != nil {
+	if meta := GetTxnCoordMeta(ctx, ij.txn); meta != nil {
 		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
 	}
 	return nil
@@ -273,7 +276,7 @@ func (ij *IndexJoiner) Child(nth int) OpNode {
 		if n, ok := ij.input.(OpNode); ok {
 			return n
 		}
-		panic("input to IndexJoiner is not an OpNode")
+		panic(fmt.Sprintf("input to IndexJoiner is not an OpNode: %T", ij.input))
 	}
 	panic(fmt.Sprintf("invalid index %d", nth))
 }

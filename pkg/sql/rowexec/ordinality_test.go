@@ -120,7 +120,7 @@ func TestOrdinality(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			d.Run(context.Background())
+			d.Run(context.Background(), nil /* txn */)
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -173,7 +173,7 @@ func BenchmarkOrdinality(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				o.Run(ctx)
+				o.Run(ctx, nil /* txn */)
 				input.Reset()
 			}
 		})

@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -71,8 +72,8 @@ func newCountAggregator(
 	return ag, nil
 }
 
-func (ag *countAggregator) Start(ctx context.Context) context.Context {
-	ag.input.Start(ctx)
+func (ag *countAggregator) Start(ctx context.Context, txn *client.Txn) context.Context {
+	ag.input.Start(ctx, txn)
 	return ag.StartInternal(ctx, countRowsProcName)
 }
 

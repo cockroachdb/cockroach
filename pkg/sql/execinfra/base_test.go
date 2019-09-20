@@ -35,7 +35,7 @@ func TestRunDrain(t *testing.T) {
 	src.InitWithBufSizeAndNumSenders(nil, 10, 1)
 	src.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: fmt.Errorf("test")})
 	src.Push(nil /* row */, nil /* meta */)
-	src.Start(ctx)
+	src.Start(ctx, nil /* txn */)
 
 	// A receiver that is marked as done consuming rows so that Run will
 	// immediately move from forwarding rows and metadata to draining metadata.

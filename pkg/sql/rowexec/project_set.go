@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -99,8 +100,8 @@ func newProjectSetProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
-	ps.input.Start(ctx)
+func (ps *projectSetProcessor) Start(ctx context.Context, txn *client.Txn) context.Context {
+	ps.input.Start(ctx, txn)
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 
 	// Initialize exprHelpers.

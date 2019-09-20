@@ -46,7 +46,6 @@ func runProcessorTest(
 	flowCtx := execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
-		Txn:     txn,
 	}
 
 	p, err := NewProcessor(
@@ -65,7 +64,7 @@ func runProcessorTest(
 		pt.SetBatchSize(2 /* batchSize */)
 	}
 
-	p.Run(context.Background())
+	p.Run(context.Background(), txn)
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}

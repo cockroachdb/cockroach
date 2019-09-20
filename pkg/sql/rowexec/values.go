@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -66,7 +67,7 @@ func newValuesProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (v *valuesProcessor) Start(ctx context.Context) context.Context {
+func (v *valuesProcessor) Start(ctx context.Context, _ *client.Txn) context.Context {
 	ctx = v.StartInternal(ctx, valuesProcName)
 
 	// Add a bogus header to appease the StreamDecoder, which wants to receive a

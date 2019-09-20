@@ -85,5 +85,5 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		}),
 	)
 
-	require.Panics(t, func() { require.NoError(t, flow.Run(ctx, nil)) })
+	require.Panics(t, func() { require.NoError(t, flow.Run(ctx, nil, nil)) })
 }

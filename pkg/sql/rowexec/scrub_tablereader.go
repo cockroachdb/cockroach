@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -70,9 +71,6 @@ func newScrubTableReader(
 ) (*scrubTableReader, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
-	}
-	if flowCtx.Txn == nil {
-		return nil, errors.Errorf("scrubTableReader outside of txn")
 	}
 
 	tr := &scrubTableReader{
@@ -213,13 +211,14 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 }
 
 // Start is part of the RowSource interface.
-func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
+func (tr *scrubTableReader) Start(ctx context.Context, txn *client.Txn) context.Context {
+	tr.SetTxn(ctx, txn)
 	ctx = tr.StartInternal(ctx, scrubTableReaderProcName)
 
 	log.VEventf(ctx, 1, "starting")
 
 	if err := tr.fetcher.StartScan(
-		ctx, tr.FlowCtx.Txn, tr.spans,
+		ctx, tr.txn, tr.spans,
 		true /* limit batches */, tr.limitHint, tr.FlowCtx.TraceKV,
 	); err != nil {
 		tr.MoveToDraining(err)

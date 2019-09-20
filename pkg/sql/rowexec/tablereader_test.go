@@ -130,7 +130,6 @@ func TestTableReader(t *testing.T) {
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-					Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 					NodeID:  s.NodeID(),
 				}
 
@@ -146,15 +145,16 @@ func TestTableReader(t *testing.T) {
 				}
 
 				var results execinfra.RowSource
+				txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
 				if rowSource {
-					tr.Start(ctx)
+					tr.Start(ctx, txn)
 					results = tr
 				} else {
-					tr.Run(ctx)
+					tr.Run(ctx, txn)
 					if !buf.ProducerClosed() {
 						t.Fatalf("output RowReceiver not closed")
 					}
-					buf.Start(ctx)
+					buf.Start(ctx, txn)
 					results = buf
 				}
 
@@ -215,7 +215,6 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
-		Txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
 		NodeID:  nodeID,
 	}
 	spec := execinfrapb.TableReaderSpec{
@@ -239,16 +238,17 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 			t.Fatal(err)
 		}
 
+		txn := client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn)
 		var results execinfra.RowSource
 		if rowSource {
-			tr.Start(ctx)
+			tr.Start(ctx, txn)
 			results = tr
 		} else {
-			tr.Run(ctx)
+			tr.Run(ctx, txn)
 			if !buf.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
-			buf.Start(ctx)
+			buf.Start(ctx, txn)
 			results = buf
 		}
 
@@ -320,7 +320,6 @@ func TestLimitScans(t *testing.T) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-		Txn:     client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn),
 		NodeID:  s.NodeID(),
 	}
 	spec := execinfrapb.TableReaderSpec{
@@ -343,7 +342,8 @@ func TestLimitScans(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tr.Start(ctx)
+	txn := client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn)
+	tr.Start(ctx, txn)
 	rows := 0
 	for {
 		row, meta := tr.Next()
@@ -424,9 +424,9 @@ func BenchmarkTableReader(b *testing.B) {
 		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-			Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			NodeID:  s.NodeID(),
 		}
+		txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			spec := execinfrapb.TableReaderSpec{
@@ -442,7 +442,7 @@ func BenchmarkTableReader(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				tr.Start(ctx)
+				tr.Start(ctx, txn)
 				count := 0
 				for {
 					row, meta := tr.Next()

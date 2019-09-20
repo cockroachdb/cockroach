@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -125,6 +126,7 @@ type JoinReader struct {
 	neededFamilies []sqlbase.FamilyID
 
 	indexKeyRow sqlbase.EncDatumRow
+	txn         *client.Txn
 }
 
 var _ Processor = &JoinReader{}
@@ -464,7 +466,7 @@ func (jr *JoinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 	sort.Sort(spans)
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	err := jr.fetcher.StartScan(
-		jr.Ctx, jr.FlowCtx.Txn, spans, true /* limitBatches */, 0, /* limitHint */
+		jr.Ctx, jr.txn, spans, true /* limitBatches */, 0, /* limitHint */
 		jr.FlowCtx.TraceKV)
 	if err != nil {
 		jr.MoveToDraining(err)
@@ -633,8 +635,9 @@ func (jr *JoinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 }
 
 // Start is part of the RowSource interface.
-func (jr *JoinReader) Start(ctx context.Context) context.Context {
-	jr.input.Start(ctx)
+func (jr *JoinReader) Start(ctx context.Context, txn *client.Txn) context.Context {
+	jr.input.Start(ctx, txn)
+	jr.txn = txn
 	ctx = jr.StartInternal(ctx, joinReaderProcName)
 	jr.runningState = jrReadingInput
 	return ctx
@@ -703,7 +706,7 @@ func (jr *JoinReader) outputStatsToTrace() {
 }
 
 func (jr *JoinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if meta := GetTxnCoordMeta(ctx, jr.FlowCtx.Txn); meta != nil {
+	if meta := GetTxnCoordMeta(ctx, jr.txn); meta != nil {
 		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
 	}
 	return nil

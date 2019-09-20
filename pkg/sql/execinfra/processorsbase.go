@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -35,7 +36,7 @@ type Processor interface {
 	OutputTypes() []types.T
 
 	// Run is the main loop of the processor.
-	Run(context.Context)
+	Run(context.Context, *client.Txn)
 }
 
 // ProcOutputHelper is a helper type that performs filtering and projection on
@@ -717,11 +718,11 @@ func (pb *ProcessorBase) OutputTypes() []types.T {
 }
 
 // Run is part of the processor interface.
-func (pb *ProcessorBase) Run(ctx context.Context) {
+func (pb *ProcessorBase) Run(ctx context.Context, txn *client.Txn) {
 	if pb.Out.output == nil {
 		panic("processor output not initialized for emitting rows")
 	}
-	ctx = pb.self.Start(ctx)
+	ctx = pb.self.Start(ctx, txn)
 	Run(ctx, pb.self, pb.Out.output)
 }
 

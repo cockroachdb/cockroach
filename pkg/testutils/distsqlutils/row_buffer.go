@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -163,7 +164,7 @@ func (rb *RowBuffer) OutputTypes() []types.T {
 }
 
 // Start is part of the RowSource interface.
-func (rb *RowBuffer) Start(ctx context.Context) context.Context { return ctx }
+func (rb *RowBuffer) Start(ctx context.Context, _ *client.Txn) context.Context { return ctx }
 
 // Next is part of the RowSource interface.
 //

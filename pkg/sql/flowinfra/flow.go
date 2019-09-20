@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -60,7 +61,7 @@ type Flow interface {
 	// But if the flow is a synchronous one, then no error is returned; instead the
 	// setup error is pushed to the syncFlowConsumer. In this case, a subsequent
 	// call to f.Wait() will not block.
-	Start(_ context.Context, doneFn func()) error
+	Start(_ context.Context, txn *client.Txn, doneFn func()) error
 
 	// Run runs the flow to completion. The last processor is run in the current
 	// goroutine; others may run in different goroutines depending on how the flow
@@ -68,7 +69,12 @@ type Flow interface {
 	// f.Wait() is called internally, so the call blocks until all the flow's
 	// goroutines are done.
 	// The caller needs to call f.Cleanup().
-	Run(_ context.Context, doneFn func()) error
+	//
+	// txn is the transaction in which the flow will run. If nil, the different
+	// processors are expected to manage their own internal transactions. If this
+	// is a RootTxn and the flow has processors running concurrently, those
+	// processors will use a derived LeafTxn.
+	Run(_ context.Context, txn *client.Txn, doneFn func()) error
 
 	// Wait waits for all the goroutines for this flow to exit. If the context gets
 	// canceled before all goroutines exit, it calls f.cancel().
@@ -248,7 +254,10 @@ func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 // set. A new context is derived and returned, and it must be used when this
 // method returns so that all components running in their own goroutines could
 // listen for a cancellation on the same context.
-func (f *FlowBase) startInternal(ctx context.Context, doneFn func()) (context.Context, error) {
+func (f *FlowBase) startInternal(
+	ctx context.Context, txn *client.Txn, doneFn func(),
+) (context.Context, error) {
+	f.EvalCtx.Txn = txn
 	f.doneFn = doneFn
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
@@ -281,10 +290,21 @@ func (f *FlowBase) startInternal(ctx context.Context, doneFn func()) (context.Co
 	for _, s := range f.startables {
 		s.Start(ctx, &f.waitGroup, f.ctxCancel)
 	}
+
+	// If we've been passed a RootTxn, make a LeafTxn from it to pass to
+	// Processor.Run().
+	// The processors started here are the ones that execute concurrently (we've
+	// already extracted the head processor and all the others that were fused
+	// with it), and RootTxns don't permit concurrent operations.
+	if len(f.processors) > 0 && txn != nil && txn.Type() == client.RootTxn {
+		meta := txn.GetTxnCoordMeta(ctx)
+		txn = client.NewTxnWithCoordMeta(ctx, txn.DB(), txn.GatewayNodeID(), client.LeafTxn, meta)
+	}
+
 	for i := 0; i < len(f.processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
-			f.processors[i].Run(ctx)
+			f.processors[i].Run(ctx, txn)
 			f.waitGroup.Done()
 		}(i)
 	}
@@ -303,8 +323,8 @@ func (f *FlowBase) IsVectorized() bool {
 }
 
 // Start is part of the Flow interface.
-func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if _, err := f.startInternal(ctx, doneFn); err != nil {
+func (f *FlowBase) Start(ctx context.Context, txn *client.Txn, doneFn func()) error {
+	if _, err := f.startInternal(ctx, txn, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
@@ -317,7 +337,7 @@ func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
 }
 
 // Run is part of the Flow interface.
-func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
+func (f *FlowBase) Run(ctx context.Context, txn *client.Txn, doneFn func()) error {
 	defer f.Wait()
 
 	// We'll take care of the last processor in particular.
@@ -329,7 +349,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 	f.processors = f.processors[:len(f.processors)-1]
 
 	var err error
-	if ctx, err = f.startInternal(ctx, doneFn); err != nil {
+	if ctx, err = f.startInternal(ctx, txn, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
@@ -338,7 +358,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
-	headProc.Run(ctx)
+	headProc.Run(ctx, txn)
 	return nil
 }
 

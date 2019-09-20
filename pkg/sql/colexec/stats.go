@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,6 +42,7 @@ type VectorizedStatsCollector struct {
 }
 
 var _ Operator = &VectorizedStatsCollector{}
+var _ KVOp = &VectorizedStatsCollector{}
 
 // NewVectorizedStatsCollector creates a new VectorizedStatsCollector which
 // wraps op that corresponds to a processor with ProcessorID id. isStall
@@ -100,4 +102,13 @@ func (vsc *VectorizedStatsCollector) Next(ctx context.Context) coldata.Batch {
 // FinalizeStats records the time measured by the stop watch into the stats.
 func (vsc *VectorizedStatsCollector) FinalizeStats() {
 	vsc.Time = vsc.inputWatch.Elapsed()
+}
+
+// SetTxn implements the KVOp interface.
+//
+// If the wrapped operator implements KVOp, pass the txn along.
+func (vsc *VectorizedStatsCollector) SetTxn(ctx context.Context, txn *client.Txn) {
+	if kvOp, ok := vsc.Operator.(KVOp); ok {
+		kvOp.SetTxn(ctx, txn)
+	}
 }

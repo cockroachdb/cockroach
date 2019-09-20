@@ -275,7 +275,6 @@ func (dsp *DistSQLPlanner) Run(
 	finishedSetupFn func(),
 ) (cleanup func()) {
 	ctx := planCtx.ctx
-
 	var (
 		localState   distsql.LocalState
 		txnCoordMeta *roachpb.TxnCoordMeta
@@ -338,7 +337,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
-	if err := flow.Run(ctx, func() {}); err != nil {
+	if err := flow.Run(ctx, txn, func() {}); err != nil {
 		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 			"The error should have gone to the consumer.", err)
 	}

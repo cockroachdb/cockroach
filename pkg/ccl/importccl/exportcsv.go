@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -80,7 +81,7 @@ func (sp *csvWriter) OutputTypes() []types.T {
 	return res
 }
 
-func (sp *csvWriter) Run(ctx context.Context) {
+func (sp *csvWriter) Run(ctx context.Context, txn *client.Txn) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
 	defer tracing.FinishSpan(span)
 
@@ -91,7 +92,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		}
 
 		typs := sp.input.OutputTypes()
-		sp.input.Start(ctx)
+		sp.input.Start(ctx, txn)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 
 		alloc := &sqlbase.DatumAlloc{}

@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -177,7 +178,7 @@ func (sp *bulkRowWriter) convertLoop(
 	return nil
 }
 
-func (sp *bulkRowWriter) Run(ctx context.Context) {
+func (sp *bulkRowWriter) Run(ctx context.Context, txn *client.Txn) {
 	ctx, span := tracing.ChildSpan(ctx, "bulkRowWriter")
 	defer tracing.FinishSpan(span)
 
@@ -188,7 +189,7 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := sp.flowCtx.EvalCtx.Copy()
 
-	sp.input.Start(ctx)
+	sp.input.Start(ctx, txn)
 
 	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, evalCtx, kvCh)
 	if err != nil {

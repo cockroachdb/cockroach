@@ -139,8 +139,8 @@ func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
 }
 
 // Run is part of the Processor interface.
-func (s *sampleAggregator) Run(ctx context.Context) {
-	s.input.Start(ctx)
+func (s *sampleAggregator) Run(ctx context.Context, txn *client.Txn) {
+	s.input.Start(ctx, txn)
 	s.StartInternal(ctx, sampleAggregatorProcName)
 
 	earlyExit, err := s.mainLoop(s.Ctx)

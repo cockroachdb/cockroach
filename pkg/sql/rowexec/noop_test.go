@@ -52,7 +52,7 @@ func BenchmarkNoop(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(context.Background())
+				d.Run(context.Background(), nil /* txn */)
 				input.Reset()
 			}
 		})

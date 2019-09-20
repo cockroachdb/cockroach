@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -270,8 +271,8 @@ func newSortAllProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (s *sortAllProcessor) Start(ctx context.Context) context.Context {
-	s.input.Start(ctx)
+func (s *sortAllProcessor) Start(ctx context.Context, txn *client.Txn) context.Context {
+	s.input.Start(ctx, txn)
 	ctx = s.StartInternal(ctx, sortAllProcName)
 
 	valid, err := s.fill()
@@ -388,8 +389,8 @@ func newSortTopKProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
-	s.input.Start(ctx)
+func (s *sortTopKProcessor) Start(ctx context.Context, txn *client.Txn) context.Context {
+	s.input.Start(ctx, txn)
 	ctx = s.StartInternal(ctx, sortTopKProcName)
 
 	// The execution loop for the SortTopK processor is similar to that of the
@@ -577,8 +578,8 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 }
 
 // Start is part of the RowSource interface.
-func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
-	s.input.Start(ctx)
+func (s *sortChunksProcessor) Start(ctx context.Context, txn *client.Txn) context.Context {
+	s.input.Start(ctx, txn)
 	return s.StartInternal(ctx, sortChunksProcName)
 }
 

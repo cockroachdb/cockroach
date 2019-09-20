@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -37,6 +38,11 @@ import (
 
 type vectorizedFlow struct {
 	*flowinfra.FlowBase
+
+	// leaves are the set of OpNodes that don't have any output leading to other
+	// OpNodes within this flow (as opposed to its output going to a different
+	// node, as in the case of an outbox).
+	leaves []execinfra.OpNode
 }
 
 var _ flowinfra.Flow = &vectorizedFlow{}
@@ -66,13 +72,84 @@ func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) 
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
 	)
-	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc)
+	var err error
+	f.leaves, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc)
 	if err == nil {
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return nil
 	}
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 	return err
+}
+
+func (f *vectorizedFlow) Start(ctx context.Context, txn *client.Txn, doneFn func()) error {
+	if err := f.setTxn(ctx, txn); err != nil {
+		return err
+	}
+	return f.FlowBase.Start(ctx, txn, doneFn)
+}
+
+func (f *vectorizedFlow) Run(ctx context.Context, txn *client.Txn, doneFn func()) error {
+	if err := f.setTxn(ctx, txn); err != nil {
+		return err
+	}
+	return f.FlowBase.Run(ctx, txn, doneFn)
+}
+
+// setTxn visits the operators in the flow and decides what txn each one should
+// run in. RootTxns don't support concurrent requests, so we ensure that the
+// RootTxn is used only by operators that don't execute concurrently with one
+// another, and all the rest use a LeafTxn (which does allow for concurrent
+// requests).
+//
+// Figuring out which operators execute concurrently is done in two stages.
+// First off, we look at the flow's leaves. Each leaf represents a tree of
+// operators that executes concurrently with the other chains. Only one of these
+// chains can use the RootTxn. There's one chain that *needs* the RootTxn - the
+// one that might have mutations in it. Mutations are always planned on the
+// gateway, and so if they exist they'll be part of a leaf Materializer's chain.
+// Then, within the chain that uses the RootTxn, we visit every operator and we
+// assign it the RootTxn as long as it's part of the chain of operators starting
+// at the Materializer and ending at the point where concurrency is introduced -
+// namely the point where a UnorderedSynchronizer is reached. Below the
+// synchronizer we use the LeafTxn.
+//
+// If we've been given a LeafTxn, there's nothing more to do.
+func (f *vectorizedFlow) setTxn(ctx context.Context, txn *client.Txn) error {
+	// If we've been given a RootTxn,
+	// figure out which components of the flow need a   Look for a leaf Materializer.
+	// That guy needs to get the RootTxn because
+	// there might be mutations feeding into it.
+	// leaves will contain f.leaves - the Materializer (if any).
+	leaves := f.leaves[:0]
+	if txn.Type() == client.RootTxn {
+		foundMaterializer := false
+		for _, l := range f.leaves {
+			_, ok := l.(*colexec.Materializer)
+			if !ok {
+				leaves = append(leaves, l)
+			}
+			if foundMaterializer {
+				return errors.AssertionFailedf("multiple leaf Materializers found")
+			}
+			foundMaterializer = true
+			colexec.SetTxn(ctx, l, txn)
+		}
+	} else {
+		leaves = f.leaves
+	}
+
+	// Give a LeafTxn to all other leaves.
+	if len(leaves) > 0 {
+		if txn.Type() == client.RootTxn {
+			meta := txn.GetTxnCoordMeta(ctx)
+			txn = client.NewTxnWithCoordMeta(ctx, txn.DB(), txn.GatewayNodeID(), client.LeafTxn, meta)
+		}
+		for _, l := range leaves {
+			colexec.SetTxn(ctx, l, txn)
+		}
+	}
+	return nil
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
@@ -519,6 +596,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// A materializer is a leaf.
 		s.leaves = append(s.leaves, proc)
 		s.addMaterializer(proc)
+
 		s.materializerAdded = true
 	default:
 		return errors.Errorf("unsupported output stream type %s", outputStream.Type)

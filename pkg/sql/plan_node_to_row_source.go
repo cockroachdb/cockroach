@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,7 +107,11 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 	})
 }
 
-func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
+// Start is part of the RowSource interface.
+//
+// The txn passed here is ignored. The plan nodes use the bound planner's txn.
+// Hopefully that's the same as this txn.
+func (p *planNodeToRowSource) Start(ctx context.Context, _ *client.Txn) context.Context {
 	// We do not call p.StartInternal to avoid creating a span. Only the context
 	// needs to be set.
 	p.Ctx = ctx

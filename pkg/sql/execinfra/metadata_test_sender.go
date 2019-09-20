@@ -13,6 +13,7 @@ package execinfra
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -74,8 +75,8 @@ func NewMetadataTestSender(
 }
 
 // Start is part of the RowSource interface.
-func (mts *MetadataTestSender) Start(ctx context.Context) context.Context {
-	mts.input.Start(ctx)
+func (mts *MetadataTestSender) Start(ctx context.Context, txn *client.Txn) context.Context {
+	mts.input.Start(ctx, txn)
 	return mts.StartInternal(ctx, metadataTestSenderProcName)
 }
 

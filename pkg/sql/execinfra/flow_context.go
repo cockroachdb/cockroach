@@ -13,7 +13,6 @@
 package execinfra
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,12 +43,6 @@ type FlowCtx struct {
 	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
 	// cores of the processors that need it.
 	EvalCtx *tree.EvalContext
-
-	// The transaction in which kv operations performed by processors in the flow
-	// must be performed. Processors in the Flow will use this txn concurrently.
-	// This field is generally not nil, except for flows that don't run in a
-	// higher-level txn (like backfills).
-	Txn *client.Txn
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.

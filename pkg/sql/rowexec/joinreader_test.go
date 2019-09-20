@@ -413,7 +413,6 @@ func TestJoinReader(t *testing.T) {
 						TempStorage: tempEngine,
 						DiskMonitor: &diskMonitor,
 					},
-					Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				}
 				encRows := make(sqlbase.EncDatumRows, len(c.input))
 				for rowIdx, row := range c.input {
@@ -447,7 +446,8 @@ func TestJoinReader(t *testing.T) {
 				// Set a lower batch size to force multiple batches.
 				jr.(*execinfra.JoinReader).SetBatchSize(3 /* batchSize */)
 
-				jr.Run(ctx)
+				txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
+				jr.Run(ctx, txn)
 
 				if !in.Done {
 					t.Fatal("joinReader didn't consume all the rows")
@@ -524,7 +524,6 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 	// Set the memory limit to the minimum allocation size so that the row
 	// container can buffer some rows in memory before spilling to disk. This
@@ -557,7 +556,8 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jr.Run(ctx)
+	txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
+	jr.Run(ctx, txn)
 
 	count := 0
 	for {
@@ -627,7 +627,6 @@ func TestJoinReaderDrain(t *testing.T) {
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
@@ -646,7 +645,8 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(ctx)
+		txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn)
+		jr.Run(ctx, txn)
 	})
 
 	// ConsumerDone verifies that the producer drains properly by checking that
@@ -667,7 +667,8 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(ctx)
+		txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn)
+		jr.Run(ctx, txn)
 		row, meta := out.Next()
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(sqlbase.OneIntCol))
@@ -724,9 +725,9 @@ func BenchmarkJoinReader(b *testing.B) {
 			DiskMonitor: diskMonitor,
 			Settings:    st,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 
+	txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
 	const numCols = 2
 	const numInputCols = 1
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
@@ -749,7 +750,7 @@ func BenchmarkJoinReader(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				jr.Run(ctx)
+				jr.Run(ctx, txn)
 				input.Reset()
 			}
 		})

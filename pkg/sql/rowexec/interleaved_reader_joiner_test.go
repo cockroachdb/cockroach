@@ -400,9 +400,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-				// Run in a RootTxn so that there's no txn metadata produced.
-				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				NodeID: s.NodeID(),
+				NodeID:  s.NodeID(),
 			}
 
 			out := &distsqlutils.RowBuffer{}
@@ -410,7 +408,9 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			irj.Run(ctx)
+			// Run in a RootTxn so that there's no txn metadata produced.
+			txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
+			irj.Run(ctx, txn)
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -530,9 +530,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-				// Run in a RootTxn so that there's no txn metadata produced.
-				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				NodeID: s.NodeID(),
+				NodeID:  s.NodeID(),
 			}
 
 			out := &distsqlutils.RowBuffer{}
@@ -588,9 +586,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-		// Run in a LeafTxn so that txn metadata is produced.
-		Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
-		NodeID: s.NodeID(),
+		NodeID:  s.NodeID(),
 	}
 
 	innerJoinSpec := execinfrapb.InterleavedReaderJoinerSpec{
@@ -614,7 +610,9 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	irj.Run(ctx)
+	// Run in a LeafTxn so that txn metadata is produced.
+	txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn)
+	irj.Run(ctx, txn)
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
 	}

@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -80,14 +81,16 @@ type interleavedReaderJoiner struct {
 	// ancestorTablePos is the corresponding index of the ancestor table in
 	// tables.
 	ancestorTablePos int
+	txn              *client.Txn
 }
 
-func (irj *interleavedReaderJoiner) Start(ctx context.Context) context.Context {
+func (irj *interleavedReaderJoiner) Start(ctx context.Context, txn *client.Txn) context.Context {
+	irj.txn = txn
 	irj.runningState = irjReading
 	ctx = irj.StartInternal(ctx, interleavedReaderJoinerProcName)
 	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := irj.fetcher.StartScan(
-		irj.Ctx, irj.FlowCtx.Txn, irj.allSpans, true /* limitBatches */, irj.limitHint, false, /* traceKV */
+		irj.Ctx, txn, irj.allSpans, true /* limitBatches */, irj.limitHint, false, /* traceKV */
 	); err != nil {
 		irj.MoveToDraining(err)
 	}
@@ -444,7 +447,7 @@ func (irj *interleavedReaderJoiner) generateMeta(
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, irj.FlowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, irj.txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta

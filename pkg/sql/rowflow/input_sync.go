@@ -17,6 +17,7 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -269,9 +270,9 @@ func (s *orderedSynchronizer) drainSources() {
 }
 
 // Start is part of the RowSource interface.
-func (s *orderedSynchronizer) Start(ctx context.Context) context.Context {
+func (s *orderedSynchronizer) Start(ctx context.Context, txn *client.Txn) context.Context {
 	for _, src := range s.sources {
-		src.src.Start(ctx)
+		src.src.Start(ctx, txn)
 	}
 	return ctx
 }

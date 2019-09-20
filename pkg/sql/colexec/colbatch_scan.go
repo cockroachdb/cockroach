@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -46,9 +47,11 @@ type colBatchScan struct {
 	maxResults uint64
 	// init is true after Init() has been called.
 	init bool
+	txn  *client.Txn
 }
 
 var _ StaticMemoryOperator = &colBatchScan{}
+var _ KVOp = &colBatchScan{}
 
 func (s *colBatchScan) EstimateStaticMemoryUsage() int {
 	return s.rf.EstimateStaticMemoryUsage()
@@ -61,11 +64,16 @@ func (s *colBatchScan) Init() {
 	limitBatches := execinfra.ScanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
 
 	if err := s.rf.StartScan(
-		s.ctx, s.flowCtx.Txn, s.spans,
+		s.ctx, s.txn, s.spans,
 		limitBatches, s.limitHint, s.flowCtx.TraceKV,
 	); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
+}
+
+// SetTxn is part of the KvOp interface.
+func (s *colBatchScan) SetTxn(_ context.Context, txn *client.Txn) {
+	s.txn = txn
 }
 
 func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
@@ -92,7 +100,7 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, s.flowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, s.txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta

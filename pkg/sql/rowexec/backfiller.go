@@ -112,7 +112,7 @@ func (b backfiller) getMutationsToProcess(
 }
 
 // Run is part of the Processor interface.
-func (b *backfiller) Run(ctx context.Context) {
+func (b *backfiller) Run(ctx context.Context, _ *client.Txn) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)

@@ -10,7 +10,8 @@
 
 package execinfra
 
-// OpNode is an interface to operator-like structures with children.
+// OpNode is an interface to operator-like structures with children. A node's
+// children represent the node's inputs.
 type OpNode interface {
 	// ChildCount returns the number of children (inputs) of the operator.
 	ChildCount() int

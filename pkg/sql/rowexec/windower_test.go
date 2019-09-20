@@ -95,7 +95,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.Run(ctx)
+	d.Run(ctx, nil /* txn */)
 	for {
 		row, meta := output.Next()
 		if row != nil {
@@ -252,7 +252,7 @@ func BenchmarkWindower(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					d.Run(context.TODO())
+					d.Run(context.Background(), nil /* txn */)
 					input.Reset()
 				}
 				b.StopTimer()

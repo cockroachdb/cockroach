@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -53,8 +54,10 @@ type FlowScheduler struct {
 // TODO(asubiotto): Figure out if asynchronous flow execution can be rearranged
 // to avoid the need to store the context.
 type flowWithCtx struct {
-	ctx         context.Context
-	flow        Flow
+	ctx  context.Context
+	flow Flow
+	// txn is the transaction in which the flow will run.
+	txn         *client.Txn
 	enqueueTime time.Time
 }
 
@@ -88,13 +91,13 @@ func (fs *FlowScheduler) canRunFlow(_ Flow) bool {
 }
 
 // runFlowNow starts the given flow; does not wait for the flow to complete.
-func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow) error {
+func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, txn *client.Txn) error {
 	log.VEventf(
 		ctx, 1, "flow scheduler running flow %s, currently running %d", f.GetID(), fs.mu.numRunning,
 	)
 	fs.mu.numRunning++
 	fs.metrics.FlowStart()
-	if err := f.Start(ctx, func() { fs.flowDoneCh <- f }); err != nil {
+	if err := f.Start(ctx, txn, func() { fs.flowDoneCh <- f }); err != nil {
 		return err
 	}
 	// TODO(radu): we could replace the WaitGroup with a structure that keeps a
@@ -111,19 +114,22 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow) error {
 //
 // If the flow can start immediately, errors encountered when starting the flow
 // are returned. If the flow is enqueued, these error will be later ignored.
-func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
+//
+// txn is the transaction in which the flow will run once its scheduled.
+func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow, txn *client.Txn) error {
 	return fs.stopper.RunTaskWithErr(
 		ctx, "flowinfra.FlowScheduler: scheduling flow", func(ctx context.Context) error {
 			fs.mu.Lock()
 			defer fs.mu.Unlock()
 
 			if fs.canRunFlow(f) {
-				return fs.runFlowNow(ctx, f)
+				return fs.runFlowNow(ctx, f, txn)
 			}
 			log.VEventf(ctx, 1, "flow scheduler enqueuing flow %s to be run later", f.GetID())
 			fs.metrics.FlowsQueued.Inc(1)
 			fs.mu.queue.PushBack(&flowWithCtx{
 				ctx:         ctx,
+				txn:         txn,
 				flow:        f,
 				enqueueTime: timeutil.Now(),
 			})
@@ -164,7 +170,7 @@ func (fs *FlowScheduler) Start() {
 						// Note: we use the flow's context instead of the worker
 						// context, to ensure that logging etc is relative to the
 						// specific flow.
-						if err := fs.runFlowNow(n.ctx, n.flow); err != nil {
+						if err := fs.runFlowNow(n.ctx, n.flow, n.txn); err != nil {
 							log.Errorf(n.ctx, "error starting queued flow: %s", err)
 						}
 					}

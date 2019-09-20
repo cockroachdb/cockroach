@@ -121,7 +121,7 @@ func TestSampleAggregator(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			p.Run(context.Background())
+			p.Run(context.Background(), nil /* txn */)
 		}
 		// Randomly interleave the output rows from the samplers into a single buffer.
 		samplerResults := distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
@@ -154,7 +154,7 @@ func TestSampleAggregator(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		agg.Run(context.Background())
+		agg.Run(context.Background(), nil /* txn */)
 		// Make sure there was no error.
 		finalOut.GetRowsNoMeta(t)
 		r := sqlutils.MakeSQLRunner(sqlDB)

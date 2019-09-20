@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -128,7 +129,11 @@ func (m *Materializer) Child(nth int) execinfra.OpNode {
 }
 
 // Start is part of the execinfra.RowSource interface.
-func (m *Materializer) Start(ctx context.Context) context.Context {
+//
+// The txn passed in is ignored. Being part of a vectorizedFlow, all the
+// Operators that need the txn have already gotten it through the SetTxn( )
+// methods at flow start time.
+func (m *Materializer) Start(ctx context.Context, _ *client.Txn) context.Context {
 	m.input.Init()
 	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
 }

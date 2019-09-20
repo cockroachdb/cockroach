@@ -502,7 +502,6 @@ func TestZigzagJoiner(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: st},
-				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			}
 
 			out := &distsqlutils.RowBuffer{}
@@ -512,7 +511,8 @@ func TestZigzagJoiner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			z.Run(ctx)
+			txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
+			z.Run(ctx, txn)
 
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
@@ -565,7 +565,6 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-		Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
@@ -592,7 +591,8 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		zz.Run(ctx)
+		txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
+		zz.Run(ctx, txn)
 	})
 
 	//TODO(pbardea): When RowSource inputs are added, ensure that meta is

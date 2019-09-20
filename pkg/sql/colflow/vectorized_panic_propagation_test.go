@@ -66,7 +66,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mat.Start(ctx)
+	mat.Start(ctx, nil /* txn */)
 
 	var meta *execinfrapb.ProducerMetadata
 	require.NotPanics(t, func() { _, meta = mat.Next() }, "VectorizedInternalPanic was not caught")
@@ -113,7 +113,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mat.Start(ctx)
+	mat.Start(ctx, nil /* txn */)
 
 	require.Panics(t, func() { mat.Next() }, "NonVectorizedPanic was caught by the operators")
 }

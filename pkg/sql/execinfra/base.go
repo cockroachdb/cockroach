@@ -98,8 +98,8 @@ type RowSource interface {
 	OutputTypes() []types.T
 
 	// Start prepares the RowSource for future Next() calls and takes in the
-	// context in which these future calls should operate. Start needs to be
-	// called before Next/ConsumerDone/ConsumerClosed.
+	// context and transaction in which these future calls should operate. Start
+	// needs to be called before Next/ConsumerDone/ConsumerClosed.
 	//
 	// RowSources that consume other RowSources are expected to Start() their
 	// inputs.
@@ -107,7 +107,19 @@ type RowSource interface {
 	// Implementations are expected to hold on to the provided context. They may
 	// choose to derive and annotate it (Processors generally do). For convenience,
 	// the possibly updated context is returned.
-	Start(context.Context) context.Context
+	//
+	// NB: If a RowSource (in particular, a Processor) uses the txn to
+	// performs any operations, it is not allowed to perform concurrent operations
+	// on that transaction, or async operations (lasting past the return from a
+	// Next() call); the transaction might be a RootTxn and generally RootTxn's
+	// don't allow concurrent operations). The infrastructure is responsible for
+	// setting up LeafTxns when different processors need to execute concurrently,
+	// but a single processor implementing RowSource is not allowed to have
+	// concurrent txn operations internally. This restriction allows the execution
+	// to use the RootTxn (instead of creating a LeafTxn) for some processors
+	// fused with the DistSQLReceiver (and particularly fused with mutations,
+	// which need the RootTxn).
+	Start(context.Context, *client.Txn) context.Context
 
 	// Next returns the next record from the source. At most one of the return
 	// values will be non-empty. Both of them can be empty when the RowSource has
@@ -157,7 +169,7 @@ type RowSource interface {
 // RowSourcedProcessor is the union of RowSource and Processor.
 type RowSourcedProcessor interface {
 	RowSource
-	Run(context.Context)
+	Run(context.Context, *client.Txn)
 }
 
 // Run reads records from the source and outputs them to the receiver, properly
@@ -249,8 +261,8 @@ func SendTraceData(ctx context.Context, dst RowReceiver) {
 // GetTxnCoordMeta returns the txn metadata from a transaction if it is present
 // and the transaction is a leaf transaction, otherwise nil.
 //
-// NOTE(andrei): As of 04/2018, the txn is shared by all processors scheduled on
-// a node, and so it's possible for multiple processors to send the same
+// NOTE(andrei): The txn might be shared by multiple processors scheduled on a
+// node, and so it's possible for multiple processors to send the same
 // TxnCoordMeta. The root TxnCoordSender doesn't care if it receives the same
 // thing multiple times.
 func GetTxnCoordMeta(ctx context.Context, txn *client.Txn) *roachpb.TxnCoordMeta {
@@ -460,7 +472,7 @@ func (rc *RowChannel) OutputTypes() []types.T {
 }
 
 // Start is part of the RowSource interface.
-func (rc *RowChannel) Start(ctx context.Context) context.Context { return ctx }
+func (rc *RowChannel) Start(ctx context.Context, _ *client.Txn) context.Context { return ctx }
 
 // Next is part of the RowSource interface.
 func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {

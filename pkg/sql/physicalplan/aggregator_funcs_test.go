@@ -58,11 +58,8 @@ func runTestFlow(
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsql.ServerImpl)
 
-	txnCoordMeta := txn.GetTxnCoordMeta(context.TODO())
-	txnCoordMeta.StripRootToLeaf()
 	req := execinfrapb.SetupFlowRequest{
-		Version:      execinfra.Version,
-		TxnCoordMeta: &txnCoordMeta,
+		Version: execinfra.Version,
 		Flow: execinfrapb.FlowSpec{
 			FlowID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
@@ -75,7 +72,7 @@ func runTestFlow(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Start(ctx, func() {}); err != nil {
+	if err := flow.Start(ctx, txn, func() {}); err != nil {
 		t.Fatal(err)
 	}
 	flow.Wait()

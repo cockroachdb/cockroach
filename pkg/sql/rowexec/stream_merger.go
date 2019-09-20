@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,9 +40,9 @@ type streamMerger struct {
 	datumAlloc   sqlbase.DatumAlloc
 }
 
-func (sm *streamMerger) start(ctx context.Context) {
-	sm.left.start(ctx)
-	sm.right.start(ctx)
+func (sm *streamMerger) start(ctx context.Context, txn *client.Txn) {
+	sm.left.start(ctx, txn)
+	sm.right.start(ctx, txn)
 }
 
 // NextBatch returns a set of rows from the left stream and a set of rows from

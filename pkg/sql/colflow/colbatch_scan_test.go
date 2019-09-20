@@ -70,10 +70,10 @@ func BenchmarkColBatchScan(b *testing.B) {
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				NodeID:  s.NodeID(),
 			}
 
+			txn := client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn)
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -83,6 +83,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 					b.Fatal(err)
 				}
 				tr := res.Op
+				tr.(colexec.KVOp).SetTxn(ctx, txn)
 				tr.Init()
 				b.StartTimer()
 				for {

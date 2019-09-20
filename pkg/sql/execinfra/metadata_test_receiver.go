@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -139,8 +140,8 @@ func (mtr *MetadataTestReceiver) checkRowNumMetadata() *execinfrapb.ProducerMeta
 }
 
 // Start is part of the RowSource interface.
-func (mtr *MetadataTestReceiver) Start(ctx context.Context) context.Context {
-	mtr.input.Start(ctx)
+func (mtr *MetadataTestReceiver) Start(ctx context.Context, txn *client.Txn) context.Context {
+	mtr.input.Start(ctx, txn)
 	return mtr.StartInternal(ctx, metadataTestReceiverProcName)
 }
 

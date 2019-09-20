@@ -16,7 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -54,11 +56,13 @@ type tableReader struct {
 
 	// rowsRead is the number of rows read and is tracked unconditionally.
 	rowsRead int64
+	txn      *client.Txn
 }
 
 var _ execinfra.Processor = &tableReader{}
 var _ execinfra.RowSource = &tableReader{}
 var _ execinfrapb.MetadataSource = &tableReader{}
+var _ colexec.KVOp = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -146,12 +150,14 @@ func (tr *tableReader) generateTrailingMeta(ctx context.Context) []execinfrapb.P
 	return trailingMeta
 }
 
-// Start is part of the RowSource interface.
-func (tr *tableReader) Start(ctx context.Context) context.Context {
-	if tr.FlowCtx.Txn == nil {
-		log.Fatalf(ctx, "tableReader outside of txn")
-	}
+// SetTxn implements the KVOp interface.
+func (tr *tableReader) SetTxn(_ context.Context, txn *client.Txn) {
+	tr.txn = txn
+}
 
+// Start is part of the RowSource interface.
+func (tr *tableReader) Start(ctx context.Context, txn *client.Txn) context.Context {
+	tr.SetTxn(ctx, txn)
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
 
 	limitBatches := execinfra.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
@@ -159,11 +165,11 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.spans,
+			ctx, tr.txn, tr.spans,
 			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
 		)
 	} else {
-		initialTS := tr.FlowCtx.Txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
+		initialTS := tr.txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS,
 			tr.maxTimestampAge, tr.spans,
@@ -259,7 +265,7 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, tr.FlowCtx.Txn); meta != nil {
+	if meta := execinfra.GetTxnCoordMeta(ctx, tr.txn); meta != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 

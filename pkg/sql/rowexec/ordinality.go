@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,8 +78,8 @@ func newOrdinalityProcessor(
 }
 
 // Start is part of the RowSource interface.
-func (o *ordinalityProcessor) Start(ctx context.Context) context.Context {
-	o.input.Start(ctx)
+func (o *ordinalityProcessor) Start(ctx context.Context, txn *client.Txn) context.Context {
+	o.input.Start(ctx, txn)
 	return o.StartInternal(ctx, ordinalityProcName)
 }
 

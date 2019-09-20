@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -214,9 +215,9 @@ func newHashJoiner(
 }
 
 // Start is part of the RowSource interface.
-func (h *hashJoiner) Start(ctx context.Context) context.Context {
-	h.leftSource.Start(ctx)
-	h.rightSource.Start(ctx)
+func (h *hashJoiner) Start(ctx context.Context, txn *client.Txn) context.Context {
+	h.leftSource.Start(ctx, txn)
+	h.rightSource.Start(ctx, txn)
 	ctx = h.StartInternal(ctx, hashJoinerProcName)
 	h.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	h.runningState = hjBuilding

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -269,8 +270,8 @@ func newWindower(
 }
 
 // Start is part of the RowSource interface.
-func (w *windower) Start(ctx context.Context) context.Context {
-	w.input.Start(ctx)
+func (w *windower) Start(ctx context.Context, txn *client.Txn) context.Context {
+	w.input.Start(ctx, txn)
 	ctx = w.StartInternal(ctx, windowerProcName)
 	w.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	w.runningState = windowerAccumulating

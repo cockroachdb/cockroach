@@ -64,7 +64,6 @@ func newSSTWriterProcessor(
 		settings:    flowCtx.Cfg.Settings,
 		registry:    flowCtx.Cfg.JobRegistry,
 		progress:    spec.Progress,
-		db:          flowCtx.EvalCtx.Txn.DB(),
 	}
 	if err := sp.out.Init(&execinfrapb.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -96,8 +95,9 @@ func (sp *sstWriter) OutputTypes() []types.T {
 	return sstOutputTypes
 }
 
-func (sp *sstWriter) Run(ctx context.Context) {
-	sp.input.Start(ctx)
+func (sp *sstWriter) Run(ctx context.Context, txn *client.Txn) {
+	sp.input.Start(ctx, txn)
+	sp.db = txn.DB()
 
 	ctx, span := tracing.ChildSpan(ctx, "sstWriter")
 	defer tracing.FinishSpan(span)
