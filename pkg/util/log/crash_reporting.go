@@ -206,7 +206,7 @@ func (st SafeType) WithCause(cause interface{}) SafeType {
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
-	if stderrRedirected() {
+	if logging.stderrRedirected() {
 		// We do not use Shout() to print the panic details here, because
 		// if stderr is not redirected (e.g. when logging to file is
 		// disabled) Shout() would copy its argument to stderr
