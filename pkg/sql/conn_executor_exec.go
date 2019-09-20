@@ -388,8 +388,8 @@ func (ex *connExecutor) execStmtInOpenState(
 			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
 				err = pgerror.Newf(pgcode.Syntax,
 					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", origTs)
-				err = errors.WithHint(err,
-					"Generally AS OF SYSTEM TIME cannot be used inside a transaction.")
+				err = errors.WithHint(err, fmt.Sprintf("See %s for help with AS OF SYSTEM TIME",
+					base.DocsURL("as-of-system-time.html#using-as-of-system-time-in-transactions")))
 				return makeErrEvent(err)
 			}
 			p.semaCtx.AsOfTimestamp = ts

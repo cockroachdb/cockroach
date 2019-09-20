@@ -225,11 +225,15 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatalf("expected %v, got %v", val1, i)
 	}
 
-	// Can't use in a transaction.
-	_, err = db.Query(
-		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
-	if !testutils.IsError(err, "cannot be used inside a transaction") {
-		t.Fatalf("expected not supported, got: %v", err)
+	// Can use in a transaction by using the SET TRANSACTION syntax
+	if err := db.QueryRow(fmt.Sprintf(
+		"BEGIN; "+
+			"SET TRANSACTION AS OF SYSTEM TIME %s; "+
+			"SELECT a FROM d.t; "+
+			"COMMIT;", tsVal1)).Scan(&i); err != nil {
+		t.Fatal(err)
+	} else if i != val1 {
+		t.Fatalf("expected %v, got %v", val1, i)
 	}
 }
 
