@@ -287,3 +287,49 @@ inner-join-apply
  │                                       ├── variable: j2.j [type=jsonb]
  │                                       └── const: 'members' [type=string]
  └── filters (true)
+
+build
+SELECT * FROM x JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
+----
+inner-join-apply
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── scan x
+ │    └── columns: a:1(int!null)
+ ├── select
+ │    ├── columns: b:2(int!null)
+ │    ├── scan y
+ │    │    └── columns: b:2(int!null)
+ │    └── filters
+ │         └── eq [type=bool]
+ │              ├── variable: b [type=int]
+ │              └── variable: a [type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM x LEFT JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
+----
+left-join-apply
+ ├── columns: a:1(int!null) b:2(int)
+ ├── scan x
+ │    └── columns: a:1(int!null)
+ ├── select
+ │    ├── columns: b:2(int!null)
+ │    ├── scan y
+ │    │    └── columns: b:2(int!null)
+ │    └── filters
+ │         └── eq [type=bool]
+ │              ├── variable: b [type=int]
+ │              └── variable: a [type=int]
+ └── filters
+      └── true [type=bool]
+
+build
+SELECT * FROM x RIGHT JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
+----
+error (42601): The combining JOIN type must be INNER or LEFT for a LATERAL reference.
+
+build
+SELECT * FROM x FULL OUTER JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
+----
+error (42601): The combining JOIN type must be INNER or LEFT for a LATERAL reference.
