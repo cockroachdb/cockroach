@@ -610,6 +610,32 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
 	),
 
+	// pg_get_function_result returns the types of the result of an builtin
+	// function. Multi-return builtins currently are returned as anyelement, which
+	// is a known incompatibility with Postgres.
+	// https://www.postgresql.org/docs/11/functions-info.html
+	"pg_get_function_result": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"func_oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				funcOid := tree.MustBeDOid(args[0])
+				t, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_function_result",
+					ctx.Txn,
+					`SELECT prorettype::REGTYPE::TEXT FROM pg_proc WHERE oid=$1`, int(funcOid.DInt))
+				if err != nil {
+					return nil, err
+				}
+				if len(t) == 0 {
+					return tree.NewDString(""), nil
+				}
+				return t[0], nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	// pg_get_function_identity_arguments returns the argument list necessary to
 	// identify a function, in the form it would need to appear in within ALTER
 	// FUNCTION, for instance. This form omits default values.
@@ -913,6 +939,32 @@ SELECT description
 		},
 	),
 
+	// pg_function_is_visible returns true if the input oid corresponds to a
+	// builtin function that is part of the databases on the search path.
+	// CockroachDB doesn't have a concept of namespaced functions, so this is
+	// always true if the builtin exists at all, and NULL otherwise.
+	// https://www.postgresql.org/docs/9.6/static/functions-info.html
+	"pg_function_is_visible": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0])
+				t, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_function_is_visible",
+					ctx.Txn,
+					"SELECT * from pg_proc WHERE oid=$1 LIMIT 1", int(oid.DInt))
+				if err != nil {
+					return nil, err
+				}
+				if t != nil {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DNull, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
 	// pg_table_is_visible returns true if the input oid corresponds to a table
 	// that is part of the databases on the search path.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html

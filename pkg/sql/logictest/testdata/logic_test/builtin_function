@@ -1510,6 +1510,16 @@ SELECT current_schema()
 ----
 public
 
+query B
+SELECT pg_catalog.pg_function_is_visible((select 'pg_table_is_visible'::regproc))
+----
+true
+
+query B
+SELECT pg_catalog.pg_function_is_visible(0)
+----
+NULL
+
 # COLLATION FOR returns a locale name for a collated string
 # but for a not collated string 'default' locale name is a Postgres compatible behavior:
 # https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
@@ -2298,3 +2308,22 @@ query T
 SELECT pg_get_function_identity_arguments((select oid from pg_proc where proname='variance' and proargtypes[0] = 'int'::regtype))
 ----
 int8
+
+# Sanity check pg_get_function_result.
+
+query T
+SELECT pg_get_function_result('array_length'::regproc)
+----
+int8
+
+query T
+SELECT pg_get_function_result((select oid from pg_proc where proname='variance' and proargtypes[0] = 'int'::regtype))
+----
+numeric
+
+
+# Slight incompatibility: in Postgres, the latter returns SETOF anyelement.
+query TT
+SELECT pg_get_function_result('pg_sleep'::regproc), pg_get_function_result('unnest'::regproc)
+----
+bool  anyelement
