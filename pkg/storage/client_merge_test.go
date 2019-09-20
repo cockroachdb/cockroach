@@ -1628,6 +1628,9 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 // replica tombstone, if S4 received a slow Raft message for the now-GC'd
 // replica, it would incorrectly construct an uninitialized replica and panic.
 //
+// This test also ensures that the nodes which processes the Merge writes a
+// tombstone which prevents the range from being resurrected by a raft message.
+//
 // This test's approach to simulating this sequence of events is based on
 // TestReplicaGCRace.
 func TestStoreReplicaGCAfterMerge(t *testing.T) {
@@ -1681,7 +1684,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		t.Fatalf("expected %s to have a replica on %s", rhsDesc, store1)
 	}
 
-	transport0 := storage.NewRaftTransport(
+	transport := storage.NewRaftTransport(
 		log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(mtc.gossips[0])),
@@ -1689,18 +1692,22 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		mtc.transportStopper,
 	)
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
-	transport0.Listen(store0.StoreID(), errChan)
+	transport.Listen(store0.StoreID(), errChan)
+	transport.Listen(store1.StoreID(), errChan)
 
-	sendHeartbeat := func(toReplDesc roachpb.ReplicaDescriptor) {
+	sendHeartbeat := func(
+		rangeID roachpb.RangeID,
+		fromReplDesc, toReplDesc roachpb.ReplicaDescriptor,
+	) {
 		// Try several times, as the message may be dropped (see #18355).
 		for i := 0; i < 5; i++ {
-			if sent := transport0.SendAsync(&storage.RaftMessageRequest{
-				FromReplica: rhsReplDesc0,
+			if sent := transport.SendAsync(&storage.RaftMessageRequest{
+				FromReplica: fromReplDesc,
 				ToReplica:   toReplDesc,
 				Heartbeats: []storage.RaftHeartbeat{
 					{
-						RangeID:       rhsDesc.RangeID,
-						FromReplicaID: rhsReplDesc0.ReplicaID,
+						RangeID:       rangeID,
+						FromReplicaID: fromReplDesc.ReplicaID,
 						ToReplicaID:   toReplDesc.ReplicaID,
 						Commit:        42,
 					},
@@ -1722,34 +1729,46 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		t.Fatal("did not get expected RaftGroupDeleted error")
 	}
 
-	// Send a heartbeat to the now-GC'd replica on store1. If the replica
+	// Send a heartbeat to the now-GC'd replica on the stores. If the replica
 	// tombstone was not written correctly when the replica was GC'd, this will
 	// cause a panic.
-	sendHeartbeat(rhsReplDesc1)
+	sendHeartbeat(rhsDesc.RangeID, rhsReplDesc0, rhsReplDesc1)
+	sendHeartbeat(rhsDesc.RangeID, rhsReplDesc1, rhsReplDesc0)
 
-	// Send a heartbeat to a fictional replica on store1 with a large replica ID.
+	// Send a heartbeat to a fictional replicas on with a large replica ID.
 	// This tests an implementation detail: the replica tombstone that gets
-	// written in this case will use the maximum possible replica ID, so store1
-	// should ignore heartbeats for replicas of the range with _any_ replica ID.
-	sendHeartbeat(roachpb.ReplicaDescriptor{
+	// written in this case will use the maximum possible replica ID, so the
+	// stores should ignore heartbeats for replicas of the range with _any_
+	// replica ID.
+	sendHeartbeat(rhsDesc.RangeID, rhsReplDesc0, roachpb.ReplicaDescriptor{
 		NodeID:    store1.Ident.NodeID,
 		StoreID:   store1.Ident.StoreID,
 		ReplicaID: 123456,
 	})
 
+	sendHeartbeat(rhsDesc.RangeID, rhsReplDesc1, roachpb.ReplicaDescriptor{
+		NodeID:    store0.Ident.NodeID,
+		StoreID:   store0.Ident.StoreID,
+		ReplicaID: 123456,
+	})
+
 	// Be extra paranoid and verify the exact value of the replica tombstone.
-	var rhsTombstone1 roachpb.RaftTombstone
-	rhsTombstoneKey := keys.RaftTombstoneKey(rhsDesc.RangeID)
-	ok, err = engine.MVCCGetProto(ctx, store1.Engine(), rhsTombstoneKey, hlc.Timestamp{},
-		&rhsTombstone1, engine.MVCCGetOptions{})
-	if err != nil {
-		t.Fatal(err)
-	} else if !ok {
-		t.Fatalf("missing raft tombstone at key %s", rhsTombstoneKey)
+	checkTombstone := func(eng engine.Engine) {
+		var rhsTombstone roachpb.RaftTombstone
+		rhsTombstoneKey := keys.RaftTombstoneKey(rhsDesc.RangeID)
+		ok, err = engine.MVCCGetProto(ctx, eng, rhsTombstoneKey, hlc.Timestamp{},
+			&rhsTombstone, engine.MVCCGetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			t.Fatalf("missing raft tombstone at key %s", rhsTombstoneKey)
+		}
+		if e, a := roachpb.ReplicaID(math.MaxInt32), rhsTombstone.NextReplicaID; e != a {
+			t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
+		}
 	}
-	if e, a := roachpb.ReplicaID(math.MaxInt32), rhsTombstone1.NextReplicaID; e != a {
-		t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
-	}
+	checkTombstone(store0.Engine())
+	checkTombstone(store1.Engine())
 }
 
 // TestStoreRangeMergeAddReplicaRace verifies that when an add replica request
