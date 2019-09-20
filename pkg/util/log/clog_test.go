@@ -559,22 +559,11 @@ func TestRollover(t *testing.T) {
 	}
 }
 
-func TestGC(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-
-	logging.mu.Lock()
-	logging.disableDaemons = true
-	defer func(previous bool) {
-		logging.mu.Lock()
-		logging.disableDaemons = previous
-		logging.mu.Unlock()
-	}(logging.disableDaemons)
-	logging.mu.Unlock()
-
+// createLogFiles create some log files for test
+// fileCount: how many log files will be created
+// retainCount: how many log files will be retained after gc, this will be used to calculate max total log file size
+func createLogFiles(t *testing.T, createCount int, retainCount int) {
 	setFlags()
-
-	const newLogFiles = 20
 
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
@@ -607,18 +596,14 @@ func TestGC(t *testing.T) {
 	}
 	// logFileSize is the size of the first log file we wrote to.
 	logFileSize := stat.Size()
-	const expectedFilesAfterGC = 2
-	// Pick a max total size that's between 2 and 3 log files in size.
-	maxTotalLogFileSize := logFileSize*expectedFilesAfterGC + logFileSize // 2
 
-	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	// Pick a max total size that's between 2 and 3 log files in size.
+	maxTotalLogFileSize := logFileSize*(int64)(retainCount) + logFileSize // 2
+
 	LogFileMaxSize = 1 // ensure rotation on every log write
-	defer func(previous int64) {
-		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
-	}(LogFilesCombinedMaxSize)
 	atomic.StoreInt64(&LogFilesCombinedMaxSize, maxTotalLogFileSize)
 
-	for i := 1; i < newLogFiles; i++ {
+	for i := 1; i < createCount; i++ {
 		Infof(context.Background(), "%d", i)
 		Flush()
 	}
@@ -627,9 +612,31 @@ func TestGC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e, a := newLogFiles, len(allFilesBefore); e != a {
+	if e, a := createCount, len(allFilesBefore); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
+}
+
+func TestGC(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// config logging and reset when test done
+	logging.mu.Lock()
+	logging.disableDaemons = true
+	defer func(previous bool) {
+		logging.mu.Lock()
+		logging.disableDaemons = previous
+		logging.mu.Unlock()
+	}(logging.disableDaemons)
+	logging.mu.Unlock()
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	defer func(previous int64) {
+		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
+	}(LogFilesCombinedMaxSize)
+
+	const expectedFilesAfterGC = 2
+	createLogFiles(t, 20, expectedFilesAfterGC)
 
 	logging.gcOldFiles()
 
@@ -639,6 +646,62 @@ func TestGC(t *testing.T) {
 	}
 	if e, a := expectedFilesAfterGC, len(allFilesAfter); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
+	}
+}
+
+func TestArchiveGC(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// config logging and reset when test done
+	logging.mu.Lock()
+	logging.disableDaemons = true
+	defer func(previous bool) {
+		logging.mu.Lock()
+		logging.disableDaemons = previous
+		logging.mu.Unlock()
+	}(logging.disableDaemons)
+	logging.mu.Unlock()
+	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
+	defer func(previous int64) {
+		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
+	}(LogFilesCombinedMaxSize)
+	defer func(previous bool) { LogFileArchive = previous }(LogFileArchive)
+
+	const createCount = 20
+	const expectedFilesAfterGC = 2
+	createLogFiles(t, createCount, expectedFilesAfterGC)
+
+	// files before gc with archive
+	allFilesBefore, err := ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// gc with archive
+	LogFileArchive = true
+	logging.gcOldFiles()
+
+	// check retain log files after gc
+	allFilesAfter, err := ListLogFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := expectedFilesAfterGC, len(allFilesAfter); e != a {
+		t.Fatalf("expected %d files, but found %d", e, a)
+	}
+
+	// check archive log files after gc
+	dir, err := logging.logDir.get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, f := range allFilesBefore {
+		if i < createCount-expectedFilesAfterGC {
+			if _, err := os.Stat(filepath.Join(dir, f.Name+".tar.gz")); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
