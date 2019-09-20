@@ -132,6 +132,9 @@ type Index interface {
 	// Span returns the KV span associated with the index.
 	Span() roachpb.Span
 
+	// EncodeKey creates a key for a given row of the table associated with this index.
+	EncodeKey(values []tree.Datum) (roachpb.Key, error)
+
 	// PartitionByListPrefixes returns values that correspond to PARTITION BY LIST
 	// values. Specifically, it returns a list of tuples where each tuple contains
 	// values for a prefix of index columns (indicating a region of the index).

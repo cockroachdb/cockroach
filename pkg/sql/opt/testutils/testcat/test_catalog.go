@@ -783,6 +783,11 @@ func (ti *Index) Span() roachpb.Span {
 	panic("not implemented")
 }
 
+// EncodeKey is part of the cat.Index interface.
+func (ti *Index) EncodeKey(values []tree.Datum) (roachpb.Key, error) {
+	panic("not implemented")
+}
+
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (ti *Index) PartitionByListPrefixes() []tree.Datums {
 	p := ti.partitionBy

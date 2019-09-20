@@ -519,7 +519,9 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *sqlbase.ImmutableTableDescriptor, stats []*stats.TableStatistic, tblZone *config.ZoneConfig,
+	desc *sqlbase.ImmutableTableDescriptor,
+	stats []*stats.TableStatistic,
+	tblZone *config.ZoneConfig,
 ) (*optTable, error) {
 	ot := &optTable{
 		desc:     desc,
@@ -959,6 +961,50 @@ func (oi *optIndex) Span() roachpb.Span {
 		return keys.SystemConfigSpan
 	}
 	return desc.IndexSpan(oi.desc.ID)
+}
+
+// EncodeKey is part of the cat.Index interface.
+func (oi *optIndex) EncodeKey(values []tree.Datum) (roachpb.Key, error) {
+	if len(values) != len(oi.tab.desc.Columns) {
+		return nil, errors.New("number of datums is not equal to number of columns in the table")
+	}
+
+	colMap := make(map[sqlbase.ColumnID]int)
+	for _, i := range oi.desc.ColumnIDs {
+		ord, err := oi.tab.lookupColumnOrdinal(i)
+		if err != nil {
+			return nil, err
+		}
+		colMap[i] = ord
+	}
+
+	// TODO (rohany): is this comparison always valid? i.e. does proto ensure that the addresses are the same?
+	if oi.desc == &oi.tab.desc.PrimaryIndex {
+		keyPrefix := oi.Span().Key
+		res, _, err := sqlbase.EncodeIndexKey(&oi.tab.desc.TableDescriptor, oi.desc, colMap, values, keyPrefix)
+		return res, err
+	}
+	// If we have a secondary index, then add on the extra columns that might be used in the index into the colMap.
+	for _, i := range oi.desc.ExtraColumnIDs {
+		ord, err := oi.tab.lookupColumnOrdinal(i)
+		if err != nil {
+			return nil, err
+		}
+		colMap[i] = ord
+	}
+	for _, i := range oi.storedCols {
+		ord, err := oi.tab.lookupColumnOrdinal(i)
+		if err != nil {
+			return nil, err
+		}
+		colMap[i] = ord
+	}
+	res, err := sqlbase.EncodeSecondaryIndex(&oi.tab.desc.TableDescriptor, oi.desc, colMap, values)
+	if err != nil {
+		return nil, err
+	}
+	// TODO (rohany): what to do here for an inverted index?
+	return res[0].Key, nil
 }
 
 // Table is part of the cat.Index interface.
