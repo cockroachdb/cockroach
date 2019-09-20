@@ -64,13 +64,18 @@ func (r *replicationStatsReportSaver) LastUpdatedRowCount() int {
 	return r.lastUpdatedRowCount
 }
 
+// EnsureEntry creates an entry for the given key if there is none.
+func (r *replicationStatsReportSaver) EnsureEntry(zKey ZoneKey) {
+	if _, ok := r.stats[zKey]; !ok {
+		r.stats[zKey] = zoneRangeStatus{}
+	}
+}
+
 // AddZoneRangeStatus adds a row to the report.
 func (r *replicationStatsReportSaver) AddZoneRangeStatus(
 	zKey ZoneKey, unavailable bool, underReplicated bool, overReplicated bool,
 ) {
-	if _, ok := r.stats[zKey]; !ok {
-		r.stats[zKey] = zoneRangeStatus{}
-	}
+	r.EnsureEntry(zKey)
 	rStat := r.stats[zKey]
 	rStat.numRanges++
 	if unavailable {
@@ -285,7 +290,7 @@ func makeReplicationStatsVisitor(
 		nodeChecker: nodeChecker,
 		report:      saver,
 	}
-	v.report.resetReport()
+	v.reset(ctx)
 	return v
 }
 
@@ -308,11 +313,16 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 		if zone == nil {
 			continue
 		}
-		v.report.AddZoneRangeStatus(
-			MakeZoneKey(i, NoSubzone),
-			false, /* unavailable */
-			false, /* underReplicated */
-			false /* overReplicated */)
+		v.ensureEntries(MakeZoneKey(i, NoSubzone), zone)
+	}
+}
+
+func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneConfig) {
+	if zoneChangesReplication(zone) {
+		v.report.EnsureEntry(key)
+	}
+	for i, sz := range zone.Subzones {
+		v.ensureEntries(MakeZoneKey(key.ZoneID, SubzoneIDFromIndex(i)), &sz.Config)
 	}
 }
 
@@ -321,14 +331,29 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 	// Get the zone
 	var zKey ZoneKey
 	var zConfig *config.ZoneConfig
+	var numReplicas int
 	found, err := visitZones(ctx, r, v.cfg,
 		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
-			if zone.NumReplicas == nil || *zone.NumReplicas == 0 {
+			if zConfig == nil {
+				if !zoneChangesReplication(zone) {
+					return false
+				}
+				zKey = key
+				zConfig = zone
+				if zone.NumReplicas != nil {
+					numReplicas = int(*zone.NumReplicas)
+					return true
+				}
+				// We need to continue upwards in search for the NumReplicas.
 				return false
 			}
-			zKey = key
-			zConfig = zone
-			return true
+			// We had already found the zone to report to, but we're haven't found
+			// its NumReplicas yet.
+			if zone.NumReplicas != nil {
+				numReplicas = int(*zone.NumReplicas)
+				return true
+			}
+			return false
 		})
 	if err != nil {
 		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
@@ -338,8 +363,8 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 		return
 	}
 
-	underReplicated := *zConfig.NumReplicas > int32(len(r.Replicas().Voters()))
-	overReplicated := *zConfig.NumReplicas < int32(len(r.Replicas().Voters()))
+	underReplicated := numReplicas > len(r.Replicas().Voters())
+	overReplicated := numReplicas < len(r.Replicas().Voters())
 	var liveNodeCount int
 	for _, rep := range r.Replicas().Voters() {
 		if v.nodeChecker(rep.NodeID) {
@@ -349,4 +374,15 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 	unavailable := liveNodeCount < (len(r.Replicas().Voters())/2 + 1)
 
 	v.report.AddZoneRangeStatus(zKey, unavailable, underReplicated, overReplicated)
+}
+
+// zoneChangesReplication determines whether a given zone config changes
+// replication attributes: the replication factor or the replication
+// constraints.
+// This is used to determine which zone's report a range counts towards for the
+// replication_stats and the critical_localities reports : it'll count towards
+// the lowest ancestor for which this method returns true.
+func zoneChangesReplication(zone *config.ZoneConfig) bool {
+	return (zone.NumReplicas != nil && *zone.NumReplicas != 0) ||
+		zone.Constraints != nil
 }
