@@ -1494,6 +1494,7 @@ pkg/sql/colexec/rank.eg.go: pkg/sql/colexec/rank_tmpl.go
 pkg/sql/colexec/row_number.eg.go: pkg/sql/colexec/row_number_tmpl.go
 pkg/sql/colexec/rowstovec.eg.go: pkg/sql/colexec/rowstovec_tmpl.go
 pkg/sql/colexec/select_in.eg.go: pkg/sql/colexec/select_in_tmpl.go
+pkg/sql/colexec/selection_ops.eg.go: pkg/sql/colexec/selection_ops_tmpl.go
 pkg/sql/colexec/sort.eg.go: pkg/sql/colexec/sort_tmpl.go
 pkg/sql/colexec/sum_agg.eg.go: pkg/sql/colexec/sum_agg_tmpl.go
 pkg/sql/colexec/tuples_differ.eg.go: pkg/sql/colexec/tuples_differ_tmpl.go
