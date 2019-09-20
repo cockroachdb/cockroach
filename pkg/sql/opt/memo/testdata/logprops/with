@@ -196,3 +196,36 @@ inner-join-apply
  │         ├── fd: ()-->(3)
  │         └── cte-uses: map[1:1]
  └── filters (true)
+
+# Regression test for #40930.
+
+exec-ddl
+CREATE TABLE t40930 (
+  s string
+)
+----
+
+opt
+WITH
+    with_4189
+        AS (
+            SELECT
+                tab_10102.s
+            FROM
+                t40930 AS tab_10102, (SELECT NULL) AS tab_10103 (col_24444)
+        )
+SELECT
+    NULL
+FROM
+    t40930, with_4189
+----
+project
+ ├── columns: "?column?":7(unknown)
+ ├── fd: ()-->(7)
+ ├── prune: (7)
+ ├── inner-join (hash)
+ │    ├── scan t40930
+ │    ├── scan tab_10102
+ │    └── filters (true)
+ └── projections
+      └── null [type=unknown]

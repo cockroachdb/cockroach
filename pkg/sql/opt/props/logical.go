@@ -464,6 +464,12 @@ func (r *Relational) Verify() {
 				"max cardinality must be <= 1 if FDs have max 1 row: %s", r.Cardinality))
 		}
 	}
+	if r.IsAvailable(PruneCols) {
+		if !r.Rule.PruneCols.SubsetOf(r.OutputCols) {
+			panic(errors.AssertionFailedf("prune cols %s must be a subset of output cols %s",
+				log.Safe(r.Rule.PruneCols), log.Safe(r.OutputCols)))
+		}
+	}
 }
 
 // VerifyAgainst checks that the two properties don't contradict each other.
