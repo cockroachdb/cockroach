@@ -12,7 +12,9 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -68,4 +70,46 @@ func TestSecondaryLog(t *testing.T) {
 		t.Errorf("primary log spilled into secondary\n%s", contents)
 	}
 
+}
+
+func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	setFlags()
+	logging.stderrThreshold = Severity_NONE
+
+	// Ensure that the main log is initialized. This should take over
+	// stderr.
+	Infof(context.Background(), "test123")
+
+	// Now create a secondary logger in the same directory.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
+
+	// Log something on the secondary logger.
+	l.Logf(context.Background(), "test456")
+
+	// Send something on stderr.
+	const stderrText = "hello stderr"
+	fmt.Fprint(os.Stderr, stderrText)
+
+	// Check the main log file: we want our stderr text there.
+	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), stderrText) {
+		t.Errorf("log does not contain stderr text\n%s", contents)
+	}
+
+	// Check the secondary log file: we don't want our stderr text there.
+	contents2, err := ioutil.ReadFile(l.logger.file.(*syncBuffer).file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(contents2), stderrText) {
+		t.Errorf("secondary log erronously contains stderr text\n%s", contents2)
+	}
 }
