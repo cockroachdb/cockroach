@@ -411,6 +411,17 @@ func (node *ShowRanges) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowRangeForRow represents a SHOW RANGE FOR ROW statement.
+type ShowRangeForRow struct {
+	TableOrIndex TableIndexName
+	Key          Exprs
+}
+
+// Format implements the NodeFormatter interface.
+// TODO (rohany): implement once syntax is sorted out.
+func (node *ShowRangeForRow) Format(ctx *FmtCtx) {
+}
+
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
 	Table *UnresolvedObjectName

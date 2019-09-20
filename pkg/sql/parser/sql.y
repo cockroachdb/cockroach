@@ -747,6 +747,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_ranges_stmt
+%type <tree.Statement> show_range_for_row_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
 %type <tree.Statement> show_sequences_stmt
@@ -3302,6 +3303,7 @@ show_stmt:
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
+| show_range_for_row_stmt
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
 | show_sequences_stmt       // EXTEND WITH HELP: SHOW SEQUENCES
@@ -3853,6 +3855,23 @@ show_zone_stmt:
 | SHOW ALL ZONE CONFIGURATIONS
   {
     $$.val = &tree.ShowZoneConfig{}
+  }
+
+show_range_for_row_stmt:
+  SHOW RANGE FROM TABLE table_name FOR ROW '(' expr_list ')'
+  {
+    name := $5.unresolvedObjectName().ToTableName()
+    $$.val = &tree.ShowRangeForRow{
+      Key: $9.exprs(),
+      TableOrIndex: tree.TableIndexName{Table: name},
+    }
+  }
+| SHOW RANGE FROM INDEX table_index_name FOR ROW '(' expr_list ')'
+  {
+    $$.val = &tree.ShowRangeForRow{
+      Key: $9.exprs(),
+      TableOrIndex: $5.tableIndexName(),
+    }
   }
 
 // %Help: SHOW RANGES - list ranges
