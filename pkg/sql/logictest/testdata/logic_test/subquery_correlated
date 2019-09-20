@@ -1170,3 +1170,25 @@ LIMIT 5;
 {}
 {}
 {}
+
+# Customers, their billing address, and all orders not going to their billing address
+query ITT rowsort
+SELECT
+	c_id, bill, states
+FROM
+	c
+	JOIN LATERAL (
+			SELECT
+				COALESCE(array_agg(o.ship), '{}') AS states
+			FROM
+				o
+			WHERE
+				o.c_id = c.c_id AND o.ship != c.bill
+		) ON true
+----
+1  CA    {}
+3  MA    {}
+4  TX    {WY}
+5  NULL  {}
+6  FL    {WA}
+2  TX    {CA}

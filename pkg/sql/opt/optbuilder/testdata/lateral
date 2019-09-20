@@ -287,3 +287,21 @@ inner-join-apply
  │                                       ├── variable: j2.j [type=jsonb]
  │                                       └── const: 'members' [type=string]
  └── filters (true)
+
+build
+SELECT * FROM x JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
+----
+inner-join-apply
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── scan x
+ │    └── columns: a:1(int!null)
+ ├── select
+ │    ├── columns: b:2(int!null)
+ │    ├── scan y
+ │    │    └── columns: b:2(int!null)
+ │    └── filters
+ │         └── eq [type=bool]
+ │              ├── variable: b [type=int]
+ │              └── variable: a [type=int]
+ └── filters
+      └── true [type=bool]

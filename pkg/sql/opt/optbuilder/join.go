@@ -31,7 +31,16 @@ import (
 // return values.
 func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope *scope) {
 	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, inScope)
-	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, inScope)
+
+	isLateral := false
+	inScopeRight := inScope
+	// Detect if this is a lateral join, upgrade scope to leftScope need be
+	if t, ok := join.Right.(*tree.AliasedTableExpr); ok && t.Lateral {
+		isLateral = true
+		inScopeRight = leftScope
+	}
+
+	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, inScopeRight)
 
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
@@ -103,7 +112,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		left := leftScope.expr.(memo.RelExpr)
 		right := rightScope.expr.(memo.RelExpr)
 		outScope.expr = b.constructJoin(
-			joinType, left, right, filters, &memo.JoinPrivate{Flags: flags},
+			joinType, left, right, filters, &memo.JoinPrivate{Flags: flags}, isLateral,
 		)
 		return outScope
 
@@ -172,11 +181,18 @@ func (b *Builder) constructJoin(
 	left, right memo.RelExpr,
 	on memo.FiltersExpr,
 	private *memo.JoinPrivate,
+	isLateral bool,
 ) memo.RelExpr {
 	switch joinType {
 	case sqlbase.InnerJoin:
+		if isLateral {
+			return b.factory.ConstructInnerJoinApply(left, right, on, private)
+		}
 		return b.factory.ConstructInnerJoin(left, right, on, private)
 	case sqlbase.LeftOuterJoin:
+		if isLateral {
+			return b.factory.ConstructLeftJoinApply(left, right, on, private)
+		}
 		return b.factory.ConstructLeftJoin(left, right, on, private)
 	case sqlbase.RightOuterJoin:
 		return b.factory.ConstructRightJoin(left, right, on, private)
@@ -351,6 +367,7 @@ func (jb *usingJoinBuilder) finishBuild() {
 		jb.rightScope.expr.(memo.RelExpr),
 		jb.filters,
 		&memo.JoinPrivate{Flags: jb.joinFlags},
+		false,
 	)
 
 	if !jb.ifNullCols.Empty() {
