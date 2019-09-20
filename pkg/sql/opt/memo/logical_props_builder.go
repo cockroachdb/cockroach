@@ -751,6 +751,9 @@ func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.R
 	// references.
 	*rel = *ref.BindingProps
 
+	// Things like PruneCols are not valid here.
+	rel.Rule = props.Relational{}.Rule
+
 	// Has Placeholder
 	// ---------------
 	// Overwrite this from the copied props.
