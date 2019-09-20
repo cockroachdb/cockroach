@@ -918,7 +918,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 	}
 
-	if s >= l.stderrThreshold.get() || (s == Severity_FATAL && stderrRedirected()) {
+	if s >= l.stderrThreshold.get() || (s == Severity_FATAL && l.stderrRedirected()) {
 		// We force-copy FATAL messages to stderr, because the process is bound
 		// to terminate and the user will want to know why.
 		l.outputToStderr(entry, stacks)
@@ -1116,7 +1116,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	// stack traces that are written by the Go runtime to stderr. Note that if
 	// --logtostderr is true we'll never enter this code path and panic stack
 	// traces will go to the original stderr as you would expect.
-	if stderrRedirected() {
+	if sb.logger.stderrRedirected() {
 		// NB: any concurrent output to stderr may straddle the old and new
 		// files. This doesn't apply to log messages as we won't reach this code
 		// unless we're not logging to stderr.
