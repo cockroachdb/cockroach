@@ -320,7 +320,7 @@ func processLocalityForRange(
 	var zKey ZoneKey
 	found, err := visitZones(ctx, r, cfg,
 		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
-			if zone.IsSubzonePlaceholder() {
+			if !zoneChangesReplication(zone) {
 				return false
 			}
 			zKey = key
