@@ -750,6 +750,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_ranges_stmt
+%type <tree.Statement> show_range_for_row_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
 %type <tree.Statement> show_sequences_stmt
@@ -3304,9 +3305,9 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS,
-// SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
-// SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
+// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES,
+// SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
+// SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -3322,6 +3323,7 @@ show_stmt:
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
+| show_range_for_row_stmt
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
 | show_sequences_stmt       // EXTEND WITH HELP: SHOW SEQUENCES
@@ -3874,6 +3876,29 @@ show_zone_stmt:
   {
     $$.val = &tree.ShowZoneConfig{}
   }
+
+// %Help: SHOW RANGE - show range information for a row
+// %Category: Misc
+// %Text:
+// SHOW RANGE FROM TABLE <tablename> FOR ROW (row, value, ...)
+// SHOW RANGE FROM INDEX [ <tablename> @ ] <indexname> FOR ROW (row, value, ...)
+show_range_for_row_stmt:
+  SHOW RANGE FROM TABLE table_name FOR ROW '(' expr_list ')'
+  {
+    name := $5.unresolvedObjectName().ToTableName()
+    $$.val = &tree.ShowRangeForRow{
+      Row: $9.exprs(),
+      TableOrIndex: tree.TableIndexName{Table: name},
+    }
+  }
+| SHOW RANGE FROM INDEX table_index_name FOR ROW '(' expr_list ')'
+  {
+    $$.val = &tree.ShowRangeForRow{
+      Row: $9.exprs(),
+      TableOrIndex: $5.tableIndexName(),
+    }
+  }
+| SHOW RANGE error // SHOW HELP: SHOW RANGE
 
 // %Help: SHOW RANGES - list ranges
 // %Category: Misc
