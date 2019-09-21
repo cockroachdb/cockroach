@@ -434,12 +434,12 @@ scrub_database_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'DATABASE' database_name opt_as_of_clause
 
 select_no_parens ::=
-	simple_select opt_for
-	| select_clause sort_clause opt_for
-	| select_clause opt_sort_clause select_limit opt_for
-	| with_clause select_clause opt_for
-	| with_clause select_clause sort_clause opt_for
-	| with_clause select_clause opt_sort_clause select_limit opt_for
+	simple_select locking_clause
+	| select_clause sort_clause locking_clause
+	| select_clause opt_sort_clause select_limit locking_clause
+	| with_clause select_clause locking_clause
+	| with_clause select_clause sort_clause locking_clause
+	| with_clause select_clause opt_sort_clause select_limit locking_clause
 
 select_with_parens ::=
 	'(' select_no_parens ')'
@@ -699,6 +699,7 @@ unreserved_keyword ::=
 	| 'LEVEL'
 	| 'LIST'
 	| 'LOCAL'
+	| 'LOCKED'
 	| 'LOOKUP'
 	| 'LOW'
 	| 'MATCH'
@@ -715,6 +716,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'NOWAIT'
 	| 'IGNORE_FOREIGN_KEYS'
 	| 'OF'
 	| 'OFF'
@@ -784,17 +786,19 @@ unreserved_keyword ::=
 	| 'SERIAL2'
 	| 'SERIAL4'
 	| 'SERIAL8'
-	| 'SERVER'
 	| 'SEQUENCE'
 	| 'SEQUENCES'
+	| 'SERVER'
 	| 'SESSION'
 	| 'SESSIONS'
 	| 'SET'
 	| 'SHARE'
 	| 'SHOW'
 	| 'SIMPLE'
+	| 'SKIP'
 	| 'SMALLSERIAL'
 	| 'SNAPSHOT'
+	| 'SPLIT'
 	| 'SQL'
 	| 'START'
 	| 'STATISTICS'
@@ -804,7 +808,6 @@ unreserved_keyword ::=
 	| 'STORING'
 	| 'STRICT'
 	| 'STRING'
-	| 'SPLIT'
 	| 'SUBSCRIPTION'
 	| 'SYNTAX'
 	| 'SYSTEM'
@@ -1146,11 +1149,8 @@ simple_select ::=
 	| table_clause
 	| set_operation
 
-opt_for ::=
-	'FOR' 'UPDATE'
-	| 'FOR' 'NO' 'KEY' 'UPDATE'
-	| 'FOR' 'SHARE'
-	| 'FOR' 'KEY' 'SHARE'
+locking_clause ::=
+	for_locking_strength opt_locked_rels
 
 select_clause ::=
 	simple_select
@@ -1551,6 +1551,15 @@ set_operation ::=
 	select_clause 'UNION' all_or_distinct select_clause
 	| select_clause 'INTERSECT' all_or_distinct select_clause
 	| select_clause 'EXCEPT' all_or_distinct select_clause
+
+for_locking_strength ::=
+	'FOR' 'UPDATE'
+	| 'FOR' 'NO' 'KEY' 'UPDATE'
+	| 'FOR' 'SHARE'
+	| 'FOR' 'KEY' 'SHARE'
+
+opt_locked_rels ::=
+	'OF' table_name_list
 
 offset_clause ::=
 	'OFFSET' a_expr

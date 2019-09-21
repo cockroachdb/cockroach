@@ -293,6 +293,9 @@ func (u *sqlSymUnion) whens() []*tree.When {
 func (u *sqlSymUnion) forLocked() tree.ForLocked {
     return u.val.(tree.ForLocked)
 }
+func (u *sqlSymUnion) lockingStrength() tree.LockingStrength {
+    return u.val.(tree.LockingStrength)
+}
 func (u *sqlSymUnion) updateExpr() *tree.UpdateExpr {
     return u.val.(*tree.UpdateExpr)
 }
@@ -532,12 +535,12 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> LANGUAGE LATERAL LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
-%token <str> LOCALTIME LOCALTIMESTAMP LOOKUP LOW LSHIFT
+%token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
-%token <str> NOT NOTHING NOTNULL NULL NULLIF NUMERIC
+%token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
@@ -557,7 +560,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
-%token <str> SHARE SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
@@ -776,7 +779,9 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <*tree.Select> select_no_parens
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
-%type <tree.ForLocked> opt_for
+%type <tree.ForLocked> locking_clause
+%type <tree.LockingStrength> for_locking_strength
+%type <empty> opt_nowait_or_skip
 %type <tree.SelectStatement> set_operation
 
 %type <tree.Expr> alter_column_default
@@ -842,7 +847,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.From> from_clause
 %type <tree.TableExprs> from_list rowsfrom_list opt_from_list
 %type <tree.TablePatterns> table_pattern_list single_table_pattern_list
-%type <tree.TableNames> table_name_list
+%type <tree.TableNames> table_name_list opt_locked_rels
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
@@ -5778,37 +5783,53 @@ select_with_parens:
 //      clause.
 //      - 2002-08-28 bjm
 select_no_parens:
-  simple_select opt_for
+  simple_select locking_clause
   {
     $$.val = &tree.Select{Select: $1.selectStmt(), ForLocked: $2.forLocked()}
   }
-| select_clause sort_clause opt_for
+| select_clause sort_clause locking_clause
   {
     $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), ForLocked: $3.forLocked()}
   }
-| select_clause opt_sort_clause select_limit opt_for
+| select_clause opt_sort_clause select_limit locking_clause
   {
     $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit(), ForLocked: $4.forLocked()}
   }
-| with_clause select_clause opt_for
+| with_clause select_clause locking_clause
   {
     $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), ForLocked: $3.forLocked()}
   }
-| with_clause select_clause sort_clause opt_for
+| with_clause select_clause sort_clause locking_clause
   {
     $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), ForLocked: $4.forLocked()}
   }
-| with_clause select_clause opt_sort_clause select_limit opt_for
+| with_clause select_clause opt_sort_clause select_limit locking_clause
   {
     $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit(), ForLocked: $5.forLocked()}
   }
 
-opt_for:
-  /* EMPTY */ { $$.val = tree.ForNone }
-| FOR UPDATE { $$.val = tree.ForUpdate }
+locking_clause:
+  /* EMPTY */ { $$.val = tree.ForLocked{} }
+| for_locking_strength opt_locked_rels opt_nowait_or_skip
+  {
+    $$.val = tree.ForLocked{Strength: $1.lockingStrength(), Targets: $2.tableNames()}
+  }
+
+opt_locked_rels:
+  /* EMPTY */ { $$.val = tree.TableNames{} }
+| OF table_name_list { $$.val = $2.tableNames() }
+
+for_locking_strength:
+  FOR UPDATE { $$.val = tree.ForUpdate }
 | FOR NO KEY UPDATE { $$.val = tree.ForNoKeyUpdate }
 | FOR SHARE { $$.val = tree.ForShare }
 | FOR KEY SHARE { $$.val = tree.ForKeyShare }
+
+opt_nowait_or_skip:
+  /* EMPTY */ { }
+// We can't support these options yet.
+| SKIP LOCKED { return unimplementedWithIssue(sqllex, 40476) }
+| NOWAIT { return unimplementedWithIssue(sqllex, 40476) }
 
 select_clause:
 // We only provide help if an open parenthesis is provided, because
@@ -9292,6 +9313,7 @@ unreserved_keyword:
 | LEVEL
 | LIST
 | LOCAL
+| LOCKED
 | LOOKUP
 | LOW
 | MATCH
@@ -9308,6 +9330,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NO_INDEX_JOIN
+| NOWAIT
 | IGNORE_FOREIGN_KEYS
 | OF
 | OFF
@@ -9377,17 +9400,19 @@ unreserved_keyword:
 | SERIAL2
 | SERIAL4
 | SERIAL8
-| SERVER
 | SEQUENCE
 | SEQUENCES
+| SERVER
 | SESSION
 | SESSIONS
 | SET
 | SHARE
 | SHOW
 | SIMPLE
+| SKIP
 | SMALLSERIAL
 | SNAPSHOT
+| SPLIT
 | SQL
 | START
 | STATISTICS
@@ -9397,7 +9422,6 @@ unreserved_keyword:
 | STORING
 | STRICT
 | STRING
-| SPLIT
 | SUBSCRIPTION
 | SYNTAX
 | SYSTEM

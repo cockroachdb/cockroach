@@ -549,6 +549,22 @@ func (node ForLocked) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node ForLocked) docTable(p *PrettyCfg) []pretty.TableRow {
+	if node.Strength == ForNone {
+		return nil
+	}
+	items := make([]pretty.TableRow, 0, 2)
+	items = append(items, node.Strength.docTable(p)...)
+	if len(node.Targets) > 0 {
+		items = append(items, p.row("OF", p.Doc(&node.Targets)))
+	}
+	return items
+}
+
+func (node LockingStrength) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node LockingStrength) docTable(p *PrettyCfg) []pretty.TableRow {
 	var keyword string
 	switch node {
 	case ForNone:

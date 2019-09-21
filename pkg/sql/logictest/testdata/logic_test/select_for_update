@@ -19,3 +19,24 @@ query I
 SELECT 1 FOR KEY SHARE
 ----
 1
+
+# Postgres gives an error if you specify a table that isn't available in the
+# FROM list for the OF ... clause, but since we're ignoring this list anyway,
+# we didn't bother to add that behavior.
+
+query I
+SELECT 1 FOR UPDATE OF a
+----
+1
+
+query I
+SELECT 1 FOR SHARE OF a, b
+----
+1
+
+# We can't support SKIP LOCKED or NOWAIT, since they would actually behave
+# differently - NOWAIT returns an error to the client instead of blocking,
+# and SKIP LOCKED returns an inconsistent view.
+
+query error at or near "locked": syntax error: unimplemented: this syntax
+SELECT 1 FOR UPDATE SKIP LOCKED

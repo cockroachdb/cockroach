@@ -48,13 +48,28 @@ type Select struct {
 	ForLocked ForLocked
 }
 
-// ForLocked represents the possible row-level lock modes for a SELECT
+// ForLocked represents a locking clause, like FOR UPDATE.
+type ForLocked struct {
+	Strength LockingStrength
+	Targets  TableNames
+}
+
+// Format implements the NodeFormatter interface.
+func (f ForLocked) Format(ctx *FmtCtx) {
+	f.Strength.Format(ctx)
+	if len(f.Targets) > 0 {
+		ctx.WriteString(" OF ")
+		f.Targets.Format(ctx)
+	}
+}
+
+// LockingStrength represents the possible row-level lock modes for a SELECT
 // statement.
-type ForLocked byte
+type LockingStrength byte
 
 const (
 	// ForNone represents the default - no for statement at all.
-	ForNone ForLocked = iota
+	ForNone LockingStrength = iota
 	// ForUpdate represents FOR UPDATE.
 	ForUpdate
 	// ForNoKeyUpdate represents FOR NO KEY UPDATE.
@@ -66,7 +81,7 @@ const (
 )
 
 // Format implements the NodeFormatter interface.
-func (f ForLocked) Format(ctx *FmtCtx) {
+func (f LockingStrength) Format(ctx *FmtCtx) {
 	switch f {
 	case ForNone:
 	case ForUpdate:
