@@ -859,6 +859,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.Limit> select_limit
 %type <tree.TableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
+%type <empty> opt_using_clause
 
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
 %type <tree.SequenceOption> sequence_option_elem
@@ -2420,18 +2421,23 @@ opt_changefeed_sink:
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
       With: $1.with(),
       Table: $4.tblExpr(),
-      Where: tree.NewWhere(tree.AstWhere, $5.expr()),
-      OrderBy: $6.orderBy(),
-      Limit: $7.limit(),
-      Returning: $8.retClause(),
+      Where: tree.NewWhere(tree.AstWhere, $6.expr()),
+      OrderBy: $7.orderBy(),
+      Limit: $8.limit(),
+      Returning: $9.retClause(),
     }
   }
 | opt_with_clause DELETE error // SHOW HELP: DELETE
+
+opt_using_clause:
+  USING from_list { return unimplementedWithIssueDetail(sqllex, 40963, "delete using") }
+| /* EMPTY */ { }
+
 
 // %Help: DISCARD - reset the session to its initial state
 // %Category: Cfg
