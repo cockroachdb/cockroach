@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/petermattis/goid"
 )
 
@@ -82,7 +82,7 @@ func Shout(ctx context.Context, sev Severity, args ...interface{}) {
 		})
 		defer t.Stop()
 	}
-	if stderrRedirected {
+	if logging.stderrRedirected() {
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
 			strings.Replace(MakeMessage(ctx, "", args), "\n", "\n* ", -1))
 	}
