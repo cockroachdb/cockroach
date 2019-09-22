@@ -132,7 +132,7 @@ func (p *planner) processSerialInColumnDef(
 
 	defaultExpr := &tree.FuncExpr{
 		Func:  tree.WrapFunction("nextval"),
-		Exprs: tree.Exprs{tree.NewStrVal(seqName.Table())},
+		Exprs: tree.Exprs{tree.NewStrVal(seqName.String())},
 	}
 
 	seqType := ""
