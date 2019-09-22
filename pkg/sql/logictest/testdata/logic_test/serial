@@ -223,6 +223,26 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serial
 ----
 4  3  4
 
+statement ok
+CREATE TABLE "serial_MixedCase" (
+  a SERIAL PRIMARY KEY,
+  b INT DEFAULT 7,
+  c SERIAL,
+  UNIQUE INDEX (c)
+)
+
+query TT
+SHOW CREATE TABLE "serial_MixedCase"
+----
+"serial_MixedCase"  CREATE TABLE "serial_MixedCase" (
+                    a INT8 NOT NULL DEFAULT nextval('"serial_MixedCase_a_seq"':::STRING),
+                    b INT8 NULL DEFAULT 7:::INT8,
+                    c INT8 NOT NULL DEFAULT nextval('"serial_MixedCase_c_seq"':::STRING),
+                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+                    UNIQUE INDEX "serial_MixedCase_c_key" (c ASC),
+                    FAMILY "primary" (a, b, c)
+)
+
 statement error multiple default values specified for column "a" of table "s1"
 CREATE TABLE s1 (a SERIAL DEFAULT 7)
 
