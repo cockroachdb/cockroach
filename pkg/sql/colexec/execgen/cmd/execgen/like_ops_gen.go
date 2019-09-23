@@ -36,7 +36,7 @@ import (
 
 {{range .}}
 {{template "selConstOp" .}}
-{{template "projRConstOp" .}}
+{{template "projConstOp" .}}
 {{end}}
 `
 
@@ -47,7 +47,11 @@ func genLikeOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	tmpl, err = tmpl.Parse(projTemplate)
+	projTemplate, err := getProjConstOpTmplString(false /* isConstLeft */)
+	if err != nil {
+		return err
+	}
+	tmpl, err = tmpl.Funcs(template.FuncMap{"buildDict": buildDict}).Parse(projTemplate)
 	if err != nil {
 		return err
 	}

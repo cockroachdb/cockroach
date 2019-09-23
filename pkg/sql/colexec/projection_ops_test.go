@@ -52,6 +52,21 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		})
 }
 
+func TestProjDivFloat64Float64Op(t *testing.T) {
+	runTests(t, []tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}},
+		orderedVerifier,
+		func(input []Operator) (Operator, error) {
+			return &projDivFloat64Float64Op{
+				projOpBase: projOpBase{
+					OneInputNode: NewOneInputNode(input[0]),
+					col1Idx:      0,
+					col2Idx:      1,
+					outputIdx:    2,
+				},
+			}, nil
+		})
+}
+
 func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
