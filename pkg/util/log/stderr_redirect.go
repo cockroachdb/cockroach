@@ -25,15 +25,15 @@ var OrigStderr = func() *os.File {
 // LoggingToStderr returns true if log messages of the given severity
 // sent to the main logger are also visible on stderr.
 func LoggingToStderr(s Severity) bool {
-	return s >= mainLog.stderrThreshold.get()
+	return s >= logging.stderrThreshold.get()
 }
 
 // stderrRedirected returns true if and only if logging to this logger
 // captures stderr output to the log file. This is used e.g. by
 // Shout() to determine whether to report to standard error in
 // addition to logs.
-func (l *loggingT) stderrRedirected() bool {
-	return l.stderrThreshold > Severity_INFO && !l.noStderrRedirect
+func (l *loggerT) stderrRedirected() bool {
+	return logging.stderrThreshold > Severity_INFO && !l.noStderrRedirect
 }
 
 // hijackStderr replaces stderr with the given file descriptor.

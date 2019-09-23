@@ -50,8 +50,8 @@ func (t *traceLocation) match(file string, line int) bool {
 
 func (t *traceLocation) String() string {
 	// Lock because the type is not atomic. TODO: clean this up.
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 	return fmt.Sprintf("%s:%d", t.file, t.line)
 }
 
@@ -62,8 +62,8 @@ var errTraceSyntax = errors.New("syntax error: expect file.go:234")
 func (t *traceLocation) Set(value string) error {
 	if value == "" {
 		// Unset.
-		mainLog.mu.Lock()
-		defer mainLog.mu.Unlock()
+		logging.mu.Lock()
+		defer logging.mu.Unlock()
 		t.line = 0
 		t.file = ""
 		return nil
@@ -83,8 +83,8 @@ func (t *traceLocation) Set(value string) error {
 	if v <= 0 {
 		return errors.New("negative or zero value for level")
 	}
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 	t.line = v
 	t.file = file
 	return nil

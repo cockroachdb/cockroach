@@ -38,7 +38,7 @@ func StartGCDaemon(ctx context.Context) {
 }
 
 // gcDaemon runs the GC loop for the given logger.
-func (l *loggingT) gcDaemon(ctx context.Context) {
+func (l *loggerT) gcDaemon(ctx context.Context) {
 	l.gcOldFiles()
 	for {
 		select {
@@ -46,17 +46,20 @@ func (l *loggingT) gcDaemon(ctx context.Context) {
 			return
 		case <-l.gcNotify:
 		}
-		l.mu.Lock()
-		if !l.disableDaemons {
+
+		logging.mu.Lock()
+		doGC := !logging.mu.disableDaemons
+		logging.mu.Unlock()
+
+		if doGC {
 			l.gcOldFiles()
 		}
-		l.mu.Unlock()
 	}
 }
 
 // gcOldFiles removes the "old" files that do not match
 // the configured size and number threshold.
-func (l *loggingT) gcOldFiles() {
+func (l *loggerT) gcOldFiles() {
 	dir, err := l.logDir.get()
 	if err != nil {
 		// No log directory configured. Nothing to do.

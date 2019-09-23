@@ -32,12 +32,12 @@ type flushSyncWriter interface {
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
 func Flush() {
-	mainLog.lockAndFlushAll()
+	mainLog.lockAndFlushAndSync(true /*doSync*/)
 	secondaryLogRegistry.mu.Lock()
 	defer secondaryLogRegistry.mu.Unlock()
 	for _, l := range secondaryLogRegistry.mu.loggers {
 		// Some loggers (e.g. the audit log) want to keep all the files.
-		l.logger.lockAndFlushAll()
+		l.logger.lockAndFlushAndSync(true /*doSync*/)
 	}
 }
 
@@ -74,23 +74,22 @@ func flushDaemon() {
 		doSync := syncCounter == syncInterval
 		syncCounter = (syncCounter + 1) % syncInterval
 
-		// Flush the main log.
-		mainLog.mu.Lock()
-		if !mainLog.disableDaemons {
-			mainLog.flushAndSync(doSync)
-		}
-		mainLog.mu.Unlock()
+		// Is flushing disabled?
+		logging.mu.Lock()
+		disableDaemons := logging.mu.disableDaemons
+		logging.mu.Unlock()
 
-		// Flush the secondary logs.
-		secondaryLogRegistry.mu.Lock()
-		for _, l := range secondaryLogRegistry.mu.loggers {
-			l.logger.mu.Lock()
-			if !l.logger.disableDaemons {
-				l.logger.flushAndSync(doSync)
+		// Flush the main log.
+		if !disableDaemons {
+			mainLog.lockAndFlushAndSync(doSync)
+
+			// Flush the secondary logs.
+			secondaryLogRegistry.mu.Lock()
+			for _, l := range secondaryLogRegistry.mu.loggers {
+				l.logger.lockAndFlushAndSync(doSync)
 			}
-			l.logger.mu.Unlock()
+			secondaryLogRegistry.mu.Unlock()
 		}
-		secondaryLogRegistry.mu.Unlock()
 	}
 }
 
@@ -104,10 +103,10 @@ func signalFlusher() {
 	}
 }
 
-// lockAndFlushAll is like flushAll but locks l.mu first.
-func (l *loggingT) lockAndFlushAll() {
+// lockAndFlushAndSync is like flushAndSync but locks l.mu first.
+func (l *loggerT) lockAndFlushAndSync(doSync bool) {
 	l.mu.Lock()
-	l.flushAndSync(true /*doSync*/)
+	l.flushAndSync(doSync)
 	l.mu.Unlock()
 }
 
@@ -138,17 +137,18 @@ func SetSync(sync bool) {
 }
 
 // lockAndSetSync configures syncWrites.
-func (l *loggingT) lockAndSetSync(sync bool) {
+func (l *loggerT) lockAndSetSync(sync bool) {
 	l.mu.Lock()
-	l.syncWrites = sync
+	l.mu.syncWrites = sync
 	l.mu.Unlock()
 }
 
 // flushAndSync flushes the current log and, if doSync is set,
 // attempts to sync its data to disk.
+//
 // l.mu is held.
-func (l *loggingT) flushAndSync(doSync bool) {
-	if l.file == nil {
+func (l *loggerT) flushAndSync(doSync bool) {
+	if l.mu.file == nil {
 		return
 	}
 
@@ -161,8 +161,8 @@ func (l *loggingT) flushAndSync(doSync bool) {
 	})
 	defer t.Stop()
 
-	_ = l.file.Flush() // ignore error
+	_ = l.mu.file.Flush() // ignore error
 	if doSync {
-		_ = l.file.Sync() // ignore error
+		_ = l.mu.file.Sync() // ignore error
 	}
 }

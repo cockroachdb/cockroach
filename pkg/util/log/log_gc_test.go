@@ -60,17 +60,17 @@ func TestSecondaryGC(t *testing.T) {
 
 func testLogGC(
 	t *testing.T,
-	logger *loggingT,
+	logger *loggerT,
 	logFn func(ctx context.Context, format string, args ...interface{}),
 ) {
-	mainLog.mu.Lock()
-	mainLog.disableDaemons = true
+	logging.mu.Lock()
+	logging.mu.disableDaemons = true
 	defer func(previous bool) {
-		mainLog.mu.Lock()
-		mainLog.disableDaemons = previous
-		mainLog.mu.Unlock()
-	}(mainLog.disableDaemons)
-	mainLog.mu.Unlock()
+		logging.mu.Lock()
+		logging.mu.disableDaemons = previous
+		logging.mu.Unlock()
+	}(logging.mu.disableDaemons)
+	logging.mu.Unlock()
 
 	const newLogFiles = 20
 
@@ -140,9 +140,9 @@ func testLogGC(
 	}
 
 	// Re-enable GC, so that the GC daemon can pick up the files.
-	logger.mu.Lock()
-	logger.disableDaemons = false
-	logger.mu.Unlock()
+	logging.mu.Lock()
+	logging.mu.disableDaemons = false
+	logging.mu.Unlock()
 	// Start the GC daemon, using a context that will terminate it
 	// at the end of the test.
 	ctx, cancel := context.WithCancel(context.Background())

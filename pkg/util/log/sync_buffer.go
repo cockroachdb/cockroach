@@ -28,11 +28,12 @@ import (
 // file rotation. There are conflicting methods, so the file cannot be embedded.
 // l.mu is held for all its methods.
 type syncBuffer struct {
-	logger *loggingT
 	*bufio.Writer
+
+	logger       *loggerT
 	file         *os.File
 	lastRotation int64
-	nbytes       int64 // The number of bytes written to this file
+	nbytes       int64 // The number of bytes written to this file so far.
 }
 
 // Sync implements the flushSyncWriter interface.
@@ -60,16 +61,16 @@ func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 // createFile initializes the syncBuffer for a logger, and triggers
 // creation of the log file.
 // Assumes that l.mu is held by the caller.
-func (l *loggingT) createFile() error {
+func (l *loggerT) createFile() error {
 	now := timeutil.Now()
-	if l.file == nil {
+	if l.mu.file == nil {
 		sb := &syncBuffer{
 			logger: l,
 		}
 		if err := sb.rotateFile(now); err != nil {
 			return err
 		}
-		l.file = sb
+		l.mu.file = sb
 	}
 	return nil
 }
@@ -118,16 +119,20 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
 		fmt.Sprintf("[config] arguments: %s\n", os.Args),
 	)
-	if sb.logger.clusterID != "" {
-		messages = append(messages, fmt.Sprintf("[config] clusterID: %s\n", sb.logger.clusterID))
+
+	logging.mu.Lock()
+	if logging.mu.clusterID != "" {
+		messages = append(messages, fmt.Sprintf("[config] clusterID: %s\n", logging.mu.clusterID))
 	}
+	logging.mu.Unlock()
+
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
 	messages = append(messages, fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"))
 
 	f, l, _ := caller.Lookup(1)
 	for _, msg := range messages {
-		buf := formatLogEntry(Entry{
+		buf := logging.formatLogEntry(Entry{
 			Severity:  Severity_INFO,
 			Time:      now.UnixNano(),
 			Goroutine: goid.Get(),
@@ -145,7 +150,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	}
 
 	select {
-	case mainLog.gcNotify <- struct{}{}:
+	case sb.logger.gcNotify <- struct{}{}:
 	default:
 	}
 	return nil
