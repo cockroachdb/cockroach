@@ -1110,6 +1110,13 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	default:
 		panic(errors.AssertionFailedf("invalid operator %s", log.Safe(set.Op())))
 	}
+	// TODO(justin): We cannot execute mutations under a UNION or UNION ALL
+	// (because mutations can't run in parallel). Once we pull up all mutations
+	// into top-level With expressions, this case will not be possible anymore.
+	if typ == tree.UnionOp && (leftExpr.Relational().CanMutate || rightExpr.Relational().CanMutate) {
+		err := unimplemented.NewWithIssuef(40853, "mutations not supported under UNION; use WITH instead")
+		return execPlan{}, err
+	}
 
 	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root)
 	if err != nil {
