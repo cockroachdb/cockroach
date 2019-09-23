@@ -81,17 +81,18 @@ define
       /\ intent.resolved = FALSE
 
   RecordStatuses  == {"pending", "staging", "committed", "aborted"}
-  RecordStaged    == record.status = "staging"
+  RecordStaging   == record.status = "staging"
   RecordCommitted == record.status = "committed"
   RecordAborted   == record.status = "aborted"
   RecordFinalized == RecordCommitted \/ RecordAborted
 
-  ImplicitCommit ==
-    /\ RecordStaged
+  ImplicitlyCommitted ==
+    /\ RecordStaging
     /\ \A k \in KEYS:
       /\ intent_writes[k].epoch = record.epoch
       /\ intent_writes[k].ts   <= record.ts
-  ExplicitCommit == RecordCommitted
+  ExplicitlyCommitted == RecordCommitted
+  Committed           == ImplicitlyCommitted \/ ExplicitlyCommitted
 
   TypeInvariants ==
     /\ record \in [status: RecordStatuses, epoch: 0..MAX_ATTEMPTS, ts: 0..MAX_ATTEMPTS]
@@ -111,6 +112,8 @@ define
     \* Once the txn record moves to a finalized status, it stays there.
     /\ [](RecordCommitted => []RecordCommitted)
     /\ [](RecordAborted   => []RecordAborted)
+    \* Once the txn is committed, it remains committed.
+    /\ [](Committed => []Committed)
     \* The txn record's epoch must always grow.
     /\ [][record'.epoch >= record.epoch]_record
     \* The txn record's timestamp must always grow.
@@ -129,11 +132,14 @@ define
     /\ [][\A k \in KEYS: tscache'[k] >= tscache[k]]_tscache
 
   \* If the transaction ever becomes implicitly committed, it should
-  \* eventually be explicitly committed.
-  ImplicitCommitLeadsToExplicitCommit == ImplicitCommit ~> ExplicitCommit
+  \* eventually become explicitly committed.
+  ImplicitCommitLeadsToExplicitCommit == ImplicitlyCommitted ~> ExplicitlyCommitted
 
-  \* If the client is acked, the record should eventually be committed.
-  AckLeadsToExplicitCommit == commit_ack ~> ExplicitCommit
+  \* If the client is acked, the transaction must be committed.
+  AckImpliesCommit == commit_ack => Committed
+
+  \* If the client is acked, the record should eventually be explicitly committed.
+  AckLeadsToExplicitCommit == commit_ack ~> ExplicitlyCommitted
 end define;
 
 \* Give up after MAX_ATTEMPTS attempts. This bounds the state space for the
@@ -163,7 +169,7 @@ variables
   txn_ts    = 0;
   to_write  = {};
   to_check  = {};
-  have_staged_record = FALSE;
+  have_staging_record = FALSE;
 begin
   \* Begin a new transaction epoch.
   BeginTxnEpoch:
@@ -211,11 +217,11 @@ begin
   StageWritesAndRecord:
     to_write := parallel_keys;
     to_check := pipelined_keys;
-    have_staged_record := FALSE;
+    have_staging_record := FALSE;
     maybe_abandon_retry();
 
     StageWritesAndRecordLoop:
-      while to_check /= {} \/ to_write /= {} \/ ~have_staged_record do
+      while to_check /= {} \/ to_write /= {} \/ ~have_staging_record do
         either
           await to_check /= {};
           QueryPipelinedWrite:
@@ -279,9 +285,9 @@ begin
               end if;
             end with;
         or
-          await ~have_staged_record;
+          await ~have_staging_record;
           StageRecord:
-            have_staged_record := TRUE;
+            have_staging_record := TRUE;
             if record.status = "pending" then
               \* Move to staging status.
               record := [status |-> "staging", epoch |-> txn_epoch, ts |-> txn_ts];
@@ -302,14 +308,14 @@ begin
   \* Ack the client now that all writes have succeeded
   \* and the transaction is implicitly committed.
   AckClient:
-    assert ImplicitCommit \/ ExplicitCommit;
+    assert Committed;
     commit_ack := TRUE;
 
   \* Now that the transaction is implicitly committed,
   \* asynchronously make the commit explicit.
-  AsyncExplicitCommit:
+  AsyncExplicitlyCommitted:
     if record.status = "staging" then
-      assert ImplicitCommit;
+      assert ImplicitlyCommitted;
       \* Make implicit commit explicit.
       record.status := "committed";
     elsif record.status = "committed" then
@@ -420,7 +426,7 @@ begin
 
             \* Can commit as result of recovery.
             if record.status = "staging" then
-              assert ImplicitCommit;
+              assert ImplicitlyCommitted;
               record.status := "committed";
             end if;
           end if;
@@ -470,17 +476,18 @@ QueryIntent(key, query_epoch, query_ts) ==
     /\ intent.resolved = FALSE
 
 RecordStatuses  == {"pending", "staging", "committed", "aborted"}
-RecordStaged    == record.status = "staging"
+RecordStaging   == record.status = "staging"
 RecordCommitted == record.status = "committed"
 RecordAborted   == record.status = "aborted"
 RecordFinalized == RecordCommitted \/ RecordAborted
 
-ImplicitCommit ==
-  /\ RecordStaged
+ImplicitlyCommitted ==
+  /\ RecordStaging
   /\ \A k \in KEYS:
     /\ intent_writes[k].epoch = record.epoch
     /\ intent_writes[k].ts   <= record.ts
-ExplicitCommit == RecordCommitted
+ExplicitlyCommitted == RecordCommitted
+Committed           == ImplicitlyCommitted \/ ExplicitlyCommitted
 
 TypeInvariants ==
   /\ record \in [status: RecordStatuses, epoch: 0..MAX_ATTEMPTS, ts: 0..MAX_ATTEMPTS]
@@ -501,6 +508,8 @@ TemporalTxnRecordProperties ==
   /\ [](RecordCommitted => []RecordCommitted)
   /\ [](RecordAborted   => []RecordAborted)
 
+  /\ [](Committed => []Committed)
+
   /\ [][record'.epoch >= record.epoch]_record
 
   /\ [][record'.ts >= record.ts]_record
@@ -519,18 +528,21 @@ TemporalTSCacheProperties ==
 
 
 
-ImplicitCommitLeadsToExplicitCommit == ImplicitCommit ~> ExplicitCommit
+ImplicitCommitLeadsToExplicitCommit == ImplicitlyCommitted ~> ExplicitlyCommitted
 
 
-AckLeadsToExplicitCommit == commit_ack ~> ExplicitCommit
+AckImpliesCommit == commit_ack => Committed
+
+
+AckLeadsToExplicitCommit == commit_ack ~> ExplicitlyCommitted
 
 VARIABLES pipelined_keys, parallel_keys, attempt, txn_epoch, txn_ts, to_write, 
-          to_check, have_staged_record, prevent_epoch, prevent_ts, 
+          to_check, have_staging_record, prevent_epoch, prevent_ts, 
           found_writes, to_resolve
 
 vars == << record, intent_writes, tscache, commit_ack, pc, pipelined_keys, 
            parallel_keys, attempt, txn_epoch, txn_ts, to_write, to_check, 
-           have_staged_record, prevent_epoch, prevent_ts, found_writes, 
+           have_staging_record, prevent_epoch, prevent_ts, found_writes, 
            to_resolve >>
 
 ProcSet == {"committer"} \cup (PREVENTERS)
@@ -548,7 +560,7 @@ Init == (* Global variables *)
         /\ txn_ts = 0
         /\ to_write = {}
         /\ to_check = {}
-        /\ have_staged_record = FALSE
+        /\ have_staging_record = FALSE
         (* Process preventer *)
         /\ prevent_epoch = [self \in PREVENTERS |-> 0]
         /\ prevent_ts = [self \in PREVENTERS |-> 0]
@@ -566,7 +578,7 @@ BeginTxnEpoch == /\ pc["committer"] = "BeginTxnEpoch"
                        ELSE /\ pc' = [pc EXCEPT !["committer"] = "PipelineWrites"]
                  /\ UNCHANGED << record, intent_writes, tscache, commit_ack, 
                                  pipelined_keys, parallel_keys, attempt, 
-                                 to_check, have_staged_record, prevent_epoch, 
+                                 to_check, have_staging_record, prevent_epoch, 
                                  prevent_ts, found_writes, to_resolve >>
 
 PipelineWrites == /\ pc["committer"] = "PipelineWrites"
@@ -577,7 +589,7 @@ PipelineWrites == /\ pc["committer"] = "PipelineWrites"
                                         THEN /\ UNCHANGED intent_writes
                                         ELSE /\ IF tscache[key] >= txn_ts
                                                    THEN /\ Assert(FALSE, 
-                                                                  "Failure of assertion at line 191, column 11.")
+                                                                  "Failure of assertion at line 197, column 11.")
                                                         /\ UNCHANGED intent_writes
                                                    ELSE /\ \/ /\ intent_writes' = [intent_writes EXCEPT ![key] =                       [
                                                                                                                    epoch    |-> txn_epoch,
@@ -591,13 +603,13 @@ PipelineWrites == /\ pc["committer"] = "PipelineWrites"
                              /\ UNCHANGED << intent_writes, to_write >>
                   /\ UNCHANGED << record, tscache, commit_ack, pipelined_keys, 
                                   parallel_keys, attempt, txn_epoch, txn_ts, 
-                                  to_check, have_staged_record, prevent_epoch, 
+                                  to_check, have_staging_record, prevent_epoch, 
                                   prevent_ts, found_writes, to_resolve >>
 
 StageWritesAndRecord == /\ pc["committer"] = "StageWritesAndRecord"
                         /\ to_write' = parallel_keys
                         /\ to_check' = pipelined_keys
-                        /\ have_staged_record' = FALSE
+                        /\ have_staging_record' = FALSE
                         /\ IF attempt > MAX_ATTEMPTS
                               THEN /\ pc' = [pc EXCEPT !["committer"] = "EndCommitter"]
                               ELSE /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
@@ -608,19 +620,19 @@ StageWritesAndRecord == /\ pc["committer"] = "StageWritesAndRecord"
                                         found_writes, to_resolve >>
 
 StageWritesAndRecordLoop == /\ pc["committer"] = "StageWritesAndRecordLoop"
-                            /\ IF to_check /= {} \/ to_write /= {} \/ ~have_staged_record
+                            /\ IF to_check /= {} \/ to_write /= {} \/ ~have_staging_record
                                   THEN /\ \/ /\ to_check /= {}
                                              /\ pc' = [pc EXCEPT !["committer"] = "QueryPipelinedWrite"]
                                           \/ /\ to_write /= {}
                                              /\ pc' = [pc EXCEPT !["committer"] = "ParallelWrite"]
-                                          \/ /\ ~have_staged_record
+                                          \/ /\ ~have_staging_record
                                              /\ pc' = [pc EXCEPT !["committer"] = "StageRecord"]
                                   ELSE /\ pc' = [pc EXCEPT !["committer"] = "AckClient"]
                             /\ UNCHANGED << record, intent_writes, tscache, 
                                             commit_ack, pipelined_keys, 
                                             parallel_keys, attempt, txn_epoch, 
                                             txn_ts, to_write, to_check, 
-                                            have_staged_record, prevent_epoch, 
+                                            have_staging_record, prevent_epoch, 
                                             prevent_ts, found_writes, 
                                             to_resolve >>
 
@@ -643,7 +655,7 @@ QueryPipelinedWrite == /\ pc["committer"] = "QueryPipelinedWrite"
                        /\ UNCHANGED << record, intent_writes, tscache, 
                                        commit_ack, pipelined_keys, 
                                        parallel_keys, txn_epoch, txn_ts, 
-                                       to_write, have_staged_record, 
+                                       to_write, have_staging_record, 
                                        prevent_epoch, prevent_ts, found_writes, 
                                        to_resolve >>
 
@@ -672,24 +684,24 @@ ParallelWrite == /\ pc["committer"] = "ParallelWrite"
                                               /\ UNCHANGED << attempt, txn_ts >>
                  /\ UNCHANGED << record, tscache, commit_ack, pipelined_keys, 
                                  parallel_keys, txn_epoch, to_check, 
-                                 have_staged_record, prevent_epoch, prevent_ts, 
-                                 found_writes, to_resolve >>
+                                 have_staging_record, prevent_epoch, 
+                                 prevent_ts, found_writes, to_resolve >>
 
 StageRecord == /\ pc["committer"] = "StageRecord"
-               /\ have_staged_record' = TRUE
+               /\ have_staging_record' = TRUE
                /\ IF record.status = "pending"
                      THEN /\ record' = [status |-> "staging", epoch |-> txn_epoch, ts |-> txn_ts]
                           /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                      ELSE /\ IF record.status = "staging"
                                 THEN /\ Assert(record.epoch <= txn_epoch /\ record.ts < txn_ts, 
-                                               "Failure of assertion at line 290, column 15.")
+                                               "Failure of assertion at line 296, column 15.")
                                      /\ record' = [status |-> "staging", epoch |-> txn_epoch, ts |-> txn_ts]
                                      /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                 ELSE /\ IF record.status = "aborted"
                                            THEN /\ pc' = [pc EXCEPT !["committer"] = "EndCommitter"]
                                            ELSE /\ IF record.status = "committed"
                                                       THEN /\ Assert(FALSE, 
-                                                                     "Failure of assertion at line 297, column 15.")
+                                                                     "Failure of assertion at line 303, column 15.")
                                                       ELSE /\ TRUE
                                                 /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                      /\ UNCHANGED record
@@ -700,33 +712,34 @@ StageRecord == /\ pc["committer"] = "StageRecord"
                                to_resolve >>
 
 AckClient == /\ pc["committer"] = "AckClient"
-             /\ Assert(ImplicitCommit \/ ExplicitCommit, 
-                       "Failure of assertion at line 305, column 5.")
+             /\ Assert(Committed, 
+                       "Failure of assertion at line 311, column 5.")
              /\ commit_ack' = TRUE
-             /\ pc' = [pc EXCEPT !["committer"] = "AsyncExplicitCommit"]
+             /\ pc' = [pc EXCEPT !["committer"] = "AsyncExplicitlyCommitted"]
              /\ UNCHANGED << record, intent_writes, tscache, pipelined_keys, 
                              parallel_keys, attempt, txn_epoch, txn_ts, 
-                             to_write, to_check, have_staged_record, 
+                             to_write, to_check, have_staging_record, 
                              prevent_epoch, prevent_ts, found_writes, 
                              to_resolve >>
 
-AsyncExplicitCommit == /\ pc["committer"] = "AsyncExplicitCommit"
-                       /\ IF record.status = "staging"
-                             THEN /\ Assert(ImplicitCommit, 
-                                            "Failure of assertion at line 312, column 7.")
-                                  /\ record' = [record EXCEPT !.status = "committed"]
-                             ELSE /\ IF record.status = "committed"
-                                        THEN /\ TRUE
-                                        ELSE /\ Assert(FALSE, 
-                                                       "Failure of assertion at line 320, column 7.")
-                                  /\ UNCHANGED record
-                       /\ to_write' = KEYS
-                       /\ pc' = [pc EXCEPT !["committer"] = "AsyncResolveIntents"]
-                       /\ UNCHANGED << intent_writes, tscache, commit_ack, 
-                                       pipelined_keys, parallel_keys, attempt, 
-                                       txn_epoch, txn_ts, to_check, 
-                                       have_staged_record, prevent_epoch, 
-                                       prevent_ts, found_writes, to_resolve >>
+AsyncExplicitlyCommitted == /\ pc["committer"] = "AsyncExplicitlyCommitted"
+                            /\ IF record.status = "staging"
+                                  THEN /\ Assert(ImplicitlyCommitted, 
+                                                 "Failure of assertion at line 318, column 7.")
+                                       /\ record' = [record EXCEPT !.status = "committed"]
+                                  ELSE /\ IF record.status = "committed"
+                                             THEN /\ TRUE
+                                             ELSE /\ Assert(FALSE, 
+                                                            "Failure of assertion at line 326, column 7.")
+                                       /\ UNCHANGED record
+                            /\ to_write' = KEYS
+                            /\ pc' = [pc EXCEPT !["committer"] = "AsyncResolveIntents"]
+                            /\ UNCHANGED << intent_writes, tscache, commit_ack, 
+                                            pipelined_keys, parallel_keys, 
+                                            attempt, txn_epoch, txn_ts, 
+                                            to_check, have_staging_record, 
+                                            prevent_epoch, prevent_ts, 
+                                            found_writes, to_resolve >>
 
 AsyncResolveIntents == /\ pc["committer"] = "AsyncResolveIntents"
                        /\ IF to_write /= {}
@@ -742,7 +755,7 @@ AsyncResolveIntents == /\ pc["committer"] = "AsyncResolveIntents"
                        /\ UNCHANGED << record, tscache, commit_ack, 
                                        pipelined_keys, parallel_keys, attempt, 
                                        txn_epoch, txn_ts, to_check, 
-                                       have_staged_record, prevent_epoch, 
+                                       have_staging_record, prevent_epoch, 
                                        prevent_ts, found_writes, to_resolve >>
 
 EndCommitter == /\ pc["committer"] = "EndCommitter"
@@ -751,13 +764,13 @@ EndCommitter == /\ pc["committer"] = "EndCommitter"
                 /\ UNCHANGED << record, intent_writes, tscache, commit_ack, 
                                 pipelined_keys, parallel_keys, attempt, 
                                 txn_epoch, txn_ts, to_write, to_check, 
-                                have_staged_record, prevent_epoch, prevent_ts, 
+                                have_staging_record, prevent_epoch, prevent_ts, 
                                 found_writes, to_resolve >>
 
 committer == BeginTxnEpoch \/ PipelineWrites \/ StageWritesAndRecord
                 \/ StageWritesAndRecordLoop \/ QueryPipelinedWrite
                 \/ ParallelWrite \/ StageRecord \/ AckClient
-                \/ AsyncExplicitCommit \/ AsyncResolveIntents
+                \/ AsyncExplicitlyCommitted \/ AsyncResolveIntents
                 \/ EndCommitter
 
 PreventLoop(self) == /\ pc[self] = "PreventLoop"
@@ -766,7 +779,7 @@ PreventLoop(self) == /\ pc[self] = "PreventLoop"
                      /\ UNCHANGED << record, intent_writes, tscache, 
                                      commit_ack, pipelined_keys, parallel_keys, 
                                      attempt, txn_epoch, txn_ts, to_write, 
-                                     to_check, have_staged_record, 
+                                     to_check, have_staging_record, 
                                      prevent_epoch, prevent_ts, to_resolve >>
 
 PushRecord(self) == /\ pc[self] = "PushRecord"
@@ -787,7 +800,7 @@ PushRecord(self) == /\ pc[self] = "PushRecord"
                     /\ UNCHANGED << intent_writes, tscache, commit_ack, 
                                     pipelined_keys, parallel_keys, attempt, 
                                     txn_epoch, txn_ts, to_write, to_check, 
-                                    have_staged_record, found_writes, 
+                                    have_staging_record, found_writes, 
                                     to_resolve >>
 
 PreventWrites(self) == /\ pc[self] = "PreventWrites"
@@ -808,7 +821,7 @@ PreventWrites(self) == /\ pc[self] = "PreventWrites"
                        /\ UNCHANGED << record, intent_writes, commit_ack, 
                                        pipelined_keys, parallel_keys, attempt, 
                                        txn_epoch, txn_ts, to_write, to_check, 
-                                       have_staged_record, prevent_epoch, 
+                                       have_staging_record, prevent_epoch, 
                                        prevent_ts, to_resolve >>
 
 RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
@@ -826,7 +839,7 @@ RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
                                                             /\ UNCHANGED record
                                                        ELSE /\ IF record.status = "pending"
                                                                   THEN /\ Assert(FALSE, 
-                                                                                 "Failure of assertion at line 400, column 15.")
+                                                                                 "Failure of assertion at line 406, column 15.")
                                                                        /\ pc' = [pc EXCEPT ![self] = "ResolveIntents"]
                                                                        /\ UNCHANGED record
                                                                   ELSE /\ IF record.status = "staging"
@@ -839,16 +852,16 @@ RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
                                                                                   /\ UNCHANGED record
                                ELSE /\ IF record.status \in {"pending", "aborted"}
                                           THEN /\ Assert(FALSE, 
-                                                         "Failure of assertion at line 415, column 13.")
+                                                         "Failure of assertion at line 421, column 13.")
                                                /\ UNCHANGED record
                                           ELSE /\ IF record.status \in {"staging", "committed"}
                                                      THEN /\ Assert(record.epoch = prevent_epoch[self], 
-                                                                    "Failure of assertion at line 418, column 13.")
+                                                                    "Failure of assertion at line 424, column 13.")
                                                           /\ Assert(record.ts    = prevent_ts[self], 
-                                                                    "Failure of assertion at line 419, column 13.")
+                                                                    "Failure of assertion at line 425, column 13.")
                                                           /\ IF record.status = "staging"
-                                                                THEN /\ Assert(ImplicitCommit, 
-                                                                               "Failure of assertion at line 423, column 15.")
+                                                                THEN /\ Assert(ImplicitlyCommitted, 
+                                                                               "Failure of assertion at line 429, column 15.")
                                                                      /\ record' = [record EXCEPT !.status = "committed"]
                                                                 ELSE /\ TRUE
                                                                      /\ UNCHANGED record
@@ -858,7 +871,7 @@ RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
                        /\ UNCHANGED << intent_writes, tscache, commit_ack, 
                                        pipelined_keys, parallel_keys, attempt, 
                                        txn_epoch, txn_ts, to_write, to_check, 
-                                       have_staged_record, prevent_epoch, 
+                                       have_staging_record, prevent_epoch, 
                                        prevent_ts, found_writes, to_resolve >>
 
 ResolveIntents(self) == /\ pc[self] = "ResolveIntents"
@@ -875,17 +888,20 @@ ResolveIntents(self) == /\ pc[self] = "ResolveIntents"
                         /\ UNCHANGED << record, tscache, commit_ack, 
                                         pipelined_keys, parallel_keys, attempt, 
                                         txn_epoch, txn_ts, to_write, to_check, 
-                                        have_staged_record, prevent_epoch, 
+                                        have_staging_record, prevent_epoch, 
                                         prevent_ts, found_writes >>
 
 preventer(self) == PreventLoop(self) \/ PushRecord(self)
                       \/ PreventWrites(self) \/ RecoverRecord(self)
                       \/ ResolveIntents(self)
 
+(* Allow infinite stuttering to prevent deadlock on termination. *)
+Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
+               /\ UNCHANGED vars
+
 Next == committer
            \/ (\E self \in PREVENTERS: preventer(self))
-           \/ (* Disjunct to prevent deadlock on termination *)
-              ((\A self \in ProcSet: pc[self] = "Done") /\ UNCHANGED vars)
+           \/ Terminating
 
 Spec == /\ Init /\ [][Next]_vars
         /\ \A self \in PREVENTERS : WF_vars(preventer(self))
@@ -898,5 +914,5 @@ Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
 =============================================================================
 \* Modification History
-\* Last modified Mon Jun 03 13:36:01 EDT 2019 by nathan
+\* Last modified Mon Sep 23 17:38:55 EDT 2019 by nathan
 \* Created Mon May 13 10:03:40 EDT 2019 by nathan
