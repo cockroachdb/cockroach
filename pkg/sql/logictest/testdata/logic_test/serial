@@ -5,7 +5,8 @@ CREATE TABLE serial (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
   c SERIAL,
-  UNIQUE INDEX (c)
+  UNIQUE INDEX (c),
+  FAMILY "primary" (a, b, c)
 )
 
 query TT
@@ -38,7 +39,10 @@ statement error conflicting NULL/NOT NULL declarations for column "a" of table "
 CREATE TABLE s1 (a SERIAL NULL)
 
 statement ok
-CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
+CREATE TABLE smallbig (
+  a SMALLSERIAL, b BIGSERIAL, c INT,
+  FAMILY "primary" (a, b, c, rowid)
+)
 
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
@@ -59,7 +63,10 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 2 2 1
 
 statement ok
-CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
+CREATE TABLE serials (
+  a SERIAL2, b SERIAL4, c SERIAL8, d INT,
+  FAMILY "primary" (a, b, c, d, rowid)
+)
 
 query TT
 SHOW CREATE TABLE serials
@@ -98,7 +105,8 @@ CREATE TABLE serial (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
   c SERIAL,
-  UNIQUE INDEX (c)
+  UNIQUE INDEX (c),
+  FAMILY "primary" (a, b, c)
 )
 
 query TT
@@ -136,7 +144,10 @@ statement error conflicting NULL/NOT NULL declarations for column "a" of table "
 CREATE TABLE s1 (a SERIAL NULL)
 
 statement ok
-CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
+CREATE TABLE smallbig (
+  a SMALLSERIAL, b BIGSERIAL, c INT,
+  FAMILY "primary" (a, b, c, rowid)
+)
 
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
@@ -157,7 +168,10 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 2 2 1
 
 statement ok
-CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
+CREATE TABLE serials (
+  a SERIAL2, b SERIAL4, c SERIAL8, d INT,
+  FAMILY "primary" (a, b, c, d, rowid)
+)
 
 query TT
 SHOW CREATE TABLE serials
@@ -192,7 +206,8 @@ CREATE TABLE serial (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
   c SERIAL,
-  UNIQUE INDEX (c)
+  UNIQUE INDEX (c),
+  FAMILY "primary" (a, b, c)
 )
 
 query TT
@@ -228,7 +243,8 @@ CREATE TABLE "serial_MixedCase" (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
   c SERIAL,
-  UNIQUE INDEX (c)
+  UNIQUE INDEX (c),
+  FAMILY "primary" (a, b, c)
 )
 
 query TT
@@ -250,7 +266,10 @@ statement error conflicting NULL/NOT NULL declarations for column "a" of table "
 CREATE TABLE s1 (a SERIAL NULL)
 
 statement ok
-CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
+CREATE TABLE smallbig (
+  a SMALLSERIAL, b BIGSERIAL, c INT,
+  FAMILY "primary" (a, b, c, rowid)
+)
 
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
@@ -271,7 +290,10 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 2 2 1
 
 statement ok
-CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
+CREATE TABLE serials (
+  a SERIAL2, b SERIAL4, c SERIAL8, d INT,
+  FAMILY "primary" (a, b, c, d, rowid)
+)
 
 query TT
 SHOW CREATE TABLE serials

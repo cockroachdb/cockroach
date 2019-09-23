@@ -2,7 +2,8 @@ statement ok
 CREATE TABLE with_no_column_refs (
   a INT,
   b INT,
-  c INT AS (3) STORED
+  c INT AS (3) STORED,
+  FAMILY "primary" (a, b, c, rowid)
 )
 
 query TT
@@ -19,7 +20,8 @@ statement ok
 CREATE TABLE extra_parens (
   a INT,
   b INT,
-  c INT AS ((3)) STORED
+  c INT AS ((3)) STORED,
+  FAMILY "primary" (a, b, c, rowid)
 )
 
 query TT
@@ -71,7 +73,8 @@ CREATE TABLE x (
   a INT DEFAULT 3,
   b INT DEFAULT 7,
   c INT AS (a) STORED,
-  d INT AS (a + b) STORED
+  d INT AS (a + b) STORED,
+  FAMILY "primary" (a, b, c, d, rowid)
 )
 
 query TT
@@ -599,7 +602,8 @@ DROP TABLE x
 statement ok
 CREATE TABLE x (
   a INT,
-  b INT as (x.a) STORED
+  b INT as (x.a) STORED,
+  FAMILY "primary" (a, b, rowid)
 )
 
 query TT
@@ -618,7 +622,8 @@ DROP TABLE x
 statement ok
 CREATE TABLE x (
   a INT,
-  b INT AS (a) STORED
+  b INT AS (a) STORED,
+  FAMILY "primary" (a, b, rowid)
 )
 
 statement ok
@@ -639,7 +644,8 @@ DROP TABLE x
 statement ok
 CREATE TABLE x (
   a INT,
-  b INT AS (a * 2) STORED
+  b INT AS (a * 2) STORED,
+  FAMILY "primary" (a, b, rowid)
 )
 
 query T colnames

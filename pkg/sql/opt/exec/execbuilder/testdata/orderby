@@ -4,7 +4,8 @@ statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
-  c BOOLEAN
+  c BOOLEAN,
+  FAMILY "primary" (a, b, c)
 )
 
 query TTT
