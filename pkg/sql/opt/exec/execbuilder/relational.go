@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -453,6 +454,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		// When there are no statistics available, we construct a scan node with
 		// the estimated row count of zero rows.
 		rowCount = 0
+	}
+
+	if scan.PartitionConstrainedScan {
+		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
 	root, err := b.factory.ConstructScan(

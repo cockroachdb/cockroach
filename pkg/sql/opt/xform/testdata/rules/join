@@ -653,7 +653,7 @@ left-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=b
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
+memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
  │         ├── best: (inner-join G3 G2 G4)
