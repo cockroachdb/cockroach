@@ -889,9 +889,10 @@ func TestHashingDoesNotAllocate(t *testing.T) {
 }
 
 // TestHashJoinerProjection tests that planning of hash joiner correctly
-// handles the "post-joiner" projection. The test uses different types with an
-// arbitrary projection so that if the projection is not handled correctly, the
-// interface conversion panic would occur.
+// handles the "post-joiner" projection. The test uses different types with a
+// projection in which output columns from both sides are intertwined so that
+// if the projection is not handled correctly, the interface conversion panic
+// would occur.
 func TestHashJoinerProjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
