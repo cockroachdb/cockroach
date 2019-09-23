@@ -28,8 +28,8 @@ var noColor bool
 
 // formatLogEntry formats an Entry into a newly allocated *buffer.
 // The caller is responsible for calling putBuffer() afterwards.
-func formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
-	buf := formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
+func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
+	buf := l.formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
 		int(entry.Goroutine), entry.File, int(entry.Line), cp)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
@@ -58,7 +58,7 @@ func formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
 // 	file             The file name
 // 	line             The line number
 // 	msg              The user-supplied message
-func formatHeader(
+func (l *loggingT) formatHeader(
 	s Severity, now time.Time, gid int, file string, line int, cp ttycolor.Profile,
 ) *buffer {
 	if noColor {
@@ -135,12 +135,12 @@ func formatHeader(
 
 // processForStderr formats a log entry for output to standard error.
 func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, ttycolor.StderrProfile)
+	return l.formatLogEntry(entry, stacks, ttycolor.StderrProfile)
 }
 
 // processForFile formats a log entry for output to a file.
 func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, nil)
+	return l.formatLogEntry(entry, stacks, nil)
 }
 
 // MakeEntry creates an Entry.
@@ -157,7 +157,7 @@ func MakeEntry(s Severity, t int64, file string, line int, msg string) Entry {
 
 // Format writes the log entry to the specified writer.
 func (e Entry) Format(w io.Writer) error {
-	buf := formatLogEntry(e, nil, nil)
+	buf := logging.formatLogEntry(e, nil, nil)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
