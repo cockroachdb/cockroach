@@ -137,6 +137,80 @@ func TestStatusJson(t *testing.T) {
 	}
 }
 
+// TestHealthTelemetry confirms that hits on some status endpoints increment
+// feature telemetry counters.
+func TestHealthTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	rows, err := db.Query("SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'monitoring%' AND usage_count > 0;")
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	initialCounts := make(map[string]int)
+	for rows.Next() {
+		var featureName string
+		var usageCount int
+
+		if err := rows.Scan(&featureName, &usageCount); err != nil {
+			t.Fatal(err)
+		}
+
+		initialCounts[featureName] = usageCount
+	}
+
+	var details serverpb.DetailsResponse
+	if err := serverutils.GetJSONProto(s, "/health", &details); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCounts := map[string]int{
+		"monitoring.prometheus.vars": 1,
+		"monitoring.health.details":  1,
+	}
+
+	rows2, err := db.Query("SELECT feature_name, usage_count FROM crdb_internal.feature_usage WHERE feature_name LIKE 'monitoring%' AND usage_count > 0;")
+	defer func() {
+		if err := rows2.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for rows2.Next() {
+		var featureName string
+		var usageCount int
+
+		if err := rows2.Scan(&featureName, &usageCount); err != nil {
+			t.Fatal(err)
+		}
+
+		usageCount -= initialCounts[featureName]
+		if count, ok := expectedCounts[featureName]; ok {
+			if count != usageCount {
+				t.Fatalf("expected %d count for feature %s, got %d", count, featureName, usageCount)
+			}
+			delete(expectedCounts, featureName)
+		}
+	}
+
+	if len(expectedCounts) > 0 {
+		t.Fatalf("%d expected telemetry counters not emitted", len(expectedCounts))
+	}
+}
+
 // TestStatusGossipJson ensures that the output response for the full gossip
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {
