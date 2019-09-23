@@ -24,7 +24,7 @@ import (
 // whose logging events go to a different file than the main logging
 // facility.
 type SecondaryLogger struct {
-	logger          loggingT
+	logger          loggerT
 	msgCount        uint64
 	enableMsgCount  bool
 	forceSyncWrites bool
@@ -62,19 +62,17 @@ func NewSecondaryLogger(
 		dir = mainLog.logDir.String()
 	}
 	l := &SecondaryLogger{
-		logger: loggingT{
+		logger: loggerT{
 			logDir:           DirName{name: dir},
-			noStderrRedirect: true,
 			prefix:           program + "-" + fileNamePrefix,
-			stderrThreshold:  mainLog.stderrThreshold,
 			fileThreshold:    Severity_INFO,
-			syncWrites:       forceSyncWrites || mainLog.syncWrites,
+			noStderrRedirect: true,
 			gcNotify:         make(chan struct{}, 1),
-			disableDaemons:   mainLog.disableDaemons,
 		},
 		forceSyncWrites: forceSyncWrites,
 		enableMsgCount:  enableMsgCount,
 	}
+	l.logger.mu.syncWrites = forceSyncWrites || mainLog.mu.syncWrites
 
 	// Ensure the registry knows about this logger.
 	secondaryLogRegistry.mu.Lock()

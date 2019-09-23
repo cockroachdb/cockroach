@@ -102,7 +102,8 @@ func (l *DirName) IsSet() bool {
 	return res
 }
 
-// DirSet returns true of the log directory has been changed from its default.
+// DirSet returns true of the log directory for the main logger has
+// been changed from its default.
 func DirSet() bool { return mainLog.logDir.IsSet() }
 
 // FileNamePattern matches log files to avoid exposing non-log files
@@ -275,9 +276,9 @@ func ListLogFiles() ([]FileInfo, error) {
 	return mainLog.listLogFiles()
 }
 
-func (l *loggingT) listLogFiles() ([]FileInfo, error) {
+func (l *loggerT) listLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	dir, err := mainLog.logDir.get()
+	dir, err := l.logDir.get()
 	if err != nil {
 		// No log directory configured: simply indicate that there are no
 		// log files.
@@ -311,6 +312,8 @@ func (l *loggingT) listLogFiles() ([]FileInfo, error) {
 // current directory, with the added feature that simple (base name)
 // file names will be searched in this process's log directory if not
 // found in the current directory.
+//
+// TODO(knz): make this work for secondary loggers too.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
 	dir, err := mainLog.logDir.get()
 	if err != nil {

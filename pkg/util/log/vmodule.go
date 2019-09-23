@@ -20,44 +20,77 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+type vmoduleConfig struct {
+	// pcsPool maintains a set of [1]uintptr buffers to be used in V to avoid
+	// allocating every time we compute the caller's PC.
+	pcsPool sync.Pool
+
+	// V logging level, the value of the --verbosity flag. Updated with
+	// atomics.
+	verbosity level
+
+	mu struct {
+		// These flags are modified only under lock.
+		syncutil.Mutex
+
+		// vmap is a cache of the V Level for each V() call site, identified by PC.
+		// It is wiped whenever the vmodule flag changes state.
+		vmap map[uintptr]level
+
+		// filterLength stores the length of the vmodule filter
+		// chain. If greater than zero, it means vmodule is enabled. It is
+		// read using atomics but updated under mu.Lock.
+		filterLength int32
+
+		// The state of the --vmodule flag.
+		vmodule moduleSpec
+	}
+}
+
 func init() {
-	mainLog.pcsPool = sync.Pool{
+	logging.vmoduleConfig.pcsPool = sync.Pool{
 		New: func() interface{} {
 			return [1]uintptr{}
 		},
 	}
-	mainLog.setVState(0, nil, false)
+	logging.vmoduleConfig.setVState(0, nil, false)
 }
 
 // SetVModule alters the vmodule logging level to the passed in value.
 func SetVModule(value string) error {
-	return mainLog.vmodule.Set(value)
+	return logging.vmoduleConfig.mu.vmodule.Set(value)
 }
 
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
 func VDepth(l int32, depth int) bool {
+	return logging.vmoduleConfig.vDepth(l, depth+1)
+}
+
+func (c *vmoduleConfig) vDepth(l int32, depth int) bool {
 	// This function tries hard to be cheap unless there's work to do.
 	// The fast path is three atomic loads and compares.
 
 	// Here is a cheap but safe test to see if V logging is enabled globally.
-	if mainLog.verbosity.get() >= level(l) {
+	if c.verbosity.get() >= level(l) {
 		return true
 	}
 
-	if f, ok := mainLog.interceptor.Load().(InterceptorFn); ok && f != nil {
+	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
 		return true
 	}
 
 	// It's off globally but vmodule may still be set.
 	// Here is another cheap but safe test to see if vmodule is enabled.
-	if atomic.LoadInt32(&mainLog.filterLength) > 0 {
+	if atomic.LoadInt32(&c.mu.filterLength) > 0 {
 		// Grab a buffer to use for reading the program counter. Keeping the
 		// interface{} version around to Put back into the pool rather than
 		// Put-ting the array saves an interface allocation.
-		poolObj := mainLog.pcsPool.Get()
+		poolObj := c.pcsPool.Get()
 		pcs := poolObj.([1]uintptr)
 		// We prefer not to use a defer in this function, which can be used in hot
 		// paths, because a defer anywhere in the body of a function causes a call
@@ -65,16 +98,16 @@ func VDepth(l int32, depth int) bool {
 		// measurable performance penalty when in a very hot path.
 		// defer mainLog.pcsPool.Put(pcs)
 		if runtime.Callers(2+depth, pcs[:]) == 0 {
-			mainLog.pcsPool.Put(poolObj)
+			c.pcsPool.Put(poolObj)
 			return false
 		}
-		mainLog.mu.Lock()
-		v, ok := mainLog.vmap[pcs[0]]
+		c.mu.Lock()
+		v, ok := c.mu.vmap[pcs[0]]
 		if !ok {
-			v = mainLog.setV(pcs)
+			v = c.setV(pcs)
 		}
-		mainLog.mu.Unlock()
-		mainLog.pcsPool.Put(poolObj)
+		c.mu.Unlock()
+		c.pcsPool.Put(poolObj)
 		return v >= level(l)
 	}
 	return false
@@ -82,22 +115,22 @@ func VDepth(l int32, depth int) bool {
 
 // setVState sets a consistent state for V logging.
 // l.mu is held.
-func (l *loggingT) setVState(verbosity level, filter []modulePat, setFilter bool) {
+func (c *vmoduleConfig) setVState(verbosity level, filter []modulePat, setFilter bool) {
 	// Turn verbosity off so V will not fire while we are in transition.
-	mainLog.verbosity.set(0)
+	c.verbosity.set(0)
 	// Ditto for filter length.
-	atomic.StoreInt32(&mainLog.filterLength, 0)
+	atomic.StoreInt32(&c.mu.filterLength, 0)
 
 	// Set the new filters and wipe the pc->Level map if the filter has changed.
 	if setFilter {
-		mainLog.vmodule.filter = filter
-		mainLog.vmap = make(map[uintptr]level)
+		c.mu.vmodule.filter = filter
+		c.mu.vmap = make(map[uintptr]level)
 	}
 
 	// Things are consistent now, so enable filtering and verbosity.
 	// They are enabled in order opposite to that in V.
-	atomic.StoreInt32(&mainLog.filterLength, int32(len(filter)))
-	mainLog.verbosity.set(verbosity)
+	atomic.StoreInt32(&c.mu.filterLength, int32(len(filter)))
+	c.verbosity.set(verbosity)
 }
 
 // setV computes and remembers the V level for a given PC
@@ -105,8 +138,9 @@ func (l *loggingT) setVState(verbosity level, filter []modulePat, setFilter bool
 // File pattern matching takes the basename of the file, stripped
 // of its .go suffix, and uses filepath.Match, which is a little more
 // general than the *? matching used in C++.
-// l.mu is held.
-func (l *loggingT) setV(pc [1]uintptr) level {
+//
+// c.mu is held.
+func (c *vmoduleConfig) setV(pc [1]uintptr) level {
 	frame, _ := runtime.CallersFrames(pc[:]).Next()
 	file := frame.File
 	// The file is something like /a/b/c/d.go. We want just the d.
@@ -116,13 +150,13 @@ func (l *loggingT) setV(pc [1]uintptr) level {
 	if slash := strings.LastIndexByte(file, '/'); slash >= 0 {
 		file = file[slash+1:]
 	}
-	for _, filter := range l.vmodule.filter {
+	for _, filter := range c.mu.vmodule.filter {
 		if filter.match(file) {
-			l.vmap[pc[0]] = filter.level
+			c.mu.vmap[pc[0]] = filter.level
 			return filter.level
 		}
 	}
-	l.vmap[pc[0]] = 0
+	c.mu.vmap[pc[0]] = 0
 	return 0
 }
 
@@ -151,8 +185,8 @@ func (m *modulePat) match(file string) bool {
 
 func (m *moduleSpec) String() string {
 	// Lock because the type is not atomic. TODO: clean this up.
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
+	logging.vmoduleConfig.mu.Lock()
+	defer logging.vmoduleConfig.mu.Unlock()
 	var b bytes.Buffer
 	for i, f := range m.filter {
 		if i > 0 {
@@ -191,9 +225,10 @@ func (m *moduleSpec) Set(value string) error {
 		// TODO: check syntax of filter?
 		filter = append(filter, modulePat{pattern, isLiteral(pattern), level(v)})
 	}
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
-	mainLog.setVState(mainLog.verbosity, filter, true)
+
+	logging.vmoduleConfig.mu.Lock()
+	defer logging.vmoduleConfig.mu.Unlock()
+	logging.vmoduleConfig.setVState(logging.vmoduleConfig.verbosity, filter, true)
 	return nil
 }
 
@@ -238,8 +273,8 @@ func (l *level) Set(value string) error {
 	if err != nil {
 		return err
 	}
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
-	mainLog.setVState(level(v), mainLog.vmodule.filter, false)
+	logging.vmoduleConfig.mu.Lock()
+	defer logging.vmoduleConfig.mu.Unlock()
+	logging.vmoduleConfig.setVState(level(v), logging.vmoduleConfig.mu.vmodule.filter, false)
 	return nil
 }

@@ -46,7 +46,7 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Check that the messages indeed made it to different files.
 
-	contents, err := ioutil.ReadFile(mainLog.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestSecondaryLog(t *testing.T) {
 		t.Errorf("secondary log spilled into primary\n%s", contents)
 	}
 
-	contents, err = ioutil.ReadFile(l.logger.file.(*syncBuffer).file.Name())
+	contents, err = ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	mainLog.stderrThreshold = Severity_NONE
+	logging.stderrThreshold = Severity_NONE
 
 	// Ensure that the main log is initialized. This should take over
 	// stderr.
@@ -96,7 +96,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	fmt.Fprint(os.Stderr, stderrText)
 
 	// Check the main log file: we want our stderr text there.
-	contents, err := ioutil.ReadFile(mainLog.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	}
 
 	// Check the secondary log file: we don't want our stderr text there.
-	contents2, err := ioutil.ReadFile(l.logger.file.(*syncBuffer).file.Name())
+	contents2, err := ioutil.ReadFile(l.logger.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}

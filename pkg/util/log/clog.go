@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,87 +26,122 @@ import (
 )
 
 // mainLog is the primary logger instance.
-var mainLog loggingT
+var mainLog loggerT
+
+// logging is the global state of the logging setup.
+var logging loggingT
 
 // loggingT collects all the global state of the logging setup.
 //
 // TODO(knz): better separate global state and per-logger state.
 type loggingT struct {
-	noStderrRedirect bool
+	// Level flag for output to stderr. Handled atomically.
+	stderrThreshold Severity
 
+	freeList struct {
+		syncutil.Mutex
+
+		// head is a list of byte buffers, maintained under
+		// freeList.Lock().
+		head *buffer
+	}
+
+	// interceptor is the configured InterceptorFn callback, if any.
+	interceptor atomic.Value
+
+	// vmoduleConfig maintains the configuration for the log.V and vmodule
+	// facilities.
+	vmoduleConfig vmoduleConfig
+
+	// mu protects the remaining elements of this structure and is
+	// used to synchronize logging.
+	// mu should be held only for short periods of time and
+	// its critical sections cannnot contain logging calls themselves.
+	mu struct {
+		syncutil.Mutex
+
+		// traceLocation is the state of the -log_backtrace_at flag.
+		traceLocation traceLocation
+
+		// disableDaemons can be used to turn off both the GC and flush deamons.
+		disableDaemons bool
+
+		// exitOverride is used when shutting down logging.
+		exitOverride struct {
+			f         func(int) // overrides os.Exit when non-nil; testing only
+			hideStack bool      // hides stack trace; only in effect when f is not nil
+		}
+
+		// the Cluster ID is reported on every new log file so as to ease the correlation
+		// of panic reports with self-reported log files.
+		clusterID string
+
+		// fatalCh is closed on fatal errors.
+		fatalCh chan struct{}
+	}
+}
+
+type loggerT struct {
 	// Directory prefix where to store this logger's files.
 	logDir DirName
 
 	// Name prefix for log files.
 	prefix string
 
-	// Level flag for output to stderr. Handled atomically.
-	stderrThreshold Severity
 	// Level flag for output to files.
 	fileThreshold Severity
 
-	// freeList is a list of byte buffers, maintained under freeListMu.
-	freeList *buffer
-	// freeListMu maintains the free list. It is separate from the main mutex
-	// so buffers can be grabbed and printed to without holding the main lock,
-	// for better parallelization.
-	freeListMu syncutil.Mutex
+	// noStderrRedirect, when set, disables redirecting this logger's
+	// log entries to stderr (even when the shared stderr threshold is
+	// matched).
+	noStderrRedirect bool
+
+	// notify GC daemon that a new log file was created
+	gcNotify chan struct{}
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
-	mu syncutil.Mutex
-	// file holds the log file writer.
-	file flushSyncWriter
-	// syncWrites if true calls file.Flush and file.Sync on every log write.
-	syncWrites bool
-	// pcsPool maintains a set of [1]uintptr buffers to be used in V to avoid
-	// allocating every time we compute the caller's PC.
-	pcsPool sync.Pool
-	// vmap is a cache of the V Level for each V() call site, identified by PC.
-	// It is wiped whenever the vmodule flag changes state.
-	vmap map[uintptr]level
-	// filterLength stores the length of the vmodule filter chain. If greater
-	// than zero, it means vmodule is enabled. It may be read safely
-	// using sync.LoadInt32, but is only modified under mu.
-	filterLength int32
-	// traceLocation is the state of the -log_backtrace_at flag.
-	traceLocation traceLocation
-	// disableDaemons can be used to turn off both the GC and flush deamons.
-	disableDaemons bool
-	// These flags are modified only under lock, although verbosity may be fetched
-	// safely using atomic.LoadInt32.
-	vmodule      moduleSpec // The state of the --vmodule flag.
-	verbosity    level      // V logging level, the value of the --verbosity flag/
-	exitOverride struct {
-		f         func(int) // overrides os.Exit when non-nil; testing only
-		hideStack bool      // hides stack trace; only in effect when f is not nil
+	mu struct {
+		syncutil.Mutex
+
+		// file holds the log file writer.
+		file flushSyncWriter
+
+		// syncWrites if true calls file.Flush and file.Sync on every log write.
+		syncWrites bool
 	}
-	gcNotify chan struct{} // notify GC daemon that a new log file was created
-	fatalCh  chan struct{} // closed on fatal error
-
-	interceptor atomic.Value // InterceptorFn
-
-	// The Cluster ID is reported on every new log file so as to ease the correlation
-	// of panic reports with self-reported log files.
-	clusterID string
 }
 
 func init() {
+	logging.mu.fatalCh = make(chan struct{})
 	// Default stderrThreshold and fileThreshold to log everything.
 	// This will be the default in tests unless overridden; the CLI
-	// commands set their default separately in cli/flags.go
-	mainLog.stderrThreshold = Severity_INFO
-	mainLog.fileThreshold = Severity_INFO
-
+	// commands set their default separately in cli/flags.go.
+	logging.stderrThreshold = Severity_INFO
 	mainLog.prefix = program
-	mainLog.fatalCh = make(chan struct{})
+	mainLog.fileThreshold = Severity_INFO
 }
 
 // FatalChan is closed when Fatal is called. This can be used to make
 // the process stop handling requests while the final log messages and
 // crash report are being written.
 func FatalChan() <-chan struct{} {
-	return mainLog.fatalCh
+	return logging.mu.fatalCh
+}
+
+// s ignalFatalCh signals the listeners of l.mu.fatalCh by closing the
+// channel.
+// l.mu is not held.
+func (l *loggingT) signalFatalCh() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	// Close l.fatalCh if it is not already closed (note that we're
+	// holding l.mu to guard against concurrent closes).
+	select {
+	case <-l.mu.fatalCh:
+	default:
+		close(l.mu.fatalCh)
+	}
 }
 
 // SetClusterID stores the Cluster ID for further reference.
@@ -115,45 +149,42 @@ func FatalChan() <-chan struct{} {
 // TODO(knz): This should not be configured per-logger.
 // See: https://github.com/cockroachdb/cockroach/issues/40983
 func SetClusterID(clusterID string) {
-	mainLog.setClusterID(clusterID)
-}
-
-func (l *loggingT) setClusterID(clusterID string) {
 	// Ensure that the clusterID is logged with the same format as for
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	file, line, _ := caller.Lookup(1)
-	l.outputLogEntry(Severity_INFO, file, line,
+	mainLog.outputLogEntry(Severity_INFO, file, line,
 		fmt.Sprintf("[config] clusterID: %s", clusterID))
 
 	// Perform the change proper.
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 
-	if l.clusterID != "" {
+	if logging.mu.clusterID != "" {
 		panic("clusterID already set")
 	}
 
-	l.clusterID = clusterID
+	logging.mu.clusterID = clusterID
 }
 
 // ensureFile ensures that l.file is set and valid.
 // Assumes that l.mu is held by the caller.
-func (l *loggingT) ensureFile() error {
-	if l.file == nil {
+func (l *loggerT) ensureFile() error {
+	if l.mu.file == nil {
 		return l.createFile()
 	}
 	return nil
 }
 
 // writeToFile writes to the file and applies the synchronization policy.
-func (l *loggingT) writeToFile(data []byte) error {
-	if _, err := l.file.Write(data); err != nil {
+// Assumes that l.mu is held by the caller.
+func (l *loggerT) writeToFile(data []byte) error {
+	if _, err := l.mu.file.Write(data); err != nil {
 		return err
 	}
-	if l.syncWrites {
-		_ = l.file.Flush()
-		_ = l.file.Sync()
+	if l.mu.syncWrites {
+		_ = l.mu.file.Flush()
+		_ = l.mu.file.Sync()
 	}
 	return nil
 }
@@ -161,12 +192,12 @@ func (l *loggingT) writeToFile(data []byte) error {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
+func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) {
 	// Set additional details in log entry.
 	now := timeutil.Now()
 	entry := MakeEntry(s, now.UnixNano(), file, line, msg)
 
-	if f, ok := l.interceptor.Load().(InterceptorFn); ok && f != nil {
+	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
 		f(entry)
 		return
 	}
@@ -177,13 +208,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	var stacks []byte
 	var fatalTrigger chan struct{}
 	if s == Severity_FATAL {
-		// Close l.fatalCh if it is not already closed (note that we're
-		// holding l.mu to guard against concurrent closes).
-		select {
-		case <-l.fatalCh:
-		default:
-			close(l.fatalCh)
-		}
+		logging.signalFatalCh()
 
 		switch traceback {
 		case tracebackSingle:
@@ -209,12 +234,14 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		// https://github.com/cockroachdb/cockroach/issues/23119
 		fatalTrigger = make(chan struct{})
 		exitFunc := os.Exit
-		if l.exitOverride.f != nil {
-			if l.exitOverride.hideStack {
-				stacks = []byte("stack trace omitted via SetExitFunc)\n")
+		logging.mu.Lock()
+		if logging.mu.exitOverride.f != nil {
+			if logging.mu.exitOverride.hideStack {
+				stacks = []byte("stack trace omitted via SetExitFunc()\n")
 			}
-			exitFunc = l.exitOverride.f
+			exitFunc = logging.mu.exitOverride.f
 		}
+		logging.mu.Unlock()
 		exitCalled := make(chan struct{})
 
 		// This defer prevents outputLogEntry() from returning until the
@@ -230,13 +257,22 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 			close(exitCalled)
 		}()
-	} else if l.traceLocation.isSet() {
-		if l.traceLocation.match(file, line) {
+	} else {
+		// Is there a stack trace trigger location configured?
+		doStacks := false
+		logging.mu.Lock()
+		if logging.mu.traceLocation.isSet() {
+			if logging.mu.traceLocation.match(file, line) {
+				doStacks = true
+			}
+		}
+		logging.mu.Unlock()
+		if doStacks {
 			stacks = getStacks(false)
 		}
 	}
 
-	if s >= l.stderrThreshold.get() || (s == Severity_FATAL && l.stderrRedirected()) {
+	if s >= logging.stderrThreshold.get() || (s == Severity_FATAL && l.stderrRedirected()) {
 		// We force-copy FATAL messages to stderr, because the process is bound
 		// to terminate and the user will want to know why.
 		l.outputToStderr(entry, stacks)
@@ -250,7 +286,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			return
 		}
 
-		buf := l.processForFile(entry, stacks)
+		buf := logging.processForFile(entry, stacks)
 		data := buf.Bytes()
 
 		if err := l.writeToFile(data); err != nil {
@@ -259,7 +295,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			return
 		}
 
-		l.putBuffer(buf)
+		logging.putBuffer(buf)
 	}
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
@@ -282,7 +318,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 // useful when the standard error is not redirected to the log file
 // (!stderrRedirected), as the go runtime will only print panics to
 // stderr.
-func (l *loggingT) printPanicToFile(r interface{}) {
+func (l *loggerT) printPanicToFile(r interface{}) {
 	if !l.logDir.IsSet() {
 		// There's no log file. Nothing to do.
 		return
@@ -303,12 +339,15 @@ func (l *loggingT) printPanicToFile(r interface{}) {
 	}
 }
 
-func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
-	buf := l.processForStderr(entry, stacks)
+// outputToSterr emits the entry to stderr.
+//
+// l.mu is held. logging.mu is not held.
+func (l *loggerT) outputToStderr(entry Entry, stacks []byte) {
+	buf := logging.processForStderr(entry, stacks)
 	if _, err := OrigStderr.Write(buf.Bytes()); err != nil {
 		l.exitLocked(err)
 	}
-	l.putBuffer(buf)
+	logging.putBuffer(buf)
 }
 
 const fatalErrorPostamble = `

@@ -24,12 +24,12 @@ type buffer struct {
 
 // getBuffer returns a new, ready-to-use buffer.
 func (l *loggingT) getBuffer() *buffer {
-	l.freeListMu.Lock()
-	b := l.freeList
+	l.freeList.Lock()
+	b := l.freeList.head
 	if b != nil {
-		l.freeList = b.next
+		l.freeList.head = b.next
 	}
-	l.freeListMu.Unlock()
+	l.freeList.Unlock()
 	if b == nil {
 		b = new(buffer)
 	} else {
@@ -45,10 +45,10 @@ func (l *loggingT) putBuffer(b *buffer) {
 		// Let big buffers die a natural death.
 		return
 	}
-	l.freeListMu.Lock()
-	b.next = l.freeList
-	l.freeList = b
-	l.freeListMu.Unlock()
+	l.freeList.Lock()
+	b.next = l.freeList.head
+	l.freeList.head = b
+	l.freeList.Unlock()
 }
 
 // Some custom tiny helper functions to print the log header efficiently.
