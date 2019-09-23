@@ -78,7 +78,6 @@ var psycopgBlackList19_2 = blacklist{
 	"tests.test_connection.ConnectionTests.test_notices_limited":                                             "5807",
 	"tests.test_connection.ConnectionTests.test_notices_noappend":                                            "5807",
 	"tests.test_connection.ConnectionTests.test_reset":                                                       "35879",
-	"tests.test_connection.ConnectionTwoPhaseTests.test_cancel_fails_prepared":                               "22329",
 	"tests.test_connection.ConnectionTwoPhaseTests.test_recovered_xids":                                      "22329",
 	"tests.test_connection.ConnectionTwoPhaseTests.test_status_after_recover":                                "22329",
 	"tests.test_connection.ConnectionTwoPhaseTests.test_tpc_commit":                                          "22329",
