@@ -425,7 +425,6 @@ with &1 (foo)
       │    ├──  a.s:4(string) => s:14(string)
       │    └──  a.j:5(jsonb) => j:15(jsonb)
       ├── cardinality: [1 - 1]
-      ├── mutations
       ├── key: ()
       └── fd: ()-->(11-15)
 

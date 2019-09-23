@@ -746,13 +746,17 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 	// Passed through from the call above to b.buildProps.
 }
 
+var emptyRelProps props.Relational
+
 func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.Relational) {
 	// WithScan inherits most of the logical properties of the expression it
 	// references.
 	*rel = *ref.BindingProps
 
-	// Things like PruneCols are not valid here.
-	rel.Rule = props.Relational{}.Rule
+	// Things like PruneCols are not valid here. To avoid duplicating any logic,
+	// we just reset them and rely on the lazy calculation.
+	rel.Rule = emptyRelProps.Rule
+	rel.Shared.Rule = emptyRelProps.Shared.Rule
 
 	// Has Placeholder
 	// ---------------
@@ -763,6 +767,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.R
 	// ------------
 	// Overwrite this from the copied props.
 	rel.CanHaveSideEffects = false
+	rel.CanMutate = false
 
 	// Output Columns
 	// --------------
