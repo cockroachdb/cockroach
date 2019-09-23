@@ -57,7 +57,7 @@ func (client *bankClient) transferMoney(ctx context.Context, numAccounts, maxTra
 	// statement timeout, which unfortunately precludes the use of prepared
 	// statements.
 	q := fmt.Sprintf(`
-SET statement_timeout = '31s';
+SET statement_timeout = '30s';
 UPDATE bank.accounts
    SET balance = CASE id WHEN %[1]d THEN balance-%[3]d WHEN %[2]d THEN balance+%[3]d END
  WHERE id IN (%[1]d, %[2]d) AND (SELECT balance >= %[3]d FROM bank.accounts WHERE id = %[1]d);
@@ -237,9 +237,7 @@ func (s *bankState) startChaosMonkey(
 					break
 				}
 				t.l.Printf("round %d: restarting %d\n", curRound, i)
-
-				c.Stop(ctx, c.Node(i))
-				c.Start(ctx, t, c.Node(i))
+				c.Restart(ctx, t, c.Node(i))
 			}
 
 			preCount := s.counts()
@@ -438,7 +436,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	}
 	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
 
-	s.waitClientsStop(ctx, t, c, 30*time.Second)
+	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	// Verify accounts.
 	s.verifyAccounts(ctx, t)
@@ -480,7 +478,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	}
 	s.startChaosMonkey(ctx, t, c, pickNodes, clientIdx)
 
-	s.waitClientsStop(ctx, t, c, 30*time.Second)
+	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	// Verify accounts.
 	s.verifyAccounts(ctx, t)
@@ -511,7 +509,7 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 	}
 
 	s.startSplitMonkey(ctx, 2*time.Second, c)
-	s.waitClientsStop(ctx, t, c, 30*time.Second)
+	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	s.verifyAccounts(ctx, t)
 
@@ -559,7 +557,7 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 	// Starting up the goroutines that restart and do splits and lease moves.
 	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
 	s.startSplitMonkey(ctx, 2*time.Second, c)
-	s.waitClientsStop(ctx, t, c, 30*time.Second)
+	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	// Verify accounts.
 	s.verifyAccounts(ctx, t)
