@@ -348,7 +348,7 @@ func TestLint(t *testing.T) {
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
-					":!util/log/clog.go",
+					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
 				},
 			},
