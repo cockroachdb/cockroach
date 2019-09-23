@@ -20,8 +20,13 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -881,4 +886,71 @@ func TestHashingDoesNotAllocate(t *testing.T) {
 		t.Fatalf("memhash64(noescape(&i)) allocated at least once")
 	}
 	t.Log(sum)
+}
+
+// TestHashJoinerProjection tests that planning of hash joiner correctly
+// handles the "post-joiner" projection. The test uses different types with an
+// arbitrary projection so that if the projection is not handled correctly, the
+// interface conversion panic would occur.
+func TestHashJoinerProjection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
+
+	leftTypes := []types.T{*types.Bool, *types.Int, *types.Bytes}
+	leftColTypes := []coltypes.T{coltypes.Bool, coltypes.Int64, coltypes.Bytes}
+	rightTypes := []types.T{*types.Int, *types.Float, *types.Decimal}
+	rightColTypes := []coltypes.T{coltypes.Int64, coltypes.Float64, coltypes.Decimal}
+	leftTuples := tuples{{false, 1, "foo"}}
+	rightTuples := tuples{{1, 1.1, decs[1]}}
+
+	spec := &execinfrapb.ProcessorSpec{
+		Core: execinfrapb.ProcessorCoreUnion{
+			HashJoiner: &execinfrapb.HashJoinerSpec{
+				LeftEqColumns:        []uint32{1},
+				RightEqColumns:       []uint32{0},
+				LeftEqColumnsAreKey:  true,
+				RightEqColumnsAreKey: true,
+			},
+		},
+		Input: []execinfrapb.InputSyncSpec{
+			{ColumnTypes: leftTypes},
+			{ColumnTypes: rightTypes},
+		},
+		Post: execinfrapb.PostProcessSpec{
+			Projection: true,
+			// The "core" of the test - we ask for a projection in which the columns
+			// from the left and from the right are intertwined.
+			OutputColumns: []uint32{3, 1, 0, 5, 4, 2},
+		},
+	}
+
+	leftSource := newOpTestInput(1, leftTuples, leftColTypes)
+	rightSource := newOpTestInput(1, rightTuples, rightColTypes)
+	hjOp, err := NewColOperator(ctx, flowCtx, spec, []Operator{leftSource, rightSource})
+	require.NoError(t, err)
+	hjOp.Op.Init()
+	for {
+		b := hjOp.Op.Next(ctx)
+		// The output types should be {Int64, Int64, Bool, Decimal, Float64, Bytes}
+		// and we check this explicitly.
+		b.ColVec(0).Int64()
+		b.ColVec(1).Int64()
+		b.ColVec(2).Bool()
+		b.ColVec(3).Decimal()
+		b.ColVec(4).Float64()
+		b.ColVec(5).Bytes()
+		if b.Length() == 0 {
+			break
+		}
+	}
 }
