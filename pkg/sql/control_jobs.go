@@ -34,6 +34,9 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
 }
 
 func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNode, error) {
+	if err := p.RequireAdminRole(ctx, n.StatementTag()); err != nil {
+		return nil, err
+	}
 	rows, err := p.newPlan(ctx, n.Jobs, []*types.T{types.Int})
 	if err != nil {
 		return nil, err

@@ -99,3 +99,14 @@ CANCEL SESSION 'aaa'::NAME
 
 query error odd length hex string
 CANCEL QUERY 'aaa'::NAME
+
+user testuser
+
+query error only users with the admin role are allowed to CANCEL JOBS
+CANCEL JOB 1
+
+query error only users with the admin role are allowed to PAUSE JOBS
+PAUSE JOB 1
+
+query error only users with the admin role are allowed to RESUME JOBS
+RESUME JOB 1
