@@ -332,6 +332,7 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 		}
 		defer rOut.Close()
 		defer wOut.Close()
+
 		rErr, wErr, err := os.Pipe()
 		if err != nil {
 			return err
