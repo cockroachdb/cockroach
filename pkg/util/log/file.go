@@ -103,7 +103,7 @@ func (l *DirName) IsSet() bool {
 }
 
 // DirSet returns true of the log directory has been changed from its default.
-func DirSet() bool { return logging.logDir.IsSet() }
+func DirSet() bool { return mainLog.logDir.IsSet() }
 
 // FileNamePattern matches log files to avoid exposing non-log files
 // accidentally and it splits the details of the filename into groups for easy
@@ -272,7 +272,7 @@ func create(
 // ListLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
-	return logging.listLogFiles()
+	return mainLog.listLogFiles()
 }
 
 func (l *loggingT) listLogFiles() ([]FileInfo, error) {
@@ -312,7 +312,7 @@ func (l *loggingT) listLogFiles() ([]FileInfo, error) {
 // file names will be searched in this process's log directory if not
 // found in the current directory.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	dir, err := logging.logDir.get()
+	dir, err := mainLog.logDir.get()
 	if err != nil {
 		return nil, err
 	}

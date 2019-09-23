@@ -33,7 +33,7 @@ func TestSecondaryLog(t *testing.T) {
 	defer cancel()
 
 	// Make a new logger, in the same directory.
-	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
 
 	// Interleave some messages.
 	Infof(context.Background(), "test1")
@@ -46,7 +46,7 @@ func TestSecondaryLog(t *testing.T) {
 
 	// Check that the messages indeed made it to different files.
 
-	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(mainLog.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold = Severity_NONE
+	mainLog.stderrThreshold = Severity_NONE
 
 	// Ensure that the main log is initialized. This should take over
 	// stderr.
@@ -86,7 +86,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	// Now create a secondary logger in the same directory.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	l := NewSecondaryLogger(ctx, &logging.logDir, "woo", true, false, true)
+	l := NewSecondaryLogger(ctx, &mainLog.logDir, "woo", true, false, true)
 
 	// Log something on the secondary logger.
 	l.Logf(context.Background(), "test456")
@@ -96,7 +96,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	fmt.Fprint(os.Stderr, stderrText)
 
 	// Check the main log file: we want our stderr text there.
-	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(mainLog.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
