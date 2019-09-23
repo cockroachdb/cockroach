@@ -171,7 +171,7 @@ func (s LeaseStore) jitteredLeaseDuration() time.Duration {
 
 // acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
-// being dropped, the error will be errTableDropped.
+// being dropped or offline, the error will be of type inactiveTableError.
 // The expiration time set for the lease > minExpiration.
 func (s LeaseStore) acquire(
 	ctx context.Context, minExpiration hlc.Timestamp, tableID sqlbase.ID,
@@ -980,7 +980,7 @@ func (t *tableState) removeInactiveVersions() []*storedTableLease {
 }
 
 // If the lease cannot be obtained because the descriptor is in the process of
-// being dropped, the error will be errTableDropped.
+// being dropped or offline, the error will be of type inactiveTableError.
 // The boolean returned is true if this call was actually responsible for the
 // lease acquisition.
 func acquireNodeLease(ctx context.Context, m *LeaseManager, id sqlbase.ID) (bool, error) {
@@ -1138,8 +1138,9 @@ func purgeOldVersions(
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
 	table, _, err := t.findForTimestamp(ctx, m.clock.Now())
-	if dropped := err == errTableDropped; dropped || err == nil {
-		removeInactives(dropped)
+	if _, ok := err.(*inactiveTableError); ok || err == nil {
+		isInactive := ok
+		removeInactives(isInactive)
 		if table != nil {
 			s, err := t.release(&table.ImmutableTableDescriptor, m.removeOnceDereferenced())
 			if err != nil {
