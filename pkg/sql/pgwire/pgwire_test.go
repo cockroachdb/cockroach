@@ -363,16 +363,17 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Set draining with no drainWait timeout and a 1s cancelWait timeout.
+		// Set draining with no drainWait timeout and a 2s cancelWait timeout.
 		// The expected behavior is for the pgServer to immediately cancel any
-		// ongoing sessions and wait for 1s for the cancellation to take effect.
+		// ongoing sessions and wait for 2s for the cancellation to take effect.
 		if err := pgServer.DrainImpl(
 			0 /* drainWait */, 2*time.Second, /* cancelWait */
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := txn.Commit(); err != driver.ErrBadConn {
+		if err := txn.Commit(); err == nil ||
+			(err != driver.ErrBadConn && !strings.Contains(err.Error(), "connection reset by peer")) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
