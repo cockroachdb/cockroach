@@ -701,7 +701,7 @@ func (b *Builder) buildSelect(
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
 	with := stmt.With
-	forLocked := stmt.ForLocked
+	forLocked := stmt.ForLocked.Strength
 
 	switch forLocked {
 	case tree.ForNone:
