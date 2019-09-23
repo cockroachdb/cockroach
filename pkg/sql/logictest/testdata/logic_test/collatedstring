@@ -341,7 +341,8 @@ CREATE TABLE quoted_coll (
   b STRING COLLATE "en_US",
   c STRING COLLATE "en-Us" DEFAULT ('c' COLLATE "en-Us"),
   d STRING COLLATE "en-u-ks-level1" DEFAULT ('d'::STRING COLLATE "en-u-ks-level1"),
-  e STRING COLLATE "en-us" AS (a COLLATE "en-us") STORED
+  e STRING COLLATE "en-us" AS (a COLLATE "en-us") STORED,
+  FAMILY "primary" (a, b, c, d, e, rowid)
 )
 
 query TT

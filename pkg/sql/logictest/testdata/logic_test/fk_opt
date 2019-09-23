@@ -361,7 +361,8 @@ CREATE TABLE delivery (
   shipment int,
   item STRING REFERENCES products (upc),
   FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
-  INDEX (item)
+  INDEX (item),
+  FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
 query TT
@@ -687,7 +688,8 @@ CREATE TABLE refpairs (
   b STRING,
   c INT,
   FOREIGN KEY (a, b) REFERENCES pairs (src, dest) ON UPDATE RESTRICT,
-  INDEX (a, b, c)
+  INDEX (a, b, c),
+  FAMILY "primary" (a, b, c, rowid)
 )
 
 query TTBITTBB colnames
@@ -896,7 +898,8 @@ statement ok
 CREATE TABLE refers (
   a INT REFERENCES referee,
   b INT,
-  INDEX b_idx (b)
+  INDEX b_idx (b),
+  FAMILY "primary" (a, b, rowid)
 )
 
 # Add some schema changes within the same transaction to verify that a

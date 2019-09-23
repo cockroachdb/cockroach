@@ -5,7 +5,8 @@ CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
   z INT,
-  INDEX foo (z, y)
+  INDEX foo (z, y),
+  FAMILY "primary" (x, y, z)
 )
 
 query T
@@ -32,7 +33,8 @@ CREATE TABLE abcdef (
     c INT DEFAULT (10),
     d INT AS (abcdef.b + c + 1) STORED,
     e INT AS (a) STORED,
-    f INT CHECK (test.abcdef.f > 2)
+    f INT CHECK (test.abcdef.f > 2),
+    FAMILY "primary" (a, b, c, d, e, f, rowid)
 )
 
 query T
@@ -83,14 +85,15 @@ scan uvwxy
 
 # Test foreign keys.
 statement ok
-CREATE TABLE parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r))
+CREATE TABLE parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r), FAMILY "primary" (p, q, r, other))
 
 # Simple FK.
 statement ok
 CREATE TABLE child  (
   c INT PRIMARY KEY,
   p INT, q INT, r INT,
-  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent(p,q,r)
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent(p,q,r),
+  FAMILY "primary" (c, p, q, r)
 )
 
 query T
@@ -131,7 +134,8 @@ statement ok
 CREATE TABLE child2  (
   c INT PRIMARY KEY,
   p INT, q INT, r INT,
-  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent(p,q,r) MATCH FULL ON DELETE SET NULL ON UPDATE SET DEFAULT
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent(p,q,r) MATCH FULL ON DELETE SET NULL ON UPDATE SET DEFAULT,
+  FAMILY "primary" (c, p, q, r)
 )
 
 # TODO(radu, justin): we are missing the ON UPDATE part.

@@ -510,7 +510,7 @@ limit                ·            ·
 ·                    spans        ALL
 
 statement ok
-CREATE TABLE tc (a INT, b INT, INDEX c(a))
+CREATE TABLE tc (a INT, b INT, INDEX c(a), FAMILY "primary" (a, b, rowid))
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
