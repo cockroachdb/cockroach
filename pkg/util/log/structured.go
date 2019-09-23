@@ -63,5 +63,5 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 	// MakeMessage already added the tags when forming msg, we don't want
 	// eventInternal to prepend them again.
 	eventInternal(ctx, (s >= Severity_ERROR), false /*withTags*/, "%s:%d %s", file, line, msg)
-	logging.outputLogEntry(s, file, line, msg)
+	mainLog.outputLogEntry(s, file, line, msg)
 }

@@ -13,7 +13,6 @@ package log
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"time"
@@ -21,11 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/petermattis/goid"
 )
 
 func init() {
-	copyStandardLogTo("INFO")
 	errors.SetWarningFn(Warningf)
 }
 
@@ -37,28 +34,6 @@ func FatalOnPanic() {
 	if r := recover(); r != nil {
 		Fatalf(context.Background(), "unexpected panic: %s", r)
 	}
-}
-
-// SetExitFunc allows setting a function that will be called to exit the
-// process when a Fatal message is generated. The supplied bool, if true,
-// suppresses the stack trace, which is useful for test callers wishing
-// to keep the logs reasonably clean.
-//
-// Call with a nil function to undo.
-func SetExitFunc(hideStack bool, f func(int)) {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-	logging.exitOverride.f = f
-	logging.exitOverride.hideStack = hideStack
-}
-
-// ResetExitFunc undoes any prior call to SetExitFunc.
-func ResetExitFunc() {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-
-	logging.exitOverride.f = nil
-	logging.exitOverride.hideStack = false
 }
 
 // logDepth uses the PrintWith to format the output string and
@@ -80,7 +55,7 @@ func Shout(ctx context.Context, sev Severity, args ...interface{}) {
 		})
 		defer t.Stop()
 	}
-	if logging.stderrRedirected() {
+	if mainLog.stderrRedirected() {
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
 			strings.Replace(MakeMessage(ctx, "", args), "\n", "\n* ", -1))
 	}
@@ -240,29 +215,4 @@ func ExpensiveLogEnabled(ctx context.Context, level int32) bool {
 		return true
 	}
 	return false
-}
-
-// MakeEntry creates an Entry.
-func MakeEntry(s Severity, t int64, file string, line int, msg string) Entry {
-	return Entry{
-		Severity:  s,
-		Time:      t,
-		Goroutine: goid.Get(),
-		File:      file,
-		Line:      int64(line),
-		Message:   msg,
-	}
-}
-
-// Format writes the log entry to the specified writer.
-func (e Entry) Format(w io.Writer) error {
-	buf := formatLogEntry(e, nil, nil)
-	defer logging.putBuffer(buf)
-	_, err := w.Write(buf.Bytes())
-	return err
-}
-
-// SetVModule alters the vmodule logging level to the passed in value.
-func SetVModule(value string) error {
-	return logging.vmodule.Set(value)
 }

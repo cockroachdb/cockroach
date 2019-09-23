@@ -78,7 +78,7 @@ func (l *loggingT) newBuffers() flushSyncWriter {
 
 // contents returns the specified log value as a string.
 func contents() string {
-	return logging.file.(*flushBuffer).Buffer.String()
+	return mainLog.file.(*flushBuffer).Buffer.String()
 }
 
 // contains reports whether the string is contained in the log.
@@ -90,10 +90,10 @@ func contains(str string, t *testing.T) bool {
 // setFlags resets the logging flags and exit function to what tests expect.
 func setFlags() {
 	ResetExitFunc()
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-	logging.noStderrRedirect = false
-	logging.stderrThreshold = Severity_ERROR
+	mainLog.mu.Lock()
+	defer mainLog.mu.Unlock()
+	mainLog.noStderrRedirect = false
+	mainLog.stderrThreshold = Severity_ERROR
 }
 
 // Test that Info works as advertised.
@@ -101,7 +101,7 @@ func TestInfo(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer logging.swap(logging.newBuffers())
+	defer mainLog.swap(mainLog.newBuffers())
 	Info(context.Background(), "test")
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -127,7 +127,7 @@ func TestStandardLog(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer logging.swap(logging.newBuffers())
+	defer mainLog.swap(mainLog.newBuffers())
 	stdLog.Print("test")
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
@@ -143,7 +143,7 @@ func TestEntryDecoder(t *testing.T) {
 		buf := formatHeader(s, now, gid, file, line, nil)
 		buf.WriteString(msg)
 		buf.WriteString("\n")
-		defer logging.putBuffer(buf)
+		defer mainLog.putBuffer(buf)
 		return buf.String()
 	}
 
@@ -275,7 +275,7 @@ func TestError(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer logging.swap(logging.newBuffers())
+	defer mainLog.swap(mainLog.newBuffers())
 	Error(context.Background(), "test")
 	if !contains("E", t) {
 		t.Errorf("Error has wrong character: %q", contents())
@@ -292,7 +292,7 @@ func TestWarning(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer logging.swap(logging.newBuffers())
+	defer mainLog.swap(mainLog.newBuffers())
 	Warning(context.Background(), "test")
 	if !contains("W", t) {
 		t.Errorf("Warning has wrong character: %q", contents())
@@ -307,10 +307,10 @@ func TestV(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer logging.swap(logging.newBuffers())
-	_ = logging.verbosity.Set("2")
-	defer func() { _ = logging.verbosity.Set("0") }()
-	if v(2) {
+	defer mainLog.swap(mainLog.newBuffers())
+	_ = mainLog.verbosity.Set("2")
+	defer func() { _ = mainLog.verbosity.Set("0") }()
+	if V(2) {
 		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
 	}
 	if !contains("I", t) {
@@ -326,19 +326,19 @@ func TestVmoduleOn(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 	setFlags()
-	defer logging.swap(logging.newBuffers())
-	_ = logging.vmodule.Set("clog_test=2")
-	defer func() { _ = logging.vmodule.Set("") }()
-	if !v(1) {
+	defer mainLog.swap(mainLog.newBuffers())
+	_ = mainLog.vmodule.Set("clog_test=2")
+	defer func() { _ = mainLog.vmodule.Set("") }()
+	if !V(1) {
 		t.Error("V not enabled for 1")
 	}
-	if !v(2) {
+	if !V(2) {
 		t.Error("V not enabled for 2")
 	}
-	if v(3) {
+	if V(3) {
 		t.Error("V enabled for 3")
 	}
-	if v(2) {
+	if V(2) {
 		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
 	}
 	if !contains("I", t) {
@@ -352,15 +352,15 @@ func TestVmoduleOn(t *testing.T) {
 // Test that a vmodule of another file does not enable a log in this file.
 func TestVmoduleOff(t *testing.T) {
 	setFlags()
-	defer logging.swap(logging.newBuffers())
-	_ = logging.vmodule.Set("notthisfile=2")
-	defer func() { _ = logging.vmodule.Set("") }()
+	defer mainLog.swap(mainLog.newBuffers())
+	_ = mainLog.vmodule.Set("notthisfile=2")
+	defer func() { _ = mainLog.vmodule.Set("") }()
 	for i := 1; i <= 3; i++ {
-		if v(level(i)) {
+		if V(int32(i)) {
 			t.Errorf("V enabled for %d", i)
 		}
 	}
-	if v(2) {
+	if V(2) {
 		addStructured(context.Background(), Severity_INFO, 1, "", []interface{}{"test"})
 	}
 	if contents() != "" {
@@ -389,11 +389,11 @@ var vGlobs = map[string]bool{
 // Test that vmodule globbing works as advertised.
 func testVmoduleGlob(pat string, match bool, t *testing.T) {
 	setFlags()
-	defer logging.swap(logging.newBuffers())
-	defer func() { _ = logging.vmodule.Set("") }()
-	_ = logging.vmodule.Set(pat)
-	if v(2) != match {
-		t.Errorf("incorrect match for %q: got %t expected %t", pat, v(2), match)
+	defer mainLog.swap(mainLog.newBuffers())
+	defer func() { _ = mainLog.vmodule.Set("") }()
+	_ = mainLog.vmodule.Set(pat)
+	if V(2) != match {
+		t.Errorf("incorrect match for %q: got %t expected %t", pat, V(2), match)
 	}
 }
 
@@ -411,7 +411,7 @@ func TestListLogFiles(t *testing.T) {
 
 	Info(context.Background(), "x")
 
-	sb, ok := logging.file.(*syncBuffer)
+	sb, ok := mainLog.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -433,7 +433,7 @@ func TestGetLogReader(t *testing.T) {
 	defer s.Close(t)
 	setFlags()
 	Info(context.Background(), "x")
-	info, ok := logging.file.(*syncBuffer)
+	info, ok := mainLog.file.(*syncBuffer)
 	if !ok {
 		t.Fatalf("buffer wasn't created")
 	}
@@ -448,7 +448,7 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err := logging.logDir.get()
+	dir, err := mainLog.logDir.get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +530,7 @@ func TestRollover(t *testing.T) {
 	LogFileMaxSize = 2048
 
 	Info(context.Background(), "x") // Be sure we have a file.
-	info, ok := logging.file.(*syncBuffer)
+	info, ok := mainLog.file.(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
 	}
@@ -563,14 +563,14 @@ func TestGC(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	logging.mu.Lock()
-	logging.disableDaemons = true
+	mainLog.mu.Lock()
+	mainLog.disableDaemons = true
 	defer func(previous bool) {
-		logging.mu.Lock()
-		logging.disableDaemons = previous
-		logging.mu.Unlock()
-	}(logging.disableDaemons)
-	logging.mu.Unlock()
+		mainLog.mu.Lock()
+		mainLog.disableDaemons = previous
+		mainLog.mu.Unlock()
+	}(mainLog.disableDaemons)
+	mainLog.mu.Unlock()
 
 	setFlags()
 
@@ -578,7 +578,7 @@ func TestGC(t *testing.T) {
 
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
-	logging.noStderrRedirect = true
+	mainLog.noStderrRedirect = true
 
 	// Create 1 log file to figure out its size.
 	Infof(context.Background(), "0")
@@ -590,7 +590,7 @@ func TestGC(t *testing.T) {
 	if e, a := 1, len(allFilesOriginal); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
-	dir, err := logging.logDir.get()
+	dir, err := mainLog.logDir.get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -631,7 +631,7 @@ func TestGC(t *testing.T) {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
 
-	logging.gcOldFiles()
+	mainLog.gcOldFiles()
 
 	allFilesAfter, err := ListLogFiles()
 	if err != nil {
@@ -647,14 +647,14 @@ func TestLogBacktraceAt(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	defer logging.swap(logging.newBuffers())
+	defer mainLog.swap(mainLog.newBuffers())
 	// The peculiar style of this code simplifies line counting and maintenance of the
 	// tracing block below.
 	var infoLine string
 	setTraceLocation := func(file string, line int, delta int) {
 		_, file = filepath.Split(file)
 		infoLine = fmt.Sprintf("%s:%d", file, line+delta)
-		err := logging.traceLocation.Set(infoLine)
+		err := mainLog.traceLocation.Set(infoLine)
 		if err != nil {
 			t.Fatal("error setting log_backtrace_at: ", err)
 		}
@@ -664,7 +664,7 @@ func TestLogBacktraceAt(t *testing.T) {
 		file, line, _ := caller.Lookup(0)
 		setTraceLocation(file, line, +2) // Two lines between Caller and Info calls.
 		Info(context.Background(), "we want a stack trace here")
-		if err := logging.traceLocation.Set(""); err != nil {
+		if err := mainLog.traceLocation.Set(""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -692,11 +692,11 @@ func TestFatalStacktraceStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold = Severity_NONE
+	mainLog.stderrThreshold = Severity_NONE
 	SetExitFunc(false /* hideStack */, func(int) {})
 
 	defer setFlags()
-	defer logging.swap(logging.newBuffers())
+	defer mainLog.swap(mainLog.newBuffers())
 
 	for _, level := range []int{tracebackNone, tracebackSingle, tracebackAll} {
 		traceback = level
@@ -730,14 +730,14 @@ func TestRedirectStderr(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold = Severity_NONE
+	mainLog.stderrThreshold = Severity_NONE
 
 	Infof(context.Background(), "test")
 
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
-	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(mainLog.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,15 +751,15 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	defer func(save Severity) { logging.fileThreshold = save }(logging.fileThreshold)
-	logging.fileThreshold = Severity_ERROR
+	defer func(save Severity) { mainLog.fileThreshold = save }(mainLog.fileThreshold)
+	mainLog.fileThreshold = Severity_ERROR
 
 	Infof(context.Background(), "test1")
 	Errorf(context.Background(), "test2")
 
 	Flush()
 
-	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(mainLog.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -804,7 +804,7 @@ func TestExitOnFullDisk(t *testing.T) {
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		buf := formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil)
-		logging.putBuffer(buf)
+		mainLog.putBuffer(buf)
 	}
 }
 

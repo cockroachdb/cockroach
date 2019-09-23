@@ -52,25 +52,25 @@ func NewSecondaryLogger(
 	forceSyncWrites bool,
 	enableMsgCount bool,
 ) *SecondaryLogger {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
+	mainLog.mu.Lock()
+	defer mainLog.mu.Unlock()
 	var dir string
 	if dirName != nil {
 		dir = dirName.String()
 	}
 	if dir == "" {
-		dir = logging.logDir.String()
+		dir = mainLog.logDir.String()
 	}
 	l := &SecondaryLogger{
 		logger: loggingT{
 			logDir:           DirName{name: dir},
 			noStderrRedirect: true,
 			prefix:           program + "-" + fileNamePrefix,
-			stderrThreshold:  logging.stderrThreshold,
+			stderrThreshold:  mainLog.stderrThreshold,
 			fileThreshold:    Severity_INFO,
-			syncWrites:       forceSyncWrites || logging.syncWrites,
+			syncWrites:       forceSyncWrites || mainLog.syncWrites,
 			gcNotify:         make(chan struct{}, 1),
-			disableDaemons:   logging.disableDaemons,
+			disableDaemons:   mainLog.disableDaemons,
 		},
 		forceSyncWrites: forceSyncWrites,
 		enableMsgCount:  enableMsgCount,
