@@ -795,7 +795,6 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 			if (liveness == storagepb.Liveness{}) {
 				return fmt.Errorf("no liveness record")
 			}
-			fmt.Printf("n%d: found liveness\n", s.NodeID())
 		}
 		return nil
 	})
