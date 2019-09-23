@@ -1356,7 +1356,7 @@ func (g *Gossip) bootstrap() {
 			select {
 			case <-bootstrapTimer.C:
 				bootstrapTimer.Read = true
-				// break
+				// continue
 			case <-g.server.stopper.ShouldStop():
 				return
 			}
