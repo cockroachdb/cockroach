@@ -110,6 +110,13 @@ func NewColOperator(
 		// because of efficiency).
 		projectionHandled bool
 
+		// projectionAfterJoiner is the projection that has to be added after a
+		// joiner. It is needed because the joiners always output all the requested
+		// columns from the left side first followed by the columns from the right
+		// side. However, post.OutputColumns projection can have an arbitrary order
+		// of columns.
+		projectionAfterJoiner []uint32
+
 		// postFilterPlanning will be set by the operators that handle the
 		// projection themselves. This is needed to handle post.Filter correctly so
 		// that those operators output all the columns that are used by post.Filter
@@ -333,6 +340,28 @@ func NewColOperator(
 					rightOutCols = append(rightOutCols, col-nLeftCols)
 				}
 			}
+			// Now that we know how many columns are output from the left side, we
+			// can populate the "post-joiner" projection. Consider an example:
+			// we have post.OutputColumns = {6, 2, 5, 7, 0, 3} with nLeftCols = 6.
+			// We've just populated output columns as follows:
+			// leftOutCols = {2, 5, 0, 3} and rightOutCols = {6, 7},
+			// and because the hash joiner always outputs the left columns first, the
+			// output will look as {2, 5, 0, 3, 6, 7}, so we need to add an extra
+			// projection. The code below will populate projectionAfterJoiner with
+			// {4, 0, 1, 5, 2, 3}.
+			// Note that we don't need to pay attention to any filter planning
+			// additions since those will be projected out before we will add this
+			// "post-joiner" projection.
+			var lOutIdx, rOutIdx uint32
+			for _, col := range post.OutputColumns {
+				if col < nLeftCols {
+					projectionAfterJoiner = append(projectionAfterJoiner, lOutIdx)
+					lOutIdx++
+				} else {
+					projectionAfterJoiner = append(projectionAfterJoiner, uint32(len(leftOutCols))+rOutIdx)
+					rOutIdx++
+				}
+			}
 			projectionHandled = true
 		} else {
 			for i := uint32(0); i < nLeftCols; i++ {
@@ -428,6 +457,28 @@ func NewColOperator(
 					leftOutCols = append(leftOutCols, col)
 				} else {
 					rightOutCols = append(rightOutCols, col-nLeftCols)
+				}
+			}
+			// Now that we know how many columns are output from the left side, we
+			// can populate the "post-joiner" projection. Consider an example:
+			// we have post.OutputColumns = {6, 2, 5, 7, 0, 3} with nLeftCols = 6.
+			// We've just populated output columns as follows:
+			// leftOutCols = {2, 5, 0, 3} and rightOutCols = {6, 7},
+			// and because the hash joiner always outputs the left columns first, the
+			// output will look as {2, 5, 0, 3, 6, 7}, so we need to add an extra
+			// projection. The code below will populate projectionAfterJoiner with
+			// {4, 0, 1, 5, 2, 3}.
+			// Note that we don't need to pay attention to any filter planning
+			// additions since those will be projected out before we will add this
+			// "post-joiner" projection.
+			var lOutIdx, rOutIdx uint32
+			for _, col := range post.OutputColumns {
+				if col < nLeftCols {
+					projectionAfterJoiner = append(projectionAfterJoiner, lOutIdx)
+					lOutIdx++
+				} else {
+					projectionAfterJoiner = append(projectionAfterJoiner, uint32(len(leftOutCols))+rOutIdx)
+					rOutIdx++
 				}
 			}
 			projectionHandled = true
@@ -677,14 +728,12 @@ func NewColOperator(
 		}
 		postFilterPlanning.projectOutExtraCols(&result)
 	}
-	if post.Projection && !projectionHandled {
-		result.Op = NewSimpleProjectOp(result.Op, len(result.ColumnTypes), post.OutputColumns)
-		// Update output ColumnTypes.
-		newTypes := make([]types.T, 0, len(post.OutputColumns))
-		for _, j := range post.OutputColumns {
-			newTypes = append(newTypes, result.ColumnTypes[j])
+	if post.Projection {
+		if projectionHandled {
+			result.addProjection(projectionAfterJoiner)
+		} else {
+			result.addProjection(post.OutputColumns)
 		}
-		result.ColumnTypes = newTypes
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
@@ -941,6 +990,18 @@ func (r *NewColOperatorResult) planFilterExpr(
 		r.Op = NewSimpleProjectOp(r.Op, len(filterColumnTypes), outputColumns)
 	}
 	return nil
+}
+
+// addProjection adds a simple projection to r (Op and ColumnTypes are updated
+// accordingly).
+func (r *NewColOperatorResult) addProjection(projection []uint32) {
+	r.Op = NewSimpleProjectOp(r.Op, len(r.ColumnTypes), projection)
+	// Update output ColumnTypes.
+	newTypes := make([]types.T, 0, len(projection))
+	for _, j := range projection {
+		newTypes = append(newTypes, r.ColumnTypes[j])
+	}
+	r.ColumnTypes = newTypes
 }
 
 func planSelectionOperators(
