@@ -697,3 +697,68 @@ t40417  CREATE TABLE t40417 (
 );
 ALTER PARTITION p1 OF INDEX "my database".public.t40417@primary CONFIGURE ZONE USING
   num_replicas = 1
+
+subtest authorization
+
+statement ok
+CREATE DATABASE auth;
+CREATE TABLE auth.t (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+  PARTITION p VALUES IN (1)
+);
+CREATE INDEX x ON auth.t (x) PARTITION BY LIST (x) (
+  PARTITION p VALUES IN (1)
+)
+
+user testuser
+
+# User should have no CONFIGURE ZONE abilities by default.
+statement error only users with the admin role are allowed to alter system ranges
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3
+
+statement error pq: user testuser does not have CREATE privilege on database auth
+ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
+
+statement error pq: only users with the admin role are allowed to alter system tables
+ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3
+
+statement error user testuser does not have CREATE privilege on relation t
+ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
+
+statement error user testuser does not have CREATE privilege on relation t
+ALTER PARTITION p OF TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
+
+statement error user testuser does not have CREATE privilege on relation t
+ALTER PARTITION p OF INDEX auth.t@x CONFIGURE ZONE USING num_replicas = 3
+
+# Granting CREATE on databases and tables should allow CONFIGURE ZONE on those
+# objects.
+user root
+
+statement ok
+GRANT CREATE ON DATABASE auth TO testuser
+
+statement ok
+GRANT CREATE ON TABLE auth.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
+
+statement ok
+ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
+
+# Granting the admin role should allow configuring zones on system tables and
+# ranges.
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3
+
+statement ok
+ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3

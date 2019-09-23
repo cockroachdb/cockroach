@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -94,6 +95,10 @@ func loadYAML(dst interface{}, yamlString string) {
 }
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
+	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
+		return nil, err
+	}
+
 	var yamlConfig tree.TypedExpr
 
 	if n.YAMLConfig != nil {
@@ -157,6 +162,36 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		options:       options,
 		setDefault:    n.SetDefault,
 	}, nil
+}
+
+func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.ZoneSpecifier) error {
+	// For system ranges, the system database, or system tables, the user must be
+	// an admin. Otherwise we require CREATE privileges on the database or table
+	// in question.
+	if zs.NamedZone != "" {
+		return p.RequireAdminRole(ctx, "alter system ranges")
+	}
+	if zs.Database != "" {
+		if zs.Database == "system" {
+			return p.RequireAdminRole(ctx, "alter the system database")
+		}
+		dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(zs.Database), true)
+		if err != nil {
+			return err
+		}
+		return p.CheckPrivilege(ctx, dbDesc, privilege.CREATE)
+	}
+	tableDesc, err := p.resolveTableForZone(ctx, &zs)
+	if err != nil {
+		if zs.TargetsIndex() && zs.TableOrIndex.Table.TableName == "" {
+			err = errors.WithHint(err, "try specifying the index as <tablename>@<indexname>")
+		}
+		return err
+	}
+	if tableDesc.ParentID == keys.SystemDatabaseID {
+		return p.RequireAdminRole(ctx, "alter system tables")
+	}
+	return p.CheckPrivilege(ctx, tableDesc, privilege.CREATE)
 }
 
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
@@ -241,9 +276,6 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// descriptor.
 	table, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
 	if err != nil {
-		if n.zoneSpecifier.TargetsIndex() && n.zoneSpecifier.TableOrIndex.Table.TableName == "" {
-			return errors.WithHint(err, "try specifying the index as <tablename>@<indexname>")
-		}
 		return err
 	}
 
