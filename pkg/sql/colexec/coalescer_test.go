@@ -17,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestCoalescer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// Large tuple number for coalescing.
 	nRows := int(coldata.BatchSize()*3 + 7)
 	large := make(tuples, nRows)

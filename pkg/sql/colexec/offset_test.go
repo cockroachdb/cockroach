@@ -16,9 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		offset   uint64
 		tuples   []tuple

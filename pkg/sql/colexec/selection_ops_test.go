@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
@@ -30,6 +31,7 @@ const (
 )
 
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tups := tuples{{0}, {1}, {2}, {nil}}
 	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []Operator) (Operator, error) {
 		return &selLTInt64Int64ConstOp{
@@ -43,6 +45,7 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 }
 
 func TestSelLTInt64Int64(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tups := tuples{
 		{0, 0},
 		{0, 1},
@@ -64,6 +67,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 }
 
 func TestGetSelectionConstOperator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	cmpOp := tree.LT
 	var input Operator
 	colIdx := 3
@@ -86,6 +90,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 }
 
 func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	cmpOp := tree.LT
 	var input Operator
 	colIdx := 3
@@ -108,6 +113,7 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 }
 
 func TestGetSelectionOperator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ct := types.Int2
 	cmpOp := tree.GE
 	var input Operator

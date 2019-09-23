@@ -96,7 +96,6 @@ const (
 	colPackagePrefix          = "github.com/cockroachdb/cockroach/pkg/col"
 	colexecPackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	colflowsetupPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	cFetcherPrefix            = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
 	treePackagePrefix         = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -115,7 +114,6 @@ func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
 	return strings.HasPrefix(panicEmittedFrom, colPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, colexecPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, colflowsetupPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, cFetcherPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, treePackagePrefix)
 }
 

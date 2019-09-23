@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestRandomizedCast(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
 	datumAsBool := func(d tree.Datum) interface{} {
 		return bool(tree.MustBeDBool(d))

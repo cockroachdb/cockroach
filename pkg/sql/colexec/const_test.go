@@ -14,9 +14,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestConst(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		tuples   tuples
 		expected tuples
@@ -39,6 +41,7 @@ func TestConst(t *testing.T) {
 }
 
 func TestConstNull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		tuples   tuples
 		expected tuples

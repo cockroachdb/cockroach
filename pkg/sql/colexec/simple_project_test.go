@@ -15,10 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSimpleProjectOp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		tuples     tuples
 		expected   tuples

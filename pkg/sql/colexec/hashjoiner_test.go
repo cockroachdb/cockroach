@@ -855,7 +855,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 // TestHashingDoesNotAllocate ensures that our use of the noescape hack to make
 // sure hashing with unsafe.Pointer doesn't allocate still works correctly.
 func TestHashingDoesNotAllocate(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 
 	var sum uintptr
 	foundAllocations := 0
