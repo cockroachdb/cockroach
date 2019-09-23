@@ -32,8 +32,9 @@ import (
 )
 
 const (
-	bankMaxTransfer = 999
-	bankNumAccounts = 999
+	bankStartingAmount = 999
+	bankMaxTransfer    = 999
+	bankNumAccounts    = 999
 )
 
 type bankClient struct {
@@ -138,7 +139,7 @@ CREATE TABLE bank.accounts (
 		if i > 0 {
 			placeholders.WriteString(", ")
 		}
-		fmt.Fprintf(&placeholders, "($%d, 0)", i+1)
+		fmt.Fprintf(&placeholders, "($%d, %d)", i+1, bankStartingAmount)
 		values = append(values, i)
 	}
 	stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
@@ -177,13 +178,13 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	client := &s.clients[0]
 
 	var sum int
-	var accounts uint64
+	var numAccounts uint64
 	err := retry.ForDuration(30*time.Second, func() error {
 		// Hold the read lock on the client to prevent it being restarted by
 		// chaos monkey.
 		client.RLock()
 		defer client.RUnlock()
-		err := client.db.QueryRowContext(ctx, "SELECT count(*), sum(balance) FROM bank.accounts").Scan(&accounts, &sum)
+		err := client.db.QueryRowContext(ctx, "SELECT count(*), sum(balance) FROM bank.accounts").Scan(&numAccounts, &sum)
 		if err != nil && !pgerror.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}
@@ -192,24 +193,18 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum != 0 {
-		t.Fatalf("the bank is not in good order, total value: %d", sum)
+	if expected := bankStartingAmount * bankNumAccounts; sum != expected {
+		t.Fatalf("the bank is not in good order, total value: %d, expected: %d", sum, expected)
 	}
 
-	if accounts < bankNumAccounts {
-		t.Fatalf("the bank is not in good order, total value: %d", sum)
+	if numAccounts != bankNumAccounts {
+		t.Fatalf("the bank is not in good order, total num accounts: %d, expected: %d", numAccounts, bankNumAccounts)
 	}
 }
 
-// startChaosMonkey picks a set of nodes and restarts them. If stopClients is set
-// all the clients are locked before the nodes are restarted.
+// startChaosMonkey picks a set of nodes and restarts them.
 func (s *bankState) startChaosMonkey(
-	ctx context.Context,
-	t *test,
-	c *cluster,
-	stopClients bool,
-	pickNodes func() []int,
-	consistentIdx int,
+	ctx context.Context, t *test, c *cluster, pickNodes func() []int, consistentIdx int,
 ) {
 	s.waitGroup.Add(1)
 	go func() {
@@ -236,29 +231,15 @@ func (s *bankState) startChaosMonkey(
 			// Pick nodes to be restarted.
 			nodes := pickNodes()
 
-			if stopClients {
-				// Prevent all clients from writing while nodes are being restarted.
-				for i := 0; i < len(s.clients); i++ {
-					s.clients[i].Lock()
-				}
-			}
 			t.l.Printf("round %d: restarting nodes %v\n", curRound, nodes)
 			for _, i := range nodes {
 				if s.done(ctx) {
 					break
 				}
 				t.l.Printf("round %d: restarting %d\n", curRound, i)
+
 				c.Stop(ctx, c.Node(i))
 				c.Start(ctx, t, c.Node(i))
-				if stopClients {
-					// Reinitialize the client talking to the restarted node.
-					s.initClient(ctx, c, i)
-				}
-			}
-			if stopClients {
-				for i := 0; i < len(s.clients); i++ {
-					s.clients[i].Unlock()
-				}
 			}
 
 			preCount := s.counts()
@@ -455,7 +436,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		}
 		return nodes
 	}
-	s.startChaosMonkey(ctx, t, c, true, pickNodes, -1)
+	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
 
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
@@ -497,7 +478,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	pickNodes := func() []int {
 		return []int{1 + rnd.Intn(clientIdx)}
 	}
-	s.startChaosMonkey(ctx, t, c, false, pickNodes, clientIdx)
+	s.startChaosMonkey(ctx, t, c, pickNodes, clientIdx)
 
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
@@ -576,7 +557,7 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 	}
 
 	// Starting up the goroutines that restart and do splits and lease moves.
-	s.startChaosMonkey(ctx, t, c, false, pickNodes, -1)
+	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
 	s.startSplitMonkey(ctx, 2*time.Second, c)
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
