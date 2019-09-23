@@ -199,6 +199,7 @@ func TestSortChunks(t *testing.T) {
 }
 
 func TestSortChunksRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 	nTups := 8
 	maxCols := 5

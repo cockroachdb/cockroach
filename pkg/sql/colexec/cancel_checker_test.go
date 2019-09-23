@@ -18,12 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 // TestCancelChecker verifies that CancelChecker panics with appropriate error
 // when the context is canceled.
 func TestCancelChecker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(batch)))

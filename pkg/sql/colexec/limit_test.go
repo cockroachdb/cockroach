@@ -10,9 +10,14 @@
 
 package colexec
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+)
 
 func TestLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		limit    uint64
 		tuples   []tuple

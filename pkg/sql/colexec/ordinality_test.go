@@ -16,9 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestOrdinality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		tuples   []tuple
 		expected []tuple

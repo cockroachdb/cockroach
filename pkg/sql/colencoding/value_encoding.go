@@ -73,8 +73,6 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		switch t.Width() {
-		case 8:
-			vec.Int8()[idx] = int8(i)
 		case 16:
 			vec.Int16()[idx] = int16(i)
 		case 32:

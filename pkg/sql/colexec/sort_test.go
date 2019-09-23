@@ -145,6 +145,7 @@ func TestSort(t *testing.T) {
 }
 
 func TestSortRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 	nTups := 1025
 	k := uint16(4)
