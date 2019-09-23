@@ -1,6 +1,6 @@
 # LogicTest: local
 
-statement ok
+statement defaultFamily
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
@@ -25,7 +25,7 @@ scan xyz
 
 # Verify that column qualifications in check constraints and computed columns
 # are stripped.
-statement ok
+statement defaultFamily
 CREATE TABLE abcdef (
     a INT NOT NULL,
     b INT,
@@ -82,11 +82,11 @@ TABLE uvwxy
 scan uvwxy
 
 # Test foreign keys.
-statement ok
+statement defaultFamily
 CREATE TABLE parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r))
 
 # Simple FK.
-statement ok
+statement defaultFamily
 CREATE TABLE child  (
   c INT PRIMARY KEY,
   p INT, q INT, r INT,
@@ -127,7 +127,7 @@ TABLE parent
 scan parent
 
 # FK with match and actions.
-statement ok
+statement defaultFamily
 CREATE TABLE child2  (
   c INT PRIMARY KEY,
   p INT, q INT, r INT,

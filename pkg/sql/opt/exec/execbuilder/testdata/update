@@ -369,7 +369,7 @@ UPDATE t35364 SET x=2.5 RETURNING *
 
 # Ensure that index hints in UPDATE statements force the choice of a specific index
 # as described in #38799.
-statement ok
+statement defaultFamily
 CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b))
 
 query TTTTT

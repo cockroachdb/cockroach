@@ -6,7 +6,7 @@ SELECT B'1000101'::BIT(4)::STRING,
 1000  1000  1000101
 
 
-statement ok
+statement defaultFamily
 CREATE TABLE bits(a BIT, b BIT(4), c VARBIT, d VARBIT(4))
 
 query TT colnames

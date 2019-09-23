@@ -451,7 +451,7 @@ INSERT INTO string_t SELECT * FROM bytes_t
 
 subtest string_width_check
 
-statement ok
+statement defaultFamily
 CREATE TABLE sw (
  a CHAR,
  b CHAR(3),
@@ -619,7 +619,7 @@ COMMIT
 
 subtest regression_32759_33012
 
-statement ok
+statement defaultFamily
 CREATE TABLE t32759(x INT, y STRING NOT NULL DEFAULT 'b', z INT)
 
 statement ok

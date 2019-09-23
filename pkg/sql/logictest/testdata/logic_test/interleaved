@@ -202,7 +202,7 @@ SELECT * FROM p0
 # Validation and descriptor bookkeeping
 
 # TODO(dan): Interleave these two indexes once we support the syntax.
-statement ok
+statement defaultFamily
 CREATE TABLE all_interleaves (
   b INT PRIMARY KEY,
   c INT,

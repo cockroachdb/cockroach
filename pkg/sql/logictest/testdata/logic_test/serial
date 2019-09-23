@@ -1,6 +1,6 @@
 subtest serial_rowid
 
-statement ok
+statement defaultFamily
 CREATE TABLE serial (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
@@ -37,7 +37,7 @@ CREATE TABLE s1 (a SERIAL DEFAULT 7)
 statement error conflicting NULL/NOT NULL declarations for column "a" of table "s1"
 CREATE TABLE s1 (a SERIAL NULL)
 
-statement ok
+statement defaultFamily
 CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
 
 statement ok
@@ -58,7 +58,7 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 ----
 2 2 1
 
-statement ok
+statement defaultFamily
 CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
 
 query TT
@@ -93,7 +93,7 @@ SET experimental_serial_normalization = virtual_sequence
 statement ok
 CREATE SEQUENCE serial_c_seq; CREATE SEQUENCE serial_c_seq1
 
-statement ok
+statement defaultFamily
 CREATE TABLE serial (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
@@ -135,7 +135,7 @@ CREATE TABLE s1 (a SERIAL DEFAULT 7)
 statement error conflicting NULL/NOT NULL declarations for column "a" of table "s1"
 CREATE TABLE s1 (a SERIAL NULL)
 
-statement ok
+statement defaultFamily
 CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
 
 statement ok
@@ -156,7 +156,7 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 ----
 2 2 1
 
-statement ok
+statement defaultFamily
 CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
 
 query TT
@@ -187,7 +187,7 @@ subtest serial_sql_sequence
 statement ok
 SET experimental_serial_normalization = sql_sequence
 
-statement ok
+statement defaultFamily
 CREATE TABLE serial (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
@@ -223,7 +223,7 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serial
 ----
 4  3  4
 
-statement ok
+statement defaultFamily
 CREATE TABLE "serial_MixedCase" (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
@@ -249,7 +249,7 @@ CREATE TABLE s1 (a SERIAL DEFAULT 7)
 statement error conflicting NULL/NOT NULL declarations for column "a" of table "s1"
 CREATE TABLE s1 (a SERIAL NULL)
 
-statement ok
+statement defaultFamily
 CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
 
 statement ok
@@ -270,7 +270,7 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 ----
 2 2 1
 
-statement ok
+statement defaultFamily
 CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
 
 query TT

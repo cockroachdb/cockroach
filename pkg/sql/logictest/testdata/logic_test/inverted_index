@@ -22,7 +22,7 @@ CREATE INDEX foo_inv2 ON t USING GIN (b)
 statement error pq: inverted indexes can't be unique
 CREATE UNIQUE INVERTED INDEX foo_inv ON t(b)
 
-statement ok
+statement defaultFamily
 CREATE TABLE c (
   id INT PRIMARY KEY,
   foo JSON,

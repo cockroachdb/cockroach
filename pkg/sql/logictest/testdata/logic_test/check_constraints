@@ -203,7 +203,7 @@ CREATE TABLE t6 (x INT CHECK (x = (SELECT 1)))
 
 # Check auto-generated constraint names.
 
-statement ok
+statement defaultFamily
 CREATE TABLE t7 (
   x INT,
   y INT,

@@ -1,4 +1,4 @@
-statement ok
+statement defaultFamily
 CREATE TABLE with_no_column_refs (
   a INT,
   b INT,
@@ -15,7 +15,7 @@ with_no_column_refs  CREATE TABLE with_no_column_refs (
                      FAMILY "primary" (a, b, c, rowid)
 )
 
-statement ok
+statement defaultFamily
 CREATE TABLE extra_parens (
   a INT,
   b INT,
@@ -66,7 +66,7 @@ SELECT c FROM with_no_column_refs
 3
 3
 
-statement ok
+statement defaultFamily
 CREATE TABLE x (
   a INT DEFAULT 3,
   b INT DEFAULT 7,
@@ -596,7 +596,7 @@ SELECT d FROM x
 statement ok
 DROP TABLE x
 
-statement ok
+statement defaultFamily
 CREATE TABLE x (
   a INT,
   b INT as (x.a) STORED
@@ -615,7 +615,7 @@ statement ok
 DROP TABLE x
 
 # Check that computed columns are resilient to column renames.
-statement ok
+statement defaultFamily
 CREATE TABLE x (
   a INT,
   b INT AS (a) STORED
@@ -636,7 +636,7 @@ x  CREATE TABLE x (
 statement ok
 DROP TABLE x
 
-statement ok
+statement defaultFamily
 CREATE TABLE x (
   a INT,
   b INT AS (a * 2) STORED

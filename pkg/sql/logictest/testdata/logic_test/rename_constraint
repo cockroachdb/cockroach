@@ -1,4 +1,4 @@
-statement ok
+statement defaultFamily
 CREATE TABLE t (
   x INT, y INT,
   CONSTRAINT cu UNIQUE (x),

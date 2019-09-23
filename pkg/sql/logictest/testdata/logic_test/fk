@@ -248,7 +248,7 @@ statement ok
 UPDATE orders SET product = '780' WHERE id = 2
 
 # "delivery" is interesting since it references a secondary index with different col names.
-statement ok
+statement defaultFamily
 CREATE TABLE delivery (
   ts TIMESTAMP DEFAULT now(),
   "order" int,
@@ -574,7 +574,7 @@ refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        1 
 refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        2             b            ASC        false    false
 refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        3             rowid        ASC        false    true
 
-statement ok
+statement defaultFamily
 CREATE TABLE refpairs (
   a INT,
   b STRING,
@@ -811,7 +811,7 @@ CREATE TABLE referee (id INT PRIMARY KEY);
 statement ok
 BEGIN TRANSACTION
 
-statement ok
+statement defaultFamily
 CREATE TABLE refers (
   a INT REFERENCES referee,
   b INT,

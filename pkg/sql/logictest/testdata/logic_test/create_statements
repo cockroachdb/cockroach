@@ -6,7 +6,7 @@
 statement ok
 CREATE TABLE t (a INT REFERENCES t)
 
-statement ok
+statement defaultFamily
 CREATE TABLE v ("'" INT REFERENCES t, s STRING UNIQUE REFERENCES v (s))
 
 query TTTT colnames

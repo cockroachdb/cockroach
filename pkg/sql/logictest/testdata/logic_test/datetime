@@ -35,7 +35,8 @@ INSERT INTO t VALUES
   ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
 
 # Check that time/date/interval representations outside of the index are okay.
-statement ok
+# TODO(mjibson): remove defaultFamily after #41007 is fixed.
+statement defaultFamily
 CREATE TABLE u (
   a BIGINT PRIMARY KEY,
   b TIMESTAMP,
@@ -1006,7 +1007,8 @@ SELECT d::timestamp FROM u WHERE a = 123
 statement ok
 SET TIME ZONE UTC
 
-statement ok
+# TODO(mjibson): remove defaultFamily after #41007 is fixed.
+statement defaultFamily
 CREATE TABLE tz (
   a INT PRIMARY KEY,
   b TIMESTAMP,

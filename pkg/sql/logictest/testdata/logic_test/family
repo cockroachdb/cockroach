@@ -183,7 +183,7 @@ abcd  CREATE TABLE abcd (
       FAMILY fam_2_g (g)
 )
 
-statement ok
+statement defaultFamily
 CREATE TABLE f1 (a INT PRIMARY KEY, b STRING, c STRING)
 
 query TT

@@ -1,6 +1,6 @@
 # LogicTest: local
 
-statement ok
+statement defaultFamily
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,

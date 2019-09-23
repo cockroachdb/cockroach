@@ -291,7 +291,8 @@ SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 1  NULL
 1  1
 
-statement ok
+# TODO(mjibson): remove defaultFamily after #41007 is fixed.
+statement defaultFamily
 CREATE TABLE ef (e INT, f INT, INDEX(f))
 
 statement ok

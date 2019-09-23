@@ -2,7 +2,8 @@ statement error pgcode 42P01 relation "t" does not exist
 EXPERIMENTAL SCRUB TABLE t
 -----
 
-statement ok
+# TODO(mjibson): remove defaultFamily after #41002 is fixed.
+statement defaultFamily
 CREATE TABLE t (
   id int PRIMARY KEY,
   name STRING,

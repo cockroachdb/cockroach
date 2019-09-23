@@ -41,7 +41,7 @@ DROP TABLE t
 # Demonstrate manual flow for non-trivial column change
 subtest ManualGeneralChange
 
-statement ok
+statement defaultFamily
 CREATE TABLE t (a INT PRIMARY KEY, b STRING)
 
 statement ok

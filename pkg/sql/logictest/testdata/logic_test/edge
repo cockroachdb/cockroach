@@ -6,7 +6,8 @@
 # in the parse or normalization phases, forcing it to be handled by the
 # execution engine itself.
 
-statement ok
+# TODO(mjibson): remove defaultFamily after #41007 is fixed.
+statement defaultFamily
 CREATE TABLE t (
     key
         STRING PRIMARY KEY,

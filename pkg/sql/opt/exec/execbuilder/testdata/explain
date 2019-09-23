@@ -509,7 +509,7 @@ limit                ·            ·
 ·                    table        t@primary
 ·                    spans        ALL
 
-statement ok
+statement defaultFamily
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
 query TTTTT

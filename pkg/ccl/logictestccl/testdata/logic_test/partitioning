@@ -379,7 +379,7 @@ CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (uuid_v4() || 'foo')
 )
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok1 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1),
     PARTITION p2 VALUES IN (2)
@@ -420,7 +420,7 @@ TABLE ok1
            └── (2)
 scan ok1
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok2 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN ((1)),
     PARTITION p2 VALUES IN (((2)))
@@ -456,7 +456,7 @@ TABLE ok2
            └── (2)
 scan ok2
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok3 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1),
     PARTITION p2 VALUES IN (DEFAULT)
@@ -491,7 +491,7 @@ TABLE ok3
            └── (1)
 scan ok3
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok4 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
     PARTITION p1 VALUES IN ((1, 1)),
     PARTITION p2 VALUES IN ((1, DEFAULT)),
@@ -532,7 +532,7 @@ TABLE ok4
            └── (2, 3)
 scan ok4
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok5 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1) PARTITION BY LIST (b) (
         PARTITION p1_1 VALUES IN (1),
@@ -580,7 +580,7 @@ ok5  CREATE TABLE ok5 (
 )
 -- Warning: Partitioned table with no zone configurations.
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok6 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (0) TO (1),
     PARTITION p2 VALUES FROM (1) TO (2)
@@ -613,7 +613,7 @@ TABLE ok6
       └── b int not null
 scan ok6
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok7 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM ((0)) TO (((1)))
 )
@@ -644,7 +644,7 @@ TABLE ok7
       └── b int not null
 scan ok7
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok8 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (MINVALUE) TO (1),
     PARTITION p2 VALUES FROM (1) TO (2),
@@ -679,7 +679,7 @@ TABLE ok8
       └── b int not null
 scan ok8
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok9 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
     PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, MAXVALUE),
     PARTITION p2 VALUES FROM (1, MAXVALUE) TO (3, MINVALUE),
@@ -716,7 +716,7 @@ TABLE ok9
       └── b int not null
 scan ok9
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok10 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
     PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, 1),
     PARTITION p2 VALUES FROM (1, 1) TO (1, MAXVALUE),
@@ -755,7 +755,7 @@ TABLE ok10
       └── b int not null
 scan ok10
 
-statement ok
+statement defaultFamily
 CREATE TABLE ok11 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1) PARTITION BY LIST (b) (
         PARTITION p1_1 VALUES IN (3) PARTITION BY LIST (c) (
@@ -806,7 +806,7 @@ TABLE ok11
            └── (6)
 scan ok11
 
-statement ok
+statement defaultFamily
 CREATE TABLE IF NOT EXISTS ok12 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION pu VALUES IN (NULL),
     PARTITION p1 VALUES IN (1),

@@ -335,7 +335,7 @@ aBcD
 
 # Test quoted collations.
 
-statement ok
+statement defaultFamily
 CREATE TABLE quoted_coll (
   a STRING COLLATE "en",
   b STRING COLLATE "en_US",
