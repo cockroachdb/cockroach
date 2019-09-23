@@ -29,7 +29,7 @@ func TestGC(t *testing.T) {
 
 	setFlags()
 
-	testLogGC(t, &logging, Infof)
+	testLogGC(t, &mainLog, Infof)
 }
 
 func TestSecondaryGC(t *testing.T) {
@@ -38,7 +38,7 @@ func TestSecondaryGC(t *testing.T) {
 
 	setFlags()
 
-	tmpDir, err := ioutil.TempDir(logging.logDir.String(), "gctest")
+	tmpDir, err := ioutil.TempDir(mainLog.logDir.String(), "gctest")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,20 +63,20 @@ func testLogGC(
 	logger *loggingT,
 	logFn func(ctx context.Context, format string, args ...interface{}),
 ) {
-	logging.mu.Lock()
-	logging.disableDaemons = true
+	mainLog.mu.Lock()
+	mainLog.disableDaemons = true
 	defer func(previous bool) {
-		logging.mu.Lock()
-		logging.disableDaemons = previous
-		logging.mu.Unlock()
-	}(logging.disableDaemons)
-	logging.mu.Unlock()
+		mainLog.mu.Lock()
+		mainLog.disableDaemons = previous
+		mainLog.mu.Unlock()
+	}(mainLog.disableDaemons)
+	mainLog.mu.Unlock()
 
 	const newLogFiles = 20
 
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
-	logging.noStderrRedirect = true
+	mainLog.noStderrRedirect = true
 
 	// Ensure the main log has at least one entry. This serves two
 	// purposes. One is to serve as baseline for the file size. The
