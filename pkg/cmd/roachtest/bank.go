@@ -202,13 +202,11 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	}
 }
 
-// startChaosMonkey picks a set of nodes and restarts them. If stopClients is set
-// all the clients are locked before the nodes are restarted.
+// startChaosMonkey picks a set of nodes and restarts them.
 func (s *bankState) startChaosMonkey(
 	ctx context.Context,
 	t *test,
 	c *cluster,
-	stopClients bool,
 	pickNodes func() []int,
 	consistentIdx int,
 ) {
@@ -237,12 +235,6 @@ func (s *bankState) startChaosMonkey(
 			// Pick nodes to be restarted.
 			nodes := pickNodes()
 
-			if stopClients {
-				// Prevent all clients from writing while nodes are being restarted.
-				for i := 0; i < len(s.clients); i++ {
-					s.clients[i].Lock()
-				}
-			}
 			t.l.Printf("round %d: restarting nodes %v\n", curRound, nodes)
 			for _, i := range nodes {
 				if s.done(ctx) {
@@ -252,15 +244,6 @@ func (s *bankState) startChaosMonkey(
 
 				c.Stop(ctx, c.Node(i))
 				c.Start(ctx, t, c.Node(i))
-				if stopClients {
-					// Reinitialize the client talking to the restarted node.
-					s.initClient(ctx, c, i)
-				}
-			}
-			if stopClients {
-				for i := 0; i < len(s.clients); i++ {
-					s.clients[i].Unlock()
-				}
 			}
 
 			preCount := s.counts()
@@ -457,7 +440,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		}
 		return nodes
 	}
-	s.startChaosMonkey(ctx, t, c, true, pickNodes, -1)
+	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
 
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
@@ -499,7 +482,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	pickNodes := func() []int {
 		return []int{1 + rnd.Intn(clientIdx)}
 	}
-	s.startChaosMonkey(ctx, t, c, false, pickNodes, clientIdx)
+	s.startChaosMonkey(ctx, t, c, pickNodes, clientIdx)
 
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
@@ -578,7 +561,7 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 	}
 
 	// Starting up the goroutines that restart and do splits and lease moves.
-	s.startChaosMonkey(ctx, t, c, false, pickNodes, -1)
+	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
 	s.startSplitMonkey(ctx, 2*time.Second, c)
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
