@@ -49,20 +49,24 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 	return p.extendedEvalCtx.VirtualSchemas
 }
 
-var errTableDropped = errors.New("table is being dropped")
 var errTableAdding = errors.New("table is being added")
+
+type inactiveTableError struct {
+	error
+}
 
 func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	switch tableDesc.State {
 	case sqlbase.TableDescriptor_DROP:
-		return errTableDropped
+		return inactiveTableError{errors.New("table is being dropped")}
+	case sqlbase.TableDescriptor_OFFLINE:
+		err := errors.Errorf("table %q is offline", tableDesc.Name)
+		if tableDesc.OfflineReason != "" {
+			err = errors.Errorf("table %q is offline: %s", tableDesc.Name, tableDesc.OfflineReason)
+		}
+		return inactiveTableError{err}
 	case sqlbase.TableDescriptor_ADD:
 		return errTableAdding
-	case sqlbase.TableDescriptor_OFFLINE:
-		if tableDesc.OfflineReason != "" {
-			return errors.Errorf("table %q is offline: %s", tableDesc.Name, tableDesc.OfflineReason)
-		}
-		return errors.Errorf("table %q is offline", tableDesc.Name)
 	case sqlbase.TableDescriptor_PUBLIC:
 		return nil
 	default:
@@ -284,7 +288,7 @@ func (tc *TableCollection) getTableVersion(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if err == errTableDropped || err == sqlbase.ErrDescriptorNotFound {
+		if _, ok := err.(inactiveTableError); ok || err == sqlbase.ErrDescriptorNotFound {
 			return readTableFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
