@@ -83,16 +83,16 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
 	mainLog.mu.Lock()
 	defer mainLog.mu.Unlock()
-	oldStderrThreshold := mainLog.stderrThreshold
+	oldStderrThreshold := logging.stderrThreshold
 	oldNoStderrRedirect := mainLog.noStderrRedirect
 
 	undo := func() {
 		mainLog.mu.Lock()
 		defer mainLog.mu.Unlock()
-		mainLog.stderrThreshold = oldStderrThreshold
+		logging.stderrThreshold = oldStderrThreshold
 		mainLog.noStderrRedirect = oldNoStderrRedirect
 	}
-	mainLog.stderrThreshold = stderrSeverity
+	logging.stderrThreshold = stderrSeverity
 	mainLog.noStderrRedirect = true
 	return undo, mainLog.logDir.Set(dir)
 }
@@ -179,14 +179,14 @@ func dirTestOverride(expected, newDir string) error {
 	return mainLog.closeFileLocked()
 }
 
-func (l *loggingT) closeFileLocked() error {
-	if l.file != nil {
-		if sb, ok := l.file.(*syncBuffer); ok {
+func (l *loggerT) closeFileLocked() error {
+	if l.mu.file != nil {
+		if sb, ok := l.mu.file.(*syncBuffer); ok {
 			if err := sb.file.Close(); err != nil {
 				return err
 			}
 		}
-		l.file = nil
+		l.mu.file = nil
 	}
 	return restoreStderr()
 }

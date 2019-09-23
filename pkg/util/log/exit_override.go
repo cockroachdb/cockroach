@@ -23,25 +23,28 @@ import (
 //
 // Call with a nil function to undo.
 func SetExitFunc(hideStack bool, f func(int)) {
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
-	mainLog.exitOverride.f = f
-	mainLog.exitOverride.hideStack = hideStack
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+
+	logging.mu.exitOverride.f = f
+	logging.mu.exitOverride.hideStack = hideStack
 }
 
 // ResetExitFunc undoes any prior call to SetExitFunc.
 func ResetExitFunc() {
-	mainLog.mu.Lock()
-	defer mainLog.mu.Unlock()
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 
-	mainLog.exitOverride.f = nil
-	mainLog.exitOverride.hideStack = false
+	logging.mu.exitOverride.f = nil
+	logging.mu.exitOverride.hideStack = false
 }
 
 // exitLocked is called if there is trouble creating or writing log files, or
 // writing to stderr. It flushes the logs and exits the program; there's no
-// point in hanging around. l.mu is held.
-func (l *loggingT) exitLocked(err error) {
+// point in hanging around.
+//
+// l.mu is held; logging.mu is not held.
+func (l *loggerT) exitLocked(err error) {
 	l.mu.AssertHeld()
 
 	// Either stderr or our log file is broken. Try writing the error to both
@@ -49,12 +52,12 @@ func (l *loggingT) exitLocked(err error) {
 	// why we crashed.
 	outputs := make([]io.Writer, 2)
 	outputs[0] = OrigStderr
-	if f, ok := l.file.(*syncBuffer); ok {
+	if f, ok := l.mu.file.(*syncBuffer); ok {
 		// Don't call syncBuffer's Write method, because it can call back into
 		// exitLocked. Go directly to syncBuffer's underlying writer.
 		outputs[1] = f.Writer
 	} else {
-		outputs[1] = l.file
+		outputs[1] = l.mu.file
 	}
 	for _, w := range outputs {
 		if w == nil {
@@ -68,8 +71,11 @@ func (l *loggingT) exitLocked(err error) {
 		return
 	}
 	l.flushAndSync(true /*doSync*/)
-	if l.exitOverride.f != nil {
-		l.exitOverride.f(2)
+	logging.mu.Lock()
+	f := logging.mu.exitOverride.f
+	logging.mu.Unlock()
+	if f != nil {
+		f(2)
 	} else {
 		os.Exit(2)
 	}
