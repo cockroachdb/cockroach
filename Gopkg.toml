@@ -159,3 +159,7 @@ ignored = [
   [[prune.project]]
     name = "github.com/knz/go-libedit"
     unused-packages = false
+
+[[constraint]]
+  name = "github.com/Azure/azure-sdk-for-go"
+  version = "33.0.0"
