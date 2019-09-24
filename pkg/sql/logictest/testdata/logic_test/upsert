@@ -373,12 +373,13 @@ upsert INTO upsert_returning VALUES (1, 5, 4, 3), (6, 5, 4, 3) RETURNING *
 statement ok
 COMMIT
 
-# For #22300. Test UPSERT ... RETURNING with UNION.
-query I rowsort
-SELECT a FROM [UPSERT INTO upsert_returning VALUES (7) RETURNING a] UNION VALUES (8)
-----
-7
-8
+# TODO(justin): reenable when we fix #35060 / #40853.
+## For #22300. Test UPSERT ... RETURNING with UNION.
+#query I rowsort
+#SELECT a FROM [UPSERT INTO upsert_returning VALUES (7) RETURNING a] UNION VALUES (8)
+#----
+#7
+#8
 
 # For #6710. Add an unused column to disable the fast path which doesn't have this bug.
 statement ok
