@@ -275,13 +275,11 @@ func (bg *mjBufferedGroup) Reset(types []coltypes.T, length int) {
 	execerror.VectorizedInternalPanic("Reset([]coltypes.T, int) should not be called on mjBufferedGroup")
 }
 
-// ResetInternalBatch implements the Batch interface.
+// ResetInternalBatch is not implemented because mjBufferedGroup is not meant
+// to be used by any operator other than the merge joiner, and it should be
+// using reset() instead.
 func (bg *mjBufferedGroup) ResetInternalBatch() {
-	for _, v := range bg.colVecs {
-		if v.Type() == coltypes.Bytes {
-			v.Bytes().Reset()
-		}
-	}
+	execerror.VectorizedInternalPanic("ResetInternalBatch() should not be called on mjBufferedGroup")
 }
 
 // reset resets the state of the buffered group so that we can reuse the
@@ -293,6 +291,9 @@ func (bg *mjBufferedGroup) reset() {
 		// We do not need to reset the column vectors because those will be just
 		// written over, but we do need to reset the nulls.
 		colVec.Nulls().UnsetNulls()
+		if colVec.Type() == coltypes.Bytes {
+			// Bytes type is the only exception to the comment above.
+			colVec.Bytes().Reset()
+		}
 	}
-	bg.ResetInternalBatch()
 }
