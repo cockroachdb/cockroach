@@ -7,6 +7,10 @@ start_test "Check cockroach demo telemetry and license check can be disabled"
 # set the proper environment variable
 set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "true"
 spawn $argv demo
+
+# Expect an informational message.
+eexpect "Telemetry and automatic license acquisition disabled by configuration."
+
 # wait for the CLI to start up
 eexpect "movr>"
 # send a request for an enterprise feature
@@ -16,4 +20,5 @@ eexpect "use of partitions requires an enterprise license"
 # clean up after the test
 interrupt
 eexpect eof
+
 end_test
