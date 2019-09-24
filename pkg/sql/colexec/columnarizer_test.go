@@ -18,10 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,6 +66,31 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 		batch.SetSelection(true)
 	}
 	require.Equal(t, nRows, foundRows)
+}
+
+func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	rb := distsqlutils.NewRowBuffer([]types.T{*types.Int}, nil /* rows */, distsqlutils.RowBufferArgs{})
+	flowCtx := &execinfra.FlowCtx{EvalCtx: &evalCtx}
+
+	const errMsg = "artificial error"
+	rb.Push(nil, &execinfrapb.ProducerMetadata{Err: errors.New(errMsg)})
+	c, err := NewColumnarizer(ctx, flowCtx, 0 /* processorID */, rb)
+	require.NoError(t, err)
+
+	// Calling DrainMeta from the vectorized execution engine should propagate to
+	// non-vectorized components as calling ConsumerDone and then draining their
+	// metadata.
+	meta := c.DrainMeta(ctx)
+	require.True(t, len(meta) == 1)
+	require.True(t, testutils.IsError(meta[0].Err, errMsg))
+	require.True(t, rb.Done)
 }
 
 func BenchmarkColumnarize(b *testing.B) {
