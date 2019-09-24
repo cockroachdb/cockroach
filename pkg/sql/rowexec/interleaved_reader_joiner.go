@@ -14,11 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -280,6 +282,9 @@ func newInterleavedReaderJoiner(
 	if flowCtx.NodeID == 0 {
 		return nil, errors.AssertionFailedf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
 	}
+
+	// Increment some telemetry counters about use of the interleaved table join feature.
+	telemetry.Inc(sqltelemetry.InterleavedTableJoinCounter)
 
 	// TODO(richardwu): We can relax this to < 2 (i.e. permit 2+ tables).
 	// This will require modifying JoinerBase init logic.
