@@ -17,13 +17,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 // This URL grants a license that is valid for 24 hours.
-const licenseURL = "https://register.cockroachdb.com/api/license"
+const licenseDefaultURL = "https://register.cockroachdb.com/api/license"
+
+// We make licenseURL configurable for use in tests.
+var licenseURL = envutil.EnvOrDefaultString("COCKROACH_DEMO_LICENSE_URL", licenseDefaultURL)
 
 func getLicense(clusterID uuid.UUID) (string, error) {
 	client := &http.Client{
@@ -60,7 +64,7 @@ func getLicense(clusterID uuid.UUID) (string, error) {
 func getAndApplyLicense(db *gosql.DB, clusterID uuid.UUID, org string) (bool, error) {
 	license, err := getLicense(clusterID)
 	if err != nil {
-		fmt.Fprintf(log.OrigStderr, "error when contacting licensing server: %+v\n", err)
+		fmt.Fprintf(log.OrigStderr, "\nerror while contacting licensing server:\n%+v\n", err)
 		return false, nil
 	}
 	if _, err := db.Exec(`SET CLUSTER SETTING cluster.organization = $1`, org); err != nil {
