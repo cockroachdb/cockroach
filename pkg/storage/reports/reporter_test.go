@@ -804,7 +804,7 @@ func (b *systemConfigBuilder) addDBDesc(id int, dbDesc sqlbase.DatabaseDescripto
 // Test the constraint conformance report in a real cluster.
 func TestConstraintConformanceReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(andrei): flaky under stress")
+	t.Skip("#40919")
 
 	ctx := context.Background()
 	tc := serverutils.StartTestCluster(t, 5, base.TestClusterArgs{
