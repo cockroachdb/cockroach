@@ -4009,10 +4009,8 @@ func (s *Store) tryGetOrCreateReplica(
 		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 	); err != nil {
 		return nil, false, err
-	} else if ok {
-		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-			return nil, false, &roachpb.RaftGroupDeletedError{}
-		}
+	} else if ok && replicaID != 0 && replicaID < tombstone.NextReplicaID {
+		return nil, false, &roachpb.RaftGroupDeletedError{}
 	}
 
 	// Create a new replica and lock it for raft processing.
@@ -4040,25 +4038,40 @@ func (s *Store) tryGetOrCreateReplica(
 		return nil, false, errRetry
 	}
 	s.mu.uninitReplicas[repl.RangeID] = repl
-	s.mu.Unlock()
+	s.mu.Unlock() // NB: unlocking out of order
 
-	// An uninitiazlied replica should have an empty HardState.Commit at
-	// all times. Failure to maintain this invariant indicates corruption.
-	// And yet, we have observed this in the wild. See #40213.
-	if hs, err := repl.mu.stateLoader.LoadHardState(ctx, s.Engine()); err != nil {
-		repl.mu.Unlock()
-		repl.raftMu.Unlock()
-		return nil, false, err
-	} else if hs.Commit != 0 {
-		log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica %s. HS=%+v", repl, hs)
-	}
+	// Initialize the Replica with the replicaID.
+	if err := func() error {
+		// Check for a tombstone again now that we've inserted into the Range
+		// map. This double-checked locking ensures that we avoid a race where a
+		// replica is created and destroyed between the initial unsynchronized
+		// tombstone check and the Range map linearization point. By checking
+		// again now, we make sure to synchronize with any goroutine that wrote
+		// a tombstone and then removed an old replica from the Range map.
+		if ok, err := engine.MVCCGetProto(
+			ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+		); err != nil {
+			return err
+		} else if ok && replicaID != 0 && replicaID < tombstone.NextReplicaID {
+			return &roachpb.RaftGroupDeletedError{}
+		}
 
-	desc := &roachpb.RangeDescriptor{
-		RangeID: rangeID,
-		// TODO(bdarnell): other fields are unknown; need to populate them from
-		// snapshot.
-	}
-	if err := repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID); err != nil {
+		// An uninitiazlied replica should have an empty HardState.Commit at
+		// all times. Failure to maintain this invariant indicates corruption.
+		// And yet, we have observed this in the wild. See #40213.
+		if hs, err := repl.mu.stateLoader.LoadHardState(ctx, s.Engine()); err != nil {
+			return err
+		} else if hs.Commit != 0 {
+			log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica %s. HS=%+v", repl, hs)
+		}
+
+		desc := &roachpb.RangeDescriptor{
+			RangeID: rangeID,
+			// NB: other fields are unknown; need to populate them from
+			// snapshot.
+		}
+		return repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID)
+	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
