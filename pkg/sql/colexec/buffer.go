@@ -25,9 +25,8 @@ type bufferOp struct {
 	input Operator
 
 	// read is true if someone has read the current batch already.
-	read     bool
-	batch    *selectionBatch
-	batchLen uint16
+	read  bool
+	batch *selectionBatch
 }
 
 var _ StaticMemoryOperator = &bufferOp{}
@@ -65,8 +64,7 @@ func (b *bufferOp) rewind() {
 // for reads.
 func (b *bufferOp) advance(ctx context.Context) {
 	b.batch.Batch = b.input.Next(ctx)
-	b.batchLen = b.batch.Length()
-	b.read = false
+	b.rewind()
 }
 
 func (b *bufferOp) Next(ctx context.Context) coldata.Batch {
