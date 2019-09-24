@@ -71,8 +71,9 @@ func (d *mysqloutfileReader) readFile(
 	var count int64 = 1
 
 	var row []tree.Datum
-	// the current field being read.
-	var field []byte
+	// The current field being read needs to be a list to be able to undo
+	// field enclosures at end of field.
+	var fieldParts []rune
 
 	// If we have an escaping char defined, seeing it means the next char is to be
 	// treated as escaped -- usually that means literal but has some specific
@@ -83,11 +84,15 @@ func (d *mysqloutfileReader) readFile(
 	// which means we do not look for separators until we see the end of the field
 	// as indicated by the matching enclosing char.
 	var readingField bool
+	// If we have just encountered a potential encloser symbol.
+	// That means if a end of field or line is next we should honor it.
+	var gotEncloser bool
 
 	var gotNull bool
 
 	reader := bufio.NewReaderSize(input, 1024*64)
 	addField := func() error {
+		field := string(fieldParts)
 		if len(row) >= len(d.conv.VisibleCols) {
 			return makeRowErr(inputName, count, pgcode.Syntax,
 				"too many columns, expected %d: %#v", len(d.conv.VisibleCols), row)
@@ -95,14 +100,14 @@ func (d *mysqloutfileReader) readFile(
 		if gotNull {
 			if len(field) != 0 {
 				return makeRowErr(inputName, count, pgcode.Syntax,
-					"unexpected data after null encoding: %s", field)
+					"unexpected data after null encoding: %v", row)
 			}
 			row = append(row, tree.DNull)
 			gotNull = false
-		} else if !d.opts.HasEscape && string(field) == "NULL" {
+		} else if !d.opts.HasEscape && field == "NULL" {
 			row = append(row, tree.DNull)
 		} else {
-			datum, err := tree.ParseStringAs(d.conv.VisibleColTypes[len(row)], string(field), d.conv.EvalCtx)
+			datum, err := tree.ParseStringAs(d.conv.VisibleColTypes[len(row)], field, d.conv.EvalCtx)
 			if err != nil {
 				col := d.conv.VisibleCols[len(row)]
 				return wrapRowErr(err, inputName, count, pgcode.Syntax,
@@ -111,7 +116,7 @@ func (d *mysqloutfileReader) readFile(
 
 			row = append(row, datum)
 		}
-		field = field[:0]
+		fieldParts = fieldParts[:0]
 		return nil
 	}
 	addRow := func() error {
@@ -138,10 +143,21 @@ func (d *mysqloutfileReader) readFile(
 			if nextLiteral {
 				return makeRowErr(inputName, count, pgcode.Syntax, "unmatched literal")
 			}
-			if readingField {
-				return makeRowErr(inputName, count, pgcode.Syntax, "unmatched field enclosure")
+			// If previous symbol was field encloser it should be
+			// dropped as it only marks end of field. Otherwise
+			// throw an error since we don;t expect unmatched encloser.
+			if gotEncloser {
+				if readingField {
+					fieldParts = fieldParts[:len(fieldParts)-1]
+				} else {
+					return makeRowErr(inputName, count, pgcode.Syntax,
+						"unmatched field enclosure at end of field")
+				}
+			} else if readingField {
+				return makeRowErr(inputName, count, pgcode.Syntax,
+					"unmatched field enclosure at start of field")
 			}
-			if len(field) > 0 {
+			if len(fieldParts) > 0 {
 				if err := addField(); err != nil {
 					return err
 				}
@@ -158,6 +174,7 @@ func (d *mysqloutfileReader) readFile(
 		if err != nil {
 			return err
 		}
+
 		if c == unicode.ReplacementChar && w == 1 {
 			if err := reader.UnreadRune(); err != nil {
 				return err
@@ -166,7 +183,8 @@ func (d *mysqloutfileReader) readFile(
 			if err != nil {
 				return err
 			}
-			field = append(field, raw)
+			fieldParts = append(fieldParts, rune(raw))
+			gotEncloser = false
 			continue
 		}
 
@@ -177,45 +195,50 @@ func (d *mysqloutfileReader) readFile(
 				// See https://dev.mysql.com/doc/refman/8.0/en/load-data.html.
 				switch c {
 				case '0':
-					field = append(field, byte(0))
+					fieldParts = append(fieldParts, rune(0))
 				case 'b':
-					field = append(field, '\b')
+					fieldParts = append(fieldParts, rune('\b'))
 				case 'n':
-					field = append(field, '\n')
+					fieldParts = append(fieldParts, rune('\n'))
 				case 'r':
-					field = append(field, '\r')
+					fieldParts = append(fieldParts, rune('\r'))
 				case 't':
-					field = append(field, '\t')
+					fieldParts = append(fieldParts, rune('\t'))
 				case 'Z':
-					field = append(field, byte(26))
+					fieldParts = append(fieldParts, rune(byte(26)))
 				case 'N':
 					if gotNull {
 						return makeRowErr(inputName, count, pgcode.Syntax, "unexpected null encoding")
 					}
 					gotNull = true
 				default:
-					field = append(field, string(c)...)
+					fieldParts = append(fieldParts, c)
 				}
+				gotEncloser = false
 				continue
 			}
 
 			if c == d.opts.Escape {
 				nextLiteral = true
+				gotEncloser = false
 				continue
 			}
 		}
 
-		// If enclosing is not disabled, check for the encloser.
-		// Technically when it is not optional, we could _require_ it to start and
-		// end fields, but for the purposes of decoding, we don't actually care --
-		// we'll handle it if we see it either way.
-		if d.opts.Enclose != roachpb.MySQLOutfileOptions_Never && c == d.opts.Encloser {
-			readingField = !readingField
-			continue
-		}
-
 		// Are we done with the field, or even the whole row?
-		if !readingField && (c == d.opts.FieldSeparator || c == d.opts.RowSeparator) {
+		if (!readingField || gotEncloser) &&
+			(c == d.opts.FieldSeparator || c == d.opts.RowSeparator) {
+			if gotEncloser {
+				// If the encloser marked end of field
+				// drop it.
+				if readingField {
+					fieldParts = fieldParts[:len(fieldParts)-1]
+				} else {
+					// Unexpected since we did not see one at start of field.
+					return makeRowErr(inputName, count, pgcode.Syntax,
+						"unmatched field enclosure at end of field")
+				}
+			}
 			if err := addField(); err != nil {
 				return err
 			}
@@ -224,11 +247,28 @@ func (d *mysqloutfileReader) readFile(
 					return err
 				}
 			}
+			readingField = false
+			gotEncloser = false
 			continue
 		}
 
-		field = append(field, string(c)...)
-	}
+		if gotEncloser {
+			gotEncloser = false
+		}
 
+		// If enclosing is not disabled, check for the encloser.
+		// Technically when it is not optional, we could _require_ it to start and
+		// end fields, but for the purposes of decoding, we don't actually care --
+		// we'll handle it if we see it either way.
+		if d.opts.Enclose != roachpb.MySQLOutfileOptions_Never && c == d.opts.Encloser {
+			if !readingField && len(fieldParts) == 0 {
+				readingField = true
+				continue
+			}
+			gotEncloser = true
+		}
+
+		fieldParts = append(fieldParts, c)
+	}
 	return d.conv.SendBatch(ctx)
 }
