@@ -901,15 +901,34 @@ func (p *filterPlanningState) remapIVars(expr execinfrapb.Expression) execinfrap
 		ret.Expr = expr.Expr
 		// We iterate in the reverse order so that the multiple digit numbers are
 		// handled correctly (consider an expression like @1 AND @11).
+		//
+		// In order not to confuse the newly replaced ordinals with the original
+		// ones we first remap all ordinals using "custom" ordinal symbol first
+		// (namely, instead of using `@1` we will use `@#1`). Consider an example
+		// `@2 = @4` with p.idxVarMap = {-1, 0, -1, 1}. If we didn't do this custom
+		// ordinal remapping, then we would get into a situation of `@2 = @2` in
+		// which the first @2 is original and needs to be replaced whereas the
+		// second one should not be touched. After the first loop, we will have
+		// `@#1 = @#2`.
 		for idx := len(p.indexVarMap) - 1; idx >= 0; idx-- {
 			if p.indexVarMap[idx] != -1 {
 				// We need +1 below because the ordinals are counting from 1.
 				ret.Expr = strings.ReplaceAll(
 					ret.Expr,
 					fmt.Sprintf("@%d", idx+1),
-					fmt.Sprintf("@%d", p.indexVarMap[idx]+1),
+					fmt.Sprintf("@#%d", p.indexVarMap[idx]+1),
 				)
 			}
+		}
+		// Now we simply need to convert the "custom" ordinal symbol by removing
+		// the pound sign (in the example above, after this loop we will have
+		// `@1 = @2`).
+		for idx := len(p.indexVarMap); idx > 0; idx-- {
+			ret.Expr = strings.ReplaceAll(
+				ret.Expr,
+				fmt.Sprintf("@#%d", idx),
+				fmt.Sprintf("@%d", idx),
+			)
 		}
 	}
 	return ret
