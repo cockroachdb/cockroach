@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,7 +32,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(yuzefovich): add unit tests for cases with ON expression.
 type hjTestCase struct {
 	leftTypes  []coltypes.T
 	rightTypes []coltypes.T
@@ -45,13 +45,15 @@ type hjTestCase struct {
 	leftOutCols  []uint32
 	rightOutCols []uint32
 
-	buildRightSide bool
-	buildDistinct  bool
-
 	// The default joinType is sqlbase.JoinType_INNER if this value is not set.
 	joinType sqlbase.JoinType
 
+	leftEqColsAreKey  bool
+	rightEqColsAreKey bool
+
 	expectedTuples tuples
+
+	onExpr execinfrapb.Expression
 }
 
 var (
@@ -93,8 +95,9 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:      sqlbase.JoinType_FULL_OUTER,
-			buildDistinct: true,
+			joinType:          sqlbase.JoinType_FULL_OUTER,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{nil, -1},
@@ -127,8 +130,9 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:      sqlbase.JoinType_LEFT_OUTER,
-			buildDistinct: true,
+			joinType:          sqlbase.JoinType_LEFT_OUTER,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{1, 1},
@@ -157,8 +161,9 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:      sqlbase.JoinType_RIGHT_OUTER,
-			buildDistinct: true,
+			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{1, 1},
@@ -182,6 +187,9 @@ func init() {
 			rightEqCols:  []uint32{0},
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
+
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: false,
 
 			expectedTuples: tuples{
 				{0},
@@ -207,6 +215,10 @@ func init() {
 			rightEqCols:  []uint32{0},
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
+			// Note that although right equality columns are key, we want to test
+			// null handling on the build column, so we "lie" here.
+			leftEqColsAreKey:  false,
+			rightEqColsAreKey: false,
 
 			expectedTuples: tuples{
 				{1},
@@ -235,6 +247,9 @@ func init() {
 			rightEqCols:  []uint32{0},
 			leftOutCols:  []uint32{1},
 			rightOutCols: []uint32{1},
+
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{nil, 2},
@@ -267,7 +282,8 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
 
-			buildDistinct: false,
+			leftEqColsAreKey:  false,
+			rightEqColsAreKey: false,
 
 			expectedTuples: tuples{
 				{2},
@@ -299,6 +315,9 @@ func init() {
 			rightEqCols:  []uint32{0, 1},
 			leftOutCols:  []uint32{2},
 			rightOutCols: []uint32{2},
+
+			leftEqColsAreKey:  false,
+			rightEqColsAreKey: false,
 
 			expectedTuples: tuples{
 				{3, 7},
@@ -339,8 +358,10 @@ func init() {
 			rightEqCols:  []uint32{0},
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
-
-			buildDistinct: false,
+			// Note that although right equality columns are key, we want to test
+			// handling of collisions, so we "lie" here.
+			leftEqColsAreKey:  false,
+			rightEqColsAreKey: false,
 
 			expectedTuples: tuples{
 				{hashTableBucketSize, hashTableBucketSize},
@@ -379,7 +400,8 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
 
-			buildDistinct: false,
+			leftEqColsAreKey:  false,
+			rightEqColsAreKey: false,
 
 			expectedTuples: tuples{
 				{1},
@@ -415,7 +437,8 @@ func init() {
 			leftOutCols:  []uint32{1, 2},
 			rightOutCols: []uint32{0, 2},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{2, "foo", 2, int32(2)},
@@ -446,7 +469,8 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{0},
@@ -479,7 +503,8 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: false,
 
 			expectedTuples: tuples{
 				{1, 1},
@@ -515,7 +540,8 @@ func init() {
 			leftOutCols:  []uint32{0, 1, 2},
 			rightOutCols: []uint32{1},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{0, 2, 30, 100},
@@ -549,7 +575,8 @@ func init() {
 			leftOutCols:  []uint32{0, 1, 2},
 			rightOutCols: []uint32{},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{20, 0, hashTableBucketSize},
@@ -584,7 +611,8 @@ func init() {
 			leftOutCols:  []uint32{5},
 			rightOutCols: []uint32{},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{"ccc"},
@@ -615,10 +643,12 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{float64(55.55555)},
+				{float64(44.4444)},
 				{float64(44.4444)},
 				{float64(33.333)},
 			},
@@ -645,8 +675,8 @@ func init() {
 			leftOutCols:  []uint32{0, 1, 2, 3},
 			rightOutCols: []uint32{0, 1, 2, 3},
 
-			buildRightSide: true,
-			buildDistinct:  true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{3, 3, 2, 2, 1, 2, 3, 4},
@@ -675,7 +705,8 @@ func init() {
 			leftOutCols:  []uint32{},
 			rightOutCols: []uint32{0},
 
-			buildDistinct: true,
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{decs[2]},
@@ -705,40 +736,136 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{},
 
+			leftEqColsAreKey:  false,
+			rightEqColsAreKey: false,
+
 			expectedTuples: tuples{
 				{0},
 				{0},
 				{1},
 			},
 		},
+		{
+			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
+
+			// Test ON expression.
+			leftTuples: tuples{
+				{1, nil},
+				{2, nil},
+				{3, 1},
+				{4, 2},
+			},
+			rightTuples: tuples{
+				{1, 2},
+				{2, nil},
+				{3, nil},
+				{4, 4},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{1},
+			rightOutCols: []uint32{1},
+
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
+
+			onExpr: execinfrapb.Expression{Expr: "@1 + @3 > 2 AND @1 + @3 < 8"},
+			expectedTuples: tuples{
+				{nil, nil},
+				{1, nil},
+			},
+		},
+		{
+			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
+
+			// Test ON expression.
+			leftTuples: tuples{
+				{1, nil},
+				{2, nil},
+				{3, 1},
+				{4, 2},
+			},
+			rightTuples: tuples{
+				{1, 2},
+				{2, nil},
+				{3, nil},
+				{4, 4},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{1},
+			rightOutCols: []uint32{1},
+
+			leftEqColsAreKey:  true,
+			rightEqColsAreKey: true,
+
+			onExpr: execinfrapb.Expression{Expr: "@1 + @3 + @4 < 100"},
+			expectedTuples: tuples{
+				{nil, 2},
+				{2, 4},
+			},
+		},
+	}
+}
+
+func createSpecForHashJoiner(tc hjTestCase) *execinfrapb.ProcessorSpec {
+	hjSpec := &execinfrapb.HashJoinerSpec{
+		LeftEqColumns:        tc.leftEqCols,
+		RightEqColumns:       tc.rightEqCols,
+		LeftEqColumnsAreKey:  tc.leftEqColsAreKey,
+		RightEqColumnsAreKey: tc.rightEqColsAreKey,
+		OnExpr:               tc.onExpr,
+		Type:                 tc.joinType,
+	}
+	projection := make([]uint32, 0, len(tc.leftOutCols)+len(tc.rightOutCols))
+	for _, outCol := range tc.leftOutCols {
+		projection = append(projection, outCol)
+	}
+	rColOffset := uint32(len(tc.leftTypes))
+	for _, outCol := range tc.rightOutCols {
+		projection = append(projection, rColOffset+outCol)
+	}
+	return &execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{
+			{ColumnTypes: typeconv.ToColumnTypes(tc.leftTypes)},
+			{ColumnTypes: typeconv.ToColumnTypes(tc.rightTypes)},
+		},
+		Core: execinfrapb.ProcessorCoreUnion{
+			HashJoiner: hjSpec,
+		},
+		Post: execinfrapb.PostProcessSpec{
+			Projection:    true,
+			OutputColumns: projection,
+		},
 	}
 }
 
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg:     &execinfra.ServerConfig{Settings: st},
+	}
+
 	for _, tc := range tcs {
 		inputs := []tuples{tc.leftTuples, tc.rightTuples}
-
-		buildFlags := []bool{false}
-		if tc.buildDistinct {
-			buildFlags = append(buildFlags, true)
-		}
-
-		for _, buildDistinct := range buildFlags {
-			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
-				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
-					leftSource, rightSource := sources[0], sources[1]
-					return NewEqHashJoinerOp(
-						leftSource, rightSource,
-						tc.leftEqCols, tc.rightEqCols,
-						tc.leftOutCols, tc.rightOutCols,
-						tc.leftTypes, tc.rightTypes,
-						tc.buildRightSide, tc.buildDistinct,
-						tc.joinType)
-				})
-			})
-
-		}
+		runTests(t, inputs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
+			spec := createSpecForHashJoiner(tc)
+			result, err := NewColOperator(ctx, flowCtx, spec, sources)
+			if err != nil {
+				return nil, err
+			}
+			return result.Op, nil
+		})
 	}
 }
 
@@ -752,7 +879,7 @@ func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
 			tc.leftEqCols, tc.rightEqCols,
 			tc.leftOutCols, tc.rightOutCols,
 			tc.leftTypes, tc.rightTypes,
-			tc.buildRightSide, tc.buildDistinct,
+			tc.rightEqColsAreKey, tc.leftEqColsAreKey || tc.rightEqColsAreKey,
 			tc.joinType)
 		require.NoError(t, err)
 		hjOp.Init()
