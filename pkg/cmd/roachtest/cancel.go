@@ -56,8 +56,8 @@ func registerCancel(r *testRegistry) {
 			t.Status("running queries to cancel")
 			for _, q := range queries {
 				sem := make(chan struct{}, 1)
-				go func() {
-					fmt.Printf("executing \"%s\"\n", q)
+				go func(q string) {
+					t.l.Printf("executing \"%s\"\n", q)
 					sem <- struct{}{}
 					_, err := conn.Exec(queryPrefix + q)
 					if err == nil {
@@ -67,7 +67,7 @@ func registerCancel(r *testRegistry) {
 						fmt.Printf("query failed with error: %s\n", err)
 					}
 					sem <- struct{}{}
-				}()
+				}(q)
 
 				<-sem
 
