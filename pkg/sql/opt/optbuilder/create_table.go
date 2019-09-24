@@ -48,8 +48,10 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 			b.qualifyDataSourceNamesInAST = false
 		}()
 
+		b.pushWithFrame()
 		// Build the input query.
 		outScope := b.buildSelect(ct.AsSource, nil /* desiredTypes */, inScope, rootBuildCtx)
+		b.popWithFrame(outScope)
 
 		numColNames := 0
 		for i := 0; i < len(ct.Defs); i++ {

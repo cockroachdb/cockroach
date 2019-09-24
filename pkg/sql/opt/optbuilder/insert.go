@@ -154,9 +154,8 @@ func init() {
 // ON CONFLICT clause is present, since it joins a new set of rows to the input
 // and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope, ctx buildCtx) (outScope *scope) {
-	var ctes []cteSource
 	if ins.With != nil {
-		inScope, ctes = b.buildCTE(ins.With.CTEList, inScope, ctx)
+		inScope = b.buildCTE(ins.With.CTEList, inScope, ctx)
 	}
 
 	// INSERT INTO xx AS yy - we want to know about xx (tn) because
@@ -310,8 +309,6 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope, ctx buildCtx) (o
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
 	}
-
-	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
 
 	return mb.outScope
 }

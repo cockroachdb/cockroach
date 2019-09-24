@@ -74,9 +74,8 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope, ctx buildCtx) (o
 		panic(pgerror.DangerousStatementf("UPDATE without WHERE clause"))
 	}
 
-	var ctes []cteSource
 	if upd.With != nil {
-		inScope, ctes = b.buildCTE(upd.With.CTEList, inScope, ctx)
+		inScope = b.buildCTE(upd.With.CTEList, inScope, ctx)
 	}
 
 	// UPDATE xx AS yy - we want to know about xx (tn) because
@@ -121,8 +120,6 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope, ctx buildCtx) (o
 	} else {
 		mb.buildUpdate(nil /* returning */)
 	}
-
-	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
 
 	return mb.outScope
 }

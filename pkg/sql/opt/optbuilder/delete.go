@@ -39,9 +39,8 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope, ctx buildCtx) (o
 			"DELETE statement requires LIMIT when ORDER BY is used"))
 	}
 
-	var ctes []cteSource
 	if del.With != nil {
-		inScope, ctes = b.buildCTE(del.With.CTEList, inScope, ctx)
+		inScope = b.buildCTE(del.With.CTEList, inScope, ctx)
 	}
 
 	// DELETE FROM xx AS yy - we want to know about xx (tn) because
@@ -76,8 +75,6 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope, ctx buildCtx) (o
 	} else {
 		mb.buildDelete(nil /* returning */)
 	}
-
-	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
 
 	return mb.outScope
 }
