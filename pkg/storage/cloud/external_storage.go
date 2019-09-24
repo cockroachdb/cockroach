@@ -242,6 +242,10 @@ func URINeedsGlobExpansion(uri string) bool {
 	return strings.ContainsAny(uri, "*?[")
 }
 
+// ExternalStorageFactory describes a factory function for ExternalStorage.
+type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
+type ExternalStorageFromURIFactory func(ctx context.Context, uri string) (ExternalStorage, error)
+
 // ExternalStorage provides functions to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
 // Generally an implementation is instantiated pointing to some base path or
