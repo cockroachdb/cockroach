@@ -712,7 +712,7 @@ func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel 
 
 func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relational) {
 	// Copy over the props from the input.
-	*rel = *with.Input.Relational()
+	inputProps := with.Input.Relational()
 
 	BuildSharedProps(b.mem, with, &rel.Shared)
 
@@ -723,77 +723,72 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 
 	// Output Columns
 	// --------------
-	// Passed through from the call above to b.buildProps.
+	// Inherited from the input expression.
+	rel.OutputCols = inputProps.OutputCols
 
 	// Not Null Columns
 	// ----------------
-	// Passed through from the call above to b.buildProps.
+	// Inherited from the input expression.
+	rel.NotNullCols = inputProps.NotNullCols
 
 	// Outer Columns
 	// -------------
-	// Passed through from the call above to b.buildProps.
+	// The outer columns are the union of the outer columns from Binding or Input,
+	// which is what is computed by the call to BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
-	// Passed through from the call above to b.buildProps.
+	rel.FuncDeps = inputProps.FuncDeps
 
 	// Cardinality
 	// -----------
-	// Passed through from the call above to b.buildProps.
+	rel.Cardinality = inputProps.Cardinality
 
 	// Statistics
 	// ----------
-	// Passed through from the call above to b.buildProps.
+	// Inherited from the input expression.
+	rel.Stats = inputProps.Stats
 }
 
-func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.Relational) {
-	// WithScan inherits most of the logical properties of the expression it
-	// references.
-	*rel = *ref.BindingProps
-
-	// Things like PruneCols are not valid here.
-	rel.Rule = props.Relational{}.Rule
-
-	// Has Placeholder
-	// ---------------
-	// Overwrite this from the copied props.
-	rel.HasPlaceholder = false
+func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, withScan, &rel.Shared)
+	bindingProps := withScan.BindingProps
 
 	// Side Effects
 	// ------------
-	// Overwrite this from the copied props.
-	rel.CanHaveSideEffects = false
+	// WithScan has no side effects (even if the original expression had them).
 
 	// Output Columns
 	// --------------
-	rel.OutputCols = ref.OutCols.ToSet()
+	rel.OutputCols = withScan.OutCols.ToSet()
 
 	// Not Null Columns
 	// ----------------
-	rel.NotNullCols = translateColSet(rel.NotNullCols, ref.InCols, ref.OutCols)
+	rel.NotNullCols = translateColSet(bindingProps.NotNullCols, withScan.InCols, withScan.OutCols)
 
 	// Outer Columns
 	// -------------
-	rel.OuterCols = opt.ColSet{}
+	// No outer columns.
 
 	// Functional Dependencies
 	// -----------------------
-	rel.FuncDeps = props.FuncDepSet{}
-	rel.FuncDeps.CopyFrom(&ref.BindingProps.FuncDeps)
-	for i := range ref.InCols {
-		rel.FuncDeps.AddEquivalency(ref.InCols[i], ref.OutCols[i])
+	// Inherit dependencies from the referenced expression (remapping the
+	// columns).
+	rel.FuncDeps.CopyFrom(&bindingProps.FuncDeps)
+	for i := range withScan.InCols {
+		rel.FuncDeps.AddEquivalency(withScan.InCols[i], withScan.OutCols[i])
 	}
-	rel.FuncDeps.ProjectCols(ref.OutCols.ToSet())
+	rel.FuncDeps.ProjectCols(withScan.OutCols.ToSet())
 
 	// Cardinality
 	// -----------
-	// Copied from the referenced expression.
+	// Inherit from the referenced expression.
+	rel.Cardinality = bindingProps.Cardinality
 
 	// Statistics
 	// ----------
-	rel.Stats = props.Statistics{}
 	if !b.disableStats {
-		b.sb.buildWithScan(ref, rel)
+		b.sb.buildWithScan(withScan, rel)
 	}
 }
 

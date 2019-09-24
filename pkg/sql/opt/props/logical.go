@@ -435,6 +435,9 @@ func (s *Shared) Verify() {
 	if s.HasCorrelatedSubquery && !s.HasSubquery {
 		panic(errors.AssertionFailedf("HasSubquery cannot be false if HasCorrelatedSubquery is true"))
 	}
+	if s.CanMutate && !s.CanHaveSideEffects {
+		panic(errors.AssertionFailedf("CanHaveSideEffects cannot be false if CanMutate is true"))
+	}
 }
 
 // Verify runs consistency checks against the relational properties, in order to
