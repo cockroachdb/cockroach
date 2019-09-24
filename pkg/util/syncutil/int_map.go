@@ -332,8 +332,12 @@ func (m *IntMap) Range(f func(key int64, value unsafe.Pointer) bool) {
 		m.mu.Lock()
 		read = m.getRead()
 		if read.amended {
-			read = readOnly{m: m.dirty}
-			atomic.StorePointer(&m.read, unsafe.Pointer(&read))
+			// Don't let read escape directly, otherwise it will allocate even
+			// when read.amended is false. Instead, constrain the allocation to
+			// just this branch.
+			newRead := &readOnly{m: m.dirty}
+			atomic.StorePointer(&m.read, unsafe.Pointer(newRead))
+			read = *newRead
 			m.dirty = nil
 			m.misses = 0
 		}
