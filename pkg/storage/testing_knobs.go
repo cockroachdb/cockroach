@@ -50,8 +50,7 @@ type StoreTestingKnobs struct {
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
 	// not be applied. If it returns an error on some replicas but not
-	// others, the behavior is poorly defined unless that error is a
-	// ReplicaCorruptionError.
+	// others, the behavior is poorly defined.
 	TestingApplyFilter storagebase.ReplicaApplyFilter
 
 	// TestingPostApplyFilter is called after a command is applied to
@@ -139,6 +138,13 @@ type StoreTestingKnobs struct {
 	// DisableRefreshReasonTicks disables refreshing pending commands
 	// periodically.
 	DisableRefreshReasonTicks bool
+	// DisableEagerReplicaRemoval prevents the Replica from destroying itself
+	// when it encounters a ChangeReplicasTrigger which would remove it or when
+	// a ReplicaTooOldError in a RaftMessageResponse would lead to removal.
+	// This option can lead to nasty cases during shutdown where a replica will
+	// spin attempting to acquire a split or merge lock on a RHS which will
+	// always fail and is generally not safe but is useful for testing.
+	DisableEagerReplicaRemoval bool
 	// RefreshReasonTicksPeriod overrides the default period over which
 	// pending commands are refreshed. The period is specified as a multiple
 	// of Raft group ticks.
