@@ -1835,5 +1835,9 @@ func (c *CustomFuncs) deriveWithUses(r opt.Expr) map[opt.WithID]int {
 		}
 	}
 
+	if w, ok := r.(*memo.WithExpr); ok {
+		delete(result, w.ID)
+	}
+
 	return result
 }

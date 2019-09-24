@@ -39,7 +39,9 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.qualifyDataSourceNamesInAST = false
 	}()
 
+	b.pushWithFrame()
 	defScope := b.buildSelect(cv.AsSource, nil /* desiredTypes */, inScope)
+	b.popWithFrame(defScope)
 
 	p := defScope.makePhysicalProps().Presentation
 	if len(cv.ColumnNames) != 0 {
