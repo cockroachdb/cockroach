@@ -31,11 +31,22 @@ type InputStatCollector struct {
 }
 
 var _ RowSource = &InputStatCollector{}
+var _ OpNode = &InputStatCollector{}
 
 // NewInputStatCollector creates a new InputStatCollector that wraps the given
 // input.
 func NewInputStatCollector(input RowSource) *InputStatCollector {
 	return &InputStatCollector{RowSource: input}
+}
+
+// ChildCount is part of the OpNode interface.
+func (isc *InputStatCollector) ChildCount() int {
+	return 1
+}
+
+// Child is part of the OpNode interface.
+func (isc *InputStatCollector) Child(nth int) OpNode {
+	return isc.RowSource.(OpNode)
 }
 
 // Next implements the RowSource interface. It calls Next on the embedded
