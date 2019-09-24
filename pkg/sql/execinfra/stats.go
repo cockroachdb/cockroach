@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,11 +32,27 @@ type InputStatCollector struct {
 }
 
 var _ RowSource = &InputStatCollector{}
+var _ OpNode = &InputStatCollector{}
 
 // NewInputStatCollector creates a new InputStatCollector that wraps the given
 // input.
 func NewInputStatCollector(input RowSource) *InputStatCollector {
 	return &InputStatCollector{RowSource: input}
+}
+
+// ChildCount is part of the OpNode interface.
+func (isc *InputStatCollector) ChildCount() int {
+	return 1
+}
+
+// Child is part of the OpNode interface.
+func (isc *InputStatCollector) Child(nth int) OpNode {
+	if nth == 0 {
+		return isc.RowSource.(OpNode)
+	}
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // Next implements the RowSource interface. It calls Next on the embedded
