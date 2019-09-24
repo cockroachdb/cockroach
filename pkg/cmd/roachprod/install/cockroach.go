@@ -203,6 +203,8 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 		if advertisePublicIP {
 			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(i+1)))
+		} else {
+			args = append(args, "--advertise-host=$(hostname -I)")
 		}
 
 		var keyCmd string
