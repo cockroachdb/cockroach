@@ -2453,6 +2453,9 @@ func ConvertLikeToRegexp(
 }
 
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
+	if left == DNull || right == DNull {
+		return DNull, nil
+	}
 	s, pattern := string(MustBeDString(left)), string(MustBeDString(right))
 	if len(s) == 0 {
 		// An empty string only matches with an empty pattern or a pattern
