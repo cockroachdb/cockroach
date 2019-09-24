@@ -85,8 +85,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
 		defer conv.inputFinished(ctx)
-
-		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, cp.flowCtx.Cfg.Settings)
+		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, cp.flowCtx.Cfg.ExternalStorage)
 	})
 
 	// Ingest the KVs that the producer emitted to the chan and the row result

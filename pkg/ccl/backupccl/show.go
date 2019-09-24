@@ -67,7 +67,7 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
-		desc, err := ReadBackupDescriptorFromURI(ctx, str, p.ExecCfg().Settings)
+		desc, err := ReadBackupDescriptorFromURI(ctx, str, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 		if err != nil {
 			return err
 		}
