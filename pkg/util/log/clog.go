@@ -1161,7 +1161,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	}
 
 	select {
-	case logging.gcNotify <- struct{}{}:
+	case sb.logger.gcNotify <- struct{}{}:
 	default:
 	}
 	return nil
