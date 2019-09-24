@@ -96,8 +96,8 @@ func verifyNodeLiveness(ctx context.Context, c *cluster, t *test, runDuration ti
 		t.Fatalf("not enough datapoints in timeseries query response: %+v", response)
 	}
 	datapoints := response.Results[0].Datapoints
-	finalCount := datapoints[len(datapoints)-1].Value
-	initialCount := datapoints[0].Value
+	finalCount := int(datapoints[len(datapoints)-1].Value)
+	initialCount := int(datapoints[0].Value)
 	if failures := finalCount - initialCount; failures > maxFailures {
 		t.Fatalf("Node liveness failed %d times, expected no more than %d",
 			failures, maxFailures)
