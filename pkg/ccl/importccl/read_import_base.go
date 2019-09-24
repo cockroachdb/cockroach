@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -42,7 +41,7 @@ func readInputFiles(
 	dataFiles map[int32]string,
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
-	settings *cluster.Settings,
+	makeExternalStorage cloud.ExternalStorageFactory,
 ) error {
 	done := ctx.Done()
 
@@ -53,7 +52,7 @@ func readInputFiles(
 		if err != nil {
 			return err
 		}
-		es, err := cloud.MakeExternalStorage(ctx, conf, settings)
+		es, err := makeExternalStorage(ctx, conf)
 		if err != nil {
 			return err
 		}
@@ -80,7 +79,7 @@ func readInputFiles(
 			if err != nil {
 				return err
 			}
-			es, err := cloud.MakeExternalStorage(ctx, conf, settings)
+			es, err := makeExternalStorage(ctx, conf)
 			if err != nil {
 				return err
 			}
@@ -168,7 +167,12 @@ func (f fileReader) ReadFraction() float32 {
 
 type inputConverter interface {
 	start(group ctxgroup.Group)
-	readFiles(ctx context.Context, dataFiles map[int32]string, format roachpb.IOFileFormat, settings *cluster.Settings) error
+	readFiles(
+		ctx context.Context,
+		dataFiles map[int32]string,
+		format roachpb.IOFileFormat,
+		makeExternalStorage cloud.ExternalStorageFactory,
+	) error
 	inputFinished(ctx context.Context)
 }
 

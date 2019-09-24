@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
@@ -55,7 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 )
@@ -1788,6 +1789,21 @@ func EnableLeaseHistory(maxEntries int) func() {
 	return func() {
 		leaseHistoryMaxEntries = originalValue
 	}
+}
+
+// GetExternalStorage returns an ExternalStorage object, based on
+// information parsed from a URI, stored in `dest`.
+func (r *Replica) GetExternalStorage(
+	ctx context.Context, dest roachpb.ExternalStorage,
+) (cloud.ExternalStorage, error) {
+	return r.store.cfg.ExternalStorage(ctx, dest)
+}
+
+// GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
+func (r *Replica) GetExternalStorageFromURI(
+	ctx context.Context, uri string,
+) (cloud.ExternalStorage, error) {
+	return r.store.cfg.ExternalStorageFromURI(ctx, uri)
 }
 
 func init() {

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -102,7 +101,10 @@ func makeDatumFromColOffset(
 }
 
 func (w *workloadReader) readFiles(
-	ctx context.Context, dataFiles map[int32]string, _ roachpb.IOFileFormat, _ *cluster.Settings,
+	ctx context.Context,
+	dataFiles map[int32]string,
+	_ roachpb.IOFileFormat,
+	_ cloud.ExternalStorageFactory,
 ) error {
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))

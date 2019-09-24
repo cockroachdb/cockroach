@@ -86,9 +86,10 @@ var BackupCheckpointInterval = time.Minute
 // reads and unmarshals a BackupDescriptor at the standard location in the
 // export storage.
 func ReadBackupDescriptorFromURI(
-	ctx context.Context, uri string, settings *cluster.Settings,
+	ctx context.Context, uri string, makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 ) (BackupDescriptor, error) {
-	exportStore, err := cloud.ExternalStorageFromURI(ctx, uri, settings)
+	exportStore, err := makeExternalStorageFromURI(ctx, uri)
+
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -671,6 +672,7 @@ func backup(
 	backupDesc *BackupDescriptor,
 	checkpointDesc *BackupDescriptor,
 	resultsCh chan<- tree.Datums,
+	makeExternalStorage cloud.ExternalStorageFactory,
 ) (roachpb.BulkOpSummary, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
@@ -873,7 +875,7 @@ func backup(
 			}
 
 			if err := func() error {
-				store, err := cloud.MakeExternalStorage(ctx, *conf, settings)
+				store, err := makeExternalStorage(ctx, *conf)
 				if err != nil {
 					return err
 				}
@@ -1027,7 +1029,7 @@ func backupPlanHook(
 		if err != nil {
 			return nil
 		}
-		defaultStore, err := cloud.ExternalStorageFromURI(ctx, defaultURI, p.ExecCfg().Settings)
+		defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI)
 		if err != nil {
 			return err
 		}
@@ -1089,7 +1091,7 @@ func backupPlanHook(
 				// since all we need to do is get the past backups' table/index spans,
 				// but it will be safer for future code to avoid having older-style
 				// descriptors around.
-				desc, err := ReadBackupDescriptorFromURI(ctx, uri, p.ExecCfg().Settings)
+				desc, err := ReadBackupDescriptorFromURI(ctx, uri, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 				if err != nil {
 					return errors.Wrapf(err, "failed to read backup from %q", uri)
 				}
@@ -1282,9 +1284,10 @@ func backupPlanHook(
 }
 
 type backupResumer struct {
-	job      *jobs.Job
-	settings *cluster.Settings
-	res      roachpb.BulkOpSummary
+	job                 *jobs.Job
+	settings            *cluster.Settings
+	res                 roachpb.BulkOpSummary
+	makeExternalStorage cloud.ExternalStorageFactory
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -1293,6 +1296,7 @@ func (b *backupResumer) Resume(
 ) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
+	b.makeExternalStorage = p.ExecCfg().DistSQLSrv.ExternalStorage
 
 	if len(details.BackupDescriptor) == 0 {
 		return errors.Newf("missing backup descriptor; cannot resume a backup from an older version")
@@ -1309,7 +1313,7 @@ func (b *backupResumer) Resume(
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
-	defaultStore, err := cloud.MakeExternalStorage(ctx, defaultConf, b.settings)
+	defaultStore, err := b.makeExternalStorage(ctx, defaultConf)
 	if err != nil {
 		return errors.Wrapf(err, "make storage")
 	}
@@ -1351,6 +1355,7 @@ func (b *backupResumer) Resume(
 		&backupDesc,
 		checkpointDesc,
 		resultsCh,
+		b.makeExternalStorage,
 	)
 	b.res = res
 	return err
@@ -1375,7 +1380,7 @@ func (b *backupResumer) OnTerminal(
 		if err != nil {
 			return err
 		}
-		exportStore, err := cloud.MakeExternalStorage(ctx, conf, b.settings)
+		exportStore, err := b.makeExternalStorage(ctx, conf)
 		if err != nil {
 			return err
 		}

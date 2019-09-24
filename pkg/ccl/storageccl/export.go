@@ -98,7 +98,7 @@ func evalExport(
 		if !foundStoreByLocality {
 			storeConf = args.Storage
 		}
-		exportStore, err = cloud.MakeExternalStorage(ctx, storeConf, cArgs.EvalCtx.ClusterSettings())
+		exportStore, err = cArgs.EvalCtx.GetExternalStorage(ctx, storeConf)
 		if err != nil {
 			return result.Result{}, err
 		}
