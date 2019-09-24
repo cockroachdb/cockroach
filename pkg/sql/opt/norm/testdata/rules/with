@@ -6,7 +6,6 @@ with &1 (foo)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
  ├── cost: 0.11
- ├── cte-uses: map[1:2]
  ├── project
  │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
@@ -257,7 +256,6 @@ with &1 (foo)
  ├── cost: 0.25
  ├── key: ()
  ├── fd: ()-->(3-6)
- ├── cte-uses: map[1:2 2:2]
  ├── values
  │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
@@ -425,7 +423,6 @@ with &1 (foo)
       │    ├──  a.s:4(string) => s:14(string)
       │    └──  a.j:5(jsonb) => j:15(jsonb)
       ├── cardinality: [1 - 1]
-      ├── mutations
       ├── key: ()
       └── fd: ()-->(11-15)
 

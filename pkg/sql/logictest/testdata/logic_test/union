@@ -286,3 +286,28 @@ SELECT a FROM (SELECT a FROM c UNION ALL SELECT a FROM a) WHERE a > 0 AND a < 3
 ----
 1
 1
+
+# Ensure that mutations under a UNION or UNION ALL error out (#40853).
+statement error mutations not supported under UNION
+SELECT * FROM uniontest
+UNION SELECT * FROM [INSERT INTO uniontest VALUES (1), (1) RETURNING k, v]
+
+statement error mutations not supported under UNION
+SELECT * FROM [INSERT INTO uniontest VALUES (1), (1) RETURNING k, v]
+UNION ALL SELECT * FROM uniontest
+
+statement error mutations not supported under UNION
+SELECT * FROM uniontest
+UNION SELECT * FROM (
+  WITH cte AS (INSERT INTO uniontest VALUES (1), (1) RETURNING k, v) SELECT * FROM cte
+)
+
+# The right way to run such a query is to use WITH above the union.
+statement ok
+WITH cte AS (INSERT INTO uniontest VALUES (1), (1) RETURNING k, v)
+(SELECT * FROM cte UNION SELECT * FROM uniontest)
+
+# Other set ops are allowed.
+statement ok
+SELECT * FROM uniontest
+EXCEPT SELECT * FROM [INSERT INTO uniontest VALUES (1), (1) RETURNING k, v]
