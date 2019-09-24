@@ -48,7 +48,9 @@ func registerHotSpotSplits(r *testRegistry) {
 			}
 			defer quietL.close()
 
-			const blockSize = 1 << 19 // 512 KB
+			// TODO(rytaft): reset this to 1 << 19 (512 KB) once we can dynamically
+			// size kv batches.
+			const blockSize = 1 << 18 // 256 KB
 			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=0 --tolerate-errors --concurrency=%d "+
 					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl:1-3}",
