@@ -277,7 +277,7 @@ func ListLogFiles() ([]FileInfo, error) {
 
 func (l *loggingT) listLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	dir, err := logging.logDir.get()
+	dir, err := l.logDir.get()
 	if err != nil {
 		// No log directory configured: simply indicate that there are no
 		// log files.
