@@ -574,10 +574,13 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 
 func (b *Builder) buildCTE(
 	ctes []*tree.CTE, inScope *scope, mutationsAllowed bool,
-) (outScope *scope, addedCTEs []cteSource) {
+) (outScope *scope) {
 	outScope = inScope.push()
 
-	start := len(b.ctes)
+	// Make a fake subquery to ensure that no CTEs are correlated.
+	outer := b.subquery
+	defer func() { b.subquery = outer }()
+	b.subquery = &subquery{}
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
@@ -648,15 +651,38 @@ func (b *Builder) buildCTE(
 				),
 			)
 		}
+
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
 
-	return outScope, b.ctes[start:]
+	return outScope
 }
 
-// wrapWithCTEs adds With expressions on top of an expression.
-func (b *Builder) wrapWithCTEs(expr memo.RelExpr, ctes []cteSource) memo.RelExpr {
+// pushWithFrame begins a new boundary at which CTEs cannot escape. We generally
+// hoist WITHs up to the highest possible level, but for instance, a WITH
+// constructed within an EXPLAIN should not be hoisted above it, and so we need
+// to denote a boundary which blocks them.
+func (b *Builder) pushWithFrame() {
+	b.cteStack = append(b.cteStack, []cteSource{})
+}
+
+// popWithFrame wraps the given scope's expression in the CTEs that have been
+// queued up at this level.
+func (b *Builder) popWithFrame(s *scope) {
+	s.expr = b.flushCTEs(s.expr)
+}
+
+// flushCTEs adds With expressions on top of an expression.
+func (b *Builder) flushCTEs(expr memo.RelExpr) memo.RelExpr {
+	var ctes []cteSource
+	b.cteStack, ctes = b.cteStack[:len(b.cteStack)-1], b.cteStack[len(b.cteStack)-1]
+
+	if len(ctes) == 0 {
+		return expr
+	}
+
 	// Since later CTEs can refer to earlier ones, we want to add these in
 	// reverse order.
 	for i := len(ctes) - 1; i >= 0; i-- {
@@ -757,9 +783,8 @@ func (b *Builder) buildSelect(
 		}
 	}
 
-	var ctes []cteSource
 	if with != nil {
-		inScope, ctes = b.buildCTE(with.CTEList, inScope, ctx.atRoot)
+		inScope = b.buildCTE(with.CTEList, inScope, ctx.atRoot)
 	}
 
 	// NB: The case statements are sorted lexicographically.
@@ -795,8 +820,6 @@ func (b *Builder) buildSelect(
 	if limit != nil {
 		b.buildLimit(limit, inScope, outScope)
 	}
-
-	outScope.expr = b.wrapWithCTEs(outScope.expr, ctes)
 
 	// TODO(rytaft): Support FILTER expression.
 	return outScope

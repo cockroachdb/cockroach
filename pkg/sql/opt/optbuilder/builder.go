@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -92,6 +93,7 @@ type Builder struct {
 	catalog    cat.Catalog
 	scopeAlloc []scope
 	ctes       []cteSource
+	cteStack   [][]cteSource
 
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling
@@ -180,9 +182,17 @@ func (b *Builder) Build() (err error) {
 		return err
 	}
 
+	b.pushWithFrame()
+
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
 	outScope := b.buildStmt(b.stmt, nil /* desiredTypes */, b.allocScope(), rootBuildCtx)
+
+	b.popWithFrame(outScope)
+	if len(b.cteStack) > 0 {
+		panic(errors.AssertionFailedf("dangling CTE stack frames"))
+	}
+
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
 	return nil
