@@ -212,7 +212,7 @@ func ListCloud() (*Cloud, error) {
 }
 
 // CreateCluster TODO(peter): document
-func CreateCluster(name string, nodes int, opts vm.CreateOpts) error {
+func CreateCluster(nodes int, opts vm.CreateOpts) error {
 	providerCount := len(opts.VMProviders)
 	if providerCount == 0 {
 		return errors.New("no VMProviders configured")
@@ -222,7 +222,7 @@ func CreateCluster(name string, nodes int, opts vm.CreateOpts) error {
 	vmLocations := map[string][]string{}
 	for i, p := 1, 0; i <= nodes; i++ {
 		pName := opts.VMProviders[p]
-		vmName := vm.Name(name, i)
+		vmName := vm.Name(opts.ClusterName, i)
 		vmLocations[pName] = append(vmLocations[pName], vmName)
 
 		p = (p + 1) % providerCount
@@ -236,6 +236,10 @@ func CreateCluster(name string, nodes int, opts vm.CreateOpts) error {
 // DestroyCluster TODO(peter): document
 func DestroyCluster(c *Cluster) error {
 	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+		// Enable a fast-path for providers that can destroy a cluster in one shot.
+		if x, ok := p.(vm.DeleteCluster); ok {
+			return x.DeleteCluster(c.Name)
+		}
 		return p.Delete(vms)
 	})
 }

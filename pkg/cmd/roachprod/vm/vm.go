@@ -114,6 +114,7 @@ func (vl List) ProviderIDs() []string {
 
 // CreateOpts is the set of options when creating VMs.
 type CreateOpts struct {
+	ClusterName    string
 	Lifetime       time.Duration
 	GeoDistributed bool
 	VMProviders    []string
@@ -174,6 +175,12 @@ type Provider interface {
 	// Providers[gce.ProviderName] != nil doesn't work because
 	// Providers[gce.ProviderName] can be a stub.
 	Active() bool
+}
+
+// DeleteCluster is an optional capability for a Provider which can
+// destroy an entire cluster in a single operation.
+type DeleteCluster interface {
+	DeleteCluster(name string) error
 }
 
 // Providers contains all known Provider instances. This is initialized by subpackage init() functions.

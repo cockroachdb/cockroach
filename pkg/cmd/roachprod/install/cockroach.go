@@ -203,6 +203,12 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 		if advertisePublicIP {
 			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(i+1)))
+		} else if !c.IsLocal() {
+			// Explicitly advertise by IP address so that we don't need to
+			// deal with cross-region name resolution. The `hostname -I`
+			// prints all IP addresses for the host and then we'll select
+			// the first from the list.
+			args = append(args, "--advertise-host=$(hostname -I | awk '{print $1}')")
 		}
 
 		var keyCmd string
