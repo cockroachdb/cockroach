@@ -1613,9 +1613,7 @@ func TestMergeJoiner(t *testing.T) {
 					Type:          tc.joinType,
 				}
 				projection := make([]uint32, 0, len(tc.leftOutCols)+len(tc.rightOutCols))
-				for _, outCol := range tc.leftOutCols {
-					projection = append(projection, outCol)
-				}
+				projection = append(projection, tc.leftOutCols...)
 				rColOffset := uint32(len(tc.leftTypes))
 				for _, outCol := range tc.rightOutCols {
 					projection = append(projection, rColOffset+outCol)
