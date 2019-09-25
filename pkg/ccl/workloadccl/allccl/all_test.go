@@ -68,7 +68,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 		}
 
 		switch meta.Name {
-		case `ycsb`, `startrek`, `roachmart`, `interleavedpartitioned`:
+		case `startrek`, `roachmart`, `interleavedpartitioned`:
 			// These don't work with IMPORT.
 			continue
 		case `tpch`:
