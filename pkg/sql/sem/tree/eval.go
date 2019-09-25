@@ -3641,7 +3641,29 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				// every postgres type that we understand OIDs for.
 				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
-				return queryOid(ctx, t, NewDString(s))
+				dOid, missingTypeErr := queryOid(ctx, t, NewDString(s))
+				if missingTypeErr == nil {
+					return dOid, missingTypeErr
+				}
+				// Fall back to some special cases that we support for compatibility
+				// only. Client use syntax like 'sometype'::regtype to produce the oid
+				// for a type that they want to search a catalog table for. Since we
+				// don't support that type, we return an artificial OID that will never
+				// match anything.
+				switch s {
+				// We don't support triggers, but some tools search for them
+				// specifically.
+				case "trigger":
+				default:
+					return nil, missingTypeErr
+				}
+				return &DOid{
+					semanticType: t,
+					// Types we don't support get OID -1, so they won't match anything
+					// in catalogs.
+					DInt: -1,
+					name: s,
+				}, nil
 
 			case oid.T_regclass:
 				tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), origS)

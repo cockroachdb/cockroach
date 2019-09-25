@@ -1099,7 +1099,6 @@ cast_target ::=
 typename ::=
 	simple_typename opt_array_bounds
 	| simple_typename 'ARRAY'
-	| postgres_oid
 
 collation_name ::=
 	unrestricted_name
@@ -1496,17 +1495,11 @@ simple_typename ::=
 	| bit_with_length
 	| character_with_length
 	| const_interval
+	| postgres_oid
 
 opt_array_bounds ::=
 	'[' ']'
 	| 
-
-postgres_oid ::=
-	'REGPROC'
-	| 'REGPROCEDURE'
-	| 'REGCLASS'
-	| 'REGTYPE'
-	| 'REGNAMESPACE'
 
 expr_tuple1_ambiguous ::=
 	'(' ')'
@@ -1861,6 +1854,13 @@ character_with_length ::=
 
 const_interval ::=
 	'INTERVAL'
+
+postgres_oid ::=
+	'REGPROC'
+	| 'REGPROCEDURE'
+	| 'REGCLASS'
+	| 'REGTYPE'
+	| 'REGNAMESPACE'
 
 tuple1_ambiguous_values ::=
 	a_expr
