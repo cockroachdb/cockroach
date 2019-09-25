@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/blobs"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -184,6 +185,7 @@ type Server struct {
 	execCfg          *sql.ExecutorConfig
 	internalExecutor *sql.InternalExecutor
 	leaseMgr         *sql.LeaseManager
+	blobService      *blobs.Service
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry     *sql.SessionRegistry
@@ -285,6 +287,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&s.cfg.DefaultZoneConfig,
 	)
 	s.nodeDialer = nodedialer.New(s.rpcContext, gossip.AddressResolver(s.gossip))
+
+	// Create blob service for inter-node file sharing.
+	s.blobService = blobs.NewBlobService(*s.nodeDialer, s.NodeID(), s.ClusterSettings().ExternalIODir)
+	roachpb.RegisterBlobServer(s.grpc.Server, s.blobService)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during

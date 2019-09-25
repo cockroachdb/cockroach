@@ -1879,3 +1879,34 @@ service Internal {
   rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
   rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
 }
+
+message GetBlobRequest {
+  string filename = 1;
+}
+
+message GetBlobResponse {
+  bytes payload = 1;
+}
+
+message PutBlobRequest {
+  string filename = 1;
+  bytes payload = 2;
+}
+
+message PutBlobResponse {
+  string filename  = 1;
+}
+
+message ListBlobRequest {
+  string dir = 1;
+}
+
+message ListBlobResponse {
+  repeated string files = 1;
+}
+
+service Blob {
+  rpc Get(GetBlobRequest) returns (GetBlobResponse) {}
+  rpc Put(PutBlobRequest) returns (PutBlobResponse) {}
+  rpc List(ListBlobRequest) returns (ListBlobResponse) {}
+}
