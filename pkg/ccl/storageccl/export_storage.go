@@ -110,12 +110,7 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			TempToken: uri.Query().Get(S3TempTokenParam),
 			Endpoint:  uri.Query().Get(S3EndpointParam),
 			Region:    uri.Query().Get(S3RegionParam),
-		}
-		if conf.S3Config.AccessKey == "" {
-			return conf, errors.Errorf("s3 uri missing %q parameter", S3AccessKeyParam)
-		}
-		if conf.S3Config.Secret == "" {
-			return conf, errors.Errorf("s3 uri missing %q parameter", S3SecretParam)
+			Auth:      uri.Query().Get(AuthParam),
 		}
 		conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
 		// AWS secrets often contain + characters, which must be escaped when
@@ -590,7 +585,38 @@ func makeS3Storage(
 		}
 		config.HTTPClient = client
 	}
-	sess, err := session.NewSession(config)
+
+	// "specified": use credentials provided in URI params; error if not present.
+	// "implicit": enable SharedConfig, which loads in credentials from environment.
+	//             Detailed in https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
+	// "": default to `specified`.
+	opts := session.Options{}
+	switch conf.Auth {
+	case "", authParamSpecified:
+		if conf.AccessKey == "" {
+			return nil, errors.Errorf(
+				"%s is set to '%s', but %s is not set",
+				AuthParam,
+				authParamSpecified,
+				S3AccessKeyParam,
+			)
+		}
+		if conf.Secret == "" {
+			return nil, errors.Errorf(
+				"%s is set to '%s', but %s is not set",
+				AuthParam,
+				authParamSpecified,
+				S3SecretParam,
+			)
+		}
+		opts.Config.MergeIn(config)
+	case authParamImplicit:
+		opts.SharedConfigState = session.SharedConfigEnable
+	default:
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)
+	}
+
+	sess, err := session.NewSessionWithOptions(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
 	}

@@ -1254,6 +1254,7 @@ message ExportStorage {
     string temp_token = 5;
     string endpoint = 6;
     string region = 7;
+    string auth = 8;
   }
   message GCS {
     option (gogoproto.equal) = true;
