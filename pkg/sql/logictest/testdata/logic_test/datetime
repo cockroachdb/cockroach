@@ -475,12 +475,12 @@ INSERT INTO ex VALUES
   (32, 'second',       '2001-04-10 12:04:59.234',          59,        '2001-04-10 12:04:59'),
   (33, 'second',       '2016-02-10 19:46:33.306157519',    33,        '2016-02-10 19:46:33'),
   (34, 'seconds',      '2016-02-10 19:46:33.306157519',    33,        '2016-02-10 19:46:33'),
-  (35, 'millisecond',  '2001-04-10 12:04:59.234567',       234,       '2001-04-10 12:04:59.234'),
-  (36, 'millisecond',  '2016-02-10 19:46:33.306157519',    306,       '2016-02-10 19:46:33.306'),
-  (37, 'milliseconds', '2016-02-10 19:46:33.306157519',    306,       '2016-02-10 19:46:33.306'),
-  (38, 'microsecond',  '2001-04-10 12:04:59.34565423',     345654,    '2001-04-10 12:04:59.345654'),
-  (39, 'microsecond',  '2016-02-10 19:46:33.306157519',    306158,    '2016-02-10 19:46:33.306158'),
-  (40, 'microseconds', '2016-02-10 19:46:33.306157519',    306158,    '2016-02-10 19:46:33.306158')
+  (35, 'millisecond',  '2001-04-10 12:04:59.234567',       59234,     '2001-04-10 12:04:59.234'),
+  (36, 'millisecond',  '2016-02-10 19:46:33.306157519',    33306,     '2016-02-10 19:46:33.306'),
+  (37, 'milliseconds', '2016-02-10 19:46:33.306157519',    33306,     '2016-02-10 19:46:33.306'),
+  (38, 'microsecond',  '2001-04-10 12:04:59.34565423',     59345654,  '2001-04-10 12:04:59.345654'),
+  (39, 'microsecond',  '2016-02-10 19:46:33.306157519',    33306158,  '2016-02-10 19:46:33.306158'),
+  (40, 'microseconds', '2016-02-10 19:46:33.306157519',    33306158,  '2016-02-10 19:46:33.306158')
 
 query IBI
 SELECT k, extract(element, input::timestamp) = extract_result, extract(element, input::timestamp) FROM ex ORDER BY k
@@ -519,12 +519,12 @@ SELECT k, extract(element, input::timestamp) = extract_result, extract(element, 
 32 true 59
 33 true 33
 34 true 33
-35 true 234
-36 true 306
-37 true 306
-38 true 345654
-39 true 306158
-40 true 306158
+35 true 59234
+36 true 33306
+37 true 33306
+38 true 59345654
+39 true 33306158
+40 true 33306158
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
@@ -538,46 +538,46 @@ SELECT INTERVAL '1 ns';
 query IBI
 SELECT k, extract(element, input::timestamptz) = extract_result, extract(element, input::timestamptz) FROM ex ORDER BY k
 ----
-1  true 2001
-2  true 2016
-3  true 2016
-4  true 2
-5  true 1
-6  true 2
-7  true 3
-8  true 4
-9  true 4
-10 true 2
-11 true 2
-12 true 15
-13 true 1
-14 true 10
-15 true 10
-16 true 10
-17 true 2
-18 true 4
-19 true 100
-20 true 102
-21 true 86401
-22 true 100801
-23 true 986904299
-24 true 12
-25 true 19
-26 true 23
-27 true 19
-28 true 23
-29 true 4
-30 true 46
-31 true 46
-32 true 59
-33 true 33
-34 true 33
-35 true 234
-36 true 306
-37 true 306
-38 true 345654
-39 true 306158
-40 true 306158
+1   true  2001
+2   true  2016
+3   true  2016
+4   true  2
+5   true  1
+6   true  2
+7   true  3
+8   true  4
+9   true  4
+10  true  2
+11  true  2
+12  true  15
+13  true  1
+14  true  10
+15  true  10
+16  true  10
+17  true  2
+18  true  4
+19  true  100
+20  true  102
+21  true  86401
+22  true  100801
+23  true  986904299
+24  true  12
+25  true  19
+26  true  23
+27  true  19
+28  true  23
+29  true  4
+30  true  46
+31  true  46
+32  true  59
+33  true  33
+34  true  33
+35  true  59234
+36  true  33306
+37  true  33306
+38  true  59345654
+39  true  33306158
+40  true  33306158
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
