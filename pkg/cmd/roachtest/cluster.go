@@ -1071,7 +1071,9 @@ func (c *cluster) setTest(t testI) {
 func (c *cluster) Save(ctx context.Context, msg string, l *logger) {
 	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)
 	// TODO(andrei): should we extend the cluster here? For how long?
-	c.destroyState.alloc.Freeze()
+	if c.destroyState.owned { // we won't have an alloc for an existing cluster
+		c.destroyState.alloc.Freeze()
+	}
 	c.r.markClusterAsSaved(c, msg)
 	c.destroyState.mu.Lock()
 	c.destroyState.mu.saved = true
