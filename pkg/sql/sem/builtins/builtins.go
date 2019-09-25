@@ -4399,9 +4399,9 @@ func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, e
 	case "second", "seconds":
 		return tree.NewDInt(tree.DInt(t.Second())), nil
 	case "millisecond", "milliseconds":
-		return tree.NewDInt(tree.DInt(t.Microsecond() / microsPerMilli)), nil
+		return tree.NewDInt(tree.DInt((t.Second() * 1000) + (t.Microsecond() / microsPerMilli))), nil
 	case "microsecond", "microseconds":
-		return tree.NewDInt(tree.DInt(t.Microsecond())), nil
+		return tree.NewDInt(tree.DInt((t.Second() * 1000 * 1000) + t.Microsecond())), nil
 	case "epoch":
 		seconds := time.Duration(t) * time.Microsecond / time.Second
 		return tree.NewDInt(tree.DInt(int64(seconds))), nil
@@ -4448,10 +4448,10 @@ func extractStringFromTimestamp(
 
 	case "millisecond", "milliseconds":
 		// This a PG extension not supported in MySQL.
-		return tree.NewDInt(tree.DInt(fromTime.Nanosecond() / int(time.Millisecond))), nil
+		return tree.NewDInt(tree.DInt((fromTime.Second() * 1000) + (fromTime.Nanosecond() / int(time.Millisecond)))), nil
 
 	case "microsecond", "microseconds":
-		return tree.NewDInt(tree.DInt(fromTime.Nanosecond() / int(time.Microsecond))), nil
+		return tree.NewDInt(tree.DInt((fromTime.Second() * 1000 * 1000) + (fromTime.Nanosecond() / int(time.Microsecond)))), nil
 
 	case "epoch":
 		return tree.NewDInt(tree.DInt(fromTime.Unix())), nil
