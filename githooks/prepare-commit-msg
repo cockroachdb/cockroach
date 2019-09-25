@@ -37,10 +37,18 @@ $cchar     <pkg>: <short description>\\
 $cchar\\
 $cchar     <long description>\\
 $cchar\\
+$cchar     Release justification (category): <release justification>\\
+$cchar\\
 $cchar     Release note (category): <release note description>\\
 $cchar     ---\\
 $cchar\\
 $cchar Wrap long lines! 72 columns is best.\\
+$cchar\\
+$cchar Categories for release justification:\\
+$cchar     - non-production code changes\\
+$cchar     - bug fixes and low-risk updates to new functionality\\
+$cchar     - fixes for high-priority or high-severity bugs in existing functionality\\
+$cchar     - low risk, high benefit changes to existing functionality\\
 $cchar\\
 $cchar The release note must be present if your commit has user-facing\\
 $cchar changes. Leave the default above if not.\\
@@ -56,6 +64,15 @@ $cchar     - backwards-incompatible change\\
 $cchar     - performance improvement\\
 $cchar     - bug fix\\
 "
+
+# Add an explicit "Release justification: None" if no release justification was specified.
+if ! grep -q '^Release justification' "$1"; then
+	sed_script+="
+;/$cchar Please enter the commit message for your changes./i\\
+\\
+$cchar Release justification:\\
+"
+fi
 
 # Add an explicit "Release note: None" if no release note was specified.
 if ! grep -q '^Release note' "$1"; then
