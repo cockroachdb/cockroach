@@ -526,6 +526,10 @@ type rideInfo struct {
 
 // Ops implements the Opser interface
 func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+	// Initialize the faker in case it hasn't been setup already.
+	g.fakerOnce.Do(func() {
+		g.faker = faker.NewFaker()
+	})
 	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
