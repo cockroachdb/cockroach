@@ -140,9 +140,6 @@ func makeScalarSample(
 }
 
 func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
-		return nil, false
-	}
 	typ, ok := s.schema.pickAnyType(typ)
 	if !ok {
 		return nil, false
@@ -292,9 +289,6 @@ func typedParen(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
 }
 
 func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
-		return nil, false
-	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -306,9 +300,6 @@ func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
-		return nil, false
-	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -602,9 +593,6 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.schema.vectorizable {
-		return nil, false
-	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -647,8 +635,14 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	stringComparison := s.schema.randStringComparison()
 	if s.schema.vectorizable {
-		return nil, false
+		// Vectorized supports only tree.Like and tree.NotLike.
+		if s.coin() {
+			stringComparison = tree.Like
+		} else {
+			stringComparison = tree.NotLike
+		}
 	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
@@ -656,7 +650,7 @@ func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr,
 		return nil, false
 	}
 	return tree.NewTypedComparisonExpr(
-		s.schema.randStringComparison(),
+		stringComparison,
 		makeScalar(s, types.String, refs),
 		makeScalar(s, types.String, refs),
 	), true
