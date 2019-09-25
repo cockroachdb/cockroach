@@ -39,6 +39,7 @@ with &1 (foo)
       │    ├── cost: 0.01
       │    ├── key: ()
       │    ├── fd: ()-->(2)
+      │    ├── prune: (2)
       │    └── cte-uses: map[1:1]
       └── with-scan &1 (foo)
            ├── columns: "?column?":3(int!null)
@@ -49,6 +50,7 @@ with &1 (foo)
            ├── cost: 0.01
            ├── key: ()
            ├── fd: ()-->(3)
+           ├── prune: (3)
            └── cte-uses: map[1:1]
 
 norm format=show-all expect=InlineWith
@@ -291,6 +293,7 @@ with &1 (foo)
            ├── cost: 0.19
            ├── key: ()
            ├── fd: ()-->(3-6)
+           ├── prune: (3-6)
            ├── cte-uses: map[1:2 2:2]
            ├── inner-join (hash)
            │    ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
@@ -299,6 +302,7 @@ with &1 (foo)
            │    ├── cost: 0.13
            │    ├── key: ()
            │    ├── fd: ()-->(3-5)
+           │    ├── prune: (3-5)
            │    ├── join-size: 3
            │    ├── cte-uses: map[1:1 2:2]
            │    ├── inner-join (hash)
@@ -308,6 +312,7 @@ with &1 (foo)
            │    │    ├── cost: 0.07
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(3,4)
+           │    │    ├── prune: (3,4)
            │    │    ├── join-size: 2
            │    │    ├── cte-uses: map[1:1 2:1]
            │    │    ├── with-scan &1 (foo)
@@ -319,6 +324,7 @@ with &1 (foo)
            │    │    │    ├── cost: 0.01
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(3)
+           │    │    │    ├── prune: (3)
            │    │    │    └── cte-uses: map[1:1]
            │    │    ├── with-scan &2 (bar)
            │    │    │    ├── columns: "?column?":4(int!null)
@@ -329,6 +335,7 @@ with &1 (foo)
            │    │    │    ├── cost: 0.01
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(4)
+           │    │    │    ├── prune: (4)
            │    │    │    └── cte-uses: map[2:1]
            │    │    └── filters (true)
            │    ├── with-scan &2 (bar)
@@ -340,6 +347,7 @@ with &1 (foo)
            │    │    ├── cost: 0.01
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(5)
+           │    │    ├── prune: (5)
            │    │    └── cte-uses: map[2:1]
            │    └── filters (true)
            ├── with-scan &1 (foo)
@@ -351,6 +359,7 @@ with &1 (foo)
            │    ├── cost: 0.01
            │    ├── key: ()
            │    ├── fd: ()-->(6)
+           │    ├── prune: (6)
            │    └── cte-uses: map[1:1]
            └── filters (true)
 
