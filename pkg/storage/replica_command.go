@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -2009,15 +2010,118 @@ func (s *Store) AdminRelocateRange(
 		return err
 	}
 	rangeDesc = *newDesc
-	rangeReplicas := rangeDesc.Replicas().All()
-	if len(rangeReplicas) != len(rangeDesc.Replicas().Voters()) {
-		// We just removed all the learners, so there shouldn't be anything but
-		// voters.
-		return crdberrors.AssertionFailedf(
-			`range %s had non-voter replicas: %v`, &rangeDesc, rangeDesc.Replicas())
+
+	canRetry := func(err error) bool {
+		whitelist := []string{
+			snapshotApplySemBusyMsg,
+			IntersectingSnapshotMsg,
+		}
+		for _, substr := range whitelist {
+			if strings.Contains(err.Error(), substr) {
+				return true
+			}
+		}
+		return false
 	}
 
-	// Step 1: Compute which replicas are to be added and which are to be removed.
+	startKey := rangeDesc.StartKey.AsRawKey()
+	transferLease := func(target roachpb.ReplicationTarget) {
+		if err := s.DB().AdminTransferLease(
+			ctx, startKey, target.StoreID,
+		); err != nil {
+			log.Warningf(ctx, "while transferring lease: %+v", err)
+		}
+	}
+
+	// Step 2: Repeatedly add and/or remove a replica until we reach the
+	// desired state. In an "atomic replication changes" world, this is
+	// conceptually easy: change from the old set of replicas to the new
+	// one. But there are two reasons that complicate this:
+	// 1. we can't remove the leaseholder, so if we ultimately want to do that
+	//    the lease has to be moved first. If we start out with *only* the
+	//    leaseholder, we will have to add a replica first.
+	// 2. this code is rewritten late in the cycle and it is both safer and
+	//    closer to its previous incarnation to never issue atomic changes
+	//    other than simple swaps.
+	//
+	// The loop below repeatedly calls relocateOne, which gives us either one or
+	// two ops that move the range towards the desired replication state. If
+	// it's one op, then a single add or remove is carried out (and it's only
+	// done when we can't swap instead). If it's two ops, then we're swapping
+	// (though this code doesn't concern itself with the details); and it's
+	// possible that we need to transfer the lease before we carry out the ops,
+	// determined via the leaseTarget variable.
+	//
+	// Transient errors returned from relocateOne are retried until things work
+	// out.
+	every := log.Every(time.Minute)
+	re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second})
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		ops, leaseTarget, err := s.relocateOne(ctx, &rangeDesc, targets)
+		if len(ops) == 0 {
+			// Done.
+			break
+		}
+		if fn := s.cfg.TestingKnobs.BeforeRelocateOne; fn != nil {
+			fn(ops, leaseTarget, err)
+		}
+		if leaseTarget != nil {
+			transferLease(*leaseTarget)
+		}
+
+		ctx = context.WithValue(ctx, "testing", "testing")
+		newDesc, err := s.DB().AdminChangeReplicas(
+			ctx, startKey, rangeDesc, ops)
+		if err != nil {
+			returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
+			if !canRetry(err) {
+				return returnErr
+			}
+			if every.ShouldLog() {
+				log.Warning(ctx, returnErr)
+			}
+			re.Next()
+			continue
+		}
+
+		rangeDesc = *newDesc
+	}
+
+	// Step 3: Transfer the lease to the first listed target, as the API specifies.
+	transferLease(targets[0])
+
+	return ctx.Err()
+}
+
+func (s *Store) relocateOne(
+	ctx context.Context, desc *roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
+) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
+	rangeReplicas := desc.Replicas().All()
+	if len(rangeReplicas) != len(desc.Replicas().Voters()) {
+		return nil, nil, crdberrors.AssertionFailedf(
+			`range %s had non-voter replicas: %v`, desc, desc.Replicas())
+	}
+
+	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
+		return nil, nil, fmt.Errorf("no system config available, unable to perform RelocateRange")
+	}
+	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	storeList, _, _ := s.allocator.storePool.getStoreList(desc.RangeID, storeFilterNone)
+	storeMap := storeListToMap(storeList)
+
+	// Compute which replica to add and/or remove, respectively. We ask the allocator
+	// about this because we want to respect the constraints. For example, it would be
+	// unfortunate if we put two replicas into the same zone despite having a locality-
+	// preserving option available.
 	//
 	// TODO(radu): we can't have multiple replicas on different stores on the
 	// same node, and this code doesn't do anything to specifically avoid that
@@ -2058,167 +2162,133 @@ func (s *Store) AdminRelocateRange(
 		}
 	}
 
-	canRetry := func(err error) bool {
-		whitelist := []string{
-			snapshotApplySemBusyMsg,
-			IntersectingSnapshotMsg,
-		}
-		for _, substr := range whitelist {
-			if strings.Contains(err.Error(), substr) {
-				return true
+	var ops roachpb.ReplicationChanges
+
+	if len(addTargets) > 0 {
+		// Each iteration, pick the most desirable replica to add. However,
+		// prefer the first target because it's the one that should hold the
+		// lease in the end; it helps to add it early so that the lease doesn't
+		// have to move too much.
+		candidateTargets := addTargets
+		if storeHasReplica(targets[0].StoreID, candidateTargets) {
+			candidateTargets = []roachpb.ReplicaDescriptor{
+				{NodeID: targets[0].NodeID, StoreID: targets[0].StoreID},
 			}
 		}
-		return false
+
+		// The storeList's list of stores is used to constrain which stores the
+		// allocator considers putting a new replica on. We want it to only
+		// consider the stores in candidateTargets.
+		candidateDescs := make([]roachpb.StoreDescriptor, 0, len(candidateTargets))
+		for _, candidate := range candidateTargets {
+			store, ok := storeMap[candidate.StoreID]
+			if !ok {
+				return nil, nil, fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor",
+					candidate.StoreID)
+			}
+			candidateDescs = append(candidateDescs, *store)
+		}
+		storeList = makeStoreList(candidateDescs)
+
+		targetStore, _ := s.allocator.allocateTargetFromList(
+			ctx,
+			storeList,
+			zone,
+			rangeReplicas,
+			s.allocator.scorerOptions())
+		if targetStore == nil {
+			return nil, nil, fmt.Errorf("none of the remaining targets %v are legal additions to %v",
+				addTargets, desc.Replicas())
+		}
+
+		target := roachpb.ReplicationTarget{
+			NodeID:  targetStore.Node.NodeID,
+			StoreID: targetStore.StoreID,
+		}
+		ops = append(ops, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)...)
+		// Pretend the voter is already there so that the removal logic below will
+		// take it into account when deciding which replica to remove.
+		rangeReplicas = append(rangeReplicas, roachpb.ReplicaDescriptor{
+			NodeID:    target.NodeID,
+			StoreID:   target.StoreID,
+			ReplicaID: desc.NextReplicaID,
+			Type:      roachpb.ReplicaTypeVoterFull(),
+		})
 	}
 
-	startKey := rangeDesc.StartKey.AsRawKey()
-	transferLease := func() {
-		if err := s.DB().AdminTransferLease(
-			ctx, startKey, targets[0].StoreID,
-		); err != nil {
-			log.Warningf(ctx, "while transferring lease: %+v", err)
+	var transferTarget *roachpb.ReplicationTarget
+	if len(removeTargets) > 0 {
+		// Pick a replica to remove. Note that rangeReplicas may already reflect
+		// a replica we're adding in the current round. This is the right thing
+		// to do. For example, consider relocating from (s1,s2,s3) to (s1,s2,s4)
+		// where addTargets will be (s4) and removeTargets is (s3). In this code,
+		// we'll want the allocator to see if s3 can be removed from
+		// (s1,s2,s3,s4) which is a reasonable request; that replica set is
+		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3)
+		// it may not want to do that due to constraints.
+		targetStore, _, err := s.allocator.RemoveTarget(ctx, zone, removeTargets, rangeReplicas)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "unable to select removal target from %v; current replicas %v",
+				removeTargets, rangeReplicas)
 		}
-	}
-
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return fmt.Errorf("no system config available, unable to perform RelocateRange")
-	}
-	zone, err := sysCfg.GetZoneConfigForKey(rangeDesc.StartKey)
-	if err != nil {
-		return err
-	}
-
-	storeList, _, _ := s.allocator.storePool.getStoreList(rangeDesc.RangeID, storeFilterNone)
-	storeMap := storeListToMap(storeList)
-
-	// Step 2: Repeatedly add a replica then remove a replica until we reach the
-	// desired state.
-	every := log.Every(time.Minute)
-	re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second})
-	for len(addTargets) > 0 || len(removeTargets) > 0 {
-		if err := ctx.Err(); err != nil {
-			return err
+		removalTarget := roachpb.ReplicationTarget{
+			NodeID:  targetStore.NodeID,
+			StoreID: targetStore.StoreID,
 		}
-
-		if len(addTargets) > 0 && len(addTargets) >= len(removeTargets) {
-			// Each iteration, pick the most desirable replica to add. However,
-			// prefer the first target if it doesn't yet have a replica so that we
-			// can always transfer the lease to it before removing a replica below.
-			// This makes it easier to avoid removing a replica that's still
-			// leaseholder without needing to bounce the lease around a bunch.
-			candidateTargets := addTargets
-			if storeHasReplica(targets[0].StoreID, candidateTargets) {
-				candidateTargets = []roachpb.ReplicaDescriptor{
-					{NodeID: targets[0].NodeID, StoreID: targets[0].StoreID},
+		// We can't remove the leaseholder, which really throws a wrench into
+		// atomic replication changes. If we find that we're trying to do just
+		// that, we need to first move the lease elsewhere. This is not possible
+		// if there is no other replica available at that point, i.e. if the
+		// existing descriptor is a single replica that's being replaced.
+		var b client.Batch
+		liReq := &roachpb.LeaseInfoRequest{}
+		liReq.Key = desc.StartKey.AsRawKey()
+		b.AddRawRequest(liReq)
+		if err := s.DB().Run(ctx, &b); err != nil {
+			return nil, nil, errors.Wrap(err, "looking up lease")
+		}
+		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
+		ok := curLeaseholder.StoreID != removalTarget.StoreID
+		if !ok {
+			// Pick a replica that we can give the lease to. We sort the first
+			// target to the beginning (if it's there) because that's where the
+			// lease needs to be in the end. We also exclude the last replica if
+			// it was added by the add branch above (in which case it doesn't
+			// exist yet).
+			sortedTargetReplicas := append([]roachpb.ReplicaDescriptor(nil), rangeReplicas[:len(rangeReplicas)-len(ops)]...)
+			sort.Slice(sortedTargetReplicas, func(i, j int) bool {
+				sl := sortedTargetReplicas
+				if sl[i].StoreID == targets[0].StoreID {
+					// targets[0] goes to the front (if it's present).
+					return true
 				}
-			}
-
-			// The storeList's list of stores is used to constrain which stores the
-			// allocator considers putting a new replica on. We want it to only
-			// consider the stores in candidateTargets.
-			candidateDescs := make([]roachpb.StoreDescriptor, 0, len(candidateTargets))
-			for _, candidate := range candidateTargets {
-				store, ok := storeMap[candidate.StoreID]
-				if !ok {
-					return fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor",
-						candidate.StoreID)
+				return false
+			})
+			for _, rDesc := range sortedTargetReplicas {
+				if rDesc.StoreID != curLeaseholder.StoreID {
+					transferTarget = &roachpb.ReplicationTarget{
+						NodeID:  rDesc.NodeID,
+						StoreID: rDesc.StoreID,
+					}
+					ok = true
+					break
 				}
-				candidateDescs = append(candidateDescs, *store)
-			}
-			storeList = makeStoreList(candidateDescs)
-
-			targetStore, _ := s.allocator.allocateTargetFromList(
-				ctx,
-				storeList,
-				zone,
-				rangeReplicas,
-				s.allocator.scorerOptions())
-			if targetStore == nil {
-				return fmt.Errorf("none of the remaining targets %v are legal additions to %v",
-					addTargets, rangeDesc.Replicas())
-			}
-
-			target := roachpb.ReplicationTarget{
-				NodeID:  targetStore.Node.NodeID,
-				StoreID: targetStore.StoreID,
-			}
-			newDesc, err := s.DB().AdminChangeReplicas(
-				ctx, startKey, rangeDesc,
-				roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target))
-			if err != nil {
-				returnErr := errors.Wrapf(err, "while adding target %v", target)
-				if !canRetry(err) {
-					return returnErr
-				}
-				if every.ShouldLog() {
-					log.Warning(ctx, returnErr)
-				}
-				re.Next()
-				continue
-			}
-
-			// Upon success, remove the target from our to-do list and add it to our
-			// local copy of the range descriptor such that future allocator
-			// decisions take it into account.
-			addTargets = removeTargetFromSlice(addTargets, target)
-			rangeDesc = *newDesc
-			rangeReplicas = rangeDesc.Replicas().All()
-			if len(rangeReplicas) != len(rangeDesc.Replicas().Voters()) {
-				// We just removed all the learners, so there shouldn't be anything but
-				// voters.
-				return crdberrors.AssertionFailedf(
-					`range %s had non-voter replicas: %v`, &rangeDesc, rangeDesc.Replicas())
 			}
 		}
 
-		if len(removeTargets) > 0 && len(removeTargets) > len(addTargets) {
-			targetStore, _, err := s.allocator.RemoveTarget(ctx, zone, removeTargets, rangeReplicas)
-			if err != nil {
-				return errors.Wrapf(err, "unable to select removal target from %v; current replicas %v",
-					removeTargets, rangeReplicas)
-			}
-			target := roachpb.ReplicationTarget{
-				NodeID:  targetStore.NodeID,
-				StoreID: targetStore.StoreID,
-			}
-			// Note that attempting to remove the leaseholder won't work, so transfer
-			// the lease first in such scenarios. The first specified target should be
-			// the leaseholder now, so we can always transfer the lease there.
-			transferLease()
-			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc,
-				roachpb.MakeReplicationChanges(
-					roachpb.REMOVE_REPLICA,
-					target),
-			)
-			if err != nil {
-				log.Warningf(ctx, "while removing target %v: %+v", target, err)
-				if !canRetry(err) {
-					return err
-				}
-				re.Next()
-				continue
-			}
-
-			// Upon success, remove the target from our to-do list and from our local
-			// copy of the range descriptor such that future allocator decisions take
-			// its absence into account.
-			removeTargets = removeTargetFromSlice(removeTargets, target)
-			rangeDesc = *newDesc
-			rangeReplicas = rangeDesc.Replicas().All()
-			if len(rangeReplicas) != len(rangeDesc.Replicas().Voters()) {
-				// We just removed all the learners, so there shouldn't be anything but
-				// voters.
-				return crdberrors.AssertionFailedf(
-					`range %s had non-voter replicas: %v`, &rangeDesc, rangeDesc.Replicas())
-			}
+		// Carry out the removal only if there was no lease problem above. If
+		// there was, we're not going to do a swap in this round but just do the
+		// addition. (Note that !ok implies that len(ops) is not empty, or we're
+		// trying to remove the last replica left in the descriptor which is
+		// illegal).
+		if ok {
+			ops = append(ops, roachpb.MakeReplicationChanges(
+				roachpb.REMOVE_REPLICA,
+				removalTarget)...)
 		}
 	}
 
-	// Step 3: Transfer the lease to the first listed target, as the API specifies.
-	transferLease()
-
-	return ctx.Err()
+	return ops, transferTarget, nil
 }
 
 // Modifies the underlying storage of the slice rather than copying.
