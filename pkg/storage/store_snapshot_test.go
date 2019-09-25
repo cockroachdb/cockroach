@@ -114,7 +114,7 @@ func TestSnapshotPreemptiveOnUninitializedReplica(t *testing.T) {
 	store, _ := createTestStore(t, testStoreOpts{}, stopper)
 
 	// Create an uninitialized replica.
-	repl, created, err := store.getOrCreateReplica(ctx, 77, 1, nil)
+	repl, created, err := store.getOrCreateReplica(ctx, 77, 1, nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
