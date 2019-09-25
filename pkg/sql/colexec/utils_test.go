@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
@@ -988,6 +989,7 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 }
 
 func TestOpTestInputOutput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	inputs := []tuples{
 		{
 			{1, 2, 100},
@@ -1006,6 +1008,7 @@ func TestOpTestInputOutput(t *testing.T) {
 }
 
 func TestRepeatableBatchSource(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batchLen := uint16(10)
 	batch.SetLength(batchLen)
@@ -1025,6 +1028,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 }
 
 func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
 	rng, _ := randutil.NewPseudoRand()
 	sel := randomSel(rng, 10 /* batchSize */, 0 /* probOfOmitting */)

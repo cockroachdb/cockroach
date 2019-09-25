@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -124,6 +125,7 @@ func (tc *aggregatorTestCase) init() error {
 }
 
 func TestAggregatorOneFunc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []aggregatorTestCase{
 		{
 			input: tuples{
@@ -307,6 +309,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 }
 
 func TestAggregatorMultiFunc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []aggregatorTestCase{
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
@@ -380,6 +383,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 }
 
 func TestAggregatorAllFunctions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []aggregatorTestCase{
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{
@@ -462,6 +466,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 }
 
 func TestAggregatorRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// This test aggregates random inputs, keeping track of the expected results
 	// to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
@@ -709,6 +714,7 @@ func BenchmarkAggregator(b *testing.B) {
 }
 
 func TestHashAggregator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []aggregatorTestCase{
 		{
 			// Test carry between output batches.

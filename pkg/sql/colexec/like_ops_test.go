@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestLikeOperators(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, tc := range []struct {
 		pattern  string
 		negate   bool

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // Mock typing context for the typechecker.
@@ -45,6 +46,7 @@ func (p *mockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 }
 
 func TestBasicBuiltinFunctions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// Trick to get the init() for the builtins package to run.
 	_ = builtins.AllBuiltinNames
 

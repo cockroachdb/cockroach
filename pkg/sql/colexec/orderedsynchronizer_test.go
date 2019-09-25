@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // Adapted from the same-named test in the rowflow package.
 func TestOrderedSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		sources  []tuples
 		ordering sqlbase.ColumnOrdering
@@ -150,6 +152,7 @@ func TestOrderedSync(t *testing.T) {
 }
 
 func TestOrderedSyncRandomInput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	numInputs := 3
 	inputLen := 1024
 	batchSize := uint16(16)

@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
 		func(input []Operator) (Operator, error) {
 			return &projPlusInt64Int64ConstOp{
@@ -38,6 +40,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 }
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}},
 		orderedVerifier,
 		func(input []Operator) (Operator, error) {
@@ -53,6 +56,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 }
 
 func TestProjDivFloat64Float64Op(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runTests(t, []tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}},
 		orderedVerifier,
 		func(input []Operator) (Operator, error) {
@@ -120,6 +124,7 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 }
 
 func TestGetProjectionConstOperator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	binOp := tree.Mult
 	var input Operator
 	colIdx := 3
@@ -144,6 +149,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 }
 
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	binOp := tree.GE
 	var input Operator
 	colIdx := 3
@@ -168,6 +174,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 }
 
 func TestGetProjectionOperator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ct := types.Int2
 	binOp := tree.Mult
 	var input Operator

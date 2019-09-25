@@ -63,16 +63,12 @@ type Vec interface {
 	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
 	Bool() []bool
-	// Int8 returns an int8 slice.
-	Int8() []int8
 	// Int16 returns an int16 slice.
 	Int16() []int16
 	// Int32 returns an int32 slice.
 	Int32() []int32
 	// Int64 returns an int64 slice.
 	Int64() []int64
-	// Float32 returns a float32 slice.
-	Float32() []float32
 	// Float64 returns a float64 slice.
 	Float64() []float64
 	// Bytes returns a flat Bytes representation.
@@ -172,10 +168,6 @@ func (m *memColumn) Bool() []bool {
 	return m.col.([]bool)
 }
 
-func (m *memColumn) Int8() []int8 {
-	return m.col.([]int8)
-}
-
 func (m *memColumn) Int16() []int16 {
 	return m.col.([]int16)
 }
@@ -186,10 +178,6 @@ func (m *memColumn) Int32() []int32 {
 
 func (m *memColumn) Int64() []int64 {
 	return m.col.([]int64)
-}
-
-func (m *memColumn) Float32() []float32 {
-	return m.col.([]float32)
 }
 
 func (m *memColumn) Float64() []float64 {
