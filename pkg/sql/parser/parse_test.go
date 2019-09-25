@@ -2107,6 +2107,13 @@ func TestParse2(t *testing.T) {
 
 		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (MINVALUE) TO (1), PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))`,
 			`CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue))`},
+
+		// Check that JSONB operators have higher precedence than '='.
+		{`SELECT '{}'::JSONB ? 'a' = false`, `SELECT ('{}'::JSONB ? 'a') = false`},
+		{`SELECT '{}'::JSONB ?| 'a' = false`, `SELECT ('{}'::JSONB ?| 'a') = false`},
+		{`SELECT '{}'::JSONB ?& 'a' = false`, `SELECT ('{}'::JSONB ?& 'a') = false`},
+		{`SELECT '{}'::JSONB @> '{}'::JSONB = false`, `SELECT ('{}'::JSONB @> '{}'::JSONB) = false`},
+		{`SELECT '{}'::JSONB <@ '{}'::JSONB = false`, `SELECT ('{}'::JSONB <@ '{}'::JSONB) = false`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
