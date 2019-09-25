@@ -17,10 +17,10 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -106,7 +106,7 @@ type cloudStorageSink struct {
 	ext           string
 	recordDelimFn func(io.Writer) error
 
-	es     storageccl.ExportStorage
+	es     cloud.ExternalStorage
 	fileID int64
 	files  map[cloudStorageSinkKey]*cloudStorageSinkFile
 }
@@ -161,7 +161,7 @@ func makeCloudStorageSink(
 
 	ctx := context.TODO()
 	var err error
-	if s.es, err = storageccl.ExportStorageFromURI(ctx, baseURI, settings); err != nil {
+	if s.es, err = cloud.ExternalStorageFromURI(ctx, baseURI, settings); err != nil {
 		return nil, err
 	}
 

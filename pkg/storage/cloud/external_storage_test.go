@@ -1,12 +1,14 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package storageccl
+package cloud
 
 import (
 	"bytes"
@@ -21,7 +23,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,7 +43,7 @@ func appendPath(t *testing.T, s, add string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u.Path = path.Join(u.Path, add)
+	u.Path = filepath.Join(u.Path, add)
 	return u.String()
 }
 
@@ -56,13 +57,13 @@ func init() {
 	}
 }
 
-func storeFromURI(ctx context.Context, t *testing.T, uri string) ExportStorage {
-	conf, err := ExportStorageConfFromURI(uri)
+func storeFromURI(ctx context.Context, t *testing.T, uri string) ExternalStorage {
+	conf, err := ExternalStorageConfFromURI(uri)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := MakeExportStorage(ctx, conf, testSettings)
+	s, err := MakeExternalStorage(ctx, conf, testSettings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,13 +73,13 @@ func storeFromURI(ctx context.Context, t *testing.T, uri string) ExportStorage {
 func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	ctx := context.TODO()
 
-	conf, err := ExportStorageConfFromURI(storeURI)
+	conf, err := ExternalStorageConfFromURI(storeURI)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Setup a sink for the given args.
-	s, err := MakeExportStorage(ctx, conf, testSettings)
+	s, err := MakeExternalStorage(ctx, conf, testSettings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,11 +239,11 @@ func TestLocalIOLimits(t *testing.T) {
 	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
 		u := fmt.Sprintf("nodelocal://%s", dest)
 
-		conf, err := ExportStorageConfFromURI(u)
+		conf, err := ExternalStorageConfFromURI(u)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := MakeExportStorage(ctx, conf, testSettings); !testutils.IsError(err, expected) {
+		if _, err := MakeExternalStorage(ctx, conf, testSettings); !testutils.IsError(err, expected) {
 			t.Fatal(err)
 		}
 	}
@@ -254,7 +255,7 @@ func TestLocalIOLimits(t *testing.T) {
 		if expectErr {
 			expected = "host component of nodelocal URI must be a node ID"
 		}
-		if _, err := ExportStorageConfFromURI(u); !testutils.IsError(err, expected) {
+		if _, err := ExternalStorageConfFromURI(u); !testutils.IsError(err, expected) {
 			t.Fatalf("%q: expected error %q, got %v", u, expected, err)
 		}
 	}
@@ -325,7 +326,7 @@ func TestPutHttp(t *testing.T) {
 			srv.Close()
 			t.Fatal(err)
 		}
-		uri.Path = path.Join(uri.Path, "testing")
+		uri.Path = filepath.Join(uri.Path, "testing")
 		return uri, func() int { return files }, cleanup
 	}
 
@@ -368,11 +369,11 @@ func TestPutHttp(t *testing.T) {
 		srv, _, cleanup := makeServer()
 		defer cleanup()
 
-		conf, err := ExportStorageConfFromURI(srv.String())
+		conf, err := ExternalStorageConfFromURI(srv.String())
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExportStorage(ctx, conf, testSettings)
+		s, err := MakeExternalStorage(ctx, conf, testSettings)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -416,7 +417,7 @@ func TestPutS3(t *testing.T) {
 
 	ctx := context.TODO()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := ExportStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"), testSettings)
+		_, err := ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"), testSettings)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
 			AuthParam,
@@ -580,7 +581,7 @@ func TestWorkloadStorage(t *testing.T) {
 		}
 		return &url.URL{
 			Scheme:   `workload`,
-			Path:     `/` + path.Join(`csv`, gen.Meta().Name, bankTable.Name),
+			Path:     `/` + filepath.Join(`csv`, gen.Meta().Name, bankTable.Name),
 			RawQuery: params.Encode(),
 		}
 	}
@@ -588,7 +589,7 @@ func TestWorkloadStorage(t *testing.T) {
 	ctx := context.Background()
 
 	{
-		s, err := ExportStorageFromURI(ctx, bankURL().String(), settings)
+		s, err := ExternalStorageFromURI(ctx, bankURL().String(), settings)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -605,7 +606,7 @@ func TestWorkloadStorage(t *testing.T) {
 	{
 		params := map[string]string{
 			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
-		s, err := ExportStorageFromURI(ctx, bankURL(params).String(), settings)
+		s, err := ExternalStorageFromURI(ctx, bankURL(params).String(), settings)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -617,16 +618,16 @@ func TestWorkloadStorage(t *testing.T) {
 		`), strings.TrimSpace(string(bytes)))
 	}
 
-	_, err := ExportStorageFromURI(ctx, `workload:///nope`, settings)
+	_, err := ExternalStorageFromURI(ctx, `workload:///nope`, settings)
 	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = ExportStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`, settings)
+	_, err = ExternalStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`, settings)
 	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = ExportStorageFromURI(ctx, `workload:///csv/nope/nope?version=`, settings)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/nope/nope?version=`, settings)
 	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank`, settings)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank`, settings)
 	require.EqualError(t, err, `parameter version is required`)
-	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=`, settings)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=`, settings)
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`, settings)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`, settings)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }
