@@ -6774,10 +6774,6 @@ typename:
       return setErr(sqllex, err)
     }
   }
-| postgres_oid
-  {
-    $$.val = $1.colType()
-  }
 
 cast_target:
   typename
@@ -6813,6 +6809,7 @@ simple_typename:
 | const_interval
 | const_interval interval_qualifier { return unimplemented(sqllex, "interval with unit qualifier") }
 | const_interval '(' ICONST ')' { return unimplementedWithIssue(sqllex, 32564) }
+| postgres_oid
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
