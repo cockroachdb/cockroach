@@ -32,7 +32,18 @@ func (i KVInserter) CPut(key, value interface{}, expValue *roachpb.Value) {
 
 // Del is not implemented.
 func (i KVInserter) Del(key ...interface{}) {
-	panic("unimplemented")
+	// This is called when there are multiple column families to ensure that
+	// existing data is cleared. With the exception of IMPORT INTO, the entire
+	// existing keyspace in any IMPORT is guaranteed to be empty, so we don't have
+	// to worry about it.
+	//
+	// IMPORT INTO disallows overwriting an existing row, so we're also okay here.
+	// The reason this works is that row existence is precisely defined as whether
+	// column family 0 exists, meaning that we write column family 0 even if all
+	// the non-pk columns in it are NULL. It follows that either the row does
+	// exist and the imported column family 0 will conflict (and the IMPORT INTO
+	// will fail) or the row does not exist (and thus the column families are all
+	// empty).
 }
 
 // Put method of the putter interface.
