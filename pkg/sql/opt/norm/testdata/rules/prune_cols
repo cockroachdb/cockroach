@@ -2791,3 +2791,18 @@ anti-join-apply
  │         └── abcde.a = k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
  └── filters
       └── abcde.a = "family".a [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+opt disable=InlineWith expect=PruneWithScanCols
+WITH foo AS (SELECT * FROM a)
+  SELECT i FROM foo
+----
+with &1 (foo)
+ ├── columns: i:6(int)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── with-scan &1 (foo)
+      ├── columns: i:6(int)
+      └── mapping:
+           └──  a.i:2(int) => i:6(int)
