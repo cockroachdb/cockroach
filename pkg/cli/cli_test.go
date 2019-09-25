@@ -470,45 +470,6 @@ func Example_logging() {
 	// 1
 }
 
-func Example_demo_locality() {
-	c := newCLITest(cliTestParams{noServer: true})
-	defer c.cleanup()
-
-	testData := [][]string{
-		{`demo`, `--nodes`, `3`, `-e`, `select node_id, locality from crdb_internal.gossip_nodes order by node_id`},
-		{`demo`, `--nodes`, `9`, `-e`, `select node_id, locality from crdb_internal.gossip_nodes order by node_id`},
-		{`demo`, `--nodes`, `3`, `--demo-locality=region=us-east1:region=us-east2:region=us-east3`,
-			`-e`, `select node_id, locality from crdb_internal.gossip_nodes order by node_id`},
-	}
-	setCLIDefaultsForTests()
-	for _, cmd := range testData {
-		c.RunWithArgs(cmd)
-	}
-
-	// Output:
-	// demo --nodes 3 -e select node_id, locality from crdb_internal.gossip_nodes order by node_id
-	// node_id	locality
-	// 1	region=us-east1,az=b
-	// 2	region=us-east1,az=c
-	// 3	region=us-east1,az=d
-	// demo --nodes 9 -e select node_id, locality from crdb_internal.gossip_nodes order by node_id
-	// node_id	locality
-	// 1	region=us-east1,az=b
-	// 2	region=us-east1,az=c
-	// 3	region=us-east1,az=d
-	// 4	region=us-west1,az=a
-	// 5	region=us-west1,az=b
-	// 6	region=us-west1,az=c
-	// 7	region=europe-west1,az=b
-	// 8	region=europe-west1,az=c
-	// 9	region=europe-west1,az=d
-	// demo --nodes 3 --demo-locality=region=us-east1:region=us-east2:region=us-east3 -e select node_id, locality from crdb_internal.gossip_nodes order by node_id
-	// node_id	locality
-	// 1	region=us-east1
-	// 2	region=us-east2
-	// 3	region=us-east3
-}
-
 func Example_demo() {
 	c := newCLITest(cliTestParams{noServer: true})
 	defer c.cleanup()
