@@ -418,7 +418,16 @@ func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Durati
 					if t.IsBuildVersion(`v19.2.0`) {
 						if err := runAndLogStmts(ctx, t, c, "mixed-schema-changes-19.2", []string{
 							// CREATE TABLE AS with a specified primary key was added in 19.2.
-							`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id)) AS select o_w_id, o_d_id, o_id from tpcc.order;`,
+							`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id)) AS select o_w_id, o_d_id, o_id FROM tpcc.order;`,
+						}); err != nil {
+							return err
+						}
+					} else {
+						if err := runAndLogStmts(ctx, t, c, "mixed-schema-changes-19.1", []string{
+							`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id));`,
+							// We can't populate the table with CREATE TABLE AS, so just
+							// insert the rows. AOST is used to reduce contention.
+							`INSERT INTO tpcc.orderpks SELECT o_w_id, o_d_id, o_id FROM tpcc.order AS OF SYSTEM TIME '-1s';`,
 						}); err != nil {
 							return err
 						}
