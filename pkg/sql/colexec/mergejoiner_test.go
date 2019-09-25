@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -63,6 +64,7 @@ func (tc *mjTestCase) Init() {
 }
 
 func TestMergeJoiner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []mjTestCase{
 		{
 			description:  "basic test",
@@ -1470,6 +1472,7 @@ func TestMergeJoiner(t *testing.T) {
 // track of the expected output to make sure the join output is batched
 // correctly.
 func TestMergeJoinerMultiBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, numInputBatches := range []int{1, 2, 16} {
 		for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize()} {
@@ -1534,6 +1537,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 // keeps track of the expected count to make sure the join output is batched
 // correctly.
 func TestMergeJoinerMultiBatchRuns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, groupSize := range []int{int(coldata.BatchSize()) / 8, int(coldata.BatchSize()) / 4, int(coldata.BatchSize()) / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
@@ -1601,6 +1605,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 // keeps track of the expected count to make sure the join output is batched
 // correctly.
 func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 4, int(coldata.BatchSize()) / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
@@ -1655,6 +1660,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 // keeps track of the expected count to make sure the join output is batched
 // correctly.
 func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, groupSize := range []int{int(coldata.BatchSize()) / 8, int(coldata.BatchSize()) / 4, int(coldata.BatchSize()) / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
@@ -1775,6 +1781,7 @@ func newBatchesOfRandIntRows(
 }
 
 func TestMergeJoinerRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, numInputBatches := range []int{1, 2, 16, 256} {
 		for _, maxRunLength := range []int64{2, 3, 100} {

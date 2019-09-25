@@ -186,8 +186,6 @@ func decodeTableKeyToCol(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		switch valType.Width() {
-		case 8:
-			vec.Int8()[idx] = int8(i)
 		case 16:
 			vec.Int16()[idx] = int16(i)
 		case 32:
@@ -305,8 +303,6 @@ func UnmarshalColumnValueToCol(
 		var v int64
 		v, err = value.GetInt()
 		switch typ.Width() {
-		case 8:
-			vec.Int8()[idx] = int8(v)
 		case 16:
 			vec.Int16()[idx] = int16(v)
 		case 32:

@@ -42,8 +42,6 @@ func PhysicalTypeColElemToDatum(
 		return tree.DBoolFalse
 	case types.IntFamily:
 		switch ct.Width() {
-		case 8:
-			return da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
 		case 16:
 			return da.NewDInt(tree.DInt(col.Int16()[rowIdx]))
 		case 32:

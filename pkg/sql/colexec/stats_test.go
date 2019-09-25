@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 // TestNumBatches is a unit test for NumBatches field of VectorizedStats.
 func TestNumBatches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize())))
 	vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
@@ -40,6 +42,7 @@ func TestNumBatches(t *testing.T) {
 
 // TestNumTuples is a unit test for NumTuples field of VectorizedStats.
 func TestNumTuples(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
@@ -60,6 +63,7 @@ func TestNumTuples(t *testing.T) {
 // merge joiner and makes sure that all the stats measured on the latter are as
 // expected.
 func TestVectorizedStatsCollector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for nBatches := 1; nBatches < 5; nBatches++ {
 		timeSource := timeutil.NewTestTimeSource()
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)

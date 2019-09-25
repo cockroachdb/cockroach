@@ -18,9 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestSelectInInt64(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		desc         string
 		inputTuples  tuples
@@ -148,6 +150,7 @@ func BenchmarkSelectInInt64(b *testing.B) {
 }
 
 func TestProjectInInt64(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		desc         string
 		inputTuples  tuples

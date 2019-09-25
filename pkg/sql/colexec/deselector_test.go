@@ -17,10 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestDeselector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		colTypes []coltypes.T
 		tuples   []tuple
