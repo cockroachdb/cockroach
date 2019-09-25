@@ -1,0 +1,62 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.blobs;
+option go_package = "blobspb";
+
+import "gogoproto/gogo.proto";
+
+message GetBlobRequest {
+  string filename = 1;
+}
+
+message GetBlobResponse {
+  bytes payload = 1;
+}
+
+message PutBlobRequest {
+  string filename = 1;
+  bytes payload = 2;
+}
+
+message PutBlobResponse {
+}
+
+message ListBlobRequest {
+  string dir = 1;
+}
+
+message ListBlobResponse {
+  repeated string files = 1;
+}
+
+message DeleteBlobRequest {
+  string filename = 1;
+}
+
+message DeleteBlobResponse {
+}
+
+message GetBlobSizeRequest {
+  string filename = 1;
+}
+
+message GetBlobSizeResponse {
+  int64 filesize = 1;
+}
+
+service Blob {
+  rpc Get(GetBlobRequest) returns (GetBlobResponse) {}
+  rpc Put(PutBlobRequest) returns (PutBlobResponse) {}
+  rpc List(ListBlobRequest) returns (ListBlobResponse) {}
+  rpc Delete(DeleteBlobRequest) returns (DeleteBlobResponse) {}
+  rpc Size(GetBlobSizeRequest) returns (GetBlobSizeResponse) {}
+}
