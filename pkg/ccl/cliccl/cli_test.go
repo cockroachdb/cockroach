@@ -215,7 +215,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [+zone=us-east-1a, +ssd]
+	// constraints: []
 	// lease_preferences: []
 	// zone ls
 	// .default

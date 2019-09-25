@@ -653,6 +653,19 @@ func (z *ZoneConfig) GetSubzone(indexID uint32, partition string) *Subzone {
 	return nil
 }
 
+// GetSubzoneExact is similar to GetSubzone but does not find the most specific
+// subzone that applies to a specified index and partition, as it finds either the
+// exact config that applies, or returns nil.
+func (z *ZoneConfig) GetSubzoneExact(indexID uint32, partition string) *Subzone {
+	for _, s := range z.Subzones {
+		if s.IndexID == indexID && s.PartitionName == partition {
+			copySubzone := s
+			return &copySubzone
+		}
+	}
+	return nil
+}
+
 // GetSubzoneForKeySuffix returns the ZoneConfig for the subzone that contains
 // keySuffix, if it exists.
 func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) *Subzone {
