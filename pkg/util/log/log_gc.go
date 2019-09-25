@@ -11,8 +11,10 @@
 package log
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -88,8 +90,59 @@ func (l *loggerT) gcOldFiles() {
 			continue
 		}
 		path := filepath.Join(dir, f.Name)
+
+		maybeArchiveFile(path)
+
 		if err := os.Remove(path); err != nil {
 			fmt.Fprintln(OrigStderr, err)
+		}
+	}
+}
+
+// maybeArchiveFile archive log file using gzip when `LogFileArchive` is set to true
+func maybeArchiveFile(path string) {
+	if LogFileArchive {
+
+		// create gzip file used by gzip writer
+		tf, err := os.Create(path + ".gz")
+		if err != nil {
+			fmt.Fprintln(OrigStderr, err)
+			return
+		}
+		defer func() {
+			if err := tf.Close(); err != nil {
+				fmt.Fprintln(OrigStderr, err)
+			}
+		}()
+
+		// writer for gzip with default compression
+		gz, err := gzip.NewWriterLevel(tf, gzip.DefaultCompression)
+		if err != nil {
+			fmt.Fprintln(OrigStderr, err)
+			return
+		}
+		defer func() {
+			if err := gz.Close(); err != nil {
+				fmt.Fprintln(OrigStderr, err)
+			}
+		}()
+
+		// open file and write to Writer
+		fs, err := os.Open(path)
+		if err != nil {
+			fmt.Fprintln(OrigStderr, err)
+			return
+		}
+		defer func() {
+			if err := fs.Close(); err != nil {
+				fmt.Fprintln(OrigStderr, err)
+			}
+		}()
+
+		// compress log file to gzip file
+		if _, err := io.Copy(gz, fs); err != nil {
+			fmt.Fprintln(OrigStderr, err)
+			return
 		}
 	}
 }
