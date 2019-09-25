@@ -22,6 +22,7 @@ with &1 (foo)
       │    └──  xy.y:2(int) => y:4(int)
       ├── key: (3)
       ├── fd: (3)-->(4)
+      ├── prune: (3,4)
       └── cte-uses: map[1:1]
 
 # Side effects should be propagated up to the top-level from the Binding side
@@ -56,7 +57,8 @@ with &1 (foo)
       │    └──  "?column?":1(decimal) => "?column?":2(decimal)
       ├── cardinality: [1 - 1]
       ├── key: ()
-      └── fd: ()-->(2)
+      ├── fd: ()-->(2)
+      └── prune: (2)
 
 # Side effects should be propagated up to the top-level from the Input side of
 # a With.
@@ -96,6 +98,7 @@ with &1 (foo)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(2)
+      │    ├── prune: (2)
       │    └── cte-uses: map[1:1]
       └── projections
            └── div [type=decimal, side-effects]
@@ -139,6 +142,7 @@ with &1 (foo)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(2)
+      │    ├── prune: (2)
       │    └── cte-uses: map[1:1]
       └── projections
            └── const: 1 [type=int]
@@ -190,6 +194,7 @@ inner-join-apply
  │         ├── cardinality: [1 - 1]
  │         ├── key: ()
  │         ├── fd: ()-->(3)
+ │         ├── prune: (3)
  │         └── cte-uses: map[1:1]
  └── filters (true)
 

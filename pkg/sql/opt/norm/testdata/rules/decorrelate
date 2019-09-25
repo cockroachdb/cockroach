@@ -2018,7 +2018,7 @@ CREATE TABLE tab_orig (
 )
 ----
 
-opt expect=TryDecorrelateGroupBy
+opt expect=TryDecorrelateGroupBy disable=InlineWith
 SELECT
   NULL
 FROM
@@ -2145,26 +2145,10 @@ project
  │    │    │         │         │    │    │    │    │    │    │    │         ├── cardinality: [1 - 1]
  │    │    │         │         │    │    │    │    │    │    │    │         ├── key: ()
  │    │    │         │         │    │    │    │    │    │    │    │         ├── fd: ()-->(39)
- │    │    │         │         │    │    │    │    │    │    │    │         ├── inner-join (hash)
- │    │    │         │         │    │    │    │    │    │    │    │         │    ├── columns: "?column?":37(unknown) "?column?":38(unknown)
+ │    │    │         │         │    │    │    │    │    │    │    │         ├── with-scan &1 (w0)
+ │    │    │         │         │    │    │    │    │    │    │    │         │    ├── mapping:
  │    │    │         │         │    │    │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
- │    │    │         │         │    │    │    │    │    │    │    │         │    ├── key: ()
- │    │    │         │         │    │    │    │    │    │    │    │         │    ├── fd: ()-->(37,38)
- │    │    │         │         │    │    │    │    │    │    │    │         │    ├── with-scan &1 (w0)
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── columns: "?column?":37(unknown)
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── mapping:
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    │    └──  "?column?":36(unknown) => "?column?":37(unknown)
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── key: ()
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    └── fd: ()-->(37)
- │    │    │         │         │    │    │    │    │    │    │    │         │    ├── with-scan &1 (w0)
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── columns: "?column?":38(unknown)
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── mapping:
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    │    └──  "?column?":36(unknown) => "?column?":38(unknown)
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    ├── key: ()
- │    │    │         │         │    │    │    │    │    │    │    │         │    │    └── fd: ()-->(38)
- │    │    │         │         │    │    │    │    │    │    │    │         │    └── filters (true)
+ │    │    │         │         │    │    │    │    │    │    │    │         │    └── key: ()
  │    │    │         │         │    │    │    │    │    │    │    │         └── projections
  │    │    │         │         │    │    │    │    │    │    │    │              └── variable: t0._string [type=int, outer=(6)]
  │    │    │         │         │    │    │    │    │    │    │    └── filters (true)
