@@ -307,21 +307,21 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		}
 	}
 
-	zipfRng := rand.New(rand.NewSource(g.seed))
-	var requestGen randGenerator
-	var scanLengthGen randGenerator
-	var rowIndex = new(uint64)
-	*rowIndex = uint64(g.recordCount)
+	rowIndexVal := uint64(g.recordCount)
+	rowIndex := &rowIndexVal
+	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 
+	var requestGen randGenerator
+	requestGenRng := rand.New(rand.NewSource(g.seed))
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
 		requestGen, err = NewZipfGenerator(
-			zipfRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
+			requestGenRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
 	case "uniform":
-		requestGen, err = NewUniformGenerator(zipfRng, 0, uint64(g.recordCount)-1)
+		requestGen, err = NewUniformGenerator(requestGenRng, 0, uint64(g.recordCount)-1)
 	case "latest":
 		requestGen, err = NewSkewedLatestGenerator(
-			zipfRng, zipfIMin, uint64(g.recordCount)-1, defaultTheta, false /* verbose */)
+			requestGenRng, zipfIMin, uint64(g.recordCount)-1, defaultTheta, false /* verbose */)
 	default:
 		return workload.QueryLoad{}, errors.Errorf("Unknown request distribution: %s", g.requestDistribution)
 	}
@@ -329,11 +329,13 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return workload.QueryLoad{}, err
 	}
 
+	var scanLengthGen randGenerator
+	scanLengthGenRng := rand.New(rand.NewSource(g.seed + 1))
 	switch strings.ToLower(g.scanLengthDistribution) {
 	case "zipfian":
-		scanLengthGen, err = NewZipfGenerator(zipfRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
+		scanLengthGen, err = NewZipfGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
 	case "uniform":
-		scanLengthGen, err = NewUniformGenerator(zipfRng, g.minScanLength, g.maxScanLength)
+		scanLengthGen, err = NewUniformGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength)
 	default:
 		return workload.QueryLoad{}, errors.Errorf("Unknown scan length distribution: %s", g.scanLengthDistribution)
 	}
@@ -341,7 +343,6 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return workload.QueryLoad{}, err
 	}
 
-	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
