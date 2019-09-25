@@ -523,3 +523,21 @@
     $passthrough
 )
 
+# PruneWithScanCols discards columns scanned from the WithScan that are never
+# used.
+[PruneWithScanCols, Normalize]
+(Project
+    $input:(WithScan)
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+        )
+)
+=>
+(Project
+    (PruneCols $input $needed)
+    $projections
+    $passthrough
+)

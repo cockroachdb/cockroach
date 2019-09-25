@@ -217,7 +217,8 @@ insert "order"
                 │    ├── stats: [rows=1, distinct(38)=1, null(38)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    └── fd: ()-->(38-40)
+                │    ├── fd: ()-->(38-40)
+                │    └── prune: (38-40)
                 └── filters (true)
 
 opt format=hide-qual
@@ -266,7 +267,8 @@ insert new_order
                 │    ├── stats: [rows=1, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    └── fd: ()-->(15-17)
+                │    ├── fd: ()-->(15-17)
+                │    └── prune: (15-17)
                 └── filters (true)
 
 opt format=hide-qual
@@ -795,7 +797,8 @@ insert order_line
       │         │    │    └──  column1:11(int) => column1:32(int)
       │         │    ├── cardinality: [6 - 6]
       │         │    ├── stats: [rows=6, distinct(30)=0.6, null(30)=0, distinct(31)=0.6, null(31)=0, distinct(32)=0.6, null(32)=0]
-      │         │    └── cost: 0.01
+      │         │    ├── cost: 0.01
+      │         │    └── prune: (30-32)
       │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
            └── anti-join (lookup stock@stock_item_fk_idx)
@@ -811,7 +814,8 @@ insert order_line
                 │    │    └──  column5:15(int) => column5:51(int)
                 │    ├── cardinality: [6 - 6]
                 │    ├── stats: [rows=6, distinct(50)=0.6, null(50)=0, distinct(51)=0.6, null(51)=0]
-                │    └── cost: 0.01
+                │    ├── cost: 0.01
+                │    └── prune: (50,51)
                 └── filters (true)
 
 # --------------------------------------------------
@@ -1142,7 +1146,8 @@ insert history
       │         │    ├── stats: [rows=1, distinct(41)=1, null(41)=0, distinct(42)=1, null(42)=0, distinct(43)=1, null(43)=0]
       │         │    ├── cost: 0.01
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(41-43)
+      │         │    ├── fd: ()-->(41-43)
+      │         │    └── prune: (41-43)
       │         └── filters (true)
       └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
            └── anti-join (lookup district)
@@ -1162,7 +1167,8 @@ insert history
                 │    ├── stats: [rows=1, distinct(55)=1, null(55)=0, distinct(56)=1, null(56)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    └── fd: ()-->(55,56)
+                │    ├── fd: ()-->(55,56)
+                │    └── prune: (55,56)
                 └── filters (true)
 
 # --------------------------------------------------
