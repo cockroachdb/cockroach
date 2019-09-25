@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -41,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -436,12 +435,6 @@ type DistSQLReceiver struct {
 	// Once set, no more rows are accepted.
 	commErr error
 
-	// txnAbortedErr is atomically set to an errWrap when the KV txn finishes
-	// asynchronously. Further results should not be returned to the client, as
-	// they risk missing seeing their own writes. Upon the next Push(), err is set
-	// and ConsumerStatus is set to ConsumerClosed.
-	txnAbortedErr atomic.Value
-
 	row    tree.Datums
 	status execinfra.ConsumerStatus
 	alloc  sqlbase.DatumAlloc
@@ -468,12 +461,6 @@ type DistSQLReceiver struct {
 	// statement.
 	bytesRead int64
 	rowsRead  int64
-}
-
-// errWrap is a container for an error, for use with atomic.Value, which
-// requires that all of things stored in it must have the same concrete type.
-type errWrap struct {
-	err error
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -560,21 +547,6 @@ func MakeDistSQLReceiver(
 		updateClock:  updateClock,
 		stmtType:     stmtType,
 		tracing:      tracing,
-	}
-	// If this receiver is part of a distributed flow and isn't using the root
-	// transaction, we need to sure that the flow is canceled when the root
-	// transaction finishes (i.e. it is abandoned, aborted, or committed), so that
-	// we don't return results to the client that might have missed seeing their
-	// own writes. The committed case shouldn't happen. This isn't necessary if
-	// the flow is running locally and is using the root transaction.
-	//
-	// TODO(andrei): Instead of doing this, should we lift this transaction
-	// monitoring to connExecutor and have it cancel the SQL txn's context? Or for
-	// that matter, should the TxnCoordSender cancel the context itself?
-	if r.txn != nil && r.txn.Type() == client.LeafTxn {
-		r.txn.OnCurrentIncarnationFinish(func(err error) {
-			r.txnAbortedErr.Store(errWrap{err: err})
-		})
 	}
 	return r
 }
@@ -675,9 +647,6 @@ func (r *DistSQLReceiver) Push(
 		}
 		return r.status
 	}
-	if r.resultWriter.Err() == nil && r.txnAbortedErr.Load() != nil {
-		r.resultWriter.SetError(r.txnAbortedErr.Load().(errWrap).err)
-	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
 		r.resultWriter.SetError(r.ctx.Err())
 	}
@@ -766,9 +735,6 @@ var (
 
 // ProducerDone is part of the RowReceiver interface.
 func (r *DistSQLReceiver) ProducerDone() {
-	if r.txn != nil {
-		r.txn.OnCurrentIncarnationFinish(nil)
-	}
 	if r.closed {
 		panic("double close")
 	}

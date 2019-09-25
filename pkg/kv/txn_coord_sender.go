@@ -125,9 +125,6 @@ type TxnCoordSender struct {
 
 		// userPriority is the txn's priority. Used when restarting the transaction.
 		userPriority roachpb.UserPriority
-
-		// onFinishFn is a closure invoked when state changes to done or aborted.
-		onFinishFn func(error)
 	}
 
 	// A pointer member to the creating factory provides access to
@@ -669,13 +666,6 @@ func (tc *TxnCoordSender) augmentMetaLocked(ctx context.Context, meta roachpb.Tx
 	}
 }
 
-// OnFinish is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) OnFinish(onFinishFn func(error)) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	tc.mu.onFinishFn = onFinishFn
-}
-
 // DisablePipelining is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) DisablePipelining() error {
 	tc.mu.Lock()
@@ -915,20 +905,12 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	return nil
 }
 
-// cleanupTxnLocked calls onFinishFn and closes all the interceptors.
+// cleanupTxnLocked closes all the interceptors.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context) {
 	if tc.mu.closed {
 		return
 	}
 	tc.mu.closed = true
-	if tc.mu.onFinishFn != nil {
-		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */).GetDetail()
-		if rejectErr == nil {
-			log.Fatal(ctx, "expected non-nil rejectErr")
-		}
-		tc.mu.onFinishFn(rejectErr)
-		tc.mu.onFinishFn = nil
-	}
 	// Close each interceptor.
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.closeLocked()

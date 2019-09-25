@@ -37,14 +37,12 @@ const (
 	// augment its state before the transaction can be finalized. Leaf
 	// transactions do not heartbeat the transaction record.
 	//
-	// Note: As leaves don't perform heartbeats, the transaction might be
-	// cleaned up while this leaf is executing an operation. So data read
-	// by a leaf txn is not guaranteed to not miss writes performed by the
-	// transaction before the cleanup (at least not after the expiration
-	// of the GC period / abort span entry timeout). If the client cares
-	// about this hazard, the state of the heartbeats should be checked
-	// using the root txn before delivering results to the client. DistSQL
-	// does this.
+	// Note: As leaves don't perform heartbeats, the transaction might be cleaned
+	// up while this leaf is executing an operation. We rely on the cleanup
+	// process poisoning the AbortSpans for all intents so that reads performed
+	// through a leaf txn don't miss writes previously performed by the
+	// transaction (at least not until the expiration of the GC period / abort
+	// span entry timeout).
 	LeafTxn
 )
 
@@ -95,15 +93,6 @@ type Sender interface {
 // metadata between the "root" client.Txn and "leaf" instances.
 type TxnSender interface {
 	Sender
-
-	// OnFinish invokes the supplied closure when the sender has finished
-	// with the txn (i.e. it's been abandoned, aborted, or committed).
-	// The error passed is meant to indicate to an extant distributed
-	// SQL receiver that the underlying transaction record has either been
-	// aborted (and why), or been committed. Only one callback is set, so
-	// if this method is invoked multiple times, the most recent callback
-	// is the only one which will be invoked.
-	OnFinish(func(error))
 
 	// AnchorOnSystemConfigRange ensures that the transaction record, if/when it
 	// will be created, will be created on the system config range. This is useful
@@ -286,15 +275,6 @@ func (m *MockTransactionalSender) GetMeta(
 // AugmentMeta is part of the TxnSender interface.
 func (m *MockTransactionalSender) AugmentMeta(context.Context, roachpb.TxnCoordMeta) {
 	panic("unimplemented")
-}
-
-// OnFinish is part of the TxnSender interface.
-func (m *MockTransactionalSender) OnFinish(f func(error)) {
-	// We accept the nil, as that's commonly used to reset a previously-set
-	// closure.
-	if f != nil {
-		panic("unimplemented")
-	}
 }
 
 // AnchorOnSystemConfigRange is part of the TxnSender interface.
