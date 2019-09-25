@@ -762,3 +762,18 @@ ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3
 
 statement ok
 ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3
+
+# Test that index configurations don't infect partition configurations.
+# Specifically we are testing that values written to infect@primary's
+# zone configuration does not appear in partition p1 of infect@primary's zone config.
+statement ok
+CREATE TABLE infect (x INT PRIMARY KEY);
+ALTER TABLE infect PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1));
+ALTER INDEX infect@primary CONFIGURE ZONE USING num_replicas=5;
+ALTER PARTITION p1 OF TABLE infect CONFIGURE ZONE USING constraints='[+dc=dc1]'
+
+query TT
+SELECT partition_name, zone_config FROM [SHOW PARTITIONS FROM TABLE infect]
+----
+p1 constraints = '[+dc=dc1]'
+

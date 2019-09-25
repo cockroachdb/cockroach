@@ -356,7 +356,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		var partialSubzone *config.Subzone
 		if index != nil {
-			partialSubzone = partialZone.GetSubzone(uint32(index.ID), partition)
+			partialSubzone = partialZone.GetSubzoneExact(uint32(index.ID), partition)
 			if partialSubzone == nil {
 				partialSubzone = &config.Subzone{Config: *config.NewZoneConfig()}
 			}
