@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -405,12 +404,6 @@ type DistSQLReceiver struct {
 	// Once set, no more rows are accepted.
 	commErr error
 
-	// txnAbortedErr is atomically set to an errWrap when the KV txn finishes
-	// asynchronously. Further results should not be returned to the client, as
-	// they risk missing seeing their own writes. Upon the next Push(), err is set
-	// and ConsumerStatus is set to ConsumerClosed.
-	txnAbortedErr atomic.Value
-
 	row    tree.Datums
 	status execinfra.ConsumerStatus
 	alloc  sqlbase.DatumAlloc
@@ -530,21 +523,6 @@ func MakeDistSQLReceiver(
 		stmtType:     stmtType,
 		tracing:      tracing,
 	}
-	// If this receiver is part of a distributed flow and isn't using the root
-	// transaction, we need to sure that the flow is canceled when the root
-	// transaction finishes (i.e. it is abandoned, aborted, or committed), so that
-	// we don't return results to the client that might have missed seeing their
-	// own writes. The committed case shouldn't happen. This isn't necessary if
-	// the flow is running locally and is using the root transaction.
-	//
-	// TODO(andrei): Instead of doing this, should we lift this transaction
-	// monitoring to connExecutor and have it cancel the SQL txn's context? Or for
-	// that matter, should the TxnCoordSender cancel the context itself?
-	if r.txn != nil && r.txn.Type() == client.LeafTxn {
-		r.txn.OnCurrentIncarnationFinish(func(err error) {
-			r.txnAbortedErr.Store(errWrap{err: err})
-		})
-	}
 	return r
 }
 
@@ -644,9 +622,6 @@ func (r *DistSQLReceiver) Push(
 		}
 		return r.status
 	}
-	if r.resultWriter.Err() == nil && r.txnAbortedErr.Load() != nil {
-		r.resultWriter.SetError(r.txnAbortedErr.Load().(errWrap).err)
-	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
 		r.resultWriter.SetError(r.ctx.Err())
 	}
@@ -735,9 +710,6 @@ var (
 
 // ProducerDone is part of the RowReceiver interface.
 func (r *DistSQLReceiver) ProducerDone() {
-	if r.txn != nil {
-		r.txn.OnCurrentIncarnationFinish(nil)
-	}
 	if r.closed {
 		panic("double close")
 	}
