@@ -122,7 +122,9 @@ explain_stmt ::=
 	'EXPLAIN' preparable_stmt
 	| 'EXPLAIN' '(' explain_option_list ')' preparable_stmt
 	| 'EXPLAIN' 'ANALYZE' preparable_stmt
+	| 'EXPLAIN' 'ANALYSE' preparable_stmt
 	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' preparable_stmt
+	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' preparable_stmt
 
 import_stmt ::=
 	'IMPORT' import_format string_or_placeholder opt_with_options
