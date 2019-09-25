@@ -48,7 +48,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[118];
+  static const ::google::protobuf::internal::ParseTable schema[124];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -212,6 +212,12 @@ extern GCRequest_GCKeyDefaultTypeInternal _GCRequest_GCKey_default_instance_;
 class GCResponse;
 class GCResponseDefaultTypeInternal;
 extern GCResponseDefaultTypeInternal _GCResponse_default_instance_;
+class GetBlobRequest;
+class GetBlobRequestDefaultTypeInternal;
+extern GetBlobRequestDefaultTypeInternal _GetBlobRequest_default_instance_;
+class GetBlobResponse;
+class GetBlobResponseDefaultTypeInternal;
+extern GetBlobResponseDefaultTypeInternal _GetBlobResponse_default_instance_;
 class GetRequest;
 class GetRequestDefaultTypeInternal;
 extern GetRequestDefaultTypeInternal _GetRequest_default_instance_;
@@ -257,6 +263,12 @@ extern LeaseInfoRequestDefaultTypeInternal _LeaseInfoRequest_default_instance_;
 class LeaseInfoResponse;
 class LeaseInfoResponseDefaultTypeInternal;
 extern LeaseInfoResponseDefaultTypeInternal _LeaseInfoResponse_default_instance_;
+class ListBlobRequest;
+class ListBlobRequestDefaultTypeInternal;
+extern ListBlobRequestDefaultTypeInternal _ListBlobRequest_default_instance_;
+class ListBlobResponse;
+class ListBlobResponseDefaultTypeInternal;
+extern ListBlobResponseDefaultTypeInternal _ListBlobResponse_default_instance_;
 class MergeRequest;
 class MergeRequestDefaultTypeInternal;
 extern MergeRequestDefaultTypeInternal _MergeRequest_default_instance_;
@@ -269,6 +281,12 @@ extern PushTxnRequestDefaultTypeInternal _PushTxnRequest_default_instance_;
 class PushTxnResponse;
 class PushTxnResponseDefaultTypeInternal;
 extern PushTxnResponseDefaultTypeInternal _PushTxnResponse_default_instance_;
+class PutBlobRequest;
+class PutBlobRequestDefaultTypeInternal;
+extern PutBlobRequestDefaultTypeInternal _PutBlobRequest_default_instance_;
+class PutBlobResponse;
+class PutBlobResponseDefaultTypeInternal;
+extern PutBlobResponseDefaultTypeInternal _PutBlobResponse_default_instance_;
 class PutRequest;
 class PutRequestDefaultTypeInternal;
 extern PutRequestDefaultTypeInternal _PutRequest_default_instance_;
@@ -466,6 +484,8 @@ template<> ::cockroach::roachpb::ExternalStorage_Workload* Arena::CreateMaybeMes
 template<> ::cockroach::roachpb::GCRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest>(Arena*);
 template<> ::cockroach::roachpb::GCRequest_GCKey* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest_GCKey>(Arena*);
 template<> ::cockroach::roachpb::GCResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::GCResponse>(Arena*);
+template<> ::cockroach::roachpb::GetBlobRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::GetBlobRequest>(Arena*);
+template<> ::cockroach::roachpb::GetBlobResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::GetBlobResponse>(Arena*);
 template<> ::cockroach::roachpb::GetRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::GetRequest>(Arena*);
 template<> ::cockroach::roachpb::GetResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::GetResponse>(Arena*);
 template<> ::cockroach::roachpb::Header* Arena::CreateMaybeMessage<::cockroach::roachpb::Header>(Arena*);
@@ -481,10 +501,14 @@ template<> ::cockroach::roachpb::InitPutRequest* Arena::CreateMaybeMessage<::coc
 template<> ::cockroach::roachpb::InitPutResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::InitPutResponse>(Arena*);
 template<> ::cockroach::roachpb::LeaseInfoRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoRequest>(Arena*);
 template<> ::cockroach::roachpb::LeaseInfoResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoResponse>(Arena*);
+template<> ::cockroach::roachpb::ListBlobRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ListBlobRequest>(Arena*);
+template<> ::cockroach::roachpb::ListBlobResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ListBlobResponse>(Arena*);
 template<> ::cockroach::roachpb::MergeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeRequest>(Arena*);
 template<> ::cockroach::roachpb::MergeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeResponse>(Arena*);
 template<> ::cockroach::roachpb::PushTxnRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::PushTxnRequest>(Arena*);
 template<> ::cockroach::roachpb::PushTxnResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::PushTxnResponse>(Arena*);
+template<> ::cockroach::roachpb::PutBlobRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::PutBlobRequest>(Arena*);
+template<> ::cockroach::roachpb::PutBlobResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::PutBlobResponse>(Arena*);
 template<> ::cockroach::roachpb::PutRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::PutRequest>(Arena*);
 template<> ::cockroach::roachpb::PutResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::PutResponse>(Arena*);
 template<> ::cockroach::roachpb::QueryIntentRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::QueryIntentRequest>(Arena*);
@@ -16591,6 +16615,683 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::RangeFeedValue* val_;
   ::cockroach::roachpb::RangeFeedCheckpoint* checkpoint_;
   ::cockroach::roachpb::RangeFeedError* error_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class GetBlobRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.GetBlobRequest) */ {
+ public:
+  GetBlobRequest();
+  virtual ~GetBlobRequest();
+
+  GetBlobRequest(const GetBlobRequest& from);
+
+  inline GetBlobRequest& operator=(const GetBlobRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  GetBlobRequest(GetBlobRequest&& from) noexcept
+    : GetBlobRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline GetBlobRequest& operator=(GetBlobRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const GetBlobRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const GetBlobRequest* internal_default_instance() {
+    return reinterpret_cast<const GetBlobRequest*>(
+               &_GetBlobRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    118;
+
+  void Swap(GetBlobRequest* other);
+  friend void swap(GetBlobRequest& a, GetBlobRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline GetBlobRequest* New() const final {
+    return CreateMaybeMessage<GetBlobRequest>(NULL);
+  }
+
+  GetBlobRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<GetBlobRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const GetBlobRequest& from);
+  void MergeFrom(const GetBlobRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(GetBlobRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string filename = 1;
+  void clear_filename();
+  static const int kFilenameFieldNumber = 1;
+  const ::std::string& filename() const;
+  void set_filename(const ::std::string& value);
+  #if LANG_CXX11
+  void set_filename(::std::string&& value);
+  #endif
+  void set_filename(const char* value);
+  void set_filename(const char* value, size_t size);
+  ::std::string* mutable_filename();
+  ::std::string* release_filename();
+  void set_allocated_filename(::std::string* filename);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.GetBlobRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr filename_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class GetBlobResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.GetBlobResponse) */ {
+ public:
+  GetBlobResponse();
+  virtual ~GetBlobResponse();
+
+  GetBlobResponse(const GetBlobResponse& from);
+
+  inline GetBlobResponse& operator=(const GetBlobResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  GetBlobResponse(GetBlobResponse&& from) noexcept
+    : GetBlobResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline GetBlobResponse& operator=(GetBlobResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const GetBlobResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const GetBlobResponse* internal_default_instance() {
+    return reinterpret_cast<const GetBlobResponse*>(
+               &_GetBlobResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    119;
+
+  void Swap(GetBlobResponse* other);
+  friend void swap(GetBlobResponse& a, GetBlobResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline GetBlobResponse* New() const final {
+    return CreateMaybeMessage<GetBlobResponse>(NULL);
+  }
+
+  GetBlobResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<GetBlobResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const GetBlobResponse& from);
+  void MergeFrom(const GetBlobResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(GetBlobResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // bytes payload = 1;
+  void clear_payload();
+  static const int kPayloadFieldNumber = 1;
+  const ::std::string& payload() const;
+  void set_payload(const ::std::string& value);
+  #if LANG_CXX11
+  void set_payload(::std::string&& value);
+  #endif
+  void set_payload(const char* value);
+  void set_payload(const void* value, size_t size);
+  ::std::string* mutable_payload();
+  ::std::string* release_payload();
+  void set_allocated_payload(::std::string* payload);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.GetBlobResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr payload_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class PutBlobRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.PutBlobRequest) */ {
+ public:
+  PutBlobRequest();
+  virtual ~PutBlobRequest();
+
+  PutBlobRequest(const PutBlobRequest& from);
+
+  inline PutBlobRequest& operator=(const PutBlobRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  PutBlobRequest(PutBlobRequest&& from) noexcept
+    : PutBlobRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline PutBlobRequest& operator=(PutBlobRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const PutBlobRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const PutBlobRequest* internal_default_instance() {
+    return reinterpret_cast<const PutBlobRequest*>(
+               &_PutBlobRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    120;
+
+  void Swap(PutBlobRequest* other);
+  friend void swap(PutBlobRequest& a, PutBlobRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline PutBlobRequest* New() const final {
+    return CreateMaybeMessage<PutBlobRequest>(NULL);
+  }
+
+  PutBlobRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<PutBlobRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const PutBlobRequest& from);
+  void MergeFrom(const PutBlobRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(PutBlobRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string filename = 1;
+  void clear_filename();
+  static const int kFilenameFieldNumber = 1;
+  const ::std::string& filename() const;
+  void set_filename(const ::std::string& value);
+  #if LANG_CXX11
+  void set_filename(::std::string&& value);
+  #endif
+  void set_filename(const char* value);
+  void set_filename(const char* value, size_t size);
+  ::std::string* mutable_filename();
+  ::std::string* release_filename();
+  void set_allocated_filename(::std::string* filename);
+
+  // bytes payload = 2;
+  void clear_payload();
+  static const int kPayloadFieldNumber = 2;
+  const ::std::string& payload() const;
+  void set_payload(const ::std::string& value);
+  #if LANG_CXX11
+  void set_payload(::std::string&& value);
+  #endif
+  void set_payload(const char* value);
+  void set_payload(const void* value, size_t size);
+  ::std::string* mutable_payload();
+  ::std::string* release_payload();
+  void set_allocated_payload(::std::string* payload);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.PutBlobRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr filename_;
+  ::google::protobuf::internal::ArenaStringPtr payload_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class PutBlobResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.PutBlobResponse) */ {
+ public:
+  PutBlobResponse();
+  virtual ~PutBlobResponse();
+
+  PutBlobResponse(const PutBlobResponse& from);
+
+  inline PutBlobResponse& operator=(const PutBlobResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  PutBlobResponse(PutBlobResponse&& from) noexcept
+    : PutBlobResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline PutBlobResponse& operator=(PutBlobResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const PutBlobResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const PutBlobResponse* internal_default_instance() {
+    return reinterpret_cast<const PutBlobResponse*>(
+               &_PutBlobResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    121;
+
+  void Swap(PutBlobResponse* other);
+  friend void swap(PutBlobResponse& a, PutBlobResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline PutBlobResponse* New() const final {
+    return CreateMaybeMessage<PutBlobResponse>(NULL);
+  }
+
+  PutBlobResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<PutBlobResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const PutBlobResponse& from);
+  void MergeFrom(const PutBlobResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(PutBlobResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string filename = 1;
+  void clear_filename();
+  static const int kFilenameFieldNumber = 1;
+  const ::std::string& filename() const;
+  void set_filename(const ::std::string& value);
+  #if LANG_CXX11
+  void set_filename(::std::string&& value);
+  #endif
+  void set_filename(const char* value);
+  void set_filename(const char* value, size_t size);
+  ::std::string* mutable_filename();
+  ::std::string* release_filename();
+  void set_allocated_filename(::std::string* filename);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.PutBlobResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr filename_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class ListBlobRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ListBlobRequest) */ {
+ public:
+  ListBlobRequest();
+  virtual ~ListBlobRequest();
+
+  ListBlobRequest(const ListBlobRequest& from);
+
+  inline ListBlobRequest& operator=(const ListBlobRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ListBlobRequest(ListBlobRequest&& from) noexcept
+    : ListBlobRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline ListBlobRequest& operator=(ListBlobRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ListBlobRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ListBlobRequest* internal_default_instance() {
+    return reinterpret_cast<const ListBlobRequest*>(
+               &_ListBlobRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    122;
+
+  void Swap(ListBlobRequest* other);
+  friend void swap(ListBlobRequest& a, ListBlobRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ListBlobRequest* New() const final {
+    return CreateMaybeMessage<ListBlobRequest>(NULL);
+  }
+
+  ListBlobRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ListBlobRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const ListBlobRequest& from);
+  void MergeFrom(const ListBlobRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ListBlobRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string dir = 1;
+  void clear_dir();
+  static const int kDirFieldNumber = 1;
+  const ::std::string& dir() const;
+  void set_dir(const ::std::string& value);
+  #if LANG_CXX11
+  void set_dir(::std::string&& value);
+  #endif
+  void set_dir(const char* value);
+  void set_dir(const char* value, size_t size);
+  ::std::string* mutable_dir();
+  ::std::string* release_dir();
+  void set_allocated_dir(::std::string* dir);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ListBlobRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr dir_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class ListBlobResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ListBlobResponse) */ {
+ public:
+  ListBlobResponse();
+  virtual ~ListBlobResponse();
+
+  ListBlobResponse(const ListBlobResponse& from);
+
+  inline ListBlobResponse& operator=(const ListBlobResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ListBlobResponse(ListBlobResponse&& from) noexcept
+    : ListBlobResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline ListBlobResponse& operator=(ListBlobResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ListBlobResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ListBlobResponse* internal_default_instance() {
+    return reinterpret_cast<const ListBlobResponse*>(
+               &_ListBlobResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    123;
+
+  void Swap(ListBlobResponse* other);
+  friend void swap(ListBlobResponse& a, ListBlobResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ListBlobResponse* New() const final {
+    return CreateMaybeMessage<ListBlobResponse>(NULL);
+  }
+
+  ListBlobResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ListBlobResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const ListBlobResponse& from);
+  void MergeFrom(const ListBlobResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ListBlobResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // repeated string files = 1;
+  int files_size() const;
+  void clear_files();
+  static const int kFilesFieldNumber = 1;
+  const ::std::string& files(int index) const;
+  ::std::string* mutable_files(int index);
+  void set_files(int index, const ::std::string& value);
+  #if LANG_CXX11
+  void set_files(int index, ::std::string&& value);
+  #endif
+  void set_files(int index, const char* value);
+  void set_files(int index, const char* value, size_t size);
+  ::std::string* add_files();
+  void add_files(const ::std::string& value);
+  #if LANG_CXX11
+  void add_files(::std::string&& value);
+  #endif
+  void add_files(const char* value);
+  void add_files(const char* value, size_t size);
+  const ::google::protobuf::RepeatedPtrField< ::std::string>& files() const;
+  ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_files();
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ListBlobResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> files_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -33666,9 +34367,432 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeFeedEvent.error)
 }
 
+// -------------------------------------------------------------------
+
+// GetBlobRequest
+
+// string filename = 1;
+inline void GetBlobRequest::clear_filename() {
+  filename_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& GetBlobRequest::filename() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.GetBlobRequest.filename)
+  return filename_.GetNoArena();
+}
+inline void GetBlobRequest::set_filename(const ::std::string& value) {
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.GetBlobRequest.filename)
+}
+#if LANG_CXX11
+inline void GetBlobRequest::set_filename(::std::string&& value) {
+  
+  filename_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.GetBlobRequest.filename)
+}
+#endif
+inline void GetBlobRequest::set_filename(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.GetBlobRequest.filename)
+}
+inline void GetBlobRequest::set_filename(const char* value, size_t size) {
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.GetBlobRequest.filename)
+}
+inline ::std::string* GetBlobRequest::mutable_filename() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GetBlobRequest.filename)
+  return filename_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* GetBlobRequest::release_filename() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.GetBlobRequest.filename)
+  
+  return filename_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void GetBlobRequest::set_allocated_filename(::std::string* filename) {
+  if (filename != NULL) {
+    
+  } else {
+    
+  }
+  filename_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), filename);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GetBlobRequest.filename)
+}
+
+// -------------------------------------------------------------------
+
+// GetBlobResponse
+
+// bytes payload = 1;
+inline void GetBlobResponse::clear_payload() {
+  payload_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& GetBlobResponse::payload() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.GetBlobResponse.payload)
+  return payload_.GetNoArena();
+}
+inline void GetBlobResponse::set_payload(const ::std::string& value) {
+  
+  payload_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.GetBlobResponse.payload)
+}
+#if LANG_CXX11
+inline void GetBlobResponse::set_payload(::std::string&& value) {
+  
+  payload_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.GetBlobResponse.payload)
+}
+#endif
+inline void GetBlobResponse::set_payload(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  payload_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.GetBlobResponse.payload)
+}
+inline void GetBlobResponse::set_payload(const void* value, size_t size) {
+  
+  payload_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.GetBlobResponse.payload)
+}
+inline ::std::string* GetBlobResponse::mutable_payload() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GetBlobResponse.payload)
+  return payload_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* GetBlobResponse::release_payload() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.GetBlobResponse.payload)
+  
+  return payload_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void GetBlobResponse::set_allocated_payload(::std::string* payload) {
+  if (payload != NULL) {
+    
+  } else {
+    
+  }
+  payload_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), payload);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GetBlobResponse.payload)
+}
+
+// -------------------------------------------------------------------
+
+// PutBlobRequest
+
+// string filename = 1;
+inline void PutBlobRequest::clear_filename() {
+  filename_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& PutBlobRequest::filename() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.PutBlobRequest.filename)
+  return filename_.GetNoArena();
+}
+inline void PutBlobRequest::set_filename(const ::std::string& value) {
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.PutBlobRequest.filename)
+}
+#if LANG_CXX11
+inline void PutBlobRequest::set_filename(::std::string&& value) {
+  
+  filename_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.PutBlobRequest.filename)
+}
+#endif
+inline void PutBlobRequest::set_filename(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.PutBlobRequest.filename)
+}
+inline void PutBlobRequest::set_filename(const char* value, size_t size) {
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.PutBlobRequest.filename)
+}
+inline ::std::string* PutBlobRequest::mutable_filename() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PutBlobRequest.filename)
+  return filename_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* PutBlobRequest::release_filename() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.PutBlobRequest.filename)
+  
+  return filename_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void PutBlobRequest::set_allocated_filename(::std::string* filename) {
+  if (filename != NULL) {
+    
+  } else {
+    
+  }
+  filename_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), filename);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.PutBlobRequest.filename)
+}
+
+// bytes payload = 2;
+inline void PutBlobRequest::clear_payload() {
+  payload_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& PutBlobRequest::payload() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.PutBlobRequest.payload)
+  return payload_.GetNoArena();
+}
+inline void PutBlobRequest::set_payload(const ::std::string& value) {
+  
+  payload_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.PutBlobRequest.payload)
+}
+#if LANG_CXX11
+inline void PutBlobRequest::set_payload(::std::string&& value) {
+  
+  payload_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.PutBlobRequest.payload)
+}
+#endif
+inline void PutBlobRequest::set_payload(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  payload_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.PutBlobRequest.payload)
+}
+inline void PutBlobRequest::set_payload(const void* value, size_t size) {
+  
+  payload_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.PutBlobRequest.payload)
+}
+inline ::std::string* PutBlobRequest::mutable_payload() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PutBlobRequest.payload)
+  return payload_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* PutBlobRequest::release_payload() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.PutBlobRequest.payload)
+  
+  return payload_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void PutBlobRequest::set_allocated_payload(::std::string* payload) {
+  if (payload != NULL) {
+    
+  } else {
+    
+  }
+  payload_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), payload);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.PutBlobRequest.payload)
+}
+
+// -------------------------------------------------------------------
+
+// PutBlobResponse
+
+// string filename = 1;
+inline void PutBlobResponse::clear_filename() {
+  filename_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& PutBlobResponse::filename() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.PutBlobResponse.filename)
+  return filename_.GetNoArena();
+}
+inline void PutBlobResponse::set_filename(const ::std::string& value) {
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.PutBlobResponse.filename)
+}
+#if LANG_CXX11
+inline void PutBlobResponse::set_filename(::std::string&& value) {
+  
+  filename_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.PutBlobResponse.filename)
+}
+#endif
+inline void PutBlobResponse::set_filename(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.PutBlobResponse.filename)
+}
+inline void PutBlobResponse::set_filename(const char* value, size_t size) {
+  
+  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.PutBlobResponse.filename)
+}
+inline ::std::string* PutBlobResponse::mutable_filename() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.PutBlobResponse.filename)
+  return filename_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* PutBlobResponse::release_filename() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.PutBlobResponse.filename)
+  
+  return filename_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void PutBlobResponse::set_allocated_filename(::std::string* filename) {
+  if (filename != NULL) {
+    
+  } else {
+    
+  }
+  filename_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), filename);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.PutBlobResponse.filename)
+}
+
+// -------------------------------------------------------------------
+
+// ListBlobRequest
+
+// string dir = 1;
+inline void ListBlobRequest::clear_dir() {
+  dir_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ListBlobRequest::dir() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ListBlobRequest.dir)
+  return dir_.GetNoArena();
+}
+inline void ListBlobRequest::set_dir(const ::std::string& value) {
+  
+  dir_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ListBlobRequest.dir)
+}
+#if LANG_CXX11
+inline void ListBlobRequest::set_dir(::std::string&& value) {
+  
+  dir_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ListBlobRequest.dir)
+}
+#endif
+inline void ListBlobRequest::set_dir(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  dir_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ListBlobRequest.dir)
+}
+inline void ListBlobRequest::set_dir(const char* value, size_t size) {
+  
+  dir_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ListBlobRequest.dir)
+}
+inline ::std::string* ListBlobRequest::mutable_dir() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ListBlobRequest.dir)
+  return dir_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ListBlobRequest::release_dir() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ListBlobRequest.dir)
+  
+  return dir_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ListBlobRequest::set_allocated_dir(::std::string* dir) {
+  if (dir != NULL) {
+    
+  } else {
+    
+  }
+  dir_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), dir);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ListBlobRequest.dir)
+}
+
+// -------------------------------------------------------------------
+
+// ListBlobResponse
+
+// repeated string files = 1;
+inline int ListBlobResponse::files_size() const {
+  return files_.size();
+}
+inline void ListBlobResponse::clear_files() {
+  files_.Clear();
+}
+inline const ::std::string& ListBlobResponse::files(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ListBlobResponse.files)
+  return files_.Get(index);
+}
+inline ::std::string* ListBlobResponse::mutable_files(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ListBlobResponse.files)
+  return files_.Mutable(index);
+}
+inline void ListBlobResponse::set_files(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ListBlobResponse.files)
+  files_.Mutable(index)->assign(value);
+}
+#if LANG_CXX11
+inline void ListBlobResponse::set_files(int index, ::std::string&& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ListBlobResponse.files)
+  files_.Mutable(index)->assign(std::move(value));
+}
+#endif
+inline void ListBlobResponse::set_files(int index, const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  files_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ListBlobResponse.files)
+}
+inline void ListBlobResponse::set_files(int index, const char* value, size_t size) {
+  files_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ListBlobResponse.files)
+}
+inline ::std::string* ListBlobResponse::add_files() {
+  // @@protoc_insertion_point(field_add_mutable:cockroach.roachpb.ListBlobResponse.files)
+  return files_.Add();
+}
+inline void ListBlobResponse::add_files(const ::std::string& value) {
+  files_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ListBlobResponse.files)
+}
+#if LANG_CXX11
+inline void ListBlobResponse::add_files(::std::string&& value) {
+  files_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ListBlobResponse.files)
+}
+#endif
+inline void ListBlobResponse::add_files(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  files_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.roachpb.ListBlobResponse.files)
+}
+inline void ListBlobResponse::add_files(const char* value, size_t size) {
+  files_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.roachpb.ListBlobResponse.files)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+ListBlobResponse::files() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ListBlobResponse.files)
+  return files_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+ListBlobResponse::mutable_files() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ListBlobResponse.files)
+  return &files_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
