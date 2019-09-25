@@ -1150,7 +1150,7 @@ func (etr *EndTransactionRequest) IsParallelCommit() bool {
 }
 
 // Keys returns credentials in an aws.Config.
-func (b *ExportStorage_S3) Keys() *aws.Config {
+func (b *ExternalStorage_S3) Keys() *aws.Config {
 	return &aws.Config{
 		Credentials: credentials.NewStaticCredentials(b.AccessKey, b.Secret, b.TempToken),
 	}

@@ -17,7 +17,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -115,7 +115,7 @@ func (w *workloadReader) readFiles(
 		if err != nil {
 			return err
 		}
-		conf, err := storageccl.ParseWorkloadConfig(file)
+		conf, err := cloud.ParseWorkloadConfig(file)
 		if err != nil {
 			return err
 		}
