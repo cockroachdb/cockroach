@@ -801,5 +801,10 @@ func SupportsVectorized(
 	defer memoryMonitor.Stop(ctx)
 	acc := memoryMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
-	return creator.setupFlow(ctx, flowCtx, processorSpecs, &acc)
+	if vecErr := execerror.CatchVectorizedRuntimeError(func() {
+		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, &acc)
+	}); vecErr != nil {
+		return leaves, vecErr
+	}
+	return leaves, err
 }
