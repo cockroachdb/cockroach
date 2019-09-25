@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -150,11 +150,11 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			writer.Flush()
 
-			conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
+			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination)
 			if err != nil {
 				return err
 			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, sp.flowCtx.Cfg.Settings)
+			es, err := cloud.MakeExternalStorage(ctx, conf, sp.flowCtx.Cfg.Settings)
 			if err != nil {
 				return err
 			}

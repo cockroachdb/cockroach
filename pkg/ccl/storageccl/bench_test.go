@@ -16,12 +16,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -152,7 +152,7 @@ func BenchmarkImport(b *testing.B) {
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
-			storage, err := storageccl.ExportStorageConfFromURI(`nodelocal:///` + subdir)
+			storage, err := cloud.ExternalStorageConfFromURI(`nodelocal:///` + subdir)
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}

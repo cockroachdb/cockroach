@@ -49,9 +49,9 @@ func TestExportCmd(t *testing.T) {
 		req := &roachpb.ExportRequest{
 			RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
 			StartTime:     start,
-			Storage: roachpb.ExportStorage{
-				Provider:  roachpb.ExportStorageProvider_LocalFile,
-				LocalFile: roachpb.ExportStorage_LocalFilePath{Path: "/foo"},
+			Storage: roachpb.ExternalStorage{
+				Provider:  roachpb.ExternalStorageProvider_LocalFile,
+				LocalFile: roachpb.ExternalStorage_LocalFilePath{Path: "/foo"},
 			},
 			MVCCFilter: mvccFilter,
 			ReturnSST:  true,

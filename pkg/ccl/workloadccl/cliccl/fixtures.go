@@ -127,7 +127,7 @@ const storageError = `failed to create google cloud client ` +
 // caller is responsible for closing it.
 func getStorage(ctx context.Context) (*storage.Client, error) {
 	// TODO(dan): Right now, we don't need all the complexity of
-	// storageccl.ExportStorage, but if we start supporting more than just GCS,
+	// cloud.ExternalStorage, but if we start supporting more than just GCS,
 	// this should probably be switched to it.
 	g, err := storage.NewClient(ctx, option.WithScopes(storage.ScopeReadWrite))
 	return g, errors.Wrap(err, storageError)

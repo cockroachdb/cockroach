@@ -180,7 +180,7 @@ func getSink(
 		}
 		u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
 		// Transfer "ownership" of validating all remaining query parameters to
-		// ExportStorage.
+		// ExternalStorage.
 		u.RawQuery = q.Encode()
 		q = url.Values{}
 		makeSink = func() (Sink, error) {

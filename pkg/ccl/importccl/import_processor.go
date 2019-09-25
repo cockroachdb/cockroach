@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -155,7 +156,7 @@ func makeInputConverter(
 	case roachpb.IOFileFormat_CSV:
 		isWorkload := true
 		for _, file := range spec.Uri {
-			if conf, err := storageccl.ExportStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExportStorageProvider_Workload {
+			if conf, err := cloud.ExternalStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExternalStorageProvider_Workload {
 				isWorkload = false
 				break
 			}

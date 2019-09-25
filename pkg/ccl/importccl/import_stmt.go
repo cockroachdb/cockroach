@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,7 +107,7 @@ func importJobDescription(
 	stmt.CreateDefs = defs
 	stmt.Files = nil
 	for _, file := range files {
-		clean, err := storageccl.SanitizeExportStorageURI(file)
+		clean, err := cloud.SanitizeExternalStorageURI(file)
 		if err != nil {
 			return "", err
 		}
@@ -441,7 +442,7 @@ func importPlanHook(
 			seqVals := make(map[sqlbase.ID]int64)
 
 			if importStmt.Bundle {
-				store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
+				store, err := cloud.ExternalStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
 				if err != nil {
 					return err
 				}

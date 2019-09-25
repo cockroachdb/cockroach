@@ -1,12 +1,14 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package storageccl
+package cloud
 
 import (
 	"context"
@@ -20,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -92,17 +93,17 @@ const (
 	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
 
-// ExportStorageConfFromURI generates an ExportStorage config from a URI string.
-func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
-	conf := roachpb.ExportStorage{}
+// ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
+func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
 	uri, err := url.Parse(path)
 	if err != nil {
 		return conf, err
 	}
 	switch uri.Scheme {
 	case "s3":
-		conf.Provider = roachpb.ExportStorageProvider_S3
-		conf.S3Config = &roachpb.ExportStorage_S3{
+		conf.Provider = roachpb.ExternalStorageProvider_S3
+		conf.S3Config = &roachpb.ExternalStorage_S3{
 			Bucket:    uri.Host,
 			Prefix:    uri.Path,
 			AccessKey: uri.Query().Get(S3AccessKeyParam),
@@ -122,8 +123,8 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		// characters to recover the original secret.
 		conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
 	case "gs":
-		conf.Provider = roachpb.ExportStorageProvider_GoogleCloud
-		conf.GoogleCloudConfig = &roachpb.ExportStorage_GCS{
+		conf.Provider = roachpb.ExternalStorageProvider_GoogleCloud
+		conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
 			Bucket:         uri.Host,
 			Prefix:         uri.Path,
 			Auth:           uri.Query().Get(AuthParam),
@@ -132,8 +133,8 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		}
 		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	case "azure":
-		conf.Provider = roachpb.ExportStorageProvider_Azure
-		conf.AzureConfig = &roachpb.ExportStorage_Azure{
+		conf.Provider = roachpb.ExternalStorageProvider_Azure
+		conf.AzureConfig = &roachpb.ExternalStorage_Azure{
 			Container:   uri.Host,
 			Prefix:      uri.Path,
 			AccountName: uri.Query().Get(AzureAccountNameParam),
@@ -147,18 +148,18 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		}
 		conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
 	case "http", "https":
-		conf.Provider = roachpb.ExportStorageProvider_Http
+		conf.Provider = roachpb.ExternalStorageProvider_Http
 		conf.HttpPath.BaseUri = path
 	case "nodelocal":
 		nodeID, err := strconv.Atoi(uri.Host)
 		if err != nil && uri.Host != "" {
 			return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", path)
 		}
-		conf.Provider = roachpb.ExportStorageProvider_LocalFile
+		conf.Provider = roachpb.ExternalStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
 		conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
 	case "experimental-workload", "workload":
-		conf.Provider = roachpb.ExportStorageProvider_Workload
+		conf.Provider = roachpb.ExternalStorageProvider_Workload
 		if conf.WorkloadConfig, err = ParseWorkloadConfig(uri); err != nil {
 			return conf, err
 		}
@@ -168,20 +169,20 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	return conf, nil
 }
 
-// ExportStorageFromURI returns an ExportStorage for the given URI.
-func ExportStorageFromURI(
+// ExternalStorageFromURI returns an ExternalStorage for the given URI.
+func ExternalStorageFromURI(
 	ctx context.Context, uri string, settings *cluster.Settings,
-) (ExportStorage, error) {
-	conf, err := ExportStorageConfFromURI(uri)
+) (ExternalStorage, error) {
+	conf, err := ExternalStorageConfFromURI(uri)
 	if err != nil {
 		return nil, err
 	}
-	return MakeExportStorage(ctx, conf, settings)
+	return MakeExternalStorage(ctx, conf, settings)
 }
 
-// SanitizeExportStorageURI returns the export storage URI with sensitive
+// SanitizeExternalStorageURI returns the external storage URI with sensitive
 // credentials stripped.
-func SanitizeExportStorageURI(path string) (string, error) {
+func SanitizeExternalStorageURI(path string) (string, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
 		return "", err
@@ -189,40 +190,40 @@ func SanitizeExportStorageURI(path string) (string, error) {
 	if uri.Scheme == "experimental-workload" || uri.Scheme == "workload" {
 		return path, nil
 	}
-	// All current export storage providers store credentials in the query string,
+	// All current external storage providers store credentials in the query string,
 	// if they store it in the URI at all.
 	uri.RawQuery = ""
 	return uri.String(), nil
 }
 
-// MakeExportStorage creates an ExportStorage from the given config.
-func MakeExportStorage(
-	ctx context.Context, dest roachpb.ExportStorage, settings *cluster.Settings,
-) (ExportStorage, error) {
+// MakeExternalStorage creates an ExternalStorage from the given config.
+func MakeExternalStorage(
+	ctx context.Context, dest roachpb.ExternalStorage, settings *cluster.Settings,
+) (ExternalStorage, error) {
 	switch dest.Provider {
-	case roachpb.ExportStorageProvider_LocalFile:
+	case roachpb.ExternalStorageProvider_LocalFile:
 		telemetry.Count("external-io.nodelocal")
 		return makeLocalStorage(dest.LocalFile, settings)
-	case roachpb.ExportStorageProvider_Http:
+	case roachpb.ExternalStorageProvider_Http:
 		telemetry.Count("external-io.http")
 		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
-	case roachpb.ExportStorageProvider_S3:
+	case roachpb.ExternalStorageProvider_S3:
 		telemetry.Count("external-io.s3")
 		return makeS3Storage(ctx, dest.S3Config, settings)
-	case roachpb.ExportStorageProvider_GoogleCloud:
+	case roachpb.ExternalStorageProvider_GoogleCloud:
 		telemetry.Count("external-io.google_cloud")
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
-	case roachpb.ExportStorageProvider_Azure:
+	case roachpb.ExternalStorageProvider_Azure:
 		telemetry.Count("external-io.azure")
 		return makeAzureStorage(dest.AzureConfig, settings)
-	case roachpb.ExportStorageProvider_Workload:
+	case roachpb.ExternalStorageProvider_Workload:
 		telemetry.Count("external-io.workload")
 		return makeWorkloadStorage(dest.WorkloadConfig)
 	}
-	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())
+	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
 
-// ExportStorage provides functions to read and write files in some storage,
+// ExternalStorage provides functions to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
 // Generally an implementation is instantiated pointing to some base path or
 // prefix and then gets and puts files using the various methods to interact
@@ -230,15 +231,15 @@ func MakeExportStorage(
 // However, implementations must also allow callers to provide the full path to
 // a given file as the "base" path, and then read or write it with the methods
 // below by simply passing an empty filename. Implementations that use stdlib's
-// `path.Join` to concatenate their base path with the provided filename will
+// `filepath.Join` to concatenate their base path with the provided filename will
 // find its semantics well suited to this -- it elides empty components and does
 // not append surplus slashes.
-type ExportStorage interface {
+type ExternalStorage interface {
 	io.Closer
 
 	// Conf should return the serializable configuration required to reconstruct
-	// this ExportStorage implementation.
-	Conf() roachpb.ExportStorage
+	// this ExternalStorage implementation.
+	Conf() roachpb.ExternalStorage
 
 	// ReadFile should return a Reader for requested name.
 	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
@@ -271,11 +272,11 @@ var (
 )
 
 type localFileStorage struct {
-	cfg  roachpb.ExportStorage_LocalFilePath // constains un-prefixed base -- DO NOT use for I/O ops.
-	base string                              // the prefixed base, for I/O ops on this node.
+	cfg  roachpb.ExternalStorage_LocalFilePath // constains un-prefixed base -- DO NOT use for I/O ops.
+	base string                                // the prefixed base, for I/O ops on this node.
 }
 
-var _ ExportStorage = &localFileStorage{}
+var _ ExternalStorage = &localFileStorage{}
 
 // MakeLocalStorageURI converts a local path (absolute or relative) to a
 // valid nodelocal URI.
@@ -288,8 +289,8 @@ func MakeLocalStorageURI(path string) (string, error) {
 }
 
 func makeLocalStorage(
-	cfg roachpb.ExportStorage_LocalFilePath, settings *cluster.Settings,
-) (ExportStorage, error) {
+	cfg roachpb.ExternalStorage_LocalFilePath, settings *cluster.Settings,
+) (ExternalStorage, error) {
 	if cfg.Path == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
@@ -311,9 +312,9 @@ func makeLocalStorage(
 	return &localFileStorage{base: localBase, cfg: cfg}, nil
 }
 
-func (l *localFileStorage) Conf() roachpb.ExportStorage {
-	return roachpb.ExportStorage{
-		Provider:  roachpb.ExportStorageProvider_LocalFile,
+func (l *localFileStorage) Conf() roachpb.ExternalStorage {
+	return roachpb.ExternalStorage{
+		Provider:  roachpb.ExternalStorageProvider_LocalFile,
 		LocalFile: l.cfg,
 	}
 }
@@ -323,12 +324,12 @@ func (l *localFileStorage) WriteFile(
 ) error {
 	p := filepath.Join(l.base, basename)
 	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-		return errors.Wrap(err, "creating local export storage path")
+		return errors.Wrap(err, "creating local external storage path")
 	}
 	tmpP := p + `.tmp`
 	f, err := os.Create(tmpP)
 	if err != nil {
-		return errors.Wrapf(err, "creating local export tmp file %q", tmpP)
+		return errors.Wrapf(err, "creating local external tmp file %q", tmpP)
 	}
 	defer func() {
 		f.Close()
@@ -338,10 +339,10 @@ func (l *localFileStorage) WriteFile(
 	}()
 	_, err = io.Copy(f, content)
 	if err != nil {
-		return errors.Wrapf(err, "writing to local export tmp file %q", tmpP)
+		return errors.Wrapf(err, "writing to local external tmp file %q", tmpP)
 	}
 	if err := f.Sync(); err != nil {
-		return errors.Wrapf(err, "syncing to local export tmp file %q", tmpP)
+		return errors.Wrapf(err, "syncing to local external tmp file %q", tmpP)
 	}
 	return err
 }
@@ -373,7 +374,7 @@ type httpStorage struct {
 	settings *cluster.Settings
 }
 
-var _ ExportStorage = &httpStorage{}
+var _ ExternalStorage = &httpStorage{}
 
 func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 	var tlsConf *tls.Config
@@ -405,7 +406,7 @@ func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 	}}, nil
 }
 
-func makeHTTPStorage(base string, settings *cluster.Settings) (ExportStorage, error) {
+func makeHTTPStorage(base string, settings *cluster.Settings) (ExternalStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but base path not provided")
 	}
@@ -426,10 +427,10 @@ func makeHTTPStorage(base string, settings *cluster.Settings) (ExportStorage, er
 	}, nil
 }
 
-func (h *httpStorage) Conf() roachpb.ExportStorage {
-	return roachpb.ExportStorage{
-		Provider: roachpb.ExportStorageProvider_Http,
-		HttpPath: roachpb.ExportStorage_Http{
+func (h *httpStorage) Conf() roachpb.ExternalStorage {
+	return roachpb.ExternalStorage{
+		Provider: roachpb.ExternalStorageProvider_Http,
+		HttpPath: roachpb.ExternalStorage_Http{
 			BaseUri: h.base.String(),
 		},
 	}
@@ -505,7 +506,7 @@ func (h *httpStorage) req(
 		}
 		dest.Host = h.hosts[int(hash.Sum32())%hosts]
 	}
-	dest.Path = path.Join(dest.Path, file)
+	dest.Path = filepath.Join(dest.Path, file)
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
 	req = req.WithContext(ctx)
@@ -529,7 +530,7 @@ func (h *httpStorage) req(
 
 type s3Storage struct {
 	bucket   *string
-	conf     *roachpb.ExportStorage_S3
+	conf     *roachpb.ExternalStorage_S3
 	prefix   string
 	s3       *s3.S3
 	settings *cluster.Settings
@@ -569,11 +570,11 @@ func delayedRetry(ctx context.Context, fn func() error) error {
 	})
 }
 
-var _ ExportStorage = &s3Storage{}
+var _ ExternalStorage = &s3Storage{}
 
 func makeS3Storage(
-	ctx context.Context, conf *roachpb.ExportStorage_S3, settings *cluster.Settings,
-) (ExportStorage, error) {
+	ctx context.Context, conf *roachpb.ExternalStorage_S3, settings *cluster.Settings,
+) (ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
@@ -648,9 +649,9 @@ func makeS3Storage(
 	}, nil
 }
 
-func (s *s3Storage) Conf() roachpb.ExportStorage {
-	return roachpb.ExportStorage{
-		Provider: roachpb.ExportStorageProvider_S3,
+func (s *s3Storage) Conf() roachpb.ExternalStorage {
+	return roachpb.ExternalStorage{
+		Provider: roachpb.ExternalStorageProvider_S3,
 		S3Config: s.conf,
 	}
 }
@@ -661,7 +662,7 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 		func(ctx context.Context) error {
 			_, err := s.s3.PutObjectWithContext(ctx, &s3.PutObjectInput{
 				Bucket: s.bucket,
-				Key:    aws.String(path.Join(s.prefix, basename)),
+				Key:    aws.String(filepath.Join(s.prefix, basename)),
 				Body:   content,
 			})
 			return err
@@ -673,7 +674,7 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	out, err := s.s3.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: s.bucket,
-		Key:    aws.String(path.Join(s.prefix, basename)),
+		Key:    aws.String(filepath.Join(s.prefix, basename)),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get s3 object")
@@ -687,7 +688,7 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 		func(ctx context.Context) error {
 			_, err := s.s3.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 				Bucket: s.bucket,
-				Key:    aws.String(path.Join(s.prefix, basename)),
+				Key:    aws.String(filepath.Join(s.prefix, basename)),
 			})
 			return err
 		})
@@ -701,7 +702,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 			var err error
 			out, err = s.s3.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 				Bucket: s.bucket,
-				Key:    aws.String(path.Join(s.prefix, basename)),
+				Key:    aws.String(filepath.Join(s.prefix, basename)),
 			})
 			return err
 		})
@@ -718,23 +719,23 @@ func (s *s3Storage) Close() error {
 type gcsStorage struct {
 	bucket   *gcs.BucketHandle
 	client   *gcs.Client
-	conf     *roachpb.ExportStorage_GCS
+	conf     *roachpb.ExternalStorage_GCS
 	prefix   string
 	settings *cluster.Settings
 }
 
-var _ ExportStorage = &gcsStorage{}
+var _ ExternalStorage = &gcsStorage{}
 
-func (g *gcsStorage) Conf() roachpb.ExportStorage {
-	return roachpb.ExportStorage{
-		Provider:          roachpb.ExportStorageProvider_GoogleCloud,
+func (g *gcsStorage) Conf() roachpb.ExternalStorage {
+	return roachpb.ExternalStorage{
+		Provider:          roachpb.ExternalStorageProvider_GoogleCloud,
 		GoogleCloudConfig: g.conf,
 	}
 }
 
 func makeGCSStorage(
-	ctx context.Context, conf *roachpb.ExportStorage_GCS, settings *cluster.Settings,
-) (ExportStorage, error) {
+	ctx context.Context, conf *roachpb.ExternalStorage_GCS, settings *cluster.Settings,
+) (ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("google cloud storage upload requested but info missing")
 	}
@@ -812,7 +813,7 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 		// Set the timeout within the retry loop.
 		return contextutil.RunWithTimeout(ctx, "put gcs file", timeoutSetting.Get(&g.settings.SV),
 			func(ctx context.Context) error {
-				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+				w := g.bucket.Object(filepath.Join(g.prefix, basename)).NewWriter(ctx)
 				if _, err := io.Copy(w, content); err != nil {
 					_ = w.Close()
 					return err
@@ -829,7 +830,7 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 	var rc io.ReadCloser
 	err := delayedRetry(ctx, func() error {
 		var readErr error
-		rc, readErr = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+		rc, readErr = g.bucket.Object(filepath.Join(g.prefix, basename)).NewReader(ctx)
 		return readErr
 	})
 	return rc, err
@@ -839,7 +840,7 @@ func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete gcs file",
 		timeoutSetting.Get(&g.settings.SV),
 		func(ctx context.Context) error {
-			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
+			return g.bucket.Object(filepath.Join(g.prefix, basename)).Delete(ctx)
 		})
 }
 
@@ -849,7 +850,7 @@ func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 		timeoutSetting.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			var err error
-			r, err = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+			r, err = g.bucket.Object(filepath.Join(g.prefix, basename)).NewReader(ctx)
 			return err
 		}); err != nil {
 		return 0, err
@@ -864,17 +865,17 @@ func (g *gcsStorage) Close() error {
 }
 
 type azureStorage struct {
-	conf      *roachpb.ExportStorage_Azure
+	conf      *roachpb.ExternalStorage_Azure
 	container azblob.ContainerURL
 	prefix    string
 	settings  *cluster.Settings
 }
 
-var _ ExportStorage = &azureStorage{}
+var _ ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	conf *roachpb.ExportStorage_Azure, settings *cluster.Settings,
-) (ExportStorage, error) {
+	conf *roachpb.ExternalStorage_Azure, settings *cluster.Settings,
+) (ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
@@ -897,13 +898,13 @@ func makeAzureStorage(
 }
 
 func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
-	name := path.Join(s.prefix, basename)
+	name := filepath.Join(s.prefix, basename)
 	return s.container.NewBlockBlobURL(name)
 }
 
-func (s *azureStorage) Conf() roachpb.ExportStorage {
-	return roachpb.ExportStorage{
-		Provider:    roachpb.ExportStorageProvider_Azure,
+func (s *azureStorage) Conf() roachpb.ExternalStorage {
+	return roachpb.ExternalStorage{
+		Provider:    roachpb.ExternalStorageProvider_Azure,
 		AzureConfig: s.conf,
 	}
 }
@@ -961,8 +962,8 @@ func (s *azureStorage) Close() error {
 }
 
 // ParseWorkloadConfig parses a workload config URI to a proto config.
-func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExportStorage_Workload, error) {
-	c := &roachpb.ExportStorage_Workload{}
+func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExternalStorage_Workload, error) {
+	c := &roachpb.ExternalStorage_Workload{}
 	pathParts := strings.Split(strings.Trim(uri.Path, `/`), `/`)
 	if len(pathParts) != 3 {
 		return nil, errors.Errorf(
@@ -998,14 +999,14 @@ func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExportStorage_Workload, error) 
 }
 
 type workloadStorage struct {
-	conf  *roachpb.ExportStorage_Workload
+	conf  *roachpb.ExternalStorage_Workload
 	gen   workload.Generator
 	table workload.Table
 }
 
-var _ ExportStorage = &workloadStorage{}
+var _ ExternalStorage = &workloadStorage{}
 
-func makeWorkloadStorage(conf *roachpb.ExportStorage_Workload) (ExportStorage, error) {
+func makeWorkloadStorage(conf *roachpb.ExternalStorage_Workload) (ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("workload upload requested but info missing")
 	}
@@ -1044,9 +1045,9 @@ func makeWorkloadStorage(conf *roachpb.ExportStorage_Workload) (ExportStorage, e
 	return s, nil
 }
 
-func (s *workloadStorage) Conf() roachpb.ExportStorage {
-	return roachpb.ExportStorage{
-		Provider:       roachpb.ExportStorageProvider_Workload,
+func (s *workloadStorage) Conf() roachpb.ExternalStorage {
+	return roachpb.ExternalStorage{
+		Provider:       roachpb.ExternalStorageProvider_Workload,
 		WorkloadConfig: s.conf,
 	}
 }

@@ -1217,7 +1217,7 @@ message ComputeChecksumResponse {
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
-enum ExportStorageProvider {
+enum ExternalStorageProvider {
   Unknown = 0;
   LocalFile = 1;
   Http = 2;
@@ -1227,10 +1227,10 @@ enum ExportStorageProvider {
   Workload = 6;
 }
 
-message ExportStorage {
+message ExternalStorage {
   option (gogoproto.equal) = true;
 
-  ExportStorageProvider provider = 1;
+  ExternalStorageProvider provider = 1;
 
   message LocalFilePath {
     option (gogoproto.equal) = true;
@@ -1326,7 +1326,7 @@ message ExportRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  ExportStorage storage = 2 [(gogoproto.nullable) = false];
+  ExternalStorage storage = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
 
@@ -1354,7 +1354,7 @@ message ExportRequest {
   // StorageByLocalityKV is a map of locality KVs to storage configurations. If
   // set, files will be written to the store that matches the most specific
   // locality KV in the map.
-  map<string, ExportStorage> storage_by_locality_kv = 8 [(gogoproto.customname) = "StorageByLocalityKV"];
+  map<string, ExternalStorage> storage_by_locality_kv = 8 [(gogoproto.customname) = "StorageByLocalityKV"];
 }
 
 message BulkOpSummary {
@@ -1394,7 +1394,7 @@ message ImportRequest {
   message File {
     option (gogoproto.equal) = true;
 
-    ExportStorage dir = 1 [(gogoproto.nullable) = false];
+    ExternalStorage dir = 1 [(gogoproto.nullable) = false];
     string path = 2;
     reserved 3;
     bytes sha512 = 4;

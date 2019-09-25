@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -95,13 +96,13 @@ func getBackupLocalityInfo(
 	if len(uris) == 1 {
 		return info, nil
 	}
-	stores := make([]storageccl.ExportStorage, len(uris))
+	stores := make([]cloud.ExternalStorage, len(uris))
 	for i, uri := range uris {
-		conf, err := storageccl.ExportStorageConfFromURI(uri)
+		conf, err := cloud.ExternalStorageConfFromURI(uri)
 		if err != nil {
 			return info, errors.Wrapf(err, "export configuration")
 		}
-		store, err := storageccl.MakeExportStorage(ctx, conf, settings)
+		store, err := cloud.MakeExternalStorage(ctx, conf, settings)
 		if err != nil {
 			return info, errors.Wrapf(err, "make storage")
 		}
@@ -673,7 +674,7 @@ type importEntry struct {
 	start, end hlc.Timestamp
 
 	// Only set if entryType is backupFile
-	dir  roachpb.ExportStorage
+	dir  roachpb.ExternalStorage
 	file BackupDescriptor_File
 
 	// Only set if entryType is request
@@ -789,11 +790,11 @@ func makeImportSpans(
 		backupCoverings = append(backupCoverings, backupSpanCovering)
 		var backupFileCovering covering.Covering
 
-		var storesByLocalityKV map[string]roachpb.ExportStorage
+		var storesByLocalityKV map[string]roachpb.ExternalStorage
 		if backupLocalityInfo != nil && backupLocalityInfo[i].URIsByOriginalLocalityKV != nil {
-			storesByLocalityKV = make(map[string]roachpb.ExportStorage)
+			storesByLocalityKV = make(map[string]roachpb.ExternalStorage)
 			for kv, uri := range backupLocalityInfo[i].URIsByOriginalLocalityKV {
-				conf, err := storageccl.ExportStorageConfFromURI(uri)
+				conf, err := cloud.ExternalStorageConfFromURI(uri)
 				if err != nil {
 					return nil, hlc.Timestamp{}, err
 				}
@@ -1119,7 +1120,7 @@ func restoreJobDescription(
 	for i, backup := range from {
 		r.From[i] = make(tree.PartitionedBackup, len(backup))
 		for j, uri := range backup {
-			sf, err := storageccl.SanitizeExportStorageURI(uri)
+			sf, err := cloud.SanitizeExternalStorageURI(uri)
 			if err != nil {
 				return "", err
 			}
