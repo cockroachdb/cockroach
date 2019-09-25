@@ -1534,7 +1534,7 @@ func (c *cluster) PutE(ctx context.Context, l *logger, src, dest string, opts ..
 
 	err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest)
 	if err != nil {
-		return errors.Wrap(ctx.Err(), "cluster.Put")
+		return errors.Wrap(err, "cluster.Put")
 	}
 	return nil
 }
