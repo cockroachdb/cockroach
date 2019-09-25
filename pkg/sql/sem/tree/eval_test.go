@@ -20,18 +20,25 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEval(t *testing.T) {
@@ -154,6 +161,102 @@ func TestEval(t *testing.T) {
 				return err.Error()
 			}
 			return datum.String()
+		})
+	})
+
+	t.Run("vectorized", func(t *testing.T) {
+		walk(t, func(d *datadriven.TestData) string {
+			if d.Input == "B'11111111111111111111111110000101'::int4" {
+				// Skip this test: https://github.com/cockroachdb/cockroach/pull/40790#issuecomment-532597294.
+				return strings.TrimSpace(d.Expected)
+			}
+			flowCtx := &execinfra.FlowCtx{
+				EvalCtx: evalCtx,
+			}
+			expr, err := parser.ParseExpr(d.Input)
+			require.NoError(t, err)
+			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			if err != nil {
+				// Skip this test as it's testing an expected error which would be
+				// caught before execution.
+				return strings.TrimSpace(d.Expected)
+			}
+			typs := []types.T{*typedExpr.ResolvedType()}
+
+			// inputTyps has no relation to the actual expression result type. Used
+			// for generating a batch.
+			inputTyps := []types.T{*types.Int}
+			inputColTyps, err := typeconv.FromColumnTypes(inputTyps)
+			require.NoError(t, err)
+
+			batchesReturned := 0
+			result, err := colexec.NewColOperator(
+				ctx,
+				flowCtx,
+				&execinfrapb.ProcessorSpec{
+					Input: []execinfrapb.InputSyncSpec{{
+						Type:        execinfrapb.InputSyncSpec_UNORDERED,
+						ColumnTypes: inputTyps,
+					}},
+					Core: execinfrapb.ProcessorCoreUnion{
+						Noop: &execinfrapb.NoopCoreSpec{},
+					},
+					Post: execinfrapb.PostProcessSpec{
+						RenderExprs: []execinfrapb.Expression{{Expr: d.Input}},
+					},
+				},
+				[]colexec.Operator{
+					&colexec.CallbackOperator{
+						NextCb: func(_ context.Context) coldata.Batch {
+							// It doesn't matter what types we create the input batch with.
+							batch := coldata.NewMemBatch(inputColTyps)
+							if batchesReturned > 0 {
+								batch.SetLength(0)
+								return batch
+							}
+							batch.SetLength(1)
+							batchesReturned++
+							return batch
+						},
+					},
+				},
+			)
+			if testutils.IsError(err, "unable to columnarize") {
+				// Skip this test as execution is not supported by the vectorized
+				// engine.
+				return strings.TrimSpace(d.Expected)
+			} else {
+				require.NoError(t, err)
+			}
+
+			mat, err := colexec.NewMaterializer(
+				flowCtx,
+				0, /* processorID */
+				result.Op,
+				typs,
+				&execinfrapb.PostProcessSpec{},
+				nil, /* output */
+				nil, /* metadataSourcesQueue */
+				nil, /* outputStatsToTrace */
+				nil, /* cancelFlow */
+			)
+			require.NoError(t, err)
+
+			var (
+				row  sqlbase.EncDatumRow
+				meta *execinfrapb.ProducerMetadata
+			)
+			row, meta = mat.Next()
+			if meta != nil {
+				if meta.Err != nil {
+					return fmt.Sprint(meta.Err)
+				}
+				t.Fatalf("unexpected metadata: %+v", meta)
+			}
+			if row == nil {
+				t.Fatal("unexpected end of input")
+			}
+			return row[0].Datum.String()
 		})
 	})
 }
