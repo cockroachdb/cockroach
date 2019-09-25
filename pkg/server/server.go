@@ -30,6 +30,8 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -83,7 +85,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -185,6 +187,7 @@ type Server struct {
 	execCfg          *sql.ExecutorConfig
 	internalExecutor *sql.InternalExecutor
 	leaseMgr         *sql.LeaseManager
+	blobService      *blobs.Service
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry     *sql.SessionRegistry
@@ -286,6 +289,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&s.cfg.DefaultZoneConfig,
 	)
 	s.nodeDialer = nodedialer.New(s.rpcContext, gossip.AddressResolver(s.gossip))
+
+	// Create blob service for inter-node file sharing.
+	if blobService, err := blobs.NewBlobService(s.ClusterSettings().ExternalIODir); err != nil {
+		log.Fatal(ctx, err)
+	} else {
+		s.blobService = blobService
+	}
+	blobspb.RegisterBlobServer(s.grpc.Server, s.blobService)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
