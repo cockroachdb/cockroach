@@ -124,11 +124,7 @@ func NewIndexJoiner(
 		ij.fetcher = &RowFetcherWrapper{Fetcher: &fetcher}
 	}
 
-	ij.neededFamilies = sqlbase.NeededColumnFamilyIDs(
-		spec.Table.ColumnIdxMap(),
-		spec.Table.Families,
-		ij.Out.NeededColumns(),
-	)
+	ij.neededFamilies = sqlbase.NeededColumnFamilyIDs(ij.Out.NeededColumns(), &spec.Table)
 
 	return ij, nil
 }

@@ -223,11 +223,7 @@ func NewJoinReader(
 
 	jr.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
-	jr.neededFamilies = sqlbase.NeededColumnFamilyIDs(
-		spec.Table.ColumnIdxMap(),
-		spec.Table.Families,
-		jr.neededRightCols(),
-	)
+	jr.neededFamilies = sqlbase.NeededColumnFamilyIDs(jr.neededRightCols(), &spec.Table)
 
 	// Initialize memory monitors and row container for looked up rows.
 	st := flowCtx.Cfg.Settings

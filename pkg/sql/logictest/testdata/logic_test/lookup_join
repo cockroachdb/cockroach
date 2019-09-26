@@ -593,7 +593,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/70/
 Scan /Table/70/1/1/{0-1}, /Table/70/1/1/2/{1-2}
 
 statement ok
-CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
+CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT NOT NULL, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
 
 statement ok
 INSERT INTO family_index_join VALUES (1, 2, 3, 4)
