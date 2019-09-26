@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -133,9 +134,20 @@ func registerTypeORM(r *testRegistry) {
 		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
 			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
 		)
-		c.l.Printf("Test Results: %s", rawResults)
+		rawResultsStr := string(rawResults)
+		c.l.Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
-			t.Fatal(err)
+			// Ignore the failure discussed in #38180 and in
+			// https://github.com/typeorm/typeorm/pull/4298.
+			// TODO(jordanlewis): remove this once the failure is resolved.
+			if t.IsBuildVersion("v19.2.0") &&
+				strings.Contains(rawResultsStr, "1 failing") &&
+				strings.Contains(rawResultsStr, "AssertionError: expected 2147483647 to equal '2147483647'") {
+				err = nil
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
