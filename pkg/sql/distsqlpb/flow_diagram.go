@@ -538,6 +538,7 @@ type FlowDiagram interface {
 }
 
 type diagramData struct {
+	SQL        string             `json:"sql"`
 	NodeNames  []string           `json:"nodeNames"`
 	Processors []diagramProcessor `json:"processors"`
 	Edges      []diagramEdge      `json:"edges"`
@@ -567,8 +568,11 @@ func (d *diagramData) AddSpans(spans []tracing.RecordedSpan) {
 	}
 }
 
-func generateDiagramData(flows []FlowSpec, nodeNames []string) (FlowDiagram, error) {
-	d := &diagramData{NodeNames: nodeNames}
+func generateDiagramData(sql string, flows []FlowSpec, nodeNames []string) (FlowDiagram, error) {
+	d := &diagramData{
+		SQL:       sql,
+		NodeNames: nodeNames,
+	}
 
 	// inPorts maps streams to their "destination" attachment point. Only DestProc
 	// and DestInput are set in each diagramEdge value.
@@ -686,7 +690,7 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (FlowDiagram, err
 // GeneratePlanDiagram generates the data for a flow diagram. There should be
 // one FlowSpec per node. The function assumes that StreamIDs are unique across
 // all flows.
-func GeneratePlanDiagram(flows map[roachpb.NodeID]*FlowSpec) (FlowDiagram, error) {
+func GeneratePlanDiagram(sql string, flows map[roachpb.NodeID]*FlowSpec) (FlowDiagram, error) {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
 	nodeIDs := make([]int, 0, len(flows))
@@ -703,14 +707,16 @@ func GeneratePlanDiagram(flows map[roachpb.NodeID]*FlowSpec) (FlowDiagram, error
 		nodeNames[i] = n.String()
 	}
 
-	return generateDiagramData(flowSlice, nodeNames)
+	return generateDiagramData(sql, flowSlice, nodeNames)
 }
 
 // GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
-func GeneratePlanDiagramURL(flows map[roachpb.NodeID]*FlowSpec) (string, url.URL, error) {
-	d, err := GeneratePlanDiagram(flows)
+func GeneratePlanDiagramURL(
+	sql string, flows map[roachpb.NodeID]*FlowSpec,
+) (string, url.URL, error) {
+	d, err := GeneratePlanDiagram(sql, flows)
 	if err != nil {
 		return "", url.URL{}, nil
 	}
