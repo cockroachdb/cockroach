@@ -39,17 +39,25 @@ type txnMetricRecorder struct {
 func (m *txnMetricRecorder) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	m.onePCCommit = ba.IsCompleteTransaction()
-
 	if m.txnStartNanos == 0 {
 		m.txnStartNanos = timeutil.Now().UnixNano()
 	}
 
 	br, pErr := m.wrapped.SendLocked(ctx, ba)
-	if pErr == nil {
-		m.parallelCommit = br.Txn.Status == roachpb.STAGING
+	if pErr != nil {
+		return br, pErr
 	}
-	return br, pErr
+
+	if length := len(br.Responses); length > 0 {
+		if et := br.Responses[length-1].GetEndTransaction(); et != nil {
+			// Check for 1-phase commit.
+			m.onePCCommit = et.OnePhaseCommit
+
+			// Check for parallel commit.
+			m.parallelCommit = !et.StagingTimestamp.IsEmpty()
+		}
+	}
+	return br, nil
 }
 
 // setWrapped is part of the txnInterceptor interface.

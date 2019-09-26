@@ -251,11 +251,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
 			"tar -chj --ignore-failed-read -f- /mnt/data1/jepsen/cockroachdb/store/latest /mnt/data1/jepsen/cockroachdb/invoke.log /var/log/")
-		output, err := cmd.Output()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
+		if output, err := cmd.Output(); err != nil {
+			t.l.Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
+		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
 		}
 		if ignoreErr {
