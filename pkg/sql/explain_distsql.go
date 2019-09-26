@@ -126,7 +126,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-	diagram, err := execinfrapb.GeneratePlanDiagram(flows)
+	diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows)
 	if err != nil {
 		return err
 	}
