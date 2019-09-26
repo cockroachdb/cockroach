@@ -470,25 +470,44 @@ func makeSQLConn(url string) *sqlConn {
 	}
 }
 
-// getPasswordAndMakeSQLClient prompts for a password if running in secure mode
-// and no certificates have been supplied.
-// Attempting to use security.RootUser without valid certificates will return an error.
-func getPasswordAndMakeSQLClient(appName string) (*sqlConn, error) {
-	return makeSQLClient(appName)
-}
-
 var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "5")
+
+// defaultSQLDb describes how a missing database part in the SQL
+// connection string is processed when creating a client connection.
+type defaultSQLDb int
+
+const (
+	// useSystemDb means that a missing database will be overridden with
+	// "system".
+	useSystemDb defaultSQLDb = iota
+	// useDefaultDb means that a missing database will be left as-is so
+	// that the server can default to "defaultdb".
+	useDefaultDb
+)
 
 // makeSQLClient connects to the database using the connection
 // settings set by the command-line flags.
+// If a password is needed, it also prompts for the password.
+//
+// If forceSystemDB is set, it also connects it to the `system`
+// database. The --database flag or database part in the URL is then
+// ignored.
 //
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
 // application_name. It is prefixed with '$ ' to mark it as internal.
-func makeSQLClient(appName string) (*sqlConn, error) {
+func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 	baseURL, err := cliCtx.makeClientConnURL()
 	if err != nil {
 		return nil, err
+	}
+
+	if defaultMode == useSystemDb && baseURL.Path == "" {
+		// Override the target database. This is because the current
+		// database can influence the output of CLI commands, and in the
+		// case where the database is missing it will default server-wise to
+		// `defaultdb` which may not exist.
+		baseURL.Path = "system"
 	}
 
 	// If there is no user in the URL already, fill in the default user.

@@ -203,7 +203,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
 
-	sqlConn, err := getPasswordAndMakeSQLClient("cockroach sql")
+	sqlConn, err := makeSQLClient("cockroach sql", useSystemDb)
 	if err != nil {
 		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
 	}

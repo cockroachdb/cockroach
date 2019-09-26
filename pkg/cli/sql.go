@@ -1412,7 +1412,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		fmt.Print(infoMessage)
 	}
 
-	conn, err := getPasswordAndMakeSQLClient("cockroach sql")
+	conn, err := makeSQLClient("cockroach sql", useDefaultDb)
 	if err != nil {
 		return err
 	}
