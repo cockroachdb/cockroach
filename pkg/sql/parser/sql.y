@@ -2466,11 +2466,19 @@ explain_stmt:
   }
 | EXPLAIN ANALYZE preparable_stmt
   {
-    $$.val = &tree.Explain{Options: []string{"DISTSQL", $2}, Statement: $3.stmt()}
+    $$.val = &tree.Explain{Options: []string{"DISTSQL", "ANALYZE"}, Statement: $3.stmt()}
+  }
+| EXPLAIN ANALYSE preparable_stmt
+  {
+    $$.val = &tree.Explain{Options: []string{"DISTSQL", "ANALYZE"}, Statement: $3.stmt()}
   }
 | EXPLAIN ANALYZE '(' explain_option_list ')' preparable_stmt
   {
-    $$.val = &tree.Explain{Options: append($4.strs(), $2), Statement: $6.stmt()}
+    $$.val = &tree.Explain{Options: append($4.strs(), "ANALYZE"), Statement: $6.stmt()}
+  }
+| EXPLAIN ANALYSE '(' explain_option_list ')' preparable_stmt
+  {
+    $$.val = &tree.Explain{Options: append($4.strs(), "ANALYZE"), Statement: $6.stmt()}
   }
 // This second error rule is necessary, because otherwise
 // preparable_stmt also provides "selectclause := '(' error ..." and
