@@ -530,8 +530,10 @@ func (t *RaftTransport) getQueue(
 }
 
 // SendAsync sends a message to the recipient specified in the request. It
-// returns false if the outgoing queue is full and calls s.onError when the
-// recipient closes the stream.
+// returns false if the outgoing queue is full. The returned bool may be a false
+// positive but will never be a false negative; if sent is true the message may
+// or may not actually be sent but if it's false the message definitely was
+// not sent.
 func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionClass) (sent bool) {
 	toNodeID := req.ToReplica.NodeID
 	stats := t.getStats(toNodeID, class)
@@ -557,8 +559,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionC
 
 	ch, existingQueue := t.getQueue(toNodeID, class)
 	if !existingQueue {
-		// Note that startProcessNewQueue is in charge of deleting the queue,
-		// no matter what it returns.
+		// Note that startProcessNewQueue is in charge of deleting the queue.
 		if !t.startProcessNewQueue(ctx, toNodeID, class, stats) {
 			return false
 		}
@@ -590,36 +591,8 @@ func (t *RaftTransport) startProcessNewQueue(
 	toNodeID roachpb.NodeID,
 	class rpc.ConnectionClass,
 	stats *raftTransportStats,
-) bool {
-	conn, err := t.dialer.Dial(ctx, toNodeID, class)
-	if err != nil {
-		// DialNode already logs sufficiently, so just return after deleting the
-		// queue.
-		t.queues[class].Delete(int64(toNodeID))
-		return false
-	}
-	worker := func(ctx context.Context) {
-		defer t.queues[class].Delete(int64(toNodeID))
-
-		client := NewMultiRaftClient(conn)
-		batchCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		ch, existingQueue := t.getQueue(toNodeID, class)
-		if !existingQueue {
-			log.Fatalf(t.AnnotateCtx(context.Background()), "queue for n%d does not exist", toNodeID)
-		}
-
-		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
-		if err != nil {
-			log.Warningf(ctx, "creating batch client for node %d failed: %+v", toNodeID, err)
-			return
-		}
-
-		if err := t.processQueue(toNodeID, ch, stats, stream, class); err != nil {
-			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
-			// Intentionally does not return.
-		}
+) (started bool) {
+	cleanup := func(ch chan *RaftMessageRequest) {
 		// Account for the remainder of `ch` which was never sent.
 		// NB: we deleted the queue above, so within a short amount
 		// of time nobody should be writing into the channel any
@@ -635,13 +608,38 @@ func (t *RaftTransport) startProcessNewQueue(
 			}
 		}
 	}
+	worker := func(ctx context.Context) {
+		ch, existingQueue := t.getQueue(toNodeID, class)
+		if !existingQueue {
+			log.Fatalf(t.AnnotateCtx(context.Background()), "queue for n%d does not exist", toNodeID)
+		}
+		defer cleanup(ch)
+		defer t.queues[class].Delete(int64(toNodeID))
+		conn, err := t.dialer.Dial(ctx, toNodeID, class)
+		if err != nil {
+			// DialNode already logs sufficiently, so just return.
+			return
+		}
+		client := NewMultiRaftClient(conn)
+		batchCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
 
+		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
+		if err != nil {
+			log.Warningf(ctx, "creating batch client for node %d failed: %+v", toNodeID, err)
+			return
+		}
+
+		if err := t.processQueue(toNodeID, ch, stats, stream, class); err != nil {
+			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
+		}
+	}
 	// Starting workers in a task prevents data races during shutdown.
-	if t.stopper.RunTask(
-		ctx, "storage.RaftTransport: sending message",
-		func(ctx context.Context) {
-			t.stopper.RunWorker(ctx, worker)
-		}) != nil {
+	workerTask := func(ctx context.Context) {
+		t.stopper.RunWorker(ctx, worker)
+	}
+	err := t.stopper.RunTask(ctx, "storage.RaftTransport: sending messages", workerTask)
+	if err != nil {
 		t.queues[class].Delete(int64(toNodeID))
 		return false
 	}
