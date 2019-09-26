@@ -119,6 +119,12 @@ class DBLogger : public rocksdb::Logger {
     }
   }
 
+  virtual void LogHeader(const char* format, va_list ap) override {
+    // RocksDB's `Logger::LogHeader()` implementation forgot to call the `Logv()` overload
+    // that takes severity info. Until it's fixed we can override their implementation.
+    Logv(rocksdb::InfoLogLevel::HEADER_LEVEL, format, ap);
+  }
+
   virtual void Logv(const char* format, va_list ap) override {
     // The RocksDB API tries to force us to separate the severity check (above function)
     // from the actual logging (this function) by making this function pure virtual.
