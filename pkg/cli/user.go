@@ -44,7 +44,7 @@ var verSetUser = version.MustParse("v1.2.0-alpha.20171113")
 
 func runGetUser(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := getPasswordAndMakeSystemSQLClient("cockroach user")
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ Use SHOW USERS or SHOW ROLES in a SQL session.`,
 
 func runLsUsers(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := getPasswordAndMakeSystemSQLClient("cockroach user")
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ Use DROP USER or DROP ROLE in a SQL session.`,
 
 func runRmUser(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := getPasswordAndMakeSystemSQLClient("cockroach user")
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := getPasswordAndMakeSystemSQLClient("cockroach user")
 	if err != nil {
 		return err
 	}

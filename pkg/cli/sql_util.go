@@ -480,25 +480,51 @@ func makeSQLConn(url string) *sqlConn {
 	}
 }
 
+// getPasswordAndMakeSystemSQLClient prompts for a password if running in secure mode
+// and no certificates have been supplied.
+// The client connection is connected to the `system` database.
+// Attempting to use security.RootUser without valid certificates will return an error.
+func getPasswordAndMakeSystemSQLClient(appName string) (*sqlConn, error) {
+	return makeSQLClient(appName, true /*forceSystemDB*/)
+}
+
 // getPasswordAndMakeSQLClient prompts for a password if running in secure mode
 // and no certificates have been supplied.
 // Attempting to use security.RootUser without valid certificates will return an error.
 func getPasswordAndMakeSQLClient(appName string) (*sqlConn, error) {
-	return makeSQLClient(appName)
+	return makeSQLClient(appName, false /*forceSystemDB*/)
 }
 
 var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "5")
 
-// makeSQLClient connects to the database using the connection
+// makeSystemSQLClient connects to the database using the connection
 // settings set by the command-line flags.
+//
+// If forceSystemDB is set, it also connects it to the `system`
+// database. The --database flag or database part in the URL is then
+// ignored.
 //
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
 // application_name. It is prefixed with '$ ' to mark it as internal.
-func makeSQLClient(appName string) (*sqlConn, error) {
+func makeSQLClient(appName string, forceSystemDB bool) (*sqlConn, error) {
 	baseURL, err := cliCtx.makeClientConnURL()
 	if err != nil {
 		return nil, err
+	}
+
+	if forceSystemDB {
+		// Override the target database. This is because the current
+		// database can influence the output of CLI commands, and in the
+		// case where the database is missing it will default server-wise to
+		// `defaultdb` which may not exist.  Inform the user if their
+		// explicit choice was overridden.
+		if baseURL.Path != "system" {
+			if baseURL.Path != "" {
+				fmt.Fprintf(stderr, "warning: target SQL database ignored: %q\n", baseURL.Path)
+			}
+			baseURL.Path = "system"
+		}
 	}
 
 	// If there is no user in the URL already, fill in the default user.
