@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // CanProvidePhysicalProps returns true if the given expression can provide the
@@ -28,8 +29,8 @@ import (
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
 func CanProvidePhysicalProps(e memo.RelExpr, required *physical.Required) bool {
-	// All operators can provide the Presentation property, so no need to check
-	// for that.
+	// All operators can provide the Presentation and LimitHint properties, so no
+	// need to check for that.
 	return e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 }
 
@@ -45,6 +46,12 @@ func BuildChildPhysicalProps(
 	mem *memo.Memo, parent memo.RelExpr, nth int, parentProps *physical.Required,
 ) *physical.Required {
 	var childProps physical.Required
+
+	// ScalarExprs don't support required physical properties; don't build
+	// physical properties for them.
+	if _, ok := parent.Child(nth).(opt.ScalarExpr); ok {
+		return mem.InternPhysicalProps(&childProps)
+	}
 
 	// Most operations don't require a presentation of their input; these are the
 	// exceptions.
@@ -68,6 +75,35 @@ func BuildChildPhysicalProps(
 	}
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
+
+	switch parent.Op() {
+	case opt.LimitOp:
+		if constLimit, ok := parent.(*memo.LimitExpr).Limit.(*memo.ConstExpr); ok {
+			childProps.LimitHint = float64(*constLimit.Value.(*tree.DInt))
+		}
+	case opt.OffsetOp:
+		if parentProps.LimitHint == 0 {
+			break
+		}
+		if constOffset, ok := parent.(*memo.OffsetExpr).Offset.(*memo.ConstExpr); ok {
+			childProps.LimitHint = parentProps.LimitHint + float64(*constOffset.Value.(*tree.DInt))
+		}
+	case opt.IndexJoinOp:
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
+		opt.UnionOp, opt.UnionAllOp:
+		// TODO(celine): Set operation limits need further thought; for example,
+		// the right child of an ExceptOp should not be limited.
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.DistinctOnOp:
+		// TODO(celine): Take selectivity into account.
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.SelectOp:
+		// TODO(celine): Take selectivity into account.
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
+		childProps.LimitHint = parentProps.LimitHint
+	}
 
 	// If properties haven't changed, no need to re-intern them.
 	if childProps.Equals(parentProps) {

@@ -1152,8 +1152,10 @@ limit
  ├── select
  │    ├── columns: i:2(int!null)
  │    ├── fd: ()-->(2)
+ │    ├── limit hint: 1.00
  │    ├── scan a
- │    │    └── columns: i:2(int)
+ │    │    ├── columns: i:2(int)
+ │    │    └── limit hint: 1.00
  │    └── filters
  │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── const: 1 [type=int]

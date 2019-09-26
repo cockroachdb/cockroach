@@ -214,6 +214,7 @@ limit
  ├── sort
  │    ├── columns: column1:3(int!null)
  │    ├── ordering: -3
+ │    ├── limit hint: 2.00
  │    └── union-all
  │         ├── columns: column1:3(int!null)
  │         ├── left columns: column1:1(int)
@@ -251,6 +252,7 @@ limit
  ├── sort
  │    ├── columns: column1:3(int!null)
  │    ├── ordering: -3
+ │    ├── limit hint: 2.00
  │    └── union-all
  │         ├── columns: column1:3(int!null)
  │         ├── left columns: column1:1(int)
@@ -563,6 +565,7 @@ limit
  ├── sort
  │    ├── columns: v:7(int)
  │    ├── ordering: -7
+ │    ├── limit hint: 2.00
  │    └── union-all
  │         ├── columns: v:7(int)
  │         ├── left columns: uniontest.v:2(int)
@@ -600,6 +603,7 @@ limit
  ├── sort
  │    ├── columns: v:7(int)
  │    ├── ordering: -7
+ │    ├── limit hint: 2.00
  │    └── union-all
  │         ├── columns: v:7(int)
  │         ├── left columns: uniontest.v:2(int)
@@ -1036,8 +1040,10 @@ except
       │                   ├── columns: "?column?":4(int!null)
       │                   ├── project
       │                   │    ├── columns: "?column?":4(int!null)
+      │                   │    ├── limit hint: 1.00
       │                   │    ├── scan a
-      │                   │    │    └── columns: a:3(int!null)
+      │                   │    │    ├── columns: a:3(int!null)
+      │                   │    │    └── limit hint: 1.00
       │                   │    └── projections
       │                   │         └── const: 1 [type=int]
       │                   └── const: 1 [type=int]

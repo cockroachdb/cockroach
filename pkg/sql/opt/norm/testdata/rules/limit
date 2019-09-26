@@ -40,7 +40,8 @@ limit
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── limit: 100
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: 99.00
  └── const: 99 [type=int]
 
 # High limits (> max uint32), can't eliminate in this case.
@@ -55,7 +56,8 @@ limit
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── limit: 5000000000
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: 5100000000.00
  └── const: 5100000000 [type=int]
 
 # Don't eliminate in case of negative limit.
@@ -72,7 +74,8 @@ limit
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
- │    └── fd: ()-->(1-5)
+ │    ├── fd: ()-->(1-5)
+ │    └── limit hint: -1.00
  └── const: -1 [type=int]
 
 # --------------------------------------------------
@@ -164,6 +167,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +6
+ │    ├── limit hint: 5.00
  │    └── project
  │         ├── columns: r:6(float) k:1(int!null)
  │         ├── key: (1)
@@ -196,9 +200,11 @@ project
  │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
+ │    │    ├── limit hint: 5.00
  │    │    └── sort
  │    │         ├── columns: i:2(int) f:3(float)
  │    │         ├── ordering: +3
+ │    │         ├── limit hint: 5.00
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
@@ -218,7 +224,8 @@ limit
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5)
+ │    └── limit hint: -1.00
  └── const: -1 [type=int]
 
 # --------------------------------------------------
@@ -369,9 +376,11 @@ project
  │    │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    │    ├── key: (2,3)
  │    │    │    ├── ordering: +3
+ │    │    │    ├── limit hint: 15.00
  │    │    │    └── sort
  │    │    │         ├── columns: i:2(int) f:3(float)
  │    │    │         ├── ordering: +3
+ │    │    │         ├── limit hint: 15.00
  │    │    │         └── scan a
  │    │    │              └── columns: i:2(int) f:3(float)
  │    │    └── const: 15 [type=int]
@@ -436,6 +445,7 @@ offset
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +2
+ │    │    ├── limit hint: 30.00
  │    │    └── scan a
  │    │         ├── columns: k:1(int!null) i:2(int)
  │    │         ├── key: (1)
@@ -458,6 +468,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── ordering: -2
+ │    ├── limit hint: 10.00
  │    └── offset
  │         ├── columns: k:1(int!null) i:2(int)
  │         ├── internal-ordering: +2
@@ -487,10 +498,12 @@ limit
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
+ │    ├── limit hint: 9223372036854775808.00
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int)
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── limit hint: 18446744073709551616.00
  │    └── const: 9223372036854775807 [type=int]
  └── const: 9223372036854775807 [type=int]
 
@@ -553,6 +566,7 @@ ordinality
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
       │    ├── ordering: +(2|3),+4 [actual: +2,+4]
+      │    ├── limit hint: 10.00
       │    └── select
       │         ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
       │         ├── key: (1)
@@ -580,6 +594,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6), (6)-->(1-5)
  │    ├── ordering: +2
+ │    ├── limit hint: 10.00
  │    └── ordinality
  │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) ordinality:6(int!null)
  │         ├── key: (1)
@@ -606,8 +621,10 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6), (6)-->(1-5)
  │    ├── ordering: +6
+ │    ├── limit hint: 10.00
  │    └── scan a
  │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │         ├── key: (1)
- │         └── fd: (1)-->(2-5)
+ │         ├── fd: (1)-->(2-5)
+ │         └── limit hint: 10.00
  └── const: 10 [type=int]

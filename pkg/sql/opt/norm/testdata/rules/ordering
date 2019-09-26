@@ -32,6 +32,7 @@ limit
  ├── sort
  │    ├── columns: d:4(int) e:5(int)
  │    ├── ordering: +4,+5
+ │    ├── limit hint: 10.00
  │    └── scan abcde
  │         └── columns: d:4(int) e:5(int)
  └── const: 10 [type=int]
@@ -52,6 +53,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: ()-->(4,5), (1)-->(2,3), (2,3)~~>(1)
  │    ├── ordering: +2,+3,+1 opt(4,5) [actual: +2,+3,+1]
+ │    ├── limit hint: 10.00
  │    └── select
  │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int!null) e:5(int!null)
  │         ├── key: (1)

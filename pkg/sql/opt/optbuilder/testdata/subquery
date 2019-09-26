@@ -1840,6 +1840,7 @@ select
                                ├── sort
                                │    ├── columns: i:7(int) max:11(string)
                                │    ├── ordering: +7
+                               │    ├── limit hint: 1.00
                                │    └── group-by
                                │         ├── columns: i:7(int) max:11(string)
                                │         ├── grouping columns: i:7(int)

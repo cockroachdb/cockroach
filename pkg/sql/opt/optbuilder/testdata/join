@@ -355,8 +355,10 @@ limit
  ├── columns: x:1(int!null)
  ├── project
  │    ├── columns: x:1(int!null)
+ │    ├── limit hint: 1.00
  │    └── inner-join (hash)
  │         ├── columns: x:1(int!null) column1:3(int!null)
+ │         ├── limit hint: 1.00
  │         ├── project
  │         │    ├── columns: x:1(int)
  │         │    └── scan onecolumn
@@ -980,6 +982,7 @@ limit
  ├── sort
  │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    └── project
  │         ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
  │         └── inner-join (hash)
@@ -1097,6 +1100,7 @@ limit
  ├── sort
  │    ├── columns: a.x:1(int!null) a.y:2(int) b.y:5(int) c.y:8(int)
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    └── project
  │         ├── columns: a.x:1(int!null) a.y:2(int) b.y:5(int) c.y:8(int)
  │         └── inner-join (hash)
