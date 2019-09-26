@@ -2709,7 +2709,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 		})
 		// Make a magical context which will allow us to use atomic replica changes.
-		ctx := context.WithValue(context.Background(), "testing", "testing")
+		ctx := client.ChangeReplicasCanMixAddAndRemoveContext(context.Background())
 		defer tc.Stopper().Stop(ctx)
 
 		// We want to first get into a joint consensus scenario.
