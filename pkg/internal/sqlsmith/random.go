@@ -26,22 +26,6 @@ func (s *Smither) d100() int {
 	return s.rnd.Intn(100) + 1
 }
 
-func (s *scope) coin() bool {
-	return s.schema.coin()
-}
-
-func (s *scope) d6() int {
-	return s.schema.d6()
-}
-
-func (s *scope) d9() int {
-	return s.schema.d9()
-}
-
-func (s *scope) d100() int {
-	return s.schema.d100()
-}
-
 // geom returns a sample from a geometric distribution whose mean is 1 / (1 -
 // p). Its return value is >= 1. p must satisfy 0 < p < 1. For example, pass
 // .5 to this function (whose mean would thus be 2), and 50% of the time this

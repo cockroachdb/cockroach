@@ -77,7 +77,7 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 	var typs []*types.T
 	for {
 		typs = append(typs, s.randType())
-		if s.d6() < 2 {
+		if s.d6() < 2 || !s.canRecurse() {
 			break
 		}
 	}

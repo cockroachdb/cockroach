@@ -44,7 +44,7 @@ func init() {
 	}()
 }
 
-func makeAlter(s *scope) (tree.Statement, bool) {
+func makeAlter(s *Smither) (tree.Statement, bool) {
 	if s.canRecurse() {
 		// Schema changes aren't visible immediately, so try to
 		// sync the change from the last alter before trying the
@@ -53,9 +53,9 @@ func makeAlter(s *scope) (tree.Statement, bool) {
 		// up the change). This has the added benefit of leaving
 		// behind old column references for a bit, which should
 		// test some additional logic.
-		_ = s.schema.ReloadSchemas()
+		_ = s.ReloadSchemas()
 		for i := 0; i < retryCount; i++ {
-			idx := s.schema.alters.Next()
+			idx := s.alters.Next()
 			stmt, ok := alters[idx].fn(s)
 			if ok {
 				return stmt, ok
@@ -65,32 +65,32 @@ func makeAlter(s *scope) (tree.Statement, bool) {
 	return nil, false
 }
 
-func makeCreateTable(s *scope) (tree.Statement, bool) {
-	table := sqlbase.RandCreateTable(s.schema.rnd, 0)
-	table.Table = tree.MakeUnqualifiedTableName(s.schema.name("tab"))
+func makeCreateTable(s *Smither) (tree.Statement, bool) {
+	table := sqlbase.RandCreateTable(s.rnd, 0)
+	table.Table = tree.MakeUnqualifiedTableName(s.name("tab"))
 	return table, true
 }
 
-func makeDropTable(s *scope) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+func makeDropTable(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
 
 	return &tree.DropTable{
 		Names:        tree.TableNames{*tableRef.TableName},
-		DropBehavior: s.schema.randDropBehavior(),
+		DropBehavior: s.randDropBehavior(),
 	}, true
 }
 
-func makeRenameTable(s *scope) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+func makeRenameTable(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
 
 	newName, err := tree.NewUnresolvedObjectName(
-		1 /* numParts */, [3]string{string(s.schema.name("tab"))}, tree.NoAnnotation,
+		1 /* numParts */, [3]string{string(s.name("tab"))}, tree.NoAnnotation,
 	)
 	if err != nil {
 		return nil, false
@@ -102,27 +102,27 @@ func makeRenameTable(s *scope) (tree.Statement, bool) {
 	}, true
 }
 
-func makeRenameColumn(s *scope) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+func makeRenameColumn(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
-	col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
+	col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 
 	return &tree.RenameColumn{
 		Table:   *tableRef.TableName,
 		Name:    col.Name,
-		NewName: s.schema.name("col"),
+		NewName: s.name("col"),
 	}, true
 }
 
-func makeAlterColumnType(s *scope) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+func makeAlterColumnType(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
-	typ := sqlbase.RandColumnType(s.schema.rnd)
-	col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
+	typ := sqlbase.RandColumnType(s.rnd)
+	col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 
 	return &tree.AlterTable{
 		Table: tableRef.TableName.ToUnresolvedObjectName(),
@@ -135,18 +135,18 @@ func makeAlterColumnType(s *scope) (tree.Statement, bool) {
 	}, true
 }
 
-func makeAddColumn(s *scope) (tree.Statement, bool) {
-	_, tableRef, colRefs, ok := s.getSchemaTable()
+func makeAddColumn(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, colRefs, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
 	colRefs.stripTableName()
-	t := sqlbase.RandColumnType(s.schema.rnd)
-	col, err := tree.NewColumnTableDef(s.schema.name("col"), t, false /* isSerial */, nil)
+	t := sqlbase.RandColumnType(s.rnd)
+	col, err := tree.NewColumnTableDef(s.name("col"), t, false /* isSerial */, nil)
 	if err != nil {
 		return nil, false
 	}
-	col.Nullable.Nullability = s.schema.randNullability()
+	col.Nullable.Nullability = s.randNullability()
 	if s.coin() {
 		col.DefaultExpr.Expr = &tree.ParenExpr{Expr: makeScalar(s, t, nil)}
 	} else if s.coin() {
@@ -169,45 +169,45 @@ func makeAddColumn(s *scope) (tree.Statement, bool) {
 	}, true
 }
 
-func makeDropColumn(s *scope) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+func makeDropColumn(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
-	col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
+	col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 
 	return &tree.AlterTable{
 		Table: tableRef.TableName.ToUnresolvedObjectName(),
 		Cmds: tree.AlterTableCmds{
 			&tree.AlterTableDropColumn{
 				Column:       col.Name,
-				DropBehavior: s.schema.randDropBehavior(),
+				DropBehavior: s.randDropBehavior(),
 			},
 		},
 	}, true
 }
 
-func makeCreateIndex(s *scope) (tree.Statement, bool) {
-	_, tableRef, _, ok := s.getSchemaTable()
+func makeCreateIndex(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, false
 	}
 	var cols tree.IndexElemList
 	seen := map[tree.Name]bool{}
 	for len(cols) < 1 || s.coin() {
-		col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
+		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
 		}
 		seen[col.Name] = true
 		cols = append(cols, tree.IndexElem{
 			Column:    col.Name,
-			Direction: s.schema.randDirection(),
+			Direction: s.randDirection(),
 		})
 	}
 	var storing tree.NameList
 	for s.coin() {
-		col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
+		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
 		}
@@ -216,7 +216,7 @@ func makeCreateIndex(s *scope) (tree.Statement, bool) {
 	}
 
 	return &tree.CreateIndex{
-		Name:    s.schema.name("idx"),
+		Name:    s.name("idx"),
 		Table:   *tableRef.TableName,
 		Unique:  s.coin(),
 		Columns: cols,
@@ -224,18 +224,18 @@ func makeCreateIndex(s *scope) (tree.Statement, bool) {
 	}, true
 }
 
-func makeDropIndex(s *scope) (tree.Statement, bool) {
-	tin, _, ok := s.schema.getRandIndex()
+func makeDropIndex(s *Smither) (tree.Statement, bool) {
+	tin, _, _, ok := s.getRandIndex()
 	return &tree.DropIndex{
 		IndexList:    tree.TableIndexNames{tin},
-		DropBehavior: s.schema.randDropBehavior(),
+		DropBehavior: s.randDropBehavior(),
 	}, ok
 }
 
-func makeRenameIndex(s *scope) (tree.Statement, bool) {
-	tin, _, ok := s.schema.getRandIndex()
+func makeRenameIndex(s *Smither) (tree.Statement, bool) {
+	tin, _, _, ok := s.getRandIndex()
 	return &tree.RenameIndex{
 		Index:   tin,
-		NewName: tree.UnrestrictedName(s.schema.name("idx")),
+		NewName: tree.UnrestrictedName(s.name("idx")),
 	}, ok
 }
