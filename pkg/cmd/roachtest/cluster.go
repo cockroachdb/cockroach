@@ -373,14 +373,16 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 	}
 
 	if err := cmd.Run(); err != nil {
-		cancel()
-		wg.Wait() // synchronize access to ring buffer
-
-		// Context deadline exceeded errors opaquely appear as "signal killed" when
-		// manifested. We surface this error explicitly.
-		if ctx.Err() == context.DeadlineExceeded {
-			return ctx.Err()
+		// Context errors opaquely appear as "signal killed" when manifested.
+		// We surface this error explicitly.
+		if ctx.Err() != nil {
+			err = ctx.Err()
 		}
+
+		// Synchronize access to ring buffers before using them to create an
+		// error to return.
+		cancel()
+		wg.Wait()
 		return errors.Wrapf(
 			err,
 			"%s returned:\nstderr:\n%s\nstdout:\n%s",
