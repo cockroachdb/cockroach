@@ -10,7 +10,12 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/types"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
 
 // Table generators, also called "set-generating functions", are
 // special functions that return an entire table.
@@ -40,10 +45,13 @@ type ValueGenerator interface {
 	// Start initializes the generator. Must be called once before
 	// Next() and Values(). It can be called again to restart
 	// the generator after Next() has returned false.
-	Start() error
+	//
+	// txn represents the txn that the generator will run inside of. The generator
+	// is expected to hold on to this txn and use it in Next() calls.
+	Start(ctx context.Context, txn *client.Txn) error
 
 	// Next determines whether there is a row of data available.
-	Next() (bool, error)
+	Next(context.Context) (bool, error)
 
 	// Values retrieves the current row of data.
 	Values() Datums

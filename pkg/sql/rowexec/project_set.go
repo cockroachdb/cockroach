@@ -59,10 +59,12 @@ type projectSetProcessor struct {
 	// emitCount is used to track the number of rows that have been
 	// emitted from Next().
 	emitCount int64
+	txn       *client.Txn
 }
 
 var _ execinfra.Processor = &projectSetProcessor{}
 var _ execinfra.RowSource = &projectSetProcessor{}
+var _ execinfrapb.MetadataSource = &projectSetProcessor{}
 
 const projectSetProcName = "projectSet"
 
@@ -92,7 +94,12 @@ func newProjectSetProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{ps.input}},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{ps.input},
+			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+				return ps.DrainMeta(ctx)
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -101,6 +108,7 @@ func newProjectSetProcessor(
 
 // Start is part of the RowSource interface.
 func (ps *projectSetProcessor) Start(ctx context.Context, txn *client.Txn) context.Context {
+	ps.txn = txn
 	ps.input.Start(ctx, txn)
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 
@@ -149,7 +157,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			if gen == nil {
 				gen = builtins.EmptyGenerator()
 			}
-			if err := gen.Start(); err != nil {
+			if err := gen.Start(ps.Ctx, ps.txn); err != nil {
 				return nil, nil, err
 			}
 			ps.gens[i] = gen
@@ -171,7 +179,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 			numCols := int(ps.spec.NumColsPerGen[i])
 			if !ps.done[i] {
 				// Yes; check whether this source still has some values available.
-				hasVals, err := gen.Next()
+				hasVals, err := gen.Next(ps.Ctx)
 				if err != nil {
 					return false, err
 				}
@@ -285,4 +293,13 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) sqlbase.EncD
 func (ps *projectSetProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ps.InternalClose()
+}
+
+// DrainMeta implements the MetadataSource interface.
+func (ps *projectSetProcessor) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	var trailingMeta []execinfrapb.ProducerMetadata
+	if meta := execinfra.GetTxnCoordMeta(ctx, ps.txn); meta != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
+	}
+	return trailingMeta
 }

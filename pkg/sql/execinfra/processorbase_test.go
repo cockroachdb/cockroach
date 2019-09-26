@@ -20,15 +20,19 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
 )
 
 // Test that processors swallow ReadWithinUncertaintyIntervalErrors once they
@@ -218,4 +222,130 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			}
 		})
 	})
+}
+
+// Test that processors executing concurrently with a processor encountering a
+// retriable error don't execute at the updated timestamp. Executing at the
+// updated timestamp would cause them to miss seeing preceeding writes from the
+// same transaction.
+// The race whose handling we test is the following:
+// Processors p1 and p2 execute concurrently on the same node (the gateway).
+// p1 encouters a retriable error which causes the RootTxn to bump the epoch
+// from 1 to 2. Were we not careful to avoid it, p2 could then start a read at
+// epoch 2, and that'd be bad. See #25329.
+// The race is handled by making sure that some processors use the RootTxn and
+// others executing concurrently with them use the LeafTxn.
+func TestConcurrentProcessorsReadEpoch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	joinerBlock := make(chan struct{})
+	maxSeq := 10
+	// trapRead is set, atomically, once the test wants to block a read on the
+	// first node.
+	injectErr := true
+	trapRead := true
+	const errKey = "_err"
+	const dummyKey = "_dummy"
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &tree.EvalContextTestingKnobs{
+				CallbackGenerators: map[string]*tree.CallbackValueGenerator{
+					"dummy_read": tree.NewCallbackValueGenerator(
+						func(ctx context.Context, prev int, txn *client.Txn) (int, error) {
+							if txn.Type() != client.LeafTxn {
+								return -1, errors.Errorf("expected LeafTxn for dummy_read")
+							}
+							log.Infof(ctx, "!!! doing dummy ")
+							_, err := txn.Get(ctx, dummyKey)
+							return -1, err
+						}),
+					"block": tree.NewCallbackValueGenerator(
+						func(ctx context.Context, prev int, txn *client.Txn) (int, error) {
+							if prev == 0 {
+								<-joinerBlock
+							}
+							if prev == maxSeq {
+								// End of generator.
+								return -1, nil
+							}
+							return prev + 1, nil
+						}),
+					"inject_err": tree.NewCallbackValueGenerator(
+						func(ctx context.Context, prev int, txn *client.Txn) (int, error) {
+							if txn.Type() != client.RootTxn {
+								return -1, errors.Errorf("expected RootTxn for inject_err")
+							}
+							if !injectErr {
+								return -1, nil
+							}
+							// !!! time.Sleep(time.Second) // !!!
+							log.Infof(context.TODO(), "!!! doing err read in txn: %d", txn.Type())
+							_, err := txn.Get(ctx, errKey)
+							if err != nil {
+								return -1, errors.Errorf("expected injected error")
+							}
+							injectErr = false
+							return -1, nil
+							//
+							//txn := ctx.Txn.GetTxnCoordMeta(evalCtx.Ctx()).Txn
+							//
+							//readTS := txn.Timestamp
+							//if readTS.Less(txn.RefreshedTimestamp) {
+							//	readTS = txn.RefreshedTimestamp
+							//}
+							//return 0, roachpb.NewReadWithinUncertaintyIntervalError(
+							//	readTS,
+							//	readTS.Add(1, 0), /* existingTs */
+							//	&txn)
+						}),
+				},
+			},
+			Store: &storage.StoreTestingKnobs{
+				TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+					req, ok := ba.GetArg(roachpb.Get)
+					if !ok {
+						return nil
+					}
+					key := req.(*roachpb.GetRequest).Key.String()
+					if strings.Contains(key, dummyKey) {
+						log.Infof(context.TODO(), "!!! trapped dummy read at ts: %s", ba.Timestamp)
+					}
+					if !trapRead {
+						return nil
+					}
+					if strings.Contains(key, errKey) {
+						log.Infof(context.TODO(), "!!! trapped read")
+						trapRead = false
+						return roachpb.NewError(
+							roachpb.NewReadWithinUncertaintyIntervalError(
+								ba.Timestamp,           /* readTs */
+								ba.Timestamp.Add(1, 0), /* existingTs */
+								ba.Txn))
+					}
+					return nil
+				},
+			},
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// !!! _, err := db.Exec("select * from testing_callback('inject_err')")
+	_, err := db.Exec(`
+		select l.x from 
+			(select * from generate_series(10, 15) as l(x) union 
+		   select * from testing_callback('dummy_read')) 
+		  as l(x) 
+		inner join 
+		  (select * from testing_callback('inject_err')) 
+		  as r(x) 
+		on l.x = r.x;
+		`)
+	log.Infof(ctx, "!!! err: %v", err)
+
+	//	select l.x from (select * from generate_series(10,15) as l(x) union values(100))
+	//	as l(x) inner join (select * from (values (1))) r(x) on l.x = r.x;
+
+	//	select l.x from (select * from generate_series(10,15) as l(x) union values(100)) as l(x) inner join (select * from testing_callback('inject_err')) r(x) on l.x = r.x;
 }

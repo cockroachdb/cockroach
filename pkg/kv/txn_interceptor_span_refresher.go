@@ -305,6 +305,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
 ) bool {
+	log.Infof(ctx, "!!! refreshing: %s", refreshTxn)
 	// Forward the refreshed timestamp under lock. This in conjunction with a
 	// check in appendRefreshSpans prevents a race where a concurrent request
 	// may add new refresh spans only "verified" up to its batch timestamp after
@@ -416,6 +417,7 @@ func (sr *txnSpanRefresher) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 
 // augmentMetaLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+	log.Infof(context.TODO(), "!!! augmentMeta with: %s", meta.RefreshReads)
 	// Do not modify existing span slices when copying.
 	if meta.RefreshInvalid {
 		sr.refreshInvalid = true

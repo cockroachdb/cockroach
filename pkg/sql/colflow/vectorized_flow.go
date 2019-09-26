@@ -140,11 +140,10 @@ func (f *vectorizedFlow) Run(ctx context.Context, txn *client.Txn, doneFn func()
 //
 // If we've been given a LeafTxn, there's nothing more to do.
 func (f *vectorizedFlow) setTxn(ctx context.Context, txn *client.Txn) (bool, error) {
-	// If we've been given a RootTxn,
-	// figure out which components of the flow need a   Look for a leaf Materializer.
-	// That guy needs to get the RootTxn because
-	// there might be mutations feeding into it.
-	// leaves will contain f.leaves - the Materializer (if any).
+	// If we've been given a RootTxn, figure out which components of the flow need
+	// a LeafTxn. Look for a leaf Materializer. That guy needs to get the RootTxn
+	// because there might be mutations feeding into it.
+	// leaves will contain f.leaves without the Materializer (if any).
 	leaves := f.leaves[:0]
 	if txn.Type() == client.RootTxn {
 		foundMaterializer := false

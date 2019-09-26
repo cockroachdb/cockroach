@@ -2604,6 +2604,8 @@ type EvalContextTestingKnobs struct {
 	// cost of each expression in the query tree for the purpose of creating
 	// alternate query plans in the optimizer.
 	OptimizerCostPerturbation float64
+
+	CallbackGenerators map[string]*CallbackValueGenerator
 }
 
 var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
@@ -5147,3 +5149,54 @@ func PickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 	}
 	return g, nil
 }
+
+type CallbackValueGenerator struct {
+	cb  func(ctx context.Context, prev int, txn *client.Txn) (int, error)
+	val int
+	txn *client.Txn
+}
+
+var _ ValueGenerator = &CallbackValueGenerator{}
+
+//func MakeCallbackValueGeneratorFactory(
+//	cb func(ctx context.Context, prev int, txn *client.Txn) (int, error),
+//) func() *CallbackValueGenerator {
+//	return func(ctx *EvalContext) *CallbackValueGenerator {
+//		return NewCallbackValueGenerator(ctx, cb)
+//	}
+//}
+
+func NewCallbackValueGenerator(
+	cb func(ctx context.Context, prev int, txn *client.Txn) (int, error),
+) *CallbackValueGenerator {
+	return &CallbackValueGenerator{
+		cb: cb,
+	}
+}
+
+func (c *CallbackValueGenerator) ResolvedType() *types.T {
+	return types.Int
+}
+
+func (c *CallbackValueGenerator) Start(_ context.Context, txn *client.Txn) error {
+	c.txn = txn
+	return nil
+}
+
+func (c *CallbackValueGenerator) Next(ctx context.Context) (bool, error) {
+	var err error
+	c.val, err = c.cb(ctx, c.val, c.txn)
+	if err != nil {
+		return false, err
+	}
+	if c.val == -1 {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (c *CallbackValueGenerator) Values() Datums {
+	return Datums{NewDInt(DInt(c.val))}
+}
+
+func (c *CallbackValueGenerator) Close() {}

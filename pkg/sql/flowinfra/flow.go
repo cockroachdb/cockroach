@@ -269,6 +269,7 @@ func (f *FlowBase) startInternal(
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
+	log.Infof(ctx, "!!! startInternal. procs: %s", f.processors)
 
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
@@ -304,6 +305,7 @@ func (f *FlowBase) startInternal(
 	// already extracted the head processor and all the others that were fused
 	// with it), and RootTxns don't permit concurrent operations.
 	if len(f.processors) > 0 && txn != nil && txn.Type() == client.RootTxn {
+		log.Infof(ctx, "!!! creating leaf txn")
 		meta := txn.GetTxnCoordMeta(ctx)
 		txn = client.NewTxnWithCoordMeta(ctx, txn.DB(), txn.GatewayNodeID(), client.LeafTxn, meta)
 		// Since some processors execute concurrently with others, we need to
