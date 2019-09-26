@@ -275,30 +275,18 @@ func (mq *mergeQueue) process(
 	}
 
 	{
-		store, db := lhsRepl.store, lhsRepl.store.DB()
+		store := lhsRepl.store
 		// AdminMerge errors if there is a learner or joint config on either
 		// side and AdminRelocateRange removes any on the range it operates on.
 		// For the sake of obviousness, just fix this all upfront.
 		var err error
-		lhsDesc, err = maybeLeaveAtomicChangeReplicas(ctx, store, lhsDesc)
+		lhsDesc, err = removeNonFullVoters(ctx, store, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return err
 		}
 
-		lhsDesc, err = removeLearners(ctx, db, lhsDesc)
-		if err != nil {
-			log.VEventf(ctx, 2, `%v`, err)
-			return err
-		}
-
-		rhsDesc, err = maybeLeaveAtomicChangeReplicas(ctx, store, rhsDesc)
-		if err != nil {
-			log.VEventf(ctx, 2, `%v`, err)
-			return err
-		}
-
-		rhsDesc, err = removeLearners(ctx, db, rhsDesc)
+		rhsDesc, err = removeNonFullVoters(ctx, store, rhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return err
