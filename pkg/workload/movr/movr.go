@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/faker"
@@ -545,7 +546,15 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	readPercentage := 0.90
 	activeRides := []rideInfo{}
 
-	getRandomUser := func(city string) (string, error) {
+	runAndRecord := func(hists *histogram.Histograms, key string, work func() error) error {
+		start := timeutil.Now()
+		err := work()
+		elapsed := timeutil.Since(start)
+		hists.Get(key).Record(elapsed)
+		return err
+	}
+
+	getRandomUser := func(hists *histogram.Histograms, city string) (string, error) {
 		id, err := uuid.NewV4()
 		if err != nil {
 			return "", err
@@ -562,11 +571,13 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 					(SELECT id FROM users WHERE city = $1 ORDER BY id LIMIT 1) AS b
 			);
 		`
-		err = db.QueryRow(q, city, id.String()).Scan(&user)
+		err = runAndRecord(hists, "getRandomUser", func() error {
+			return db.QueryRow(q, city, id.String()).Scan(&user)
+		})
 		return user, err
 	}
 
-	getRandomPromoCode := func() (string, error) {
+	getRandomPromoCode := func(hists *histogram.Histograms) (string, error) {
 		id, err := uuid.NewV4()
 		if err != nil {
 			return "", err
@@ -583,11 +594,13 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			);
 		`
 		var code string
-		err = db.QueryRow(q, id.String()).Scan(&code)
+		err = runAndRecord(hists, "getRandomPromoCode", func() error {
+			return db.QueryRow(q, id.String()).Scan(&code)
+		})
 		return code, err
 	}
 
-	getRandomVehicle := func(city string) (string, error) {
+	getRandomVehicle := func(hists *histogram.Histograms, city string) (string, error) {
 		id, err := uuid.NewV4()
 		if err != nil {
 			return "", err
@@ -604,16 +617,21 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			);
 		`
 		var vehicle string
-		err = db.QueryRow(q, city, id.String()).Scan(&vehicle)
+		err = runAndRecord(hists, "getRandomVehicle", func() error {
+			return db.QueryRow(q, city, id.String()).Scan(&vehicle)
+		})
 		return vehicle, err
 	}
 
+	hists := reg.GetHandle()
 	movrQuerySimulation := func(ctx context.Context) error {
 		activeCity := randCity(rng)
 		if rng.Float64() <= readPercentage {
-			q := `SELECT city, id FROM vehicles WHERE city = $1`
-			_, err := db.Exec(q, activeCity)
-			return err
+			return runAndRecord(hists, "readVehicles", func() error {
+				q := `SELECT city, id FROM vehicles WHERE city = $1`
+				_, err := db.Exec(q, activeCity)
+				return err
+			})
 		}
 		// Simulate vehicle location updates.
 		for i, ride := range activeRides {
@@ -622,7 +640,10 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			}
 			lat, long := randLatLong(rng)
 			q := `UPSERT INTO vehicle_location_histories VALUES ($1, $2, now(), $3, $4)`
-			_, err := db.Exec(q, ride.city, ride.id, lat, long)
+			err := runAndRecord(hists, "updateVehicleLoction", func() error {
+				_, err := db.Exec(q, ride.city, ride.id, lat, long)
+				return err
+			})
 			if err != nil {
 				return err
 			}
@@ -636,16 +657,19 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		// Do write operations.
 		if rng.Float64() < 0.03 {
 			q := `INSERT INTO promo_codes VALUES ($1, NULL, NULL, NULL, NULL)`
-			_, err = db.Exec(q, id.String())
+			err := runAndRecord(hists, "createPromoCode", func() error {
+				_, err = db.Exec(q, id.String())
+				return err
+			})
 			return err
 		} else if rng.Float64() < 0.1 {
 			// Apply a promo code to an account.
-			user, err := getRandomUser(activeCity)
+			user, err := getRandomUser(hists, activeCity)
 			if err != nil {
 				return err
 			}
 
-			code, err := getRandomPromoCode()
+			code, err := getRandomPromoCode(hists)
 			if err != nil {
 				return err
 			}
@@ -653,7 +677,9 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			// See if the promo code has been used.
 			var count int
 			q := `SELECT count(*) FROM user_promo_codes WHERE city = $1 AND user_id = $2 AND code = $3`
-			err = db.QueryRow(q, activeCity, user, code).Scan(&count)
+			err = runAndRecord(hists, "checkPromoCodeUsed", func() error {
+				return db.QueryRow(q, activeCity, user, code).Scan(&count)
+			})
 			if err != nil {
 				return err
 			}
@@ -661,39 +687,51 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			// If is has not been, apply the promo code.
 			if count == 0 {
 				q = `INSERT INTO user_promo_codes VALUES ($1, $2, $3, NULL, NULL)`
-				_, err = db.Exec(q, activeCity, user, code)
+				err := runAndRecord(hists, "applyPromoCode", func() error {
+					_, err = db.Exec(q, activeCity, user, code)
+					return err
+				})
 				return err
 			}
 			return nil
 		} else if rng.Float64() < 0.3 {
 			q := `INSERT INTO users VALUES ($1, $2, NULL, NULL, NULL)`
-			_, err = db.Exec(q, id.String(), activeCity)
+			err := runAndRecord(hists, "addUser", func() error {
+				_, err = db.Exec(q, id.String(), activeCity)
+				return err
+			})
 			return err
 		} else if rng.Float64() < 0.1 {
 			// Simulate adding a new vehicle to the population.
-			ownerID, err := getRandomUser(activeCity)
+			ownerID, err := getRandomUser(hists, activeCity)
 			if err != nil {
 				return err
 			}
 
 			typ := randVehicleType(rng)
 			q := `INSERT INTO vehicles VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL)`
-			_, err = db.Exec(q, id.String(), activeCity, typ, ownerID)
+			err = runAndRecord(hists, "addVehicle", func() error {
+				_, err := db.Exec(q, id.String(), activeCity, typ, ownerID)
+				return err
+			})
 			return err
 		} else if rng.Float64() < 0.5 {
 			// Simulate a user starting a ride.
-			rider, err := getRandomUser(activeCity)
+			rider, err := getRandomUser(hists, activeCity)
 			if err != nil {
 				return err
 			}
 
-			vehicle, err := getRandomVehicle(activeCity)
+			vehicle, err := getRandomVehicle(hists, activeCity)
 			if err != nil {
 				return err
 			}
 
 			q := `INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, NULL, now(), NULL, NULL)`
-			_, err = db.Exec(q, id.String(), activeCity, rider, vehicle, g.faker.StreetAddress(rng))
+			err = runAndRecord(hists, "startRide", func() error {
+				_, err = db.Exec(q, id.String(), activeCity, rider, vehicle, g.faker.StreetAddress(rng))
+				return err
+			})
 			if err != nil {
 				return err
 			}
@@ -705,7 +743,10 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 				ride := activeRides[0]
 				activeRides = activeRides[1:]
 				q := `UPDATE rides SET end_address = $3, end_time = now() WHERE city = $1 AND id = $2`
-				_, err := db.Exec(q, ride.city, ride.id, g.faker.StreetAddress(rng))
+				err = runAndRecord(hists, "endRide", func() error {
+					_, err := db.Exec(q, ride.city, ride.id, g.faker.StreetAddress(rng))
+					return err
+				})
 				return err
 			}
 		}
