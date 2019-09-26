@@ -113,6 +113,16 @@ func registerTypeORM(r *testRegistry) {
 			ctx,
 			c,
 			node,
+			"patch TypeORM test script to run all tests even on failure",
+			`sed -i 's/--bail //' /mnt/data1/typeorm/package.json`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
 			"building TypeORM",
 			`cd /mnt/data1/typeorm/ && sudo npm install --unsafe-perm=true --allow-root`,
 		); err != nil {
