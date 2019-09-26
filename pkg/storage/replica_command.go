@@ -1996,14 +1996,9 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-	// Step 0: Remove all learners so we don't have to think about them. We could
-	// do something smarter here and try to promote them, but it doesn't seem
-	// worth the complexity right now. Revisit if this is an issue in practice.
-	//
-	// Note that we can't just add the learners to removeTargets. The below logic
-	// always does add then remove and if the learner was in the requested
-	// targets, we might try to add it before removing it.
-	newDesc, err := removeLearners(ctx, s.DB(), &rangeDesc)
+	// Step 0: Remove everything that's not a full voter so we don't have to think
+	// about them.
+	newDesc, err := removeNonFullVoters(ctx, s, &rangeDesc)
 	if err != nil {
 		log.Warning(ctx, err)
 		return err
@@ -2237,10 +2232,16 @@ func removeTargetFromSlice(
 	return targets
 }
 
-func removeLearners(
-	ctx context.Context, db *client.DB, desc *roachpb.RangeDescriptor,
+func removeNonFullVoters(
+	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
 	origDesc := desc
+
+	desc, err := maybeLeaveAtomicChangeReplicas(ctx, store, desc)
+	if err != nil {
+		return nil, err
+	}
+
 	learners := desc.Replicas().Learners()
 	if len(learners) == 0 {
 		return desc, nil
@@ -2258,7 +2259,7 @@ func removeLearners(
 	// https://github.com/cockroachdb/cockroach/pull/40268
 	for i := range chgs {
 		var err error
-		desc, err = db.AdminChangeReplicas(ctx, desc.StartKey, *desc, chgs[i:i+1])
+		desc, err = store.DB().AdminChangeReplicas(ctx, desc.StartKey, *desc, chgs[i:i+1])
 		if err != nil {
 			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
 		}

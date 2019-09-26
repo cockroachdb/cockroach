@@ -792,7 +792,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	check()
 }
 
-func TestLearnerAdminRelocateRange(t *testing.T) {
+func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -812,22 +812,39 @@ func TestLearnerAdminRelocateRange(t *testing.T) {
 		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(2))
 	})
 
+	check := func(targets []roachpb.ReplicationTarget) {
+		require.NoError(t, tc.Server(0).DB().AdminRelocateRange(ctx, scratchStartKey, targets))
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		voters := desc.Replicas().Voters()
+		require.Len(t, voters, len(targets))
+		sort.Slice(voters, func(i, j int) bool { return voters[i].NodeID < voters[j].NodeID })
+		for i := range voters {
+			require.Equal(t, targets[i].NodeID, voters[i].NodeID, `%v`, voters)
+			require.Equal(t, targets[i].StoreID, voters[i].StoreID, `%v`, voters)
+		}
+		require.Empty(t, desc.Replicas().Learners())
+		require.Empty(t, desc.Replicas().Filter(predIncoming))
+		require.Empty(t, desc.Replicas().Filter(predOutgoing))
+	}
+
 	// Test AdminRelocateRange's treatment of learners by having one that it has
 	// to remove and one that should stay and become a voter.
 	//
 	// Before: 1 (voter), 2 (learner), 3 (learner)
 	// After: 1 (voter), 2 (voter), 4 (voter)
-	targets := []roachpb.ReplicationTarget{tc.Target(0), tc.Target(1), tc.Target(3)}
-	require.NoError(t, tc.Server(0).DB().AdminRelocateRange(ctx, scratchStartKey, targets))
-	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-	voters := desc.Replicas().Voters()
-	require.Len(t, voters, len(targets))
-	sort.Slice(voters, func(i, j int) bool { return voters[i].NodeID < voters[j].NodeID })
-	for i := range voters {
-		require.Equal(t, targets[i].NodeID, voters[i].NodeID, `%v`, voters)
-		require.Equal(t, targets[i].StoreID, voters[i].StoreID, `%v`, voters)
-	}
-	require.Empty(t, desc.Replicas().Learners())
+	check([]roachpb.ReplicationTarget{tc.Target(0), tc.Target(1), tc.Target(3)})
+
+	// AdminRelocateRange should leave joint configs before doing its thing.
+	//
+	// Before: 1 (voter), 2 (voter), 4 (outgoing)
+	// After: 1 (voter), 2 (voter), 3 (voter)
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+	desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(3))
+	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+	require.Len(t, desc.Replicas().Filter(predOutgoing), 1)
+	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 0)
+	check([]roachpb.ReplicationTarget{tc.Target(0), tc.Target(1), tc.Target(2)})
 }
 
 func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
