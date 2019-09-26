@@ -551,9 +551,10 @@ func (o *Optimizer) enforceProps(
 ) (fullyOptimized bool) {
 	inner := *required
 
-	// Ignore the Presentation property, since any relational or enforcer
-	// operator can provide it.
+	// Ignore the Presentation and LimitHint properties, since any relational or
+	// enforcer operator can provide them.
 	inner.Presentation = nil
+	inner.LimitHint = 0
 
 	// Strip off one property that can be enforced. Other properties will be
 	// stripped by recursively optimizing the group with successively fewer

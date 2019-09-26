@@ -43,6 +43,8 @@ type Required struct {
 	// descending order. If Ordering is not defined, then no particular ordering
 	// is required or provided.
 	Ordering OrderingChoice
+
+	LimitHint float64
 }
 
 // MinRequired are the default physical properties that require nothing and
@@ -52,7 +54,7 @@ var MinRequired = &Required{}
 // Defined is true if any physical property is defined. If none is defined, then
 // this is an instance of MinRequired.
 func (p *Required) Defined() bool {
-	return !p.Presentation.Any() || !p.Ordering.Any()
+	return !p.Presentation.Any() || !p.Ordering.Any() || p.LimitHint != 0
 }
 
 // ColSet returns the set of columns used by any of the physical properties.
@@ -67,9 +69,10 @@ func (p *Required) ColSet() opt.ColSet {
 func (p *Required) String() string {
 	hasProjection := !p.Presentation.Any()
 	hasOrdering := !p.Ordering.Any()
+	hasLimitHint := p.LimitHint != 0
 
 	// Handle empty properties case.
-	if !hasProjection && !hasOrdering {
+	if !hasProjection && !hasOrdering && !hasLimitHint {
 		return "[]"
 	}
 
@@ -80,7 +83,7 @@ func (p *Required) String() string {
 		p.Presentation.format(&buf)
 		buf.WriteByte(']')
 
-		if hasOrdering {
+		if hasOrdering || hasLimitHint {
 			buf.WriteString(" ")
 		}
 	}
@@ -89,6 +92,16 @@ func (p *Required) String() string {
 		buf.WriteString("[ordering: ")
 		p.Ordering.Format(&buf)
 		buf.WriteByte(']')
+
+		if hasLimitHint {
+			buf.WriteString(" ")
+		}
+	}
+
+	if hasLimitHint {
+		buf.WriteString("[limit hint: ")
+		fmt.Fprintf(&buf, "%d", int64(p.LimitHint))
+		buf.WriteByte(']')
 	}
 
 	return buf.String()
@@ -96,7 +109,7 @@ func (p *Required) String() string {
 
 // Equals returns true if the two physical properties are identical.
 func (p *Required) Equals(rhs *Required) bool {
-	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering)
+	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) && p.LimitHint == rhs.LimitHint
 }
 
 // Presentation specifies the naming, membership (including duplicates), and

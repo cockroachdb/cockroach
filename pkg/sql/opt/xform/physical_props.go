@@ -11,10 +11,13 @@
 package xform
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // CanProvidePhysicalProps returns true if the given expression can provide the
@@ -28,8 +31,8 @@ import (
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
 func CanProvidePhysicalProps(e memo.RelExpr, required *physical.Required) bool {
-	// All operators can provide the Presentation property, so no need to check
-	// for that.
+	// All operators can provide the Presentation and LimitHint properties, so no
+	// need to check for that.
 	return e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
 }
 
@@ -45,6 +48,12 @@ func BuildChildPhysicalProps(
 	mem *memo.Memo, parent memo.RelExpr, nth int, parentProps *physical.Required,
 ) *physical.Required {
 	var childProps physical.Required
+
+	// ScalarExprs don't support required physical properties; don't build
+	// physical properties for them.
+	if _, ok := parent.Child(nth).(opt.ScalarExpr); ok {
+		return mem.InternPhysicalProps(&childProps)
+	}
 
 	// Most operations don't require a presentation of their input; these are the
 	// exceptions.
@@ -68,6 +77,41 @@ func BuildChildPhysicalProps(
 	}
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
+
+	switch parent.Op() {
+	case opt.LimitOp:
+		if constLimit, ok := parent.(*memo.LimitExpr).Limit.(*memo.ConstExpr); ok {
+			childProps.LimitHint = float64(*constLimit.Value.(*tree.DInt))
+		}
+	case opt.OffsetOp:
+		if parentProps.LimitHint == 0 {
+			break
+		}
+		if constOffset, ok := parent.(*memo.OffsetExpr).Offset.(*memo.ConstExpr); ok {
+			offsetValue := float64(*constOffset.Value.(*tree.DInt))
+			if offsetValue > math.MaxFloat64-parentProps.LimitHint {
+				// In the case of overflow, don't set a limit hint.
+				childProps.LimitHint = 0
+			} else {
+				childProps.LimitHint = parentProps.LimitHint + offsetValue
+			}
+		}
+	case opt.IndexJoinOp:
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
+		opt.UnionOp, opt.UnionAllOp:
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.DistinctOnOp:
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.SelectOp:
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.ProjectOp:
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.OrdinalityOp:
+		childProps.LimitHint = parentProps.LimitHint
+	case opt.ProjectSetOp:
+		childProps.LimitHint = parentProps.LimitHint
+	}
 
 	// If properties haven't changed, no need to re-intern them.
 	if childProps.Equals(parentProps) {
