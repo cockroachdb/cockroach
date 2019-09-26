@@ -533,7 +533,8 @@ func (s *Server) newConnExecutor(
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
-		ctxHolder: ctxHolder{connCtx: ctx},
+		ctxHolder:    ctxHolder{connCtx: ctx},
+		executorType: executorTypeExec,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -953,6 +954,10 @@ type connExecutor struct {
 	// draining is set if we've received a DrainRequest. Once this is set, we're
 	// going to find a suitable time to close the connection.
 	draining bool
+
+	// executorType is set to whether this executor is an ordinary executor which
+	// responds to user queries or an internal one.
+	executorType executorType
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
