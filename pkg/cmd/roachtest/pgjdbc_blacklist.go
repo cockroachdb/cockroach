@@ -1279,8 +1279,6 @@ var pgjdbcBlackList19_2 = blacklist{
 	"org.postgresql.test.jdbc4.DatabaseMetaDataTest.testGetFunctionsWithBlankPatterns":                                                                                         "unknown",
 	"org.postgresql.test.jdbc4.DatabaseMetaDataTest.testGetFunctionsWithSpecificTypes":                                                                                         "17511",
 	"org.postgresql.test.jdbc4.IsValidTest.testIsValidRemoteClose":                                                                                                             "35897",
-	"org.postgresql.test.jdbc4.JsonbTest.testJsonbNonPreparedStatement":                                                                                                        "40855",
-	"org.postgresql.test.jdbc4.JsonbTest.testJsonbPreparedStatement":                                                                                                           "40855",
 	"org.postgresql.test.jdbc4.PGCopyInputStreamTest.testReadBytesCorrectlyHandlesEof":                                                                                         "unknown",
 	"org.postgresql.test.jdbc4.PGCopyInputStreamTest.testReadBytesCorrectlyReadsDataInChunks":                                                                                  "unknown",
 	"org.postgresql.test.jdbc4.PGCopyInputStreamTest.testStreamCanBeClosedAfterReadUp":                                                                                         "unknown",
