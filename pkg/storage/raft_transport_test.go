@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -602,4 +603,41 @@ func TestReopenConnection(t *testing.T) {
 		}
 		return errors.New("still waiting")
 	})
+}
+
+// This test ensures that blocking by a node dialer attempting to dial a
+// remote node does not block calls to SendAsync.
+func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rttc := newRaftTransportTestContext(t)
+	defer rttc.Stop()
+
+	// Create a single server from which we're going to call send.
+	// We'll then set up a bogus target server which will not be serving gRPC
+	// and will block during connection setup (leading to blocking in the Dial
+	// call). The test ensures that the Send call does not block.
+	const rangeID, from, to = 1, 1, 2
+	transport := rttc.AddNode(from)
+	// Set up a plain old TCP listener that's not going to accept any connecitons
+	// which will lead to blocking during dial.
+	ln, err := net.Listen("tcp", util.TestAddr.String())
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+	rttc.GossipNode(to, ln.Addr())
+	// Try to send a message, make sure we don't block waiting to set up the
+	// connection.
+	transport.SendAsync(&storage.RaftMessageRequest{
+		RangeID: rangeID,
+		ToReplica: roachpb.ReplicaDescriptor{
+			StoreID:   to,
+			NodeID:    to,
+			ReplicaID: to,
+		},
+		FromReplica: roachpb.ReplicaDescriptor{
+			StoreID:   from,
+			NodeID:    from,
+			ReplicaID: from,
+		},
+		Message: raftpb.Message{To: to, From: from},
+	}, rpc.DefaultClass)
 }
