@@ -309,11 +309,10 @@ func (dsp *DistSQLPlanner) Run(
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		json, url, err := execinfrapb.GeneratePlanDiagramURL(flows)
+		_, url, err := execinfrapb.GeneratePlanDiagramURL(planCtx.planner.stmt.String(), flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {
-			log.Infof(ctx, "Plan diagram JSON:\n%s", json)
 			log.Infof(ctx, "Plan diagram URL:\n%s", url.String())
 		}
 	}

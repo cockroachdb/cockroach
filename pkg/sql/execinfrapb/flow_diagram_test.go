@@ -136,13 +136,14 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		},
 	}
 
-	json, url, err := GeneratePlanDiagramURL(flows)
+	json, url, err := GeneratePlanDiagramURL("SOME SQL HERE", flows)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected := `
 		{
+		  "sql":"SOME SQL HERE",
 		  "nodeNames":["1","2","3"],
 		  "processors":[
 			  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
@@ -162,9 +163,9 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	compareDiagrams(t, json, expected)
 
-	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kjFr8zAQhvfvV3y8awS1pE6aNBXSoSlpt9aDah1B4EhGkiEl-L8XyyWJoSkpaUfd3XvP48N7-GDpwWwpQb2Ag0GAQaJm6GJoKKUQx9Y0uLQ7qIrB-a7PY7lmaEIkqD2yyy1B4dm8tbQmYyneVGCwlI1ry_qnsKWlt7TTZQgMqz6r_5ozLVAPDKHPx8Upmw1B8YGdwPnlcP7rcHE5XPwp_MgM0VIkO6dpsUA9fGF4H5z_FJTzSBfd1sT3g96dazPF0XChxWtfVbLR8qAtzzqLnxxsTakLPtFM5dzmavwgshuaDpBCHxt6jKEpf-T0XJVcKVhKeerK6bH0pVWOehrm14TFNWH5bfh2Fq6Gevj3EQAA__8R3DK5"
+	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kkFLwzAUx-9-ivG_LmCbeMqpl4kTdbp50x5q8xiBLqlJCpPS7y5NZVvByWR6zHvv_36_PtrCv1eQWC3uZ5PV093kZracgcFYRQ_FhjzkC1IwcDAI5Ay1syV5b13fauPgXG0hEwZt6ib05ZyhtI4gWwQdKoLEc_FW0ZIKRe4yAYOiUOgqrl_ZDc2Nom0Wh8CwaIKcZCnLOPKOwTZhv9iHYk2QaccO4Onp8PTP4fx0OP9X-J5pnSJHakzL-BR5943hrdXmS1CMI7XTm8J97PSudRXI9YbTjL82SSLKTOy0xVFn_puDLcnX1ngaqRzbnPQfRGpNwwG8bVxJj86W8Y8cnouYiwVFPgxdMTzmJrbiUQ_D6Tlhfk5Y_Bi-GoWTLu8uPgMAAP__nLk4fw=="
 	if url.String() != expectedURL {
-		t.Errorf("expected `%s` got `%s`", expectedURL, &url)
+		t.Errorf("expected `%s` got `%s`", expectedURL, url.String())
 	}
 }
 
@@ -358,7 +359,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		}},
 	}
 
-	diagram, err := GeneratePlanDiagram(flows)
+	diagram, err := GeneratePlanDiagram("SOME SQL HERE", flows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,6 +370,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 
 	expected := `
 		{
+		  "sql":"SOME SQL HERE",
 			"nodeNames":["1","2","3","4"],
 			"processors":[
 				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
