@@ -169,6 +169,36 @@ func init() {
 			leftTypes:  []coltypes.T{coltypes.Int64},
 			rightTypes: []coltypes.T{coltypes.Int64},
 
+			// Test right outer join with non-distinct left build table with an
+			// unmatched row from the right followed by a matched one.
+			leftTuples: tuples{
+				{0},
+				{0},
+				{2},
+			},
+			rightTuples: tuples{
+				{1},
+				{2},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			joinType:       sqlbase.JoinType_RIGHT_OUTER,
+			buildDistinct:  false,
+			buildRightSide: false,
+
+			expectedTuples: tuples{
+				{nil, 1},
+				{2, 2},
+			},
+		},
+		{
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
+
 			// Test null handling only on probe column.
 			leftTuples: tuples{
 				{0},
