@@ -298,3 +298,13 @@ foo13  CREATE TABLE foo13 (
             FAMILY pk (a, b),
             FAMILY fam_1_c_d (e, z)
 )
+
+# Regression test for #41004
+statement ok
+CREATE TABLE foo41004 (x, y, z, FAMILY (y), FAMILY (x), FAMILY (z)) AS
+    VALUES (1, 2, NULL::INT)
+
+query III
+SELECT * FROM foo41004
+----
+1  2  NULL
