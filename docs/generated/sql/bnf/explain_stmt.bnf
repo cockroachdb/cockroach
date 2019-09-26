@@ -1,3 +1,5 @@
 explain_stmt ::=
 	'EXPLAIN' preparable_stmt
 	| 'EXPLAIN' '(' ( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ( ( ',' ( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ) )* ')' preparable_stmt
+	| 'EXPLAIN' 'ANALYSE' preparable_stmt
+	| 'EXPLAIN' 'ANALYSE' '(' ( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ( ( ',' ( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ) )* ')' preparable_stmt
