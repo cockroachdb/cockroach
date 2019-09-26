@@ -148,6 +148,86 @@
     $private
 )
 
+# PushEqualityIntoJoinLeftAndRight is similar to PushFilterIntoJoinLeftAndRight,
+# but is used for the special case of a variable equality expression such as
+# a.x=b.x.
+[PushEqualityIntoJoinLeftAndRight, Normalize]
+(InnerJoin | SemiJoin
+    $left:* & ^(HasOuterCols $left)
+    $right:* & ^(HasOuterCols $right)
+    $on:[
+        ...
+        $item:* &
+            (FiltersItem (Eq (Variable) (Variable))) &
+            (CanMapJoinOpEquality $on $item $left) &
+            (CanMapJoinOpEquality $on $item $right)
+        ...
+    ]
+    $private:*
+)
+=>
+((OpName)
+    (Select
+        $left
+        [ (FiltersItem (MapJoinOpEquality $on $item $left)) ]
+    )
+    (Select
+        $right
+        [ (FiltersItem (MapJoinOpEquality $on $item $right)) ]
+    )
+    (RemoveFiltersItem $on $item)
+    $private
+)
+
+# MapEqualityIntoJoinLeft is similar to MapFilterIntoJoinLeft, but is used for
+# the special case of a variable equality expression such as a.x=b.x.
+[MapEqualityIntoJoinLeft, Normalize]
+(InnerJoin | InnerJoinApply | RightJoin | SemiJoin | SemiJoinApply
+    $left:* & ^(HasOuterCols $left)
+    $right:*
+    $on:[
+        ...
+        $item:* &
+            (FiltersItem (Eq (Variable) (Variable))) &
+            ^(IsBoundBy $item (OutputCols $left)) &
+            (CanMapJoinOpEquality $on $item $left)
+        ...
+    ]
+    $private:*
+)
+=>
+((OpName)
+    $left
+    $right
+    (ReplaceFiltersItem $on $item (MapJoinOpEquality $on $item $left))
+    $private
+)
+
+# MapEqualityIntoJoinRight is similar to MapFilterIntoJoinRight, but is used for
+# the special case of a variable equality expression such as a.x=b.x.
+[MapEqualityIntoJoinRight, Normalize]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+ SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $left:*
+    $right:* & ^(HasOuterCols $right)
+    $on:[
+        ...
+        $item:* &
+            (FiltersItem (Eq (Variable) (Variable))) &
+            ^(IsBoundBy $item (OutputCols $right)) &
+            (CanMapJoinOpEquality $on $item $right)
+        ...
+    ]
+    $private:*
+)
+=>
+((OpName)
+    $left
+    $right
+    (ReplaceFiltersItem $on $item (MapJoinOpEquality $on $item $right))
+    $private
+)
+
 # PushFilterIntoJoinLeft pushes Join filter conditions into the left side of the
 # join. This is possible in the case of InnerJoin and RightJoin, as long as the
 # condition has no dependencies on the right side of the join. Left and Full

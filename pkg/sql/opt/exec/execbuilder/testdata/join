@@ -105,10 +105,10 @@ render                    ·            ·
            │    │         type         inner
            │    │         equality     (x) = (x)
            │    ├── scan  ·            ·
-           │    │         table        twocolumn@primary
+           │    │         table        onecolumn@primary
            │    │         spans        ALL
            │    └── scan  ·            ·
-           │              table        onecolumn@primary
+           │              table        twocolumn@primary
            │              spans        ALL
            └── hash-join  ·            ·
                 │         type         inner

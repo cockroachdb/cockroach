@@ -144,6 +144,49 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 	return true
 }
 
+// CanMapJoinOpEquality is similar to CanMapJoinOpFilter, but is used for
+// the special case of a variable equality expression such as a.x=b.x.
+//
+// For example, consider this query:
+//
+//   SELECT * FROM a, b, c WHERE a.x=b.x AND a.x=c.x
+//
+// Given join ordering (a join (b join c)), CanMapJoinOpEquality would be
+// called with filters=(a.x=b.x AND a.x=c.x), src=(a.x=b.x) and dst=(b join c).
+// It is possible to map a.x=b.x to b.x=c.x, so CanMapJoinOpEquality would
+// return true.
+func (c *CustomFuncs) CanMapJoinOpEquality(
+	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
+) bool {
+	// Fast path if src is already bound by dst.
+	if c.IsBoundBy(src, c.OutputCols(dst)) {
+		return true
+	}
+
+	// For CanMapJoinOpEquality to be true, each column in src must map to at
+	// least *two* columns in dst, and those two columns must not already
+	// have an equality condition. We only need to check the first column of src
+	// since by definition the second column is equivalent.
+	col, _ := src.ScalarProps(c.mem).OuterCols.Next(0)
+	eqCols := c.GetEquivColsWithEquivType(col, filters)
+	eqCols.IntersectionWith(c.OutputCols(dst))
+	if eqCols.Len() < 2 {
+		return false
+	}
+
+	// Remove from consideration equality columns that already have an equality
+	// condition bound by dst.
+	for i := range filters {
+		fd := &filters[i].ScalarProps(c.mem).FuncDeps
+		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+		if filterEqCols.SubsetOf(c.OutputCols(dst)) {
+			eqCols.DifferenceWith(filterEqCols)
+		}
+	}
+
+	return eqCols.Len() >= 2
+}
+
 // MapJoinOpFilter maps a boolean expression src, which is a conjunct in
 // the given filters expression, to use the output columns of the relational
 // expression dst.
@@ -174,9 +217,8 @@ func (c *CustomFuncs) MapJoinOpFilter(
 		return src.Condition
 	}
 
-	// MapJoinOpFilter each column in src to one column in dst. We choose an
-	// arbitrary column (the one with the smallest ColumnID) if there are multiple
-	// choices.
+	// Map each column in src to one column in dst. We choose an arbitrary column
+	// (the one with the smallest ColumnID) if there are multiple choices.
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps(c.mem).OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
@@ -188,7 +230,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 			dstCol, ok := eqCols.Next(0)
 			if !ok {
 				panic(errors.AssertionFailedf(
-					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
+					"MapJoinOpFilter called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
 					src, dst,
 				))
 			}
@@ -218,6 +260,52 @@ func (c *CustomFuncs) MapJoinOpFilter(
 	}
 
 	return replace(src.Condition).(opt.ScalarExpr)
+}
+
+// MapJoinOpEquality is similar to MapJoinOpFilter, but is used for
+// the special case of a variable equality expression such as a.x=b.x.
+//
+// For example, consider this query:
+//
+//   SELECT * FROM a, b, c WHERE a.x=b.x AND a.x=c.x
+//
+// Given join ordering (a join (b join c)), MapJoinOpEquality would be
+// called with filters=(a.x=b.x AND a.x=c.x), src=(a.x=b.x) and dst=(b join c).
+// In this case, MapJoinOpEquality would map a.x=b.x to b.x=c.x.
+func (c *CustomFuncs) MapJoinOpEquality(
+	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
+) opt.ScalarExpr {
+	// Fast path if src is already bound by dst.
+	if c.IsBoundBy(src, c.OutputCols(dst)) {
+		return src.Condition
+	}
+
+	// Create an equality between the first two columns in dst that are equal to
+	// the columns in src, and that don't already have an equality condition.
+	col, _ := src.ScalarProps(c.mem).OuterCols.Next(0)
+	eqCols := c.GetEquivColsWithEquivType(col, filters)
+	eqCols.IntersectionWith(c.OutputCols(dst))
+
+	// Remove from consideration equality columns that already have an equality
+	// condition bound by dst.
+	for i := range filters {
+		fd := &filters[i].ScalarProps(c.mem).FuncDeps
+		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+		if filterEqCols.SubsetOf(c.OutputCols(dst)) {
+			eqCols.DifferenceWith(filterEqCols)
+		}
+	}
+
+	if eqCols.Len() < 2 {
+		panic(errors.AssertionFailedf(
+			"MapJoinOpEquality called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
+			src, dst,
+		))
+	}
+
+	var1, _ := eqCols.Next(0)
+	var2, _ := eqCols.Next(var1 + 1)
+	return c.f.ConstructEq(c.f.ConstructVariable(var1), c.f.ConstructVariable(var2))
 }
 
 // GetEquivColsWithEquivType uses the given FuncDepSet to find columns that are
@@ -260,10 +348,23 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 		return res
 	}
 
-	// Compute all equivalent columns.
+	// Compute all equivalent columns. To ensure that we don't miss any
+	// transitive equivalences, do one pass for filters that contain col,
+	// and another pass for filters that don't contain col.
 	eqCols := opt.MakeColSet(col)
 	for i := range filters {
-		eqCols = filters[i].ScalarProps(c.mem).FuncDeps.ComputeEquivClosure(eqCols)
+		scalarProps := filters[i].ScalarProps(c.mem)
+		if scalarProps.OuterCols.Contains(col) {
+			// Filter contains col.
+			eqCols = scalarProps.FuncDeps.ComputeEquivClosure(eqCols)
+		}
+	}
+	for i := range filters {
+		scalarProps := filters[i].ScalarProps(c.mem)
+		if !scalarProps.OuterCols.Contains(col) {
+			// Filter does not contain col.
+			eqCols = scalarProps.FuncDeps.ComputeEquivClosure(eqCols)
+		}
 	}
 
 	eqCols.ForEach(func(i opt.ColumnID) {

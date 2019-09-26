@@ -155,39 +155,32 @@ CREATE TABLE ac (a INT, c INT)
 query TTT
 EXPLAIN UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.a
 ----
-·                                        distributed        false
-·                                        vectorized         false
-count                                    ·                  ·
- └── update                              ·                  ·
-      │                                  table              abc
-      │                                  set                b, c
-      │                                  strategy           updater
-      └── render                         ·                  ·
-           └── distinct                  ·                  ·
-                │                        distinct on        a
-                │                        order key          a
-                └── merge-join           ·                  ·
-                     │                   type               inner
-                     │                   equality           (a) = (a)
-                     │                   mergeJoinOrder     +"(a=a)"
-                     ├── merge-join      ·                  ·
-                     │    │              type               inner
-                     │    │              equality           (a) = (a)
-                     │    │              left cols are key  ·
-                     │    │              mergeJoinOrder     +"(a=a)"
-                     │    ├── scan       ·                  ·
-                     │    │              table              abc@primary
-                     │    │              spans              ALL
-                     │    └── sort       ·                  ·
-                     │         │         order              +a
-                     │         └── scan  ·                  ·
-                     │                   table              ac@primary
-                     │                   spans              ALL
-                     └── sort            ·                  ·
-                          │              order              +a
-                          └── scan       ·                  ·
-·                                        table              ab@primary
-·                                        spans              ALL
+·                                   distributed         false
+·                                   vectorized          false
+count                               ·                   ·
+ └── update                         ·                   ·
+      │                             table               abc
+      │                             set                 b, c
+      │                             strategy            updater
+      └── render                    ·                   ·
+           └── distinct             ·                   ·
+                │                   distinct on         a
+                └── hash-join       ·                   ·
+                     │              type                inner
+                     │              equality            (a) = (a)
+                     ├── scan       ·                   ·
+                     │              table               ab@primary
+                     │              spans               ALL
+                     └── hash-join  ·                   ·
+                          │         type                inner
+                          │         equality            (a) = (a)
+                          │         right cols are key  ·
+                          ├── scan  ·                   ·
+                          │         table               ac@primary
+                          │         spans               ALL
+                          └── scan  ·                   ·
+·                                   table               abc@primary
+·                                   spans               ALL
 
 # Make sure UPDATE ... FROM works with LATERAL.
 query TTT
