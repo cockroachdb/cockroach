@@ -144,6 +144,121 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 	return true
 }
 
+// CanMapJoinOpEqualities checks whether it is possible to map equality
+// conditions in a join to use different variables so that the number of
+// conditions crossing both sides of a join are minimized.
+//
+// Specifically, it finds the set of columns containing col that forms an
+// equivalence group in filters. It splits that group into columns from
+// the left and right sides of the join, and checks whether there are multiple
+// equality conditions in filters that connect the two groups. If so,
+// CanMapJoinOpEqualities returns true.
+func (c *CustomFuncs) CanMapJoinOpEqualities(
+	filters memo.FiltersExpr, col opt.ColumnID, leftCols, rightCols opt.ColSet,
+) bool {
+	eqCols := c.GetEquivColsWithEquivType(col, filters)
+
+	// To map equality conditions, the equivalent columns must intersect
+	// both sides and must be fully bound by both sides.
+	if !(eqCols.Intersects(leftCols) &&
+		eqCols.Intersects(rightCols) &&
+		eqCols.SubsetOf(leftCols.Union(rightCols))) {
+		return false
+	}
+
+	// If more than one equality condition connecting columns in the equivalence
+	// group spans both sides of the join, these conditions can be remapped.
+	found := false
+	for i := range filters {
+		fd := &filters[i].ScalarProps(c.mem).FuncDeps
+		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+		if filterEqCols.Intersects(leftCols) && filterEqCols.Intersects(rightCols) &&
+			filterEqCols.SubsetOf(eqCols) {
+			if found {
+				return true
+			}
+			found = true
+		}
+	}
+
+	return false
+}
+
+// MapJoinOpEqualities maps equality conditions in a join to use different
+// variables so that the number of conditions crossing both sides of a join are
+// minimized. This is useful for creating additional filter conditions that can
+// be pushed down to either side of the join.
+//
+// To perform the mapping, MapJoinOpEqualities finds the set of columns
+// containing col that forms an equivalence group in filters. Then it
+// (conceptually) constructs a graph in which the nodes represent columns and
+// the edges represent equality conditions between the columns. The goal is to
+// select edges that form a minimum spanning tree such that only a single edge
+// connects columns from the left side and the right side. For example, suppose
+// the initial graph looks like this (L and R indicate left and right columns):
+//
+//   L    R
+//   0 -- 0
+//   |
+//   0 -- 0
+//
+// MapJoinOpEqualities would reconstruct the graph to look like this:
+//
+//   L    R
+//   0 -- 0
+//   |    |
+//   0    0
+//
+// In SQL, this corresponds to converting the query:
+//
+//   SELECT * FROM a, b WHERE a.x = b.x AND a.x = a.y AND a.y = b.y
+//
+// to:
+//
+//   SELECT * FROM a, b WHERE a.x = b.x AND a.x = a.y AND b.x = b.y
+//
+func (c *CustomFuncs) MapJoinOpEqualities(
+	filters memo.FiltersExpr, col opt.ColumnID, leftCols, rightCols opt.ColSet,
+) memo.FiltersExpr {
+	eqCols := c.GetEquivColsWithEquivType(col, filters)
+
+	// First remove all the equality conditions for this equivalence group.
+	newFilters := make(memo.FiltersExpr, 0, len(filters))
+	for i := range filters {
+		fd := &filters[i].ScalarProps(c.mem).FuncDeps
+		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+		if !filterEqCols.Empty() && filterEqCols.SubsetOf(eqCols) {
+			continue
+		}
+		newFilters = append(newFilters, filters[i])
+	}
+
+	// Now append new equality conditions that represent the minimum spanning
+	// tree for this equivalence group.
+	leftEqCols := leftCols.Intersection(eqCols)
+	rightEqCols := rightCols.Intersection(eqCols)
+	prevCol, ok := leftEqCols.Next(0)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"MapJoinOpEqualities called with equivalence group that does not intersect both sides",
+		))
+	}
+	for col, ok := leftEqCols.Next(prevCol + 1); ok; col, ok = leftEqCols.Next(col + 1) {
+		newFilters = append(newFilters, memo.FiltersItem{
+			Condition: c.f.ConstructEq(c.f.ConstructVariable(prevCol), c.f.ConstructVariable(col)),
+		})
+		prevCol = col
+	}
+	for col, ok := rightEqCols.Next(0); ok; col, ok = rightEqCols.Next(col + 1) {
+		newFilters = append(newFilters, memo.FiltersItem{
+			Condition: c.f.ConstructEq(c.f.ConstructVariable(prevCol), c.f.ConstructVariable(col)),
+		})
+		prevCol = col
+	}
+
+	return newFilters
+}
+
 // MapJoinOpFilter maps a boolean expression src, which is a conjunct in
 // the given filters expression, to use the output columns of the relational
 // expression dst.
@@ -174,9 +289,8 @@ func (c *CustomFuncs) MapJoinOpFilter(
 		return src.Condition
 	}
 
-	// MapJoinOpFilter each column in src to one column in dst. We choose an
-	// arbitrary column (the one with the smallest ColumnID) if there are multiple
-	// choices.
+	// Map each column in src to one column in dst. We choose an arbitrary column
+	// (the one with the smallest ColumnID) if there are multiple choices.
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps(c.mem).OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
@@ -188,7 +302,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 			dstCol, ok := eqCols.Next(0)
 			if !ok {
 				panic(errors.AssertionFailedf(
-					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
+					"MapJoinOpFilter called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
 					src, dst,
 				))
 			}
@@ -218,6 +332,28 @@ func (c *CustomFuncs) MapJoinOpFilter(
 	}
 
 	return replace(src.Condition).(opt.ScalarExpr)
+}
+
+// MapAllJoinOpEqualities maps all variable equality conditions in filters to
+// use columns in either leftCols or rightCols where possible.
+// See CanMapJoinOpEqualities and MapJoinOpEqualities for more info.
+func (c *CustomFuncs) MapAllJoinOpEqualities(
+	filters memo.FiltersExpr, leftCols, rightCols opt.ColSet,
+) memo.FiltersExpr {
+	var equivFD props.FuncDepSet
+	for i := range filters {
+		equivFD.AddEquivFrom(&filters[i].ScalarProps(c.mem).FuncDeps)
+	}
+	equivReps := equivFD.EquivReps()
+
+	newFilters := filters
+	equivReps.ForEach(func(col opt.ColumnID) {
+		if c.CanMapJoinOpEqualities(newFilters, col, leftCols, rightCols) {
+			newFilters = c.MapJoinOpEqualities(newFilters, col, leftCols, rightCols)
+		}
+	})
+
+	return newFilters
 }
 
 // GetEquivColsWithEquivType uses the given FuncDepSet to find columns that are
@@ -261,10 +397,11 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 	}
 
 	// Compute all equivalent columns.
-	eqCols := opt.MakeColSet(col)
+	var equivFD props.FuncDepSet
 	for i := range filters {
-		eqCols = filters[i].ScalarProps(c.mem).FuncDeps.ComputeEquivClosure(eqCols)
+		equivFD.AddEquivFrom(&filters[i].ScalarProps(c.mem).FuncDeps)
 	}
+	eqCols := equivFD.ComputeEquivGroup(col)
 
 	eqCols.ForEach(func(i opt.ColumnID) {
 		// Only include columns that have the same type as col.
