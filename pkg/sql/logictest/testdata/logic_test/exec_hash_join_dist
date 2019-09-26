@@ -28,3 +28,40 @@ SELECT * FROM t WHERE EXISTS(SELECT * FROM xy WHERE x=t.k)
 ----
 2  20
 3  30
+
+statement ok
+CREATE TABLE small (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE large (c INT, d INT)
+
+statement ok
+INSERT INTO small SELECT x, 3*x FROM
+  generate_series(1, 10) AS a(x)
+
+statement ok
+INSERT INTO large SELECT 2*x, 4*x FROM
+  generate_series(1, 10) AS a(x)
+
+statement ok
+ALTER TABLE small SPLIT AT SELECT a FROM small
+
+statement ok
+ALTER TABLE small EXPERIMENTAL_RELOCATE SELECT ARRAY[mod(i, 3) + 1], i FROM generate_series(1, 10) AS g(i)
+
+statement ok
+ALTER TABLE large SPLIT AT SELECT 2*i FROM generate_series(1, 10) AS g(i)
+
+statement ok
+ALTER TABLE large EXPERIMENTAL_RELOCATE SELECT ARRAY[mod(i, 3) + 1], 2*i FROM generate_series(1, 10) as g(i)
+
+# Test that RIGHT OUTER hash join correctly sets probeRowUnmatched on
+# subsequent batches.
+query II rowsort
+SELECT small.b, large.d FROM large RIGHT HASH JOIN small ON small.b = large.c AND large.d < 30 ORDER BY 1 LIMIT 5
+----
+3   NULL
+6   12
+9   NULL
+12  24
+15  NULL
