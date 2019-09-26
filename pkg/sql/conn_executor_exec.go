@@ -646,9 +646,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	defer func() {
+		execType := statementTypeExec
+		if ex.isInternal {
+			execType = statementTypeExecInternal
+		}
 		planner.maybeLogStatement(
 			ctx,
-			"exec",
+			execType,
 			ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(),
 			res.Err(),

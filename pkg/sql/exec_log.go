@@ -88,16 +88,27 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+type statementType int
+
+const (
+	statementTypeExec statementType = iota
+	statementTypeExecInternal
+)
+
 // maybeLogStatement conditionally records the current statement
 // (p.curPlan) to the exec / audit logs.
 func (p *planner) maybeLogStatement(
-	ctx context.Context, lbl string, numRetries, rows int, err error, queryReceived time.Time,
+	ctx context.Context,
+	execType statementType,
+	numRetries, rows int,
+	err error,
+	queryReceived time.Time,
 ) {
-	p.maybeLogStatementInternal(ctx, lbl, numRetries, rows, err, queryReceived)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, rows, err, queryReceived)
 }
 
 func (p *planner) maybeLogStatementInternal(
-	ctx context.Context, lbl string, numRetries, rows int, err error, startTime time.Time,
+	ctx context.Context, execType statementType, numRetries, rows int, err error, startTime time.Time,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -150,6 +161,16 @@ func (p *planner) maybeLogStatementInternal(
 		auditErrStr = "ERROR"
 	}
 
+	var lbl string
+	switch execType {
+	case statementTypeExec:
+		lbl = "exec"
+	case statementTypeExecInternal:
+		lbl = "exec-internal"
+	default:
+		lbl = "?"
+	}
+
 	// Now log!
 	if auditEventsDetected {
 		logger := p.execCfg.AuditLogger
@@ -163,7 +184,11 @@ func (p *planner) maybeLogStatementInternal(
 	}
 	if logV {
 		// Copy to the main log.
-		log.VEventf(ctx, 2, "%s %q %s %q %s %.3f %d %q %d",
+		vLevel := int32(2)
+		if execType == statementTypeExecInternal {
+			vLevel = 3
+		}
+		log.VEventf(ctx, vLevel, "%s %q %s %q %s %.3f %d %q %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, execErrStr, numRetries)
 	}
 }

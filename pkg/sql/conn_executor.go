@@ -953,6 +953,10 @@ type connExecutor struct {
 	// draining is set if we've received a DrainRequest. Once this is set, we're
 	// going to find a suitable time to close the connection.
 	draining bool
+
+	// isInternal is set to true if this executor is for internal use, and not
+	// connected directly to any user-initiated SQL statements.
+	isInternal bool
 }
 
 // ctxHolder contains a connection's context and, while session tracing is

@@ -194,6 +194,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	if err != nil {
 		return nil, nil, err
 	}
+	ex.isInternal = true
 
 	var wg sync.WaitGroup
 	wg.Add(1)
