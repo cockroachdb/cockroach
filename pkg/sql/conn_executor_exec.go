@@ -676,7 +676,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := false
-	planner.prepareForDistSQLSupportCheck()
 	distributePlan = shouldDistributePlan(
 		ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)

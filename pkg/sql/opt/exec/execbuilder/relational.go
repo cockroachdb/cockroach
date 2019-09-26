@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -468,12 +469,21 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
+	softLimit := int64(math.Ceil(scan.RequiredPhysical().LimitHint))
+	hardLimit := scan.HardLimit.RowCount()
+
+	// At most one of hardLimit and softLimit may be defined at the same time.
+	if softLimit != 0 {
+		hardLimit = 0
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
 		needed,
 		scan.Constraint,
-		scan.HardLimit.RowCount(),
+		hardLimit,
+		softLimit,
 		// HardLimit.Reverse() is taken into account by ScanIsReverse.
 		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
 		b.indexConstraintMaxResults(scan),

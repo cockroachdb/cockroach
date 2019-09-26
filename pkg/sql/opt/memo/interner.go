@@ -536,6 +536,7 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 		}
 	}
 	h.HashOrderingChoice(val.Ordering)
+	h.HashFloat64(val.LimitHint)
 }
 
 func (h *hasher) HashRelExpr(val RelExpr) {
