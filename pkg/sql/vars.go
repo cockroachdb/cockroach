@@ -482,7 +482,7 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	`extra_float_digits`: {
-		GetStringVal: makeIntGetStringValFn(`extra_float_digits`),
+		// GetStringVal: makeIntGetStringValFn(`extra_float_digits`),
 		Set: func(
 			_ context.Context, m *sessionDataMutator, s string,
 		) error {

@@ -253,6 +253,7 @@ func (expr *NumVal) AsConstantInt() (constant.Value, bool) {
 var (
 	intLikeTypes     = []*types.T{types.Int, types.Oid}
 	decimalLikeTypes = []*types.T{types.Decimal, types.Float}
+	strTypes         = []*types.T{types.String, types.Bytes}
 
 	// NumValAvailInteger is the set of available integer types.
 	NumValAvailInteger = append(intLikeTypes, decimalLikeTypes...)
@@ -261,6 +262,12 @@ var (
 	// NumValAvailDecimalWithFraction is the set of available fractional numeric types.
 	NumValAvailDecimalWithFraction = decimalLikeTypes
 )
+
+func init() {
+	NumValAvailInteger = append(NumValAvailInteger, strTypes...)
+	// NumValAvailDecimalNoFraction = append(NumValAvailDecimalNoFraction, strTypes...)
+	// NumValAvailDecimalWithFraction = append(NumValAvailDecimalWithFraction, strTypes...)
+}
 
 // AvailableTypes implements the Constant interface.
 func (expr *NumVal) AvailableTypes() []*types.T {
@@ -353,6 +360,18 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		oid := NewDOid(*d.(*DInt))
 		oid.semanticType = typ
 		return oid, nil
+	case types.StringFamily:
+		s := expr.ExactString()
+		if expr.negative {
+			s = "-" + s
+		}
+		return NewDString(s), nil
+	case types.BytesFamily:
+		s := expr.ExactString()
+		if expr.negative {
+			s = "-" + s
+		}
+		return NewDBytes(DBytes(s)), nil
 	default:
 		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
