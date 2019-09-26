@@ -1,0 +1,30 @@
+exec-ddl
+CREATE TABLE t (x INT PRIMARY KEY, y INT)
+----
+
+memo
+SELECT * FROM (SELECT * FROM t OFFSET 5) WHERE y=1 LIMIT 10
+----
+memo (optimized, ~4KB, required=[presentation: x:1,y:2])
+ ├── G1: (limit G2 G3)
+ │    └── [presentation: x:1,y:2]
+ │         ├── best: (limit G2="[limit hint: 10]" G3)
+ │         └── cost: 1060.05
+ ├── G2: (select G4 G5)
+ │    └── [limit hint: 10]
+ │         ├── best: (select G4="[limit hint: 10]" G5)
+ │         └── cost: 1059.94
+ ├── G3: (const 10)
+ ├── G4: (offset G6 G7)
+ │    └── [limit hint: 10]
+ │         ├── best: (offset G6="[limit hint: 15]" G7)
+ │         └── cost: 1049.98
+ ├── G5: (filters G8)
+ ├── G6: (scan t)
+ │    └── [limit hint: 15]
+ │         ├── best: (scan t)
+ │         └── cost: 1040.02
+ ├── G7: (const 5)
+ ├── G8: (eq G9 G10)
+ ├── G9: (variable y)
+ └── G10: (const 1)

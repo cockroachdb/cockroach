@@ -45,30 +45,6 @@ func (n *limitNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 }
 
-// estimateLimit pre-computes the count and offset fields if they are constants,
-// otherwise predefines them to be MaxInt64, 0. Used by index selection.
-// This must be called after type checking and constant folding.
-func (n *limitNode) estimateLimit() {
-	n.count = math.MaxInt64
-	n.offset = 0
-
-	// Use simple integer datum if available.
-	// The limit can be a simple DInt here either because it was
-	// entered as such in the query, or as a result of constant
-	// folding prior to type checking.
-
-	if n.countExpr != nil {
-		if i, ok := tree.AsDInt(n.countExpr); ok {
-			n.count = int64(i)
-		}
-	}
-	if n.offsetExpr != nil {
-		if i, ok := tree.AsDInt(n.offsetExpr); ok {
-			n.offset = int64(i)
-		}
-	}
-}
-
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
 // value is MaxInt64. If Offset is missing, the value is 0
 func (n *limitNode) evalLimit(evalCtx *tree.EvalContext) error {
