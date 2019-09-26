@@ -219,7 +219,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	sqlConn, err := getPasswordAndMakeSQLClient("cockroach zip")
+	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
 		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
 	}
