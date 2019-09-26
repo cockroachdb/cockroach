@@ -15,8 +15,12 @@
 package sql
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -849,21 +853,40 @@ func (ef *execFactory) ConstructPlan(
 	return res, nil
 }
 
-// lineOutputter handles writing strings for EXPLAIN (env). It's a layer of
-// indirection to ensure each line gets its own row and there's exactly one
-// blank line between each output.
-type lineOutputter struct {
-	rows [][]tree.TypedExpr
+// urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,
+// ENV). It also ensures that (in the text that is encoded by the URL) each
+// entry gets its own line and there's exactly one blank line between entries.
+type urlOutputter struct {
+	buf bytes.Buffer
 }
 
-func (e *lineOutputter) write(s string) {
-	if len(e.rows) > 0 {
-		e.rows = append(e.rows, []tree.TypedExpr{tree.NewDString("")})
+func (e *urlOutputter) writef(format string, args ...interface{}) {
+	if e.buf.Len() > 0 {
+		e.buf.WriteString("\n")
 	}
-	ss := strings.Split(strings.Trim(s, "\n"), "\n")
-	for _, line := range ss {
-		e.rows = append(e.rows, []tree.TypedExpr{tree.NewDString(line)})
+	fmt.Fprintf(&e.buf, format, args...)
+}
+
+func (e *urlOutputter) finish() (url.URL, error) {
+	// Generate a URL that encodes all the text.
+	var compressed bytes.Buffer
+	encoder := base64.NewEncoder(base64.URLEncoding, &compressed)
+	compressor := zlib.NewWriter(encoder)
+	if _, err := e.buf.WriteTo(compressor); err != nil {
+		return url.URL{}, err
 	}
+	if err := compressor.Close(); err != nil {
+		return url.URL{}, err
+	}
+	if err := encoder.Close(); err != nil {
+		return url.URL{}, err
+	}
+	return url.URL{
+		Scheme:   "https",
+		Host:     "cockroachdb.github.io",
+		Path:     "text/decode.html",
+		Fragment: compressed.String(),
+	}, nil
 }
 
 // environmentQuery is a helper to run a query to build up the output of
@@ -899,17 +922,30 @@ func (ef *execFactory) environmentQuery(query string) (string, error) {
 	return string(*s), nil
 }
 
+var testingOverrideExplainEnvVersion string
+
+// TestingOverrideExplainEnvVersion overrides the version reported by
+// EXPLAIN (OPT, ENV). Used for testing.
+func TestingOverrideExplainEnvVersion(ver string) func() {
+	prev := testingOverrideExplainEnvVersion
+	testingOverrideExplainEnvVersion = ver
+	return func() { testingOverrideExplainEnvVersion = prev }
+}
+
 // showEnv implements EXPLAIN (opt, env). It returns a node which displays
 // the environment a query was run in.
 func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
-	var out lineOutputter
+	var out urlOutputter
 
 	// Show the version of Cockroach running.
 	version, err := ef.environmentQuery("SELECT version()")
 	if err != nil {
 		return nil, err
 	}
-	out.write(fmt.Sprintf("Version: %s", version))
+	if testingOverrideExplainEnvVersion != "" {
+		version = testingOverrideExplainEnvVersion
+	}
+	out.writef("Version: %s\n", version)
 
 	// Show the definition of each referenced catalog object.
 	for _, tn := range envOpts.Sequences {
@@ -920,7 +956,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 			return nil, err
 		}
 
-		out.write(fmt.Sprintf("%s;", createStatement))
+		out.writef("%s;\n", createStatement)
 	}
 
 	// TODO(justin): it might also be relevant in some cases to print the create
@@ -933,7 +969,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 			return nil, err
 		}
 
-		out.write(fmt.Sprintf("%s;", createStatement))
+		out.writef("%s;\n", createStatement)
 
 		// In addition to the schema, it's important to know what the table
 		// statistics on each table are.
@@ -961,11 +997,7 @@ FROM
 			return nil, err
 		}
 
-		out.write(
-			fmt.Sprintf(
-				"ALTER TABLE %s INJECT STATISTICS '%s';", tn.String(), stats,
-			),
-		)
+		out.writef("ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
 	}
 
 	for _, tn := range envOpts.Views {
@@ -976,7 +1008,7 @@ FROM
 			return nil, err
 		}
 
-		out.write(fmt.Sprintf("%s;", createStatement))
+		out.writef("%s;\n", createStatement)
 	}
 
 	// Show the values of any non-default session variables that can impact
@@ -987,7 +1019,7 @@ FROM
 		return nil, err
 	}
 	if value != strconv.FormatInt(opt.DefaultJoinOrderLimit, 10) {
-		out.write(fmt.Sprintf("SET reorder_joins_limit = %s;", value))
+		out.writef("SET reorder_joins_limit = %s;\n", value)
 	}
 
 	for _, param := range []string{
@@ -999,17 +1031,21 @@ FROM
 		}
 		defaultVal := varGen[param].GlobalDefault(nil)
 		if value != defaultVal {
-			out.write(fmt.Sprintf("SET %s = %s;", param, value))
+			out.writef("SET %s = %s;\n", param, value)
 		}
 	}
 
 	// Show the query running. Note that this is the *entire* query, including
 	// the "EXPLAIN (opt, env)" preamble.
-	out.write(fmt.Sprintf("%s;\n----\n%s", ef.planner.stmt.AST.String(), plan))
+	out.writef("%s;\n----\n%s", ef.planner.stmt.AST.String(), plan)
 
+	url, err := out.finish()
+	if err != nil {
+		return nil, err
+	}
 	return &valuesNode{
 		columns:          sqlbase.ExplainOptColumns,
-		tuples:           out.rows,
+		tuples:           [][]tree.TypedExpr{{tree.NewDString(url.String())}},
 		specifiedInQuery: true,
 	}, nil
 }
@@ -1024,12 +1060,15 @@ func (ef *execFactory) ConstructExplainOpt(
 		return ef.showEnv(planText, envOpts)
 	}
 
-	var out lineOutputter
-	out.write(planText)
+	var rows [][]tree.TypedExpr
+	ss := strings.Split(strings.Trim(planText, "\n"), "\n")
+	for _, line := range ss {
+		rows = append(rows, []tree.TypedExpr{tree.NewDString(line)})
+	}
 
 	return &valuesNode{
 		columns:          sqlbase.ExplainOptColumns,
-		tuples:           out.rows,
+		tuples:           rows,
 		specifiedInQuery: true,
 	}, nil
 }

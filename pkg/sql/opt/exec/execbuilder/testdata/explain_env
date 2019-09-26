@@ -32,181 +32,36 @@ CREATE TABLE y (
   INDEX (v)
 )
 
-# NOTE: the logic test rewriter formats these terribly, because it thinks it's
-# formatting relational output. If you need to rewrite these try to keep the
-# current formatting.
-
-# Since version might change for reasons unrelated to this test, just ensure
-# there's a line that includes the version (the NOT LIKE %EXPLAIN% is so that
-# we don't just recognize the printing of this query, which also contains the
-# string "Version").
-query B
-SELECT EXISTS(
-    SELECT text FROM
-        [EXPLAIN (opt, env) SELECT * FROM x WHERE b = 3]
-    WHERE text LIKE '%Version%' AND text NOT LIKE '%EXPLAIN%'
-)
+query T
+EXPLAIN (OPT, ENV) SELECT * FROM x WHERE b = 3
 ----
-true
+https://cockroachdb.github.io/text/decode.html#eJy8UlGLm0wUfc78ioMvm3yfbsb4shgKdd1ZamtM0Ol2QwgyToSVGg06ti6lsD8ivzC_pOimqdCXvrTzcOGee8-Zc-A-pFWdlYUNt5Sfq1LIp7tbpG0qkybLd2kFldYKX163CHFD5nAG7tz6DC3GZCTgBfwGwZIj-Oj7OhklZ-S1c5dBxEPHCzi0Q5XtRfWsYRV6Cydc4wNbYyzgRO5EJyMvuGOPaOMkznYtxslP_N5ZeP56QB8LHcmETOaEOD5n4dlPZ_X60CR5Jq9beMF75nJE3OFexD03wtWGAMC3vnZPk2Xe7Itas7G5gP1AaJd-qw_2q1SodBcLpdnQZtS8MahpUBPUtCm1Kf2_r9qAsstqlRVSxbJsio5mUjoYP2W1KmNZ5rF6PqSd6pBciP3vWJPnF7GhVFV-_fXJzDJnVj_7rv9x6uQvpu4N_dvgZHs1J4Q9rnzHCzBerrgOFjxMEDG_O43_cB8uF2jx6R0LGRK8gTUnhmEYpJaiQPv2fIsEp-PxdHw5HV8gy6JWlcgKZWM6m5o2NlMLBqbWlvwIAAD__w6J0wo=
 
 statement error ENV only supported with \(OPT\) option
-EXPLAIN (env) SELECT * FROM x WHERE b = 3
+EXPLAIN (ENV) SELECT * FROM x WHERE b = 3
 
 query T
-SELECT text FROM [
-EXPLAIN (opt, env) SELECT * FROM x WHERE b = 3
-] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+EXPLAIN (OPT, ENV) SELECT * FROM x WHERE b = 3
 ----
-·
-CREATE TABLE x (
-    a INT8 NOT NULL,
-    b INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC),
-    INDEX x_b_idx (b ASC),
-    FAMILY "primary" (a, b)
-);
-·
-ALTER TABLE test.public.x INJECT STATISTICS '[
-    {
-        "columns": [
-            "a"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 100,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    },
-    {
-        "columns": [
-            "b"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 123123,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    }
-]';
-·
-SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x WHERE b = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
-----
-scan x@x_b_idx
- └── constraint: /2/1: [/3 - /3]
+https://cockroachdb.github.io/text/decode.html#eJy8UlGLm0wUfc78ioMvm3yfbsb4shgKdd1ZamtM0Ol2QwgyToSVGg06ti6lsD8ivzC_pOimqdCXvrTzcOGee8-Zc-A-pFWdlYUNt5Sfq1LIp7tbpG0qkybLd2kFldYKX163CHFD5nAG7tz6DC3GZCTgBfwGwZIj-Oj7OhklZ-S1c5dBxEPHCzi0Q5XtRfWsYRV6Cydc4wNbYyzgRO5EJyMvuGOPaOMkznYtxslP_N5ZeP56QB8LHcmETOaEOD5n4dlPZ_X60CR5Jq9beMF75nJE3OFexD03wtWGAMC3vnZPk2Xe7Itas7G5gP1AaJd-qw_2q1SodBcLpdnQZtS8MahpUBPUtCm1Kf2_r9qAsstqlRVSxbJsio5mUjoYP2W1KmNZ5rF6PqSd6pBciP3vWJPnF7GhVFV-_fXJzDJnVj_7rv9x6uQvpu4N_dvgZHs1J4Q9rnzHCzBerrgOFjxMEDG_O43_cB8uF2jx6R0LGRK8gTUnhmEYpJaiQPv2fIsEp-PxdHw5HV8gy6JWlcgKZWM6m5o2NlMLBqbWlvwIAAD__w6J0wo=
 
 #
 # Multiple Tables.
 #
 
 query T
-SELECT text FROM [
-EXPLAIN (opt, env) SELECT * FROM x, y WHERE b = 3
-] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+EXPLAIN (OPT, ENV) SELECT * FROM x, y WHERE b = 3
 ----
-·
-CREATE TABLE x (
-    a INT8 NOT NULL,
-    b INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC),
-    INDEX x_b_idx (b ASC),
-    FAMILY "primary" (a, b)
-);
-·
-ALTER TABLE test.public.x INJECT STATISTICS '[
-    {
-        "columns": [
-            "a"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 100,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    },
-    {
-        "columns": [
-            "b"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 123123,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    }
-]';
-·
-CREATE TABLE y (
-    u INT8 NOT NULL,
-    v INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
-    INDEX y_v_idx (v ASC),
-    FAMILY "primary" (u, v)
-);
-·
-ALTER TABLE test.public.y INJECT STATISTICS '[]';
-·
-SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x, y WHERE b = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
-----
-inner-join
- ├── scan y
- ├── scan x@x_b_idx
- │    └── constraint: /2/1: [/3 - /3]
- └── filters (true)
+https://cockroachdb.github.io/text/decode.html#eJy8k9FOnE4Uxq-dp_jCjbv_P7iwe2MwTYo429Iia4BajTEE2DFORTDDQCFNE9Nn2Ms-3T5JA7sqqW3TXrRcTDLf-c7hnMnvnDJR8iI3YRfpjSji9ProEKxhaVLxbMkEJCsl6o2LENunVkgRWocuRYMR2YnheOE-vEUI753rqmQn2Sqbm73wgtC3HC-Ecif4bSxaBSe-c2z553hLzzGKYQX2WCU7jndEz9BEScSXDUbJgz63jh33fJA-ilUkYzI-IMRyQ-pv--la3burkoynew0c7w21QwShFTpB6NgBdi8IAHzqz-5T0iKrbvNSMXHxKPaBWHm8X6oDv2CxZMsolooJZaob-5puaLoB3TB13dT1__tTGaQseSl5nsooLaq8SzN0fRC-5qUsorTIItnesa7qMDmPb59rVZY9FhuWEsXHp59MZ8Z01sc-q789dfIXp-4b-reDk8vdg--QbTtkq2fI1n-IbPWA5sB6dRPVkWBXUYP5wqfOK2_jrcfw6Zz61LNp0O1M_MR6G9Ub1uufs16pqH_NevtD1vvh6dmJazkeRouTUAX1TscIqNt5_8PcXxyjUdHi_WvqUyR4gdkB0TRNIzzPmdA-FDwnWK--rlf369U9yjTO0T5Tmpfbne0iX7qnX69WW0Na5KUUMc-licl0Ypi4mMygYTK7JAPbFc8kEyVGUlRsTL4FAAD__0TIOPI=
 
 #
 # Same table twice should only show up once.
 #
 
 query T
-SELECT text FROM [
-EXPLAIN (opt, env) SELECT * FROM x one, x two
-] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+EXPLAIN (OPT, ENV) SELECT * FROM x one, x two
 ----
-·
-CREATE TABLE x (
-    a INT8 NOT NULL,
-    b INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC),
-    INDEX x_b_idx (b ASC),
-    FAMILY "primary" (a, b)
-);
-·
-ALTER TABLE test.public.x INJECT STATISTICS '[
-    {
-        "columns": [
-            "a"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 100,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    },
-    {
-        "columns": [
-            "b"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 123123,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    }
-]';
-·
-SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x AS one, x AS two] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
-----
-inner-join
- ├── scan one
- ├── scan two
- └── filters (true)
+https://cockroachdb.github.io/text/decode.html#eJy8kkFr2zAUx8_Rp3j4Umezi5xeSnJSXRW8OU6wtdJQipEdjWpzpCDLi8sY9EPkuE-XTzLsZJmhl102HR56v_f-T-8PuhemllpNIdTlV6N5-Xx7A6IVZdHIai0MWFFb-HbsQihMKWEUGLmJKbTgohGHKGHXkCwYJJ_i2EOj4kSOWbhIMpaSKGHgbI3ccPPiwDKN5iRdwUe6ApcDycKxh0ZRcksfoM2LXK5bcIvf_I7Mo3g1kLvcg2KMxjOESMxoetqnW_Vy2xSVLC9biJIPNGSQMcKijEVhBhePCADgex-745S6ajaqdqbweIZ9gTvn_Mkb9BvBrVjn3DpTcCY4uPZx4OMAcDDFeIrx-z46A8la1laq0ualblQnCzAelJ9lbXVe6iq3L1vRTR2KFd-8ZU1VnYcNRxm9-_PI5CqYXPW1H95fuy7-oet-of9rHD1dzBCiD8uYRAm4iyXzgCb3Y8ho3H2Nd3CXLubQAslAK-Edb3anZ8j3fR9JpYTxv2ipEBz2Pw_718P-FeqSq679DbM73bH9iX2WlRWmBteaRozRrwAAAP__xJfkIQ==
 
 #
 # Set a relevant session variable to a non-default value and ensure it shows up
@@ -217,57 +72,17 @@ statement ok
 SET reorder_joins_limit = 100
 
 query T
-SELECT text FROM [
 EXPLAIN (opt, env) SELECT * FROM y WHERE u = 3
-] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
 ----
-·
-CREATE TABLE y (
-    u INT8 NOT NULL,
-    v INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
-    INDEX y_v_idx (v ASC),
-    FAMILY "primary" (u, v)
-);
-·
-ALTER TABLE test.public.y INJECT STATISTICS '[]';
-·
-SET reorder_joins_limit = 100;
-·
-SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM y WHERE u = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
-----
-scan y
- └── constraint: /1: [/3 - /3]
+https://cockroachdb.github.io/text/decode.html#eJxUj89O20AQh8_sU_zEBbuKCSiXKhGHxUzabZ11tLulRAhZxlnULcFG6z-ybzyEnzBPUkVJpfY4o2--0Xdvfe2qco64Kl59lRe_7m5he1s8t263tR6NrRt0R4qxWBE3BMNvE8KAgJ21ENJ8hkwN5I8kmbCz7rQ5TnEqtVFcSIPzd-_ecj-cY63EiqsNvtMGQQuu4_B_9OU16zJvX7Iey1SR-CKPbBdC0ZIUyZg0egT54VDIO3rAkHWZ2_YIur_CJV-JZPPP36CdoAtZuGCMJ4bUKeTQePnePu9ccTlAyG8UG2jDjdBGxBoXj08XC8Y0GXhb-a312e_KlXW2c2-uwQ2ur64WjNHDOuFCIkjXZgKS9yE0JQfXJyxVusKAn19JEVrcYLZgURRFrC7yEgPDfhz348d-_EBRlXXjc1c2c0yv53iczhBhOntifwIAAP__CxR8Tw==
 
 statement ok
 SET experimental_enable_zigzag_join = true
 
 query T
-SELECT text FROM [
-EXPLAIN (opt, env) SELECT * FROM y WHERE u = 3
-] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+EXPLAIN (OPT, ENV) SELECT * FROM y WHERE u = 3
 ----
-·
-CREATE TABLE y (
-    u INT8 NOT NULL,
-    v INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
-    INDEX y_v_idx (v ASC),
-    FAMILY "primary" (u, v)
-);
-·
-ALTER TABLE test.public.y INJECT STATISTICS '[]';
-·
-SET reorder_joins_limit = 100;
-·
-SET experimental_enable_zigzag_join = on;
-·
-SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM y WHERE u = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
-----
-scan y
- └── constraint: /1: [/3 - /3]
+https://cockroachdb.github.io/text/decode.html#eJxUj81u2kAUhdeZpzjKJnaFQyI2FYiF41zaac0YjadpUBRZxkzSaYyNxj-ys-IheEKepKJQqVnee79zj74HbStTFmMEZfZmyzT7dX8H3els1Zh8rS1qXdVoTxRjgSRfEZR_FxJ6OOyiARfqM0SkIH6E4YBdtOfNaQoiESvpc6FwubVmk9r-EgvJ575c4jst4TTw48D9iL68JW1i9UvSYRZJ4l_EiW1dSJqRJBFQjA5OegxycU-P6JM2MesOTvvv4cyf83D5X6_TDNC6zJ0w5oeK5Fnk6Hi9bVa5ya57cPGNAoVY-YrHigcxrp6eryaMxaRgdWnX2ia_S1NUSW42psYUtzc357vuttqajS7qNE90ka5ynbyb1_f09W8EU5TFhDF6XIQ-F3CihRqAxIOLmMJj7SfMZDRHj59fSRIaTDGaMM_zPFZlaYGe4bDfH_a7w36HrCyq2qamqMcY3o7xNBzBw3D0zP4EAAD__2_ai9I=
 
 statement ok
 RESET reorder_joins_limit
@@ -283,16 +98,9 @@ statement ok
 CREATE SEQUENCE seq
 
 query T
-SELECT text FROM [
-EXPLAIN (opt, env) SELECT * FROM seq
-] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+EXPLAIN (OPT, ENV) SELECT * FROM seq
 ----
-·
-CREATE SEQUENCE seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
-·
-SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM seq] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
-----
-sequence-select test.public.seq
+https://cockroachdb.github.io/text/decode.html#eJwkjkFPgzAcR-_9FL-jGrsMcHa6U61_ExLazdKRXV39JxLJEArGj2-U2zu85L2Gx9T2l0eYPn6O_Vv8eH4C_3A8z233ziMmThO-F0sI40kHQk2vR3KGkHiALV2jqyMhg9WnBR_yvChUvi7ut5s7pTbbtULpjCdLLiBDHbQPyHZC0OlQ6dLhan8ItyDXXKOmikzADV783v4ldkJKKUXiYeZLZJm44zj9r62-5nPXxlXiQfwGAAD__6j-PBk=
 
 #
 # Test views.
@@ -302,61 +110,6 @@ statement ok
 CREATE VIEW v AS SELECT a, b, u, v FROM x, y WHERE b = 3
 
 query T
-SELECT text FROM [
-EXPLAIN (opt, env) SELECT * FROM v
-] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+EXPLAIN (OPT, ENV) SELECT * FROM v
 ----
-·
-CREATE TABLE x (
-    a INT8 NOT NULL,
-    b INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (a ASC),
-    INDEX x_b_idx (b ASC),
-    FAMILY "primary" (a, b)
-);
-·
-ALTER TABLE test.public.x INJECT STATISTICS '[
-    {
-        "columns": [
-            "a"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 100,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    },
-    {
-        "columns": [
-            "b"
-        ],
-        "created_at": "2018-01-01 01:00:00+00:00",
-        "distinct_count": 123123,
-        "histo_col_type": "",
-        "name": "",
-        "null_count": 0,
-        "row_count": 123123
-    }
-]';
-·
-CREATE TABLE y (
-    u INT8 NOT NULL,
-    v INT8 NULL,
-    CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
-    INDEX y_v_idx (v ASC),
-    FAMILY "primary" (u, v)
-);
-·
-ALTER TABLE test.public.y INJECT STATISTICS '[]';
-·
-CREATE VIEW v (a, b, u, v) AS SELECT a, b, u, v FROM test.public.x, test.public.y WHERE b = 3;
-·
-SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM v] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
-----
-inner-join
- ├── scan test.public.y
- ├── scan test.public.x@x_b_idx
- │    └── constraint: /2/1: [/3 - /3]
- └── filters (true)
+https://cockroachdb.github.io/text/decode.html#eJy8lM9um0AQxs_Zp_jEJXYLMZimdm1VKiHrlhavU9g4iaIIASYKjQMp_2qrqhT1GXzs0_lJKozjkKSN2kPLYcXOfPPtjvgN4yBJwzjqQY_9yyR2_Yv9PQSzwPfycDoJEmRBmqGoVIToFtU4hU0_HlKmU6TBZwwNNtbMQwoFQ-24en3Vbqtqpy2rL7u7Lzqd3a7cgcF0iw4p41Bgc83iUPobR67tmRQzNMiWC4PxLtiIgx2apki2vHWk2ukjZnNLMxiHcJ2EV24yF3BgGUPNOsEHeoKGC83WmyLZMtg-PcbM8ZxwMkPDu40PtKFhntTKG64Ir0mafUI0k1NrfZ-y-Z3r3JuG_s4MBntPdV7enRs2N3Qb26cEAL6u1vIR_HiaX0Wp0MPpJrhKuMJmfybW9EngZsHEcTOhB6EtK11JViRZgaz0ZLkny89Xq1ArmYRpFkZ-5vhxHpVliizX0hdhmsWOH0-dbH4dlK714si9ehzLp9ONWd0qib_cHdJWlba6yn0T_7hr7x92vbrQ_22cnG0_RHZeIps_Qrb4S2TzWzRr0vNLp3CS4NyZYTCyqPGWVdqiCYsOqFVOoF3OjHvH-twpKtaL37OeiyieZn3-S9brzY8NeoSimhsRK0doNmxqlmV3UQys0fD-HIkPjjp6Ry0KD6-h9gmhxwemZjA0RgdcBGXj5q3ps8qr6BNJkiQSRlGQSJ_iMCJYLn4sFzfLxQ1S343u-z-Znb1Z_xxK1ffyGy8Xi7XYj6M0S9wwynpotVtKD6ctFRJa6hmpyc7DaRYkKRpZkgdN8jMAAP__nVlt3A==
