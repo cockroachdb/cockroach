@@ -1437,6 +1437,8 @@ func Example_user() {
 	c.Run("user ls --format=table")
 	c.Run("user rm foo")
 	c.Run("user ls --format=table")
+	c.RunWithArgs([]string{"sql", "-e", "drop database defaultdb"})
+	c.Run("user set foo")
 
 	// Output:
 	// user ls
@@ -1546,6 +1548,11 @@ func Example_user() {
 	//   table
 	//   ομηρος
 	// (10 rows)
+	// sql -e drop database defaultdb
+	// DROP DATABASE
+	// user set foo
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
+	// CREATE USER 1
 }
 
 func Example_cert() {
@@ -1671,6 +1678,8 @@ func Example_node() {
 	c.Run("node ls")
 	c.Run("node ls --format=table")
 	c.Run("node status 10000")
+	c.RunWithArgs([]string{"sql", "-e", "drop database defaultdb"})
+	c.Run("node ls")
 
 	// Output:
 	// node ls
@@ -1683,6 +1692,11 @@ func Example_node() {
 	// (1 row)
 	// node status 10000
 	// Error: node 10000 doesn't exist
+	// sql -e drop database defaultdb
+	// DROP DATABASE
+	// node ls
+	// id
+	// 1
 }
 
 func TestCLITimeout(t *testing.T) {

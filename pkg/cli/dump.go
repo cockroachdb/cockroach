@@ -52,7 +52,7 @@ var verDump = version.MustParse("v2.1.0-alpha.20180416-0")
 // The approach here and its current flaws are summarized
 // in https://github.com/cockroachdb/cockroach/issues/28948.
 func runDump(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach dump")
+	conn, err := makeSQLClient("cockroach dump", useDefaultDb)
 	if err != nil {
 		return err
 	}
