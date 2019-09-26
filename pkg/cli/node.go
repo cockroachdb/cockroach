@@ -50,7 +50,7 @@ To retrieve the IDs for inactive members, see 'node status --decommission'.
 }
 
 func runLsNodes(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach node ls")
+	conn, err := makeSQLClient("cockroach node ls", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ SELECT node_id AS id,
        draining AS is_draining
 FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`
 
-	conn, err := getPasswordAndMakeSQLClient("cockroach node status")
+	conn, err := makeSQLClient("cockroach node status", useSystemDb)
 	if err != nil {
 		return nil, nil, err
 	}

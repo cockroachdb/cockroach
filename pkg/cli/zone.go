@@ -76,7 +76,7 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
+	conn, err := makeSQLClient("cockroach zone", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ List zone configs.
 }
 
 func runLsZones(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
+	conn, err := makeSQLClient("cockroach zone", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ Remove an existing zone config for the specified database or table.
 }
 
 func runRmZone(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
+	conn, err := makeSQLClient("cockroach zone", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -268,7 +268,7 @@ func readZoneConfig() (conf []byte, err error) {
 // runSetZone parses the yaml input file, converts it to proto, and inserts it
 // in the system.zones table.
 func runSetZone(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
+	conn, err := makeSQLClient("cockroach zone", useSystemDb)
 	if err != nil {
 		return err
 	}

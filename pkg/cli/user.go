@@ -42,7 +42,7 @@ var verRmUser = version.MustParse("v1.1.0-alpha.20170622")
 var verSetUser = version.MustParse("v1.2.0-alpha.20171113")
 
 func runGetUser(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := makeSQLClient("cockroach user", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ List all users.
 }
 
 func runLsUsers(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := makeSQLClient("cockroach user", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ Remove an existing user by username.
 }
 
 func runRmUser(cmd *cobra.Command, args []string) error {
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := makeSQLClient("cockroach user", useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	conn, err := getPasswordAndMakeSQLClient("cockroach user")
+	conn, err := makeSQLClient("cockroach user", useSystemDb)
 	if err != nil {
 		return err
 	}
