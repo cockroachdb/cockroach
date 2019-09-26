@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/faker"
@@ -542,7 +543,7 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
 	rng := rand.New(rand.NewSource(g.seed))
-	readPercentage := 0.90
+	readPercentage := 0.95
 	activeRides := []rideInfo{}
 
 	getRandomUser := func(city string) (string, error) {
@@ -608,14 +609,12 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return vehicle, err
 	}
 
-	movrQuerySimulation := func(ctx context.Context) error {
-		activeCity := randCity(rng)
-		if rng.Float64() <= readPercentage {
-			q := `SELECT city, id FROM vehicles WHERE city = $1`
-			_, err := db.Exec(q, activeCity)
-			return err
-		}
-		// Simulate vehicle location updates.
+	readVehicles := func(activeCity string) error {
+		q := `SELECT city, id FROM vehicles WHERE city = $1`
+		_, err := db.Exec(q, activeCity)
+		return err
+	}
+	updateActiveRides := func() error {
 		for i, ride := range activeRides {
 			if i >= 10 {
 				break
@@ -627,90 +626,170 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 				return err
 			}
 		}
+		return nil
+	}
+	addUser := func(id uuid.UUID, activeCity string) error {
+		q := `INSERT INTO users VALUES ($1, $2, NULL, NULL, NULL)`
+		_, err = db.Exec(q, id.String(), activeCity)
+		return err
+	}
+	createPromoCode := func(id uuid.UUID, _ string) error {
+		q := `INSERT INTO promo_codes VALUES ($1, NULL, NULL, NULL, NULL)`
+		_, err = db.Exec(q, id.String())
+		return err
+	}
+	applyPromoCode := func(id uuid.UUID, activeCity string) error {
+		user, err := getRandomUser(activeCity)
+		if err != nil {
+			return err
+		}
+		code, err := getRandomPromoCode()
+		if err != nil {
+			return err
+		}
+		// See if the promo code has been used.
+		var count int
+		q := `SELECT count(*) FROM user_promo_codes WHERE city = $1 AND user_id = $2 AND code = $3`
+		err = db.QueryRow(q, activeCity, user, code).Scan(&count)
+		if err != nil {
+			return err
+		}
+		// If is has not been, apply the promo code.
+		if count == 0 {
+			q = `INSERT INTO user_promo_codes VALUES ($1, $2, $3, NULL, NULL)`
+			_, err = db.Exec(q, activeCity, user, code)
+			return err
+		}
+		return nil
+	}
+	addVehicle := func(id uuid.UUID, activeCity string) error {
+		ownerID, err := getRandomUser(activeCity)
+		if err != nil {
+			return err
+		}
+		typ := randVehicleType(rng)
+		q := `INSERT INTO vehicles VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL)`
+		_, err = db.Exec(q, id.String(), activeCity, typ, ownerID)
+		return err
+	}
+	startRide := func(id uuid.UUID, activeCity string) error {
+		rider, err := getRandomUser(activeCity)
+		if err != nil {
+			return err
+		}
+		vehicle, err := getRandomVehicle(activeCity)
+		if err != nil {
+			return err
+		}
+		q := `INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, NULL, now(), NULL, NULL)`
+		_, err = db.Exec(q, id.String(), activeCity, rider, vehicle, g.faker.StreetAddress(rng))
+		if err != nil {
+			return err
+		}
+		activeRides = append(activeRides, rideInfo{id.String(), activeCity})
+		return err
+	}
+	endRide := func(id uuid.UUID, activeCity string) error {
+		if len(activeRides) > 1 {
+			ride := activeRides[0]
+			activeRides = activeRides[1:]
+			q := `UPDATE rides SET end_address = $3, end_time = now() WHERE city = $1 AND id = $2`
+			_, err := db.Exec(q, ride.city, ride.id, g.faker.StreetAddress(rng))
+			return err
+		}
+		return nil
+	}
 
+	movrWorkloadFns := []struct {
+		weight float32
+		key    string
+		work   func(uuid.UUID, string) error
+	}{
+		{
+			weight: 0.03,
+			key:    "createPromoCode",
+			work:   createPromoCode,
+		},
+		{
+			weight: 0.1,
+			key:    "applyPromoCode",
+			work:   applyPromoCode,
+		},
+		{
+			weight: 0.3,
+			key:    "addUser",
+			work:   addUser,
+		},
+		{
+			weight: 0.1,
+			key:    "addVehicle",
+			work:   addVehicle,
+		},
+		{
+			weight: 0.4,
+			key:    "startRide",
+			work:   startRide,
+		},
+		{
+			weight: 0.07,
+			key:    "endRide",
+			work:   endRide,
+		},
+	}
+
+	sum := float32(0.0)
+	for _, s := range movrWorkloadFns {
+		sum += s.weight
+	}
+	if sum < 1.0 {
+		panic("Movr workload function weights do not add up to 1")
+	}
+
+	runAndRecord := func(hists *histogram.Histograms, key string, work func() error) error {
+		start := timeutil.Now()
+		err := work()
+		elapsed := timeutil.Since(start)
+		if err == nil {
+			hists.Get(key).Record(elapsed)
+		}
+		return err
+	}
+
+	// Hists is not threadsafe! If this workload expands to returning multiple workers,
+	// make sure that each worker is given its own reg.GetHandle().
+	hists := reg.GetHandle()
+
+	movrQuerySimulation := func(ctx context.Context) error {
+		activeCity := randCity(rng)
 		id, err := uuid.NewV4()
 		if err != nil {
 			return err
 		}
-
-		// Do write operations.
-		if rng.Float64() < 0.03 {
-			q := `INSERT INTO promo_codes VALUES ($1, NULL, NULL, NULL, NULL)`
-			_, err = db.Exec(q, id.String())
+		// Our workload is as follows: with 95% chance, do a simple read operation.
+		// Else, update all active vehicle locations, then pick a random "write" operation
+		// weighted by the weights in movrWorkloadFns.
+		if rng.Float64() <= readPercentage {
+			return runAndRecord(hists, "readVehicles", func() error {
+				return readVehicles(activeCity)
+			})
+		}
+		err = runAndRecord(hists, "updateActiveRides", func() error {
+			return updateActiveRides()
+		})
+		if err != nil {
 			return err
-		} else if rng.Float64() < 0.1 {
-			// Apply a promo code to an account.
-			user, err := getRandomUser(activeCity)
-			if err != nil {
-				return err
-			}
-
-			code, err := getRandomPromoCode()
-			if err != nil {
-				return err
-			}
-
-			// See if the promo code has been used.
-			var count int
-			q := `SELECT count(*) FROM user_promo_codes WHERE city = $1 AND user_id = $2 AND code = $3`
-			err = db.QueryRow(q, activeCity, user, code).Scan(&count)
-			if err != nil {
-				return err
-			}
-
-			// If is has not been, apply the promo code.
-			if count == 0 {
-				q = `INSERT INTO user_promo_codes VALUES ($1, $2, $3, NULL, NULL)`
-				_, err = db.Exec(q, activeCity, user, code)
-				return err
-			}
-			return nil
-		} else if rng.Float64() < 0.3 {
-			q := `INSERT INTO users VALUES ($1, $2, NULL, NULL, NULL)`
-			_, err = db.Exec(q, id.String(), activeCity)
-			return err
-		} else if rng.Float64() < 0.1 {
-			// Simulate adding a new vehicle to the population.
-			ownerID, err := getRandomUser(activeCity)
-			if err != nil {
-				return err
-			}
-
-			typ := randVehicleType(rng)
-			q := `INSERT INTO vehicles VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL)`
-			_, err = db.Exec(q, id.String(), activeCity, typ, ownerID)
-			return err
-		} else if rng.Float64() < 0.5 {
-			// Simulate a user starting a ride.
-			rider, err := getRandomUser(activeCity)
-			if err != nil {
-				return err
-			}
-
-			vehicle, err := getRandomVehicle(activeCity)
-			if err != nil {
-				return err
-			}
-
-			q := `INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, NULL, now(), NULL, NULL)`
-			_, err = db.Exec(q, id.String(), activeCity, rider, vehicle, g.faker.StreetAddress(rng))
-			if err != nil {
-				return err
-			}
-			activeRides = append(activeRides, rideInfo{id.String(), activeCity})
-			return err
-		} else {
-			// Simulate a ride ending.
-			if len(activeRides) > 1 {
-				ride := activeRides[0]
-				activeRides = activeRides[1:]
-				q := `UPDATE rides SET end_address = $3, end_time = now() WHERE city = $1 AND id = $2`
-				_, err := db.Exec(q, ride.city, ride.id, g.faker.StreetAddress(rng))
-				return err
+		}
+		randVal := rng.Float32()
+		w := float32(0.0)
+		for _, s := range movrWorkloadFns {
+			w += s.weight
+			if w >= randVal {
+				return runAndRecord(hists, s.key, func() error {
+					return s.work(id, activeCity)
+				})
 			}
 		}
-
-		return nil
+		panic("unreachable")
 	}
 
 	ql.WorkerFns = append(ql.WorkerFns, movrQuerySimulation)
