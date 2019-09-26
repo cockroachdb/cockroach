@@ -585,13 +585,6 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData
 }
 
-// prepareForDistSQLSupportCheck prepares p.curPlan.plan for a distSQL support
-// check and does additional verification of the planner state.
-func (p *planner) prepareForDistSQLSupportCheck() {
-	// Trigger limit propagation.
-	p.propagateSoftLimits(p.curPlan.plan)
-}
-
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.
 type txnModesSetter interface {

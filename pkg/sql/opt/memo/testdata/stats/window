@@ -38,7 +38,8 @@ project
       │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    │    ├── stats: [rows=1000]
       │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-7)
+      │    │    ├── fd: (1)-->(2-7)
+      │    │    └── limit hint: 10.00
       │    └── const: 10 [type=int]
       └── windows
            └── rank [type=int]

@@ -727,6 +727,7 @@ with &1 (t)
  │         ├── sort
  │         │    ├── columns: xy.x:1(int!null) v:6(int)
  │         │    ├── ordering: -6
+ │         │    ├── limit hint: 5.00
  │         │    └── project
  │         │         ├── columns: xy.x:1(int!null) v:6(int)
  │         │         └── inner-join (hash)

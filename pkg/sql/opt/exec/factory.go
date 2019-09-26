@@ -51,7 +51,11 @@ type Factory interface {
 	//   - If indexConstraint is not nil, the scan is restricted to the spans in
 	//     in the constraint.
 	//   - If hardLimit > 0, then only up to hardLimit rows can be returned from
-	//     the scan.
+	//     the scan. If hardLimit > 0, softLimit must be 0.
+	//   - If softLimit > 0, then the scan may be required to return up to all
+	//     of its rows, but can be optimized under the assumption that only
+	//     softLimit rows will be needed. If softLimit > 0, then hardLimit must
+	//     be 0.
 	//   - If maxResults > 0, the scan is guaranteed to return at most maxResults
 	//     rows.
 	ConstructScan(
@@ -60,6 +64,7 @@ type Factory interface {
 		needed ColumnOrdinalSet,
 		indexConstraint *constraint.Constraint,
 		hardLimit int64,
+		softLimit int64,
 		reverse bool,
 		maxResults uint64,
 		reqOrdering OutputOrdering,

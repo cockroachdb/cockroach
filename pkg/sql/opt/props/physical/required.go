@@ -43,6 +43,15 @@ type Required struct {
 	// descending order. If Ordering is not defined, then no particular ordering
 	// is required or provided.
 	Ordering OrderingChoice
+
+	// LimitHint specifies a "soft limit" to the number of result rows that may
+	// be required of the expression. If requested, an expression will still need
+	// to return all result rows, but it can be optimized based on the assumption
+	// that only the hinted number of rows will be needed.
+	// A LimitHint of 0 indicates "no limit". The LimitHint is an intermediate
+	// float64 representation, and can be converted to an integer number of rows
+	// using math.Ceil.
+	LimitHint float64
 }
 
 // MinRequired are the default physical properties that require nothing and
@@ -52,7 +61,7 @@ var MinRequired = &Required{}
 // Defined is true if any physical property is defined. If none is defined, then
 // this is an instance of MinRequired.
 func (p *Required) Defined() bool {
-	return !p.Presentation.Any() || !p.Ordering.Any()
+	return !p.Presentation.Any() || !p.Ordering.Any() || p.LimitHint != 0
 }
 
 // ColSet returns the set of columns used by any of the physical properties.
@@ -65,38 +74,38 @@ func (p *Required) ColSet() opt.ColSet {
 }
 
 func (p *Required) String() string {
-	hasProjection := !p.Presentation.Any()
-	hasOrdering := !p.Ordering.Any()
+	var buf bytes.Buffer
+	output := func(name string, fn func(*bytes.Buffer)) {
+		if buf.Len() != 0 {
+			buf.WriteByte(' ')
+		}
+		buf.WriteByte('[')
+		buf.WriteString(name)
+		buf.WriteString(": ")
+		fn(&buf)
+		buf.WriteByte(']')
+	}
+
+	if !p.Presentation.Any() {
+		output("presentation", p.Presentation.format)
+	}
+	if !p.Ordering.Any() {
+		output("ordering", p.Ordering.Format)
+	}
+	if p.LimitHint != 0 {
+		output("limit hint", func(buf *bytes.Buffer) { fmt.Fprintf(buf, "%.2f", p.LimitHint) })
+	}
 
 	// Handle empty properties case.
-	if !hasProjection && !hasOrdering {
+	if buf.Len() == 0 {
 		return "[]"
 	}
-
-	var buf bytes.Buffer
-
-	if hasProjection {
-		buf.WriteString("[presentation: ")
-		p.Presentation.format(&buf)
-		buf.WriteByte(']')
-
-		if hasOrdering {
-			buf.WriteString(" ")
-		}
-	}
-
-	if hasOrdering {
-		buf.WriteString("[ordering: ")
-		p.Ordering.Format(&buf)
-		buf.WriteByte(']')
-	}
-
 	return buf.String()
 }
 
 // Equals returns true if the two physical properties are identical.
 func (p *Required) Equals(rhs *Required) bool {
-	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering)
+	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) && p.LimitHint == rhs.LimitHint
 }
 
 // Presentation specifies the naming, membership (including duplicates), and

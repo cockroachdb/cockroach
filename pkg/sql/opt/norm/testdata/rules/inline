@@ -435,10 +435,13 @@ project
       ├── select
       │    ├── columns: c0:6(int) c1:7(int)
       │    ├── side-effects
+      │    ├── limit hint: 107.00
       │    ├── project
       │    │    ├── columns: c0:6(int) c1:7(int)
+      │    │    ├── limit hint: 107.00
       │    │    ├── scan crdb_internal.public.zones
-      │    │    │    └── columns: crdb_internal.public.zones.zone_id:1(int!null)
+      │    │    │    ├── columns: crdb_internal.public.zones.zone_id:1(int!null)
+      │    │    │    └── limit hint: 107.00
       │    │    └── projections
       │    │         ├── crdb_internal.public.zones.zone_id + 1 [type=int, outer=(1)]
       │    │         └── crdb_internal.public.zones.zone_id + 2 [type=int, outer=(1)]
@@ -460,8 +463,10 @@ project
       │              │    │         │    │    │         ├── select
       │              │    │         │    │    │         │    ├── columns: ref_1.config_yaml:10(bytes!null)
       │              │    │         │    │    │         │    ├── outer: (6)
+      │              │    │         │    │    │         │    ├── limit hint: 52.00
       │              │    │         │    │    │         │    ├── scan ref_1
-      │              │    │         │    │    │         │    │    └── columns: ref_1.config_yaml:10(bytes!null)
+      │              │    │         │    │    │         │    │    ├── columns: ref_1.config_yaml:10(bytes!null)
+      │              │    │         │    │    │         │    │    └── limit hint: 52.00
       │              │    │         │    │    │         │    └── filters
       │              │    │         │    │    │         │         └── c0 IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │              │    │         │    │    │         └── const: 52 [type=int]

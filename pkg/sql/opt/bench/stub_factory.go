@@ -38,6 +38,7 @@ func (f *stubFactory) ConstructScan(
 	needed exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
+	softLimit int64,
 	reverse bool,
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,

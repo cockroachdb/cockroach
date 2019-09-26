@@ -520,7 +520,7 @@ func TestInternerPhysProps(t *testing.T) {
 
 	inCache := make(map[*physical.Required]bool)
 
-	for _, tc := range testCases[:1] {
+	for _, tc := range testCases {
 		interned := in.InternPhysicalProps(tc.phys)
 		if tc.inCache && !inCache[interned] {
 			t.Errorf("expected physical props to already be in cache: %s", tc.phys)

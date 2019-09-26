@@ -72,6 +72,7 @@ func (ef *execFactory) ConstructScan(
 	needed exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
+	softLimit int64,
 	reverse bool,
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
@@ -97,9 +98,12 @@ func (ef *execFactory) ConstructScan(
 	if indexConstraint != nil && indexConstraint.IsContradiction() {
 		return newZeroNode(scan.resultColumns), nil
 	}
+
 	scan.index = indexDesc
 	scan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	scan.hardLimit = hardLimit
+	scan.softLimit = softLimit
+
 	scan.reverse = reverse
 	scan.maxResults = maxResults
 	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)

@@ -23,6 +23,7 @@ limit
  │    ├── columns: y:2(int!null) b.x:3(string!null) c:5(int)
  │    ├── fd: (2)-->(5)
  │    ├── ordering: +2
+ │    ├── limit hint: 10.00
  │    └── project
  │         ├── columns: c:5(int) y:2(int!null) b.x:3(string!null)
  │         ├── fd: (2)-->(5)
@@ -80,6 +81,7 @@ project
  │    │    ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
  │    │    ├── fd: (3)==(5), (5)==(3)
  │    │    ├── ordering: +2
+ │    │    ├── limit hint: 10.00
  │    │    └── inner-join (hash)
  │    │         ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
  │    │         ├── fd: (3)==(5), (5)==(3)
@@ -130,14 +132,14 @@ memo (optimized, ~17KB, required=[presentation: y:2,x:3,c:6] [ordering: +2])
  │         └── cost: 2171.27
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── [ordering: +2]
- │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
+ │    │    ├── best: (limit G4="[ordering: +2] [limit hint: 10.00]" G5 ordering=+2)
  │    │    └── cost: 2171.06
  │    └── []
- │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
+ │         ├── best: (limit G4="[ordering: +2] [limit hint: 10.00]" G5 ordering=+2)
  │         └── cost: 2171.06
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G7 G10 b,keyCols=[5],outCols=(2,3,5)) (merge-join G8 G7 G10 inner-join,+3,+5)
- │    ├── [ordering: +2]
+ │    ├── [ordering: +2] [limit hint: 10.00]
  │    │    ├── best: (sort G4)
  │    │    └── cost: 2170.95
  │    └── []

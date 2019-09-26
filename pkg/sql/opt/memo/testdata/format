@@ -174,7 +174,7 @@ sort
       └── projections
            └── a + 1 [outer=(1)]
 
-opt format=(hide-miscprops,hide-orderings,hide-columns)
+opt format=(hide-miscprops,hide-physprops,hide-columns)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort

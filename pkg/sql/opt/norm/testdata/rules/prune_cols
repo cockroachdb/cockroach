@@ -339,6 +339,7 @@ project
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── ordering: +2
+      │    ├── limit hint: 10.00
       │    └── scan a
       │         ├── columns: k:1(int!null) i:2(int)
       │         ├── key: (1)
@@ -363,6 +364,7 @@ project
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
       │    ├── ordering: +2,+1
+      │    ├── limit hint: 10.00
       │    └── scan a
       │         ├── columns: k:1(int!null) i:2(int) s:4(string)
       │         ├── key: (1)
@@ -389,6 +391,7 @@ project
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
       │    ├── ordering: +2,+1
+      │    ├── limit hint: 10.00
       │    └── scan a
       │         ├── columns: k:1(int!null) i:2(int) s:4(string)
       │         ├── key: (1)
@@ -411,8 +414,10 @@ project
  │    │    ├── columns: f:3(float) s:4(string)
  │    │    ├── grouping columns: f:3(float) s:4(string)
  │    │    ├── key: (3,4)
+ │    │    ├── limit hint: 5.00
  │    │    └── scan a
- │    │         └── columns: f:3(float) s:4(string)
+ │    │         ├── columns: f:3(float) s:4(string)
+ │    │         └── limit hint: 5.00
  │    └── const: 5 [type=int]
  └── projections
       └── f * 2.0 [type=float, outer=(3)]
@@ -556,6 +561,7 @@ project
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2)
       │    │    ├── ordering: +2
+      │    │    ├── limit hint: 20.00
       │    │    └── scan a
       │    │         ├── columns: k:1(int!null) i:2(int)
       │    │         ├── key: (1)
@@ -588,6 +594,7 @@ project
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,4)
       │    │    ├── ordering: +2,+1
+      │    │    ├── limit hint: 20.00
       │    │    └── scan a
       │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │         ├── key: (1)
@@ -622,6 +629,7 @@ project
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,4)
       │    │    ├── ordering: +2,+1
+      │    │    ├── limit hint: 20.00
       │    │    └── scan a
       │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │         ├── key: (1)
@@ -648,8 +656,10 @@ project
  │    │    │    ├── columns: f:3(float) s:4(string)
  │    │    │    ├── grouping columns: f:3(float) s:4(string)
  │    │    │    ├── key: (3,4)
+ │    │    │    ├── limit hint: 10.00
  │    │    │    └── scan a
- │    │    │         └── columns: f:3(float) s:4(string)
+ │    │    │         ├── columns: f:3(float) s:4(string)
+ │    │    │         └── limit hint: 10.00
  │    │    └── const: 10 [type=int]
  │    └── const: 5 [type=int]
  └── projections
@@ -1811,6 +1821,7 @@ delete a
       │    ├── key: (5)
       │    ├── fd: (5)-->(9)
       │    ├── ordering: +9
+      │    ├── limit hint: 10.00
       │    └── project
       │         ├── columns: column9:9(int) k:5(int!null)
       │         ├── key: (5)

@@ -287,6 +287,7 @@ window partition=()
  ├── limit
  │    ├── cardinality: [0 - 10]
  │    ├── scan a
+ │    │    └── limit hint: 10.00
  │    └── const: 10 [type=int]
  └── windows
       └── rank [type=int]
@@ -307,6 +308,7 @@ project
       │    ├── sort
       │    │    ├── columns: i:2(int)
       │    │    ├── ordering: +2
+      │    │    ├── limit hint: 10.00
       │    │    └── scan a
       │    │         └── columns: i:2(int)
       │    └── const: 10 [type=int]
@@ -329,6 +331,7 @@ project
       │    ├── sort
       │    │    ├── columns: i:2(int) f:3(float)
       │    │    ├── ordering: +2,+3
+      │    │    ├── limit hint: 10.00
       │    │    └── scan a
       │    │         └── columns: i:2(int) f:3(float)
       │    └── const: 10 [type=int]
@@ -354,6 +357,7 @@ project
       │    ├── sort
       │    │    ├── columns: i:2(int) f:3(float)
       │    │    ├── ordering: +2,+3
+      │    │    ├── limit hint: 10.00
       │    │    └── scan a
       │    │         └── columns: i:2(int) f:3(float)
       │    └── const: 10 [type=int]
@@ -376,6 +380,7 @@ project
       ├── window partition=()
       │    ├── columns: k:1(int!null) avg:6(decimal)
       │    ├── key: (1)
+      │    ├── limit hint: 10.00
       │    ├── scan a
       │    │    ├── columns: k:1(int!null)
       │    │    └── key: (1)
@@ -401,6 +406,7 @@ project
       ├── sort
       │    ├── columns: i:2(int) f:3(float) rank:6(int)
       │    ├── ordering: +3
+      │    ├── limit hint: 10.00
       │    └── window partition=() ordering=+2
       │         ├── columns: i:2(int) f:3(float) rank:6(int)
       │         ├── scan a
@@ -432,6 +438,7 @@ sort
            │    ├── sort
            │    │    ├── columns: i:2(int) f:3(float)
            │    │    ├── ordering: +3,+2
+           │    │    ├── limit hint: 10.00
            │    │    └── scan a
            │    │         └── columns: i:2(int) f:3(float)
            │    └── const: 10 [type=int]
@@ -463,6 +470,7 @@ project
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int) avg:7(decimal)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
+      │    ├── limit hint: 10.00
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
       │    │    ├── key: (1)
@@ -492,6 +500,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── ordering: +3
+ │    ├── limit hint: 2.00
  │    └── window partition=(4) ordering=+3 opt(4)
  │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
  │         ├── key: (1)
@@ -529,6 +538,7 @@ sort
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
       │    │    ├── ordering: +3,+1
+      │    │    ├── limit hint: 2.00
       │    │    └── scan wxyz
       │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │         ├── key: (1)
@@ -561,7 +571,8 @@ sort
       │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    └── ordering: +1
+      │    │    ├── ordering: +1
+      │    │    └── limit hint: 2.00
       │    └── const: 2 [type=int]
       └── windows
            └── rank [type=int]
@@ -590,7 +601,8 @@ sort
       │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    └── ordering: +1
+      │    │    ├── ordering: +1
+      │    │    └── limit hint: 2.00
       │    └── const: 2 [type=int]
       └── windows
            └── rank [type=int]
@@ -620,6 +632,7 @@ sort
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
       │    │    ├── ordering: +3,+1
+      │    │    ├── limit hint: 2.00
       │    │    └── scan wxyz
       │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │         ├── key: (1)
@@ -652,7 +665,8 @@ sort
       │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    └── ordering: +1
+      │    │    ├── ordering: +1
+      │    │    └── limit hint: 2.00
       │    └── const: 2 [type=int]
       └── windows
            └── rank [type=int]
@@ -682,6 +696,7 @@ sort
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
       │    │    ├── ordering: +4,+2,+3
+      │    │    ├── limit hint: 2.00
       │    │    └── scan wxyz
       │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │         ├── key: (1)
@@ -715,6 +730,7 @@ sort
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
       │    │    ├── ordering: +4,+3
+      │    │    ├── limit hint: 2.00
       │    │    └── scan wxyz
       │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │         ├── key: (1)
@@ -738,6 +754,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── ordering: +3
+ │    ├── limit hint: 2.00
  │    └── window partition=(4) ordering=+3 opt(4)
  │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
  │         ├── key: (1)
@@ -774,7 +791,8 @@ sort
       │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    └── ordering: +1
+      │    │    ├── ordering: +1
+      │    │    └── limit hint: 2.00
       │    └── const: 2 [type=int]
       └── windows
            └── rank [type=int]
@@ -804,6 +822,7 @@ sort
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
       │    │    ├── ordering: +4,+1
+      │    │    ├── limit hint: 2.00
       │    │    └── scan wxyz
       │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │         ├── key: (1)
@@ -837,6 +856,7 @@ sort
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
       │    │    ├── ordering: +4,+1
+      │    │    ├── limit hint: 2.00
       │    │    └── scan wxyz
       │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
       │    │         ├── key: (1)

@@ -218,6 +218,7 @@ limit
  │    ├── lax-key: (1-3)
  │    ├── fd: (3)~~>(1,2)
  │    ├── ordering: +2
+ │    ├── limit hint: 10.00
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+3)
  │    └── scan abc

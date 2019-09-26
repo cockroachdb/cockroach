@@ -45,11 +45,13 @@ limit
  │    ├── stats: [rows=200, distinct(3)=1, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ │    ├── limit hint: 5.00
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    └── limit hint: 5.00
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── const: 5 [type=int]
@@ -118,6 +120,7 @@ select
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │    ├── ordering: +3
+ │    │    ├── limit hint: 5.00
  │    │    └── scan a
  │    │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
@@ -173,7 +176,8 @@ limit
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=2000, distinct(2)=501, null(2)=1000, distinct(3)=11, null(3)=1000, distinct(2,3)=2000, null(2,3)=1500]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── limit hint: 5.00
  └── const: 5 [type=int]
 
 build colstat=2 colstat=3 colstat=(2,3)
@@ -190,11 +194,13 @@ limit
  │    ├── stats: [rows=100, distinct(2)=92.7652197, null(2)=50, distinct(3)=1, null(3)=0, distinct(2,3)=100, null(2,3)=75]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ │    ├── limit hint: 5.00
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(2)=501, null(2)=1000, distinct(3)=11, null(3)=1000, distinct(4)=200, null(4)=0, distinct(2,3)=2000, null(2,3)=1500]
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    └── limit hint: 5.00
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── const: 5 [type=int]
@@ -224,6 +230,7 @@ offset
  │    │    ├── columns: x:1(int)
  │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    │    ├── ordering: +1
+ │    │    ├── limit hint: 10000.00
  │    │    └── scan b
  │    │         ├── columns: x:1(int)
  │    │         └── stats: [rows=1000, distinct(1)=100, null(1)=10]
