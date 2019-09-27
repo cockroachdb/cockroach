@@ -1343,6 +1343,14 @@ func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
 	return crt.DeprecatedUpdatedReplicas
 }
 
+// NextReplicaID returns the next replica id to use after this trigger applies.
+func (crt ChangeReplicasTrigger) NextReplicaID() ReplicaID {
+	if crt.Desc != nil {
+		return crt.Desc.NextReplicaID
+	}
+	return crt.DeprecatedNextReplicaID
+}
+
 // ConfChange returns the configuration change described by the trigger.
 func (crt ChangeReplicasTrigger) ConfChange(encodedCtx []byte) (raftpb.ConfChangeI, error) {
 	return confChangeImpl(crt, encodedCtx)
