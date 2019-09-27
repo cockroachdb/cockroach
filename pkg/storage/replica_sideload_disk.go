@@ -256,6 +256,10 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 // Clear implements SideloadStorage.
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 	err := ss.eng.DeleteDirAndFiles(ss.dir)
+	if os.IsNotExist(err) {
+		ss.dirCreated = false
+		return nil
+	}
 	ss.dirCreated = ss.dirCreated && err != nil
 	return err
 }

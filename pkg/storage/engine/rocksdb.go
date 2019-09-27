@@ -3264,10 +3264,10 @@ func (r *RocksDB) DeleteFile(filename string) error {
 
 // DeleteDirAndFiles deletes the directory and any files it contains but
 // not subdirectories from this RocksDB's env. If dir does not exist,
-// DeleteDirAndFiles returns nil (no error).
+// return os.ErrNotExist.
 func (r *RocksDB) DeleteDirAndFiles(dir string) error {
-	if err := statusToError(C.DBEnvDeleteDirAndFiles(r.rdb, goToCSlice([]byte(dir)))); err != nil && notFoundErrOrDefault(err) != os.ErrNotExist {
-		return err
+	if err := statusToError(C.DBEnvDeleteDirAndFiles(r.rdb, goToCSlice([]byte(dir)))); err != nil {
+		return notFoundErrOrDefault(err)
 	}
 	return nil
 }
@@ -3367,9 +3367,9 @@ func ExportToSst(
 
 func notFoundErrOrDefault(err error) error {
 	errStr := err.Error()
-	if strings.Contains(errStr, "No such file or directory") ||
-		strings.Contains(errStr, "File not found") ||
-		strings.Contains(errStr, "The system cannot find the path specified") {
+	if strings.Contains(errStr, "No such") ||
+		strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "cannot find") {
 		return os.ErrNotExist
 	}
 	return err
