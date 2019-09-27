@@ -335,7 +335,6 @@ func (l *localFileStorage) WriteFile(
 	if err != nil {
 		return errors.Wrapf(err, "creating local export tmp file %q", tmpP)
 	}
-	defer f.Close()
 	_, err = io.Copy(f, content)
 	if err != nil {
 		return errors.Wrapf(err, "writing to local export tmp file %q", tmpP)
@@ -343,6 +342,7 @@ func (l *localFileStorage) WriteFile(
 	if err := f.Sync(); err != nil {
 		return errors.Wrapf(err, "syncing to local export tmp file %q", tmpP)
 	}
+	f.Close()
 	return errors.Wrapf(os.Rename(tmpP, p), "renaming to local export file %q", p)
 }
 
