@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -23,130 +24,146 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
-// TestReplicaStateMachineStageChangeReplicas tests the behavior of staging a
-// replicated command with a ChangeReplicas trigger in a replicaAppBatch. The
-// test exercises the logic of applying both old-style and new-style
+// TestReplicaStateMachineChangeReplicas tests the behavior of applying a
+// replicated command with a ChangeReplicas trigger in a replicaAppBatch.
+// The test exercises the logic of applying both old-style and new-style
 // ChangeReplicas triggers.
-func TestReplicaStateMachineStageChangeReplicas(t *testing.T) {
+func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	testutils.RunTrueAndFalse(t, "add replica", func(t *testing.T, add bool) {
+		testutils.RunTrueAndFalse(t, "deprecated", func(t *testing.T, deprecated bool) {
+			tc := testContext{}
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			tc.Start(t, stopper)
 
-	// Lock the replica for the entire test.
-	r := tc.repl
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	sm := r.getStateMachine()
+			// Lock the replica for the entire test.
+			r := tc.repl
+			r.raftMu.Lock()
+			defer r.raftMu.Unlock()
+			sm := r.getStateMachine()
 
-	desc := r.Desc()
-	replDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
-	require.True(t, ok)
+			desc := r.Desc()
+			replDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
+			require.True(t, ok)
 
-	makeCmd := func(desc *roachpb.RangeDescriptor, t roachpb.ChangeReplicasTrigger) *replicatedCmd {
-		return &replicatedCmd{
-			ctx: context.Background(),
-			ent: &raftpb.Entry{Index: r.mu.state.RaftAppliedIndex + 1},
-			decodedRaftEntry: decodedRaftEntry{
-				idKey: makeIDKey(),
-				raftCmd: storagepb.RaftCommand{
-					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
-					ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
-						State:          &storagepb.ReplicaState{Desc: desc},
-						ChangeReplicas: &storagepb.ChangeReplicas{ChangeReplicasTrigger: t},
-						Timestamp:      r.mu.state.GCThreshold.Add(1, 0),
+			newDesc := *desc
+			newDesc.InternalReplicas = append([]roachpb.ReplicaDescriptor(nil), desc.InternalReplicas...)
+			var trigger roachpb.ChangeReplicasTrigger
+			var confChange raftpb.ConfChange
+			if add {
+				// Add a new replica to the Range.
+				addedReplDesc := newDesc.AddReplica(replDesc.NodeID+1, replDesc.StoreID+1, roachpb.VOTER_FULL)
+
+				if deprecated {
+					trigger = roachpb.ChangeReplicasTrigger{
+						DeprecatedChangeType: roachpb.ADD_REPLICA,
+						DeprecatedReplica:    addedReplDesc,
+						DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{
+							replDesc,
+							addedReplDesc,
+						},
+						DeprecatedNextReplicaID: addedReplDesc.ReplicaID + 1,
+					}
+				} else {
+					trigger = roachpb.ChangeReplicasTrigger{
+						Desc:                  &newDesc,
+						InternalAddedReplicas: []roachpb.ReplicaDescriptor{addedReplDesc},
+					}
+				}
+
+				confChange = raftpb.ConfChange{
+					Type:   raftpb.ConfChangeAddNode,
+					NodeID: uint64(addedReplDesc.NodeID),
+				}
+			} else {
+				// Remove ourselves from the Range.
+				removedReplDesc, ok := newDesc.RemoveReplica(replDesc.NodeID, replDesc.StoreID)
+				require.True(t, ok)
+
+				if deprecated {
+					trigger = roachpb.ChangeReplicasTrigger{
+						DeprecatedChangeType:      roachpb.REMOVE_REPLICA,
+						DeprecatedReplica:         removedReplDesc,
+						DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{},
+						DeprecatedNextReplicaID:   replDesc.ReplicaID + 1,
+					}
+				} else {
+					trigger = roachpb.ChangeReplicasTrigger{
+						Desc:                    &newDesc,
+						InternalRemovedReplicas: []roachpb.ReplicaDescriptor{removedReplDesc},
+					}
+				}
+
+				confChange = raftpb.ConfChange{
+					Type:   raftpb.ConfChangeRemoveNode,
+					NodeID: uint64(removedReplDesc.NodeID),
+				}
+			}
+
+			// Create a new application batch.
+			b := sm.NewBatch(false /* ephemeral */).(*replicaAppBatch)
+			defer b.Close()
+
+			// Stage a command with the ChangeReplicas trigger.
+			cmd := &replicatedCmd{
+				ctx: ctx,
+				ent: &raftpb.Entry{
+					Index: r.mu.state.RaftAppliedIndex + 1,
+					Type:  raftpb.EntryConfChange,
+				},
+				decodedRaftEntry: decodedRaftEntry{
+					idKey: makeIDKey(),
+					raftCmd: storagepb.RaftCommand{
+						ProposerLeaseSequence: r.mu.state.Lease.Sequence,
+						MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+						ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
+							State:          &storagepb.ReplicaState{Desc: &newDesc},
+							ChangeReplicas: &storagepb.ChangeReplicas{ChangeReplicasTrigger: trigger},
+							Timestamp:      r.mu.state.GCThreshold.Add(1, 0),
+						},
+					},
+					confChange: &decodedConfChange{
+						ConfChangeI: confChange,
 					},
 				},
-			},
-		}
-	}
-
-	t.Run("add replica", func(t *testing.T) {
-		// Add a new replica to the Range.
-		newDesc := *desc
-		newDesc.InternalReplicas = append([]roachpb.ReplicaDescriptor(nil), desc.InternalReplicas...)
-		addedReplDesc := newDesc.AddReplica(replDesc.NodeID+1, replDesc.StoreID+1, roachpb.VOTER_FULL)
-
-		testutils.RunTrueAndFalse(t, "deprecated", func(t *testing.T, deprecated bool) {
-			var trigger roachpb.ChangeReplicasTrigger
-			if deprecated {
-				trigger = roachpb.ChangeReplicasTrigger{
-					DeprecatedChangeType: roachpb.ADD_REPLICA,
-					DeprecatedReplica:    addedReplDesc,
-					DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{
-						replDesc,
-						addedReplDesc,
-					},
-					DeprecatedNextReplicaID: addedReplDesc.ReplicaID + 1,
-				}
-			} else {
-				trigger = roachpb.ChangeReplicasTrigger{
-					Desc:                  &newDesc,
-					InternalAddedReplicas: []roachpb.ReplicaDescriptor{addedReplDesc},
-				}
 			}
 
-			// Create a new application batch.
-			b := sm.NewBatch(false /* ephemeral */).(*replicaAppBatch)
-			defer b.Close()
-
-			// Stage a command with the ChangeReplicas trigger.
-			cmd := makeCmd(&newDesc, trigger)
-			_, err := b.Stage(cmd)
+			checkedCmd, err := b.Stage(cmd)
 			require.NoError(t, err)
-			require.False(t, b.changeRemovesReplica)
+			require.Equal(t, !add, b.changeRemovesReplica)
 			require.Equal(t, b.state.RaftAppliedIndex, cmd.ent.Index)
 			require.Equal(t, b.state.LeaseAppliedIndex, cmd.raftCmd.MaxLeaseIndex)
 
 			// Check the replica's destroy status.
-			r.mu.Lock()
-			require.False(t, r.mu.destroyStatus.Removed())
-			r.mu.Unlock()
-		})
-	})
-
-	t.Run("remove replica", func(t *testing.T) {
-		// Remove ourselves from the Range.
-		newDesc := *desc
-		newDesc.InternalReplicas = append([]roachpb.ReplicaDescriptor(nil), desc.InternalReplicas...)
-		removedReplDesc, ok := newDesc.RemoveReplica(replDesc.NodeID, replDesc.StoreID)
-		require.True(t, ok)
-
-		testutils.RunTrueAndFalse(t, "deprecated", func(t *testing.T, deprecated bool) {
-			var trigger roachpb.ChangeReplicasTrigger
-			if deprecated {
-				trigger = roachpb.ChangeReplicasTrigger{
-					DeprecatedChangeType:      roachpb.REMOVE_REPLICA,
-					DeprecatedReplica:         removedReplDesc,
-					DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{},
-					DeprecatedNextReplicaID:   replDesc.ReplicaID + 1,
-				}
+			reason, _ := r.IsDestroyed()
+			if add {
+				require.Equal(t, destroyReasonAlive, reason)
 			} else {
-				trigger = roachpb.ChangeReplicasTrigger{
-					Desc:                    &newDesc,
-					InternalRemovedReplicas: []roachpb.ReplicaDescriptor{removedReplDesc},
-				}
+				require.Equal(t, destroyReasonRemoved, reason)
 			}
 
-			// Create a new application batch.
-			b := sm.NewBatch(false /* ephemeral */).(*replicaAppBatch)
-			defer b.Close()
-
-			// Stage a command with the ChangeReplicas trigger.
-			cmd := makeCmd(&newDesc, trigger)
-			_, err := b.Stage(cmd)
+			// Apply the batch to the StateMachine.
+			err = b.ApplyToStateMachine(ctx)
 			require.NoError(t, err)
-			require.True(t, b.changeRemovesReplica)
-			require.Equal(t, b.state.RaftAppliedIndex, cmd.ent.Index)
-			require.Equal(t, b.state.LeaseAppliedIndex, cmd.raftCmd.MaxLeaseIndex)
 
-			// Check the replica's destroy status.
-			r.mu.Lock()
-			require.True(t, r.mu.destroyStatus.Removed())
-			r.mu.destroyStatus.Set(nil, destroyReasonAlive) // reset
-			r.mu.Unlock()
+			// Apply the side effects of the command to the StateMachine.
+			_, err = sm.ApplySideEffects(checkedCmd)
+			if add {
+				require.NoError(t, err)
+			} else {
+				require.Equal(t, apply.ErrRemoved, err)
+			}
+
+			// Check whether the Replica still exists in the Store.
+			_, err = tc.store.GetReplica(r.RangeID)
+			if add {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.IsType(t, &roachpb.RangeNotFoundError{}, err)
+			}
 		})
 	})
 }

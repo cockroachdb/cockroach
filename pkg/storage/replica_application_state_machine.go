@@ -668,16 +668,6 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 		b.r.mu.Unlock()
 		b.changeRemovesReplica = true
 
-		// In 19.1 and before we used DeprecatedNextReplicaID to carry the next
-		// replica id to use once this change is applied. In 19.2 we started
-		// providing a new range descriptor directly, which includes this info.
-		var nextReplID roachpb.ReplicaID
-		if change.Desc != nil {
-			nextReplID = change.Desc.NextReplicaID
-		} else {
-			nextReplID = change.DeprecatedNextReplicaID
-		}
-
 		// Delete all of the local data. We're going to delete the hard state too.
 		// In order for this to be safe we need code above this to promise that we're
 		// never going to write hard state in response to a message for a later
@@ -686,7 +676,7 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 			ctx,
 			b.batch,
 			b.batch,
-			nextReplID,
+			change.NextReplicaID(),
 			false, /* clearRangeIDLocalOnly */
 			false, /* mustUseClearRange */
 		); err != nil {
