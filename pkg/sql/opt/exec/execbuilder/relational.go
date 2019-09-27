@@ -1408,9 +1408,7 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 	// Add the buffer as a subquery so it gets executed ahead of time, and is
 	// available to be referenced by other queries.
 	b.subqueries = append(b.subqueries, exec.Subquery{
-		ExprNode: &tree.Subquery{
-			Select: with.OriginalExpr.Select,
-		},
+		ExprNode: with.OriginalExpr,
 		// TODO(justin): this is wasteful: both the subquery and the bufferNode
 		// will buffer up all the results.  This should be fixed by either making
 		// the buffer point directly to the subquery results or adding a new
@@ -1423,7 +1421,7 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 
 	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
 
-	return b.buildRelational(with.Input)
+	return b.buildRelational(with.Main)
 }
 
 func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
