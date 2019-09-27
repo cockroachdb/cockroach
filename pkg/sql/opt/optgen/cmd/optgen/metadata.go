@@ -167,6 +167,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Type":           {fullName: "*types.T", isPointer: true},
 		"Datum":          {fullName: "tree.Datum", isPointer: true},
 		"TypedExpr":      {fullName: "tree.TypedExpr", isPointer: true},
+		"Statement":      {fullName: "tree.Statement", isPointer: true},
 		"Subquery":       {fullName: "*tree.Subquery", isPointer: true, usePointerIntern: true},
 		"CreateTable":    {fullName: "*tree.CreateTable", isPointer: true, usePointerIntern: true},
 		"Constraint":     {fullName: "*constraint.Constraint", isPointer: true, usePointerIntern: true},

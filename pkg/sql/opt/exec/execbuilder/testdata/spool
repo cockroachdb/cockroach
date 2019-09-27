@@ -20,7 +20,7 @@ root                                ·             ·
  │                                  label         buffer 1 (a)
  └── subquery                       ·             ·
       │                             id            @S1
-      │                             original sql  <unknown>
+      │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
       │                             exec mode     all rows
       └── buffer node               ·             ·
            │                        label         buffer 1 (a)
@@ -46,7 +46,7 @@ root                                ·             ·
  │                                  label         buffer 1 (a)
  └── subquery                       ·             ·
       │                             id            @S1
-      │                             original sql  <unknown>
+      │                             original sql  DELETE FROM t RETURNING x
       │                             exec mode     all rows
       └── buffer node               ·             ·
            │                        label         buffer 1 (a)
@@ -73,7 +73,7 @@ root                                     ·             ·
  │                                       label         buffer 1 (a)
  └── subquery                            ·             ·
       │                                  id            @S1
-      │                                  original sql  <unknown>
+      │                                  original sql  UPDATE t SET x = x + 1 RETURNING x
       │                                  exec mode     all rows
       └── buffer node                    ·             ·
            │                             label         buffer 1 (a)
@@ -101,7 +101,7 @@ root                                  ·             ·
  │                                    label         buffer 1 (a)
  └── subquery                         ·             ·
       │                               id            @S1
-      │                               original sql  <unknown>
+      │                               original sql  UPSERT INTO t VALUES (2), (3) RETURNING x
       │                               exec mode     all rows
       └── buffer node                 ·             ·
            │                          label         buffer 1 (a)
@@ -238,7 +238,7 @@ root                                                 ·             ·
  │                                                   label         buffer 2 (b)
  ├── subquery                                        ·             ·
  │    │                                              id            @S1
- │    │                                              original sql  <unknown>
+ │    │                                              original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
  │    │                                              exec mode     all rows
  │    └── buffer node                                ·             ·
  │         │                                         label         buffer 1 (a)
@@ -252,7 +252,7 @@ root                                                 ·             ·
  │                                                   spans         ALL
  └── subquery                                        ·             ·
       │                                              id            @S2
-      │                                              original sql  <unknown>
+      │                                              original sql  INSERT INTO t SELECT x + 1 FROM a RETURNING x
       │                                              exec mode     all rows
       └── buffer node                                ·             ·
            │                                         label         buffer 2 (b)

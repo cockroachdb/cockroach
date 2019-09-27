@@ -28,7 +28,8 @@ import (
 // after it has been converted to a query plan. It is stored in
 // planTop.subqueryPlans.
 type subquery struct {
-	subquery *tree.Subquery
+	// subquery is used to show the subquery SQL when explaining plans.
+	subquery tree.NodeFormatter
 	execMode rowexec.SubqueryExecMode
 	expanded bool
 	started  bool

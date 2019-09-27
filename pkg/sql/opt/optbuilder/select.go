@@ -622,16 +622,10 @@ func (b *Builder) buildCTE(
 
 		id := b.factory.Memo().NextWithID()
 
-		// No good way to show non-select expressions, like INSERT, here.
-		var stmt tree.SelectStatement
-		if sel, ok := ctes[i].Stmt.(*tree.Select); ok {
-			stmt = sel.Select
-		}
-
 		b.ctes = append(b.ctes, cteSource{
 			name:         ctes[i].Name,
 			cols:         cols,
-			originalExpr: stmt,
+			originalExpr: ctes[i].Stmt,
 			expr:         cteScope.expr,
 			id:           id,
 		})
@@ -655,7 +649,7 @@ func (b *Builder) wrapWithCTEs(expr memo.RelExpr, ctes []cteSource) memo.RelExpr
 			&memo.WithPrivate{
 				ID:           ctes[i].id,
 				Name:         string(ctes[i].name.Alias),
-				OriginalExpr: &tree.Subquery{Select: ctes[i].originalExpr},
+				OriginalExpr: ctes[i].originalExpr,
 			},
 		)
 	}

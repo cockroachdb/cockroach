@@ -810,13 +810,13 @@ define WindowPrivate {
     Ordering OrderingChoice
 }
 
-# With executes Binding, making its results available to Input. Within Input,
-# Binding may be referenced by a WithScan expression containing the ID of this
-# With.
+# With executes Binding, making its results available to Main. Within Main, the
+# results of Binding may be referenced by a WithScan expression containing the
+# ID of this With.
 [Relational]
 define With {
     Binding RelExpr
-    Input   RelExpr
+    Main    RelExpr
 
     _ WithPrivate
 }
@@ -825,9 +825,9 @@ define With {
 define WithPrivate {
     ID WithID
 
-    # OriginalExpr contains the original Subquery expression if it's a SELECT
-    # so that we can display it in the EXPLAIN plan.
-    OriginalExpr Subquery
+    # OriginalExpr contains the original CTE expression (so that we can display
+    # it in the EXPLAIN plan).
+    OriginalExpr Statement
 
     # Name is used to identify the with for debugging purposes.
     Name string
