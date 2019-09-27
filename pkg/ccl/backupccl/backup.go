@@ -54,6 +54,10 @@ const (
 	// BackupDescriptorName is the file name used for serialized
 	// BackupDescriptor protos.
 	BackupDescriptorName = "BACKUP"
+	// BackupManifestName is a future name for the serialized
+	// BackupDescriptor proto.
+	BackupManifestName = "BACKUP_MANIFEST"
+
 	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	BackupPartitionDescriptorPrefix = "BACKUP_PART"
@@ -91,7 +95,11 @@ func ReadBackupDescriptorFromURI(
 	defer exportStore.Close()
 	backupDesc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorName)
 	if err != nil {
-		return BackupDescriptor{}, err
+		backupManifest, manifestErr := readBackupDescriptor(ctx, exportStore, BackupManifestName)
+		if manifestErr != nil {
+			return BackupDescriptor{}, err
+		}
+		backupDesc = backupManifest
 	}
 	backupDesc.Dir = exportStore.Conf()
 	// TODO(dan): Sanity check this BackupDescriptor: non-empty EndTime,
@@ -919,6 +927,14 @@ func VerifyUsableExportTarget(
 		return pgerror.Newf(pgcode.DuplicateFile,
 			"%s already contains a %s file",
 			readable, BackupDescriptorName)
+	}
+	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
+		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
+		// returns (and then wrap/tag them), we could narrow this check.
+		r.Close()
+		return pgerror.Newf(pgcode.DuplicateFile,
+			"%s already contains a %s file",
+			readable, BackupManifestName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupDescriptorCheckpointName); err == nil {
 		r.Close()
