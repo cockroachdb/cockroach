@@ -1720,28 +1720,24 @@ func TestSystemZoneConfigs(t *testing.T) {
 		expectedSystemRanges, systemNumReplicas, expectedUserRanges, userNumReplicas, expectedReplicas)
 
 	waitForReplicas := func() error {
-		var conflictingID roachpb.RangeID
-		replicas := make(map[roachpb.RangeID]int)
+		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
 			if err := storage.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
-				if existing, ok := replicas[desc.RangeID]; ok && existing != len(desc.InternalReplicas) {
-					conflictingID = desc.RangeID
+				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(desc) {
+					return false, fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
 				}
-				replicas[desc.RangeID] = len(desc.InternalReplicas)
+				replicas[desc.RangeID] = desc
 				return false, nil
 			}); err != nil {
 				return err
 			}
 		}
-		if conflictingID != 0 {
-			return fmt.Errorf("not all replicas agree on the range descriptor for r%d", conflictingID)
-		}
 		var totalReplicas int
-		for _, count := range replicas {
-			totalReplicas += count
+		for _, desc := range replicas {
+			totalReplicas += len(desc.Replicas().Voters())
 		}
 		if totalReplicas != expectedReplicas {
-			return fmt.Errorf("got %d replicas, want %d; details: %+v", totalReplicas, expectedReplicas, replicas)
+			return fmt.Errorf("got %d voters, want %d; details: %+v", totalReplicas, expectedReplicas, replicas)
 		}
 		return nil
 	}
