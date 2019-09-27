@@ -187,29 +187,6 @@ delete xyz
       │                   └── placeholder: $2 [type=int]
       └── const: 2 [type=int]
 
-# Correlated subquery.
-build
-SELECT * FROM xyz WHERE EXISTS (SELECT * FROM [DELETE FROM abcde WHERE b=y RETURNING *])
-----
-select
- ├── columns: x:1(string!null) y:2(int) z:3(float)
- ├── scan xyz
- │    └── columns: x:1(string!null) y:2(int) z:3(float)
- └── filters
-      └── exists [type=bool]
-           └── project
-                ├── columns: a:4(int!null) b:5(int!null) c:6(int) d:7(int) e:8(int)
-                └── delete abcde
-                     ├── columns: a:4(int!null) b:5(int!null) c:6(int) d:7(int) e:8(int) rowid:9(int!null)
-                     ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
-                     └── select
-                          ├── columns: a:10(int!null) b:11(int!null) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-                          ├── scan abcde
-                          │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-                          └── filters
-                               └── eq [type=bool]
-                                    ├── variable: b [type=int]
-                                    └── variable: y [type=int]
 
 # Use CTE within WHERE clause.
 build
@@ -400,31 +377,6 @@ delete mutation
                 ├── variable: m [type=int]
                 └── const: 1 [type=int]
 
-# Use column "p" from higher scope that is shadowed by mutation column "p".
-build
-SELECT *
-FROM abcde AS mno(m, n, p)
-WHERE EXISTS(SELECT * FROM [DELETE FROM mutation WHERE m=p RETURNING *])
-----
-project
- ├── columns: m:1(int!null) n:2(int) p:3(int) d:4(int) e:5(int)
- └── select
-      ├── columns: mno.m:1(int!null) mno.n:2(int) mno.p:3(int) d:4(int) e:5(int) rowid:6(int!null)
-      ├── scan mno
-      │    └── columns: mno.m:1(int!null) mno.n:2(int) mno.p:3(int) d:4(int) e:5(int) rowid:6(int!null)
-      └── filters
-           └── exists [type=bool]
-                └── delete mutation
-                     ├── columns: mutation.m:7(int!null) mutation.n:8(int)
-                     ├── fetch columns: mutation.m:11(int) mutation.n:12(int) o:13(int) mutation.p:14(int)
-                     └── select
-                          ├── columns: mutation.m:11(int!null) mutation.n:12(int) o:13(int) mutation.p:14(int)
-                          ├── scan mutation
-                          │    └── columns: mutation.m:11(int!null) mutation.n:12(int) o:13(int) mutation.p:14(int)
-                          └── filters
-                               └── eq [type=bool]
-                                    ├── variable: mutation.m [type=int]
-                                    └── variable: mno.p [type=int]
 
 # Try to return a mutation column.
 build

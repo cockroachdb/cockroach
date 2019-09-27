@@ -483,44 +483,6 @@ update abcde
                 │    └── variable: c [type=int]
                 └── const: 1 [type=int]
 
-# Correlated subquery.
-build
-SELECT * FROM xyz WHERE EXISTS (SELECT * FROM [UPDATE abcde SET b=y, c=z::int+1 RETURNING *])
-----
-select
- ├── columns: x:1(string!null) y:2(int) z:3(float)
- ├── scan xyz
- │    └── columns: x:1(string!null) xyz.y:2(int) z:3(float)
- └── filters
-      └── exists [type=bool]
-           └── project
-                ├── columns: a:4(int!null) b:5(int) c:6(int) d:7(int) e:8(int!null)
-                └── update abcde
-                     ├── columns: a:4(int!null) b:5(int) c:6(int) d:7(int) e:8(int!null) rowid:9(int!null)
-                     ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
-                     ├── update-mapping:
-                     │    ├──  y:16 => b:5
-                     │    ├──  column17:17 => c:6
-                     │    ├──  column18:18 => d:7
-                     │    └──  a:10 => e:8
-                     └── project
-                          ├── columns: column18:18(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null) y:16(int) column17:17(int)
-                          ├── project
-                          │    ├── columns: y:16(int) column17:17(int) a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-                          │    ├── scan abcde
-                          │    │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-                          │    └── projections
-                          │         ├── variable: xyz.y [type=int]
-                          │         └── plus [type=int]
-                          │              ├── cast: INT8 [type=int]
-                          │              │    └── variable: z [type=float]
-                          │              └── const: 1 [type=int]
-                          └── projections
-                               └── plus [type=int]
-                                    ├── plus [type=int]
-                                    │    ├── variable: y [type=int]
-                                    │    └── variable: column17 [type=int]
-                                    └── const: 1 [type=int]
 
 # Unknown target table.
 build
@@ -1465,44 +1427,6 @@ update mutation
            └── gt [type=bool]
                 ├── variable: column11 [type=int]
                 └── const: 0 [type=int]
-
-# Use column "o" from higher scope that is shadowed by mutation column "o".
-build
-SELECT * FROM abcde AS mno(m, n, o) WHERE EXISTS(SELECT * FROM [UPDATE mutation SET m=o RETURNING *])
-----
-project
- ├── columns: m:1(int!null) n:2(int) o:3(int) d:4(int) e:5(int)
- └── select
-      ├── columns: mno.m:1(int!null) mno.n:2(int) mno.o:3(int) d:4(int) e:5(int) rowid:6(int!null)
-      ├── scan mno
-      │    └── columns: mno.m:1(int!null) mno.n:2(int) mno.o:3(int) d:4(int) e:5(int) rowid:6(int!null)
-      └── filters
-           └── exists [type=bool]
-                └── update mutation
-                     ├── columns: mutation.m:7(int!null) mutation.n:8(int)
-                     ├── fetch columns: mutation.m:12(int) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
-                     ├── update-mapping:
-                     │    ├──  o:17 => mutation.m:7
-                     │    └──  column18:18 => p:10
-                     ├── check columns: check1:19(bool)
-                     └── project
-                          ├── columns: check1:19(bool) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int) column18:18(int)
-                          ├── project
-                          │    ├── columns: column18:18(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int)
-                          │    ├── project
-                          │    │    ├── columns: o:17(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
-                          │    │    ├── scan mutation
-                          │    │    │    └── columns: mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
-                          │    │    └── projections
-                          │    │         └── variable: mno.o [type=int]
-                          │    └── projections
-                          │         └── plus [type=int]
-                          │              ├── variable: mutation.o [type=int]
-                          │              └── variable: mutation.n [type=int]
-                          └── projections
-                               └── gt [type=bool]
-                                    ├── variable: o [type=int]
-                                    └── const: 0 [type=int]
 
 # Try to return a mutation column.
 build

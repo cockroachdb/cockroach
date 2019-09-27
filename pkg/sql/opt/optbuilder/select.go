@@ -130,7 +130,11 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.StatementSource:
-		outScope = b.buildStmt(source.Statement, nil /* desiredTypes */, inScope)
+		// This is the special '[ ... ]' syntax. We treat this as syntactic sugar
+		// for a top-level CTE, so it cannot refer to anything in the input scope.
+		// See #41078.
+		emptyScope := &scope{builder: b}
+		outScope = b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
 		if len(outScope.cols) == 0 {
 			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"statement source \"%v\" does not return any columns", source.Statement))

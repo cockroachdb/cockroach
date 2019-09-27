@@ -1269,3 +1269,46 @@ with &1 (cte)
  │    └── const: 1 [type=int]
  └── scan abc
       └── columns: a:6(int!null) b:7(int) c:8(int)
+
+# Tests for the square bracket syntax.
+build
+SELECT * FROM [SELECT * FROM abc]
+----
+scan abc
+ └── columns: a:1(int!null) b:2(int) c:3(int)
+
+build
+SELECT * FROM [INSERT INTO abc VALUES (1, 2, 3) RETURNING a]
+----
+project
+ ├── columns: a:1(int!null)
+ └── insert abc
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── insert-mapping:
+      │    ├──  column1:4 => a:1
+      │    ├──  column2:5 => b:2
+      │    └──  column3:6 => c:3
+      └── values
+           ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
+           └── tuple [type=tuple{int, int, int}]
+                ├── const: 1 [type=int]
+                ├── const: 2 [type=int]
+                └── const: 3 [type=int]
+
+# Statement inside brackets cannot refer to outer column.
+build
+SELECT a, b FROM abc WHERE b = (SELECT x FROM [SELECT * FROM xyzw WHERE x = a])
+----
+error (42703): column "a" does not exist
+
+build
+SELECT a, b FROM abc, LATERAL (SELECT * FROM [SELECT * FROM xyzw WHERE a = x])
+----
+error (42703): column "a" does not exist
+
+# Statement inside brackets cannot refer to outer CTEs.
+build
+WITH cte AS (VALUES (1), (2))
+SELECT * FROM (VALUES (3)) AS t (x), [SELECT * FROM cte]
+----
+error (42P01): no data source matches prefix: "cte"
