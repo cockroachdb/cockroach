@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -60,9 +61,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 	runChange := func(expDesc roachpb.RangeDescriptor, chgs []roachpb.ReplicationChange) roachpb.RangeDescriptor {
 		t.Helper()
 		desc, err := tc.Servers[0].DB().AdminChangeReplicas(
-			// TODO(tbg): when 19.2 is out, remove this "feature gate" here and in
-			// AdminChangeReplicas.
-			context.WithValue(ctx, "testing", "testing"),
+			client.ChangeReplicasCanMixAddAndRemoveContext(ctx),
 			k, expDesc, chgs,
 		)
 		require.NoError(t, err)
