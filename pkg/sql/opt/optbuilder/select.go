@@ -91,7 +91,7 @@ func (b *Builder) buildDataSource(
 				Name:         string(cte.name.Alias),
 				InCols:       inCols,
 				OutCols:      outCols,
-				BindingProps: cte.expr.Relational(),
+				BindingProps: cte.bindingProps,
 			})
 			return outScope
 		}
@@ -571,54 +571,44 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	return inScope
 }
 
-func (b *Builder) buildCTE(
-	ctes []*tree.CTE, inScope *scope,
+func (b *Builder) buildCTEs(
+	with *tree.With, inScope *scope,
 ) (outScope *scope, addedCTEs []cteSource) {
 	outScope = inScope.push()
 
-	start := len(b.ctes)
-
+	addedCTEs = make([]cteSource, len(with.CTEList))
 	outScope.ctes = make(map[string]*cteSource)
-	for i := range ctes {
-		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
-		cols := b.getCTECols(cteScope, ctes[i].Name)
-		name := ctes[i].Name.Alias
+	for i, cte := range with.CTEList {
+		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
 
 		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
 		if b.subquery != nil && !b.subquery.outerCols.Empty() {
 			panic(pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated"))
 		}
 
-		if _, ok := outScope.ctes[name.String()]; ok {
+		aliasStr := cte.Name.Alias.String()
+		if _, ok := outScope.ctes[aliasStr]; ok {
 			panic(pgerror.Newf(
-				pgcode.DuplicateAlias,
-				"WITH query name %s specified more than once", ctes[i].Name.Alias),
-			)
+				pgcode.DuplicateAlias, "WITH query name %s specified more than once", aliasStr,
+			))
 		}
-
-		cteScope.removeHiddenCols()
-		projectionsScope := cteScope.replace()
-		projectionsScope.appendColumnsFromScope(cteScope)
-		b.constructProjectForScope(cteScope, projectionsScope)
-
-		cteScope = projectionsScope
 
 		id := b.factory.Memo().NextWithID()
 
-		b.ctes = append(b.ctes, cteSource{
-			name:         ctes[i].Name,
-			cols:         cols,
-			originalExpr: ctes[i].Stmt,
-			expr:         cteScope.expr,
+		addedCTEs[i] = cteSource{
+			name:         cte.Name,
+			cols:         cteCols,
+			originalExpr: cte.Stmt,
+			expr:         cteExpr,
+			bindingProps: cteExpr.Relational(),
 			id:           id,
-		})
-		cte := &b.ctes[len(b.ctes)-1]
-		outScope.ctes[ctes[i].Name.Alias.String()] = cte
+		}
+		outScope.ctes[aliasStr] = &addedCTEs[i]
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
 
-	return outScope, b.ctes[start:]
+	return outScope, addedCTEs
 }
 
 // wrapWithCTEs adds With expressions on top of an expression.
@@ -656,7 +646,7 @@ func (b *Builder) buildSelectStmt(
 		return b.buildSelectClause(stmt, nil /* orderBy */, desiredTypes, inScope)
 
 	case *tree.UnionClause:
-		return b.buildUnion(stmt, desiredTypes, inScope)
+		return b.buildUnionClause(stmt, desiredTypes, inScope)
 
 	case *tree.ValuesClause:
 		return b.buildValuesClause(stmt, desiredTypes, inScope)
@@ -725,7 +715,7 @@ func (b *Builder) buildSelect(
 
 	var ctes []cteSource
 	if with != nil {
-		inScope, ctes = b.buildCTE(with.CTEList, inScope)
+		inScope, ctes = b.buildCTEs(with, inScope)
 	}
 
 	// NB: The case statements are sorted lexicographically.
@@ -734,7 +724,7 @@ func (b *Builder) buildSelect(
 		outScope = b.buildSelectClause(t, orderBy, desiredTypes, inScope)
 
 	case *tree.UnionClause:
-		outScope = b.buildUnion(t, desiredTypes, inScope)
+		outScope = b.buildUnionClause(t, desiredTypes, inScope)
 
 	case *tree.ValuesClause:
 		outScope = b.buildValuesClause(t, desiredTypes, inScope)

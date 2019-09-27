@@ -258,6 +258,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.WithScanExpr:
 		ep, err = b.buildWithScan(t)
 
+	case *memo.RecursiveCTEExpr:
+		ep, err = b.buildRecursiveCTE(t)
+
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
 
@@ -1422,6 +1425,69 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
 
 	return b.buildRelational(with.Main)
+}
+
+func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error) {
+	initial, err := b.buildRelational(rec.Initial)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Make sure we have the columns in the correct order.
+	initial, err = b.ensureColumns(initial, rec.InitialCols, nil /* colNames */, nil /* ordering */)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Renumber the columns so they match the columns expected by the recursive
+	// query.
+	initial.outputCols = util.FastIntMap{}
+	for i, col := range rec.OutCols {
+		initial.outputCols.Set(int(col), i)
+	}
+
+	// To implement exec.RecursiveCTEIterationFn, we create a special Builder.
+
+	innerBldTemplate := &Builder{
+		factory: b.factory,
+		mem:     b.mem,
+		catalog: b.catalog,
+		evalCtx: b.evalCtx,
+		// If the recursive query itself contains CTEs, building it in the function
+		// below will add to withExprs. Cap the slice to force reallocation on any
+		// appends, so that they don't overwrite overwrite later appends by our
+		// original builder.
+		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
+	}
+
+	fn := func(bufferRef exec.Node) (exec.Plan, error) {
+		// Use a separate builder each time.
+		innerBld := *innerBldTemplate
+		innerBld.addBuiltWithExpr(rec.WithID, initial.outputCols, bufferRef)
+		plan, err := innerBld.build(rec.Recursive)
+		if err != nil {
+			return nil, err
+		}
+		// Ensure columns are output in the same order.
+		plan, err = innerBld.ensureColumns(
+			plan, rec.RecursiveCols, nil /* colNames */, nil, /* ordering */
+		)
+		if err != nil {
+			return nil, err
+		}
+		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.postqueries)
+	}
+
+	label := fmt.Sprintf("working buffer (%s)", rec.Name)
+	var ep execPlan
+	ep.root, err = b.factory.ConstructRecursiveCTE(initial.root, fn, label)
+	if err != nil {
+		return execPlan{}, err
+	}
+	for i, col := range rec.OutCols {
+		ep.outputCols.Set(int(col), i)
+	}
+	return ep, nil
 }
 
 func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {

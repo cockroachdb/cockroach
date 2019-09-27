@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -94,11 +95,15 @@ type scope struct {
 
 // cteSource represents a CTE in the given query.
 type cteSource struct {
+	id           opt.WithID
 	name         tree.AliasClause
 	cols         physical.Presentation
 	originalExpr tree.Statement
+	bindingProps *props.Relational
 	expr         memo.RelExpr
-	id           opt.WithID
+	// If set, this function is called when a CTE is referenced. It can throw an
+	// error.
+	onRef func()
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -230,6 +235,14 @@ func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
 	return nil
 }
 
+func (s *scope) makeColumnTypes() []*types.T {
+	res := make([]*types.T, len(s.cols))
+	for i := range res {
+		res[i] = s.cols[i].typ
+	}
+	return res
+}
+
 // makeOrderingChoice returns an OrderingChoice that corresponds to s.ordering.
 func (s *scope) makeOrderingChoice() physical.OrderingChoice {
 	var oc physical.OrderingChoice
@@ -292,6 +305,9 @@ func (s *scope) resolveCTE(name *tree.TableName) *cteSource {
 				seenCTEs = true
 			}
 			if cte, ok := s.ctes[nameStr]; ok {
+				if cte.onRef != nil {
+					cte.onRef()
+				}
 				return cte
 			}
 		}
