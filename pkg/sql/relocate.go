@@ -163,8 +163,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 				if err := params.extendedEvalCtx.ExecCfg.Gossip.GetInfoProto(
 					gossipStoreKey, &storeDesc,
 				); err != nil {
-					return false, errors.NewAssertionErrorWithWrappedErrf(err,
-						"error looking up store %d", errors.Safe(storeID))
+					return false, errors.Wrapf(err, "error looking up store %d", storeID)
 				}
 				nodeID = storeDesc.Node.NodeID
 				n.run.storeMap[storeID] = nodeID
