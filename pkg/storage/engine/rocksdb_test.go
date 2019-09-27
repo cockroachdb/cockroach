@@ -1348,6 +1348,11 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 
+	// Verify DeleteDirAndFiles returns os.ErrNotExist if dir does not exist.
+	if err := db.DeleteDirAndFiles("/non/existent/file"); !os.IsNotExist(err) {
+		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+	}
+
 	fname := filepath.Join(dir, "random.file")
 	data := "random data"
 	if f, err := db.OpenFile(fname); err != nil {
