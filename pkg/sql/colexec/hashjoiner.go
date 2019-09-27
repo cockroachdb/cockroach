@@ -250,29 +250,27 @@ func (hj *hashJoinEqOp) Init() {
 
 func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 	hj.prober.batch.ResetInternalBatch()
-	return hj.nextInternal(ctx)
-}
+	for {
+		switch hj.runningState {
+		case hjBuilding:
+			hj.build(ctx)
+			continue
+		case hjProbing:
+			hj.prober.exec(ctx)
 
-func (hj *hashJoinEqOp) nextInternal(ctx context.Context) coldata.Batch {
-	switch hj.runningState {
-	case hjBuilding:
-		hj.build(ctx)
-		return hj.nextInternal(ctx)
-	case hjProbing:
-		hj.prober.exec(ctx)
-
-		if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
-			hj.initEmitting()
-			return hj.nextInternal(ctx)
+			if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
+				hj.initEmittingUnmatched()
+				continue
+			}
+			return hj.prober.batch
+		case hjEmittingUnmatched:
+			hj.emitUnmatched()
+			return hj.prober.batch
+		default:
+			execerror.VectorizedInternalPanic("hash joiner in unhandled state")
+			// This code is unreachable, but the compiler cannot infer that.
+			return nil
 		}
-		return hj.prober.batch
-	case hjEmittingUnmatched:
-		hj.emitUnmatched()
-		return hj.prober.batch
-	default:
-		execerror.VectorizedInternalPanic("hash joiner in unhandled state")
-		// This code is unreachable, but the compiler cannot infer that.
-		return nil
 	}
 }
 
@@ -291,7 +289,7 @@ func (hj *hashJoinEqOp) build(ctx context.Context) {
 	hj.runningState = hjProbing
 }
 
-func (hj *hashJoinEqOp) initEmitting() {
+func (hj *hashJoinEqOp) initEmittingUnmatched() {
 	hj.runningState = hjEmittingUnmatched
 
 	// Set all elements in the probe columns of the output batch to null.
