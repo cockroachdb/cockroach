@@ -791,6 +791,17 @@ func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.No
 	}, nil
 }
 
+// ConstructRecursiveCTE is part of the exec.Factory interface.
+func (ef *execFactory) ConstructRecursiveCTE(
+	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string,
+) (exec.Node, error) {
+	return &recursiveCTENode{
+		initial:        initial.(planNode),
+		genIterationFn: fn,
+		label:          label,
+	}, nil
+}
+
 // ConstructProjectSet is part of the exec.Factory interface.
 func (ef *execFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,

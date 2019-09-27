@@ -12,7 +12,8 @@ package tree
 
 // With represents a WITH statement.
 type With struct {
-	CTEList []*CTE
+	Recursive bool
+	CTEList   []*CTE
 }
 
 // CTE represents a common table expression inside of a WITH clause.
@@ -27,6 +28,9 @@ func (node *With) Format(ctx *FmtCtx) {
 		return
 	}
 	ctx.WriteString("WITH ")
+	if node.Recursive {
+		ctx.WriteString("RECURSIVE ")
+	}
 	for i, cte := range node.CTEList {
 		if i != 0 {
 			ctx.WriteString(", ")
@@ -34,6 +38,7 @@ func (node *With) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&cte.Name)
 		ctx.WriteString(" AS (")
 		ctx.FormatNode(cte.Stmt)
-		ctx.WriteString(") ")
+		ctx.WriteString(")")
 	}
+	ctx.WriteByte(' ')
 }
