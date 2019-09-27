@@ -679,48 +679,6 @@ INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 100)
 ----
 error (0A000): generate_series(): generator functions are not allowed in RETURNING
 
-# Correlated subquery.
-build
-SELECT * FROM xyz WHERE EXISTS (SELECT * FROM [INSERT INTO abcde VALUES (y, y+1) RETURNING *])
-----
-select
- ├── columns: x:1(string!null) y:2(int) z:3(float)
- ├── scan xyz
- │    └── columns: x:1(string!null) y:2(int) z:3(float)
- └── filters
-      └── exists [type=bool]
-           └── project
-                ├── columns: a:4(int!null) b:5(int) c:6(int!null) d:7(int) e:8(int)
-                └── insert abcde
-                     ├── columns: a:4(int!null) b:5(int) c:6(int!null) d:7(int) e:8(int) rowid:9(int!null)
-                     ├── insert-mapping:
-                     │    ├──  column1:10 => a:4
-                     │    ├──  column2:11 => b:5
-                     │    ├──  column12:12 => c:6
-                     │    ├──  column14:14 => d:7
-                     │    ├──  column1:10 => e:8
-                     │    └──  column13:13 => rowid:9
-                     └── project
-                          ├── columns: column14:14(int) column1:10(int) column2:11(int) column12:12(int!null) column13:13(int)
-                          ├── project
-                          │    ├── columns: column12:12(int!null) column13:13(int) column1:10(int) column2:11(int)
-                          │    ├── values
-                          │    │    ├── columns: column1:10(int) column2:11(int)
-                          │    │    └── tuple [type=tuple{int, int}]
-                          │    │         ├── variable: y [type=int]
-                          │    │         └── plus [type=int]
-                          │    │              ├── variable: y [type=int]
-                          │    │              └── const: 1 [type=int]
-                          │    └── projections
-                          │         ├── const: 10 [type=int]
-                          │         └── function: unique_rowid [type=int]
-                          └── projections
-                               └── plus [type=int]
-                                    ├── plus [type=int]
-                                    │    ├── variable: column2 [type=int]
-                                    │    └── variable: column12 [type=int]
-                                    └── const: 1 [type=int]
-
 # ------------------------------------------------------------------------------
 # Tests with target column names.
 # ------------------------------------------------------------------------------
