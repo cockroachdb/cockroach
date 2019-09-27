@@ -52,6 +52,10 @@ type CopySliceArgs struct {
 	// selection vector is applied to the source vector, but the results are
 	// copied densely into the destination vector.
 	SelOnDest bool
+	// SkipTuples, if set, indicates which tuples should not be copied, namely,
+	// the tuple Sel64[idx] will be skipped if SkipTuples[idx] is true.
+	// NOTE: this can only be set when Sel64 is set and SelOnDest is false.
+	SkipTuples []bool
 }
 
 // Vec is an interface that represents a column vector that's accessible by

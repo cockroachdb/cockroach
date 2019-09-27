@@ -967,7 +967,8 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 					Src:       valCol,
 					SrcEndIdx: uint64(nResults),
 				},
-				Sel64: prober.buildIdx,
+				Sel64:      prober.buildIdx,
+				SkipTuples: prober.probeRowUnmatched,
 			},
 		)
 		if prober.spec.outer {

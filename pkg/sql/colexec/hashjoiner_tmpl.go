@@ -230,11 +230,6 @@ func _COLLECT_RIGHT_OUTER(
 				// If currentID == 0, nobody will look at this again since
 				// probeRowUnmatched will have been set - so don't populate this with
 				// a garbage value.
-				// TODO(yuzefovich): the comment above is not entirely correct. In
-				// congregate(), we always copy the full vector of actual values that
-				// correspond to the tuples in buildIdx slice first and then set the
-				// nulls where needed. It would be nice to copy the values only for
-				// those indices for which probeRowUnmatched[i] is false.
 				prober.buildIdx[nResults] = currentID - 1
 			}
 			// {{if .UseSel}}

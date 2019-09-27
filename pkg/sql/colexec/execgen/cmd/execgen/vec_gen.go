@@ -33,8 +33,8 @@ func genVec(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 	s = replaceManipulationFuncs(".LTyp", s)
 
-	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 6)
-	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "LTyp" .LTyp "SelOnDest" $6}}`)
+	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 7)
+	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "LTyp" .LTyp "SelOnDest" $6 "SkipTuples" $7}}`)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("vec_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

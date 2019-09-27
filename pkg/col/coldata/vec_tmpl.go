@@ -76,12 +76,22 @@ func (m *memColumn) Append(args SliceArgs) {
 
 // {{/*
 func _COPY_WITH_SEL(
-	m *memColumn, args CopySliceArgs, fromCol, toCol _GOTYPESLICE, sel interface{}, _SEL_ON_DEST bool,
+	m *memColumn,
+	args CopySliceArgs,
+	fromCol, toCol _GOTYPESLICE,
+	sel interface{},
+	_SEL_ON_DEST bool,
+	_SKIP_TUPLES bool,
 ) { // */}}
-	// {{define "copyWithSel"}}
+	// {{define "copyWithSel" -}}
 	if args.Src.MaybeHasNulls() {
 		nulls := args.Src.Nulls()
 		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+			// {{if .SkipTuples }}
+			if args.SkipTuples[i] {
+				continue
+			}
+			// {{end}}
 			if nulls.NullAt64(uint64(selIdx)) {
 				// {{if .SelOnDest}}
 				// Remove an unused warning in some cases.
@@ -104,6 +114,11 @@ func _COPY_WITH_SEL(
 	}
 	// No Nulls.
 	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+		// {{if .SkipTuples }}
+		if args.SkipTuples[i] {
+			continue
+		}
+		// {{end}}
 		selIdx := sel[int(args.SrcStartIdx)+i]
 		v := execgen.UNSAFEGET(fromCol, int(selIdx))
 		// {{if .SelOnDest}}
@@ -119,6 +134,14 @@ func _COPY_WITH_SEL(
 // */}}
 
 func (m *memColumn) Copy(args CopySliceArgs) {
+	if len(args.SkipTuples) > 0 {
+		if args.SelOnDest {
+			panic("both SelOnDest and SkipTuples are set")
+		}
+		if args.Sel64 == nil {
+			panic("SkipTuples is set when Sel64 is unset")
+		}
+	}
 	if !args.SelOnDest {
 		// We're about to overwrite this entire range, so unset all the nulls.
 		m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
@@ -136,17 +159,21 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 		if args.Sel64 != nil {
 			sel := args.Sel64
 			if args.SelOnDest {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
+				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true, false)
 			} else {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
+				if len(args.SkipTuples) > 0 {
+					_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false, true)
+				} else {
+					_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false, false)
+				}
 			}
 			return
 		} else if args.Sel != nil {
 			sel := args.Sel
 			if args.SelOnDest {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
+				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true, false)
 			} else {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
+				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false, false)
 			}
 			return
 		}
