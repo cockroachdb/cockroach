@@ -96,7 +96,7 @@ type scope struct {
 type cteSource struct {
 	name         tree.AliasClause
 	cols         []scopeColumn
-	originalExpr tree.SelectStatement
+	originalExpr tree.Statement
 	expr         memo.RelExpr
 	id           opt.WithID
 }
