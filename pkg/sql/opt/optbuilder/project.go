@@ -58,6 +58,16 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 	return b.factory.ConstructProject(input, projections, passthrough)
 }
 
+// dropOrderingAndExtraCols removes the ordering in the scope and projects away
+// any extra columns.
+func (b *Builder) dropOrderingAndExtraCols(s *scope) {
+	s.ordering = nil
+	if len(s.extraCols) > 0 {
+		s.extraCols = nil
+		s.expr = b.constructProject(s.expr, s.cols)
+	}
+}
+
 // analyzeProjectionList analyzes the given list of SELECT clause expressions,
 // and adds the resulting aliases and typed expressions to outScope. See the
 // header comment for analyzeSelectList.

@@ -6036,7 +6036,11 @@ with_clause:
     /* SKIP DOC */
     $$.val = &tree.With{CTEList: $2.ctes()}
   }
-| WITH RECURSIVE cte_list { return unimplementedWithIssue(sqllex, 21085) }
+| WITH RECURSIVE cte_list
+  {
+    /* SKIP DOC */
+    $$.val = &tree.With{Recursive: true, CTEList: $3.ctes()}
+  }
 
 cte_list:
   common_table_expr

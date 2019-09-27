@@ -2448,3 +2448,30 @@ build
 SELECT 3::decimal IN (SELECT 1::int)
 ----
 error (22023): unsupported comparison operator: <decimal> IN <tuple{int}>
+
+build
+SELECT 'foo ' || (SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT 1 ] ORDER BY level)
+----
+project
+ ├── columns: "?column?":9(string)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── concat [type=string]
+           ├── const: 'foo ' [type=string]
+           └── subquery [type=string]
+                └── max1-row
+                     ├── columns: tree:2(string)
+                     └── project
+                          ├── columns: tree:2(string)
+                          └── project
+                               ├── columns: tree:2(string) level:3(int)
+                               └── explain
+                                    ├── columns: tree:2(string) level:3(int) node_type:4(string) field:5(string) description:6(string) columns:7(string) ordering:8(string)
+                                    ├── mode: verbose
+                                    └── project
+                                         ├── columns: "?column?":1(int!null)
+                                         ├── values
+                                         │    └── tuple [type=tuple]
+                                         └── projections
+                                              └── const: 1 [type=int]

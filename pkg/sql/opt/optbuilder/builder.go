@@ -91,7 +91,6 @@ type Builder struct {
 	evalCtx    *tree.EvalContext
 	catalog    cat.Catalog
 	scopeAlloc []scope
-	ctes       []cteSource
 
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling

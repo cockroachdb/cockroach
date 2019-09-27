@@ -863,6 +863,43 @@ define WithScanPrivate {
     OutCols ColList
 }
 
+# RecursiveCTE implements the logic of a recursive CTE:
+#  * the Initial query is evaluated; the results are emitted and also saved into
+#    a "working table".
+#  * so long as the working table is not empty:
+#    - the Recursive query (which refers to the working table using a specific
+#      WithID) is evaluated; the results are emitted and also saved into a new
+#      "working table" for the next iteration.
+[Relational]
+define RecursiveCTE {
+    Initial RelExpr
+    Recursive RelExpr
+
+    _ RecursiveCTEPrivate
+}
+
+[Private]
+define RecursiveCTEPrivate {
+    # Name is used to identify the CTE being referenced for debugging purposes.
+    Name string
+
+    # WithID is the ID through which the Recursive expression refers to the
+    # current working table.
+    WithID WithID
+
+    # InitialCols are the columns produced by the initial expression.
+    InitialCols ColList
+
+
+    # RecursiveCols are the columns produced by the recursive expression, that
+    # map 1-1 to InitialCols.
+    RecursiveCols ColList
+
+    # OutCols are the columns produced by the RecursiveCTE operator; they map
+    # 1-1 to InitialCols and to RecursiveCols.
+    OutCols ColList
+}
+
 # FakeRel is a mock relational operator used for testing; its logical properties
 # are pre-determined and stored in the private. It can be used as the child of
 # an operator for which we are calculating properties or statistics.
