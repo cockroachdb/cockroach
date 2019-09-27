@@ -77,7 +77,7 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
-type testRunner func(*testing.T, []tuples, []coltypes.T, tuples, verifier, func([]Operator) (Operator, error))
+type testRunner func(*testing.T, []tuples, [][]coltypes.T, tuples, verifier, func([]Operator) (Operator, error))
 
 // variableOutputBatchSizeInitializer is implemented by operators that can be
 // initialized with variable output size batches. This allows runTests to
@@ -107,7 +107,7 @@ func runTests(
 func runTestsWithTyps(
 	t *testing.T,
 	tups []tuples,
-	typs []coltypes.T,
+	typs [][]coltypes.T,
 	expected tuples,
 	verifier verifier,
 	constructor func(inputs []Operator) (Operator, error),
@@ -132,8 +132,12 @@ func runTestsWithTyps(
 		}
 		opConstructor := func(injectAllNulls bool) Operator {
 			inputSources := make([]Operator, len(tups))
+			var inputTypes []coltypes.T
 			for i, tup := range tups {
-				input := newOpTestInput(1 /* batchSize */, tup, typs)
+				if typs != nil {
+					inputTypes = typs[i]
+				}
+				input := newOpTestInput(1 /* batchSize */, tup, inputTypes)
 				input.injectAllNulls = injectAllNulls
 				inputSources[i] = input
 			}
@@ -190,7 +194,7 @@ func runTestsWithTyps(
 func runTestsWithoutAllNullsInjection(
 	t *testing.T,
 	tups []tuples,
-	typs []coltypes.T,
+	typs [][]coltypes.T,
 	expected tuples,
 	verifier verifier,
 	constructor func(inputs []Operator) (Operator, error),
@@ -214,11 +218,17 @@ func runTestsWithoutAllNullsInjection(
 		// output on its second Next call (we need the first call to Next to get a
 		// reference to a batch to modify), and a second time to modify the batch
 		// and verify that this does not change the operator output.
-		var secondBatchHasSelection, secondBatchHasNulls bool
+		var (
+			secondBatchHasSelection, secondBatchHasNulls bool
+			inputTypes                                   []coltypes.T
+		)
 		for round := 0; round < 2; round++ {
 			inputSources := make([]Operator, len(tups))
 			for i, tup := range tups {
-				inputSources[i] = newOpTestInput(1 /* batchSize */, tup, typs)
+				if typs != nil {
+					inputTypes = typs[i]
+				}
+				inputSources[i] = newOpTestInput(1 /* batchSize */, tup, inputTypes)
 			}
 			op, err := constructor(inputSources)
 			if err != nil {
@@ -272,8 +282,12 @@ func runTestsWithoutAllNullsInjection(
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
 		inputSources := make([]Operator, len(tups))
+		var inputTypes []coltypes.T
 		for i, tup := range tups {
-			input := newOpTestInput(1 /* batchSize */, tup, typs)
+			if typs != nil {
+				inputTypes = typs[i]
+			}
+			input := newOpTestInput(1 /* batchSize */, tup, inputTypes)
 			input.injectRandomNulls = true
 			inputSources[i] = input
 		}
@@ -302,7 +316,7 @@ func runTestsWithoutAllNullsInjection(
 // - test is a function that takes a list of input Operators and performs testing
 // with t.
 func runTestsWithFn(
-	t *testing.T, tups []tuples, typs []coltypes.T, test func(t *testing.T, inputs []Operator),
+	t *testing.T, tups []tuples, typs [][]coltypes.T, test func(t *testing.T, inputs []Operator),
 ) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -310,13 +324,20 @@ func runTestsWithFn(
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
 				inputSources := make([]Operator, len(tups))
+				var inputTypes []coltypes.T
 				if useSel {
 					for i, tup := range tups {
-						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, typs)
+						if typs != nil {
+							inputTypes = typs[i]
+						}
+						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, inputTypes)
 					}
 				} else {
 					for i, tup := range tups {
-						inputSources[i] = newOpTestInput(batchSize, tup, typs)
+						if typs != nil {
+							inputTypes = typs[i]
+						}
+						inputSources[i] = newOpTestInput(batchSize, tup, inputTypes)
 					}
 				}
 				test(t, inputSources)

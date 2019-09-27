@@ -104,6 +104,32 @@ func init() {
 			leftTypes:  []coltypes.T{coltypes.Int64},
 			rightTypes: []coltypes.T{coltypes.Int64},
 
+			// Test an empty build table.
+			leftTuples: tuples{},
+			rightTuples: tuples{
+				{-1},
+				{1},
+				{3},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			joinType:      sqlbase.JoinType_FULL_OUTER,
+			buildDistinct: true,
+
+			expectedTuples: tuples{
+				{nil, -1},
+				{nil, 1},
+				{nil, 3},
+			},
+		},
+		{
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
+
 			leftTuples: tuples{
 				{0},
 				{1},
@@ -743,6 +769,7 @@ func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, tc := range tcs {
 		inputs := []tuples{tc.leftTuples, tc.rightTuples}
+		typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
 
 		buildFlags := []bool{false}
 		if tc.buildDistinct {
@@ -751,16 +778,18 @@ func TestHashJoiner(t *testing.T) {
 
 		for _, buildDistinct := range buildFlags {
 			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
-				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
-					leftSource, rightSource := sources[0], sources[1]
-					return NewEqHashJoinerOp(
-						leftSource, rightSource,
-						tc.leftEqCols, tc.rightEqCols,
-						tc.leftOutCols, tc.rightOutCols,
-						tc.leftTypes, tc.rightTypes,
-						tc.buildRightSide, tc.buildDistinct,
-						tc.joinType)
-				})
+				runTestsWithTyps(
+					t, inputs, typs, tc.expectedTuples, unorderedVerifier,
+					func(sources []Operator) (Operator, error) {
+						leftSource, rightSource := sources[0], sources[1]
+						return NewEqHashJoinerOp(
+							leftSource, rightSource,
+							tc.leftEqCols, tc.rightEqCols,
+							tc.leftOutCols, tc.rightOutCols,
+							tc.leftTypes, tc.rightTypes,
+							tc.buildRightSide, tc.buildDistinct,
+							tc.joinType)
+					})
 			})
 
 		}
