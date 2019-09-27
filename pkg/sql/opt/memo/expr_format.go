@@ -208,17 +208,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *WithExpr:
-		w := e.(*WithExpr)
-		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), w.ID)
-		if w.Name != "" {
-			fmt.Fprintf(f.Buffer, " (%s)", w.Name)
+		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), t.ID)
+		if t.Name != "" {
+			fmt.Fprintf(f.Buffer, " (%s)", t.Name)
 		}
 
 	case *WithScanExpr:
-		ws := e.(*WithScanExpr)
-		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), ws.ID)
-		if ws.Name != "" {
-			fmt.Fprintf(f.Buffer, " (%s)", ws.Name)
+		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), t.ID)
+		if t.Name != "" {
+			fmt.Fprintf(f.Buffer, " (%s)", t.Name)
 		}
 
 	default:
@@ -467,6 +465,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		if m != "" {
 			tp.Childf("mode: %s", m)
+		}
+
+	case *RecursiveCTEExpr:
+		if !f.HasFlags(ExprFmtHideColumns) {
+			tp.Childf("working table binding: &%d", t.WithID)
+			f.formatColList(e, tp, "initial columns:", t.InitialCols)
+			f.formatColList(e, tp, "recursive columns:", t.RecursiveCols)
 		}
 
 	default:

@@ -1356,6 +1356,10 @@ func TestParse(t *testing.T) {
 
 		// Regression for #15926
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
+
+		{`WITH cte AS (SELECT 1) SELECT * FROM cte`},
+		{`WITH cte (x) AS (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2`},
+		{`WITH RECURSIVE cte (x) AS (SELECT 1), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT 1`},
 	}
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
@@ -3128,8 +3132,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b TIMETZ)`, 26097, `type`},
 
 		{`INSERT INTO a VALUES (1) ON CONFLICT (x) WHERE x > 3 DO NOTHING`, 32557, ``},
-
-		{`WITH RECURSIVE a AS (TABLE b) SELECT c`, 21085, ``},
 
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``},
 		{`UPDATE foo SET a.b = 1`, 27792, ``},

@@ -167,6 +167,10 @@ func (c *RowContainer) UnsafeReset(ctx context.Context) error {
 
 // Close releases the memory associated with the RowContainer.
 func (c *RowContainer) Close(ctx context.Context) {
+	if c == nil {
+		// Allow Close on an uninitialized container.
+		return
+	}
 	c.chunks = nil
 	c.varSizedColumns = nil
 	c.memAcc.Close(ctx)

@@ -294,7 +294,15 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error {
 	a.run.curRightRow = 0
 	a.run.rightRows.Clear(params.ctx)
-	rowResultWriter := NewRowResultWriter(a.run.rightRows)
+	return runPlanInsidePlan(params, plan, a.run.rightRows)
+}
+
+// runPlanInsidePlan is used to run a plan and gather the results in a row
+// container, as part of the execution of an "outer" plan.
+func runPlanInsidePlan(
+	params runParams, plan *planTop, rowContainer *rowcontainer.RowContainer,
+) error {
+	rowResultWriter := NewRowResultWriter(rowContainer)
 	recv := MakeDistSQLReceiver(
 		params.ctx, rowResultWriter, tree.Rows,
 		params.extendedEvalCtx.ExecCfg.RangeDescriptorCache,
@@ -339,7 +347,6 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 		return recv.commErr
 	}
 	return rowResultWriter.err
-
 }
 
 func (a *applyJoinNode) Values() tree.Datums {
