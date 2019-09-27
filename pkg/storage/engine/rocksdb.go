@@ -3367,9 +3367,9 @@ func ExportToSst(
 
 func notFoundErrOrDefault(err error) error {
 	errStr := err.Error()
-	if strings.Contains(errStr, "No such file or directory") ||
-		strings.Contains(errStr, "File not found") ||
-		strings.Contains(errStr, "The system cannot find the path specified") {
+	if strings.Contains(errStr, "No such") ||
+		strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "cannot find") {
 		return os.ErrNotExist
 	}
 	return err
