@@ -112,6 +112,32 @@ func init() {
 			leftTypes:  []coltypes.T{coltypes.Int64},
 			rightTypes: []coltypes.T{coltypes.Int64},
 
+			// Test an empty build table.
+			leftTuples: tuples{},
+			rightTuples: tuples{
+				{-1},
+				{1},
+				{3},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+
+			joinType:         sqlbase.JoinType_FULL_OUTER,
+			leftEqColsAreKey: true,
+
+			expectedTuples: tuples{
+				{nil, -1},
+				{nil, 1},
+				{nil, 3},
+			},
+		},
+		{
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
+
 			leftTuples: tuples{
 				{0},
 				{1},
@@ -175,7 +201,9 @@ func init() {
 			rightTypes: []coltypes.T{coltypes.Int64},
 
 			// Test right outer join with non-distinct left build table with an
-			// unmatched row from the right followed by a matched one.
+			// unmatched row from the right followed by a matched one. This is a
+			// regression test for #39303 in order to check that probeRowUnmatched
+			// is updated correctly in case of non-distinct build table.
 			leftTuples: tuples{
 				{0},
 				{0},
@@ -191,9 +219,8 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:       sqlbase.JoinType_RIGHT_OUTER,
-			buildDistinct:  false,
-			buildRightSide: false,
+			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			rightEqColsAreKey: true,
 
 			expectedTuples: tuples{
 				{nil, 1},
@@ -886,7 +913,8 @@ func TestHashJoiner(t *testing.T) {
 
 	for _, tc := range tcs {
 		inputs := []tuples{tc.leftTuples, tc.rightTuples}
-		runTests(t, inputs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
+		typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
+		runTestsWithTyps(t, inputs, typs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
 			spec := createSpecForHashJoiner(tc)
 			result, err := NewColOperator(ctx, flowCtx, spec, sources)
 			if err != nil {
