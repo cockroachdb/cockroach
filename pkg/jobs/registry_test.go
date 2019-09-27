@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -182,7 +183,7 @@ func TestRegistryGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -191,18 +192,39 @@ func TestRegistryGC(t *testing.T) {
 	earlier := ts.Add(-1 * time.Hour)
 	muchEarlier := ts.Add(-2 * time.Hour)
 
-	writeJob := func(created, finished time.Time, status Status) string {
-		ft := timeutil.ToUnixMicros(finished)
+	setMutations := func(mutations []sqlbase.DescriptorMutation) sqlbase.ID {
+		desc := sqlbase.GetTableDescriptor(kvDB, "t", "to_be_mutated")
+		desc.Mutations = mutations
+		if err := kvDB.Put(
+			context.TODO(),
+			sqlbase.MakeDescMetadataKey(desc.GetID()),
+			sqlbase.WrapDescriptor(desc),
+		); err != nil {
+			t.Fatal(err)
+		}
+		return desc.GetID()
+	}
+
+	writeJob := func(name string, created, finished time.Time, status Status) string {
+		if _, err := sqlDB.Exec(`
+CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS SELECT 1`); err != nil {
+			t.Fatal(err)
+		}
 		payload, err := protoutil.Marshal(&jobspb.Payload{
-			Lease:          &jobspb.Lease{NodeID: 1, Epoch: 1},
-			Details:        jobspb.WrapPayloadDetails(jobspb.BackupDetails{}),
-			FinishedMicros: ft,
+			Description: name,
+			Lease:       &jobspb.Lease{NodeID: 1, Epoch: 1},
+			// register a mutation on the table so that jobs that reference
+			// the table are not considered orphaned
+			DescriptorIDs:  []sqlbase.ID{setMutations([]sqlbase.DescriptorMutation{{}})},
+			Details:        jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
+			StartedMicros:  timeutil.ToUnixMicros(created),
+			FinishedMicros: timeutil.ToUnixMicros(finished),
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		progress, err := protoutil.Marshal(&jobspb.Progress{
-			Details: jobspb.WrapProgressDetails(jobspb.BackupProgress{}),
+			Details: jobspb.WrapProgressDetails(jobspb.SchemaChangeProgress{}),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -215,23 +237,37 @@ func TestRegistryGC(t *testing.T) {
 		return strconv.Itoa(int(id))
 	}
 
-	j1 := writeJob(muchEarlier, time.Time{}, StatusRunning)
-	j2 := writeJob(muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded)
+	oldRunningJob := writeJob("old_running", muchEarlier, time.Time{}, StatusRunning)
+	oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded)
+	oldSucceededJob2 := writeJob("old_succeeded2", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded)
+	newRunningJob := writeJob("new_running", earlier, time.Time{}, StatusRunning)
+	newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StatusSucceeded)
 
-	j3 := writeJob(earlier, time.Time{}, StatusRunning)
-	j4 := writeJob(earlier, earlier.Add(time.Minute), StatusSucceeded)
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+		{oldRunningJob}, {oldSucceededJob}, {oldSucceededJob2}, {newRunningJob}, {newSucceededJob}})
 
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j2}, {j3}, {j4}})
 	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
 		t.Fatal(err)
 	}
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j3}, {j4}})
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+		{oldRunningJob}, {newRunningJob}, {newSucceededJob}})
+
 	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
 		t.Fatal(err)
 	}
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j3}, {j4}})
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+		{oldRunningJob}, {newRunningJob}, {newSucceededJob}})
+
 	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
 		t.Fatal(err)
 	}
-	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{{j1}, {j3}})
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+		{oldRunningJob}, {newRunningJob}})
+
+	// force the running jobs to become orphaned
+	_ = setMutations(nil)
+	if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
+		t.Fatal(err)
+	}
+	db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{})
 }
