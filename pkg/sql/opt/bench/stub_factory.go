@@ -339,6 +339,12 @@ func (f *stubFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Nod
 	return struct{}{}, nil
 }
 
+func (f *stubFactory) ConstructRecursiveCTE(
+	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
 func (f *stubFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node,
 ) (exec.Node, error) {

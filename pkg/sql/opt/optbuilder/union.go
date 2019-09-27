@@ -18,25 +18,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// buildUnion builds a set of memo groups that represent the given union
+// buildUnionClause builds a set of memo groups that represent the given union
 // clause.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildUnion(
+func (b *Builder) buildUnionClause(
 	clause *tree.UnionClause, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	leftScope := b.buildSelect(clause.Left, desiredTypes, inScope)
 	// Try to propagate types left-to-right, if we didn't already have desired
 	// types.
 	if len(desiredTypes) == 0 {
-		desiredTypes = make([]*types.T, len(leftScope.cols))
-		for i := range leftScope.cols {
-			desiredTypes[i] = leftScope.cols[i].typ
-		}
+		desiredTypes = leftScope.makeColumnTypes()
 	}
 	rightScope := b.buildSelect(clause.Right, desiredTypes, inScope)
+	return b.buildSetOp(clause.Type, clause.All, inScope, leftScope, rightScope)
+}
 
+func (b *Builder) buildSetOp(
+	typ tree.UnionType, all bool, inScope, leftScope, rightScope *scope,
+) (outScope *scope) {
 	// Remove any hidden columns, as they are not included in the Union.
 	leftScope.removeHiddenCols()
 	rightScope.removeHiddenCols()
@@ -55,7 +57,7 @@ func (b *Builder) buildUnion(
 		leftScope, rightScope,
 		true, /* tolerateUnknownLeft */
 		true, /* tolerateUnknownRight */
-		clause.Type.String(),
+		typ.String(),
 	)
 
 	if propagateTypesLeft {
@@ -69,7 +71,7 @@ func (b *Builder) buildUnion(
 	// values from both the left and right relations). This is not necessary for
 	// INTERSECT or EXCEPT, since these operations are basically filters on the
 	// left relation.
-	if clause.Type == tree.UnionOp {
+	if typ == tree.UnionOp {
 		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
 		for i := range leftScope.cols {
 			c := &leftScope.cols[i]
@@ -89,8 +91,8 @@ func (b *Builder) buildUnion(
 	right := rightScope.expr.(memo.RelExpr)
 	private := memo.SetPrivate{LeftCols: leftCols, RightCols: rightCols, OutCols: newCols}
 
-	if clause.All {
-		switch clause.Type {
+	if all {
+		switch typ {
 		case tree.UnionOp:
 			outScope.expr = b.factory.ConstructUnionAll(left, right, &private)
 		case tree.IntersectOp:
@@ -99,7 +101,7 @@ func (b *Builder) buildUnion(
 			outScope.expr = b.factory.ConstructExceptAll(left, right, &private)
 		}
 	} else {
-		switch clause.Type {
+		switch typ {
 		case tree.UnionOp:
 			outScope.expr = b.factory.ConstructUnion(left, right, &private)
 		case tree.IntersectOp:
