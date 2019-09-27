@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -363,11 +364,28 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 	}
 }
 
+// isOrphaned tries to detect if there are no mutations left to be done for the
+// job which will make it a candidate for garbage collection. Jobs can be left
+// in such inconsistent state if they fail before being removed from the jobs table.
+func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (bool, error) {
+	if payload.Type() != jobspb.TypeSchemaChange {
+		return false, nil
+	}
+	for _, id := range payload.DescriptorIDs {
+		txn := r.db.NewTxn(ctx, "get_table_and_db_descrs")
+		td, err := sqlbase.GetTableDescFromID(ctx, txn, id)
+		if err == nil && len(td.GetMutations()) != 0 {
+			return false, nil
+		}
+		txn.Commit(ctx)
+	}
+	return true, nil
+}
+
 func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
-	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) AND created < $4 ORDER BY created LIMIT 1000`
-	rows, err := r.ex.Query(
-		ctx, "gc-jobs", nil /* txn */, stmt, StatusFailed, StatusSucceeded, StatusCanceled, olderThan,
-	)
+	const stmt = `SELECT id, payload, status FROM system.jobs WHERE created < $1
+		      ORDER BY created LIMIT 1000`
+	rows, err := r.ex.Query(ctx, "gc-jobs", nil /* txn */, stmt, olderThan)
 	if err != nil {
 		return err
 	}
@@ -380,18 +398,33 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 		if err != nil {
 			return err
 		}
-		if payload.FinishedMicros < oldMicros {
+		remove := false
+		switch Status(*row[2].(*tree.DString)) {
+		case StatusRunning, StatusPending:
+			done, err := r.isOrphaned(ctx, payload)
+			if err != nil {
+				return err
+			}
+			remove = done && payload.StartedMicros < oldMicros
+		case StatusSucceeded, StatusCanceled, StatusFailed:
+			remove = payload.FinishedMicros < oldMicros
+		}
+		if remove {
 			toDelete.Array = append(toDelete.Array, row[0])
 		}
 	}
 	if len(toDelete.Array) > 0 {
-
 		log.Infof(ctx, "cleaning up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
-		if _ /* cols */, err := r.ex.Exec(
+		var nDeleted int
+		if nDeleted, err = r.ex.Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
 		); err != nil {
 			return errors.Wrap(err, "deleting old jobs")
+		}
+		if nDeleted != len(toDelete.Array) {
+			return errors.Errorf("asked to delete %d rows but %d were actually deleted",
+				len(toDelete.Array), nDeleted)
 		}
 	}
 	return nil
