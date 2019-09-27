@@ -33,10 +33,11 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 		Message string `xml:"message,attr"`
 	}
 	type TestCase struct {
-		Name      string  `xml:"name,attr"`
-		ClassName string  `xml:"classname,attr"`
-		Failure   Failure `xml:"failure,omitempty"`
-		Error     Error   `xml:"error,omitempty"`
+		Name      string    `xml:"name,attr"`
+		ClassName string    `xml:"classname,attr"`
+		Failure   Failure   `xml:"failure,omitempty"`
+		Error     Error     `xml:"error,omitempty"`
+		Skipped   *struct{} `xml:"failure,omitempty"`
 	}
 	type TestSuite struct {
 		XMLName   xml.Name   `xml:"testsuite"`
@@ -55,6 +56,9 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 	var failedTestToIssue = make(map[string]string)
 	for _, testCase := range testSuite.TestCases {
 		testName := fmt.Sprintf("%s.%s", testCase.ClassName, testCase.Name)
+		if testCase.Skipped != nil {
+			continue
+		}
 		testPassed := len(testCase.Failure.Message) == 0 && len(testCase.Error.Message) == 0
 		tests = append(tests, testName)
 		passed = append(passed, testPassed)
