@@ -33,7 +33,7 @@ func TestConst(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, []coltypes.T{coltypes.Int64}, tc.expected, orderedVerifier,
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]coltypes.T{{coltypes.Int64}}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
 				return NewConstOp(input[0], coltypes.Int64, int64(9), 1)
 			})
@@ -56,7 +56,7 @@ func TestConstNull(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, []coltypes.T{coltypes.Int64}, tc.expected, orderedVerifier,
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]coltypes.T{{coltypes.Int64}}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
 				return NewConstNullOp(input[0], 1, coltypes.Int64), nil
 			})
