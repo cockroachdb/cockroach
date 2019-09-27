@@ -76,7 +76,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 
 	var ctes []cteSource
 	if upd.With != nil {
-		inScope, ctes = b.buildCTE(upd.With.CTEList, inScope)
+		inScope, ctes = b.buildCTEs(upd.With, inScope)
 	}
 
 	// UPDATE xx AS yy - we want to know about xx (tn) because

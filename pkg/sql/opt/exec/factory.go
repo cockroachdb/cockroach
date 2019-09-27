@@ -476,11 +476,15 @@ type Factory interface {
 
 	// ConstructBuffer constructs a node whose input can be referenced from
 	// elsewhere in the query.
-	ConstructBuffer(value Node, label string) (Node, error)
+	ConstructBuffer(input Node, label string) (Node, error)
 
 	// ConstructScanBuffer constructs a node which refers to a node constructed by
-	// ConstructBuffer.
+	// ConstructBuffer or ConstructRecursiveCTEBuffer.
 	ConstructScanBuffer(ref Node, label string) (Node, error)
+
+	// ConstructRecursiveCTE constructs a node whose input can be referenced
+	// from elsewhere in the query. The no
+	ConstructRecursiveCTE(initial Node, fn RecursiveCTEIterationFn, label string) (Node, error)
 
 	// ConstructControlJobs creates a node that implements PAUSE/CANCEL/RESUME
 	// JOBS.
@@ -616,3 +620,8 @@ type KVOption struct {
 	// If there is no value, Value is DNull.
 	Value tree.TypedExpr
 }
+
+// RecursiveCTEIterationFn creates a plan for an iteration of WITH RECURSIVE,
+// given the result of the last iteration (as a Buffer that can be used with
+// ConstructScanBuffer).
+type RecursiveCTEIterationFn func(bufferRef Node) (Plan, error)

@@ -659,6 +659,12 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 		n.plan = v.visit(n.plan)
 
+	case *recursiveCTENode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "label", n.label)
+		}
+		n.initial = v.visit(n.initial)
+
 	case *exportNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "destination", n.fileName)
@@ -796,6 +802,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&max1RowNode{}):              "max1row",
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&projectSetNode{}):           "project set",
+	reflect.TypeOf(&recursiveCTENode{}):         "recursive cte node",
 	reflect.TypeOf(&relocateNode{}):             "relocate",
 	reflect.TypeOf(&renameColumnNode{}):         "rename column",
 	reflect.TypeOf(&renameDatabaseNode{}):       "rename database",

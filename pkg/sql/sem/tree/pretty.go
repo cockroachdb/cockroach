@@ -659,7 +659,11 @@ func (node *With) docRow(p *PrettyCfg) pretty.TableRow {
 			p.bracketKeyword("AS", " (", p.Doc(cte.Stmt), ")", ""),
 		)
 	}
-	return p.row("WITH", p.commaSeparated(d...))
+	kw := "WITH"
+	if node.Recursive {
+		kw = "WITH RECURSIVE"
+	}
+	return p.row(kw, p.commaSeparated(d...))
 }
 
 func (node *Subquery) doc(p *PrettyCfg) pretty.Doc {

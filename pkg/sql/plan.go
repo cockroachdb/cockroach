@@ -176,6 +176,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &max1RowNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
+var _ planNode = &recursiveCTENode{}
 var _ planNode = &relocateNode{}
 var _ planNode = &renameColumnNode{}
 var _ planNode = &renameDatabaseNode{}

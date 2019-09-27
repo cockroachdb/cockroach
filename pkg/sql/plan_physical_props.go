@@ -88,11 +88,12 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return n.props
 	case *zigzagJoinNode:
 		return n.props
+
+	// Every other node simply has no guarantees on its output rows.
 	case *applyJoinNode:
 	case *bufferNode:
 	case *scanBufferNode:
-
-	// Every other node simply has no guarantees on its output rows.
+	case *recursiveCTENode:
 	case *CreateUserNode:
 	case *DropUserNode:
 	case *alterIndexNode:
