@@ -45,28 +45,28 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
-·                                          distributed    false             ·                   ·
-·                                          vectorized     false             ·                   ·
-root                                       ·              ·                 (a)                 ·
- ├── scan buffer node                      ·              ·                 (a)                 ·
- │                                         label          buffer 1 (t)      ·                   ·
- └── subquery                              ·              ·                 (a)                 ·
-      │                                    id             @S1               ·                   ·
-      │                                    original sql   <unknown>         ·                   ·
-      │                                    exec mode      all rows          ·                   ·
-      └── buffer node                      ·              ·                 (a)                 ·
-           │                               label          buffer 1 (t)      ·                   ·
-           └── spool                       ·              ·                 (a)                 ·
-                └── render                 ·              ·                 (a)                 ·
-                     │                     render 0       a                 ·                   ·
-                     └── run               ·              ·                 (a, rowid[hidden])  ·
-                          └── insert       ·              ·                 (a, rowid[hidden])  ·
-                               │           into           x(a, rowid)       ·                   ·
-                               │           strategy       inserter          ·                   ·
-                               └── values  ·              ·                 (column1, column4)  ·
-·                                          size           2 columns, 1 row  ·                   ·
-·                                          row 0, expr 0  1                 ·                   ·
-·                                          row 0, expr 1  unique_rowid()    ·                   ·
+·                                          distributed    false                                 ·                   ·
+·                                          vectorized     false                                 ·                   ·
+root                                       ·              ·                                     (a)                 ·
+ ├── scan buffer node                      ·              ·                                     (a)                 ·
+ │                                         label          buffer 1 (t)                          ·                   ·
+ └── subquery                              ·              ·                                     (a)                 ·
+      │                                    id             @S1                                   ·                   ·
+      │                                    original sql   INSERT INTO x VALUES (1) RETURNING a  ·                   ·
+      │                                    exec mode      all rows                              ·                   ·
+      └── buffer node                      ·              ·                                     (a)                 ·
+           │                               label          buffer 1 (t)                          ·                   ·
+           └── spool                       ·              ·                                     (a)                 ·
+                └── render                 ·              ·                                     (a)                 ·
+                     │                     render 0       a                                     ·                   ·
+                     └── run               ·              ·                                     (a, rowid[hidden])  ·
+                          └── insert       ·              ·                                     (a, rowid[hidden])  ·
+                               │           into           x(a, rowid)                           ·                   ·
+                               │           strategy       inserter                              ·                   ·
+                               └── values  ·              ·                                     (column1, column4)  ·
+·                                          size           2 columns, 1 row                      ·                   ·
+·                                          row 0, expr 0  1                                     ·                   ·
+·                                          row 0, expr 1  unique_rowid()                        ·                   ·
 
 # Regression test for #39010.
 

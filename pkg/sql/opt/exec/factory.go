@@ -516,9 +516,9 @@ type OutputOrdering sqlbase.ColumnOrdering
 
 // Subquery encapsulates information about a subquery that is part of a plan.
 type Subquery struct {
-	// ExprNode is a reference to a tree.Subquery node that has been created for
-	// this query; it is part of a scalar expression inside some Node.
-	ExprNode *tree.Subquery
+	// ExprNode is a reference to a AST node that can be used for printing the SQL
+	// of the subquery (for EXPLAIN).
+	ExprNode tree.NodeFormatter
 	Mode     SubqueryMode
 	// Root is the root Node of the plan for this subquery. This Node returns
 	// results as required for the specific Type.

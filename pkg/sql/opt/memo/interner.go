@@ -395,6 +395,10 @@ func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
+func (h *hasher) HashStatement(val tree.Statement) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
 func (h *hasher) HashColumnID(val opt.ColumnID) {
 	h.HashUint64(uint64(val))
 }
@@ -746,6 +750,10 @@ func (h *hasher) areDatumsWithTypeEqual(ldatums, rdatums tree.Datums, ltyp, rtyp
 }
 
 func (h *hasher) IsTypedExprEqual(l, r tree.TypedExpr) bool {
+	return l == r
+}
+
+func (h *hasher) IsStatementEqual(l, r tree.Statement) bool {
 	return l == r
 }
 

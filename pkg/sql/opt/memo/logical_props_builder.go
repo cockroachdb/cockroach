@@ -712,7 +712,7 @@ func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel 
 
 func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relational) {
 	// Copy over the props from the input.
-	inputProps := with.Input.Relational()
+	inputProps := with.Main.Relational()
 
 	BuildSharedProps(b.mem, with, &rel.Shared)
 
