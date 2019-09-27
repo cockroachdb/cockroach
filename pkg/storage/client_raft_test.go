@@ -4399,8 +4399,6 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/40496")
-
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
@@ -4443,7 +4441,6 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	for _, s := range mtc.stores {
 		s.SetReplicateQueueActive(true)
 	}
-
 	mtc.replicateRange(1, 1, 2)
 	// Make a key that's in the user data space.
 	keyA := append(keys.MakeTablePrefix(100), 'a')
@@ -4455,11 +4452,8 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		// Look up the replica again because we may have restarted the store.
 		replica1 = mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
 		// Put some data in the range so we'll have something to test for.
-		putReq := &roachpb.PutRequest{}
-		putReq.RequestHeader.Key = keyA
-		putReq.Value.SetInt(1)
-		_, pErr := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), putReq)
-		require.Nil(t, pErr)
+		db := mtc.Store(0).DB()
+		require.NoError(t, db.Put(ctx, keyA, 1))
 
 		// Wait for all nodes to catch up.
 		mtc.waitForValues(keyA, []int64{1, 1, 1})
@@ -4493,9 +4487,8 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		// We should always hit it.
 		withTimeout, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 		defer cancel()
-		putReq.Value.SetInt(2)
-		_, pErr = client.SendWrapped(withTimeout, mtc.stores[0].TestSender(), putReq)
-		require.NotNil(t, pErr, "expected an error when sending to a disconnected store")
+		err = db.Put(withTimeout, keyA, 2)
+		require.True(t, testutils.IsError(err, "deadline exceeded"), err)
 		// Transfer the lease back to demonstrate that the system range is still live.
 		testutils.SucceedsSoon(t, func() error {
 			return mtc.transferLeaseNonFatal(ctx, 1, target, int(lease.Replica.StoreID-1))
@@ -4505,13 +4498,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		// have been canceled.
 		disabled.Store(false)
 		// Overwrite with a new value and ensure that it propagates.
-		putReq.Value.SetInt(3)
-		// Retry because failures in stress due to liveness epoch failures can
-		// happen.
-		testutils.SucceedsSoon(t, func() error {
-			_, pErr = client.SendWrapped(ctx, mtc.stores[0].TestSender(), putReq)
-			return pErr.GoError()
-		})
+		require.NoError(t, db.Put(ctx, keyA, 3))
 		mtc.waitForValuesT(t, keyA, []int64{3, 3, 3})
 	}
 	t.Run("initial_run", runTest)
