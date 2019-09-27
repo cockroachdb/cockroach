@@ -320,7 +320,7 @@ func (r *Replica) handleChangeReplicasResult(
 		log.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
 	}
 
-	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.Desc.NextReplicaID, RemoveOptions{
+	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
 		// We destroyed the data when the batch committed so don't destroy it again.
 		DestroyData: false,
 		// In order to detect the GC queue racing with other causes of replica removal
