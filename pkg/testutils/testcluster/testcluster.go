@@ -164,6 +164,11 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		t.Fatal(err)
 	}
 
+	var errCh chan error
+	if args.ParallelStart {
+		errCh = make(chan error, nodes)
+	}
+
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
 		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
@@ -197,12 +202,27 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			//serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 			serverArgs.JoinAddr = firstListener.Addr().String()
 		}
-		if err := tc.doAddServer(t, serverArgs); err != nil {
-			t.Fatal(err)
+		if args.ParallelStart {
+			go func() {
+				errCh <- tc.doAddServer(t, serverArgs)
+			}()
+		} else {
+			if err := tc.doAddServer(t, serverArgs); err != nil {
+				t.Fatal(err)
+			}
+			// We want to wait for stores for each server in order to have predictable
+			// store IDs. Otherwise, stores can be asynchronously bootstrapped in an
+			// unexpected order (#22342).
+			tc.WaitForStores(t, tc.Servers[0].Gossip())
 		}
-		// We want to wait for stores for each server in order to have predictable
-		// store IDs. Otherwise, stores can be asynchronously bootstrapped in an
-		// unexpected order (#22342).
+	}
+
+	if args.ParallelStart {
+		for i := 0; i < nodes; i++ {
+			if err := <-errCh; err != nil {
+				t.Fatal(err)
+			}
+		}
 		tc.WaitForStores(t, tc.Servers[0].Gossip())
 	}
 
@@ -297,6 +317,9 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 
 	s, conn, _ := serverutils.StartServer(t, serverArgs)
 
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
 	if tc.replicationMode == base.ReplicationManual && len(tc.Servers) == 0 {
 		// We've already disabled the merge queue via testing knobs above, but ALTER
 		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
@@ -318,9 +341,7 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 
 	tc.Servers = append(tc.Servers, s.(*server.TestServer))
 	tc.Conns = append(tc.Conns, conn)
-	tc.mu.Lock()
 	tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
-	tc.mu.Unlock()
 	return nil
 }
 

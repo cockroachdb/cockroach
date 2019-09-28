@@ -243,6 +243,14 @@ func (rgcq *replicaGCQueue) process(
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
 		}
+
+		// Note that we do not check the replicaID at this point. If our
+		// local replica ID is behind the one in the meta descriptor, we
+		// could safely delete our local copy, but this would just force
+		// the use of a snapshot when catching up to the new replica ID.
+		// We don't normally expect to have a *higher* local replica ID
+		// than the one in the meta descriptor, but it's possible after
+		// recovering with unsafe-remove-dead-replicas.
 	} else if sameRange {
 		// We are no longer a member of this range, but the range still exists.
 		// Clean up our local data.
