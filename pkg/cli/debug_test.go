@@ -12,8 +12,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -27,11 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -131,161 +135,260 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	baseDir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-
-	// The first node gets a real store, others are just in memory.
-	storePath := filepath.Join(baseDir, "store")
-
-	clusterArgs := base.TestClusterArgs{
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {
-				StoreSpecs:      []base.StoreSpec{{Path: storePath}},
-				ScanMaxIdleTime: time.Millisecond,
-			},
-		},
-	}
-	// Start the cluster, let it replicate, then stop it. Since two
-	// nodes use in-memory stores, this automatically causes the cluster
-	// to lose its quorum.
-	//
-	// While it's running, start a transaction and write an intent to
-	// one of the range descriptors (without committing or aborting the
-	// transaction). This exercises a special case in removeDeadReplicas.
-	func() {
-		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
-		defer tc.Stopper().Stop(ctx)
-
-		// Perform a write, to ensure that pre-crash data is preserved.
-		// Creating a table causes extra friction in the test harness when
-		// we restart the cluster, so just write a setting.
-		s := sqlutils.MakeSQLRunner(tc.Conns[0])
-		s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
-
-		txn := client.NewTxn(ctx, tc.Servers[0].DB(), 1, client.RootTxn)
-		var desc roachpb.RangeDescriptor
-		// Pick one of the predefined split points.
-		rdKey := keys.RangeDescriptorKey(roachpb.RKey(keys.TimeseriesPrefix))
-		if err := txn.GetProto(ctx, rdKey, &desc); err != nil {
-			t.Fatal(err)
-		}
-		desc.NextReplicaID++
-		if err := txn.Put(ctx, rdKey, &desc); err != nil {
-			t.Fatal(err)
-		}
-
-		// At this point the intent has been written to rocksdb but this
-		// write was not synced (only the raft log append was synced). We
-		// need to force another sync, but we're far from the storage
-		// layer here so the easiest thing to do is simply perform a
-		// second write. This will force the first write to be persisted
-		// to disk (the second write may or may not make it to disk due to
-		// timing).
-		desc.NextReplicaID++
-		if err := txn.Put(ctx, rdKey, &desc); err != nil {
-			t.Fatal(err)
-		}
-
-		// We deliberately do not close this transaction so the intent is
-		// left behind.
-	}()
-
-	// Open the store directly to repair it.
-	func() {
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-
-		db, err := OpenExistingStore(storePath, stopper, false /* readOnly */)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
-
-		batch, err := removeDeadReplicas(db, map[roachpb.StoreID]struct{}{
-			2: {},
-			3: {},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if batch == nil {
-			t.Fatal("expected non-nil batch")
-		}
-		if err := batch.Commit(true); err != nil {
-			t.Fatal(err)
-		}
-		batch.Close()
-
-		// The repair process is idempotent and should give a nil batch the second time.
-		batch, err = removeDeadReplicas(db, map[roachpb.StoreID]struct{}{
-			2: {},
-			3: {},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if batch != nil {
-			batch.Close()
-			t.Fatalf("expected nil batch on second attempt")
-		}
-	}()
-
-	// Now that the data is salvaged, we can restart the cluster. The
-	// nodes with the in-memory stores will be assigned new node IDs 4
-	// and 5.
-	//
-	// This activates the adaptive zone config feature (using 5x
-	// replication for clusters of 5 nodes or more), so we must
-	// decommission nodes 2 or 3 for WaitForFullReplication to complete.
-	// (note that the cluster is working even when it doesn't consider
-	// itself fully replicated - that's what allows the decommissioning
-	// to succeed. We're just waiting for full replication so that we
-	// can validate that ranges were moved from {1,2,3} to {1,4,5}).
-	//
-	// Set replication mode to manual so that TestCluster doesn't call
-	// WaitForFullReplication before we've decommissioned the nodes.
-	clusterArgs.ReplicationMode = base.ReplicationManual
-	tc := testcluster.StartTestCluster(t, 3, clusterArgs)
-	defer tc.Stopper().Stop(ctx)
-
-	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(
-		tc.Server(0).ServingRPCAddr(),
-		tc.Server(0).NodeID(),
-		rpc.DefaultClass,
-	).Connect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	adminClient := serverpb.NewAdminClient(grpcConn)
-
-	if err := runDecommissionNodeImpl(
-		ctx, adminClient, nodeDecommissionWaitNone, []string{"2", "3"},
-	); err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		survivingNodes, totalNodes, replicationFactor int
+	}{
+		{1, 3, 3},
+		{2, 4, 4},
 	}
 
-	store, err := tc.Servers[0].Stores().GetStore(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store.SetReplicateQueueActive(true)
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
+	for _, testCase := range testCases {
+		for _, allNodesStopped := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%d/%d/r=%d,allStopped=%v", testCase.survivingNodes, testCase.totalNodes,
+				testCase.replicationFactor, allNodesStopped),
+				func(t *testing.T) {
+					baseDir, dirCleanupFn := testutils.TempDir(t)
+					defer dirCleanupFn()
 
-	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	row := s.QueryRow(t, "select replicas from [show ranges from table system.namespace] limit 1")
-	var replicaStr string
-	row.Scan(&replicaStr)
-	if replicaStr != "{1,4,5}" {
-		t.Fatalf("expected replicas on {1,4,5} but got %s", replicaStr)
-	}
+					// The surviving nodes get a real store, others are just in memory.
+					var storePaths []string
+					clusterArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{}}
+					deadReplicas := map[roachpb.StoreID]struct{}{}
 
-	row = s.QueryRow(t, "show cluster setting cluster.organization")
-	var org string
-	row.Scan(&org)
-	if org != "remove dead replicas test" {
-		t.Fatalf("expected old setting to be present, got %s instead", org)
+					for i := 0; i < testCase.totalNodes; i++ {
+						storeID := roachpb.StoreID(i + 1)
+						if i < testCase.survivingNodes {
+							path := filepath.Join(baseDir, fmt.Sprintf("store%d", storeID))
+							storePaths = append(storePaths, path)
+							// ServerArgsPerNode uses 0-based index, not node ID.
+							clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
+								StoreSpecs:      []base.StoreSpec{{Path: path}},
+								ScanMaxIdleTime: time.Millisecond,
+							}
+						} else {
+							deadReplicas[storeID] = struct{}{}
+						}
+					}
+
+					// Start the cluster, let it replicate, then stop it. Since the
+					// non-surviving nodes use in-memory stores, this automatically
+					// causes the cluster to lose its quorum.
+					//
+					// While it's running, start a transaction and write an intent to
+					// one of the range descriptors (without committing or aborting the
+					// transaction). This exercises a special case in removeDeadReplicas.
+					func() {
+						tc := testcluster.StartTestCluster(t, testCase.totalNodes, clusterArgs)
+						defer tc.Stopper().Stop(ctx)
+
+						s := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+						// Set the replication factor on all zones.
+						func() {
+							rows := s.Query(t, "show all zone configurations")
+							defer rows.Close()
+							re := regexp.MustCompile(`num_replicas = \d+`)
+							var sqls []string
+							for rows.Next() {
+								var name, configSQL string
+								if err := rows.Scan(&name, &configSQL); err != nil {
+									t.Fatal(err)
+								}
+								sqls = append(sqls, configSQL)
+							}
+							for _, sql := range sqls {
+								if re.FindString(sql) != "" {
+									sql = re.ReplaceAllString(sql,
+										fmt.Sprintf("num_replicas = %d", testCase.replicationFactor))
+								} else {
+									sql = fmt.Sprintf("%s, num_replicas = %d", sql, testCase.replicationFactor)
+								}
+								s.Exec(t, sql)
+							}
+						}()
+						if err := tc.WaitForFullReplication(); err != nil {
+							t.Fatal(err)
+						}
+
+						// Perform a write, to ensure that pre-crash data is preserved.
+						// Creating a table causes extra friction in the test harness when
+						// we restart the cluster, so just write a setting.
+						s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
+
+						txn := client.NewTxn(ctx, tc.Servers[0].DB(), 1, client.RootTxn)
+						var desc roachpb.RangeDescriptor
+						// Pick one of the predefined split points.
+						rdKey := keys.RangeDescriptorKey(roachpb.RKey(keys.TimeseriesPrefix))
+						if err := txn.GetProto(ctx, rdKey, &desc); err != nil {
+							t.Fatal(err)
+						}
+						desc.NextReplicaID++
+						if err := txn.Put(ctx, rdKey, &desc); err != nil {
+							t.Fatal(err)
+						}
+
+						// At this point the intent has been written to rocksdb but this
+						// write was not synced (only the raft log append was synced). We
+						// need to force another sync, but we're far from the storage
+						// layer here so the easiest thing to do is simply perform a
+						// second write. This will force the first write to be persisted
+						// to disk (the second write may or may not make it to disk due to
+						// timing).
+						desc.NextReplicaID++
+						if err := txn.Put(ctx, rdKey, &desc); err != nil {
+							t.Fatal(err)
+						}
+
+						// We deliberately do not close this transaction so the intent is
+						// left behind.
+					}()
+
+					var now hlc.Timestamp
+					if allNodesStopped {
+						clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+						now = clock.Now()
+					}
+
+					// Open the surviving stores directly to repair them.
+					repairStore := func(idx int) error {
+						stopper := stop.NewStopper()
+						defer stopper.Stop(ctx)
+
+						db, err := OpenExistingStore(storePaths[idx], stopper, false /* readOnly */)
+						if err != nil {
+							return err
+						}
+						defer db.Close()
+
+						batch, err := removeDeadReplicas(db, deadReplicas, allNodesStopped, now)
+						if err != nil {
+							return err
+						}
+						if batch == nil {
+							return errors.New("expected non-nil batch")
+						}
+						if err := batch.Commit(true); err != nil {
+							return err
+						}
+						batch.Close()
+
+						// The repair process is idempotent and should give a nil batch the second time
+						batch, err = removeDeadReplicas(db, deadReplicas, allNodesStopped, now)
+						if err != nil {
+							return err
+						}
+						if batch != nil {
+							batch.Close()
+							return errors.New("expected nil batch on second attempt")
+						}
+						return nil
+					}
+					for i := 0; i < testCase.survivingNodes; i++ {
+						err := repairStore(i)
+						if !allNodesStopped && testCase.survivingNodes > 1 {
+							if !testutils.IsError(err, ".*--all-nodes-are-stopped not passed") {
+								t.Fatalf("did not get expected error: %v", err)
+							}
+							// The rest of the test won't succeed since we didn't repair anything.
+							return
+						} else if err != nil {
+							t.Fatal(err)
+						}
+					}
+
+					// Now that the data is salvaged, we can restart the cluster.
+					// The nodes with the in-memory stores will be assigned new,
+					// higher node IDs (e.g. in the 1/3 case, the restarted nodes
+					// will be 4 and 5).
+					//
+					// This can activate the adaptive zone config feature (using 5x
+					// replication for clusters of 5 nodes or more), so we must
+					// decommission the dead nodes for WaitForFullReplication to
+					// complete. (note that the cluster is working even when it
+					// doesn't consider itself fully replicated - that's what allows
+					// the decommissioning to succeed. We're just waiting for full
+					// replication so that we can validate that ranges were moved
+					// from e.g. {1,2,3} to {1,4,5}).
+					//
+					// Set replication mode to manual so that TestCluster doesn't call
+					// WaitForFullReplication before we've decommissioned the nodes.
+					clusterArgs.ReplicationMode = base.ReplicationManual
+					clusterArgs.ParallelStart = true
+					tc := testcluster.StartTestCluster(t, testCase.totalNodes, clusterArgs)
+					defer tc.Stopper().Stop(ctx)
+
+					grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(
+						tc.Server(0).ServingRPCAddr(),
+						tc.Server(0).NodeID(),
+						rpc.DefaultClass,
+					).Connect(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+					adminClient := serverpb.NewAdminClient(grpcConn)
+
+					deadNodeStrs := []string{}
+					for i := testCase.survivingNodes; i < testCase.totalNodes; i++ {
+						deadNodeStrs = append(deadNodeStrs, fmt.Sprintf("%d", i+1))
+					}
+
+					if err := runDecommissionNodeImpl(
+						ctx, adminClient, nodeDecommissionWaitNone, deadNodeStrs,
+					); err != nil {
+						t.Fatal(err)
+					}
+
+					for i := 0; i < len(tc.Servers); i++ {
+						err = tc.Servers[i].Stores().VisitStores(func(store *storage.Store) error {
+							store.SetReplicateQueueActive(true)
+							return nil
+						})
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+					if err := tc.WaitForFullReplication(); err != nil {
+						t.Fatal(err)
+					}
+
+					for i := 0; i < len(tc.Servers); i++ {
+						err = tc.Servers[i].Stores().VisitStores(func(store *storage.Store) error {
+							return store.ForceConsistencyQueueProcess()
+						})
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+
+					expectedReplicas := []string{}
+					for i := 0; i < testCase.totalNodes; i++ {
+						var storeID int
+						if i < testCase.survivingNodes {
+							// If the replica survived, just adjust from zero-based to one-based.
+							storeID = i + 1
+						} else {
+							storeID = i + 1 + testCase.totalNodes - testCase.survivingNodes
+						}
+						expectedReplicas = append(expectedReplicas, fmt.Sprintf("%d", storeID))
+					}
+					expectedReplicaStr := fmt.Sprintf("{%s}", strings.Join(expectedReplicas, ","))
+
+					s := sqlutils.MakeSQLRunner(tc.Conns[0])
+					row := s.QueryRow(t, "select replicas from [show ranges from table system.namespace] limit 1")
+					var replicaStr string
+					row.Scan(&replicaStr)
+					if replicaStr != expectedReplicaStr {
+						t.Fatalf("expected replicas on %s but got %s", expectedReplicaStr, replicaStr)
+					}
+
+					row = s.QueryRow(t, "show cluster setting cluster.organization")
+					var org string
+					row.Scan(&org)
+					if org != "remove dead replicas test" {
+						t.Fatalf("expected old setting to be present, got %s instead", org)
+					}
+				})
+		}
 	}
 }
 
