@@ -268,8 +268,7 @@ rocksdb::Status DataKeyManager::LoadKeys() {
   std::unique_lock<std::mutex> l(mu_);
 
   // We should never have loaded keys before.
-  assert(data_keys_.size() == 0);
-  assert(store_keys_.size() == 0);
+  assert(current_key_ == nullptr);
   assert(registry_ == nullptr);
 
   std::unique_ptr<enginepbccl::DataKeysRegistry> registry(new enginepbccl::DataKeysRegistry());

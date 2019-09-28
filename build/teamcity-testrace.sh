@@ -51,7 +51,8 @@ for pkg in $pkgspec; do
 		PKG="$pkg" \
 		TESTTIMEOUT=45m \
 		TESTFLAGS='-v' \
-		USE_ROCKSDB_ASSERTIONS=1 2>&1 \
+		ENABLE_ROCKSDB_ASSERTIONS=1 2>&1 \
+		ENABLE_LIBROACH_ASSERTIONS=1 2>&1 \
 		| tee -a artifacts/testrace.log \
 		| go-test-teamcity
 done
