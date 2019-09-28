@@ -119,6 +119,11 @@ type TestClusterArgs struct {
 	ServerArgs TestServerArgs
 	// ReplicationMode controls how replication is to be done in the cluster.
 	ReplicationMode TestClusterReplicationMode
+	// If true, nodes will be started in parallel. This is useful in
+	// testing certain recovery scenarios, although it makes store/node
+	// IDs unpredictable. Even in ParallelStart mode, StartTestCluster
+	// waits for all nodes to start before returning.
+	ParallelStart bool
 
 	// ServerArgsPerNode override the default ServerArgs with the value in this
 	// map. The map's key is an index within TestCluster.Servers. If there is
