@@ -282,14 +282,14 @@ build
 VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
 ----
 sort
- ├── columns: column1:3(int)
- ├── ordering: +3
+ ├── columns: column1:4(int)
+ ├── ordering: +4
  └── union-all
-      ├── columns: column1:3(int)
-      ├── left columns: column1:4(int)
+      ├── columns: column1:4(int)
+      ├── left columns: column1:3(int)
       ├── right columns: column1:2(int)
       ├── project
-      │    ├── columns: column1:4(int)
+      │    ├── columns: column1:3(int)
       │    ├── values
       │    │    ├── columns: column1:1(unknown)
       │    │    └── tuple [type=tuple{unknown}]
@@ -322,13 +322,13 @@ build
 SELECT x, pg_typeof(y) FROM (SELECT 1 AS a, NULL AS b UNION ALL SELECT 2 AS a, 4 AS b) AS t(x, y)
 ----
 project
- ├── columns: x:5(int!null) pg_typeof:8(string)
+ ├── columns: x:6(int!null) pg_typeof:8(string)
  ├── union-all
- │    ├── columns: a:5(int!null) b:6(int)
- │    ├── left columns: a:1(int) b:7(int)
+ │    ├── columns: a:6(int!null) b:7(int)
+ │    ├── left columns: a:1(int) b:5(int)
  │    ├── right columns: a:3(int) b:4(int)
  │    ├── project
- │    │    ├── columns: b:7(int) a:1(int!null)
+ │    │    ├── columns: b:5(int) a:1(int!null)
  │    │    ├── project
  │    │    │    ├── columns: a:1(int!null) b:2(unknown)
  │    │    │    ├── values
@@ -893,11 +893,11 @@ build
 VALUES (NULL, NULL), (NULL, 'x') UNION VALUES (1, 'a'), (2, 'b')
 ----
 union
- ├── columns: column1:5(int) column2:6(string)
- ├── left columns: column1:7(int) column2:2(string)
+ ├── columns: column1:6(int) column2:7(string)
+ ├── left columns: column1:5(int) column2:2(string)
  ├── right columns: column1:3(int) column2:4(string)
  ├── project
- │    ├── columns: column1:7(int) column2:2(string)
+ │    ├── columns: column1:5(int) column2:2(string)
  │    ├── values
  │    │    ├── columns: column1:1(unknown) column2:2(string)
  │    │    ├── tuple [type=tuple{unknown, string}]
@@ -951,11 +951,11 @@ build
 VALUES (NULL, NULL), (NULL, 'x') UNION ALL VALUES (1, NULL), (2, NULL)
 ----
 union-all
- ├── columns: column1:5(int) column2:6(string)
- ├── left columns: column1:7(int) column2:2(string)
+ ├── columns: column1:6(int) column2:7(string)
+ ├── left columns: column1:5(int) column2:2(string)
  ├── right columns: column1:3(int) column2:4(string)
  ├── project
- │    ├── columns: column1:7(int) column2:2(string)
+ │    ├── columns: column1:5(int) column2:2(string)
  │    ├── values
  │    │    ├── columns: column1:1(unknown) column2:2(string)
  │    │    ├── tuple [type=tuple{unknown, string}]
