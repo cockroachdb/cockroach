@@ -579,6 +579,7 @@ func (b *Builder) buildCTE(
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
 		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
+		cteScope.removeHiddenCols()
 		cols := cteScope.cols
 		name := ctes[i].Name.Alias
 
