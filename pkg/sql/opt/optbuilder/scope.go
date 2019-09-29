@@ -399,11 +399,14 @@ func (s *scope) hasSameColumns(other *scope) bool {
 	return s.colSetWithExtraCols().Equals(other.colSetWithExtraCols())
 }
 
-// removeHiddenCols removes hidden columns from the scope.
+// removeHiddenCols removes hidden columns from the scope (and moves them to
+// extraCols, in case they are referenced by ORDER BY or DISTINCT ON).
 func (s *scope) removeHiddenCols() {
 	n := 0
 	for i := range s.cols {
-		if !s.cols[i].hidden {
+		if s.cols[i].hidden {
+			s.extraCols = append(s.extraCols, s.cols[i])
+		} else {
 			if n != i {
 				s.cols[n] = s.cols[i]
 			}
