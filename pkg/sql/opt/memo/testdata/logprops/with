@@ -9,6 +9,7 @@ with &1 (foo)
  ├── columns: x:3(int!null) y:4(int)
  ├── key: (3)
  ├── fd: (3)-->(4)
+ ├── prune: (3,4)
  ├── cte-uses: map[1:1]
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
@@ -37,6 +38,7 @@ with &1 (foo)
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(2)
+ ├── prune: (2)
  ├── project
  │    ├── columns: "?column?":1(decimal)
  │    ├── cardinality: [1 - 1]
@@ -72,6 +74,7 @@ with &1 (foo)
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(3)
+ ├── prune: (3)
  ├── cte-uses: map[1:1]
  ├── project
  │    ├── columns: "?column?":1(int!null)
@@ -116,6 +119,7 @@ with &1 (foo)
  ├── has-placeholder
  ├── key: ()
  ├── fd: ()-->(3)
+ ├── prune: (3)
  ├── cte-uses: map[1:1]
  ├── project
  │    ├── columns: int8:1(int)
@@ -161,6 +165,7 @@ FROM
 inner-join-apply
  ├── columns: x:1(int!null) "?column?":3(int)
  ├── cardinality: [2 - 2]
+ ├── prune: (3)
  ├── values
  │    ├── columns: column1:1(int!null)
  │    ├── cardinality: [2 - 2]
@@ -175,6 +180,7 @@ inner-join-apply
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
+ │    ├── prune: (3)
  │    ├── cte-uses: map[1:1]
  │    ├── project
  │    │    ├── columns: "?column?":2(int)

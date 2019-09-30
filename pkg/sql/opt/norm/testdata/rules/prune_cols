@@ -2806,3 +2806,30 @@ with &1 (foo)
       ├── columns: i:6(int)
       └── mapping:
            └──  a.i:2(int) => i:6(int)
+
+opt disable=InlineWith format=show-all expect=PruneWithCols
+WITH foo AS (SELECT * FROM a)
+  SELECT i FROM (SELECT i, 1 AS y FROM foo) ORDER BY y
+----
+with &1 (foo)
+ ├── columns: i:6(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1080.04
+ ├── prune: (6)
+ ├── cte-uses: map[1:1]
+ ├── scan t.public.a
+ │    ├── columns: t.public.a.k:1(int!null) t.public.a.i:2(int) t.public.a.f:3(float) t.public.a.s:4(string)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1080.02
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1)
+ └── with-scan &1 (foo)
+      ├── columns: i:6(int)
+      ├── mapping:
+      │    └──  t.public.a.i:2(int) => i:6(int)
+      ├── stats: [rows=1000]
+      ├── cost: 0.01
+      ├── prune: (6)
+      └── cte-uses: map[1:1]
