@@ -12,12 +12,14 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -56,6 +58,7 @@ func (s *Store) Send(
 	// Limit the number of concurrent AddSSTable requests, since they're expensive
 	// and block all other writes to the same span.
 	if ba.IsSingleAddSSTableRequest() {
+		before := timeutil.Now()
 		if err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx); err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -64,7 +67,12 @@ func (s *Store) Send(
 		if err := s.limiters.AddSSTableRequestRate.Wait(ctx); err != nil {
 			return nil, roachpb.NewError(err)
 		}
+		beforeEngineDelay := timeutil.Now()
 		s.engine.PreIngestDelay(ctx)
+		if waited := timeutil.Since(before); waited > time.Second {
+			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
+				waited, timeutil.Since(beforeEngineDelay))
+		}
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {

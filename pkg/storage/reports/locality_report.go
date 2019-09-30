@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -133,7 +134,7 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 	for _, row := range rows {
 		key := localityKey{}
 		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
-		key.SubzoneID = SubzoneID(*row[1].(*tree.DInt))
+		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
 		key.locality = (LocalityRepr)(*row[2].(*tree.DString))
 		r.previousVersion[key] = localityStatus{(int32)(*row[3].(*tree.DInt))}
 	}
