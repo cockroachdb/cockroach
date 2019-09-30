@@ -336,7 +336,7 @@ func makeKey(i int) MVCCKey {
 }
 
 func benchmarkIterOnBatch(ctx context.Context, b *testing.B, writes int) {
-	engine := createTestEngine()
+	engine := createTestRocksDBEngine()
 	defer engine.Close()
 
 	for i := 0; i < writes; i++ {
@@ -368,7 +368,7 @@ func benchmarkIterOnBatch(ctx context.Context, b *testing.B, writes int) {
 func benchmarkIterOnReadWriter(
 	ctx context.Context, b *testing.B, writes int, f func(Engine) ReadWriter, closeReadWriter bool,
 ) {
-	engine := createTestEngine()
+	engine := createTestRocksDBEngine()
 	defer engine.Close()
 
 	for i := 0; i < writes; i++ {
