@@ -486,6 +486,22 @@ func awsMachineType(cpus int) string {
 	}
 }
 
+func machineTypeFlag(machineType string) string {
+	ssd := isSSD(machineType)
+	switch cloud {
+	case "aws":
+		if ssd {
+			return "--aws-machine-type-ssd"
+		} else {
+			return "--aws-machine-type"
+		}
+	case "gce":
+		return "--gce-machine-type"
+	default:
+		panic(fmt.Sprintf("unsupported cloud: %s\n", cloud))
+	}
+}
+
 func gceMachineType(cpus int) string {
 	// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
 	// machines have a decent amount of RAM. We could use customer machine
@@ -495,6 +511,23 @@ func gceMachineType(cpus int) string {
 		return fmt.Sprintf("n1-standard-%d", cpus)
 	}
 	return fmt.Sprintf("n1-highcpu-%d", cpus)
+}
+
+func isSSD(machineType string) bool {
+	if cloud != "aws" {
+		return false
+	}
+
+	typeAndSize := strings.Split(machineType, ".")
+	if len(typeAndSize) == 2 {
+		awsType := typeAndSize[0]
+		// All SSD machine types that we use end in 'd', except for the i3 type.
+		return awsType == "i3" || strings.HasSuffix(awsType, "d")
+	}
+
+	fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", machineType)
+	os.Exit(1)
+	return false
 }
 
 type testI interface {
@@ -586,6 +619,7 @@ type clusterSpec struct {
 	CPUs        int
 	Zones       string
 	Geo         bool
+	MachineType string
 	Lifetime    time.Duration
 	ReusePolicy clusterReusePolicy
 }
@@ -607,6 +641,9 @@ func clustersCompatible(s1, s2 clusterSpec) bool {
 
 func (s clusterSpec) String() string {
 	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
+	if len(s.MachineType) > 0 {
+		str += "machine=" + s.MachineType
+	}
 	if s.Geo {
 		str += "-geo"
 	}
@@ -631,12 +668,19 @@ func (s *clusterSpec) args() []string {
 	}
 
 	if !local && s.CPUs != 0 {
-		switch cloud {
-		case "aws":
-			args = append(args, "--aws-machine-type-ssd="+awsMachineType(s.CPUs))
-		case "gce":
-			args = append(args, "--gce-machine-type="+gceMachineType(s.CPUs))
+		machineType := s.MachineType
+		if len(machineType) == 0 {
+			// If no machine type was specified, choose
+			// one based on the cloud and CPU count.
+			switch cloud {
+			case "aws":
+				machineType = awsMachineType(s.CPUs)
+			case "gce":
+				machineType = gceMachineType(s.CPUs)
+			}
 		}
+		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
+		args = append(args, machineTypeArg)
 	}
 	if s.Zones != "" {
 		args = append(args, "--gce-zones="+s.Zones)
@@ -671,6 +715,16 @@ func (o nodeCPUOption) apply(spec *clusterSpec) {
 // cpu is a node option which requests nodes with the specified number of CPUs.
 func cpu(n int) nodeCPUOption {
 	return nodeCPUOption(n)
+}
+
+type nodeMachineTypeOption string
+
+func (o nodeMachineTypeOption) apply(spec *clusterSpec) {
+	spec.MachineType = string(o)
+}
+
+func machineType(machineType string) nodeMachineTypeOption {
+	return nodeMachineTypeOption(machineType)
 }
 
 type nodeGeoOption struct{}
