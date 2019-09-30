@@ -28,7 +28,7 @@ func InsertNewStats(
 	ctx context.Context,
 	executor sqlutil.InternalExecutor,
 	txn *client.Txn,
-	tableStats []*TableStatistic,
+	tableStats []*TableStatisticProto,
 ) error {
 	var err error
 	for _, statistic := range tableStats {
@@ -42,7 +42,7 @@ func InsertNewStats(
 			int64(statistic.RowCount),
 			int64(statistic.DistinctCount),
 			int64(statistic.NullCount),
-			statistic.Histogram,
+			statistic.HistogramData,
 		)
 		if err != nil {
 			return err

@@ -21,11 +21,11 @@ import "google/protobuf/timestamp.proto";
 
 import "sql/stats/histogram.proto";
 
-// A TableStatistic object holds a statistic for a particular column or group
-// of columns. It mirrors the structure of the system.table_statistics table.
-// It is also used as the format in which table statistics are serialized
-// in a backup.
-message TableStatistic {
+// A TableStatisticProto object holds a statistic for a particular column or
+// group of columns. It mirrors the structure of the system.table_statistics
+// table. It is also used as the format in which table statistics are
+// serialized in a backup.
+message TableStatisticProto {
   // The ID of the table.
   uint32 table_id = 1 [(gogoproto.customname) = "TableID",
                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
@@ -46,5 +46,5 @@ message TableStatistic {
   // The number of rows that have a NULL in any of the columns in ColumnIDs.
   uint64 null_count = 8;
   // Histogram (if available)
-  HistogramData histogram = 9;
+  HistogramData histogram_data = 9;
 }
