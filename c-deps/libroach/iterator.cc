@@ -26,7 +26,6 @@ DBIterator::DBIterator(std::atomic<int64_t>* iters, DBIterOptions iter_options) 
 
   if (!EmptyTimestamp(iter_options.min_timestamp_hint) ||
       !EmptyTimestamp(iter_options.max_timestamp_hint)) {
-    assert(!EmptyTimestamp(iter_options.min_timestamp_hint));
     assert(!EmptyTimestamp(iter_options.max_timestamp_hint));
     const std::string min = EncodeTimestamp(iter_options.min_timestamp_hint);
     const std::string max = EncodeTimestamp(iter_options.max_timestamp_hint);
