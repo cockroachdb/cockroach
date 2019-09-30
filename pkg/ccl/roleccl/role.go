@@ -84,19 +84,28 @@ func grantRolePlanHook(
 			return err
 		}
 
-		if hasAdminRole, err := p.HasAdminRole(ctx); err != nil {
+		hasAdminRole, err := p.HasAdminRole(ctx)
+		if err != nil {
 			return err
-		} else if !hasAdminRole {
-			// Not a superuser: check permissions on each role.
-			allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
-			if err != nil {
-				return err
+		}
+		// Check permissions on each role.
+		allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
+		if err != nil {
+			return err
+		}
+		for _, r := range grant.Roles {
+			// If the user is an admin, don't check if the user is allowed to add/drop
+			// users in the role. However, if the role being modified is the admin role, then
+			// make sure the user is an admin with the admin option.
+			if hasAdminRole && string(r) != sqlbase.AdminRole {
+				continue
 			}
-			for _, r := range grant.Roles {
-				if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"%s is not a superuser or role admin for role %s", p.User(), r)
+			if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
+				errMsg := "%s is not a superuser or role admin for role %s"
+				if string(r) == sqlbase.AdminRole {
+					errMsg = "%s is not a role admin for role %s"
 				}
+				return pgerror.Newf(pgcode.InsufficientPrivilege, errMsg, p.User(), r)
 			}
 		}
 
@@ -229,19 +238,28 @@ func revokeRolePlanHook(
 			return err
 		}
 
-		if hasAdminRole, err := p.HasAdminRole(ctx); err != nil {
+		hasAdminRole, err := p.HasAdminRole(ctx)
+		if err != nil {
 			return err
-		} else if !hasAdminRole {
-			// Not a superuser: check permissions on each role.
-			allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
-			if err != nil {
-				return err
+		}
+		// check permissions on each role.
+		allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
+		if err != nil {
+			return err
+		}
+		for _, r := range revoke.Roles {
+			// If the user is an admin, don't check if the user is allowed to add/drop
+			// users in the role. However, if the role being modified is the admin role, then
+			// make sure the user is an admin with the admin option.
+			if hasAdminRole && string(r) != sqlbase.AdminRole {
+				continue
 			}
-			for _, r := range revoke.Roles {
-				if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"%s is not a superuser or role admin for role %s", p.User(), r)
+			if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
+				errMsg := "%s is not a superuser or role admin for role %s"
+				if string(r) == sqlbase.AdminRole {
+					errMsg = "%s is not a role admin for role %s"
 				}
+				return pgerror.Newf(pgcode.InsufficientPrivilege, errMsg, p.User(), r)
 			}
 		}
 
