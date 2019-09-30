@@ -517,7 +517,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "chaos")
 	}
 
-	opts := []createOption{cpu(b.CPUs)}
+	opts := []createOption{cpu(b.CPUs), machineType(machine)}
 	switch b.Distribution {
 	case singleZone:
 		// No specifier.
