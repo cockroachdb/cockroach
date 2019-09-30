@@ -686,6 +686,35 @@ REVOKE newgroup FROM testuser
 statement error testuser is not a superuser or role admin for role newgroup
 GRANT newgroup TO testuser WITH ADMIN OPTION
 
+# Regression for #31784
+user root
+
+# grant admin to testuser without ADMIN OPTION
+statement ok
+CREATE USER user1;
+GRANT admin TO testuser
+
+user testuser
+
+statement error pq: testuser is not a superuser or role admin for role admin
+GRANT admin TO user1
+
+user root
+
+# WITH ADMIN OPTION means that testuser now has permission to add to the admin role
+statement ok
+GRANT admin TO testuser WITH ADMIN OPTION
+
+user testuser
+
+statement ok
+GRANT admin TO user1
+
+user root
+
+statement ok
+DROP USER user1
+
 user root
 
 # The user does not have direct privileges on anything, so we can drop it.

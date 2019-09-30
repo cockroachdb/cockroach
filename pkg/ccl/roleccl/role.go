@@ -86,16 +86,18 @@ func grantRolePlanHook(
 
 		if hasAdminRole, err := p.HasAdminRole(ctx); err != nil {
 			return err
-		} else if !hasAdminRole {
-			// Not a superuser: check permissions on each role.
+		} else {
+			// Check permissions on each role.
 			allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
 			if err != nil {
 				return err
 			}
 			for _, r := range grant.Roles {
-				if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"%s is not a superuser or role admin for role %s", p.User(), r)
+				if !hasAdminRole || r == "admin" {
+					if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
+						return pgerror.Newf(pgcode.InsufficientPrivilege,
+							"%s is not a superuser or role admin for role %s", p.User(), r)
+					}
 				}
 			}
 		}
