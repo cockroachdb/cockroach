@@ -17,16 +17,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
+
+// A TableStatistic object holds a statistic for a particular column or group
+// of columns.
+type TableStatistic struct {
+	TableStatisticProto
+
+	// Histogram is the decoded histogram data.
+	Histogram []cat.HistogramBucket
+}
 
 // A TableStatisticsCache contains two underlying LRU caches:
 // (1) A cache of []*TableStatistic objects, keyed by table ID.
@@ -262,33 +273,53 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 	}
 
 	// Extract datum values.
-	tableStatistic := &TableStatistic{
-		TableID:       sqlbase.ID((int32)(*datums[tableIDIndex].(*tree.DInt))),
-		StatisticID:   (uint64)(*datums[statisticsIDIndex].(*tree.DInt)),
-		CreatedAt:     datums[createdAtIndex].(*tree.DTimestamp).Time,
-		RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
-		DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
-		NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
+	res := &TableStatistic{
+		TableStatisticProto: TableStatisticProto{
+			TableID:       sqlbase.ID((int32)(*datums[tableIDIndex].(*tree.DInt))),
+			StatisticID:   (uint64)(*datums[statisticsIDIndex].(*tree.DInt)),
+			CreatedAt:     datums[createdAtIndex].(*tree.DTimestamp).Time,
+			RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
+			DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
+			NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
+		},
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
-	tableStatistic.ColumnIDs = make([]sqlbase.ColumnID, len(columnIDs.Array))
+	res.ColumnIDs = make([]sqlbase.ColumnID, len(columnIDs.Array))
 	for i, d := range columnIDs.Array {
-		tableStatistic.ColumnIDs[i] = sqlbase.ColumnID((int32)(*d.(*tree.DInt)))
+		res.ColumnIDs[i] = sqlbase.ColumnID((int32)(*d.(*tree.DInt)))
 	}
 	if datums[nameIndex] != tree.DNull {
-		tableStatistic.Name = string(*datums[nameIndex].(*tree.DString))
+		res.Name = string(*datums[nameIndex].(*tree.DString))
 	}
 	if datums[histogramIndex] != tree.DNull {
-		tableStatistic.Histogram = &HistogramData{}
+		res.HistogramData = &HistogramData{}
 		if err := protoutil.Unmarshal(
 			[]byte(*datums[histogramIndex].(*tree.DBytes)),
-			tableStatistic.Histogram,
+			res.HistogramData,
 		); err != nil {
 			return nil, err
 		}
+
+		// Decode the histogram data so that it's usable by the opt catalog.
+		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
+		typ := &res.HistogramData.ColumnType
+		var a sqlbase.DatumAlloc
+		for i := range res.Histogram {
+			bucket := &res.HistogramData.Buckets[i]
+			datum, _, err := sqlbase.DecodeTableKey(&a, typ, bucket.UpperBound, encoding.Ascending)
+			if err != nil {
+				return nil, err
+			}
+			res.Histogram[i] = cat.HistogramBucket{
+				NumEq:         float64(bucket.NumEq),
+				NumRange:      float64(bucket.NumRange),
+				DistinctRange: bucket.DistinctRange,
+				UpperBound:    datum,
+			}
+		}
 	}
 
-	return tableStatistic, nil
+	return res, nil
 }
 
 // getTableStatsFromDB retrieves the statistics in system.table_statistics

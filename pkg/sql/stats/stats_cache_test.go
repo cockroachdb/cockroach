@@ -34,7 +34,7 @@ import (
 )
 
 func insertTableStat(
-	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, stat *TableStatistic,
+	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, stat *TableStatisticProto,
 ) error {
 	insertStatStmt := `
 INSERT INTO system.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
@@ -62,8 +62,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	if len(stat.Name) != 0 {
 		args[2] = stat.Name
 	}
-	if stat.Histogram != nil {
-		histogramBytes, err := protoutil.Marshal(stat.Histogram)
+	if stat.HistogramData != nil {
+		histogramBytes, err := protoutil.Marshal(stat.HistogramData)
 		if err != nil {
 			return err
 		}
@@ -94,7 +94,10 @@ func lookupTableStats(
 }
 
 func checkStatsForTable(
-	ctx context.Context, sc *TableStatisticsCache, expected []*TableStatistic, tableID sqlbase.ID,
+	ctx context.Context,
+	sc *TableStatisticsCache,
+	expected []*TableStatisticProto,
+	tableID sqlbase.ID,
 ) error {
 	// Initially the stats won't be in the cache.
 	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
@@ -107,7 +110,7 @@ func checkStatsForTable(
 	if err != nil {
 		return errors.Errorf(err.Error())
 	}
-	if !reflect.DeepEqual(statsList, expected) {
+	if !checkStats(statsList, expected) {
 		return errors.Errorf("for lookup of key %d, expected stats %s, got %s", tableID, expected, statsList)
 	}
 
@@ -118,12 +121,24 @@ func checkStatsForTable(
 	return nil
 }
 
+func checkStats(actual []*TableStatistic, expected []*TableStatisticProto) bool {
+	if len(actual) == 0 && len(expected) == 0 {
+		// DeepEqual differentiates between nil and empty slices, we don't.
+		return true
+	}
+	var protoList []*TableStatisticProto
+	for i := range actual {
+		protoList = append(protoList, &actual[i].TableStatisticProto)
+	}
+	return reflect.DeepEqual(protoList, expected)
+}
+
 func initTestData(
 	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor,
-) (map[sqlbase.ID][]*TableStatistic, error) {
+) (map[sqlbase.ID][]*TableStatisticProto, error) {
 	// The expected stats must be ordered by TableID+, CreatedAt- so they can
 	// later be compared with the returned stats using reflect.DeepEqual.
-	expStatsList := []TableStatistic{
+	expStatsList := []TableStatisticProto{
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   0,
@@ -133,7 +148,7 @@ func initTestData(
 			RowCount:      32,
 			DistinctCount: 30,
 			NullCount:     0,
-			Histogram: &HistogramData{ColumnType: *types.Int, Buckets: []HistogramData_Bucket{
+			HistogramData: &HistogramData{ColumnType: *types.Int, Buckets: []HistogramData_Bucket{
 				{NumEq: 3, NumRange: 30, UpperBound: encoding.EncodeVarintAscending(nil, 3000)}},
 			},
 		},
@@ -169,7 +184,7 @@ func initTestData(
 
 	// Insert the stats into system.table_statistics
 	// and store them in maps for fast retrieval.
-	expectedStats := make(map[sqlbase.ID][]*TableStatistic)
+	expectedStats := make(map[sqlbase.ID][]*TableStatisticProto)
 	for i := range expStatsList {
 		stat := &expStatsList[i]
 
@@ -284,7 +299,7 @@ func TestCacheWait(t *testing.T) {
 				stats, err := sc.GetTableStats(ctx, id)
 				if err != nil {
 					t.Error(err)
-				} else if !reflect.DeepEqual(stats, expectedStats[id]) {
+				} else if !checkStats(stats, expectedStats[id]) {
 					t.Errorf("for table %d, expected stats %s, got %s", id, expectedStats[id], stats)
 				}
 				wg.Done()
