@@ -1626,7 +1626,7 @@ func (s *adminServer) DataDistribution(
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
 	zoneConfigsQuery := `
-		SELECT target, config_sql, config_protobuf
+		SELECT target, raw_config_sql, raw_config_protobuf
 		FROM crdb_internal.zones
 		WHERE target IS NOT NULL
 	`

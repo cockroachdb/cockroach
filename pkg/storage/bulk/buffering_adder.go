@@ -13,6 +13,7 @@ package bulk
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -47,6 +49,8 @@ type BufferingAdder struct {
 	flushCounts struct {
 		total      int
 		bufferSize int
+		totalSort  time.Duration
+		totalFlush time.Duration
 	}
 
 	// name of the BufferingAdder for the purpose of logging only.
@@ -208,8 +212,13 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 	before := b.sink.flushCounts
 	beforeSize := b.sink.totalRows.DataSize
 
+	beforeSort := timeutil.Now()
+
 	sort.Sort(&b.curBuf)
 	mvccKey := engine.MVCCKey{Timestamp: b.timestamp}
+
+	beforeFlush := timeutil.Now()
+	b.flushCounts.totalSort += beforeFlush.Sub(beforeSort)
 
 	for i := range b.curBuf.entries {
 		mvccKey.Key = b.curBuf.Key(i)
@@ -220,6 +229,7 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 	if err := b.sink.Flush(ctx); err != nil {
 		return err
 	}
+	b.flushCounts.totalFlush += timeutil.Since(beforeFlush)
 
 	if log.V(3) {
 		written := b.sink.totalRows.DataSize - beforeSize
@@ -228,8 +238,23 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 		dueToSize := b.sink.flushCounts.sstSize - before.sstSize
 
 		log.Infof(ctx,
-			"flushing %s buffer wrote %d SSTs (avg: %s) with %d for splits, %d for size",
-			sz(b.curBuf.MemSize), files, sz(written/int64(files)), dueToSplits, dueToSize,
+			"flushing %s buffer wrote %d SSTs (avg: %s) with %d for splits, %d for size, took %v",
+			sz(b.curBuf.MemSize), files, sz(written/int64(files)), dueToSplits, dueToSize, timeutil.Since(beforeSort),
+		)
+	}
+	if log.V(4) {
+		log.Infof(ctx,
+			"bulk adder %s has ingested %s, spent %v sorting and %v flushing (%v sending, %v splitting). Flushed %d times due to buffer (%s) size. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
+			b.name,
+			sz(b.sink.totalRows.DataSize),
+			b.flushCounts.totalSort,
+			b.flushCounts.totalFlush,
+			b.sink.flushCounts.sendWait,
+			b.sink.flushCounts.splitWait,
+			b.flushCounts.bufferSize,
+			sz(b.memAcc.Used()),
+			b.sink.flushCounts.total, b.sink.flushCounts.files,
+			b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
 		)
 	}
 	if b.onFlush != nil {

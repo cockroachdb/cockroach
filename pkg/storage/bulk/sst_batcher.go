@@ -69,6 +69,9 @@ type SSTBatcher struct {
 		split   int
 		sstSize int
 		files   int // a single flush might create multiple files.
+
+		sendWait  time.Duration
+		splitWait time.Duration
 	}
 	// Tracking for if we have "filled" a range in case we want to split/scatter.
 	flushedToCurrentRange uint64
@@ -270,10 +273,13 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	if (b.ms != enginepb.MVCCStats{}) {
 		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
 	}
+
+	beforeSend := timeutil.Now()
 	files, err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms)
 	if err != nil {
 		return err
 	}
+	b.flushCounts.sendWait += timeutil.Since(beforeSend)
 
 	b.flushCounts.files += files
 	if b.flushKey != nil {
@@ -291,6 +297,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 			if splitAt, err := keys.EnsureSafeSplitKey(nextKey); err != nil {
 				log.Warning(ctx, err)
 			} else {
+				beforeSplit := timeutil.Now()
+
 				log.VEventf(ctx, 2, "%s added since last split, splitting/scattering for next range at %v", sz(b.flushedToCurrentRange), end)
 				// NB: Passing 'hour' here is technically illegal until 19.2 is
 				// active, but the value will be ignored before that, and we don't
@@ -298,6 +306,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 				if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
 					log.Warningf(ctx, "failed to split and scatter during ingest: %+v", err)
 				}
+				b.flushCounts.splitWait += timeutil.Since(beforeSplit)
 			}
 			b.flushedToCurrentRange = 0
 		}
@@ -344,7 +353,7 @@ func AddSSTable(
 	ms enginepb.MVCCStats,
 ) (int, error) {
 	var files int
-	now := timeutil.Now().UnixNano()
+	now := timeutil.Now()
 	iter, err := engine.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
 		return 0, err
@@ -354,7 +363,7 @@ func AddSSTable(
 	var stats enginepb.MVCCStats
 	if (ms == enginepb.MVCCStats{}) {
 		stats, err = engine.ComputeStatsGo(
-			iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now,
+			iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now.UnixNano(),
 		)
 		if err != nil {
 			return 0, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
@@ -371,10 +380,12 @@ func AddSSTable(
 		if err := func() error {
 			var err error
 			for i := 0; i < maxAddSSTableRetries; i++ {
-				log.VEventf(ctx, 2, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), start, end)
+				log.VEventf(ctx, 2, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), item.start, item.end)
+				before := timeutil.Now()
 				// This will fail if the range has split but we'll check for that below.
 				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats)
 				if err == nil {
+					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
 				}
 				// This range has split -- we need to split the SST to try again.
@@ -387,7 +398,7 @@ func AddSSTable(
 					}
 
 					right.stats, err = engine.ComputeStatsGo(
-						iter, engine.MVCCKey{Key: right.start}, engine.MVCCKey{Key: right.end}, now,
+						iter, engine.MVCCKey{Key: right.start}, engine.MVCCKey{Key: right.end}, now.UnixNano(),
 					)
 					if err != nil {
 						return err
@@ -414,7 +425,7 @@ func AddSSTable(
 		// top level SST which is kept around to iterate over.
 		item.sstBytes = nil
 	}
-
+	log.VEventf(ctx, 3, "AddSSTable [%v, %v) added %d files and took %v", start, end, files, timeutil.Since(now))
 	return files, nil
 }
 

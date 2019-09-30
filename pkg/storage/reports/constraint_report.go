@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -169,7 +170,7 @@ func (r *replicationConstraintStatsReportSaver) ensureEntries(
 		}
 	}
 	for i, sz := range zone.Subzones {
-		szKey := ZoneKey{ZoneID: key.ZoneID, SubzoneID: SubzoneIDFromIndex(i)}
+		szKey := ZoneKey{ZoneID: key.ZoneID, SubzoneID: base.SubzoneIDFromIndex(i)}
 		r.ensureEntries(szKey, &sz.Config)
 	}
 }
@@ -219,7 +220,7 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 	for _, row := range rows {
 		key := ConstraintStatusKey{}
 		key.ZoneID = (uint32)(*row[0].(*tree.DInt))
-		key.SubzoneID = SubzoneID((*row[1].(*tree.DInt)))
+		key.SubzoneID = base.SubzoneID((*row[1].(*tree.DInt)))
 		key.ViolationType = (ConstraintType)(*row[2].(*tree.DString))
 		key.Constraint = (ConstraintRepr)(*row[3].(*tree.DString))
 		r.previousVersion[key] = ConstraintStatus{(int)(*row[4].(*tree.DInt))}
