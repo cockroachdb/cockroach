@@ -2037,6 +2037,7 @@ WHERE
                 w0 AS (SELECT NULL)
               SELECT
                 t0._string FROM w0 CROSS JOIN w0 as w1
+              WHERE t0._string = 1
             ) ON true
       JOIN tab_orig AS t4 ON
           t3._timestamptz
@@ -2089,91 +2090,90 @@ project
  │    │    │         │         │    ├── outer: (6)
  │    │    │         │         │    ├── key: (14,21,28,35,60)
  │    │    │         │         │    ├── fd: ()-->(25), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (14,21,28,35,60)-->(19,25,26,29,31,41,44,45)
- │    │    │         │         │    ├── project
- │    │    │         │         │    │    ├── columns: true:40(bool!null) tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) rownum:60(int!null)
+ │    │    │         │         │    ├── inner-join (hash)
+ │    │    │         │         │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true:40(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) rownum:60(int!null)
  │    │    │         │         │    │    ├── outer: (6)
  │    │    │         │         │    │    ├── key: (14,21,28,35,60)
  │    │    │         │         │    │    ├── fd: ()-->(25,40), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
  │    │    │         │         │    │    ├── inner-join (hash)
- │    │    │         │         │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) "_string":39(int) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) rownum:60(int!null)
+ │    │    │         │         │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true:40(bool!null)
  │    │    │         │         │    │    │    ├── outer: (6)
- │    │    │         │         │    │    │    ├── key: (14,21,28,35,60)
- │    │    │         │         │    │    │    ├── fd: ()-->(25,39), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
+ │    │    │         │         │    │    │    ├── key: (14,21,28,35)
+ │    │    │         │         │    │    │    ├── fd: ()-->(40), (21)-->(19), (28)-->(25,26), (35)-->(29,31)
  │    │    │         │         │    │    │    ├── inner-join (hash)
- │    │    │         │         │    │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) "_string":39(int)
+ │    │    │         │         │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true:40(bool!null)
  │    │    │         │         │    │    │    │    ├── outer: (6)
- │    │    │         │         │    │    │    │    ├── key: (14,21,28,35)
- │    │    │         │         │    │    │    │    ├── fd: ()-->(39), (21)-->(19), (28)-->(25,26), (35)-->(29,31)
+ │    │    │         │         │    │    │    │    ├── key: (21,28,35)
+ │    │    │         │         │    │    │    │    ├── fd: ()-->(40), (21)-->(19), (28)-->(25,26), (35)-->(29,31)
  │    │    │         │         │    │    │    │    ├── inner-join (hash)
- │    │    │         │         │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) "_string":39(int)
+ │    │    │         │         │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+ │    │    │         │         │    │    │    │    │    ├── key: (28,35)
+ │    │    │         │         │    │    │    │    │    ├── fd: (28)-->(25,26), (35)-->(29,31)
+ │    │    │         │         │    │    │    │    │    ├── scan t2
+ │    │    │         │         │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null)
+ │    │    │         │         │    │    │    │    │    │    ├── key: (28)
+ │    │    │         │         │    │    │    │    │    │    └── fd: (28)-->(25,26)
+ │    │    │         │         │    │    │    │    │    ├── scan t3
+ │    │    │         │         │    │    │    │    │    │    ├── columns: t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+ │    │    │         │         │    │    │    │    │    │    ├── key: (35)
+ │    │    │         │         │    │    │    │    │    │    └── fd: (35)-->(29,31)
+ │    │    │         │         │    │    │    │    │    └── filters (true)
+ │    │    │         │         │    │    │    │    ├── inner-join (hash)
+ │    │    │         │         │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) true:40(bool!null)
  │    │    │         │         │    │    │    │    │    ├── outer: (6)
- │    │    │         │         │    │    │    │    │    ├── key: (21,28,35)
- │    │    │         │         │    │    │    │    │    ├── fd: ()-->(39), (21)-->(19), (28)-->(25,26), (35)-->(29,31)
- │    │    │         │         │    │    │    │    │    ├── inner-join (hash)
- │    │    │         │         │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) "_string":39(int)
- │    │    │         │         │    │    │    │    │    │    ├── outer: (6)
- │    │    │         │         │    │    │    │    │    │    ├── key: (28,35)
- │    │    │         │         │    │    │    │    │    │    ├── fd: ()-->(39), (28)-->(25,26), (35)-->(29,31)
- │    │    │         │         │    │    │    │    │    │    ├── scan t2
- │    │    │         │         │    │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null)
- │    │    │         │         │    │    │    │    │    │    │    ├── key: (28)
- │    │    │         │         │    │    │    │    │    │    │    └── fd: (28)-->(25,26)
- │    │    │         │         │    │    │    │    │    │    ├── inner-join (hash)
- │    │    │         │         │    │    │    │    │    │    │    ├── columns: t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) "_string":39(int)
- │    │    │         │         │    │    │    │    │    │    │    ├── outer: (6)
- │    │    │         │         │    │    │    │    │    │    │    ├── key: (35)
- │    │    │         │         │    │    │    │    │    │    │    ├── fd: ()-->(39), (35)-->(29,31)
- │    │    │         │         │    │    │    │    │    │    │    ├── scan t3
- │    │    │         │         │    │    │    │    │    │    │    │    ├── columns: t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
- │    │    │         │         │    │    │    │    │    │    │    │    ├── key: (35)
- │    │    │         │         │    │    │    │    │    │    │    │    └── fd: (35)-->(29,31)
- │    │    │         │         │    │    │    │    │    │    │    ├── with &1 (w0)
- │    │    │         │         │    │    │    │    │    │    │    │    ├── columns: "_string":39(int)
- │    │    │         │         │    │    │    │    │    │    │    │    ├── outer: (6)
- │    │    │         │         │    │    │    │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │         │         │    │    │    │    │    │    │    │    ├── key: ()
- │    │    │         │         │    │    │    │    │    │    │    │    ├── fd: ()-->(39)
- │    │    │         │         │    │    │    │    │    │    │    │    ├── values
- │    │    │         │         │    │    │    │    │    │    │    │    │    ├── columns: "?column?":36(unknown)
- │    │    │         │         │    │    │    │    │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │         │         │    │    │    │    │    │    │    │    │    ├── key: ()
- │    │    │         │         │    │    │    │    │    │    │    │    │    ├── fd: ()-->(36)
- │    │    │         │         │    │    │    │    │    │    │    │    │    └── (NULL,) [type=tuple{unknown}]
- │    │    │         │         │    │    │    │    │    │    │    │    └── project
- │    │    │         │         │    │    │    │    │    │    │    │         ├── columns: "_string":39(int)
- │    │    │         │         │    │    │    │    │    │    │    │         ├── outer: (6)
- │    │    │         │         │    │    │    │    │    │    │    │         ├── cardinality: [1 - 1]
- │    │    │         │         │    │    │    │    │    │    │    │         ├── key: ()
- │    │    │         │         │    │    │    │    │    │    │    │         ├── fd: ()-->(39)
- │    │    │         │         │    │    │    │    │    │    │    │         ├── with-scan &1 (w0)
- │    │    │         │         │    │    │    │    │    │    │    │         │    ├── mapping:
- │    │    │         │         │    │    │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
- │    │    │         │         │    │    │    │    │    │    │    │         │    └── key: ()
- │    │    │         │         │    │    │    │    │    │    │    │         └── projections
- │    │    │         │         │    │    │    │    │    │    │    │              └── variable: t0._string [type=int, outer=(6)]
- │    │    │         │         │    │    │    │    │    │    │    └── filters (true)
- │    │    │         │         │    │    │    │    │    │    └── filters (true)
+ │    │    │         │         │    │    │    │    │    ├── key: (21)
+ │    │    │         │         │    │    │    │    │    ├── fd: ()-->(40), (21)-->(19)
  │    │    │         │         │    │    │    │    │    ├── scan t1
  │    │    │         │         │    │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null)
  │    │    │         │         │    │    │    │    │    │    ├── key: (21)
  │    │    │         │         │    │    │    │    │    │    └── fd: (21)-->(19)
- │    │    │         │         │    │    │    │    │    └── filters (true)
- │    │    │         │         │    │    │    │    ├── scan tab_orig
- │    │    │         │         │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null)
- │    │    │         │         │    │    │    │    │    └── key: (14)
+ │    │    │         │         │    │    │    │    │    ├── with &1 (w0)
+ │    │    │         │         │    │    │    │    │    │    ├── columns: true:40(bool!null)
+ │    │    │         │         │    │    │    │    │    │    ├── outer: (6)
+ │    │    │         │         │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │         │         │    │    │    │    │    │    ├── key: ()
+ │    │    │         │         │    │    │    │    │    │    ├── fd: ()-->(40)
+ │    │    │         │         │    │    │    │    │    │    ├── values
+ │    │    │         │         │    │    │    │    │    │    │    ├── columns: "?column?":36(unknown)
+ │    │    │         │         │    │    │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │         │         │    │    │    │    │    │    │    ├── key: ()
+ │    │    │         │         │    │    │    │    │    │    │    ├── fd: ()-->(36)
+ │    │    │         │         │    │    │    │    │    │    │    └── (NULL,) [type=tuple{unknown}]
+ │    │    │         │         │    │    │    │    │    │    └── project
+ │    │    │         │         │    │    │    │    │    │         ├── columns: true:40(bool!null)
+ │    │    │         │         │    │    │    │    │    │         ├── outer: (6)
+ │    │    │         │         │    │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │         │         │    │    │    │    │    │         ├── key: ()
+ │    │    │         │         │    │    │    │    │    │         ├── fd: ()-->(40)
+ │    │    │         │         │    │    │    │    │    │         ├── select
+ │    │    │         │         │    │    │    │    │    │         │    ├── outer: (6)
+ │    │    │         │         │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+ │    │    │         │         │    │    │    │    │    │         │    ├── key: ()
+ │    │    │         │         │    │    │    │    │    │         │    ├── with-scan &1 (w0)
+ │    │    │         │         │    │    │    │    │    │         │    │    ├── mapping:
+ │    │    │         │         │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
+ │    │    │         │         │    │    │    │    │    │         │    │    └── key: ()
+ │    │    │         │         │    │    │    │    │    │         │    └── filters
+ │    │    │         │         │    │    │    │    │    │         │         └── t0._string = 1 [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+ │    │    │         │         │    │    │    │    │    │         └── projections
+ │    │    │         │         │    │    │    │    │    │              └── true [type=bool]
+ │    │    │         │         │    │    │    │    │    └── filters
+ │    │    │         │         │    │    │    │    │         └── true IS NOT NULL [type=bool, outer=(40), constraints=(/40: (/NULL - ]; tight)]
  │    │    │         │         │    │    │    │    └── filters (true)
- │    │    │         │         │    │    │    ├── ordinality
- │    │    │         │         │    │    │    │    ├── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz) rownum:60(int!null)
- │    │    │         │         │    │    │    │    ├── key: (60)
- │    │    │         │         │    │    │    │    ├── fd: (60)-->(44,45)
- │    │    │         │         │    │    │    │    └── scan t4
- │    │    │         │         │    │    │    │         └── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz)
- │    │    │         │         │    │    │    └── filters
- │    │    │         │         │    │    │         ├── variable: t2._bool [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
- │    │    │         │         │    │    │         ├── t3._timestamptz = t4._timestamptz [type=bool, outer=(31,45), constraints=(/31: (/NULL - ]; /45: (/NULL - ]), fd=(31)==(45), (45)==(31)]
- │    │    │         │         │    │    │         └── t3._int2 = t4._int8 [type=bool, outer=(29,44), constraints=(/29: (/NULL - ]; /44: (/NULL - ]), fd=(29)==(44), (44)==(29)]
- │    │    │         │         │    │    └── projections
- │    │    │         │         │    │         └── true [type=bool]
+ │    │    │         │         │    │    │    ├── scan tab_orig
+ │    │    │         │         │    │    │    │    ├── columns: tab_orig.rowid:14(int!null)
+ │    │    │         │         │    │    │    │    └── key: (14)
+ │    │    │         │         │    │    │    └── filters (true)
+ │    │    │         │         │    │    ├── ordinality
+ │    │    │         │         │    │    │    ├── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz) rownum:60(int!null)
+ │    │    │         │         │    │    │    ├── key: (60)
+ │    │    │         │         │    │    │    ├── fd: (60)-->(44,45)
+ │    │    │         │         │    │    │    └── scan t4
+ │    │    │         │         │    │    │         └── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz)
+ │    │    │         │         │    │    └── filters
+ │    │    │         │         │    │         ├── variable: t2._bool [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
+ │    │    │         │         │    │         ├── t3._timestamptz = t4._timestamptz [type=bool, outer=(31,45), constraints=(/31: (/NULL - ]; /45: (/NULL - ]), fd=(31)==(45), (45)==(31)]
+ │    │    │         │         │    │         └── t3._int2 = t4._int8 [type=bool, outer=(29,44), constraints=(/29: (/NULL - ]; /44: (/NULL - ]), fd=(29)==(44), (44)==(29)]
  │    │    │         │         │    └── aggregations
  │    │    │         │         │         ├── const-not-null-agg [type=bool, outer=(40)]
  │    │    │         │         │         │    └── variable: true [type=bool]

@@ -545,6 +545,11 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// required by the mutation only because they're being returned).
 		relProps.Rule.PruneCols = relProps.OutputCols.Difference(neededCols)
 
+	case opt.WithOp:
+		// WithOp passes through its input unchanged, so it has the same pruning
+		// characteristics as its input.
+		relProps.Rule.PruneCols = DerivePruneCols(e.(*memo.WithExpr).Main)
+
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the
 		// creation of a wrapper Project around an operator that does not have
