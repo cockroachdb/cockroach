@@ -259,6 +259,7 @@ with &1 (foo)
  ├── cost: 0.25
  ├── key: ()
  ├── fd: ()-->(3-6)
+ ├── prune: (3-6)
  ├── cte-uses: map[1:2 2:2]
  ├── values
  │    ├── columns: "?column?":1(int!null)
@@ -277,6 +278,7 @@ with &1 (foo)
       ├── cost: 0.22
       ├── key: ()
       ├── fd: ()-->(3-6)
+      ├── prune: (3-6)
       ├── cte-uses: map[1:2 2:2]
       ├── values
       │    ├── columns: "?column?":2(int!null)

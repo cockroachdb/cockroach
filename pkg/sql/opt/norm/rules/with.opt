@@ -16,3 +16,27 @@
     $input
     $withPrivate
 )
+
+# PushProjectIntoWith pushes a Project operator beneath a With. This has the
+# effect of pruning columns, but since the With passes through all its columns,
+# no logic to test prunability is needed.
+[PushProjectIntoWith, Normalize]
+(Project
+    (With
+        $binding:*
+        $input:*
+        $private:*
+    )
+    $projections:*
+    $passthrough:*
+)
+=>
+(With
+    $binding
+    (Project
+        $input
+        $projections
+        $passthrough
+    )
+    $private
+)
