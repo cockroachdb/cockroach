@@ -881,7 +881,7 @@ func NewStore(
 	s.limiters.ConcurrentAddSSTableRequests = limit.MakeConcurrentRequestLimiter(
 		"addSSTableRequestLimiter", int(addSSTableRequestLimit.Get(&cfg.Settings.SV)),
 	)
-	importRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
+	addSSTableRequestLimit.SetOnChange(&cfg.Settings.SV, func() {
 		s.limiters.ConcurrentAddSSTableRequests.SetLimit(int(addSSTableRequestLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
