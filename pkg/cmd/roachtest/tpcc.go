@@ -399,17 +399,6 @@ func registerTPCC(r *testRegistry) {
 		LoadWarehouses: 2000,
 		EstimatedMax:   600,
 	})
-	// Cloud report
-	registerTPCCBenchSpec(r, tpccBenchSpec{
-		Nodes:       4,
-		CPUs:        16,
-		MachineType: "c5n.4xlarge",
-
-		LoadWarehouses: 3000,
-		EstimatedMax:   gceOrAws(cloud, 1600, 2350),
-
-		Tags: []string{`cloud`},
-	})
 }
 
 func maxVersion(vers ...string) string {
@@ -501,7 +490,6 @@ func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 type tpccBenchSpec struct {
 	Nodes        int
 	CPUs         int
-	MachineType  string
 	Chaos        bool
 	Distribution tpccBenchDistribution
 	LoadConfig   tpccBenchLoadConfig
@@ -555,11 +543,8 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 	if b.Chaos {
 		nameParts = append(nameParts, "chaos")
 	}
-	if len(b.MachineType) > 0 {
-		nameParts = append(nameParts, fmt.Sprintf("machine=%s", b.MachineType))
-	}
 
-	opts := []createOption{cpu(b.CPUs), machineType(b.MachineType)}
+	opts := []createOption{cpu(b.CPUs), machineType(machine)}
 	switch b.Distribution {
 	case singleZone:
 		// No specifier.
@@ -991,16 +976,6 @@ func registerTPCCBench(r *testRegistry) {
 
 			LoadWarehouses: 10000,
 			EstimatedMax:   8000,
-		},
-
-		// Cloud report
-		{
-			Nodes:       3,
-			CPUs:        16,
-			MachineType: "i3.4xlarge",
-
-			LoadWarehouses: 3000,
-			EstimatedMax:   2000,
 		},
 	}
 

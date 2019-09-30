@@ -50,6 +50,7 @@ var (
 	cockroach   string
 	cloud                    = "gce"
 	encrypt     encryptValue = "false"
+	machine     string
 	workload    string
 	roachprod   string
 	buildTag    string
@@ -642,7 +643,7 @@ func clustersCompatible(s1, s2 clusterSpec) bool {
 func (s clusterSpec) String() string {
 	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
 	if len(s.MachineType) > 0 {
-		str += "machine=" + s.MachineType
+		str += "machine-" + s.MachineType
 	}
 	if s.Geo {
 		str += "-geo"
