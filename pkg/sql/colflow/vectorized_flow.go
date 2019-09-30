@@ -83,15 +83,36 @@ func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) 
 }
 
 func (f *vectorizedFlow) Start(ctx context.Context, txn *client.Txn, doneFn func()) error {
-	if err := f.setTxn(ctx, txn); err != nil {
+	if txn.Type() == client.RootTxn {
+		// Currently this method is not equipped to deal with RootTxns; if we'd be
+		// running in a root, then cleanup after the flow is completed would be
+		// required in the case when the f.setTxn() call below returns true for
+		// concurrent execution (see f.Run()). But this method does not have a
+		// facility for deferring such cleanup.
+		return errors.AssertionFailedf("unexpected vectorizedFlow.Start in RootTxn")
+	}
+	_ /* concurrent */, err := f.setTxn(ctx, txn)
+	if err != nil {
 		return err
 	}
 	return f.FlowBase.Start(ctx, txn, doneFn)
 }
 
 func (f *vectorizedFlow) Run(ctx context.Context, txn *client.Txn, doneFn func()) error {
-	if err := f.setTxn(ctx, txn); err != nil {
-		return err
+	if txn != nil {
+		concurrent, err := f.setTxn(ctx, txn)
+		if err != nil {
+			return err
+		}
+		if concurrent && txn.Type() == client.RootTxn {
+			// Since some processors execute concurrently with others, we need to
+			// disable read refreshes on the txn.
+			cleanup, err := txn.PrepareForConcurrentReads()
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+		}
 	}
 	return f.FlowBase.Run(ctx, txn, doneFn)
 }
@@ -101,6 +122,9 @@ func (f *vectorizedFlow) Run(ctx context.Context, txn *client.Txn, doneFn func()
 // RootTxn is used only by operators that don't execute concurrently with one
 // another, and all the rest use a LeafTxn (which does allow for concurrent
 // requests).
+//
+// Returns true if any components of the flow are executed concurrently (and so
+// at least some of them will use the LeafTxn).
 //
 // Figuring out which operators execute concurrently is done in two stages.
 // First off, we look at the flow's leaves. Each leaf represents a tree of
@@ -115,7 +139,7 @@ func (f *vectorizedFlow) Run(ctx context.Context, txn *client.Txn, doneFn func()
 // synchronizer we use the LeafTxn.
 //
 // If we've been given a LeafTxn, there's nothing more to do.
-func (f *vectorizedFlow) setTxn(ctx context.Context, txn *client.Txn) error {
+func (f *vectorizedFlow) setTxn(ctx context.Context, txn *client.Txn) (bool, error) {
 	// If we've been given a RootTxn,
 	// figure out which components of the flow need a   Look for a leaf Materializer.
 	// That guy needs to get the RootTxn because
@@ -130,7 +154,7 @@ func (f *vectorizedFlow) setTxn(ctx context.Context, txn *client.Txn) error {
 				leaves = append(leaves, l)
 			}
 			if foundMaterializer {
-				return errors.AssertionFailedf("multiple leaf Materializers found")
+				return false, errors.AssertionFailedf("multiple leaf Materializers found")
 			}
 			foundMaterializer = true
 			colexec.SetTxn(ctx, l, txn)
@@ -149,7 +173,7 @@ func (f *vectorizedFlow) setTxn(ctx context.Context, txn *client.Txn) error {
 			colexec.SetTxn(ctx, l, txn)
 		}
 	}
-	return nil
+	return len(leaves) > 0, nil
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector

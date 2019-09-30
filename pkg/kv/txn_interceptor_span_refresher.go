@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -110,6 +111,12 @@ type txnSpanRefresher struct {
 	refreshWrites []roachpb.Span
 	// See TxnCoordMeta.RefreshInvalid.
 	refreshInvalid bool
+	// refreshSuspended is set if refreshing is temporarily suspended. Refreshing
+	// is suspended while there's outstending LeafTxns whose metadata has not been
+	// ingested yet (through augmentMetaLocked). While suspended, refreshReads and
+	// refreshWrites are still being accumulated.
+	// This is orthogonal to refreshInvalid.
+	refreshSuspended bool
 	// refreshSpansBytes is the total size in bytes of the spans
 	// encountered during this transaction that need to be refreshed
 	// to avoid serializable restart.
@@ -307,6 +314,9 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
 		return false
+	} else if sr.refreshSuspended {
+		log.VEvent(ctx, 2, "can't refresh txn spans; suspended")
+		return false
 	} else if len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
 		log.VEvent(ctx, 2, "there are no txn spans to refresh")
 		return true
@@ -434,8 +444,19 @@ func (sr *txnSpanRefresher) epochBumpedLocked() {
 	sr.refreshReads = nil
 	sr.refreshWrites = nil
 	sr.refreshInvalid = false
+	sr.refreshSuspended = false
 	sr.refreshSpansBytes = 0
 }
 
 // closeLocked implements the txnInterceptor interface.
 func (*txnSpanRefresher) closeLocked() {}
+
+// SuspendRefreshing suspends the refeshing mechanism and returns a callback to
+// be called when the mechanism can be re-instituted.
+func (sr *txnSpanRefresher) SuspendRefreshing() (func(), error) {
+	if sr.refreshSuspended {
+		return nil, errors.AssertionFailedf("SuspendRefreshing() called while sr.refreshSuspended set")
+	}
+	sr.refreshSuspended = true
+	return func() { sr.refreshSuspended = false }, nil
+}

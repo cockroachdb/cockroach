@@ -1030,3 +1030,23 @@ func (txn *Txn) deadline() *hlc.Timestamp {
 func (txn *Txn) GatewayNodeID() roachpb.NodeID {
 	return txn.gatewayNodeID
 }
+
+// PrepareForConcurrentReads informs the txn that the client intends to do reads
+// through one or more LeafTransaction. Performing such reads means that the
+// Root txn will have to ingest metadata from the Leaves by
+// AugmentTxnCoordMeta().
+//
+// It returns a cleanup function to be called after all the leaf metadata was
+// ingested.
+//
+// While ingesting metadata from leaves is outstanding, the Root txn is not
+// allowed to refresh any reads. If it did refresh, and then it'd ingest more
+// read spans, those spans would also need to be refreshed (which we don't
+// currently do).
+//
+// It's illegal to call this on a LeafTxn. It's also illegal to call this while
+// a previous PrepareForConcurrentReads() is in effect (i.e. before the
+// respective cleanup function has been called.
+func (txn *Txn) PrepareForConcurrentReads() (func(), error) {
+	return txn.Sender().PrepareForConcurrentReads()
+}

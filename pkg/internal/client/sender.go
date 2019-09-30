@@ -206,6 +206,17 @@ type TxnSender interface {
 	// However, this is used by DistSQL for sending the transaction over the wire
 	// when it creates flows.
 	SerializeTxn() *roachpb.Transaction
+
+	// PrepareForConcurrentReads suspends the span refreshing mechanism while LeafTxns are in use.
+	// See Txn.PrepareForConcurrentReads().
+	//
+	// It returns a cleanup function to be called after all the leaf metadata was
+	// ingested.
+	//
+	// It's illegal to call this on a LeafTxn. It's also illegal to call this while
+	// a previous PrepareForConcurrentReads() is in effect (i.e. before the
+	// respective cleanup function has been called.
+	PrepareForConcurrentReads() (func(), error)
 }
 
 // TxnStatusOpt represents options for TxnSender.GetMeta().
@@ -255,6 +266,8 @@ type MockTransactionalSender struct {
 	) (*roachpb.BatchResponse, *roachpb.Error)
 	txn roachpb.Transaction
 }
+
+var _ TxnSender = &MockTransactionalSender{}
 
 // NewMockTransactionalSender creates a MockTransactionalSender.
 // The passed in txn is cloned.
@@ -368,6 +381,11 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 
 // DisablePipelining is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
+
+// PrepareForConcurrentReads is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) PrepareForConcurrentReads() (func(), error) {
+	return func() {}, nil
+}
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {

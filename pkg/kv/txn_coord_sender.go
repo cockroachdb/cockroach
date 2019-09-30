@@ -1266,3 +1266,8 @@ func (tc *TxnCoordSender) IsTracking() bool {
 	defer tc.mu.Unlock()
 	return tc.interceptorAlloc.txnHeartbeater.heartbeatLoopRunningLocked()
 }
+
+// PrepareForConcurrentReads is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) PrepareForConcurrentReads() (func(), error) {
+	return tc.interceptorAlloc.txnSpanRefresher.SuspendRefreshing()
+}

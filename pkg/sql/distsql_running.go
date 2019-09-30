@@ -305,6 +305,23 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
+	// If any flows are remote, then we need to disable read refreshing on the txn.
+	if len(flows) > 1 {
+		if txn != nil {
+			cleanup, err := txn.PrepareForConcurrentReads()
+			if err != nil {
+				recv.SetError(err)
+				return func() {}
+			}
+			defer cleanup()
+		}
+	} else {
+		if flows[dsp.nodeDesc.NodeID] == nil {
+			recv.SetError(errors.AssertionFailedf(
+				"when planning results in a single flow, that flow is expected to run on the gateway."))
+			return func() {}
+		}
+	}
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")

@@ -254,9 +254,16 @@ func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 // set. A new context is derived and returned, and it must be used when this
 // method returns so that all components running in their own goroutines could
 // listen for a cancellation on the same context.
+//
+// A cleanup function is also returned. If not nil, this cleanup function needs
+// to be called after the flow finished running.
 func (f *FlowBase) startInternal(
 	ctx context.Context, txn *client.Txn, doneFn func(),
-) (context.Context, error) {
+) (context.Context, func(), error) {
+	var cleanup func() // the returned cleanup function
+
+	// Set the txn on the shared EvalCtx. This is funky, because different
+	// processors otherwise use possibly different transactions.
 	f.EvalCtx.Txn = txn
 	f.doneFn = doneFn
 	log.VEventf(
@@ -278,7 +285,7 @@ func (f *FlowBase) startInternal(
 		if err := f.flowRegistry.RegisterFlow(
 			ctx, f.ID, f, f.inboundStreams, SettingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
 		); err != nil {
-			return ctx, err
+			return nil, nil, err
 		}
 	}
 
@@ -299,6 +306,13 @@ func (f *FlowBase) startInternal(
 	if len(f.processors) > 0 && txn != nil && txn.Type() == client.RootTxn {
 		meta := txn.GetTxnCoordMeta(ctx)
 		txn = client.NewTxnWithCoordMeta(ctx, txn.DB(), txn.GatewayNodeID(), client.LeafTxn, meta)
+		// Since some processors execute concurrently with others, we need to
+		// disable read refreshes on the txn.
+		var err error
+		cleanup, err = txn.PrepareForConcurrentReads()
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	for i := 0; i < len(f.processors); i++ {
@@ -309,7 +323,7 @@ func (f *FlowBase) startInternal(
 		}(i)
 	}
 	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 0 || !f.IsLocal()
-	return ctx, nil
+	return ctx, cleanup, nil
 }
 
 // IsLocal returns whether this flow does not have any remote execution.
@@ -324,7 +338,16 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, txn *client.Txn, doneFn func()) error {
-	if _, err := f.startInternal(ctx, txn, doneFn); err != nil {
+	if txn != nil && txn.Type() != client.LeafTxn {
+		// Currently this method is not equipped to deal with RootTxns; if we'd be
+		// running in a root, then cleanup after the flow is completed would be
+		// required in the case when the f.setTxn() call below returns true for
+		// concurrent execution (see f.Run()). But this method does not have a
+		// facility for deferring such cleanup.
+		return errors.AssertionFailedf("unexpected vectorizedFlow.Start in RootTxn")
+	}
+	_, cleanup, err := f.startInternal(ctx, txn, doneFn)
+	if err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
@@ -333,12 +356,28 @@ func (f *FlowBase) Start(ctx context.Context, txn *client.Txn, doneFn func()) er
 		}
 		return err
 	}
+	if cleanup != nil {
+		// We're not expecting cleanup given that we've asserted that we're running
+		// in a Leaf above.
+		return errors.AssertionFailedf("unexpected cleanup")
+	}
 	return nil
 }
 
 // Run is part of the Flow interface.
 func (f *FlowBase) Run(ctx context.Context, txn *client.Txn, doneFn func()) error {
-	defer f.Wait()
+	var cleanup func()
+	defer func() {
+		// If Wait is called as part of stack unwinding during a panic, the flow
+		// context must be canceled to ensure that all asynchronous goroutines get
+		// the message that they must exit (otherwise we will wait indefinitely).
+		f.ctxCancel()
+
+		f.Wait()
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
 
 	// We'll take care of the last processor in particular.
 	var headProc execinfra.Processor
@@ -349,7 +388,7 @@ func (f *FlowBase) Run(ctx context.Context, txn *client.Txn, doneFn func()) erro
 	f.processors = f.processors[:len(f.processors)-1]
 
 	var err error
-	if ctx, err = f.startInternal(ctx, txn, doneFn); err != nil {
+	if ctx, cleanup, err = f.startInternal(ctx, txn, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})

@@ -2693,6 +2693,10 @@ type EvalContext struct {
 	Sequence SequenceOperators
 
 	// The transaction in which the statement is executing.
+	// TODO(andrei): In the context of DistSQL flows, this field is funky. It's
+	// shared between all processors, although it shouldn't be; different procs
+	// sometimes need to use different txn objects (e.g. Root vs Leaf).
+	// Also see #41222.
 	Txn *client.Txn
 	// A handle to the database.
 	DB *client.DB
