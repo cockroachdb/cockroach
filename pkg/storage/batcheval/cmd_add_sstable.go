@@ -204,7 +204,7 @@ func checkForKeyCollisions(
 	existingDataIter.Seek(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {
 		return emptyMVCCStats, errors.Wrap(err, "checking for key collisions")
-	} else if ok && !existingDataIter.UnsafeKey().Less(mvccEndKey) {
+	} else if !ok {
 		// Target key range is empty, so it is safe to ingest.
 		return emptyMVCCStats, nil
 	}
