@@ -42,7 +42,6 @@ DBIncrementalIterator::DBIncrementalIterator(DBEngine* engine, DBIterOptions opt
   // outside of the timestamp range **from iter's perspective**. This allows us
   // to simply ignore discrepancies that we notice in advance(). See #34819.
   if (!EmptyTimestamp(opts.min_timestamp_hint) || !EmptyTimestamp(opts.max_timestamp_hint)) {
-    assert(!EmptyTimestamp(opts.min_timestamp_hint));
     assert(!EmptyTimestamp(opts.max_timestamp_hint));
     DBIterOptions nontimebound_opts = DBIterOptions();
     nontimebound_opts.upper_bound = opts.upper_bound;
