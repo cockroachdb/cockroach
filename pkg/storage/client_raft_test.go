@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -2926,6 +2928,134 @@ func TestReplicaGCRace(t *testing.T) {
 			t.Fatal("failed to send heartbeat")
 		}
 	}
+}
+
+func requireOnlyAtomicChanges(
+	t *testing.T, db *sqlutils.SQLRunner, rangeID roachpb.RangeID, repFactor int, start time.Time,
+) {
+	// From all events pertaining to the given rangeID and post-dating the start time,
+	// filter out those infos which indicate a (full and incoming) voter count in
+	// excess of the replication factor. Any rows returned have the full info JSON
+	// strings in them.
+	const q = `
+SELECT
+	"uniqueID",
+	count(t) AS repfactor,
+	string_agg(info, e'\\n') AS infos
+FROM
+	[
+		SELECT
+			"uniqueID",
+			replicas->'node_id' AS n,
+			COALESCE(replicas->'type', '0') AS t,
+			info
+		FROM
+			system.rangelog,
+			ROWS FROM (
+				jsonb_array_elements(
+					info::JSONB->'UpdatedDesc'->'internal_replicas'
+				)
+			)
+				AS replicas
+		WHERE
+			info::JSONB->'UpdatedDesc'->'range_id' = $1::JSONB AND timestamp >= $2
+		ORDER BY
+			"timestamp" ASC
+	]
+WHERE
+	t IN ('0', '2')
+GROUP BY
+	"uniqueID"
+HAVING
+	count(t) > $3;
+`
+	matrix := db.QueryStr(t, q, rangeID, start, repFactor)
+	if len(matrix) > 0 {
+		t.Fatalf("more than %d voting replicas: %s", repFactor, sqlutils.MatrixToStr(matrix))
+	}
+}
+
+func TestDecommission(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationAuto,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	cc, err := tc.Server(0).RPCContext().GRPCDialNode(tc.Server(0).RPCAddr(), 1, rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err)
+	admin := serverpb.NewAdminClient(cc)
+	// Decommission the first node, which holds most of the leases.
+	_, err = admin.Decommission(
+		ctx, &serverpb.DecommissionRequest{Decommissioning: true},
+	)
+	require.NoError(t, err)
+
+	requireNoReplicas := func(storeID roachpb.StoreID, repFactor int) {
+		testutils.SucceedsSoon(t, func() error {
+			desc := tc.LookupRangeOrFatal(t, k)
+			for _, rDesc := range desc.Replicas().Voters() {
+				store, err := tc.Servers[int(rDesc.NodeID-1)].Stores().GetStore(rDesc.StoreID)
+				require.NoError(t, err)
+				if err := store.ForceReplicationScanAndProcess(); err != nil {
+					return err
+				}
+			}
+			if sl := desc.Replicas().Filter(func(rDesc roachpb.ReplicaDescriptor) bool {
+				return rDesc.StoreID == storeID
+			}); len(sl) > 0 {
+				return errors.Errorf("still a replica on s%d: %s", storeID, &desc)
+			}
+			if len(desc.Replicas().Voters()) != repFactor {
+				return errors.Errorf("expected %d replicas: %s", repFactor, &desc)
+			}
+			return nil
+		})
+	}
+
+	const triplicated = 3
+
+	requireNoReplicas(1, triplicated)
+
+	runner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	ts := timeutil.Now()
+
+	_, err = admin.Decommission(
+		ctx, &serverpb.DecommissionRequest{NodeIDs: []roachpb.NodeID{2}, Decommissioning: true},
+	)
+	require.NoError(t, err)
+
+	// Both s1 and s2 are out, so neither ought to have replicas.
+	requireNoReplicas(1, triplicated)
+	requireNoReplicas(2, triplicated)
+
+	// Going from three replicas to three replicas should have used atomic swaps
+	// only. We didn't verify this before the first decommissioning op because
+	// lots of ranges were over-replicated due to ranges recently having split
+	// off from the five-fold replicated system ranges.
+	requireOnlyAtomicChanges(t, runner, tc.LookupRangeOrFatal(t, k).RangeID, triplicated, ts)
+
+	sqlutils.SetZoneConfig(t, runner, "RANGE default", "num_replicas: 1")
+
+	const single = 1
+
+	// The range should drop down to one replica, neither of which is on a decommissioning store.
+	requireNoReplicas(1, single)
+	requireNoReplicas(2, single)
+
+	// Decommission two more nodes. Only n5 is left; getting the replicas there
+	// can't use atomic replica swaps because the leaseholder can't be removed.
+	_, err = admin.Decommission(
+		ctx, &serverpb.DecommissionRequest{NodeIDs: []roachpb.NodeID{3, 4}, Decommissioning: true},
+	)
+	require.NoError(t, err)
+
+	requireNoReplicas(1, single)
+	requireNoReplicas(2, single)
+	requireNoReplicas(3, single)
+	requireNoReplicas(4, single)
 }
 
 // TestStoreRangeMoveDecommissioning verifies that if a store is set to
