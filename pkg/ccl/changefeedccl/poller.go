@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/sst"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -465,7 +466,9 @@ func (p *poller) pollTableHistory(ctx context.Context) error {
 
 // slurpSST iterates an encoded sst and inserts the contained kvs into the
 // buffer.
-func (p *poller) slurpSST(ctx context.Context, sst []byte, schemaTimestamp hlc.Timestamp) error {
+func (p *poller) slurpSST(
+	ctx context.Context, encodedSST []byte, schemaTimestamp hlc.Timestamp,
+) error {
 	var previousKey roachpb.Key
 	var kvs []roachpb.KeyValue
 	slurpKVs := func() error {
@@ -481,7 +484,7 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte, schemaTimestamp hlc.T
 	}
 
 	var scratch bufalloc.ByteAllocator
-	it, err := engine.NewMemSSTIterator(sst, false /* verify */)
+	it, err := sst.NewMemIterator(encodedSST, false /* verify */)
 	if err != nil {
 		return err
 	}

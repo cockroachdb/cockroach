@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/sst"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -447,7 +448,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 	}
 
 	getStats := func(startKey, endKey engine.MVCCKey, data []byte) enginepb.MVCCStats {
-		dataIter, err := engine.NewMemSSTIterator(data, true)
+		dataIter, err := sst.NewMemIterator(data, true)
 		if err != nil {
 			return enginepb.MVCCStats{}
 		}

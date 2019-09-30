@@ -116,30 +116,12 @@ func (b *RocksDBBatchBuilder) getRepr() []byte {
 	return b.batch.Repr()
 }
 
-func putUint32(b []byte, v uint32) {
-	b[0] = byte(v >> 24)
-	b[1] = byte(v >> 16)
-	b[2] = byte(v >> 8)
-	b[3] = byte(v)
-}
-
-func putUint64(b []byte, v uint64) {
-	b[0] = byte(v >> 56)
-	b[1] = byte(v >> 48)
-	b[2] = byte(v >> 40)
-	b[3] = byte(v >> 32)
-	b[4] = byte(v >> 24)
-	b[5] = byte(v >> 16)
-	b[6] = byte(v >> 8)
-	b[7] = byte(v)
-}
-
 // Put sets the given key to the value provided.
 //
 // It is safe to modify the contents of the arguments after Put returns.
 func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 	deferredOp, _ := b.batch.SetDeferred(key.Len(), len(value), nil)
-	EncodeKeyToBuf(deferredOp.Key, key)
+	EncodeKeyToBuf(deferredOp.Key[:0], key)
 	copy(deferredOp.Value, value)
 	deferredOp.Finish()
 }
@@ -152,7 +134,7 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 // It is safe to modify the contents of the arguments after Merge returns.
 func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
 	deferredOp, _ := b.batch.MergeDeferred(key.Len(), len(value), nil)
-	EncodeKeyToBuf(deferredOp.Key, key)
+	EncodeKeyToBuf(deferredOp.Key[:0], key)
 	copy(deferredOp.Value, value)
 	deferredOp.Finish()
 }
@@ -162,7 +144,7 @@ func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
 // It is safe to modify the contents of the arguments after Clear returns.
 func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	deferredOp, _ := b.batch.DeleteDeferred(key.Len(), nil)
-	EncodeKeyToBuf(deferredOp.Key, key)
+	EncodeKeyToBuf(deferredOp.Key[:0], key)
 	deferredOp.Finish()
 }
 
@@ -229,26 +211,27 @@ func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
 	}
 
 	sz := len(key.Key) + timestampLength + timestampEncodedLengthLen
-	if cap(buf) < sz {
-		buf = make([]byte, sz)
+	pos := len(buf)
+	if cap(buf) < len(buf)+sz {
+		newBuf := make([]byte, len(buf)+sz)
+		copy(newBuf, buf)
+		buf = newBuf
 	} else {
-		buf = buf[:sz]
+		buf = buf[:len(buf)+sz]
 	}
 
-	copy(buf, key.Key)
-
-	pos := len(key.Key)
+	pos += copy(buf[pos:], key.Key)
 	if timestampLength > 0 {
 		buf[pos] = 0
 		pos += timestampSentinelLen
-		putUint64(buf[pos:], uint64(key.Timestamp.WallTime))
+		binary.BigEndian.PutUint64(buf[pos:], uint64(key.Timestamp.WallTime))
 		pos += walltimeEncodedLen
 		if key.Timestamp.Logical != 0 {
-			putUint32(buf[pos:], uint32(key.Timestamp.Logical))
+			binary.BigEndian.PutUint32(buf[pos:], uint32(key.Timestamp.Logical))
 			pos += logicalEncodedLen
 		}
 	}
-	buf[len(buf)-1] = byte(timestampLength)
+	buf[pos] = byte(timestampLength)
 
 	return buf
 }

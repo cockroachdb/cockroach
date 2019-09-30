@@ -44,7 +44,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 		t.Fatalf("expected %s to not exist", ssss.snapDir)
 	}
 
-	sssf, err := ssss.NewFile()
+	sssf, err := ssss.NewFile(0)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, sssf.Close())
@@ -62,6 +62,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	}
 
 	require.NoError(t, sssf.Write(ctx, []byte("foo")))
+	require.NoError(t, sssf.Sync())
 
 	// After writing to files, check that they have been flushed to disk.
 	for _, fileName := range ssss.SSTs() {
@@ -78,11 +79,15 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	// Check that writing to a closed file is an error.
 	require.EqualError(t, sssf.Write(ctx, []byte("foo")), "file has already been closed")
 
+	// Check that syncing to a closed file is an error.
+	require.EqualError(t, sssf.Sync(), "file has already been closed")
+
 	// Check that closing an empty file is an error.
-	sssf, err = ssss.NewFile()
+	sssf, err = ssss.NewFile(0)
 	require.NoError(t, err)
 	require.EqualError(t, sssf.Close(), "file is empty")
 	require.NoError(t, sssf.Write(ctx, []byte("foo")))
+	require.NoError(t, sssf.Sync())
 
 	// Check that Clear removes the directory.
 	require.NoError(t, ssss.Clear())
