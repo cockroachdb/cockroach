@@ -385,4 +385,3 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.locality' AND usage_count > 0
 ----
 sql.show.locality
-
