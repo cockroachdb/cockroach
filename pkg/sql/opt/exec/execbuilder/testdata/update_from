@@ -209,14 +209,14 @@ run                                 ·                   ·
                      │              type                inner
                      │              equality            (a) = (a)
                      ├── scan       ·                   ·
-                     │              table               ac@primary
+                     │              table               ab@primary
                      │              spans               ALL
                      └── hash-join  ·                   ·
                           │         type                inner
                           │         equality            (a) = (a)
                           │         right cols are key  ·
                           ├── scan  ·                   ·
-                          │         table               ab@primary
+                          │         table               ac@primary
                           │         spans               ALL
                           └── scan  ·                   ·
 ·                                   table               abc@primary

@@ -204,7 +204,10 @@ func ExtractJoinEqualityFilters(leftCols, rightCols opt.ColSet, on FiltersExpr) 
 	return on
 }
 
-func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, ok bool) {
+// IsVarEquality tests whether condition is a variable equality, such as
+// a.x=b.x. If so, it returns the left and right variable expressions, and
+// ok=true. Otherwise, returns ok=false.
+func IsVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, ok bool) {
 	if eq, ok := condition.(*EqExpr); ok {
 		if leftVar, ok := eq.Left.(*VariableExpr); ok {
 			if rightVar, ok := eq.Right.(*VariableExpr); ok {
@@ -218,7 +221,7 @@ func isVarEquality(condition opt.ScalarExpr) (leftVar, rightVar *VariableExpr, o
 func isJoinEquality(
 	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr,
 ) (ok bool, left, right opt.ColumnID) {
-	lvar, rvar, ok := isVarEquality(condition)
+	lvar, rvar, ok := IsVarEquality(condition)
 	if !ok {
 		return false, 0, 0
 	}
@@ -245,7 +248,7 @@ func isJoinEquality(
 func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) FiltersExpr {
 	var newFilters FiltersExpr
 	for i := range on {
-		leftVar, rightVar, ok := isVarEquality(on[i].Condition)
+		leftVar, rightVar, ok := IsVarEquality(on[i].Condition)
 		if ok {
 			a, b := leftVar.Col, rightVar.Col
 			found := false

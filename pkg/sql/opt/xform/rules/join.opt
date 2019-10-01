@@ -188,14 +188,19 @@
     (InnerJoin
         $innerRight
         $right
-        (ExtractBoundConditions $on (OutputCols2 $innerRight $right))
+        (SortFilters
+            (ExtractBoundConditions
+                $newOn:(MapAllJoinOpEqualities
+                    (ConcatFilters $on $innerOn)
+                    $cols:(OutputCols2 $innerRight $right)
+                )
+                $cols
+            )
+        )
         (EmptyJoinPrivate)
     )
     (SortFilters
-        (ConcatFilters
-            (ExtractUnboundConditions $on (OutputCols2 $innerRight $right))
-            $innerOn
-        )
+        (ExtractUnboundConditions $newOn $cols)
     )
     (EmptyJoinPrivate)
 )

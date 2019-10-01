@@ -2501,3 +2501,129 @@ project
       │         ├── constraint: /5/3: [/'2019-01-01' - /'2019-01-01']
       │         └── fd: ()-->(5)
       └── filters (true)
+
+# --------------------------------------------------
+# AssociateJoin
+# --------------------------------------------------
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE stu INJECT STATISTICS '[
+  {
+    "columns": ["s"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+# Check that the equality condition abc.a = xyz.x is synthesized.
+opt
+SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) s:5(int!null) t:6(int!null) u:7(int!null) x:8(int!null) y:9(int) z:10(int)
+ ├── left ordering: +5
+ ├── right ordering: +8
+ ├── fd: (5)==(1,8), (8)==(1,5), (1)==(5,8)
+ ├── scan stu
+ │    ├── columns: s:5(int!null) t:6(int!null) u:7(int!null)
+ │    ├── key: (5-7)
+ │    └── ordering: +5
+ ├── inner-join (merge)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int) x:8(int!null) y:9(int) z:10(int)
+ │    ├── left ordering: +8
+ │    ├── right ordering: +1
+ │    ├── fd: (1)==(8), (8)==(1)
+ │    ├── ordering: +(1|8) [actual: +8]
+ │    ├── scan xyz@xy
+ │    │    ├── columns: x:8(int) y:9(int) z:10(int)
+ │    │    └── ordering: +8
+ │    ├── scan abc@ab
+ │    │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    │    └── ordering: +1
+ │    └── filters (true)
+ └── filters (true)
+
+memo
+SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
+----
+memo (optimized, ~39KB, required=[presentation: a:1,b:2,c:3,s:5,t:6,u:7,x:8,y:9,z:10])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+5) (merge-join G3 G2 G5 inner-join,+5,+1) (lookup-join G3 G5 abc@ab,keyCols=[5],outCols=(1-3,5-10)) (inner-join G6 G7 G8) (inner-join G9 G10 G8) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+5,+8) (inner-join G10 G9 G8) (merge-join G9 G10 G5 inner-join,+8,+5) (merge-join G7 G6 G5 inner-join,+8,+5) (lookup-join G7 G5 stu,keyCols=[8],outCols=(1-3,5-10)) (inner-join G9 G10 G11) (inner-join G2 G3 G11) (merge-join G10 G9 G5 inner-join,+5,+8) (lookup-join G10 G5 xyz@xy,keyCols=[5],outCols=(1-3,5-10)) (inner-join G6 G7 G4) (inner-join G10 G9 G11) (merge-join G9 G10 G5 inner-join,+8,+1) (inner-join G3 G2 G11) (merge-join G2 G3 G5 inner-join,+1,+8) (inner-join G7 G6 G4) (merge-join G6 G7 G5 inner-join,+5,+1) (merge-join G10 G9 G5 inner-join,+1,+8) (lookup-join G10 G5 xyz@xy,keyCols=[1],outCols=(1-3,5-10)) (merge-join G3 G2 G5 inner-join,+8,+1) (lookup-join G3 G5 abc@ab,keyCols=[8],outCols=(1-3,5-10)) (merge-join G7 G6 G5 inner-join,+1,+5) (lookup-join G7 G5 stu,keyCols=[1],outCols=(1-3,5-10))
+ │    └── [presentation: a:1,b:2,c:3,s:5,t:6,u:7,x:8,y:9,z:10]
+ │         ├── best: (merge-join G6="[ordering: +5]" G7="[ordering: +(1|8)]" G5 inner-join,+5,+8)
+ │         └── cost: 12980.08
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan abc@ab,cols=(1-3))
+ │    │    └── cost: 1070.02
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 1070.02
+ ├── G3: (inner-join G6 G9 G8) (inner-join G9 G6 G8) (merge-join G6 G9 G5 inner-join,+5,+8) (lookup-join G6 G5 xyz@xy,keyCols=[5],outCols=(5-10)) (merge-join G9 G6 G5 inner-join,+8,+5) (lookup-join G9 G5 stu,keyCols=[8],outCols=(5-10))
+ │    ├── [ordering: +(5|8)]
+ │    │    ├── best: (merge-join G6="[ordering: +5]" G9="[ordering: +8]" G5 inner-join,+5,+8)
+ │    │    └── cost: 11880.05
+ │    └── []
+ │         ├── best: (merge-join G6="[ordering: +5]" G9="[ordering: +8]" G5 inner-join,+5,+8)
+ │         └── cost: 11880.05
+ ├── G4: (filters G12)
+ ├── G5: (filters)
+ ├── G6: (scan stu) (scan stu@uts)
+ │    ├── [ordering: +5]
+ │    │    ├── best: (scan stu)
+ │    │    └── cost: 10600.02
+ │    └── []
+ │         ├── best: (scan stu)
+ │         └── cost: 10600.02
+ ├── G7: (inner-join G9 G2 G11) (inner-join G2 G9 G11) (merge-join G9 G2 G5 inner-join,+8,+1) (lookup-join G9 G5 abc@ab,keyCols=[8],outCols=(1-3,8-10)) (merge-join G2 G9 G5 inner-join,+1,+8) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,8-10))
+ │    ├── [ordering: +(1|8)]
+ │    │    ├── best: (merge-join G9="[ordering: +8]" G2="[ordering: +1]" G5 inner-join,+8,+1)
+ │    │    └── cost: 2170.05
+ │    └── []
+ │         ├── best: (merge-join G9="[ordering: +8]" G2="[ordering: +1]" G5 inner-join,+8,+1)
+ │         └── cost: 2170.05
+ ├── G8: (filters G13)
+ ├── G9: (scan xyz,cols=(8-10)) (scan xyz@xy,cols=(8-10)) (scan xyz@yz,cols=(8-10))
+ │    ├── [ordering: +8]
+ │    │    ├── best: (scan xyz@xy,cols=(8-10))
+ │    │    └── cost: 1070.02
+ │    └── []
+ │         ├── best: (scan xyz,cols=(8-10))
+ │         └── cost: 1070.02
+ ├── G10: (inner-join G6 G2 G4) (inner-join G2 G6 G4) (merge-join G6 G2 G5 inner-join,+5,+1) (lookup-join G6 G5 abc@ab,keyCols=[5],outCols=(1-3,5-7)) (merge-join G2 G6 G5 inner-join,+1,+5) (lookup-join G2 G5 stu,keyCols=[1],outCols=(1-3,5-7))
+ │    ├── [ordering: +(1|5)]
+ │    │    ├── best: (merge-join G6="[ordering: +5]" G2="[ordering: +1]" G5 inner-join,+5,+1)
+ │    │    └── cost: 11880.05
+ │    └── []
+ │         ├── best: (merge-join G6="[ordering: +5]" G2="[ordering: +1]" G5 inner-join,+5,+1)
+ │         └── cost: 11880.05
+ ├── G11: (filters G14)
+ ├── G12: (eq G15 G16)
+ ├── G13: (eq G16 G17)
+ ├── G14: (eq G15 G17)
+ ├── G15: (variable a)
+ ├── G16: (variable s)
+ └── G17: (variable x)

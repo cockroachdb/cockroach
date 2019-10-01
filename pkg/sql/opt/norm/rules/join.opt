@@ -159,8 +159,8 @@
         ...
         $item:* &
             (FiltersItem (Eq (Variable) (Variable))) &
-            (CanMapJoinOpEquality $on $item $left) &
-            (CanMapJoinOpEquality $on $item $right)
+            (CanMapJoinOpEquality $on $item $leftCols:(OutputCols $left)) &
+            (CanMapJoinOpEquality $on $item $rightCols:(OutputCols $right))
         ...
     ]
     $private:*
@@ -169,11 +169,11 @@
 ((OpName)
     (Select
         $left
-        [ (FiltersItem (MapJoinOpEquality $on $item $left)) ]
+        [ (FiltersItem (MapJoinOpEquality $on $item $leftCols)) ]
     )
     (Select
         $right
-        [ (FiltersItem (MapJoinOpEquality $on $item $right)) ]
+        [ (FiltersItem (MapJoinOpEquality $on $item $rightCols)) ]
     )
     (RemoveFiltersItem $on $item)
     $private
@@ -189,8 +189,8 @@
         ...
         $item:* &
             (FiltersItem (Eq (Variable) (Variable))) &
-            ^(IsBoundBy $item (OutputCols $left)) &
-            (CanMapJoinOpEquality $on $item $left)
+            ^(IsBoundBy $item $leftCols:(OutputCols $left)) &
+            (CanMapJoinOpEquality $on $item $leftCols)
         ...
     ]
     $private:*
@@ -199,7 +199,7 @@
 ((OpName)
     $left
     $right
-    (ReplaceFiltersItem $on $item (MapJoinOpEquality $on $item $left))
+    (ReplaceFiltersItem $on $item (MapJoinOpEquality $on $item $leftCols))
     $private
 )
 
@@ -214,8 +214,8 @@
         ...
         $item:* &
             (FiltersItem (Eq (Variable) (Variable))) &
-            ^(IsBoundBy $item (OutputCols $right)) &
-            (CanMapJoinOpEquality $on $item $right)
+            ^(IsBoundBy $item $rightCols:(OutputCols $right)) &
+            (CanMapJoinOpEquality $on $item $rightCols)
         ...
     ]
     $private:*
@@ -224,7 +224,7 @@
 ((OpName)
     $left
     $right
-    (ReplaceFiltersItem $on $item (MapJoinOpEquality $on $item $right))
+    (ReplaceFiltersItem $on $item (MapJoinOpEquality $on $item $rightCols))
     $private
 )
 
