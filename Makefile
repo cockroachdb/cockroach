@@ -982,7 +982,7 @@ roachprod-stress roachprod-stressrace: bin/roachprod-stress
 	@if [ -z "$(CLUSTER)" ]; then \
 	  echo "ERROR: missing or empty CLUSTER"; \
 	else \
-	  bin/roachprod-stress $(CLUSTER) $(STRESSFLAGS) ./$(notdir $(patsubst %/,%,$(PKG))).test \
+	  bin/roachprod-stress $(CLUSTER) $(STRESSFLAGS) $(patsubst github.com/cockroachdb/cockroach/%,./%,$(PKG)) \
 	    -test.run "$(TESTS)" $(filter-out -v,$(TESTFLAGS)) -test.v -test.timeout $(TESTTIMEOUT); \
 	fi
 
