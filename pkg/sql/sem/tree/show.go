@@ -411,6 +411,26 @@ func (node *ShowRanges) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowRangeForRow represents a SHOW RANGE FOR ROW statement.
+type ShowRangeForRow struct {
+	TableOrIndex TableIndexName
+	Row          Exprs
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowRangeForRow) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW RANGE FROM ")
+	if node.TableOrIndex.Index != "" {
+		ctx.WriteString("INDEX ")
+	} else {
+		ctx.WriteString("TABLE ")
+	}
+	ctx.FormatNode(&node.TableOrIndex)
+	ctx.WriteString(" FOR ROW (")
+	ctx.FormatNode(&node.Row)
+	ctx.WriteString(")")
+}
+
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
 	Table *UnresolvedObjectName

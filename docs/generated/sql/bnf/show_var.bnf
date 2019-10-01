@@ -11,6 +11,7 @@ show_stmt ::=
 	| show_jobs_stmt
 	| show_queries_stmt
 	| show_ranges_stmt
+	| show_range_for_row_stmt
 	| show_roles_stmt
 	| show_schemas_stmt
 	| show_sequences_stmt

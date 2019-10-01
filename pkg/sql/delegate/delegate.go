@@ -72,6 +72,9 @@ func TryDelegate(
 	case *tree.ShowRanges:
 		return d.delegateShowRanges(t)
 
+	case *tree.ShowRangeForRow:
+		return d.delegateShowRangeForRow(t)
+
 	case *tree.ShowRoleGrants:
 		return d.delegateShowRoleGrants(t)
 
