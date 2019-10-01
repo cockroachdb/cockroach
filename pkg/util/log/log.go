@@ -259,7 +259,7 @@ func MakeEntry(s Severity, t int64, file string, line int, msg string) Entry {
 // Format writes the log entry to the specified writer.
 func (e Entry) Format(w io.Writer) error {
 	buf := formatLogEntry(e, nil, nil)
-	defer logging.putBuffer(buf)
+	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
 }
