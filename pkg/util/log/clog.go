@@ -480,7 +480,7 @@ func formatHeader(
 		cp = nil
 	}
 
-	buf := logging.getBuffer()
+	buf := getBuffer()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
 	}
@@ -696,13 +696,6 @@ type loggingT struct {
 	// Level flag for output to files.
 	fileThreshold Severity
 
-	// freeList is a list of byte buffers, maintained under freeListMu.
-	freeList *buffer
-	// freeListMu maintains the free list. It is separate from the main mutex
-	// so buffers can be grabbed and printed to without holding the main lock,
-	// for better parallelization.
-	freeListMu syncutil.Mutex
-
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
 	mu syncutil.Mutex
@@ -740,6 +733,12 @@ type loggingT struct {
 	// The Cluster ID is reported on every new log file so as to ease the correlation
 	// of panic reports with self-reported log files.
 	clusterID string
+}
+
+var freeList struct {
+	syncutil.Mutex
+	// head is the head of a list of byte buffers, maintained under the mutex.
+	head *buffer
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -792,13 +791,13 @@ func (l *loggingT) setVState(verbosity level, filter []modulePat, setFilter bool
 }
 
 // getBuffer returns a new, ready-to-use buffer.
-func (l *loggingT) getBuffer() *buffer {
-	l.freeListMu.Lock()
-	b := l.freeList
+func getBuffer() *buffer {
+	freeList.Lock()
+	b := freeList.head
 	if b != nil {
-		l.freeList = b.next
+		freeList.head = b.next
 	}
-	l.freeListMu.Unlock()
+	freeList.Unlock()
 	if b == nil {
 		b = new(buffer)
 	} else {
@@ -809,15 +808,15 @@ func (l *loggingT) getBuffer() *buffer {
 }
 
 // putBuffer returns a buffer to the free list.
-func (l *loggingT) putBuffer(b *buffer) {
+func putBuffer(b *buffer) {
 	if b.Len() >= 256 {
 		// Let big buffers die a natural death.
 		return
 	}
-	l.freeListMu.Lock()
-	b.next = l.freeList
-	l.freeList = b
-	l.freeListMu.Unlock()
+	freeList.Lock()
+	b.next = freeList.head
+	freeList.head = b
+	freeList.Unlock()
 }
 
 // ensureFile ensures that l.file is set and valid.
@@ -938,10 +937,11 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		if err := l.writeToFile(data); err != nil {
 			l.exitLocked(err)
 			l.mu.Unlock()
+			putBuffer(buf)
 			return
 		}
 
-		l.putBuffer(buf)
+		putBuffer(buf)
 	}
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
@@ -987,10 +987,11 @@ func (l *loggingT) printPanicToFile(r interface{}) {
 
 func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 	buf := l.processForStderr(entry, stacks)
-	if _, err := OrigStderr.Write(buf.Bytes()); err != nil {
+	_, err := OrigStderr.Write(buf.Bytes())
+	putBuffer(buf)
+	if err != nil {
 		l.exitLocked(err)
 	}
-	l.putBuffer(buf)
 }
 
 // processForStderr formats a log entry for output to standard error.
@@ -1153,11 +1154,11 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}, nil, nil)
 		var n int
 		n, err = sb.file.Write(buf.Bytes())
+		putBuffer(buf)
 		sb.nbytes += int64(n)
 		if err != nil {
 			return err
 		}
-		logging.putBuffer(buf)
 	}
 
 	select {

@@ -142,7 +142,7 @@ func TestEntryDecoder(t *testing.T) {
 		buf := formatHeader(s, now, gid, file, line, nil)
 		buf.WriteString(msg)
 		buf.WriteString("\n")
-		defer logging.putBuffer(buf)
+		defer putBuffer(buf)
 		return buf.String()
 	}
 
@@ -720,7 +720,7 @@ func TestExitOnFullDisk(t *testing.T) {
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		buf := formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil)
-		logging.putBuffer(buf)
+		putBuffer(buf)
 	}
 }
 
