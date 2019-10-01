@@ -81,6 +81,7 @@ TEST(Libroach, DBOpen) {
                  "Invalid argument: encryption was used on this store before, but no encryption "
                  "flags specified. You need a CCL build and must fully specify the "
                  "--enterprise-encryption flag");
+    free(ret.data);
     ASSERT_OK(rocksdb::Env::Default()->DeleteFile(dir.Path(kFileRegistryFilename)));
   }
   {
@@ -98,6 +99,7 @@ TEST(Libroach, DBOpen) {
     auto ret = DBOpen(&db, ToDBSlice(dir.Path("")), db_opts);
     EXPECT_STREQ(std::string(ret.data, ret.len).c_str(),
                  "Invalid argument: encryption options are not supported in OSS builds");
+    free(ret.data);
     ASSERT_OK(rocksdb::Env::Default()->DeleteFile(dir.Path(kFileRegistryFilename)));
   }
 }
