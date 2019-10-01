@@ -1644,7 +1644,7 @@ type restoreResumer struct {
 	databases      []*sqlbase.DatabaseDescriptor
 	tables         []*sqlbase.TableDescriptor
 	exec           sqlutil.InternalExecutor
-	latestStats    []*stats.TableStatistic
+	latestStats    []*stats.TableStatisticProto
 	statsRefresher *stats.Refresher
 }
 
@@ -1656,8 +1656,8 @@ type restoreResumer struct {
 // table is being restored.
 func remapRelevantStatistics(
 	backup BackupDescriptor, tableRewrites TableRewriteMap,
-) []*stats.TableStatistic {
-	relevantTableStatistics := make([]*stats.TableStatistic, 0, len(backup.Statistics))
+) []*stats.TableStatisticProto {
+	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
 
 	for i := range backup.Statistics {
 		stat := backup.Statistics[i]

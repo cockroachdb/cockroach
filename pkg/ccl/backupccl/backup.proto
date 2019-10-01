@@ -101,7 +101,7 @@ message BackupDescriptor {
                 (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   repeated string partition_descriptor_filenames = 19;
   repeated string locality_kvs = 20 [(gogoproto.customname) = "LocalityKVs"];
-  repeated sql.stats.TableStatistic statistics = 21;
+  repeated sql.stats.TableStatisticProto statistics = 21;
 }
 
 message BackupPartitionDescriptor{

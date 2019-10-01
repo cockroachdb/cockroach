@@ -38,7 +38,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
 	// expected deleted stats is correct.
-	testData := []TableStatistic{
+	testData := []TableStatisticProto{
 		{
 			TableID:       sqlbase.ID(100),
 			StatisticID:   1,

@@ -1045,7 +1045,7 @@ func backupPlanHook(
 		}
 
 		statsCache := p.ExecCfg().TableStatsCache
-		tableStatistics := make([]*stats.TableStatistic, 0)
+		tableStatistics := make([]*stats.TableStatisticProto, 0)
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
@@ -1064,7 +1064,9 @@ func backupPlanHook(
 				if err != nil {
 					return err
 				}
-				tableStatistics = append(tableStatistics, tableStatisticsAcc...)
+				for i := range tableStatisticsAcc {
+					tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
+				}
 			}
 		}
 

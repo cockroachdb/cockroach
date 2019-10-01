@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1001,22 +1000,14 @@ func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
 }
 
 type optTableStat struct {
-	createdAt      time.Time
+	stat           *stats.TableStatistic
 	columnOrdinals []int
-	rowCount       uint64
-	distinctCount  uint64
-	nullCount      uint64
-	histogram      []cat.HistogramBucket
 }
 
 var _ cat.TableStatistic = &optTableStat{}
 
 func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool, _ error) {
-	os.createdAt = stat.CreatedAt
-	os.rowCount = stat.RowCount
-	os.distinctCount = stat.DistinctCount
-	os.nullCount = stat.NullCount
-
+	os.stat = stat
 	os.columnOrdinals = make([]int, len(stat.ColumnIDs))
 	for i, c := range stat.ColumnIDs {
 		var ok bool
@@ -1028,31 +1019,13 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 		}
 	}
 
-	if stat.Histogram != nil {
-		os.histogram = make([]cat.HistogramBucket, len(stat.Histogram.Buckets))
-		typ := &stat.Histogram.ColumnType
-		var a sqlbase.DatumAlloc
-		for i := range os.histogram {
-			bucket := &stat.Histogram.Buckets[i]
-			datum, _, err := sqlbase.DecodeTableKey(&a, typ, bucket.UpperBound, encoding.Ascending)
-			if err != nil {
-				return false, err
-			}
-			os.histogram[i] = cat.HistogramBucket{
-				NumEq:         float64(bucket.NumEq),
-				NumRange:      float64(bucket.NumRange),
-				DistinctRange: bucket.DistinctRange,
-				UpperBound:    datum,
-			}
-		}
-	}
 	return true, nil
 }
 
 func (os *optTableStat) equals(other *optTableStat) bool {
 	// Two table statistics are considered equal if they have been created at the
 	// same time, on the same set of columns.
-	if os.createdAt != other.createdAt || len(os.columnOrdinals) != len(other.columnOrdinals) {
+	if os.CreatedAt() != other.CreatedAt() || len(os.columnOrdinals) != len(other.columnOrdinals) {
 		return false
 	}
 	for i, c := range os.columnOrdinals {
@@ -1065,7 +1038,7 @@ func (os *optTableStat) equals(other *optTableStat) bool {
 
 // CreatedAt is part of the cat.TableStatistic interface.
 func (os *optTableStat) CreatedAt() time.Time {
-	return os.createdAt
+	return os.stat.CreatedAt
 }
 
 // ColumnCount is part of the cat.TableStatistic interface.
@@ -1080,22 +1053,22 @@ func (os *optTableStat) ColumnOrdinal(i int) int {
 
 // RowCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) RowCount() uint64 {
-	return os.rowCount
+	return os.stat.RowCount
 }
 
 // DistinctCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) DistinctCount() uint64 {
-	return os.distinctCount
+	return os.stat.DistinctCount
 }
 
 // NullCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) NullCount() uint64 {
-	return os.nullCount
+	return os.stat.NullCount
 }
 
 // Histogram is part of the cat.TableStatistic interface.
 func (os *optTableStat) Histogram() []cat.HistogramBucket {
-	return os.histogram
+	return os.stat.Histogram
 }
 
 // optFamily is a wrapper around sqlbase.ColumnFamilyDescriptor that keeps a
