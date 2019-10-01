@@ -130,7 +130,7 @@ class DeleteRangeTblPropCollector : public rocksdb::TablePropertiesCollector {
   }
 
  private:
-  int ntombstones_;
+  int ntombstones_ = 0;
 };
 
 class DeleteRangeTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
