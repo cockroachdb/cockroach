@@ -55,6 +55,10 @@ func (lj *lookupJoinNode) Values() tree.Datums {
 	panic("lookupJoinNode cannot be run in local mode")
 }
 
+func (lj *lookupJoinNode) CanParallelize() bool {
+	return lj.eqColsAreKey
+}
+
 func (lj *lookupJoinNode) Close(ctx context.Context) {
 	lj.input.Close(ctx)
 	lj.table.Close(ctx)

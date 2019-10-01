@@ -442,6 +442,24 @@ scan  ·            ·
 ·     spans        /1-/1/# /3-/3/#
 ·     parallel     ·
 
+statement ok
+CREATE TABLE t2 (x INT PRIMARY KEY)
+
+query TTT
+EXPLAIN (PLAN) SELECT * FROM t INNER LOOKUP JOIN t2 ON t.k = t2.x
+----
+·            distributed            false
+·            vectorized             true
+lookup-join  ·                      ·
+ │           table                  t2@primary
+ │           type                   inner
+ │           equality               (k) = (x)
+ │           equality cols are key  ·
+ │           parallel               ·
+ └── scan    ·                      ·
+·            table                  t@primary
+·            spans                  ALL
+
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
