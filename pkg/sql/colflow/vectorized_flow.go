@@ -47,7 +47,9 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 }
 
 // Setup is part of the flowinfra.Flow interface.
-func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) error {
+func (f *vectorizedFlow) Setup(
+	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
+) error {
 	f.SetSpec(spec)
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
 	acc := f.EvalCtx.Mon.MakeBoundAccount()
@@ -66,7 +68,7 @@ func (f *vectorizedFlow) Setup(ctx context.Context, spec *execinfrapb.FlowSpec) 
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
 	)
-	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc)
+	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc, opt)
 	if err == nil {
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return nil
@@ -341,7 +343,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 // []distqlpb.MetadataSource so that any remote metadata can be read through
 // calling DrainMeta.
 func (s *vectorizedFlowCreator) setupInput(
-	input execinfrapb.InputSyncSpec,
+	input execinfrapb.InputSyncSpec, opt flowinfra.FuseOpt,
 ) (op colexec.Operator, _ []execinfrapb.MetadataSource, memUsed int, _ error) {
 	inputStreamOps := make([]colexec.Operator, 0, len(input.Streams))
 	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
@@ -402,7 +404,11 @@ func (s *vectorizedFlowCreator) setupInput(
 			)
 			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
-			op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+			if opt == flowinfra.FuseAggressively {
+				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, typs)
+			} else {
+				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+			}
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.
@@ -531,6 +537,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
 	acc *mon.BoundAccount,
+	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
 	// queue is a queue of indices into processorSpecs, for topologically
@@ -571,7 +578,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			input, metadataSources, memUsed, err := s.setupInput(pspec.Input[i])
+			input, metadataSources, memUsed, err := s.setupInput(pspec.Input[i], opt)
 			if err != nil {
 				return nil, err
 			}
@@ -773,7 +780,10 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // It returns a list of the leaf operators of all flows for the purposes of
 // EXPLAIN output.
 func SupportsVectorized(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, processorSpecs []execinfrapb.ProcessorSpec,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorSpecs []execinfrapb.ProcessorSpec,
+	fuseOpt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(),
@@ -802,7 +812,7 @@ func SupportsVectorized(
 	acc := memoryMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
 	if vecErr := execerror.CatchVectorizedRuntimeError(func() {
-		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, &acc)
+		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, &acc, fuseOpt)
 	}); vecErr != nil {
 		return leaves, vecErr
 	}

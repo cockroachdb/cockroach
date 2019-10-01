@@ -60,6 +60,9 @@ const (
 // stream are assumed to be ordered according to the same set of columns
 // (intra-stream ordering).
 type orderedSynchronizer struct {
+	// ordering dictates the way in which rows compare. If nil (i.e.
+	// sqlbase.NoOrdering), then rows are not compared and sources are consumed in
+	// index order.
 	ordering sqlbase.ColumnOrdering
 	evalCtx  *tree.EvalContext
 
@@ -107,6 +110,12 @@ func (s *orderedSynchronizer) Len() int {
 
 // Less is part of heap.Interface and is only meant to be used internally.
 func (s *orderedSynchronizer) Less(i, j int) bool {
+	// If we're not enforcing any ordering between rows, let's consume sources in
+	// their index order.
+	if s.ordering == nil {
+		return s.heap[i] < s.heap[j]
+	}
+
 	si := &s.sources[s.heap[i]]
 	sj := &s.sources[s.heap[j]]
 	cmp, err := si.row.Compare(s.types, &s.alloc, s.ordering, s.evalCtx, sj.row)
@@ -354,6 +363,9 @@ func (s *orderedSynchronizer) consumerStatusChanged(
 	s.state = newState
 }
 
+// makeOrderedSync creates an orderedSynchronizer. ordering dictates how rows
+// are to be compared. Use sqlbase.NoOrdering to indicate that the row ordering
+// doesn't matter and sources should be consumed in index order.
 func makeOrderedSync(
 	ordering sqlbase.ColumnOrdering, evalCtx *tree.EvalContext, sources []execinfra.RowSource,
 ) (execinfra.RowSource, error) {

@@ -151,7 +151,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// vectorized. If any of them can't, turn off the setting.
 			// TODO(yuzefovich): this is a safe but quite inefficient way of setting
 			// up vectorized flows since the flows will effectively be planned twice.
-			for _, spec := range flows {
+			for nodeID, spec := range flows {
+				fuseOpt := flowinfra.Normal
+				if nodeID == thisNodeID && localState.IsLocal {
+					fuseOpt = flowinfra.FuseAggressively
+				}
 				if _, err := colflow.SupportsVectorized(
 					ctx, &execinfra.FlowCtx{
 						EvalCtx: &evalCtx.EvalContext,
@@ -160,7 +164,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							Settings:    dsp.st,
 						},
 						NodeID: -1,
-					}, spec.Processors,
+					}, spec.Processors, fuseOpt,
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false

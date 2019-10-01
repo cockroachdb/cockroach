@@ -46,11 +46,24 @@ func (f StartableFn) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel co
 	f(ctx, wg, ctxCancel)
 }
 
+// FuseOpt specifies options for processor fusing at Flow.Setup() time.
+type FuseOpt bool
+
+const (
+	// Normal means fuse what you can, but don't serialize unordered input
+	// synchronizers.
+	Normal FuseOpt = false
+	// FuseAggressively means serialize unordered input synchronizers.
+	// This is useful for flows that might have mutations which can't have any
+	// concurrency.
+	FuseAggressively = true
+)
+
 // Flow represents a flow which consists of processors and streams.
 type Flow interface {
 	// Setup sets up all the infrastructure for the flow as defined by the flow
 	// spec. The flow will then need to be started and run.
-	Setup(context.Context, *execinfrapb.FlowSpec) error
+	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) error
 
 	// Start starts the flow. Processors run asynchronously in their own goroutines.
 	// Wait() needs to be called to wait for the flow to finish.
@@ -147,7 +160,7 @@ type FlowBase struct {
 }
 
 // Setup is part of the Flow interface.
-func (f *FlowBase) Setup(context.Context, *execinfrapb.FlowSpec) error {
+func (f *FlowBase) Setup(context.Context, *execinfrapb.FlowSpec, FuseOpt) error {
 	panic("Setup should not be called on FlowBase")
 }
 
