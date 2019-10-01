@@ -7,7 +7,7 @@ CREATE TABLE t (a INT PRIMARY KEY)
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT avg(a) OVER () FROM t)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkDFLBDEQhXt_xfEqhchttky1VnKNJ6doISniZjgCe0nIzKJy7H-X3RR6womW8ybf-8IcEZOnO3cghnmBhlXIJfXEnMoc1Qcb_w7TKISYR5ljq9CnQjBHSJCBYPDoXgfakfNU1g0UPIkLw1KbSzi48tEJFB6yi2xW17CTQhrlq5DF7QlGT-rv0ucQfXqjstanxpun28tOX0FhO4pZde1ZXfsf3Y44p8h0IjvX3ExWgfye6h05jaWn-5L6RVPH7cItgSeWutV12MS6mj_4Hda_wu0P2E4XnwEAAP__EY6e-w==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE1LwzAYx-9-ivA_tRLZumNOG1qlMNfZjimMHmLzMApdU5PUF0a_u6wZ6ISJHp__2y9kD_tSQyCP5_H1inWmZrdZes828dNyPksWLLhJ8lX-MA_ZMXLpA8HxlK_bQIYsXccZC0LvubAAR6MVLeSOLMQGEQqO1uiSrNXmIO2HQKLeIcYcVdN27iAXHKU2BLGHq1xNEFjJ55oykorMaAwORU5W9TDbmmonzcfUgSNvZWMFu0LRc-jOfQ1aJ7cEEfX879DHqlH6jcwoOiXO1nfBNArBkXZOsOnkLG7yH1xGttWNpRPYueVxX3CQ2pL_R6s7U9LS6HLA-DMdeoOgyDrvRv5IGm8dHvi9HP1anvwoF_3FZwAAAP__Y7O2sg==
 
 # Test that explaining a query that contains a subquery the result of which is
 # needed to make the physical plan is rejected. See #40677.
