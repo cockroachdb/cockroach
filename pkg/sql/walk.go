@@ -263,6 +263,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if n.eqColsAreKey {
 			v.observer.attr(name, "equality cols are key", "")
 		}
+		if n.CanParallelize() {
+			v.observer.attr(name, "parallel", "")
+		}
 		if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
 			v.expr(name, "pred", -1, n.onCond)
 		}

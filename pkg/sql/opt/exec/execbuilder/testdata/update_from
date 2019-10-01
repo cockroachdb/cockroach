@@ -142,6 +142,7 @@ count                            ·                      ·
                      │           type                   inner
                      │           equality               (column1) = (a)
                      │           equality cols are key  ·
+                     │           parallel               ·
                      └── values  ·                      ·
 ·                                size                   3 columns, 2 rows
 

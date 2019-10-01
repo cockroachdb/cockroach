@@ -34,6 +34,7 @@ root                                       ·                      ·           
                 │                          type                   anti               ·                   ·
                 │                          equality               (column2) = (p)    ·                   ·
                 │                          equality cols are key  ·                  ·                   ·
+                │                          parallel               ·                  ·                   ·
                 └── render                 ·                      ·                  (column2)           ·
                      │                     render 0               column2            ·                   ·
                      └── scan buffer node  ·                      ·                  (column1, column2)  ·

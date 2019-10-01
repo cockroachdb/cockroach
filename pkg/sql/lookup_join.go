@@ -43,6 +43,14 @@ type lookupJoinNode struct {
 	props physicalProps
 }
 
+// CanParallelize indicates whether the fetchers can parallelize the
+// batches of lookups that can be performed. As of now, this is true if
+// the equality columns that the lookup joiner uses form keys that
+// can return at most 1 row.
+func (lj *lookupJoinNode) CanParallelize() bool {
+	return lj.eqColsAreKey
+}
+
 func (lj *lookupJoinNode) startExec(params runParams) error {
 	panic("lookupJoinNode cannot be run in local mode")
 }

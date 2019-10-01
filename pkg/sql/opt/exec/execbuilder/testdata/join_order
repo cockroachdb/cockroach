@@ -85,11 +85,13 @@ render                 ·                      ·            (a, b, c, d, b, x, 
       │                type                   inner        ·                         ·
       │                equality               (b) = (b)    ·                         ·
       │                equality cols are key  ·            ·                         ·
+      │                parallel               ·            ·                         ·
       └── lookup-join  ·                      ·            (a, b, c, d, c, y)        ·
            │           table                  cy@primary   ·                         ·
            │           type                   inner        ·                         ·
            │           equality               (c) = (c)    ·                         ·
            │           equality cols are key  ·            ·                         ·
+           │           parallel               ·            ·                         ·
            └── scan    ·                      ·            (a, b, c, d)              ·
 ·                      table                  abc@primary  ·                         ·
 ·                      spans                  /1-/1/#      ·                         ·
