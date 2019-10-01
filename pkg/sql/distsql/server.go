@@ -331,7 +331,15 @@ func (ds *ServerImpl) setupFlow(
 	// to restore the original value which can have data races under stress.
 	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
-	if err := f.Setup(ctx, &req.Flow); err != nil {
+	opt := flowinfra.FuseNormally
+	if localState.IsLocal {
+		// If there's no remote flows, fuse everything. This is needed in order for
+		// us to be able to use the RootTxn for the flow 's execution; the RootTxn
+		// doesn't allow for concurrent operations. Local flows with mutations need
+		// to use the RootTxn.
+		opt = flowinfra.FuseAggressively
+	}
+	if err := f.Setup(ctx, &req.Flow, opt); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)

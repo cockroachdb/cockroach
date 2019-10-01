@@ -31,6 +31,7 @@ type unorderedSynchronizerMsg struct {
 }
 
 var _ Operator = &ParallelUnorderedSynchronizer{}
+var _ execinfra.OpNode = &ParallelUnorderedSynchronizer{}
 
 // ParallelUnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
