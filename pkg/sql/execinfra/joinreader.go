@@ -74,10 +74,11 @@ type JoinReader struct {
 
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
 	// JoinReader to wrap the fetcher with a stat collector when necessary.
-	fetcher        RowFetcher
-	indexKeyPrefix []byte
-	alloc          sqlbase.DatumAlloc
-	rowAlloc       sqlbase.EncDatumRowAlloc
+	fetcher            RowFetcher
+	indexKeyPrefix     []byte
+	alloc              sqlbase.DatumAlloc
+	rowAlloc           sqlbase.EncDatumRowAlloc
+	shouldLimitBatches bool
 
 	input      RowSource
 	inputTypes []types.T
@@ -170,6 +171,10 @@ func NewJoinReader(
 		indexCols[i] = uint32(columnID)
 		jr.indexTypes[i] = columnTypes[jr.colIdxMap[columnID]]
 	}
+
+	// If the lookup columns form a key, there is only one result per lookup, so the fetcher
+	// should parallelize the key lookups it performs.
+	jr.shouldLimitBatches = !spec.LookupColumnsAreKey
 
 	if err := jr.JoinerBase.Init(
 		jr,
@@ -464,7 +469,7 @@ func (jr *JoinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 	sort.Sort(spans)
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	err := jr.fetcher.StartScan(
-		jr.Ctx, jr.FlowCtx.Txn, spans, true /* limitBatches */, 0, /* limitHint */
+		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
 		jr.FlowCtx.TraceKV)
 	if err != nil {
 		jr.MoveToDraining(err)

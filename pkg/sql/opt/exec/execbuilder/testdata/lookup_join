@@ -53,6 +53,7 @@ lookup-join  ·                      ·                (a, b, c, d, e, f)  ·
  │           type                   inner            ·                   ·
  │           equality               (b, c) = (f, e)  ·                   ·
  │           equality cols are key  ·                ·                   ·
+ │           parallel               ·                ·                   ·
  └── scan    ·                      ·                (a, b, c)           ·
 ·            table                  abc@primary      ·                   ·
 ·            spans                  ALL              ·                   ·
@@ -161,6 +162,7 @@ render            ·                      ·                            (a, b, c
       │           type                   inner                        ·                         ·
       │           equality               (a, b, c, d) = (a, b, c, d)  ·                         ·
       │           equality cols are key  ·                            ·                         ·
+      │           parallel               ·                            ·                         ·
       └── scan    ·                      ·                            (a, b, c, d)              ·
 ·                 table                  data@primary                 ·                         ·
 ·                 spans                  ALL                          ·                         ·
@@ -385,6 +387,7 @@ render                 ·                      ·                (a, d)        �
       │                type                   inner            ·             ·
       │                equality               (a, b) = (a, b)  ·             ·
       │                equality cols are key  ·                ·             ·
+      │                parallel               ·                ·             ·
       └── lookup-join  ·                      ·                (a, a, b)     ·
            │           table                  large@bc         ·             ·
            │           type                   inner            ·             ·
@@ -465,6 +468,7 @@ render                 ·                      ·                (c, d)        �
       │                type                   left outer       ·             ·
       │                equality               (a, b) = (a, b)  ·             ·
       │                equality cols are key  ·                ·             ·
+      │                parallel               ·                ·             ·
       └── lookup-join  ·                      ·                (c, a, b)     ·
            │           table                  large@bc         ·             ·
            │           type                   left outer       ·             ·
@@ -729,6 +733,7 @@ lookup-join  ·                      ·                (a, b, c)  ·
  │           type                   semi             ·          ·
  │           equality               (a, c) = (f, e)  ·          ·
  │           equality cols are key  ·                ·          ·
+ │           parallel               ·                ·          ·
  └── scan    ·                      ·                (a, b, c)  ·
 ·            table                  abc@primary      ·          ·
 ·            spans                  ALL              ·          ·
@@ -743,6 +748,7 @@ lookup-join  ·                      ·                (a, b, c)  ·
  │           type                   anti             ·          ·
  │           equality               (a, c) = (f, e)  ·          ·
  │           equality cols are key  ·                ·          ·
+ │           parallel               ·                ·          ·
  └── scan    ·                      ·                (a, b, c)  ·
 ·            table                  abc@primary      ·          ·
 ·            spans                  ALL              ·          ·
@@ -1413,18 +1419,21 @@ limit                                               ·                      ·
                      │                              type                   inner
                      │                              equality               (l_orderkey) = (o_orderkey)
                      │                              equality cols are key  ·
+                     │                              parallel               ·
                      │                              pred                   @11 = 'F'
                      └── lookup-join                ·                      ·
                           │                         table                  nation@primary
                           │                         type                   inner
                           │                         equality               (s_nationkey) = (n_nationkey)
                           │                         equality cols are key  ·
+                          │                         parallel               ·
                           │                         pred                   @9 = 'SAUDI ARABIA'
                           └── lookup-join           ·                      ·
                                │                    table                  supplier@primary
                                │                    type                   inner
                                │                    equality               (l_suppkey) = (s_suppkey)
                                │                    equality cols are key  ·
+                               │                    parallel               ·
                                └── lookup-join      ·                      ·
                                     │               table                  lineitem@primary
                                     │               type                   semi

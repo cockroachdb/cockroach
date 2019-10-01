@@ -99,6 +99,7 @@ count                                    ·                      ·
                 │                        type                   inner
                 │                        equality               (k) = (k)
                 │                        equality cols are key  ·
+                │                        parallel               ·
                 └── render               ·                      ·
                      │                   render 0               CAST(NULL AS INT8)
                      │                   render 1               k
@@ -427,6 +428,7 @@ count                       ·                      ·                   ()     
                 │           type                   inner               ·                      ·
                 │           equality               (a) = (a)           ·                      ·
                 │           equality cols are key  ·                   ·                      ·
+                │           parallel               ·                   ·                      ·
                 └── scan    ·                      ·                   (a, b)                 ·
 ·                           table                  table38627@primary  ·                      ·
 ·                           spans                  /1-/1/#             ·                      ·
