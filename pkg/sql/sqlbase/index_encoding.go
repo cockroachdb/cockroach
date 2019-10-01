@@ -242,9 +242,15 @@ func MakeSpanFromEncDatums(
 func NeededColumnFamilyIDs(
 	colIdxMap map[ColumnID]int, families []ColumnFamilyDescriptor, neededCols util.FastIntSet,
 ) []FamilyID {
-	var needed []FamilyID
+	// Column family 0 is always included so we can distinguish null rows from
+	// absent rows.
+	needed := []FamilyID{0}
 	for i := range families {
 		family := &families[i]
+		if family.ID == 0 {
+			// Already added above.
+			continue
+		}
 		for _, columnID := range family.ColumnIDs {
 			columnOrdinal := colIdxMap[columnID]
 			if neededCols.Contains(columnOrdinal) {
