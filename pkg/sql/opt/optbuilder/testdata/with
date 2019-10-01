@@ -762,3 +762,29 @@ with &1 (t)
                      │    └── mapping:
                      │         └──  xy.x:1(int) => x:16(int)
                      └── variable: xy.x [type=int]
+
+# Check hidden column handling: level, node_type should not be output.
+build
+WITH cte AS (EXPLAIN (VERBOSE) SELECT 1) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: tree:9(string) field:10(string) description:11(string) columns:12(string) ordering:13(string)
+ ├── project
+ │    ├── columns: tree:2(string) field:5(string) description:6(string) columns:7(string) ordering:8(string)
+ │    └── explain
+ │         ├── columns: tree:2(string) level:3(int) node_type:4(string) field:5(string) description:6(string) columns:7(string) ordering:8(string)
+ │         ├── mode: verbose
+ │         └── project
+ │              ├── columns: "?column?":1(int!null)
+ │              ├── values
+ │              │    └── tuple [type=tuple]
+ │              └── projections
+ │                   └── const: 1 [type=int]
+ └── with-scan &1 (cte)
+      ├── columns: tree:9(string) field:10(string) description:11(string) columns:12(string) ordering:13(string)
+      └── mapping:
+           ├──  tree:2(string) => tree:9(string)
+           ├──  field:5(string) => field:10(string)
+           ├──  description:6(string) => description:11(string)
+           ├──  columns:7(string) => columns:12(string)
+           └──  ordering:8(string) => ordering:13(string)
