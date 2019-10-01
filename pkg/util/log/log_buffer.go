@@ -10,11 +10,7 @@
 
 package log
 
-import (
-	"bytes"
-
-	"github.com/knz/shakespeare/pkg/crdb/syncutil"
-)
+import "bytes"
 
 // buffer holds a byte Buffer for reuse while constructing log lines
 // prior to sending them to a sync buffer or log stream.
@@ -22,30 +18,16 @@ import (
 // Allocations are optimized by using a free list.
 type buffer struct {
 	bytes.Buffer
-	tmp  [64]byte // temporary byte array for creating headers.
-	next *buffer
+	tmp [64]byte // temporary byte array for creating headers.
 }
 
-var freeList struct {
-	syncutil.Mutex
-	// head is the head of a list of byte buffers, maintained under the mutex.
-	head *buffer
-}
+// newBuffer is the constructor for the sync.Pool.
+func newBuffer() interface{} { return new(buffer) }
 
 // getBuffer returns a new, ready-to-use buffer.
 func getBuffer() *buffer {
-	freeList.Lock()
-	b := freeList.head
-	if b != nil {
-		freeList.head = b.next
-	}
-	freeList.Unlock()
-	if b == nil {
-		b = new(buffer)
-	} else {
-		b.next = nil
-		b.Reset()
-	}
+	b := logging.bufPool.Get().(*buffer)
+	b.Reset()
 	return b
 }
 
@@ -55,10 +37,7 @@ func putBuffer(b *buffer) {
 		// Let big buffers die a natural death.
 		return
 	}
-	freeList.Lock()
-	b.next = freeList.head
-	freeList.head = b
-	freeList.Unlock()
+	logging.bufPool.Put(b)
 }
 
 // Some custom tiny helper functions to print the log header efficiently.
