@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,13 +39,8 @@ type loggingT struct {
 	// Level flag for output to stderr. Handled atomically.
 	stderrThreshold Severity
 
-	freeList struct {
-		syncutil.Mutex
-
-		// head is a list of byte buffers, maintained under
-		// freeList.Lock().
-		head *buffer
-	}
+	// pool for entry formatting buffers.
+	bufPool sync.Pool
 
 	// interceptor is the configured InterceptorFn callback, if any.
 	interceptor atomic.Value
@@ -113,6 +109,7 @@ type loggerT struct {
 }
 
 func init() {
+	logging.bufPool.New = newBuffer
 	logging.mu.fatalCh = make(chan struct{})
 	// Default stderrThreshold and fileThreshold to log everything.
 	// This will be the default in tests unless overridden; the CLI
