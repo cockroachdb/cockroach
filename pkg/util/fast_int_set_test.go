@@ -67,20 +67,32 @@ func TestFastIntSet(t *testing.T) {
 				if o := s.Ordered(); !reflect.DeepEqual(vals, o) {
 					t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
 				}
+				assertSame := func(orig, copy FastIntSet) {
+					if !orig.Equals(copy) || !copy.Equals(orig) {
+						t.Fatalf("expected equality: %v, %v", orig, copy)
+					}
+					if col, ok := copy.Next(0); ok {
+						copy.Remove(col)
+						if orig.Equals(copy) || copy.Equals(orig) {
+							t.Fatalf("unexpected equality: %v, %v", orig, copy)
+						}
+						copy.Add(col)
+						if !orig.Equals(copy) || !copy.Equals(orig) {
+							t.Fatalf("expected equality: %v, %v", orig, copy)
+						}
+					}
+				}
+				// Test Copy.
 				s2 := s.Copy()
-				if !s.Equals(s2) || !s2.Equals(s) {
-					t.Fatalf("expected equality: %v, %v", s, s2)
-				}
-				if col, ok := s2.Next(0); ok {
-					s2.Remove(col)
-					if s.Equals(s2) || s2.Equals(s) {
-						t.Fatalf("unexpected equality: %v, %v", s, s2)
-					}
-					s2.Add(col)
-					if !s.Equals(s2) || !s2.Equals(s) {
-						t.Fatalf("expected equality: %v, %v", s, s2)
-					}
-				}
+				assertSame(s, s2)
+				// Test CopyFrom.
+				var s3 FastIntSet
+				s3.CopyFrom(s)
+				assertSame(s, s3)
+				// Make sure CopyFrom into a non-empty set still works.
+				s.Shift(100)
+				s.CopyFrom(s3)
+				assertSame(s, s3)
 			}
 		})
 	}
