@@ -83,7 +83,7 @@ namespace {
 
 rocksdb::Status checkFileEntry(FileRegistry& registry, const std::string& filename,
                                enginepbccl::EncryptionType enc_type) {
-  auto entry = registry.GetFileEntry(filename).get();
+  auto entry = registry.GetFileEntry(filename);
   if (entry == nullptr) {
     return rocksdb::Status::InvalidArgument(
         fmt::StringPrintf("file %s has no entry", filename.c_str()));
@@ -99,7 +99,7 @@ rocksdb::Status checkFileEntry(FileRegistry& registry, const std::string& filena
 }
 
 rocksdb::Status checkNoFileEntry(FileRegistry& registry, const std::string& filename) {
-  auto entry = registry.GetFileEntry(filename).get();
+  auto entry = registry.GetFileEntry(filename);
   if (entry != nullptr) {
     return rocksdb::Status::InvalidArgument(
         fmt::StringPrintf("file %s has an unexpected entry", filename.c_str()));
