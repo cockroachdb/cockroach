@@ -27,6 +27,9 @@ type ColumnOrderInfo struct {
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
 
+// NoOrdering is used to indicate an empty ColumnOrdering.
+var NoOrdering ColumnOrdering
+
 // CompareDatums compares two datum rows according to a column ordering. Returns:
 //  - 0 if lhs and rhs are equal on the ordering columns;
 //  - less than 0 if lhs comes first;
