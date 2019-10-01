@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -2941,6 +2942,87 @@ may increase either contention or retry errors, or both.`,
 				return tree.NewDString(ctx.ClusterName), nil
 			},
 			Info: "Returns the cluster name.",
+		},
+	),
+
+	"crdb_internal.encode_key": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_id", types.Int},
+				{"index_id", types.Int},
+				{"row_tuple", types.AnyTuple},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tableID := int(tree.MustBeDInt(args[0]))
+				indexID := int(tree.MustBeDInt(args[1]))
+				rowDatums, ok := tree.AsDTuple(args[2])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected DTuple, found %s", args[2])
+				}
+
+				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
+				if err != nil {
+					return nil, err
+				}
+
+				if len(rowDatums.D) != len(tableDesc.Columns) {
+					return nil, pgerror.Newf(pgcode.Syntax, "number of values provided must equal number of columns in table")
+				}
+
+				// Check that all the input datums have types that line up with the columns.
+				var datums tree.Datums
+				for i, d := range rowDatums.D {
+					// We try to perform a cast here rather than a typecheck because the individual datums
+					// already have a fixed type, and not information is known at typechecking time for those
+					// datums to line up with the column types of the input table. Instead we try to cast the
+					// parsed datums into the types of the table's columns.
+					var newDatum tree.Datum
+					if d.ResolvedType() == types.Unknown {
+						if !tableDesc.Columns[i].Nullable {
+							return nil, pgerror.Newf(pgcode.NotNullViolation, "NULL provided as a value for a non-nullable column")
+						}
+						newDatum = tree.DNull
+					} else {
+						expectedTyp := tableDesc.Columns[i].DatumType()
+						newDatum, err = tree.PerformCast(ctx, d, expectedTyp)
+						if err != nil {
+							return nil, errors.WithHint(err, "try to explicitly cast each value to the corresponding column type")
+						}
+					}
+					datums = append(datums, newDatum)
+				}
+
+				indexDesc := tableDesc.AllNonDropIndexes()[indexID-1]
+
+				// Create a column id to row index map. In this case, each column ID just maps to the i'th ordinal.
+				colMap := make(map[sqlbase.ColumnID]int)
+				for i := range tableDesc.Columns {
+					colMap[tableDesc.Columns[i].ID] = i
+				}
+
+				if indexDesc.ID == tableDesc.PrimaryIndex.ID {
+					keyPrefix := tableDesc.IndexSpan(indexDesc.ID).Key
+					res, _, err := sqlbase.EncodeIndexKey(tableDesc, indexDesc, colMap, datums, keyPrefix)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(res)), err
+				}
+				// We have a secondary index.
+				res, err := sqlbase.EncodeSecondaryIndex(tableDesc, indexDesc, colMap, datums)
+				if err != nil {
+					return nil, err
+				}
+				// If EncodeSecondaryIndex returns more than one element then we have an inverted index,
+				// which this command does not support right now.
+				if len(res) > 1 {
+					return nil, unimplemented.NewWithIssue(41232, "inverted indexes not supported right now")
+				}
+				return tree.NewDBytes(tree.DBytes(res[0].Key)), err
+			},
+			Info: "Generate the key for a row on a particular table and index.",
 		},
 	),
 
