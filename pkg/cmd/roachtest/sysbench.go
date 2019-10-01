@@ -25,11 +25,8 @@ const (
 	oltpUpdateIndex
 	oltpUpdateNonIndex
 	oltpReadOnly
-
-	// TODO(nvanbenschoten): transactional workloads are not supported
-	// because sysbench does not contain client-side retry loops.
-	// oltpReadWrite
-	// oltpWriteOnly
+	oltpReadWrite
+	oltpWriteOnly
 
 	numSysbenchWorkloads
 )
@@ -41,8 +38,8 @@ var sysbenchWorkloadName = map[sysbenchWorkload]string{
 	oltpUpdateIndex:    "oltp_update_index",
 	oltpUpdateNonIndex: "oltp_update_non_index",
 	oltpReadOnly:       "oltp_read_only",
-	// oltpReadWrite: "oltp_read_write",
-	// oltpWriteOnly: "oltp_write_only",
+	oltpReadWrite:      "oltp_read_write",
+	oltpWriteOnly:      "oltp_write_only",
 }
 
 func (w sysbenchWorkload) String() string {
