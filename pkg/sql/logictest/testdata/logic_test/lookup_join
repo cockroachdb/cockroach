@@ -610,9 +610,9 @@ statement ok
 SET tracing = off
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/71/1/1/1/{1-2}, /Table/71/1/1/3/{1-2}'
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/71/1/%'
 ----
-Scan /Table/71/1/1/1/{1-2}, /Table/71/1/1/3/{1-2}
+Scan /Table/71/1/1/{0-1/2}, /Table/71/1/1/3/{1-2}
 
 # Test generating tighter spans on interleaved tables.
 statement ok
