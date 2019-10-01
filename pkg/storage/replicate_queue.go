@@ -21,13 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft"
 )
 
@@ -335,20 +336,56 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorAdd:
 		// only include live replicas, since dead replicas should soon be removed
 		existingReplicas := liveVoterReplicas
-		return rq.add(ctx, repl, existingReplicas, dryRun)
+		return rq.addOrReplace(ctx, repl, existingReplicas, -1 /* removeIdx */, dryRun)
 	case AllocatorRemove:
 		return rq.remove(ctx, repl, voterReplicas, dryRun)
-	case AllocatorReplaceDead, AllocatorReplaceDecommissioning:
-		existingReplicas := liveVoterReplicas
-		// WIP(tbg): pass a slice of replicas that can be replaced in.
-		// In ReplaceDead, it's the dead replicas, in ReplaceDecommissioning
-		// it's the decommissioning ones.
-		// Rename rq.add to rq.addOrReplace, and let it actually replace a replica
-		// atomically when there's suitable candidate in the slice.
-		return rq.add(ctx, repl, existingReplicas, dryRun)
+	case AllocatorReplaceDead:
+		if len(deadVoterReplicas) == 0 {
+			// Nothing to do.
+			return false, nil
+		}
+		removeIdx := -1 // guaranteed to be changed below
+		for i, rDesc := range voterReplicas {
+			if rDesc.StoreID == deadVoterReplicas[0].StoreID {
+				removeIdx = i
+				break
+			}
+		}
+		if removeIdx < 0 {
+			return false, errors.AssertionFailedf(
+				"dead voter %v unexpectedly not found in %v",
+				deadVoterReplicas[0], voterReplicas)
+		}
+		return rq.addOrReplace(ctx, repl, voterReplicas, removeIdx, dryRun)
+	case AllocatorReplaceDecommissioning:
+		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(
+			desc.RangeID, voterReplicas)
+		if len(decommissioningReplicas) == 0 {
+			// Nothing to do.
+			return false, nil
+		}
+		removeIdx := -1 // guaranteed to be changed below
+		for i, rDesc := range voterReplicas {
+			if rDesc.StoreID == decommissioningReplicas[0].StoreID {
+				removeIdx = i
+				break
+			}
+		}
+		if removeIdx < 0 {
+			return false, errors.AssertionFailedf(
+				"decommissioning voter %v unexpectedly not found in %v",
+				decommissioningReplicas[0], voterReplicas)
+		}
+		return rq.addOrReplace(ctx, repl, voterReplicas, removeIdx, dryRun)
 	case AllocatorRemoveDecommissioning:
+		// NB: this path will only be hit when the range is over-replicated and
+		// has decommissioning replicas; in the common case we'll hit
+		// AllocatorReplaceDecommissioning above.
 		return rq.removeDecommissioning(ctx, repl, dryRun)
 	case AllocatorRemoveDead:
+		// NB: this path will only be hit when the range is over-replicated and
+		// has dead replicas; in the common case we'll hit AllocatorReplaceDead
+		// above.
 		return rq.removeDead(ctx, repl, deadVoterReplicas, dryRun)
 	case AllocatorRemoveLearner:
 		return rq.removeLearner(ctx, repl, dryRun)
@@ -359,22 +396,72 @@ func (rq *replicateQueue) processOneChange(
 		// Requeue because either we failed to transition out of a joint state
 		// (bad) or we did and there might be more to do for that range.
 		return true, err
+	default:
+		return false, errors.Errorf("unknown allocator action %v", action)
 	}
-	return true, nil
 }
 
-func (rq *replicateQueue) add(
-	ctx context.Context, repl *Replica, existingReplicas []roachpb.ReplicaDescriptor, dryRun bool,
+// addOrReplace adds or replaces a replica. If removeIdx is -1, an addition is
+// carried out. Otherwise, removeIdx must be a valid index into existingReplicas
+// and specifies which replica to replace with a new one.
+//
+// The method preferably issues an atomic replica swap, but may not be able to
+// do this in all cases, such as when atomic replication changes are not
+// available, or when the range consists of a single replica. As a fall back,
+// only the addition is carried out; the removal is then a follow-up step for
+// the next scanner cycle.
+func (rq *replicateQueue) addOrReplace(
+	ctx context.Context,
+	repl *Replica,
+	existingReplicas []roachpb.ReplicaDescriptor,
+	removeIdx int, // -1 for no removal
+	dryRun bool,
 ) (requeue bool, _ error) {
+	if len(existingReplicas) == 1 {
+		// If only one replica remains, that replica is the leaseholder and
+		// we won't be able to swap it out. Ignore the removal and simply add
+		// a replica.
+		removeIdx = -1
+	}
+	if !rq.store.cfg.Settings.Version.IsActive(cluster.VersionAtomicChangeReplicas) {
+		// If we can't swap yet, don't.
+		removeIdx = -1
+	}
+
+	var remainingReplicas []roachpb.ReplicaDescriptor
+	if removeIdx >= 0 {
+		remainingReplicas = append(existingReplicas[:removeIdx:removeIdx], existingReplicas[removeIdx+1:]...)
+		// See about transferring the lease away if we're about to remove the
+		// leaseholder.
+		done, err := rq.maybeTransferLeaseAway(ctx, repl, existingReplicas[removeIdx].StoreID, dryRun)
+		if err != nil {
+			return false, err
+		}
+		if done {
+			// Lease was transferred away. Next leaseholder is going to take over.
+			return false, nil
+		}
+	} else {
+		remainingReplicas = existingReplicas
+	}
+
 	desc, zone := repl.DescAndZone()
+	// Allocate a target assuming that the replica we're replacing (if any) is
+	// already gone. The allocator should not try to re-add this replica since
+	// there is a reason we're removing it (i.e. dead or decommissioning). If we
+	// left the replica in the slice, the allocator would not be guaranteed to
+	// pick a replica that fills the gap removeRepl leaves once it's gone.
 	newStore, details, err := rq.allocator.AllocateTarget(
 		ctx,
 		zone,
 		desc.RangeID,
-		existingReplicas,
+		remainingReplicas,
 	)
 	if err != nil {
 		return false, err
+	}
+	if removeIdx >= 0 && newStore.StoreID == existingReplicas[removeIdx].StoreID {
+		return false, errors.AssertionFailedf("allocator suggested to replace replica on s%d with itself", newStore.StoreID)
 	}
 	newReplica := roachpb.ReplicationTarget{
 		NodeID:  newStore.Node.NodeID,
@@ -383,7 +470,6 @@ func (rq *replicateQueue) add(
 
 	clusterNodes := rq.allocator.storePool.ClusterNodeCount()
 	need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
-	willHave := len(existingReplicas) + 1
 
 	// Only up-replicate if there are suitable allocation targets such that,
 	// either the replication goal is met, or it is possible to get to the next
@@ -395,7 +481,10 @@ func (rq *replicateQueue) add(
 	// NB: If willHave > need, then always allow up-replicating as that
 	// will be the case when up-replicating a range with a decommissioning
 	// replica.
-	if willHave < need && willHave%2 == 0 {
+	//
+	// We skip this check if we're swapping a replica, since that does not
+	// change the quorum size.
+	if willHave := len(existingReplicas) + 1; removeIdx < 0 && willHave < need && willHave%2 == 0 {
 		// This means we are going to up-replicate to an even replica state.
 		// Check if it is possible to go to an odd replica state beyond it.
 		oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), existingReplicas...)
@@ -417,12 +506,26 @@ func (rq *replicateQueue) add(
 		}
 	}
 	rq.metrics.AddReplicaCount.Inc(1)
-	log.VEventf(ctx, 1, "adding replica %+v due to under-replication: %s",
-		newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+	ops := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, newReplica)
+	if removeIdx < 0 {
+		log.VEventf(ctx, 1, "adding replica %+v: %s",
+			newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+	} else {
+		rq.metrics.RemoveReplicaCount.Inc(1)
+		removeReplica := existingReplicas[removeIdx]
+		log.VEventf(ctx, 1, "replacing replica %s with %+v: %s",
+			removeReplica, newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+		ops = append(ops,
+			roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, roachpb.ReplicationTarget{
+				StoreID: removeReplica.StoreID,
+				NodeID:  removeReplica.NodeID,
+			})...)
+	}
+
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, newReplica),
+		ops,
 		desc,
 		SnapshotRequest_RECOVERY,
 		storagepb.ReasonRangeUnderReplicated,
@@ -431,6 +534,7 @@ func (rq *replicateQueue) add(
 	); err != nil {
 		return false, err
 	}
+	// Always requeue to see if more work needs to be done.
 	return true, nil
 }
 
