@@ -122,6 +122,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 	vectorizeThresholdMet bool,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
+	_, ok := flows[thisNodeID]
+	if !ok {
+		return nil, nil, errors.AssertionFailedf("missing gateway flow")
+	}
+	if localState.IsLocal && len(flows) != 1 {
+		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
+	}
 
 	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
 	setupReq := execinfrapb.SetupFlowRequest{
@@ -146,6 +153,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// the execution time.
 			setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
 		} else {
+			fuseOpt := flowinfra.FuseNormally
+			if localState.IsLocal {
+				fuseOpt = flowinfra.FuseAggressively
+			}
 			// Now we check to see whether or not to even try vectorizing the flow.
 			// The goal here is to determine up front whether all of the flows can be
 			// vectorized. If any of them can't, turn off the setting.
@@ -160,7 +171,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							Settings:    dsp.st,
 						},
 						NodeID: -1,
-					}, spec.Processors,
+					}, spec.Processors, fuseOpt,
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
@@ -345,6 +356,16 @@ func (dsp *DistSQLPlanner) Run(
 
 	if finishedSetupFn != nil {
 		finishedSetupFn()
+	}
+
+	// Check that flows that were forced to be planned locally also have no concurrency.
+	// This is important, since these flows are forced to use the RootTxn (since
+	// they might have mutations), and the RootTxn does not permit concurrency.
+	// For such flows, we were supposed to have fused everything.
+	if txn != nil && planCtx.isLocal && flow.ConcurrentExecution() {
+		recv.SetError(errors.AssertionFailedf(
+			"unexpected concurrency for a flow that was forced to be planned locally"))
+		return func() {}
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
