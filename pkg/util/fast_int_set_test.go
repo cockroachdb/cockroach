@@ -67,8 +67,21 @@ func TestFastIntSet(t *testing.T) {
 				if o := s.Ordered(); !reflect.DeepEqual(vals, o) {
 					t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
 				}
+				// Test Copy.
 				s2 := s.Copy()
 				if !s.Equals(s2) || !s2.Equals(s) {
+					t.Fatalf("expected equality: %v, %v", s, s2)
+				}
+				// Test CopyFrom.
+				var s3 FastIntSet
+				s3.CopyFrom(s)
+				if !s.Equals(s3) || !s3.Equals(s) {
+					t.Fatalf("expected equality: %v, %v", s, s2)
+				}
+				// Make sure CopyFrom into a non-empty set still works.
+				s.Shift(100)
+				s.CopyFrom(s3)
+				if !s.Equals(s3) || !s3.Equals(s) {
 					t.Fatalf("expected equality: %v, %v", s, s2)
 				}
 				if col, ok := s2.Next(0); ok {

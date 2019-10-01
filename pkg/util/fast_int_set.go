@@ -203,7 +203,7 @@ func (s *FastIntSet) CopyFrom(c FastIntSet) {
 		if s.large == nil {
 			s.large = new(intsets.Sparse)
 		}
-		s.large.Copy(s.large)
+		s.large.Copy(c.large)
 	} else {
 		s.small = c.small
 		if s.large != nil {
