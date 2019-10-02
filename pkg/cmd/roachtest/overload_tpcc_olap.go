@@ -43,7 +43,7 @@ type tpccOLAPSpec struct {
 }
 
 func (s tpccOLAPSpec) run(ctx context.Context, t *test, c *cluster) {
-	crdbNodes, workloadNode := setupTPCC(ctx, t, c, s.Warehouses, false /* zfs */, nil /* versions */)
+	crdbNodes, workloadNode := setupTPCC(ctx, t, c, s.Warehouses, nil /* versions */)
 	const queryFileName = "queries.sql"
 	// querybench expects the entire query to be on a single line.
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`

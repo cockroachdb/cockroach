@@ -1774,6 +1774,9 @@ func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...str
 	}
 }
 
+// Silence unused warning.
+var _ = (&cluster{}).Reformat
+
 // Install a package in a node
 func (c *cluster) Install(
 	ctx context.Context, l *logger, node nodeListOption, args ...string,
