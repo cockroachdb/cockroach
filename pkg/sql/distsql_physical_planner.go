@@ -3051,6 +3051,8 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 					execinfrapb.PostProcessSpec{},
 					p.ResultTypes,
 				)
+			} else {
+				p.EnsureSingleStreamPerNode()
 			}
 		}
 	} else {
