@@ -253,8 +253,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// and after ValidateAddrs().
 	s.cfg.CheckCertificateAddrs(ctx)
 
-	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper,
-		&cfg.Settings.Version)
+	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
+		serverKnobs := knobs.(*TestingKnobs)
+		s.rpcContext = rpc.NewContextWithTestingKnobs(
+			s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper, &cfg.Settings.Version,
+			serverKnobs.ContextTestingKnobs,
+		)
+	} else {
+		s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper,
+			&cfg.Settings.Version)
+	}
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
 			log.Fatal(ctx, err)
@@ -1172,6 +1180,16 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	if s.cfg.TestingKnobs.Server != nil {
+		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)
+		if knobs.SignalAfterGettingRPCAddress != nil {
+			close(knobs.SignalAfterGettingRPCAddress)
+		}
+		if knobs.PauseAfterGettingRPCAddress != nil {
+			<-knobs.PauseAfterGettingRPCAddress
+		}
+	}
+
 	// Enable the debug endpoints first to provide an earlier window into what's
 	// going on with the node in advance of exporting node functionality.
 	//
@@ -1709,6 +1727,11 @@ func (s *Server) startListenRPCAndSQL(
 	}
 
 	anyL := m.Match(cmux.Any())
+	if serverTestKnobs, ok := s.cfg.TestingKnobs.Server.(*TestingKnobs); ok {
+		if serverTestKnobs.ContextTestingKnobs.ArtificialLatencyMap != nil {
+			anyL = rpc.NewDelayingListener(anyL)
+		}
+	}
 
 	// The remainder shutdown worker.
 	s.stopper.RunWorker(workersCtx, func(context.Context) {

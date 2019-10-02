@@ -38,6 +38,12 @@ type ContextTestingKnobs struct {
 	// for a given target and class.
 	StreamClientInterceptor func(target string, class ConnectionClass) grpc.StreamClientInterceptor
 
+	// ArtificialLatencyMap if non-nil contains a map from target address
+	// (server.RPCServingAddr() of a remote node) to artificial latency in
+	// milliseconds to inject. Setting this will cause the server to pause for
+	// the given amount of milliseconds on every network write.
+	ArtificialLatencyMap map[string]int
+
 	// ClusterID initializes the Context's ClusterID container to this value if
 	// non-nil at construction time.
 	ClusterID *uuid.UUID

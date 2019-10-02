@@ -146,6 +146,7 @@ func initCLIDefaults() {
 
 	demoCtx.nodes = 1
 	demoCtx.useEmptyDatabase = false
+	demoCtx.simulateLatency = false
 	demoCtx.runWorkload = false
 	demoCtx.localities = nil
 	demoCtx.geoPartitionedReplicas = false
@@ -352,4 +353,5 @@ var demoCtx struct {
 	runWorkload               bool
 	localities                demoLocalityList
 	geoPartitionedReplicas    bool
+	simulateLatency           bool
 }

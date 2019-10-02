@@ -602,6 +602,9 @@ func init() {
 	// The --empty flag is only valid for the top level demo command,
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, false)
+	BoolFlag(demoCmd.Flags(), &demoCtx.simulateLatency, cliflags.Global, false)
+	// Mark the --global flag as hidden until we investigate it more.
+	_ = demoCmd.Flags().MarkHidden(cliflags.Global.Name)
 
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()
