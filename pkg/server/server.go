@@ -81,7 +81,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -1663,11 +1663,19 @@ func (s *Server) startListenRPCAndSQL(
 	if s.cfg.SplitListenSQL {
 		rpcChanName = "rpc"
 	}
-	ln, err := listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
-	if err != nil {
-		return nil, nil, err
+	var ln net.Listener
+	if k := s.cfg.TestingKnobs.Server; k != nil {
+		knobs := k.(*TestingKnobs)
+		ln = knobs.RPCListener
 	}
-	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
+	if ln == nil {
+		var err error
+		ln, err = listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
+		if err != nil {
+			return nil, nil, err
+		}
+		log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
+	}
 
 	var pgL net.Listener
 	if s.cfg.SplitListenSQL {

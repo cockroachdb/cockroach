@@ -11,6 +11,8 @@
 package server
 
 import (
+	"net"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
@@ -32,6 +34,19 @@ type TestingKnobs struct {
 	SignalAfterGettingRPCAddress chan struct{}
 	// ContextTestingKnobs allows customization of the RPC context testing knobs.
 	ContextTestingKnobs rpc.ContextTestingKnobs
+
+	// If set, use this listener for RPC (and possibly SQL, depending on
+	// the SplitListenSQL setting), instead of binding a new listener.
+	// This is useful in tests that need an ephemeral listening port but
+	// must know it before the server starts.
+	//
+	// When this is used, the advertise address should also be set to
+	// match.
+	//
+	// The Server takes responsibility for closing this listener.
+	// TODO(bdarnell): That doesn't give us a good way to clean up if the
+	// server fails to start.
+	RPCListener net.Listener
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
