@@ -647,7 +647,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	defer func() {
 		planner.maybeLogStatement(
 			ctx,
-			"exec",
+			ex.executorType,
 			ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(),
 			res.Err(),
