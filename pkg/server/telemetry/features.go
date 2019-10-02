@@ -61,6 +61,11 @@ func Inc(c Counter) {
 	atomic.AddInt32(c, 1)
 }
 
+// Read reads the current value of the counter.
+func Read(c Counter) int32 {
+	return atomic.LoadInt32(c)
+}
+
 // GetCounterOnce returns a counter from the global registry,
 // and asserts it didn't exist previously.
 func GetCounterOnce(feature string) Counter {
