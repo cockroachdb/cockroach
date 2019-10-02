@@ -1827,7 +1827,7 @@ func TestIngestDelayLimit(t *testing.T) {
 		{ramp, Stats{L0FileCount: 21}},
 		{ramp * 2, Stats{L0FileCount: 22}},
 		{max, Stats{L0FileCount: 55}},
-		{0, Stats{PendingCompactionBytesEstimate: 20 << 30}},
+		{0, Stats{PendingCompactionBytesEstimate: (2 << 30) - 1}},
 		{max, Stats{L0FileCount: 25, PendingCompactionBytesEstimate: 80 << 30}},
 		{max, Stats{L0FileCount: 35, PendingCompactionBytesEstimate: 20 << 30}},
 	} {
