@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -247,7 +248,11 @@ func checkedTSCacheUpdate(
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) (bool, *roachpb.Error) {
+	// bumpedDueToMinReadTS is set to true if the highest timestamp bump encountered
+	// below is due to the minReadTS.
+	var bumpedDueToMinReadTS bool
 	var bumped bool
+
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		if roachpb.ConsultsTimestampCache(args) {
@@ -255,21 +260,28 @@ func (r *Replica) applyTimestampCache(
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
+			var forwardedToMinReadTS bool
 			if rTS.Forward(minReadTS) {
+				forwardedToMinReadTS = true
 				rTxnID = uuid.Nil
 			}
 			nextRTS := rTS.Next()
+			var didBump bool
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
 					if ba.Txn.Timestamp.Less(nextRTS) {
 						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(nextRTS) || bumped
+						didBump = txn.Timestamp.Forward(nextRTS)
 						ba.Txn = txn
 					}
 				}
 			} else {
-				bumped = ba.Timestamp.Forward(nextRTS) || bumped
+				didBump = ba.Timestamp.Forward(nextRTS)
 			}
+			// Preserve bumpedDueToMinReadTS if we did not just bump or set it
+			// appropriately if we did.
+			bumpedDueToMinReadTS = (!didBump && bumpedDueToMinReadTS) || (didBump && forwardedToMinReadTS)
+			bumped, didBump = bumped || didBump, false
 
 			// On more recent writes, forward the timestamp and set the
 			// write too old boolean for transactions. Note that currently
@@ -281,15 +293,21 @@ func (r *Replica) applyTimestampCache(
 				if ba.Txn.ID != wTxnID {
 					if ba.Txn.Timestamp.Less(nextWTS) {
 						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(nextWTS) || bumped
+						didBump = txn.Timestamp.Forward(nextWTS)
 						txn.WriteTooOld = true
 						ba.Txn = txn
 					}
 				}
 			} else {
-				bumped = ba.Timestamp.Forward(nextWTS) || bumped
+				didBump = ba.Timestamp.Forward(nextWTS)
 			}
+			// Clear bumpedDueToMinReadTS if we just bumped due to the write tscache.
+			bumpedDueToMinReadTS = !didBump && bumpedDueToMinReadTS
+			bumped = bumped || didBump
 		}
+	}
+	if bumpedDueToMinReadTS {
+		telemetry.Inc(r.store.txnsPushedDueToClosedTimestamp)
 	}
 	return bumped, nil
 }

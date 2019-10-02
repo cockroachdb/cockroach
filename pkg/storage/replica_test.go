@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -11791,6 +11792,127 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	}
 	if len(entries) > 0 {
 		t.Fatalf("reused span after free: %v", entries)
+	}
+}
+
+// This test ensures that pushes due to closed timestamps are properly recorded
+// into the associated telemetry counter.
+func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	keyA := append(keys.MakeTablePrefix(math.MaxUint32), 'a')
+	keyAA := append(keyA[:len(keyA):len(keyA)], 'a')
+	rKeyA, err := keys.Addr(keyA)
+	putReq := func(key roachpb.Key) *roachpb.PutRequest {
+		r := putArgs(key, []byte("foo"))
+		return &r
+	}
+	require.NoError(t, err)
+	type testCase struct {
+		name string
+		f    func(*testing.T, *Replica)
+	}
+	runTestCase := func(c testCase) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+		tc.Start(t, stopper)
+		r := tc.store.LookupReplica(rKeyA)
+		t.Run(c.name, func(t *testing.T) {
+			c.f(t, r)
+		})
+	}
+	for _, c := range []testCase{
+		{
+			// Test the case where no bump occurs.
+			name: "no bump", f: func(t *testing.T, r *Replica) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(putReq(keyA))
+				minReadTS := r.store.Clock().Now()
+				ba.Timestamp = minReadTS.Next()
+				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
+				require.Nil(t, pErr)
+				require.False(t, bumped)
+				require.Equal(t, int32(0), telemetry.Read(r.store.txnsPushedDueToClosedTimestamp))
+			},
+		},
+		{
+			name: "bump due to minTS", f: func(t *testing.T, r *Replica) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(putReq(keyA))
+				ba.Timestamp = r.store.Clock().Now()
+				minReadTS := ba.Timestamp.Next()
+				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
+				require.Nil(t, pErr)
+				require.True(t, bumped)
+				require.Equal(t, int32(1), telemetry.Read(r.store.txnsPushedDueToClosedTimestamp))
+			},
+		},
+		// Test the case where we bump due to the read ts cache rather than the minReadTS.
+		{
+			name: "bump due to later read ts cache entry", f: func(t *testing.T, r *Replica) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(putReq(keyA))
+				ba.Timestamp = r.store.Clock().Now()
+				minReadTS := ba.Timestamp.Next()
+				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4(), true)
+				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
+				require.Nil(t, pErr)
+				require.True(t, bumped)
+				require.Equal(t, int32(0), telemetry.Read(r.store.txnsPushedDueToClosedTimestamp))
+			},
+		},
+		// Test the case where we bump due to the write ts cache rather than the minReadTS.
+		{
+			name: "bump due to later write tscache entry", f: func(t *testing.T, r *Replica) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(putReq(keyA))
+				ba.Timestamp = r.store.Clock().Now()
+				minReadTS := ba.Timestamp.Next()
+				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4(), false)
+				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
+				require.Nil(t, pErr)
+				require.True(t, bumped)
+				require.Equal(t, int32(0), telemetry.Read(r.store.txnsPushedDueToClosedTimestamp))
+			},
+		},
+		// Test the case where we do initially bump due to the minReadTS but then
+		// bump again to a higher ts due to the read ts cache.
+		{
+			name: "higher bump due to read ts cache entry", f: func(t *testing.T, r *Replica) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(putReq(keyA))
+				ba.Add(putReq(keyAA))
+				ba.Timestamp = r.store.Clock().Now()
+				minReadTS := ba.Timestamp.Next()
+				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
+				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4(), true)
+				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
+				require.Nil(t, pErr)
+				require.True(t, bumped)
+				require.Equal(t, int32(0), telemetry.Read(r.store.txnsPushedDueToClosedTimestamp))
+			},
+		},
+		// Test the case where we do initially bump due to the minReadTS but then
+		// bump again to a higher ts due to the write ts cache.
+		{
+			name: "higher bump due to write ts cache entry", f: func(t *testing.T, r *Replica) {
+				ba := roachpb.BatchRequest{}
+				ba.Add(putReq(keyA))
+				ba.Add(putReq(keyAA))
+				ba.Timestamp = r.store.Clock().Now()
+				minReadTS := ba.Timestamp.Next()
+				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
+				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4(), false)
+				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
+				require.Nil(t, pErr)
+				require.True(t, bumped)
+				require.Equal(t, int32(0), telemetry.Read(r.store.txnsPushedDueToClosedTimestamp))
+			},
+		},
+	} {
+		runTestCase(c)
 	}
 }
 

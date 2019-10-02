@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -392,6 +393,11 @@ type Store struct {
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
 	sss                SSTSnapshotStorage
+
+	// txnsPushedDueToClosedTimestamp is a telemetry counter for the number of
+	// transactions which have been pushed due to the closed timestamp.
+	// See Replica.applyTimestampCache().
+	txnsPushedDueToClosedTimestamp telemetry.Counter
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -770,11 +776,12 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		cfg:                            cfg,
+		db:                             cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:                         eng,
+		nodeDesc:                       nodeDesc,
+		metrics:                        newStoreMetrics(cfg.HistogramWindowInterval),
+		txnsPushedDueToClosedTimestamp: telemetry.GetCounter("kv.closed_timestamp.txns_pushed"),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
