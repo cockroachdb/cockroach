@@ -777,3 +777,19 @@ SELECT partition_name, zone_config FROM [SHOW PARTITIONS FROM TABLE infect]
 ----
 p1 constraints = '[+dc=dc1]'
 
+# regression for #38074
+statement ok
+CREATE TABLE t38074 (x INT, index i(x));
+
+statement ok
+ALTER INDEX t38074@i CONFIGURE ZONE USING gc.ttlseconds = 80000
+
+statement ok
+ALTER TABLE t38074 CONFIGURE ZONE USING gc.ttlseconds = 70000
+
+# Ensure that the zone configurations for the table are not ignore due to being placeholders.
+query TT
+SELECT table_name, index_name FROM crdb_internal.zones WHERE table_name='t38074'
+----
+t38074 NULL
+t38074 i
