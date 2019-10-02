@@ -196,16 +196,16 @@ func (s FastIntSet) Copy() FastIntSet {
 	return c
 }
 
-// CopyFrom sets the receiver to a copy of c, which can then be modified
+// CopyFrom sets the receiver to a copy of other, which can then be modified
 // independently.
-func (s *FastIntSet) CopyFrom(c FastIntSet) {
-	if c.large != nil {
+func (s *FastIntSet) CopyFrom(other FastIntSet) {
+	if other.large != nil {
 		if s.large == nil {
 			s.large = new(intsets.Sparse)
 		}
-		s.large.Copy(s.large)
+		s.large.Copy(other.large)
 	} else {
-		s.small = c.small
+		s.small = other.small
 		if s.large != nil {
 			s.large.Clear()
 		}
