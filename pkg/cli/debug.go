@@ -1325,6 +1325,22 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix)
 }
 
+var debugClusterLogicalTimestampCommand = &cobra.Command{
+	Use:   "cluster-logical-timestamp",
+	Short: "generate a cluster logical timestamp",
+	Long: `
+Similar to the SQL cluster_logical_timestamp, but works offline.
+`,
+	RunE: runDebugClusterLogicalTimestamp,
+}
+
+func runDebugClusterLogicalTimestamp(cmd *cobra.Command, args []string) error {
+	clock := hlc.NewClock(hlc.UnixNano, 0)
+	ts := clock.Now()
+	fmt.Printf("%s\n", ts.AsOfSystemTime())
+	return nil
+}
+
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
 // and need encryption flags (injected by CCL code).
 // Note: do NOT include commands that just call rocksdb code without setting up an engine.
@@ -1354,6 +1370,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCommand,
+	debugClusterLogicalTimestampCommand,
 )
 
 // DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
