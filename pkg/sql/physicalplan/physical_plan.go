@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -1100,5 +1101,66 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 		}
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
+	}
+}
+
+// EnsureSingleStreamPerNode goes over the ResultRouters and merges any group of
+// routers that are on the same node, using a no-op processor.
+//
+// TODO(radu): a no-op processor is not ideal if the next processor is on the
+// same node. A fix for that is much more complicated, requiring remembering
+// extra state in the PhysicalPlan.
+func (p *PhysicalPlan) EnsureSingleStreamPerNode() {
+	// Fast path - check if we need to do anything.
+	var nodes util.FastIntSet
+	var foundDuplicates bool
+	for _, pIdx := range p.ResultRouters {
+		proc := &p.Processors[pIdx]
+		if nodes.Contains(int(proc.Node)) {
+			foundDuplicates = true
+			break
+		}
+		nodes.Add(int(proc.Node))
+	}
+	if !foundDuplicates {
+		return
+	}
+	streams := make([]ProcessorIdx, 0, 2)
+
+	for i := 0; i < len(p.ResultRouters); i++ {
+		pIdx := p.ResultRouters[i]
+		node := p.Processors[p.ResultRouters[i]].Node
+		streams = append(streams[:0], pIdx)
+		// Find all streams on the same node.
+		for j := i + 1; j < len(p.ResultRouters); {
+			if p.Processors[p.ResultRouters[j]].Node == node {
+				streams = append(streams, p.ResultRouters[j])
+				// Remove the stream.
+				copy(p.ResultRouters[j:], p.ResultRouters[j+1:])
+				p.ResultRouters = p.ResultRouters[:len(p.ResultRouters)-1]
+			} else {
+				j++
+			}
+		}
+		if len(streams) == 1 {
+			// Nothing to do for this node.
+			continue
+		}
+
+		// Merge the streams into a no-op processor.
+		proc := Processor{
+			Node: node,
+			Spec: execinfrapb.ProcessorSpec{
+				Input: []execinfrapb.InputSyncSpec{{
+					// The other fields will be filled in by MergeResultStreams.
+					ColumnTypes: p.ResultTypes,
+				}},
+				Core:   execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+			},
+		}
+		mergedProcIdx := p.AddProcessor(proc)
+		p.MergeResultStreams(streams, 0 /* sourceRouterSlot */, p.MergeOrdering, mergedProcIdx, 0 /* destInput */)
+		p.ResultRouters[i] = mergedProcIdx
 	}
 }
