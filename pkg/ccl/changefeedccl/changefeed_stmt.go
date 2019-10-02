@@ -14,6 +14,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -263,6 +265,14 @@ func changefeedPlanHook(
 			details.Opts[optKeyInValue] = ``
 		}
 
+		settings := p.ExecCfg().Settings
+		// Changefeeds are based on the Rangefeed abstraction, which requires the
+		// `kv.rangefeed.enabled` setting to be true.
+		if !storage.RangefeedEnabled.Get(&settings.SV) {
+			return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See " +
+				base.DocsURL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+		}
+
 		// Feature telemetry
 		telemetrySink := parsedSink.Scheme
 		if telemetrySink == `` {
@@ -277,7 +287,6 @@ func changefeedPlanHook(
 			return MaybeStripRetryableErrorMarker(err)
 		}
 
-		settings := p.ExecCfg().Settings
 		if err := utilccl.CheckEnterpriseEnabled(
 			settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {

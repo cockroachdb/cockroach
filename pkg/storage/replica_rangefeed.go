@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -128,10 +127,6 @@ func (i iteratorWithCloser) Close() {
 func (r *Replica) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
-	if !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
-		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See " +
-			base.DocsURL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-	}
 	ctx := r.AnnotateCtx(stream.Context())
 
 	var rspan roachpb.RSpan
