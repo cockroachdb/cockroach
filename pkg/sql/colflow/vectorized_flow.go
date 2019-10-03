@@ -402,7 +402,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			)
 			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
-			op = colexec.NewUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+			op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.
