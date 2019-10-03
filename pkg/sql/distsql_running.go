@@ -287,10 +287,10 @@ func (dsp *DistSQLPlanner) Run(
 	// NB: putting part of evalCtx in localState means it might be mutated down
 	// the line.
 	localState.EvalContext = &evalCtx.EvalContext
+	localState.Txn = txn
 	if planCtx.isLocal {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
-		localState.Txn = txn
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
@@ -330,6 +330,11 @@ func (dsp *DistSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
+	if len(flows) == 1 {
+		// We ended up planning everything locally, regardless of whether we
+		// intended to distribute or not.
+		localState.IsLocal = true
+	}
 	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState, vectorizedThresholdMet)
 	if err != nil {
 		recv.SetError(err)
@@ -338,6 +343,16 @@ func (dsp *DistSQLPlanner) Run(
 
 	if finishedSetupFn != nil {
 		finishedSetupFn()
+	}
+
+	// Check that flows that were forced to be planned locally also have no concurrency.
+	// This is important, since these flows are forced to use the RootTxn (
+	// since they might have mutations), and the RootTxn does not permit concurrency.
+	// For such flows, we were supposed to have fused everything.
+	if txn != nil && planCtx.isLocal && flow.ConcurrentExecution() {
+		recv.SetError(errors.Errorf(
+			"unexpected concurrency for a flow that was forced to be planned locally"))
+		return func() {}
 	}
 
 	// TODO(radu): this should go through the flow scheduler.

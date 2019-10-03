@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -65,6 +66,10 @@ type Flow interface {
 	// spec. The flow will then need to be started and run.
 	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) error
 
+	// SetTxn is used to provide the transaction in which the flow will run.
+	// It needs to be called after Setup() and before Start().
+	SetTxn(*client.Txn)
+
 	// Start starts the flow. Processors run asynchronously in their own goroutines.
 	// Wait() needs to be called to wait for the flow to finish.
 	// See Run() for a synchronous version.
@@ -105,6 +110,10 @@ type Flow interface {
 	// Cleanup should be called when the flow completes (after all processors and
 	// mailboxes exited).
 	Cleanup(context.Context)
+
+	// ConcurrentExecution returns true if the flow will use concurrency. Can only
+	// be called after Setup().
+	ConcurrentExecution() bool
 }
 
 // FlowBase is the shared logic between row based and vectorized flows. It
@@ -162,6 +171,17 @@ type FlowBase struct {
 // Setup is part of the Flow interface.
 func (f *FlowBase) Setup(context.Context, *execinfrapb.FlowSpec, FuseOpt) error {
 	panic("Setup should not be called on FlowBase")
+}
+
+// SetTxn is part of the Flow interface.
+func (f *FlowBase) SetTxn(txn *client.Txn) {
+	f.FlowCtx.Txn = txn
+	f.EvalCtx.Txn = txn
+}
+
+// ConcurrentExecution is part of the Flow interface.
+func (f *FlowBase) ConcurrentExecution() bool {
+	return len(f.processors) > 1
 }
 
 var _ Flow = &FlowBase{}

@@ -37,6 +37,8 @@ import (
 
 type vectorizedFlow struct {
 	*flowinfra.FlowBase
+	// operatorConcurrency is set if any operators are executed in parallel.
+	operatorConcurrency bool
 }
 
 var _ flowinfra.Flow = &vectorizedFlow{}
@@ -73,8 +75,14 @@ func (f *vectorizedFlow) Setup(
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return nil
 	}
+	f.operatorConcurrency = creator.operatorConcurrency
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 	return err
+}
+
+// ConcurrentExecution is part of the Flow interface.
+func (f *vectorizedFlow) ConcurrentExecution() bool {
+	return f.operatorConcurrency || f.FlowBase.ConcurrentExecution()
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
@@ -207,6 +215,8 @@ type vectorizedFlowCreator struct {
 	// leaves accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
 	leaves []execinfra.OpNode
+	// operatorConcurrency is set if any operators are executed in parallel.
+	operatorConcurrency bool
 }
 
 func newVectorizedFlowCreator(
@@ -408,6 +418,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, typs)
 			} else {
 				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+				s.operatorConcurrency = true
 			}
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
