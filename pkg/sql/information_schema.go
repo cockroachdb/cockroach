@@ -1421,35 +1421,36 @@ func forEachSchemaName(
 	return nil
 }
 
-// forEachDatabaseDesc retrieves all database descriptors and iterates through them in
-// lexicographical order with respect to their name. For each database, the function
-// will call fn with its descriptor.
+// forEachDatabaseDesc calls a function for the given DatabaseDescriptor, or if
+// it is nil, retrieves all database descriptors and iterates through them in
+// lexicographical order with respect to their name. The function is only called
+// if the user has privileges on the database.
 func forEachDatabaseDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext *DatabaseDescriptor,
 	fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
-	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
-	if err != nil {
-		return err
-	}
-
-	// Ignore table descriptors.
-	var dbDescs []*sqlbase.DatabaseDescriptor
-	for _, desc := range descs {
-		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok &&
-			(dbContext == nil || dbContext.ID == dbDesc.ID) &&
-			userCanSeeDatabase(ctx, p, dbDesc) {
-			dbDescs = append(dbDescs, dbDesc)
-		}
-	}
-
-	for _, db := range dbDescs {
-		if err := fn(db); err != nil {
+	var dbDescs []sqlbase.DatabaseDescriptor
+	if dbContext == nil {
+		descs, err := p.Tables().getAllDatabaseDescriptors(ctx, p.txn)
+		if err != nil {
 			return err
 		}
+		dbDescs = descs
+	} else {
+		dbDescs = append(dbDescs, *dbContext)
 	}
+
+	// Ignore databases that the user cannot see.
+	for _, dbDesc := range dbDescs {
+		if userCanSeeDatabase(ctx, p, &dbDesc) {
+			if err := fn(&dbDesc); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 

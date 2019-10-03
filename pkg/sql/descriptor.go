@@ -230,6 +230,23 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 	return descs, nil
 }
 
+// GetAllDatabaseDescriptorIDs looks up and returns all available database
+// descriptor IDs.
+func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbase.ID, error) {
+	log.Eventf(ctx, "fetching all database descriptor IDs")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "")
+	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
+	}
+
+	descIDs := make([]sqlbase.ID, 0, len(kvs))
+	for _, kv := range kvs {
+		descIDs = append(descIDs, sqlbase.ID(kv.ValueInt()))
+	}
+	return descIDs, nil
+}
+
 // writeDescToBatch adds a Put command writing a descriptor proto to the
 // descriptors table. It writes the descriptor desc at the id descID. If kvTrace
 // is enabled, it will log an event explaining the put that was performed.
