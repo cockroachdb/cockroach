@@ -536,6 +536,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name: fmt.Sprintf("cdc/crdb-chaos/rangefeed=%t", useRangeFeed),
+		Skip: "#37716",
 		// TODO(dan): Re-enable this test on 2.1 if we decide to backport #36852.
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
