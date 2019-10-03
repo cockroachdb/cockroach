@@ -18,9 +18,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -52,7 +54,7 @@ func roundToSeconds(d time.Duration) time.Duration {
 
 func run() error {
 	flags.Usage = func() {
-		fmt.Fprintf(flags.Output(), "usage: %s <cluster> [<flags>] <test> [<args>]\n", flags.Name())
+		fmt.Fprintf(flags.Output(), "usage: %s <cluster> <pkg> [<flags>] [<args>]\n", flags.Name())
 		flags.PrintDefaults()
 	}
 
@@ -70,6 +72,27 @@ func run() error {
 
 	if !*flagStderr {
 		return errors.New("-stderr=false is unsupported, please tee to a file (or implement the feature)")
+	}
+
+	pkg := os.Args[2]
+	localTestBin := filepath.Base(pkg) + ".test"
+	{
+		fi, err := os.Stat(pkg)
+		if err != nil {
+			return fmt.Errorf("the pkg flag %q is not a directory relative to the current working directory: %v", pkg, err)
+		}
+		if !fi.Mode().IsDir() {
+			return fmt.Errorf("the pkg flag %q is not a directory relative to the current working directory", pkg)
+		}
+
+		// Verify that the test binary exists.
+		fi, err = os.Stat(localTestBin)
+		if err != nil {
+			return fmt.Errorf("test binary %q does not exist: %v", localTestBin, err)
+		}
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("test binary %q is not a file", localTestBin)
+		}
 	}
 
 	if *flagP <= 0 || *flagTimeout < 0 || len(flags.Args()) == 0 {
@@ -97,6 +120,7 @@ func run() error {
 	nodes := strings.Count(string(out), "\n") - 1
 
 	const stressBin = "bin.docker_amd64/stress"
+
 	cmd = exec.Command("roachprod", "put", cluster, stressBin)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -104,8 +128,31 @@ func run() error {
 		return err
 	}
 
-	testBin := flags.Args()[0]
-	cmd = exec.Command("roachprod", "put", cluster, testBin)
+	cmd = exec.Command("roachprod", "run", cluster, "mkdir -p "+pkg)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	testdataPath := filepath.Join(pkg, "testdata")
+	if _, err := os.Stat(testdataPath); err == nil {
+		// roachprod put has bizarre semantics for putting directories anywhere
+		// other than the home directory. To deal with this we put the directory
+		// in the home directory and then move it.
+		tmpPath := "testdata" + strconv.Itoa(rand.Int())
+		cmd = exec.Command("roachprod", "run", cluster, "--", "rm", "-rf", testdataPath)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to remove old testdata: %v:\n%s", err, output)
+		}
+		cmd = exec.Command("roachprod", "put", cluster, testdataPath, tmpPath)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to copy testdata: %v", err)
+		}
+		cmd = exec.Command("roachprod", "run", cluster, "mv", tmpPath, testdataPath)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to move testdata: %v", err)
+		}
+	}
+	testBin := filepath.Join(pkg, localTestBin)
+	cmd = exec.Command("roachprod", "put", cluster, localTestBin, testBin)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -204,7 +251,8 @@ func run() error {
 			var stderr bytes.Buffer
 			cmd := exec.Command("roachprod",
 				"ssh", fmt.Sprintf("%s:%d", cluster, i), "--",
-				fmt.Sprintf("GOTRACEBACK=all ./stress %s", strings.Join(os.Args[2:], " ")))
+				fmt.Sprintf("cd %s; GOTRACEBACK=all ~/stress ./%s %s", pkg, filepath.Base(testBin),
+					strings.Join(os.Args[3:], " ")))
 			cmd.Stdout = stdoutW
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
