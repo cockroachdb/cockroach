@@ -78,13 +78,16 @@ func GetCounter(feature string) Counter {
 	counters.RLock()
 	i, ok := counters.m[feature]
 	counters.RUnlock()
+	if ok {
+		return i
+	}
 
+	counters.Lock()
+	defer counters.Unlock()
+	i, ok = counters.m[feature]
 	if !ok {
-		counters.Lock()
-		var n int32
-		counters.m[feature] = &n
-		i = &n
-		counters.Unlock()
+		i = new(int32)
+		counters.m[feature] = i
 	}
 	return i
 }
