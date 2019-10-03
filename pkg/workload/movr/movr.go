@@ -298,9 +298,11 @@ func (g *movr) Hooks() workload.Hooks {
 			constraints = '{"+region=us-east1": 1}',
 			lease_preferences = '[[+region=us-east1]]';
 		ALTER INDEX promo_codes@promo_codes_idx_us_west CONFIGURE ZONE USING
+			num_replicas = 3,
 			constraints = '{"+region=us-west1": 1}',
 			lease_preferences = '[[+region=us-west1]]';
 		ALTER INDEX promo_codes@promo_codes_idx_europe_west CONFIGURE ZONE USING
+			num_replicas = 3,
 			constraints = '{"+region=europe-west1": 1}',
 			lease_preferences = '[[+region=europe-west1]]';
 	`
