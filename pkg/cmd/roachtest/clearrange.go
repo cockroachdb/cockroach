@@ -27,10 +27,7 @@ func registerClearRange(r *testRegistry) {
 			// to <3:30h but it varies.
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
-			// This test reformats a drive to ZFS, so we don't want it reused.
-			// TODO(andrei): Can the test itself reuse the cluster (under --count=2)?
-			// In other words, would a OnlyTagged("clearrange") policy be good?
-			Cluster: makeClusterSpec(10, reuseNone()),
+			Cluster:    makeClusterSpec(10),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
@@ -41,31 +38,16 @@ func registerClearRange(r *testRegistry) {
 func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bool) {
 	c.Put(ctx, cockroach, "./cockroach")
 
-	if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
-		// Use ZFS so the data directories can instantly be rolled back to
-		// their pristine state. Useful for iterating quickly on the test.
-		if !local {
-			c.Reformat(ctx, c.All(), "zfs")
-		}
+	t.Status("restoring fixture")
+	c.Start(ctx, t)
 
-		t.Status("restoring fixture")
-		c.Start(ctx, t)
-
-		// NB: on a 10 node cluster, this should take well below 3h.
-		tBegin := timeutil.Now()
-		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
-		c.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
-		c.Stop(ctx)
-		t.Status()
-
-		if !local {
-			c.Run(ctx, c.All(), "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
-		}
-	} else {
-		t.Status(`restoring store directories from zfs snapshot`)
-		c.Run(ctx, c.All(), "sudo zfs rollback data1@pristine")
-	}
+	// NB: on a 10 node cluster, this should take well below 3h.
+	tBegin := timeutil.Now()
+	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
+		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
+	c.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
+	c.Stop(ctx)
+	t.Status()
 
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
