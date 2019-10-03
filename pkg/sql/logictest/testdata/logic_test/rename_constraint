@@ -3,7 +3,8 @@ CREATE TABLE t (
   x INT, y INT,
   CONSTRAINT cu UNIQUE (x),
   CONSTRAINT cc CHECK (x > 10),
-  CONSTRAINT cf FOREIGN KEY (x) REFERENCES t(x)
+  CONSTRAINT cf FOREIGN KEY (x) REFERENCES t(x),
+  FAMILY "primary" (x, y, rowid)
   )
 
 query T

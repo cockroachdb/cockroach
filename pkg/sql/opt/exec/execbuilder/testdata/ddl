@@ -183,7 +183,8 @@ statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
-  c INT
+  c INT,
+  FAMILY "primary" (a, b, c)
 )
 
 statement ok

@@ -28,7 +28,8 @@ CREATE TABLE c (
   foo JSON,
   bar JSON,
   INVERTED INDEX (foo),
-  INVERTED INDEX (bar)
+  INVERTED INDEX (bar),
+  FAMILY "primary" (id, foo, bar)
 )
 
 query TT

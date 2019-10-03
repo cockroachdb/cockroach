@@ -147,7 +147,11 @@ a  b  c
 
 # Check that CREATE TABLE AS allows users to specify primary key (#20940)
 statement ok
-CREATE TABLE foo5 (a, b PRIMARY KEY, c) AS SELECT * FROM baz
+CREATE TABLE foo5 (
+  a , b PRIMARY KEY, c,
+  FAMILY "primary" (a, b, c)
+) AS
+  SELECT * FROM baz
 
 query TT
 SHOW CREATE TABLE foo5
@@ -161,7 +165,11 @@ foo5  CREATE TABLE foo5 (
     )
 
 statement ok
-CREATE TABLE foo6 (a PRIMARY KEY, b, c) AS SELECT * FROM baz
+CREATE TABLE foo6 (
+  a PRIMARY KEY, b , c,
+  FAMILY "primary" (a, b, c)
+) AS
+  SELECT * FROM baz
 
 query TT
 SHOW CREATE TABLE foo6
@@ -192,7 +200,12 @@ foo8  CREATE TABLE foo8 (
 
 # Allow CREATE TABLE AS to specify composite primary keys.
 statement ok
-CREATE TABLE foo9 (a, b, c, PRIMARY KEY (a, c)) AS SELECT * FROM baz
+CREATE TABLE foo9 (
+  a , b , c,
+  PRIMARY KEY (a, c),
+  FAMILY "primary" (a, b, c)
+) AS
+  SELECT * FROM baz
 
 query TT
 SHOW CREATE TABLE foo9
@@ -220,7 +233,12 @@ foo10  CREATE TABLE foo10 (
     )
 
 statement ok
-CREATE TABLE foo11 (x, y, z, PRIMARY KEY(x, z)) AS VALUES (1, 3, 4), (10, 20, 40);
+CREATE TABLE foo11 (
+  x , y , z,
+  PRIMARY KEY (x, z),
+  FAMILY "primary" (x, y, z)
+) AS
+  VALUES (1, 3, 4), (10, 20, 40);
 
 query TT
 SHOW CREATE TABLE foo11
