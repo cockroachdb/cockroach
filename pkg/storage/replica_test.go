@@ -11831,9 +11831,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Add(putReq(keyA))
 				minReadTS := r.store.Clock().Now()
 				ba.Timestamp = minReadTS.Next()
-				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
-				require.Nil(t, pErr)
-				require.False(t, bumped)
+				require.False(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
@@ -11844,9 +11842,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Add(putReq(keyA))
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
-				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
-				require.Nil(t, pErr)
-				require.True(t, bumped)
+				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(1), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
@@ -11858,9 +11854,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
 				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4(), true)
-				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
-				require.Nil(t, pErr)
-				require.True(t, bumped)
+				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
@@ -11872,9 +11866,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
 				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4(), false)
-				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
-				require.Nil(t, pErr)
-				require.True(t, bumped)
+				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
@@ -11889,9 +11881,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				minReadTS := ba.Timestamp.Next()
 				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
 				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4(), true)
-				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
-				require.Nil(t, pErr)
-				require.True(t, bumped)
+				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
@@ -11906,9 +11896,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				minReadTS := ba.Timestamp.Next()
 				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
 				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4(), false)
-				bumped, pErr := r.applyTimestampCache(ctx, &ba, minReadTS)
-				require.Nil(t, pErr)
-				require.True(t, bumped)
+				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
 		},
