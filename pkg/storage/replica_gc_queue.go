@@ -32,10 +32,13 @@ const (
 	// ReplicaGCQueueInactivityThreshold is the inactivity duration after which
 	// a range will be considered for garbage collection. Exported for testing.
 	ReplicaGCQueueInactivityThreshold = 10 * 24 * time.Hour // 10 days
-	// ReplicaGCQueueCandidateTimeout is the duration after which a range in
+	// ReplicaGCQueueSuspectTimeout is the duration after which a Replica which
+	// is suspected to be removed should be processed by the queue.
+	// A Replica is suspected to have been removed if either it is in the
 	// candidate Raft state (which is a typical sign of having been removed
-	// from the group) will be considered for garbage collection.
-	ReplicaGCQueueCandidateTimeout = 1 * time.Second
+	// from the group) or it is a leaner which has been removed but never heard
+	// about that removal.
+	ReplicaGCQueueSuspectTimeout = 1 * time.Second
 )
 
 // Priorities for the replica GC queue.
@@ -44,7 +47,10 @@ const (
 
 	// Replicas that have been removed from the range spend a lot of
 	// time in the candidate state, so treat them as higher priority.
-	replicaGCPriorityCandidate = 1.0
+	// Learner replicas which have been removed never enter the candidate state
+	// but in the common case a replica should not be a learner for long so
+	// treat it the same as a candidate.
+	replicaGCPrioritySuspect = 1.0
 
 	// The highest priority is used when we have definite evidence
 	// (external to replicaGCQueue) that the replica has been removed.
@@ -120,7 +126,8 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
-	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
+	replDesc, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID())
+	if !currentMember {
 		return true, replicaGCPriorityRemoved
 	}
 
@@ -132,10 +139,11 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		lastActivity.Forward(*lease.ProposedTS)
 	}
 
-	var isCandidate bool
+	isSuspect := replDesc.GetType() == roachpb.LEARNER
 	if raftStatus := repl.RaftStatus(); raftStatus != nil {
-		isCandidate = (raftStatus.SoftState.RaftState == raft.StateCandidate ||
-			raftStatus.SoftState.RaftState == raft.StatePreCandidate)
+		isSuspect = isSuspect ||
+			(raftStatus.SoftState.RaftState == raft.StateCandidate ||
+				raftStatus.SoftState.RaftState == raft.StatePreCandidate)
 	} else {
 		// If a replica doesn't have an active raft group, we should check whether
 		// we're decommissioning. If so, we should process the replica because it
@@ -148,20 +156,20 @@ func (rgcq *replicaGCQueue) shouldQueue(
 			}
 		}
 	}
-	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isCandidate)
+	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isSuspect)
 }
 
 func replicaGCShouldQueueImpl(
-	now, lastCheck, lastActivity hlc.Timestamp, isCandidate bool,
+	now, lastCheck, lastActivity hlc.Timestamp, isSuspect bool,
 ) (bool, float64) {
 	timeout := ReplicaGCQueueInactivityThreshold
 	priority := replicaGCPriorityDefault
 
-	if isCandidate {
-		// If the range is a candidate (which happens if its former replica set
+	if isSuspect {
+		// If the range is suspect (which happens if its former replica set
 		// ignores it), let it expire much earlier.
-		timeout = ReplicaGCQueueCandidateTimeout
-		priority = replicaGCPriorityCandidate
+		timeout = ReplicaGCQueueSuspectTimeout
+		priority = replicaGCPrioritySuspect
 	} else if now.Less(lastCheck.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0)) {
 		// Return false immediately if the previous check was less than the
 		// check interval in the past. Note that we don't do this if the
