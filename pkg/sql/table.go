@@ -131,6 +131,10 @@ type TableCollection struct {
 	// return different values, such as when the txn timestamp changes or when
 	// new descriptors are written in the txn.
 	allDescriptors []sqlbase.DescriptorProto
+
+	// allDatabaseDescriptors is a slice of all available database descriptors.
+	// These are purged at the same time as allDescriptors.
+	allDatabaseDescriptors []*sqlbase.DatabaseDescriptor
 }
 
 type dbCacheSubscriber interface {
@@ -634,10 +638,36 @@ func (tc *TableCollection) getAllDescriptors(
 	return tc.allDescriptors, nil
 }
 
+// getAllDatabaseDescriptors returns all database descriptors visible by the
+// transaction, first checking the TableCollection's cached descriptors for
+// validity before scanning system.namespace and looking up the descriptors
+// in the database cache, if necessary.
+func (tc *TableCollection) getAllDatabaseDescriptors(
+	ctx context.Context, txn *client.Txn,
+) ([]*sqlbase.DatabaseDescriptor, error) {
+	if tc.allDatabaseDescriptors == nil {
+		dbDescIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn)
+		if err != nil {
+			return nil, err
+		}
+		dbDescs := make([]*sqlbase.DatabaseDescriptor, 0, len(dbDescIDs))
+		for _, dbDescID := range dbDescIDs {
+			dbDesc, err := MustGetDatabaseDescByID(ctx, txn, dbDescID)
+			if err != nil {
+				return nil, err
+			}
+			dbDescs = append(dbDescs, dbDesc)
+		}
+		tc.allDatabaseDescriptors = dbDescs
+	}
+	return tc.allDatabaseDescriptors, nil
+}
+
 // releaseAllDescriptors releases the cached slice of all descriptors
 // held by TableCollection.
 func (tc *TableCollection) releaseAllDescriptors() {
 	tc.allDescriptors = nil
+	tc.allDatabaseDescriptors = nil
 }
 
 // Copy the modified schema to the table collection. Used when initializing
