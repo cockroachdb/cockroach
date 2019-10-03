@@ -718,7 +718,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 			// inactive and thus unlikely to be about to process a split.
 			gcPriority := replicaGCPriorityDefault
 			if inactive(exReplica) {
-				gcPriority = replicaGCPriorityCandidate
+				gcPriority = replicaGCPrioritySuspect
 			}
 
 			msg += "; initiated GC:"
