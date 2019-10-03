@@ -465,7 +465,8 @@ CREATE TABLE sw (
  cc VARCHAR COLLATE en,
  dc VARCHAR(3) COLLATE en,
  ec STRING COLLATE en,
- fc STRING(3) COLLATE en
+ fc STRING(3) COLLATE en,
+ FAMILY "primary" (a, b, c, d, e, f, g, ac, bc, cc, dc, ec, fc, rowid)
 )
 
 query T
@@ -620,7 +621,10 @@ COMMIT
 subtest regression_32759_33012
 
 statement ok
-CREATE TABLE t32759(x INT, y STRING NOT NULL DEFAULT 'b', z INT)
+CREATE TABLE t32759 (
+  x INT, y STRING DEFAULT 'b' NOT NULL, z INT,
+  FAMILY "primary" (x, z, rowid)
+)
 
 statement ok
 BEGIN; ALTER TABLE t32759 DROP COLUMN y

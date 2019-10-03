@@ -4,10 +4,16 @@
 # CREATE TABLE statements. See #39504.
 
 statement ok
-CREATE TABLE t (a INT REFERENCES t)
+CREATE TABLE t (
+  a INT REFERENCES t,
+  FAMILY "primary" (a, rowid)
+)
 
 statement ok
-CREATE TABLE v ("'" INT REFERENCES t, s STRING UNIQUE REFERENCES v (s))
+CREATE TABLE v (
+  "'" INT REFERENCES t, s STRING UNIQUE REFERENCES v (s),
+  FAMILY "primary" ("'", s, rowid)
+)
 
 query TTTT colnames
 SELECT create_statement, create_nofks, alter_statements, validate_statements FROM crdb_internal.create_statements WHERE database_name = 'test'

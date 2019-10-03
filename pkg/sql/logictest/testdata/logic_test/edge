@@ -6,6 +6,7 @@
 # in the parse or normalization phases, forcing it to be handled by the
 # execution engine itself.
 
+# TODO(mjibson): Remove family definition when #41277 is fixed.
 statement ok
 CREATE TABLE t (
     key
@@ -21,7 +22,8 @@ CREATE TABLE t (
     _int4
         INT4,
     _int8
-        INT8
+        INT8,
+    FAMILY "primary" (key, _date, _float4, _float8, _int2, _int4, _int8)
 )
 
 statement ok

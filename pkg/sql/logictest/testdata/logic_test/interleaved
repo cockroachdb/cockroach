@@ -208,7 +208,8 @@ CREATE TABLE all_interleaves (
   c INT,
   d INT,
   INDEX (c),
-  UNIQUE INDEX (d)
+  UNIQUE INDEX (d),
+  FAMILY "primary" (b, c, d)
 ) INTERLEAVE IN PARENT p1_1 (b)
 
 statement ok

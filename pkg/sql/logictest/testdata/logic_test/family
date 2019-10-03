@@ -184,7 +184,10 @@ abcd  CREATE TABLE abcd (
 )
 
 statement ok
-CREATE TABLE f1 (a INT PRIMARY KEY, b STRING, c STRING)
+CREATE TABLE f1 (
+  a INT PRIMARY KEY, b STRING, c STRING,
+  FAMILY "primary" (a, b, c)
+)
 
 query TT
 SHOW CREATE TABLE f1

@@ -212,7 +212,8 @@ CREATE TABLE t7 (
   CHECK (x + y > 0),
   CHECK (y + z > 0),
   CHECK (y + z = 0),
-  CONSTRAINT named_constraint CHECK (z = 1)
+  CONSTRAINT named_constraint CHECK (z = 1),
+  FAMILY "primary" (x, y, z, rowid)
 )
 
 query TT
