@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -1094,44 +1092,25 @@ Must only be used when the dead stores are lost and unrecoverable. If
 the dead stores were to rejoin the cluster after this command was
 used, data may be corrupted.
 
-In most cases, this repair can be performed with one node down at a
-time. In some cases it is necessary to stop all nodes in the cluster
-for safety, and the procedure to be followed is more complicated:
-
-1. Stop all nodes
-2. On one node, run "cockroach debug cluster-logical-timestamp" to generate
-   a timestamp and save the output
-3. On the affected nodes, run "cockroach debug unsafe-remove-dead-replicas",
-   passing the --all-nodes-are-stopped and --now=$TS flags, using the timestamp
-   generated above.
-
 This comand will prompt for confirmation before committing its changes.
+
+Limitations: Can only recover from a single replica. If a range with
+four replicas has experienced two failures, or a range with five
+replicas experiences three failures, this tool cannot (yet) be used to
+recover from the two remaining replicas.
+
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugUnsafeRemoveDeadReplicas),
 }
 
 var removeDeadReplicasOpts struct {
-	deadStoreIDs       []int
-	allNodesAreStopped bool
-	now                string
+	deadStoreIDs []int
 }
 
 func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-
-	var now hlc.Timestamp
-	if removeDeadReplicasOpts.now != "" {
-		decTS, _, err := apd.NewFromString(removeDeadReplicasOpts.now)
-		if err != nil {
-			return err
-		}
-		now, err = tree.DecimalToHLC(decTS)
-		if err != nil {
-			return err
-		}
-	}
 
 	db, err := OpenExistingStore(args[0], stopper, false /* readOnly */)
 	if err != nil {
@@ -1143,7 +1122,7 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 	for _, id := range removeDeadReplicasOpts.deadStoreIDs {
 		deadStoreIDs[roachpb.StoreID(id)] = struct{}{}
 	}
-	batch, err := removeDeadReplicas(db, deadStoreIDs, removeDeadReplicasOpts.allNodesAreStopped, now)
+	batch, err := removeDeadReplicas(db, deadStoreIDs)
 	if err != nil {
 		return err
 	} else if batch == nil {
@@ -1172,18 +1151,9 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 }
 
 func removeDeadReplicas(
-	db engine.Engine,
-	deadStoreIDs map[roachpb.StoreID]struct{},
-	allNodesAreStopped bool,
-	now hlc.Timestamp,
+	db engine.Engine, deadStoreIDs map[roachpb.StoreID]struct{},
 ) (engine.Batch, error) {
-	if now == (hlc.Timestamp{}) {
-		if allNodesAreStopped {
-			return nil, errors.New("--now is required if --all-nodes-are-stopped is used")
-		}
-		clock := hlc.NewClock(hlc.UnixNano, 0)
-		now = clock.Now()
-	}
+	clock := hlc.NewClock(hlc.UnixNano, 0)
 
 	ctx := context.Background()
 
@@ -1212,30 +1182,17 @@ func removeDeadReplicas(
 			if _, ok := deadStoreIDs[rep.StoreID]; ok {
 				numDeadPeers++
 			}
-			if rep.Type != nil && *rep.Type != roachpb.VOTER_FULL {
-				return false, errors.Errorf("this tool does not yet support non-voter replicas")
-			}
 		}
-		if hasSelf && numDeadPeers > 0 {
-			if numDeadPeers != (numReplicas-1) && !allNodesAreStopped {
-				return false, errors.Errorf(
-					"unable to repair %s: multiple surviving peers and --all-nodes-are-stopped not passed.", &desc)
-			}
+		if hasSelf && numDeadPeers > 0 && numDeadPeers == numReplicas-1 {
 			newDesc := desc
-			// Rewrite the replicas list. Bump the next replica ID as an
-			// extra defense against one of the old replicas returning from
-			// the dead.
-			var replicas []roachpb.ReplicaDescriptor
-			for _, rep := range allReplicas {
-				if _, ok := deadStoreIDs[rep.StoreID]; ok {
-					continue
-				}
-				replicas = append(replicas, roachpb.ReplicaDescriptor{
-					NodeID:    rep.NodeID,
-					StoreID:   rep.StoreID,
-					ReplicaID: rep.ReplicaID,
-				})
-			}
+			// Rewrite the replicas list. Bump the replica ID as an extra
+			// defense against one of the old replicas returning from the
+			// dead.
+			replicas := []roachpb.ReplicaDescriptor{{
+				NodeID:    storeIdent.NodeID,
+				StoreID:   storeIdent.StoreID,
+				ReplicaID: desc.NextReplicaID,
+			}}
 			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
 			newDesc.NextReplicaID++
 			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
@@ -1254,7 +1211,7 @@ func removeDeadReplicas(
 	batch := db.NewBatch()
 	for _, desc := range newDescs {
 		key := keys.RangeDescriptorKey(desc.StartKey)
-		err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, now, nil /* txn */, &desc)
+		err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, clock.Now(), nil /* txn */, &desc)
 		if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
 			if len(wiErr.Intents) != 1 {
 				return nil, errors.Errorf("expected 1 intent, found %d: %s", len(wiErr.Intents), wiErr)
@@ -1273,7 +1230,7 @@ func removeDeadReplicas(
 				return nil, err
 			}
 			// With the intent resolved, we can try again.
-			if err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, now,
+			if err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, clock.Now(),
 				nil /* txn */, &desc); err != nil {
 				return nil, err
 			}
@@ -1415,8 +1372,6 @@ func init() {
 	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
 		"list of dead store IDs")
-	f.BoolVar(&removeDeadReplicasOpts.allNodesAreStopped, "all-nodes-are-stopped", false,
-		"set to true if all nodes have been stopped")
 
 	f = debugMergeLogsCommand.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
