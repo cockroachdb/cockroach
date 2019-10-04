@@ -25,12 +25,12 @@ func TestReplicaGCShouldQueue(t *testing.T) {
 		return hlc.Timestamp{WallTime: t.Nanoseconds()}
 	}
 
-	base := 2 * (ReplicaGCQueueCandidateTimeout + ReplicaGCQueueInactivityThreshold)
+	base := 2 * (ReplicaGCQueueSuspectTimeout + ReplicaGCQueueInactivityThreshold)
 	var (
 		z       = ts(0)
 		bTS     = ts(base)
-		cTS     = ts(base + ReplicaGCQueueCandidateTimeout)
-		cTSnext = ts(base + ReplicaGCQueueCandidateTimeout + 1)
+		cTS     = ts(base + ReplicaGCQueueSuspectTimeout)
+		cTSnext = ts(base + ReplicaGCQueueSuspectTimeout + 1)
 		iTSprev = ts(base + ReplicaGCQueueInactivityThreshold - 1)
 		iTS     = ts(base + ReplicaGCQueueInactivityThreshold)
 	)
