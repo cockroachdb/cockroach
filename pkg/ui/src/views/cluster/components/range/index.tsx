@@ -1,0 +1,241 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import { Button, DatePicker, TimePicker, notification } from "antd";
+import moment, { Moment } from "moment";
+import { TimeWindow } from "oss/src/redux/timewindow";
+import React from "react";
+import "./range.styl";
+
+export enum DateTypes {
+  DATE_FROM,
+  DATE_TO,
+}
+
+type RangeOption = {
+  value: string;
+  label: string;
+};
+interface RangeSelectProps {
+  options: RangeOption[];
+  onChange: (arg0: RangeOption) => void;
+  changeDate: (arg0: moment.Moment, arg1: DateTypes) => void;
+  value: TimeWindow;
+  selected: string;
+  useTimeRange: boolean;
+}
+interface RangeSelectState {
+  opened: boolean;
+}
+
+class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
+  state = {
+    opened: false,
+  };
+
+  isValid = (date: moment.Moment, direction: DateTypes) => {
+    const { value } = this.props;
+    let valid = true;
+    switch (direction) {
+      case DateTypes.DATE_FROM:
+        valid = !(date >= value.end);
+        break;
+      case DateTypes.DATE_TO:
+        valid = !(date <= value.start);
+        break;
+      default:
+        valid = true;
+    }
+    return valid;
+  }
+
+  onChangeDate = (direction: DateTypes) => (date: Moment) => {
+    const { changeDate, value } = this.props;
+    if (this.isValid(date, direction)) {
+      changeDate(moment.utc(date), direction);
+    } else {
+      if (direction === DateTypes.DATE_TO) {
+        changeDate(moment(value.start).add(10, "minute"), direction);
+      } else {
+        changeDate(moment(value.end).add(-10, "minute"), direction);
+      }
+      notification.info({
+        message: "The timeframe has been set to a 10 minute range",
+        description: "An invalid timeframe was entered. The timeframe has been set to a 10 minute range.",
+      });
+    }
+  }
+
+  renderTimePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} className="_now-button" type="link" size="small">Now</Button>;
+
+  onChangeOption = (option: RangeOption) => () => {
+    const { onChange } = this.props;
+    this.setState({ opened: false });
+    onChange(option);
+  }
+
+  renderOptions = () => {
+    const { options, selected } = this.props;
+    return options.map(option => (
+      <Button
+        className={`_time-button ${selected === option.value && "active" || ""}`}
+        onClick={this.onChangeOption(option)}
+        type="link"
+        ghost
+      >
+        {option.value}
+      </Button>
+    ));
+  }
+
+  findSelectedValue = () => {
+    const { options, selected } = this.props;
+    const value = options.find(option => option.value === selected);
+    return value ? value.label : selected;
+  }
+
+  getDisabledHours = (isStart?: boolean) => () => {
+    const { value } = this.props;
+    const start = Number(moment.utc(value.start).format("HH"));
+    const end = Number(moment.utc(value.end).format("HH"));
+    const hours = [];
+    for (let i = 0 ; i < (isStart ? moment().hour() : start); i++) {
+      if (isStart) {
+        hours.push((end + 1) + i);
+      } else {
+        hours.push(i);
+      }
+    }
+    return hours;
+  }
+
+  getDisabledMinutes = (isStart?: boolean) => () => {
+    const { value } = this.props;
+    const startHour = Number(moment.utc(value.start).format("HH"));
+    const endHour = Number(moment.utc(value.end).format("HH"));
+    const startMinutes = Number(moment.utc(value.start).format("mm"));
+    const endMinutes = Number(moment.utc(value.end).format("mm"));
+    const minutes = [];
+    if (startHour === endHour) {
+      for (let i = 0 ; i < (isStart ? moment().minute() : startMinutes); i++) {
+        if (isStart) {
+          minutes.push((endMinutes + 1) + i);
+        } else {
+          minutes.push(i);
+        }
+      }
+    }
+    return minutes;
+  }
+
+  getDisabledSeconds = (isStart?: boolean) => () => {
+    const { value } = this.props;
+    const startHour = Number(moment.utc(value.start).format("HH"));
+    const endHour = Number(moment.utc(value.end).format("HH"));
+    const startMinutes = Number(moment.utc(value.start).format("mm"));
+    const endMinutes = Number(moment.utc(value.end).format("mm"));
+    const startSeconds = Number(moment.utc(value.start).format("ss"));
+    const endSeconds = Number(moment.utc(value.end).format("ss"));
+    const seconds = [];
+    if (startHour === endHour && startMinutes === endMinutes) {
+      for (let i = 0 ; i < (isStart ? moment().second() : startSeconds + 1); i++) {
+        if (isStart) {
+          seconds.push(endSeconds + i);
+        } else {
+          seconds.push(i);
+        }
+      }
+    }
+    return seconds;
+  }
+
+  render() {
+    const { value, useTimeRange } = this.props;
+    const { opened } = this.state;
+    const start = useTimeRange ? moment.utc(value.start) : null;
+    const end = useTimeRange ? moment.utc(value.end) : null;
+    const datePickerFormat = "M/DD/YYYY";
+    const timePickerFormat = "h:mm:ss A";
+    const selectedValue = this.findSelectedValue();
+    const isSameDate = useTimeRange && moment(start).isSame(end, "day");
+    const content = (
+      <div className="range-selector">
+        <div className="_quick-view">
+          <span className="_title">Quick view</span>
+          {this.renderOptions()}
+        </div>
+        <div className="_start">
+          <span className="_title">Start</span>
+          <DatePicker
+            value={start}
+            disabledDate={(currentDate) => currentDate >= (end || moment())}
+            allowClear={false}
+            format={`${datePickerFormat} ${moment(start).isSame(moment.utc(), "day") && "[Today]" || ""}`}
+            onChange={this.onChangeDate(DateTypes.DATE_FROM)}
+          />
+          <TimePicker
+            value={start}
+            allowClear={false}
+            format={`${timePickerFormat} ${moment(start).isSame(moment.utc(), "minute") && "[Now]" || ""}`}
+            use12Hours
+            addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}
+            onChange={this.onChangeDate(DateTypes.DATE_FROM)}
+            disabledHours={isSameDate && this.getDisabledHours(true) || undefined}
+            disabledMinutes={isSameDate && this.getDisabledMinutes(true) || undefined}
+            disabledSeconds={isSameDate && this.getDisabledSeconds(true) || undefined}
+          />
+        </div>
+        <div className="_end">
+          <span className="_title">End</span>
+          <DatePicker
+            value={end}
+            disabledDate={(currentDate) => (currentDate > moment() || currentDate <= (start || moment()))}
+            allowClear={false}
+            format={`${datePickerFormat} ${moment(end).isSame(moment.utc(), "day") && "[Today]" || ""}`}
+            onChange={this.onChangeDate(DateTypes.DATE_TO)}
+          />
+          <TimePicker
+            value={end}
+            allowClear={false}
+            format={`${timePickerFormat} ${moment(end).isSame(moment.utc(), "minute") && "[Now]" || ""}`}
+            use12Hours
+            addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}
+            onChange={this.onChangeDate(DateTypes.DATE_TO)}
+            disabledHours={isSameDate && this.getDisabledHours() || undefined}
+            disabledMinutes={isSameDate && this.getDisabledMinutes() || undefined}
+            disabledSeconds={isSameDate && this.getDisabledSeconds() || undefined}
+          />
+        </div>
+      </div>
+    );
+
+    return (
+      <div>
+        {opened && <div className="trigger-container" onClick={() => this.setState({ opened: false })} />}
+        <div className="trigger-wrapper">
+          <div
+            className={`trigger Select ${opened && "is-open" || ""}`}
+            onClick={() => this.setState({ opened: !opened })}
+          >
+            <span className="Select-value-label">{selectedValue}</span>
+            <div className="Select-control">
+              <div className="Select-arrow-zone">
+                <span className="Select-arrow"></span>
+              </div>
+            </div>
+          </div>
+          {opened && content}
+        </div>
+      </div>
+    );
+  }
+}
+
+export default RangeSelect;

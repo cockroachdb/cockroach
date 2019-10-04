@@ -5,7 +5,12 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "dependencies": {
+<<<<<<< HEAD
     "analytics-node": "^3.4.0-beta.1",
+=======
+    "analytics-node": "^3.3.0",
+    "antd": "^3.23.5",
+>>>>>>> ui: new range selector
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "combokeys": "^2.4.6",
@@ -15,6 +20,7 @@
     "nvd3": "^1.8.5",
     "popper.js": "^1.14.4",
     "raw-loader": "^0.5.1",
+    "rc-form": "^2.4.9",
     "rc-progress": "^2.2.1",
     "react": "^16.3.1",
     "react-addons-create-fragment": "^15.4.2",
@@ -65,6 +71,7 @@
     "@types/sinon": "2.1.0",
     "babel-core": "^6.24.0",
     "babel-loader": "^7.1.2",
+    "babel-plugin-import": "^1.12.2",
     "babel-preset-env": "^1.2.2",
     "babel-preset-react": "^6.23.0",
     "bytebuffer": "^5.0.1",
