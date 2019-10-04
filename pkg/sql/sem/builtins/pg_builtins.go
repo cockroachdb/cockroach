@@ -406,7 +406,7 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		if err != nil {
 			return nil, err
 		}
-		if err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
+		if _, err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
 			return nil, err
 		}
 		if ctx.SessionData.Database != "" && ctx.SessionData.Database != string(tn.CatalogName) {
