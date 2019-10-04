@@ -331,8 +331,12 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 	scan := del.Input.(*memo.ScanExpr)
 	tab := b.mem.Metadata().Table(scan.Table)
 	needed, _ := b.getColumns(scan.Cols, scan.Table)
-
-	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint)
+	// Calculate the maximum number of keys that the scan could return by
+	// multiplying the number of possible result rows by the number of column
+	// families of the table. The execbuilder needs this information to determine
+	// whether or not autoCommit can be enabled.
+	maxKeys := int(b.indexConstraintMaxResults(scan)) * tab.FamilyCount()
+	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint, maxKeys, b.autoCommit)
 	if err != nil {
 		return execPlan{}, err
 	}
