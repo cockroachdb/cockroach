@@ -968,7 +968,7 @@ type StoreMetrics struct {
 	registry *metric.Registry
 
 	// Replica metrics.
-	ReplicaCount                  *metric.Gauge // Does not include reserved replicas.
+	ReplicaCount                  *metric.Gauge // Does not include uninitialized or reserved replicas.
 	ReservedReplicaCount          *metric.Gauge
 	RaftLeaderCount               *metric.Gauge
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
