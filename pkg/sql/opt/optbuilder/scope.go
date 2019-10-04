@@ -95,7 +95,7 @@ type scope struct {
 // cteSource represents a CTE in the given query.
 type cteSource struct {
 	name         tree.AliasClause
-	cols         []scopeColumn
+	cols         physical.Presentation
 	originalExpr tree.Statement
 	expr         memo.RelExpr
 	id           opt.WithID
@@ -240,23 +240,28 @@ func (s *scope) makeOrderingChoice() physical.OrderingChoice {
 // makePhysicalProps constructs physical properties using the columns in the
 // scope for presentation and s.ordering for required ordering.
 func (s *scope) makePhysicalProps() *physical.Required {
-	p := &physical.Required{}
-
-	if len(s.cols) > 0 {
-		p.Presentation = make(physical.Presentation, 0, len(s.cols))
-		for i := range s.cols {
-			col := &s.cols[i]
-			if !col.hidden {
-				p.Presentation = append(p.Presentation, opt.AliasedColumn{
-					Alias: string(col.name),
-					ID:    col.id,
-				})
-			}
-		}
+	p := &physical.Required{
+		Presentation: s.makePresentation(),
 	}
-
 	p.Ordering.FromOrdering(s.ordering)
 	return p
+}
+
+func (s *scope) makePresentation() physical.Presentation {
+	if len(s.cols) == 0 {
+		return nil
+	}
+	presentation := make(physical.Presentation, 0, len(s.cols))
+	for i := range s.cols {
+		col := &s.cols[i]
+		if !col.hidden {
+			presentation = append(presentation, opt.AliasedColumn{
+				Alias: string(col.name),
+				ID:    col.id,
+			})
+		}
+	}
+	return presentation
 }
 
 // walkExprTree walks the given expression and performs name resolution,

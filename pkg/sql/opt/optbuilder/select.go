@@ -78,11 +78,10 @@ func (b *Builder) buildDataSource(
 			outScope.cols = nil
 			i := 0
 			for _, col := range cte.cols {
-				id := col.id
-				c := b.factory.Metadata().ColumnMeta(id)
-				newCol := b.synthesizeColumn(outScope, string(col.name), c.Type, nil, nil)
+				c := b.factory.Metadata().ColumnMeta(col.ID)
+				newCol := b.synthesizeColumn(outScope, col.Alias, c.Type, nil, nil)
 				newCol.table = *tn
-				inCols[i] = id
+				inCols[i] = col.ID
 				outCols[i] = newCol.id
 				i++
 			}
@@ -582,8 +581,7 @@ func (b *Builder) buildCTE(
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
 		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
-		cteScope.removeHiddenCols()
-		cols := cteScope.cols
+		cols := b.getCTECols(cteScope, ctes[i].Name)
 		name := ctes[i].Name.Alias
 
 		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
@@ -598,30 +596,7 @@ func (b *Builder) buildCTE(
 			)
 		}
 
-		// Names for the output columns can optionally be specified.
-		if ctes[i].Name.Cols != nil {
-			if len(cteScope.cols) != len(ctes[i].Name.Cols) {
-				panic(pgerror.Newf(
-					pgcode.InvalidColumnReference,
-					"source %q has %d columns available but %d columns specified",
-					name, len(cteScope.cols), len(ctes[i].Name.Cols),
-				))
-			}
-
-			cols = make([]scopeColumn, len(cteScope.cols))
-			tableName := tree.MakeUnqualifiedTableName(ctes[i].Name.Alias)
-			copy(cols, cteScope.cols)
-			for j := range cols {
-				cols[j].name = ctes[i].Name.Cols[j]
-				cols[j].table = tableName
-			}
-		}
-
-		if len(cols) == 0 {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported,
-				"WITH clause %q does not have a RETURNING clause", tree.ErrString(&name)))
-		}
-
+		cteScope.removeHiddenCols()
 		projectionsScope := cteScope.replace()
 		projectionsScope.appendColumnsFromScope(cteScope)
 		b.constructProjectForScope(cteScope, projectionsScope)
