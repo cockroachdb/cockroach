@@ -45,6 +45,7 @@ const (
 	VersionAtomicChangeReplicasTrigger
 	VersionAtomicChangeReplicas
 	VersionTableDescModificationTimeFromMVCC
+	VersionPartitionedBackup
 
 	// Add new versions here (step one of two).
 
@@ -544,6 +545,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// row which contained the serialized table descriptor.
 		Key:     VersionTableDescModificationTimeFromMVCC,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 10},
+	},
+	{
+		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
+		Key:     VersionPartitionedBackup,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 11},
 	},
 
 	// Add new versions here (step two of two).
