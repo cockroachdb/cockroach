@@ -45,7 +45,7 @@ var (
 
 	// OidVector is a type-alias for an array of Oid values, but with a different
 	// OID (T_oidvector instead of T__oid). It is a special VECTOR type used by
-	// Postgres in system tables.
+	// Postgres in system tables. OidVectors are 0-indexed, unlike normal arrays.
 	OidVector = &T{InternalType: InternalType{
 		Family: ArrayFamily, Oid: oid.T_oidvector, ArrayContents: Oid, Locale: &emptyLocale}}
 )

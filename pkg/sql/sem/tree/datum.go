@@ -3128,6 +3128,17 @@ func (d *DArray) ResolvedType() *types.T {
 	return types.MakeArray(d.ParamTyp)
 }
 
+// FirstIndex returns the first index of the array. 1 for normal SQL arrays,
+// which are 1-indexed, and 0 for the special Postgers vector types which are
+// 0-indexed.
+func (d *DArray) FirstIndex() int {
+	switch d.customOid {
+	case oid.T_int2vector, oid.T_oidvector:
+		return 0
+	}
+	return 1
+}
+
 // Compare implements the Datum interface.
 func (d *DArray) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
