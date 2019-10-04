@@ -6842,7 +6842,18 @@ simple_typename:
 | character_with_length
 | const_interval
 | const_interval interval_qualifier { return unimplemented(sqllex, "interval with unit qualifier") }
-| const_interval '(' ICONST ')' { return unimplementedWithIssue(sqllex, 32564) }
+| const_interval '(' ICONST ')'
+  {
+    prec, err := $3.numVal().AsInt32()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    if prec == 6 {
+      $$.val = $1.colType()
+    } else {
+      return unimplementedWithIssue(sqllex, 32564)
+    }
+  }
 | postgres_oid
 
 // We have a separate const_typename to allow defaulting fixed-length types
