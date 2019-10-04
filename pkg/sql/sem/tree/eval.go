@@ -2518,7 +2518,7 @@ type EvalDatabase interface {
 	// If the database name is not given, it uses the search path to find it, and
 	// sets it on the returned TableName.
 	// It returns an error if the table doesn't exist.
-	ResolveTableName(ctx context.Context, tn *TableName) error
+	ResolveTableName(ctx context.Context, tn *TableName) (ID, error)
 
 	// LookupSchema looks up the schema with the given name in the given
 	// database.
@@ -3670,16 +3670,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				if err != nil {
 					return nil, err
 				}
-				if err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
+				id, err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn)
+				if err != nil {
 					return nil, err
 				}
-				// Determining the table's OID requires joining against the databases
-				// table because we only have the database name, not its OID, which is
-				// what is stored in pg_class. This extra join means we can't use
-				// queryOid like everyone else.
-				return queryOidWithJoin(ctx, t, NewDString(tn.Table()),
-					"JOIN pg_catalog.pg_namespace ON relnamespace = pg_namespace.oid",
-					fmt.Sprintf("AND nspname = '%s'", tn.Schema()))
+				return &DOid{
+					semanticType: t,
+					DInt:         DInt(id),
+					name:         tn.TableName.String(),
+				}, nil
 			default:
 				return queryOid(ctx, t, NewDString(s))
 			}
