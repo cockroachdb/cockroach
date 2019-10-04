@@ -554,9 +554,12 @@ func makeGenerateSubscriptsGenerator(
 // subscriptsValueGenerator is a value generator that returns a series
 // comprising the given array's subscripts.
 type subscriptsValueGenerator struct {
-	avg     arrayValueGenerator
-	buf     [1]tree.Datum
-	reverse bool
+	avg arrayValueGenerator
+	buf [1]tree.Datum
+	// firstIndex is normally 1, since arrays are normally 1-indexed. But the
+	// special Postgres vector types are 0-indexed.
+	firstIndex int
+	reverse    bool
 }
 
 var subscriptsValueGeneratorLabels = []string{"generate_subscripts"}
@@ -575,6 +578,8 @@ func (s *subscriptsValueGenerator) Start() error {
 	} else {
 		s.avg.nextIndex = -1
 	}
+	// Most arrays are 1-indexed, but not all.
+	s.firstIndex = s.avg.array.FirstIndex()
 	return nil
 }
 
@@ -593,8 +598,7 @@ func (s *subscriptsValueGenerator) Next() (bool, error) {
 
 // Values implements the tree.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Values() tree.Datums {
-	// Generate Subscript's indexes are 1 based.
-	s.buf[0] = tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))
+	s.buf[0] = tree.NewDInt(tree.DInt(s.avg.nextIndex + s.firstIndex))
 	return s.buf[:]
 }
 
