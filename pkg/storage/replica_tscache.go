@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -221,6 +222,14 @@ func checkedTSCacheUpdate(
 	}
 }
 
+// txnsPushedDueToClosedTimestamp is a telemetry counter for the number of
+// batch requests which have been pushed due to the closed timestamp.
+var batchesPushedDueToClosedTimestamp telemetry.Counter
+
+func init() {
+	batchesPushedDueToClosedTimestamp = telemetry.GetCounter("kv.closed_timestamp.txns_pushed")
+}
+
 // applyTimestampCache moves the batch timestamp forward depending on
 // the presence of overlapping entries in the timestamp cache. If the
 // batch is transactional, the txn timestamp and the txn.WriteTooOld
@@ -247,7 +256,11 @@ func checkedTSCacheUpdate(
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) (bool, *roachpb.Error) {
+	// bumpedDueToMinReadTS is set to true if the highest timestamp bump encountered
+	// below is due to the minReadTS.
+	var bumpedDueToMinReadTS bool
 	var bumped bool
+
 	for _, union := range ba.Requests {
 		args := union.GetInner()
 		if roachpb.ConsultsTimestampCache(args) {
@@ -255,21 +268,28 @@ func (r *Replica) applyTimestampCache(
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
+			var forwardedToMinReadTS bool
 			if rTS.Forward(minReadTS) {
+				forwardedToMinReadTS = true
 				rTxnID = uuid.Nil
 			}
 			nextRTS := rTS.Next()
+			var bumpedCurReq bool
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
 					if ba.Txn.Timestamp.Less(nextRTS) {
 						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(nextRTS) || bumped
+						bumpedCurReq = txn.Timestamp.Forward(nextRTS)
 						ba.Txn = txn
 					}
 				}
 			} else {
-				bumped = ba.Timestamp.Forward(nextRTS) || bumped
+				bumpedCurReq = ba.Timestamp.Forward(nextRTS)
 			}
+			// Preserve bumpedDueToMinReadTS if we did not just bump or set it
+			// appropriately if we did.
+			bumpedDueToMinReadTS = (!bumpedCurReq && bumpedDueToMinReadTS) || (bumpedCurReq && forwardedToMinReadTS)
+			bumped, bumpedCurReq = bumped || bumpedCurReq, false
 
 			// On more recent writes, forward the timestamp and set the
 			// write too old boolean for transactions. Note that currently
@@ -281,15 +301,21 @@ func (r *Replica) applyTimestampCache(
 				if ba.Txn.ID != wTxnID {
 					if ba.Txn.Timestamp.Less(nextWTS) {
 						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(nextWTS) || bumped
+						bumpedCurReq = txn.Timestamp.Forward(nextWTS)
 						txn.WriteTooOld = true
 						ba.Txn = txn
 					}
 				}
 			} else {
-				bumped = ba.Timestamp.Forward(nextWTS) || bumped
+				bumpedCurReq = ba.Timestamp.Forward(nextWTS)
 			}
+			// Clear bumpedDueToMinReadTS if we just bumped due to the write tscache.
+			bumpedDueToMinReadTS = !bumpedCurReq && bumpedDueToMinReadTS
+			bumped = bumped || bumpedCurReq
 		}
+	}
+	if bumpedDueToMinReadTS {
+		telemetry.Inc(batchesPushedDueToClosedTimestamp)
 	}
 	return bumped, nil
 }
