@@ -245,8 +245,6 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		log.Fatalf(ctx, "uninitialized replica %v was unexpectedly replaced", existing)
 	}
 
-	s.metrics.ReplicaCount.Dec(1)
-
 	// Only an uninitialized replica can have a placeholder since, by
 	// definition, an initialized replica will be present in the
 	// replicasByKey map. While the replica will usually consume the
