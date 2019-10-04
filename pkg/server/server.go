@@ -81,7 +81,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -1270,7 +1270,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
-	startAssertEngineHealth(ctx, s.stopper, s.engines)
+	s.node.startAssertEngineHealth(ctx, s.engines)
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{

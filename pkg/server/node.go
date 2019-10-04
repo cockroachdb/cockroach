@@ -44,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -78,6 +78,13 @@ var (
 		Measurement: "Batch KV Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaDiskStalls = metric.Metadata{
+		Name:        "engine.stalls",
+		Help:        "Number of disk stalls detected on this node",
+		Measurement: "Disk stalls detected",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Cluster settings.
@@ -105,16 +112,18 @@ var (
 )
 
 type nodeMetrics struct {
-	Latency *metric.Histogram
-	Success *metric.Counter
-	Err     *metric.Counter
+	Latency    *metric.Histogram
+	Success    *metric.Counter
+	Err        *metric.Counter
+	DiskStalls *metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
 	nm := nodeMetrics{
-		Latency: metric.NewLatency(metaExecLatency, histogramWindow),
-		Success: metric.NewCounter(metaExecSuccess),
-		Err:     metric.NewCounter(metaExecError),
+		Latency:    metric.NewLatency(metaExecLatency, histogramWindow),
+		Success:    metric.NewCounter(metaExecSuccess),
+		Err:        metric.NewCounter(metaExecError),
+		DiskStalls: metric.NewCounter(metaDiskStalls),
 	}
 	reg.AddMetricStruct(nm)
 	return nm
