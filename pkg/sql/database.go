@@ -211,8 +211,10 @@ func (dc *databaseCache) getDatabaseDescByID(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc, err := dc.getCachedDatabaseDescByID(id)
-	if err != nil {
-		log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
+	if desc == nil || err != nil {
+		if err != nil {
+			log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
+		}
 		desc, err = MustGetDatabaseDescByID(ctx, txn, id)
 	}
 	return desc, err
