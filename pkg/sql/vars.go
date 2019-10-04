@@ -545,6 +545,12 @@ var varGen = map[string]sessionVar{
 	// See also issue #5924.
 	`idle_in_transaction_session_timeout`: makeCompatIntVar(`idle_in_transaction_session_timeout`, 0),
 
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+	`max_identifier_length`: {
+		Get: func(evalCtx *extendedEvalContext) string { return "128" },
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-MAX-INDEX-KEYS
 	`max_index_keys`: makeReadOnlyVar("32"),
 
