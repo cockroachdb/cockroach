@@ -713,6 +713,7 @@ func TestParse(t *testing.T) {
 		{`SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP`},
 		{`SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ`},
 		{`SELECT JSONB 'foo', 'foo'::JSONB`},
+		{`SELECT INTERVAL '0', '0'::INTERVAL`},
 
 		{`SELECT 'foo'::DECIMAL(1)`},
 		{`SELECT 'foo'::DECIMAL(2,1)`},
@@ -724,6 +725,7 @@ func TestParse(t *testing.T) {
 		{`SELECT 'foo'::TIMESTAMP(6)`},
 		{`SELECT 'foo'::TIMESTAMPTZ(6)`},
 		{`SELECT 'foo'::TIME(6)`},
+		{`SELECT '0'::INTERVAL(6)`},
 
 		{`SELECT '192.168.0.1'::INET`},
 		{`SELECT '192.168.0.1':::INET`},
