@@ -74,6 +74,30 @@ func TestAvgDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalAvgAggregate, makeDecimalTestDatum(10))
 }
 
+func TestBitAndIntResultDeepCopy(t *testing.T) {
+	t.Run("all null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitAndAggregate, makeNullTestDatum(10))
+	})
+	t.Run("with null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitAndAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
+	})
+	t.Run("without null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitAndAggregate, makeIntTestDatum(10))
+	})
+}
+
+func TestBitOrIntResultDeepCopy(t *testing.T) {
+	t.Run("all null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitOrAggregate, makeNullTestDatum(10))
+	})
+	t.Run("with null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitOrAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
+	})
+	t.Run("without null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitOrAggregate, makeIntTestDatum(10))
+	})
+}
+
 func TestBoolAndResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newBoolAndAggregate, makeBoolTestDatum(10))
 }
@@ -162,6 +186,16 @@ func TestStdDevDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalStdDevAggregate, makeDecimalTestDatum(10))
 }
 
+// makeNullTestDatum will create an array of only DNull
+// values to make sure the aggregation handles only nulls.
+func makeNullTestDatum(count int) []tree.Datum {
+	values := make([]tree.Datum, count)
+	for i := range values {
+		values[i] = tree.DNull
+	}
+	return values
+}
+
 func makeIntTestDatum(count int) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -170,6 +204,18 @@ func makeIntTestDatum(count int) []tree.Datum {
 		vals[i] = tree.NewDInt(tree.DInt(rng.Int63()))
 	}
 	return vals
+}
+
+// makeTestWithNullDatum will call the maker function
+// to generate an array of datums, and then a null datum
+// will be placed randomly in the array of datums and
+// returned. Use this to ensure proper partial null
+// handling of aggregations.
+func makeTestWithNullDatum(count int, maker func(count int) []tree.Datum) []tree.Datum {
+	rng, _ := randutil.NewPseudoRand()
+	values := maker(count)
+	values[rng.Int()%count] = tree.DNull
+	return values
 }
 
 // makeSmallIntTestDatum creates integers that are sufficiently

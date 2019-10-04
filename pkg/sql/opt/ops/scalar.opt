@@ -763,6 +763,16 @@ define Avg {
 }
 
 [Scalar, Aggregate]
+define BitAndAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define BitOrAgg {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define BoolAnd {
     Input ScalarExpr
 }
