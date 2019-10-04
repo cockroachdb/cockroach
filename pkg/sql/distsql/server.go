@@ -189,6 +189,9 @@ func (ds *ServerImpl) setupFlow(
 	} else if localState.IsLocal {
 		// If we're a local flow, we don't need a "follows from" relationship: we're
 		// going to run this flow synchronously.
+		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
+		//  If that field is unset, we might still want to create a child span if
+		//  this flow is run synchronously.
 		sp = tracing.StartChildSpan(opName, parentSpan, logtags.FromContext(ctx), false /* separateRecording */)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
@@ -378,7 +381,8 @@ func (ds *ServerImpl) SetupSyncFlow(
 type LocalState struct {
 	EvalContext *tree.EvalContext
 
-	// IsLocal is true if the flow is being run locally in the first place.
+	// IsLocal is set if the flow is running on the gateway and there are no
+	// remote flows.
 	IsLocal bool
 
 	/////////////////////////////////////////////
