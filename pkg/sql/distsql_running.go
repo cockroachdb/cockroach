@@ -283,10 +283,10 @@ func (dsp *DistSQLPlanner) Run(
 	// NB: putting part of evalCtx in localState means it might be mutated down
 	// the line.
 	localState.EvalContext = &evalCtx.EvalContext
+	localState.Txn = txn
 	if planCtx.isLocal {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
-		localState.Txn = txn
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
@@ -306,6 +306,10 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
+	if _, ok := flows[dsp.nodeDesc.NodeID]; !ok {
+		recv.SetError(errors.Errorf("expected to find gateway flow"))
+		return func() {}
+	}
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
@@ -326,6 +330,13 @@ func (dsp *DistSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
+
+	if len(flows) == 1 {
+		// We ended up planning everything locally, regardless of whether we
+		// intended to distribute or not.
+		localState.IsLocal = true
+	}
+
 	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState, vectorizedThresholdMet)
 	if err != nil {
 		recv.SetError(err)
