@@ -385,8 +385,8 @@ func registerTPCC(r *testRegistry) {
 		Distribution: multiRegion,
 		LoadConfig:   multiLoadgen,
 
-		LoadWarehouses: 2000,
-		EstimatedMax:   1000,
+		LoadWarehouses: 5000,
+		EstimatedMax:   2200,
 
 		MinVersion: "v19.1.0",
 	})
@@ -931,8 +931,10 @@ func registerTPCCBench(r *testRegistry) {
 			Distribution: multiRegion,
 			LoadConfig:   multiLoadgen,
 
-			LoadWarehouses: 5000,
-			EstimatedMax:   2200,
+			LoadWarehouses: 12000,
+			EstimatedMax:   8000,
+
+			MinVersion: "v19.1.0",
 		},
 		// objective 4, key result 2.
 		{
