@@ -1005,6 +1005,11 @@ func backupPlanHook(
 		if err != nil {
 			return err
 		}
+		if len(to) > 1 &&
+			!p.ExecCfg().Settings.Version.IsActive(cluster.VersionPartitionedBackup) {
+			return errors.Errorf("partitioned backups can only be made on a cluster that has been fully upgraded to version 19.2")
+		}
+
 		incrementalFrom, err := incrementalFromFn()
 		if err != nil {
 			return err
@@ -1018,7 +1023,6 @@ func backupPlanHook(
 			}
 		}
 
-		// TODO (lucy): put partitioned BACKUP behind a 19.2 version gate
 		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to)
 		if err != nil {
 			return nil
