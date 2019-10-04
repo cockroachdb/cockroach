@@ -18,9 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestHelpFunctions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// This test checks that all the built-in functions receive contextual help.
 	for f := range builtins {
 		if unicode.IsUpper(rune(f[0])) {
