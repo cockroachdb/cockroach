@@ -89,7 +89,7 @@
     "karma-mocha-reporter": "^2.2.3",
     "karma-sinon": "^1.0.5",
     "karma-sourcemap-loader": "^0.3.7",
-    "karma-webpack": "^2.0.4",
+    "karma-webpack": "^2.0.13",
     "mocha": "^6.0.2",
     "nib": "^1.1.2",
     "prop-types": "^15.5.10",
@@ -107,7 +107,7 @@
     "ts-loader": "^2.3.4",
     "tslint": "^5.10.0",
     "typescript": "^2.2.1",
-    "url-loader": "^0.5.8",
+    "url-loader": "2.1.0",
     "us-atlas": "^1.0.2",
     "webpack": "^3.5.6",
     "webpack-dev-server": "^2.11.2",
@@ -115,14 +115,15 @@
     "world-atlas": "^1.1.4"
   },
   "resolutions": {
+    "**/axios": "^0.19.0",
     "**/chokidar": "^2.0.0",
     "**/deep-extend": "^0.5.1",
     "**/extend": "^3.0.2",
     "**/http-proxy-middleware": "^0.19.1",
-    "**/lodash": "^4.17.11",
+    "**/lodash": "4.17.15",
     "**/react-dom": "16.4.2",
-    "**/url-parse": "^1.4.3",
-    "**/axios": "^0.19.0"
+    "**/ua-parser-js": "0.7.20",
+    "**/url-parse": "^1.4.3"
   },
   "engines": {
     "node": ">=6",
