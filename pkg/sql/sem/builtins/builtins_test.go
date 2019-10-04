@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestCategory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	if expected, actual := categoryString, builtins["lower"].props.Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
@@ -39,6 +41,7 @@ func TestCategory(t *testing.T) {
 // TestGenerateUniqueIDOrder verifies the expected ordering of
 // GenerateUniqueID.
 func TestGenerateUniqueIDOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tests := []tree.DInt{
 		GenerateUniqueID(0, 0),
 		GenerateUniqueID(1, 0),
@@ -56,6 +59,7 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 }
 
 func TestStringToArrayAndBack(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// s allows us to have a string pointer literal.
 	s := func(x string) *string { return &x }
 	fs := func(x *string) string {
@@ -135,6 +139,7 @@ func TestStringToArrayAndBack(t *testing.T) {
 }
 
 func TestEscapeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		bytes []byte
 		str   string
@@ -170,6 +175,7 @@ func TestEscapeFormat(t *testing.T) {
 }
 
 func TestEscapeFormatRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for i := 0; i < 1000; i++ {
 		b := make([]byte, rand.Intn(100))
 		for j := 0; j < len(b); j++ {
@@ -187,6 +193,7 @@ func TestEscapeFormatRandom(t *testing.T) {
 }
 
 func TestLPadRPad(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		padFn    func(string, int, string) (string, error)
 		str      string
@@ -236,6 +243,7 @@ func TestLPadRPad(t *testing.T) {
 }
 
 func TestFloatWidthBucket(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		operand  float64
 		b1       float64

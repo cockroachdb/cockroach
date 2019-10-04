@@ -148,7 +148,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			if gen == nil {
 				gen = builtins.EmptyGenerator()
 			}
-			if err := gen.Start(); err != nil {
+			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
 				return nil, nil, err
 			}
 			ps.gens[i] = gen
@@ -170,7 +170,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 			numCols := int(ps.spec.NumColsPerGen[i])
 			if !ps.done[i] {
 				// Yes; check whether this source still has some values available.
-				hasVals, err := gen.Next()
+				hasVals, err := gen.Next(ps.Ctx)
 				if err != nil {
 					return false, err
 				}
