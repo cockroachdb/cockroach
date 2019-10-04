@@ -189,6 +189,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogAttrDefTableID:             pgCatalogAttrDefTable,
 		sqlbase.PgCatalogAttributeTableID:           pgCatalogAttributeTable,
 		sqlbase.PgCatalogAuthMembersTableID:         pgCatalogAuthMembersTable,
+		sqlbase.PgCatalogAvailableExtensionsTableID: pgCatalogAvailableExtensionsTable,
 		sqlbase.PgCatalogCastTableID:                pgCatalogCastTable,
 		sqlbase.PgCatalogClassTableID:               pgCatalogClassTable,
 		sqlbase.PgCatalogCollationTableID:           pgCatalogCollationTable,
@@ -494,6 +495,22 @@ CREATE TABLE pg_catalog.pg_auth_members (
 					tree.MakeDBool(tree.DBool(isAdmin)), // admin_option
 				)
 			})
+	},
+}
+
+var pgCatalogAvailableExtensionsTable = virtualSchemaTable{
+	comment: `available extensions
+https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_available_extensions (
+	name NAME,
+	default_version TEXT,
+	installed_version TEXT,
+	comment TEXT
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// We support no extensions.
+		return nil
 	},
 }
 

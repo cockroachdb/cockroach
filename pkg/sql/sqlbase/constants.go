@@ -111,6 +111,7 @@ const (
 	PgCatalogAttrDefTableID
 	PgCatalogAttributeTableID
 	PgCatalogAuthMembersTableID
+	PgCatalogAvailableExtensionsTableID
 	PgCatalogCastTableID
 	PgCatalogClassTableID
 	PgCatalogCollationTableID
