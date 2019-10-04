@@ -427,7 +427,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:42b3b311d72e202b62fd5d1962edc6fc099062a0b10300fa3f28481106520611"
+  digest = "1:8691c0cd3246e045a951b907e94af1165904d663a4ce0013c4650751643a8945"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -450,7 +450,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "b54d5a75a3c4018dced942c98d5223704789abb4"
+  revision = "b8525550fbb0604c22fbf7879e836d44e5233272"
 
 [[projects]]
   branch = "master"
@@ -799,18 +799,6 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
-
-[[projects]]
-  branch = "master"
-  digest = "1:b87c6f69cfb9f9b332c582ed93f7371150d21f40da6118d6547534e69b12cabb"
-  name = "github.com/golang/leveldb"
-  packages = [
-    "crc",
-    "db",
-    "table",
-  ]
-  pruneopts = "UT"
-  revision = "259d9253d71996b7778a3efb4144fe4892342b18"
 
 [[projects]]
   digest = "1:6ce94e52c5f56dfbea4e3cb99ccf4b44d701d91b16167486e9842b2fe45e717a"
@@ -1995,8 +1983,6 @@
     "github.com/gogo/protobuf/vanity/command",
     "github.com/golang-commonmark/markdown",
     "github.com/golang/dep/cmd/dep",
-    "github.com/golang/leveldb/db",
-    "github.com/golang/leveldb/table",
     "github.com/golang/protobuf/proto",
     "github.com/golang/snappy",
     "github.com/google/btree",

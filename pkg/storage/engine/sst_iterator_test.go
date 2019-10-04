@@ -126,30 +126,29 @@ func TestSSTIterator(t *testing.T) {
 func TestCockroachComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyAMetadata := encodeInternalSeekKey(MVCCKey{
+	keyAMetadata := MVCCKey{
 		Key: []byte("a"),
-	})
-	keyA2 := encodeInternalSeekKey(MVCCKey{
+	}
+	keyA2 := MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
-	})
-	keyA1 := encodeInternalSeekKey(MVCCKey{
+	}
+	keyA1 := MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 1},
-	})
-	keyB2 := encodeInternalSeekKey(MVCCKey{
+	}
+	keyB2 := MVCCKey{
 		Key:       []byte("b"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
-	})
+	}
 
-	c := cockroachComparer{}
-	if x := c.Compare(keyAMetadata, keyA1); x != -1 {
+	if x := MVCCComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)); x != -1 {
 		t.Errorf("expected key metadata to sort first got: %d", x)
 	}
-	if x := c.Compare(keyA2, keyA1); x != -1 {
+	if x := MVCCComparer.Compare(EncodeKey(keyA2), EncodeKey(keyA1)); x != -1 {
 		t.Errorf("expected higher timestamp to sort first got: %d", x)
 	}
-	if x := c.Compare(keyA2, keyB2); x != -1 {
+	if x := MVCCComparer.Compare(EncodeKey(keyA2), EncodeKey(keyB2)); x != -1 {
 		t.Errorf("expected lower key to sort first got: %d", x)
 	}
 }
