@@ -249,13 +249,9 @@ func init() {
 // the read timestamp cache. That is, if the read timestamp cache returns a
 // value below minReadTS, minReadTS (without an associated txn id) will be used
 // instead to adjust the batch's timestamp.
-//
-// The timestamp cache also has a role in preventing replays of BeginTransaction
-// reordered after an EndTransaction. If that's detected, an error will be
-// returned.
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
-) (bool, *roachpb.Error) {
+) bool {
 	// bumpedDueToMinReadTS is set to true if the highest timestamp bump encountered
 	// below is due to the minReadTS.
 	var bumpedDueToMinReadTS bool
@@ -317,7 +313,7 @@ func (r *Replica) applyTimestampCache(
 	if bumpedDueToMinReadTS {
 		telemetry.Inc(batchesPushedDueToClosedTimestamp)
 	}
-	return bumped, nil
+	return bumped
 }
 
 // CanCreateTxnRecord determines whether a transaction record can be created for
