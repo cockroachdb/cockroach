@@ -1787,7 +1787,11 @@ func (ef *execFactory) ConstructDelete(
 }
 
 func (ef *execFactory) ConstructDeleteRange(
-	table cat.Table, needed exec.ColumnOrdinalSet, indexConstraint *constraint.Constraint,
+	table cat.Table,
+	needed exec.ColumnOrdinalSet,
+	indexConstraint *constraint.Constraint,
+	maxReturnedKeys int,
+	allowAutoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := &tabDesc.PrimaryIndex
@@ -1805,10 +1809,29 @@ func (ef *execFactory) ConstructDeleteRange(
 		return nil, err
 	}
 
+	// Permitting autocommit in DeleteRange is very important, because DeleteRange
+	// is used for simple deletes from primary indexes like
+	// DELETE FROM t WHERE key = 1000
+	// When possible, we need to make this a 1pc transaction for performance
+	// reasons. At the same time, we have to be careful, because DeleteRange
+	// returns all of the keys that it deleted - so we have to set a limit on the
+	// DeleteRange request. But, trying to set autocommit and a limit on the
+	// request doesn't work properly if the limit is hit. So, we permit autocommit
+	// here if we can guarantee that the number of returned keys is finite and
+	// relatively small.
+	autoCommitEnabled := allowAutoCommit && ef.planner.autoCommit
+	// If maxReturnedKeys is 0, it indicates that we weren't able to determine
+	// the maximum number of returned keys, so we'll give up and not permit
+	// autocommit.
+	if maxReturnedKeys == 0 || maxReturnedKeys > TableTruncateChunkSize {
+		autoCommitEnabled = false
+	}
+
 	return &deleteRangeNode{
 		interleavedFastPath: false,
 		spans:               spans,
 		desc:                tabDesc,
+		autoCommitEnabled:   autoCommitEnabled,
 	}, nil
 }
 
