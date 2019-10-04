@@ -9,10 +9,10 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRBBT
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01') FROM kv
+query IIIIRRRRBBTII
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -841,6 +841,38 @@ query B
 SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
 ----
 true
+
+statement ok
+CREATE TABLE bits (b INT)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+NULL NULL
+
+statement ok
+INSERT INTO bits VALUES (12), (25)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+8 29
+
+statement ok
+INSERT INTO bits VALUES(105)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+8 125
+
+statement ok
+INSERT INTO bits VALUES(NULL)
+
+query II
+SELECT bit_and(b), bit_or(b) FROM bits
+----
+8 125
 
 statement ok
 CREATE TABLE bools (b BOOL)
