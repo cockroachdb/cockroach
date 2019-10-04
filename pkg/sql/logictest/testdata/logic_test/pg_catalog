@@ -1795,9 +1795,6 @@ SELECT count(*) FROM pg_catalog.pg_depend
 query error cannot access virtual schema in anonymous database
 select 'upper'::REGPROC;
 
-query error cannot access virtual schema in anonymous database
-select 'system.namespace'::regclass
-
 statement ok
 SET DATABASE = test
 

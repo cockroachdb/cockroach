@@ -201,8 +201,10 @@ func (so *importSequenceOperators) ParseQualifiedTableName(
 }
 
 // Implements the tree.EvalDatabase interface.
-func (so *importSequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errSequenceOperators
+func (so *importSequenceOperators) ResolveTableName(
+	ctx context.Context, tn *tree.TableName,
+) (tree.ID, error) {
+	return 0, errSequenceOperators
 }
 
 // Implements the tree.EvalDatabase interface.
