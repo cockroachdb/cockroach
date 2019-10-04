@@ -49,7 +49,7 @@ func GenerateCerts(ctx context.Context) func() {
 	// Certs for starting a cockroach server. Key size is from cli/cert.go:defaultKeySize.
 	maybePanic(security.CreateNodePair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		2048, 48*time.Hour, false, []string{"localhost", "cockroach"}))
+		2048, 48*time.Hour, false, []string{"cockroach", "localhost"}))
 
 	// Store a copy of the client certificate and private key in a PKCS#12
 	// bundle, which is the only format understood by Npgsql (.NET).
