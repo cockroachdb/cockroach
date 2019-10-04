@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,6 +41,8 @@ type deleteRangeNode struct {
 	// fetcher is around to decode the returned keys from the DeleteRange, so that
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher
+
+	autoCommitEnabled bool
 
 	// rowCount will be set to the count of rows deleted.
 	rowCount int
@@ -160,54 +163,93 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	}
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
-	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 	spans := make([]roachpb.Span, len(d.spans))
 	copy(spans, d.spans)
-	for len(spans) != 0 {
-		b := params.p.txn.NewBatch()
-		for _, span := range spans {
-			if traceKV {
-				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+	if !d.autoCommitEnabled {
+		// Without autocommit, we're going to run each batch one by one, respecting
+		// a max span request keys size. We use spans as a queue of spans to delete.
+		// It'll be edited if there are any resume spans encountered (if any request
+		// hits the key limit).
+		for len(spans) != 0 {
+			b := params.p.txn.NewBatch()
+			d.deleteSpans(params, b, spans)
+			b.Header.MaxSpanRequestKeys = TableTruncateChunkSize
+			if err := params.p.txn.Run(ctx, b); err != nil {
+				return err
 			}
-			b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
-		}
-		b.Header.MaxSpanRequestKeys = TableTruncateChunkSize
 
-		if err := params.p.txn.Run(ctx, b); err != nil {
+			spans = spans[:0]
+			if err := d.processResults(b.Results, spans); err != nil {
+				return err
+			}
+		}
+	} else {
+		// With autocommit, we're going to run the deleteRange in a single batch
+		// without a limit, since limits and deleteRange aren't compatible with 1pc
+		// transactions / autocommit. This isn't inherently safe, because without a
+		// limit, this command could technically use up unlimited memory. However,
+		// the optimizer only enables autoCommit if the maximum possible number of
+		// keys to delete in this command are low, so we're made safe.
+		b := params.p.txn.NewBatch()
+		d.deleteSpans(params, b, spans)
+		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
 			return err
 		}
-
-		spans = spans[:0]
-		for _, r := range b.Results {
-			var prev []byte
-			for _, keyBytes := range r.Keys {
-				// If prefix is same, don't bother decoding key.
-				if len(prev) > 0 && bytes.HasPrefix(keyBytes, prev) {
-					continue
-				}
-
-				after, ok, err := d.fetcher.ReadIndexKey(keyBytes)
-				if err != nil {
-					return err
-				}
-				if !ok {
-					return errors.AssertionFailedf("key did not match descriptor")
-				}
-				k := keyBytes[:len(keyBytes)-len(after)]
-				if !bytes.Equal(k, prev) {
-					prev = k
-					d.rowCount++
-				}
-			}
-			if r.ResumeSpan != nil && r.ResumeSpan.Valid() {
-				spans = append(spans, *r.ResumeSpan)
-			}
+		if err := d.processResults(b.Results, spans); err != nil {
+			return err
 		}
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
 	params.ExecCfg().StatsRefresher.NotifyMutation(d.desc.ID, d.rowCount)
 
+	return nil
+}
+
+// deleteSpans adds each input span to a DelRange command in the given batch.
+func (d *deleteRangeNode) deleteSpans(params runParams, b *client.Batch, spans roachpb.Spans) {
+	ctx := params.ctx
+	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	for _, span := range spans {
+		if traceKV {
+			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+		}
+		b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
+	}
+}
+
+// processResults parses the results of a DelRangeResponse, incrementing the
+// rowCount we're going to return for each row. If any resume spans are
+// encountered during result processing, they're appended to the resumeSpans
+// input parameter.
+func (d *deleteRangeNode) processResults(
+	results []client.Result, resumeSpans []roachpb.Span,
+) error {
+	for _, r := range results {
+		var prev []byte
+		for _, keyBytes := range r.Keys {
+			// If prefix is same, don't bother decoding key.
+			if len(prev) > 0 && bytes.HasPrefix(keyBytes, prev) {
+				continue
+			}
+
+			after, ok, err := d.fetcher.ReadIndexKey(keyBytes)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return errors.AssertionFailedf("key did not match descriptor")
+			}
+			k := keyBytes[:len(keyBytes)-len(after)]
+			if !bytes.Equal(k, prev) {
+				prev = k
+				d.rowCount++
+			}
+		}
+		if r.ResumeSpan != nil && r.ResumeSpan.Valid() {
+			resumeSpans = append(resumeSpans, *r.ResumeSpan)
+		}
+	}
 	return nil
 }
 

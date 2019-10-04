@@ -331,8 +331,15 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 	scan := del.Input.(*memo.ScanExpr)
 	tab := b.mem.Metadata().Table(scan.Table)
 	needed, _ := b.getColumns(scan.Cols, scan.Table)
+	var indexCols opt.ColSet
+	numCols := scan.Constraint.Columns.Count()
+	for i := 0; i < numCols; i++ {
+		indexCols.Add(scan.Constraint.Columns.Get(i).ID())
+	}
+	maxKeys := int(scan.Constraint.CalculateMaxResults(
+		b.evalCtx, indexCols, scan.Relational().NotNullCols)) * tab.FamilyCount()
 
-	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint)
+	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint, maxKeys, b.autoCommit)
 	if err != nil {
 		return execPlan{}, err
 	}
