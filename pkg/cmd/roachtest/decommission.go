@@ -497,8 +497,11 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		exp := [][]string{
 			decommissionHeader,
 			// Expect the same as usual, except this time the node should be draining
-			// because it shut down cleanly (thanks to `quit --decommission`).
-			{"3", "true", "0", "true", "true"},
+			// because it shut down cleanly (thanks to `quit --decommission`). It turns
+			// out that while it will always manage to mark itself as draining during a
+			// graceful shutdown, gossip may not yet have told this node. It's rare,
+			// but seems to happen (#41249).
+			{"3", "true", "0", "true", "true|false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
