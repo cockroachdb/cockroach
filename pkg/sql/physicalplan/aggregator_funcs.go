@@ -93,6 +93,26 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 		},
 	},
 
+	execinfrapb.AggregatorSpec_BIT_AND: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_BIT_AND},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_BIT_AND,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.AggregatorSpec_BIT_OR: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_BIT_OR},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_BIT_OR,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
 	execinfrapb.AggregatorSpec_BOOL_AND: {
 		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_BOOL_AND},
 		FinalStage: []FinalStageInfo{
