@@ -76,25 +76,25 @@ func TestAvgDecimalResultDeepCopy(t *testing.T) {
 
 func TestBitAndIntResultDeepCopy(t *testing.T) {
 	t.Run("all null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitAndIntAggregate, makeNullTestDatum(10))
+		testAggregateResultDeepCopy(t, newBitAndAggregate, makeNullTestDatum(10))
 	})
 	t.Run("with null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitAndIntAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
+		testAggregateResultDeepCopy(t, newBitAndAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
 	})
 	t.Run("without null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitAndIntAggregate, makeIntTestDatum(10))
+		testAggregateResultDeepCopy(t, newBitAndAggregate, makeIntTestDatum(10))
 	})
 }
 
 func TestBitOrIntResultDeepCopy(t *testing.T) {
 	t.Run("all null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitOrIntAggregate, makeNullTestDatum(10))
+		testAggregateResultDeepCopy(t, newBitOrAggregate, makeNullTestDatum(10))
 	})
 	t.Run("with null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitOrIntAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
+		testAggregateResultDeepCopy(t, newBitOrAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
 	})
 	t.Run("without null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitOrIntAggregate, makeIntTestDatum(10))
+		testAggregateResultDeepCopy(t, newBitOrAggregate, makeIntTestDatum(10))
 	})
 }
 
@@ -213,7 +213,7 @@ func makeIntTestDatum(count int) []tree.Datum {
 // handling of aggregations.
 func makeTestWithNullDatum(count int, maker func(count int) []tree.Datum) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
-	values := append(maker(count), nil)
+	values := maker(count)
 	values[rng.Int()%count] = tree.DNull
 	return values
 }

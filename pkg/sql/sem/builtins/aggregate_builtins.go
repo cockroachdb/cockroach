@@ -128,12 +128,12 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"bit_and": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Int, newBitAndIntAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Int, newBitAndAggregate,
 			"Calculates the bitwise AND of all non-null input values, or null if none."),
 	),
 
 	"bit_or": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Int, newBitOrIntAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Int, newBitOrAggregate,
 			"Calculates the bitwise OR of all non-null input values, or null if none."),
 	),
 
@@ -417,8 +417,8 @@ var _ tree.AggregateFunc = &boolOrAggregate{}
 var _ tree.AggregateFunc = &bytesXorAggregate{}
 var _ tree.AggregateFunc = &intXorAggregate{}
 var _ tree.AggregateFunc = &jsonAggregate{}
-var _ tree.AggregateFunc = &bitAndIntAggregate{}
-var _ tree.AggregateFunc = &bitOrIntAggregate{}
+var _ tree.AggregateFunc = &bitAndAggregate{}
+var _ tree.AggregateFunc = &bitOrAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -447,8 +447,8 @@ const sizeOfBoolOrAggregate = int64(unsafe.Sizeof(boolOrAggregate{}))
 const sizeOfBytesXorAggregate = int64(unsafe.Sizeof(bytesXorAggregate{}))
 const sizeOfIntXorAggregate = int64(unsafe.Sizeof(intXorAggregate{}))
 const sizeOfJSONAggregate = int64(unsafe.Sizeof(jsonAggregate{}))
-const sizeOfIntAndBitAggregate = int64(unsafe.Sizeof(bitAndIntAggregate{}))
-const sizeOfIntOrBitAggregate = int64(unsafe.Sizeof(bitOrIntAggregate{}))
+const sizeOfIntAndBitAggregate = int64(unsafe.Sizeof(bitAndAggregate{}))
+const sizeOfIntOrBitAggregate = int64(unsafe.Sizeof(bitOrAggregate{}))
 
 // See NewAnyNotNullAggregate.
 type anyNotNullAggregate struct {
@@ -726,27 +726,37 @@ func (a *concatAggregate) Size() int64 {
 	return sizeOfConcatAggregate
 }
 
-type bitAndIntAggregate struct {
+type bitAndAggregate struct {
 	sawNonNull bool
+	sawValue   bool
 	result     int64
 }
 
-func newBitAndIntAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
-	return &bitAndIntAggregate{}
+func newBitAndAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &bitAndAggregate{}
 }
 
 // Add inserts one value into the running bitwise AND.
-func (a *bitAndIntAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum) error {
+func (a *bitAndAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum) error {
 	if datum == tree.DNull {
 		return nil
 	}
 	a.sawNonNull = true
-	a.result = a.result & int64(*datum.(*tree.DInt))
+	x := int64(*datum.(*tree.DInt))
+	// We don't want to compare to the default 0
+	// so if we haven't seen a value yet then
+	// store the provided value for the
+	// aggregation.
+	if !a.sawValue {
+		a.result = x
+		a.sawValue = true
+	}
+	a.result = a.result & x
 	return nil
 }
 
 // Result returns the bitwise AND.
-func (a *bitAndIntAggregate) Result() (tree.Datum, error) {
+func (a *bitAndAggregate) Result() (tree.Datum, error) {
 	if !a.sawNonNull {
 		return tree.DNull, nil
 	}
@@ -754,41 +764,51 @@ func (a *bitAndIntAggregate) Result() (tree.Datum, error) {
 }
 
 // Reset implements tree.AggregateFunc interface.
-func (a *bitAndIntAggregate) Reset(context.Context) {
+func (a *bitAndAggregate) Reset(context.Context) {
 	a.sawNonNull = false
+	a.sawValue = false
 	a.result = 0
 }
 
 // Close is part of the tree.AggregateFunc interface.
-func (a *bitAndIntAggregate) Close(context.Context) {}
+func (a *bitAndAggregate) Close(context.Context) {}
 
 // Size is part of the tree.AggregateFunc interface.
-func (a *bitAndIntAggregate) Size() int64 {
-	// This aggregation is the same size as the OR aggregate.
+func (a *bitAndAggregate) Size() int64 {
 	return sizeOfIntAndBitAggregate
 }
 
-type bitOrIntAggregate struct {
+type bitOrAggregate struct {
 	sawNonNull bool
+	sawValue   bool
 	result     int64
 }
 
-func newBitOrIntAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
-	return &bitOrIntAggregate{}
+func newBitOrAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &bitOrAggregate{}
 }
 
 // Add inserts one value into the running bitwise OR.
-func (a *bitOrIntAggregate) Add(_ context.Context, datum tree.Datum, otherArgs ...tree.Datum) error {
+func (a *bitOrAggregate) Add(_ context.Context, datum tree.Datum, otherArgs ...tree.Datum) error {
 	if datum == tree.DNull {
 		return nil
 	}
 	a.sawNonNull = true
-	a.result = a.result | int64(*datum.(*tree.DInt))
+	x := int64(*datum.(*tree.DInt))
+	// We don't want to compare to the default 0
+	// so if we haven't seen a value yet then
+	// store the provided value for the
+	// aggregation.
+	if !a.sawValue {
+		a.result = x
+		a.sawValue = true
+	}
+	a.result = a.result | x
 	return nil
 }
 
 // Result returns the bitwise OR.
-func (a *bitOrIntAggregate) Result() (tree.Datum, error) {
+func (a *bitOrAggregate) Result() (tree.Datum, error) {
 	if !a.sawNonNull {
 		return tree.DNull, nil
 	}
@@ -796,17 +816,17 @@ func (a *bitOrIntAggregate) Result() (tree.Datum, error) {
 }
 
 // Reset implements tree.AggregateFunc interface.
-func (a *bitOrIntAggregate) Reset(context.Context) {
+func (a *bitOrAggregate) Reset(context.Context) {
 	a.sawNonNull = false
+	a.sawValue = false
 	a.result = 0
 }
 
 // Close is part of the tree.AggregateFunc interface.
-func (a *bitOrIntAggregate) Close(context.Context) {}
+func (a *bitOrAggregate) Close(context.Context) {}
 
 // Size is part of the tree.AggregateFunc interface.
-func (a *bitOrIntAggregate) Size() int64 {
-	// This aggregation is the same size as the AND aggregate.
+func (a *bitOrAggregate) Size() int64 {
 	return sizeOfIntOrBitAggregate
 }
 

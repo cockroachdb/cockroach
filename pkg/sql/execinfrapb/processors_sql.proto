@@ -427,6 +427,9 @@ message AggregatorSpec {
     // JSONB_AGG is an alias for JSON_AGG, they do the same thing.
     JSONB_AGG = 20;
     STRING_AGG = 21;
+
+    BIT_AND = 22;
+    BIT_OR = 23;
   }
 
   enum Type {
