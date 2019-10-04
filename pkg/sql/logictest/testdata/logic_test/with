@@ -133,7 +133,7 @@ SELECT * from x
 ----
 
 # #22420: ensure okay error message for CTE clause without output columns
-query error WITH clause "t" does not have a RETURNING clause
+query error WITH clause "t" does not return any columns
 WITH t AS (
     INSERT INTO x(a) VALUES(0)
 )
