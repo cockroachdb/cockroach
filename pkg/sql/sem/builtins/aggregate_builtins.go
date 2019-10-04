@@ -127,6 +127,16 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the average of the selected values."),
 	),
 
+	"bit_and": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Int, newBitAndIntAggregate,
+			"Calculates the bitwise AND of all non-null input values, or null if none"),
+	),
+
+	"bit_or": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Int, newBitOrIntAggregate,
+			"Calculates the bitwise OR of all non-null input values, or null if none"),
+	),
+
 	"bool_and": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
 			"Calculates the boolean value of `AND`ing all selected values."),
@@ -407,6 +417,8 @@ var _ tree.AggregateFunc = &boolOrAggregate{}
 var _ tree.AggregateFunc = &bytesXorAggregate{}
 var _ tree.AggregateFunc = &intXorAggregate{}
 var _ tree.AggregateFunc = &jsonAggregate{}
+var _ tree.AggregateFunc = &bitAndIntAggregate{}
+var _ tree.AggregateFunc = &bitOrIntAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -435,6 +447,8 @@ const sizeOfBoolOrAggregate = int64(unsafe.Sizeof(boolOrAggregate{}))
 const sizeOfBytesXorAggregate = int64(unsafe.Sizeof(bytesXorAggregate{}))
 const sizeOfIntXorAggregate = int64(unsafe.Sizeof(intXorAggregate{}))
 const sizeOfJSONAggregate = int64(unsafe.Sizeof(jsonAggregate{}))
+const sizeOfIntAndBitAggregate = int64(unsafe.Sizeof(bitAndIntAggregate{}))
+const sizeOfIntOrBitAggregate = int64(unsafe.Sizeof(bitOrIntAggregate{}))
 
 // See NewAnyNotNullAggregate.
 type anyNotNullAggregate struct {
@@ -710,6 +724,90 @@ func (a *concatAggregate) Close(ctx context.Context) {
 // Size is part of the tree.AggregateFunc interface.
 func (a *concatAggregate) Size() int64 {
 	return sizeOfConcatAggregate
+}
+
+type bitAndIntAggregate struct {
+	sawNonNull bool
+	result     int64
+}
+
+func newBitAndIntAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &bitAndIntAggregate{}
+}
+
+// Add inserts one value into the running bitwise AND.
+func (a *bitAndIntAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if datum == tree.DNull {
+		return nil
+	}
+	a.sawNonNull = true
+	a.result = a.result & int64(*datum.(*tree.DInt))
+	return nil
+}
+
+// Result returns the bitwise AND.
+func (a *bitAndIntAggregate) Result() (tree.Datum, error) {
+	if !a.sawNonNull {
+		return tree.DNull, nil
+	}
+	return tree.NewDInt(tree.DInt(a.result)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *bitAndIntAggregate) Reset(context.Context) {
+	a.sawNonNull = false
+	a.result = 0
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *bitAndIntAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *bitAndIntAggregate) Size() int64 {
+	// This aggregation is the same size as the OR aggregate.
+	return sizeOfIntAndBitAggregate
+}
+
+type bitOrIntAggregate struct {
+	sawNonNull bool
+	result     int64
+}
+
+func newBitOrIntAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &bitOrIntAggregate{}
+}
+
+// Add inserts one value into the running bitwise OR.
+func (a *bitOrIntAggregate) Add(_ context.Context, datum tree.Datum, otherArgs ...tree.Datum) error {
+	if datum == tree.DNull {
+		return nil
+	}
+	a.sawNonNull = true
+	a.result = a.result | int64(*datum.(*tree.DInt))
+	return nil
+}
+
+// Result returns the bitwise OR.
+func (a *bitOrIntAggregate) Result() (tree.Datum, error) {
+	if !a.sawNonNull {
+		return tree.DNull, nil
+	}
+	return tree.NewDInt(tree.DInt(a.result)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *bitOrIntAggregate) Reset(context.Context) {
+	a.sawNonNull = false
+	a.result = 0
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *bitOrIntAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *bitOrIntAggregate) Size() int64 {
+	// This aggregation is the same size as the AND aggregate.
+	return sizeOfIntOrBitAggregate
 }
 
 type boolAndAggregate struct {
