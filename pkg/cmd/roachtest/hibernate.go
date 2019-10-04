@@ -37,6 +37,37 @@ func registerHibernate(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"change database replication and GC time",
+			`./cockroach sql --insecure -e
+        'ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;'`,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"change database replication and GC time",
+			`./cockroach sql --insecure -e
+        'ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;'`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"change jobs retention time",
+			`./cockroach sql --insecure -e 'SET CLUSTER SETTING jobs.retention_time = '180s';'`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		t.Status("cloning hibernate and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
 			ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
