@@ -543,9 +543,9 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 oid         relname  adrelid  adnum  adbin           adsrc
-1666782879  t1       55       4      12:::INT8       12:::INT8
+1666782879  t1       55       4      12              12
 841178406   t2       56       2      unique_rowid()  unique_rowid()
-2186255414  t3       57       3      'FOO':::STRING  'FOO':::STRING
+2186255414  t3       57       3      'FOO'::STRING   'FOO'::STRING
 2186255409  t3       57       4      unique_rowid()  unique_rowid()
 
 ## pg_catalog.pg_indexes
@@ -570,13 +570,13 @@ FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
 crdb_oid    tablename  indexname     indexdef
-450499963   t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t1 (p ASC)
-450499960   t1         t1_a_key      CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 (a ASC)
-450499961   t1         index_key     CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 (b ASC, c ASC)
-2315049508  t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t2 (rowid ASC)
-2315049511  t2         t2_t1_id_idx  CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 (t1_id ASC)
-969972501   t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 (rowid ASC)
-969972502   t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 (a ASC, b DESC) STORING (c)
+450499963   t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t1 USING btree (p ASC)
+450499960   t1         t1_a_key      CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 USING btree (a ASC)
+450499961   t1         index_key     CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 USING btree (b ASC, c ASC)
+2315049508  t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t2 USING btree (rowid ASC)
+2315049511  t2         t2_t1_id_idx  CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
+969972501   t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 USING btree (rowid ASC)
+969972502   t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
 
 ## pg_catalog.pg_index
 
@@ -1746,9 +1746,9 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-1666782879  t1  12:::INT8
+1666782879  t1  12
 841178406   t2  unique_rowid()
-2186255414  t3  'FOO':::STRING
+2186255414  t3  'FOO'::STRING
 2186255409  t3  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root

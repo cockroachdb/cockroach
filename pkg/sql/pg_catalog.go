@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -344,7 +345,15 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						// pg_attrdef only expects rows for columns with default values.
 						return nil
 					}
-					defSrc := tree.NewDString(*column.DefaultExpr)
+					var defSrc *tree.DString
+					expr, err := parser.ParseExpr(*column.DefaultExpr)
+					if err != nil {
+						defSrc = tree.NewDString(*column.DefaultExpr)
+					} else {
+						ctx := tree.NewFmtCtx(tree.FmtPGAttrdefAdbin)
+						ctx.FormatNode(expr)
+						defSrc = tree.NewDString(ctx.String())
+					}
 					return addRow(
 						h.ColumnOid(table.ID, column.ID), // oid
 						defaultOid(table.ID),             // adrelid
@@ -1497,7 +1506,9 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Interleave = intlDef
 	}
-	return indexDef.String(), nil
+	fmtCtx := tree.NewFmtCtx(tree.FmtPGIndexDef)
+	fmtCtx.FormatNode(&indexDef)
+	return fmtCtx.String(), nil
 }
 
 var pgCatalogInheritsTable = virtualSchemaTable{
