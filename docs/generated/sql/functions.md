@@ -675,6 +675,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><code>crdb_internal.unary_table() &rarr; tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
 <p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
+<tr><td><code>generate_series(start: <a href="decimal.html">decimal</a>, end: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the decimal values from <code>start</code> to <code>end</code>, inclusive.</p>
+</span></td></tr>
+<tr><td><code>generate_series(start: <a href="decimal.html">decimal</a>, end: <a href="decimal.html">decimal</a>, step: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the decimal values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
+</span></td></tr>
 <tr><td><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
 </span></td></tr>
 <tr><td><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>

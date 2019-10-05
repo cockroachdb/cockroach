@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -100,21 +101,33 @@ var generators = map[string]builtinDefinition{
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}},
-			seriesValueGeneratorType,
+			types.Int,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}, {"step", types.Int}},
-			seriesValueGeneratorType,
+			types.Int,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
 		),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Timestamp}, {"end", types.Timestamp}, {"step", types.Interval}},
-			seriesTSValueGeneratorType,
+			types.Timestamp,
 			makeTSSeriesGenerator,
 			"Produces a virtual table containing the timestamp values from `start` to `end`, inclusive, by increment of `step`.",
+		),
+		makeGeneratorOverload(
+			tree.ArgTypes{{"start", types.Decimal}, {"end", types.Decimal}},
+			types.Decimal,
+			makeDecimalSeriesGenerator,
+			"Produces a virtual table containing the decimal values from `start` to `end`, inclusive.",
+		),
+		makeGeneratorOverload(
+			tree.ArgTypes{{"start", types.Decimal}, {"end", types.Decimal}, {"step", types.Decimal}},
+			types.Decimal,
+			makeDecimalSeriesGenerator,
+			"Produces a virtual table containing the decimal values from `start` to `end`, inclusive, by increment of `step`.",
 		),
 	),
 
@@ -311,10 +324,6 @@ type seriesValueGenerator struct {
 
 var seriesValueGeneratorLabels = []string{"generate_series"}
 
-var seriesValueGeneratorType = types.Int
-
-var seriesTSValueGeneratorType = types.Timestamp
-
 var errStepCannotBeZero = pgerror.New(pgcode.InvalidParameterValue, "step cannot be 0")
 
 func seriesIntNext(s *seriesValueGenerator) (bool, error) {
@@ -367,6 +376,41 @@ func seriesGenTSValue(s *seriesValueGenerator) tree.Datums {
 	return tree.Datums{tree.MakeDTimestamp(s.value.(time.Time), time.Microsecond)}
 }
 
+func seriesDecimalNext(s *seriesValueGenerator) (bool, error) {
+	step := &s.step.(*tree.DDecimal).Decimal
+	start := &s.start.(*tree.DDecimal).Decimal
+	stop := &s.stop.(*tree.DDecimal).Decimal
+
+	if !s.nextOK {
+		return false, nil
+	}
+
+	if step.Form != apd.Finite || start.Form != apd.Finite || stop.Form != apd.Finite {
+		return false, nil
+	}
+
+	stepForward := tree.CompareDecimals(step, &apd.Decimal{}) > 0
+	startStopCmp := tree.CompareDecimals(start, stop)
+	if !stepForward && startStopCmp < 0 {
+		return false, nil
+	}
+	if stepForward && startStopCmp > 0 {
+		return false, nil
+	}
+
+	s.value = s.start
+	next := &tree.DDecimal{}
+	if _, err := tree.ExactCtx.Add(&next.Decimal, start, step); err != nil {
+		return false, err
+	}
+	s.start = next
+	return true, nil
+}
+
+func seriesGenDecimalValue(s *seriesValueGenerator) tree.Datums {
+	return tree.Datums{s.value.(*tree.DDecimal)}
+}
+
 func makeSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	start := int64(tree.MustBeDInt(args[0]))
 	stop := int64(tree.MustBeDInt(args[1]))
@@ -382,7 +426,7 @@ func makeSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGen
 		origStart: start,
 		stop:      stop,
 		step:      step,
-		genType:   seriesValueGeneratorType,
+		genType:   types.Int,
 		genValue:  seriesGenIntValue,
 		next:      seriesIntNext,
 	}, nil
@@ -402,9 +446,37 @@ func makeTSSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueG
 		origStart: start,
 		stop:      stop,
 		step:      step,
-		genType:   seriesTSValueGeneratorType,
+		genType:   types.Timestamp,
 		genValue:  seriesGenTSValue,
 		next:      seriesTSNext,
+	}, nil
+}
+
+func makeDecimalSeriesGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	start := args[0].(*tree.DDecimal)
+	stop := args[1].(*tree.DDecimal)
+	var step *tree.DDecimal
+	if len(args) > 2 {
+		step = args[2].(*tree.DDecimal)
+	} else {
+		step = &tree.DDecimal{}
+		step.SetInt64(1)
+	}
+
+	if step.IsZero() {
+		return nil, errStepCannotBeZero
+	}
+
+	return &seriesValueGenerator{
+		ctx:       ctx,
+		origStart: start,
+		stop:      stop,
+		step:      step,
+		genType:   types.Decimal,
+		genValue:  seriesGenDecimalValue,
+		next:      seriesDecimalNext,
 	}, nil
 }
 
