@@ -191,6 +191,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 			}
 		}
 	} else {
+		log.Event(ctx, "autocommit enabled")
 		// With autocommit, we're going to run the deleteRange in a single batch
 		// without a limit, since limits and deleteRange aren't compatible with 1pc
 		// transactions / autocommit. This isn't inherently safe, because without a
