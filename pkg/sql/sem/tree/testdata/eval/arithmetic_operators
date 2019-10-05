@@ -242,3 +242,48 @@ eval
 2:::int ^ 62:::int
 ----
 4611686018427387904
+
+eval
+1:::decimal + 2:::float
+----
+3.0
+
+eval
+1:::decimal - 2:::float
+----
+-1.0
+
+eval
+1:::decimal / 2:::float
+----
+0.5
+
+eval
+1:::decimal * 2:::float
+----
+2.0
+
+eval
+1:::float + 2:::decimal
+----
+3.0
+
+eval
+1:::float - 2:::decimal
+----
+-1.0
+
+eval
+1:::float / 2:::decimal
+----
+0.5
+
+eval
+1:::float * 2:::decimal
+----
+2.0
+
+eval
+1:::float + (2:::decimal)^2000
+----
+strconv.ParseFloat: parsing "1.1481306952742545242E+602": value out of range

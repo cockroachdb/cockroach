@@ -549,6 +549,34 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
+			LeftType:   types.Float,
+			RightType:  types.Decimal,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DFloat)
+				r := right.(*DDecimal)
+				rFloat, err := r.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(l + DFloat(rFloat)), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Decimal,
+			RightType:  types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := left.(*DDecimal)
+				r := *right.(*DFloat)
+				lFloat, err := l.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(DFloat(lFloat) + r), nil
+			},
+		},
+		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Int,
 			ReturnType: types.Date,
@@ -743,6 +771,34 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				dd := &DDecimal{}
 				_, err := ExactCtx.Sub(&dd.Decimal, l, r)
 				return dd, err
+			},
+		},
+		&BinOp{
+			LeftType:   types.Float,
+			RightType:  types.Decimal,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DFloat)
+				r := right.(*DDecimal)
+				rFloat, err := r.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(l - DFloat(rFloat)), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Decimal,
+			RightType:  types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := left.(*DDecimal)
+				r := *right.(*DFloat)
+				lFloat, err := l.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(DFloat(lFloat) - r), nil
 			},
 		},
 		&BinOp{
@@ -1024,6 +1080,34 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return dd, err
 			},
 		},
+		&BinOp{
+			LeftType:   types.Float,
+			RightType:  types.Decimal,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DFloat)
+				r := right.(*DDecimal)
+				rFloat, err := r.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(l * DFloat(rFloat)), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Decimal,
+			RightType:  types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := left.(*DDecimal)
+				r := *right.(*DFloat)
+				lFloat, err := l.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(DFloat(lFloat) * r), nil
+			},
+		},
 		// The following two overloads are needed because DInt/DInt = DDecimal. Due
 		// to this operation, normalization may sometimes create a DInt * DDecimal
 		// operation.
@@ -1157,6 +1241,34 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return dd, ErrDivByZero
 				}
 				return dd, err
+			},
+		},
+		&BinOp{
+			LeftType:   types.Float,
+			RightType:  types.Decimal,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := *left.(*DFloat)
+				r := right.(*DDecimal)
+				rFloat, err := r.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(l / DFloat(rFloat)), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Decimal,
+			RightType:  types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := left.(*DDecimal)
+				r := *right.(*DFloat)
+				lFloat, err := l.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return NewDFloat(DFloat(lFloat) / r), nil
 			},
 		},
 		&BinOp{

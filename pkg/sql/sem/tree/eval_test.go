@@ -127,7 +127,7 @@ func TestEval(t *testing.T) {
 			typedExpr, err := expr.TypeCheck(nil, types.Any)
 			if err != nil {
 				// An error here should have been found above by QueryRow.
-				t.Fatal(err)
+				t.Fatalf("type check error for '%s': %v", d.Input, err)
 			}
 
 			switch typedExpr.ResolvedType().Family() {
