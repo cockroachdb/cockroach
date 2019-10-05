@@ -2323,6 +2323,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
+//
+// The tick argument should increment across repeated calls to this
+// method. It is used to compute some metrics less frequently than others.
 func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	ctx = s.AnnotateCtx(ctx)
 	if err := s.updateCapacityGauges(); err != nil {
@@ -2352,8 +2355,11 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
 		readAmp := sstables.ReadAmplification()
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
-		// Log this metric infrequently.
-		if tick%logSSTInfoTicks == 0 /* every 10m */ {
+		// Log this metric infrequently (with current configurations,
+		// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
+		// non-periodic callers of this method don't trigger expensive
+		// stats.
+		if tick%logSSTInfoTicks == 1 /* every 10m */ {
 			log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
 			log.Infof(ctx, "%sestimated_pending_compaction_bytes: %s",
 				rocksdb.GetCompactionStats(), humanizeutil.IBytes(stats.PendingCompactionBytesEstimate))
