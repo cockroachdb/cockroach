@@ -1,0 +1,274 @@
+# This file tests against mutations that we expect to be handled with one-phase
+# commit transactions. Any change to the kv batches produced by these statements
+# should be treated with care.
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+# ------------
+# INSERT tests
+# ------------
+
+# Single-row insert.
+statement ok
+SET TRACING=ON;
+  INSERT INTO kv VALUES (1, 1);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+
+# Multi-row insert.
+statement ok
+SET TRACING=ON;
+  INSERT INTO kv VALUES (2, 2), (3, 3);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+
+# Single-row insert with returning clause.
+statement ok
+SET TRACING=ON;
+  INSERT INTO kv VALUES (4) RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+
+# Multi-row insert with returning clause.
+statement ok
+SET TRACING=ON;
+  INSERT INTO kv VALUES (5), (6) RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+
+# ------------
+# UPSERT tests
+# ------------
+
+# Single-row upsert.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO kv VALUES (1, 1);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+
+# Multi-row upsert.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO kv VALUES (2, 2), (3, 3);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+
+# Single-row upsert with returning clause.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO kv VALUES (4) RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+
+# Multi-row upsert with returning clause.
+statement ok
+SET TRACING=ON;
+  UPSERT INTO kv VALUES (5), (6) RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+
+# ------------
+# UPDATE tests
+# ------------
+
+# Single-row update.
+statement ok
+SET TRACING=ON;
+  UPDATE kv SET v = v+1 WHERE k = 1;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+
+# Multi-row update.
+statement ok
+SET TRACING=ON;
+  UPDATE kv SET v = v+1 WHERE k BETWEEN 1 AND 2;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+
+# Multi-row non-contiguous update.
+statement ok
+SET TRACING=ON;
+  UPDATE kv SET v = v+1 WHERE k IN (1, 3);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+
+# Single-row update with returning clause.
+statement ok
+SET TRACING=ON;
+  UPDATE kv SET v = v+1 WHERE k = 4 RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+
+# Multi-row update with returning clause.
+statement ok
+SET TRACING=ON;
+  UPDATE kv SET v = v+1 WHERE k BETWEEN 4 AND 5 RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+
+# Multi-row non-contiguous update with returning clause.
+statement ok
+SET TRACING=ON;
+  UPDATE kv SET v = v+1 WHERE k IN (4, 6) RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+
+# ------------
+# DELETE tests
+# ------------
+
+# Single-row delete.
+statement ok
+SET TRACING=ON;
+  DELETE FROM kv WHERE k = 1;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+
+# Multi-row delete.
+statement ok
+SET TRACING=ON;
+  DELETE FROM kv WHERE k BETWEEN 1 AND 2;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+
+# Multi-row non-contiguous delete.
+statement ok
+SET TRACING=ON;
+  DELETE FROM kv WHERE k IN (1, 3);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 DelRng, 1 EndTxn to (n1,s1):1
+
+# Single-row delete with returning clause.
+statement ok
+SET TRACING=ON;
+  DELETE FROM kv WHERE k = 4 RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+
+# Multi-row delete with returning clause.
+statement ok
+SET TRACING=ON;
+  DELETE FROM kv WHERE k BETWEEN 4 AND 5 RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+
+# Multi-row non-contiguous delete with returning clause.
+statement ok
+SET TRACING=ON;
+  DELETE FROM kv WHERE k IN (4, 6) RETURNING v;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%r24: sending batch%'
+----
+dist sender send  r24: sending batch 2 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 Del, 1 EndTxn to (n1,s1):1
