@@ -122,6 +122,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 	vectorizeThresholdMet bool,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
+	_, ok := flows[thisNodeID]
+	if !ok {
+		return nil, nil, errors.AssertionFailedf("missing gateway flow")
+	}
+	if localState.IsLocal && len(flows) != 1 {
+		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
+	}
 
 	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
 	setupReq := execinfrapb.SetupFlowRequest{
@@ -146,6 +153,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// the execution time.
 			setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
 		} else {
+			fuseOpt := flowinfra.FuseNormally
+			if localState.IsLocal {
+				fuseOpt = flowinfra.FuseAggressively
+			}
 			// Now we check to see whether or not to even try vectorizing the flow.
 			// The goal here is to determine up front whether all of the flows can be
 			// vectorized. If any of them can't, turn off the setting.
@@ -160,7 +171,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							Settings:    dsp.st,
 						},
 						NodeID: -1,
-					}, spec.Processors,
+					}, spec.Processors, fuseOpt,
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false
@@ -283,10 +294,10 @@ func (dsp *DistSQLPlanner) Run(
 	// NB: putting part of evalCtx in localState means it might be mutated down
 	// the line.
 	localState.EvalContext = &evalCtx.EvalContext
+	localState.Txn = txn
 	if planCtx.isLocal {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
-		localState.Txn = txn
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
@@ -306,6 +317,10 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
+	if _, ok := flows[dsp.nodeDesc.NodeID]; !ok {
+		recv.SetError(errors.Errorf("expected to find gateway flow"))
+		return func() {}
+	}
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
@@ -326,6 +341,13 @@ func (dsp *DistSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
+
+	if len(flows) == 1 {
+		// We ended up planning everything locally, regardless of whether we
+		// intended to distribute or not.
+		localState.IsLocal = true
+	}
+
 	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState, vectorizedThresholdMet)
 	if err != nil {
 		recv.SetError(err)
@@ -334,6 +356,16 @@ func (dsp *DistSQLPlanner) Run(
 
 	if finishedSetupFn != nil {
 		finishedSetupFn()
+	}
+
+	// Check that flows that were forced to be planned locally also have no concurrency.
+	// This is important, since these flows are forced to use the RootTxn (since
+	// they might have mutations), and the RootTxn does not permit concurrency.
+	// For such flows, we were supposed to have fused everything.
+	if txn != nil && planCtx.isLocal && flow.ConcurrentExecution() {
+		recv.SetError(errors.AssertionFailedf(
+			"unexpected concurrency for a flow that was forced to be planned locally"))
+		return func() {}
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
