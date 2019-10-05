@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -243,12 +242,6 @@ func TestRemoveDeadReplicas(t *testing.T) {
 						// left behind.
 					}()
 
-					var now hlc.Timestamp
-					if allNodesStopped {
-						clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-						now = clock.Now()
-					}
-
 					// Open the surviving stores directly to repair them.
 					repairStore := func(idx int) error {
 						stopper := stop.NewStopper()
@@ -260,20 +253,19 @@ func TestRemoveDeadReplicas(t *testing.T) {
 						}
 						defer db.Close()
 
-						batch, err := removeDeadReplicas(db, deadReplicas, allNodesStopped, now)
+						batch, err := removeDeadReplicas(db, deadReplicas)
 						if err != nil {
 							return err
 						}
-						if batch == nil {
-							return errors.New("expected non-nil batch")
+						if batch != nil {
+							if err := batch.Commit(true); err != nil {
+								return err
+							}
+							batch.Close()
 						}
-						if err := batch.Commit(true); err != nil {
-							return err
-						}
-						batch.Close()
 
 						// The repair process is idempotent and should give a nil batch the second time
-						batch, err = removeDeadReplicas(db, deadReplicas, allNodesStopped, now)
+						batch, err = removeDeadReplicas(db, deadReplicas)
 						if err != nil {
 							return err
 						}
@@ -285,13 +277,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					}
 					for i := 0; i < testCase.survivingNodes; i++ {
 						err := repairStore(i)
-						if !allNodesStopped && testCase.survivingNodes > 1 {
-							if !testutils.IsError(err, ".*--all-nodes-are-stopped not passed") {
-								t.Fatalf("did not get expected error: %v", err)
-							}
-							// The rest of the test won't succeed since we didn't repair anything.
-							return
-						} else if err != nil {
+						if err != nil {
 							t.Fatal(err)
 						}
 					}
@@ -384,8 +370,20 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					row = s.QueryRow(t, "show cluster setting cluster.organization")
 					var org string
 					row.Scan(&org)
-					if org != "remove dead replicas test" {
-						t.Fatalf("expected old setting to be present, got %s instead", org)
+
+					// If there was only one surviving node, we know we
+					// recovered the write we did at the start of the test. But
+					// if there were multiples, we might have picked a lagging
+					// replica that didn't have it. See comments around
+					// maxLivePeer in debug.go.
+					//
+					// TODO(bdarnell): It doesn't look to me like this is
+					// guaranteed even in the single-survivor case, but it's
+					// only flaky when there are multiple survivors.
+					if testCase.survivingNodes == 1 {
+						if org != "remove dead replicas test" {
+							t.Fatalf("expected old setting to be present, got %s instead", org)
+						}
 					}
 				})
 		}

@@ -1174,20 +1174,35 @@ func removeDeadReplicas(
 		hasSelf := false
 		numDeadPeers := 0
 		allReplicas := desc.Replicas().All()
-		numReplicas := len(allReplicas)
+		maxLivePeer := roachpb.StoreID(-1)
 		for _, rep := range allReplicas {
 			if rep.StoreID == storeIdent.StoreID {
 				hasSelf = true
 			}
 			if _, ok := deadStoreIDs[rep.StoreID]; ok {
 				numDeadPeers++
+			} else {
+				if rep.StoreID > maxLivePeer {
+					maxLivePeer = rep.StoreID
+				}
 			}
 		}
-		if hasSelf && numDeadPeers > 0 && numDeadPeers == numReplicas-1 {
+		if hasSelf && numDeadPeers > 0 && storeIdent.StoreID == maxLivePeer {
+			// Rewrite the range as having a single replica. The winning
+			// replica is picked arbitrarily: the one with the highest store
+			// ID. This is not always the best option: it may lose writes
+			// that were committed on another surviving replica that had
+			// applied more of the raft log. However, in practice when we
+			// have multiple surviving replicas but still need this tool
+			// (because the replication factor was 4 or higher), we see that
+			// the logs are nearly always in sync and the choice doesn't
+			// matter. Correctly picking the replica with the longer log
+			// would complicate the use of this tool.
 			newDesc := desc
-			// Rewrite the replicas list. Bump the replica ID as an extra
-			// defense against one of the old replicas returning from the
-			// dead.
+			// Rewrite the replicas list. Bump the replica ID so that in
+			// case there are other surviving nodes that were members of the
+			// old incarnation of the range, they no longer recognize this
+			// revived replica (because they are not in sync with it).
 			replicas := []roachpb.ReplicaDescriptor{{
 				NodeID:    storeIdent.NodeID,
 				StoreID:   storeIdent.StoreID,
