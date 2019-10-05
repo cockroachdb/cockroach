@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -87,9 +88,14 @@ func (n *explainVecNode) startExec(params runParams) error {
 	tp := treeprinter.NewWithIndent(false /* leftPad */, true /* rightPad */, 0 /* edgeLength */)
 	root := tp.Child("")
 	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
+	thisNodeID := distSQLPlanner.nodeDesc.NodeID
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		opChains, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors)
+		fuseOpt := flowinfra.FuseNormally
+		if flow.nodeID == thisNodeID && !willDistributePlan {
+			fuseOpt = flowinfra.FuseAggressively
+		}
+		opChains, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors, fuseOpt)
 		if err != nil {
 			return err
 		}

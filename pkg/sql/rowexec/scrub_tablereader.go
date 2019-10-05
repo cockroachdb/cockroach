@@ -71,10 +71,6 @@ func newScrubTableReader(
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
-	if flowCtx.Txn == nil {
-		return nil, errors.Errorf("scrubTableReader outside of txn")
-	}
-
 	tr := &scrubTableReader{
 		indexIdx: int(spec.IndexIdx),
 	}
@@ -214,6 +210,10 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 
 // Start is part of the RowSource interface.
 func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
+	if tr.FlowCtx.Txn == nil {
+		tr.MoveToDraining(errors.Errorf("scrubTableReader outside of txn"))
+	}
+
 	ctx = tr.StartInternal(ctx, scrubTableReaderProcName)
 
 	log.VEventf(ctx, 1, "starting")
