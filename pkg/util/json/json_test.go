@@ -2016,3 +2016,65 @@ func TestJSONRemovePath(t *testing.T) {
 		}
 	}
 }
+
+func TestToDecimal(t *testing.T) {
+	numericCases := []string{
+		"1",
+		"1.0",
+		"3.14",
+		"-3.14",
+		"1.000",
+		"-0.0",
+		"-0.09",
+		"0.08",
+	}
+
+	nonNumericCases := []struct {
+		input  string
+		errMsg string
+	}{
+		{"\"1\"", "cannot convert JSON of type json.jsonString to decimal"},
+		{"{}", "cannot convert JSON of type json.jsonObject to decimal"},
+		{"[]", "cannot convert JSON of type json.jsonArray to decimal"},
+		{"true", "cannot convert JSON of type json.jsonTrue to decimal"},
+		{"false", "cannot convert JSON of type json.jsonFalse to decimal"},
+		{"null", "cannot convert JSON of type json.jsonNull to decimal"},
+	}
+
+	for _, tc := range numericCases {
+		t.Run(fmt.Sprintf("numeric - %s", tc), func(t *testing.T) {
+			dec1, _, err := apd.NewFromString(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			json, err := ParseJSON(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			dec2, err := ToDecimal(json)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if dec1.Cmp(&dec2) != 0 {
+				t.Fatalf("expected %s == %s", dec1.String(), dec2.String())
+			}
+		})
+	}
+
+	for _, tc := range nonNumericCases {
+		t.Run(fmt.Sprintf("nonNumeric - %s", tc), func(t *testing.T) {
+			json, err := ParseJSON(tc.input)
+			if err != nil {
+				t.Fatalf("expected no error")
+			}
+
+			_, err = ToDecimal(json)
+			if err.Error() != tc.errMsg {
+				t.Fatalf("expected %s, got %s", tc.errMsg, err.Error())
+			}
+		})
+	}
+}

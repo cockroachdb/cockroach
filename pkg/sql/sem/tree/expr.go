@@ -1520,11 +1520,11 @@ var (
 	bitArrayCastTypes = annotateCast(types.VarBit, []*types.T{types.Unknown, types.VarBit, types.Int, types.String, types.AnyCollatedString})
 	boolCastTypes     = annotateCast(types.Bool, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString})
 	intCastTypes      = annotateCast(types.Int, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.VarBit})
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.VarBit, types.Jsonb})
 	floatCastTypes = annotateCast(types.Float, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Jsonb})
 	decimalCastTypes = annotateCast(types.Decimal, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Jsonb})
 	stringCastTypes = annotateCast(types.String, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
 		types.VarBit,
 		types.AnyArray, types.AnyTuple,

@@ -972,6 +972,19 @@ func FromFloat64(v float64) (JSON, error) {
 	return jsonNumber(dec), nil
 }
 
+// ToDecimal returns a apd.Decimal given a JSON value
+func ToDecimal(j JSON) (apd.Decimal, error) {
+	j, err := decodeIfNeeded(j)
+	if err != nil {
+		return apd.Decimal{}, err
+	}
+	num, ok := j.(jsonNumber)
+	if !ok {
+		return apd.Decimal{}, errors.AssertionFailedf("cannot convert JSON of type %T to decimal", j)
+	}
+	return apd.Decimal(num), nil
+}
+
 // MakeJSON returns a JSON value given a Go-style representation of JSON.
 // * JSON null is Go `nil`,
 // * JSON true is Go `true`,

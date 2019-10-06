@@ -3213,6 +3213,18 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			res = NewDInt(DInt(iv))
 		case *DOid:
 			res = &v.DInt
+		case *DJSON:
+			if v.Type() == json.NumberJSONType {
+				// err is ignored as a more appropriate error
+				// will be generated later
+				dec, err := json.ToDecimal(v.JSON)
+				if err == nil {
+					asInt, err := dec.Int64()
+					if err == nil {
+						res = NewDInt(DInt(asInt))
+					}
+				}
+			}
 		}
 		if res != nil {
 			return res, nil
@@ -3253,6 +3265,18 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return NewDFloat(DFloat(float64(v.UnixEpochDays()))), nil
 		case *DInterval:
 			return NewDFloat(DFloat(v.AsFloat64())), nil
+		case *DJSON:
+			if v.Type() == json.NumberJSONType {
+				// err is ignored as a more appropriate error
+				// will be generated later
+				dec, err := json.ToDecimal(v.JSON)
+				if err == nil {
+					asFloat, err := dec.Int64()
+					if err == nil {
+						return NewDFloat(DFloat(asFloat)), nil
+					}
+				}
+			}
 		}
 
 	case types.DecimalFamily:
@@ -3301,6 +3325,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DInterval:
 			v.AsBigInt(&dd.Coeff)
 			dd.Exponent = -9
+		case *DJSON:
+			if v.Type() == json.NumberJSONType {
+				var dec apd.Decimal
+				// err is ignored as a more appropriate error
+				// will be generated later
+				dec, err = json.ToDecimal(v.JSON)
+				unset = err != nil
+				dd = DDecimal{dec}
+			}
 		default:
 			unset = true
 		}
