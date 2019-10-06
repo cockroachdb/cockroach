@@ -1225,6 +1225,14 @@ func removeDeadReplicas(
 
 	batch := db.NewBatch()
 	for _, desc := range newDescs {
+		// Write the rewritten descriptor to the range-local descriptor
+		// key. We do not update the meta copies of the descriptor.
+		// Instead, we leave them in a temporarily inconsistent state and
+		// they will be overwritten when the cluster recovers and
+		// up-replicates this range from its single copy to multiple
+		// copies. We rely on the fact that all range descriptor updates
+		// start with a CPut on the range-local copy followed by a blind
+		// Put to the meta copy.
 		key := keys.RangeDescriptorKey(desc.StartKey)
 		err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, clock.Now(), nil /* txn */, &desc)
 		if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
@@ -1232,6 +1240,14 @@ func removeDeadReplicas(
 				return nil, errors.Errorf("expected 1 intent, found %d: %s", len(wiErr.Intents), wiErr)
 			}
 			intent := wiErr.Intents[0]
+			// We rely on the property that transactions involving the range
+			// descriptor always start on the range-local descriptor's key.
+			// This guarantees that when the transaction commits, the intent
+			// will be resolved synchronously. If we see an intent on this
+			// key, we know that the transaction did not commit and we can
+			// abort it.
+			//
+			// TODO(nvanbenschoten): Does this need updating for parallel commits?
 			fmt.Printf("Conflicting intent found on %s. Aborting txn %s to resolve.\n", key, intent.Txn.ID)
 
 			// A crude form of the intent resolution process: abort the
