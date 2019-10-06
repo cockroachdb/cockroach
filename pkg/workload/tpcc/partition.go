@@ -393,7 +393,7 @@ func replicateItem(db *gosql.DB, cfg zoneConfig) error {
 
 		configure := fmt.Sprintf(`
 			ALTER INDEX item@%s
-			CONFIGURE ZONE USING constraints = '{"+zone=%s":1}', lease_preferences = '[[+zone=%s]]'`,
+			CONFIGURE ZONE USING num_replicas = 3, constraints = '{"+zone=%s":1}', lease_preferences = '[[+zone=%s]]'`,
 			idxName, zone, zone)
 		if _, err := db.Exec(configure); err != nil {
 			return errors.Wrapf(err, "Couldn't exec %q", configure)
