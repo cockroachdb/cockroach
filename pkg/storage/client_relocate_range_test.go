@@ -31,12 +31,20 @@ func relocateAndCheck(
 	tc *testcluster.TestCluster,
 	startKey roachpb.RKey,
 	targets []roachpb.ReplicationTarget,
-) {
-	require.NoError(t, tc.Servers[0].DB().AdminRelocateRange(context.Background(), startKey.AsRawKey(), targets))
+) (retries int) {
+	testutils.SucceedsSoon(t, func() error {
+		err := tc.Servers[0].DB().
+			AdminRelocateRange(context.Background(), startKey.AsRawKey(), targets)
+		if err != nil {
+			retries++
+		}
+		return err
+	})
 	desc, err := tc.Servers[0].LookupRange(startKey.AsRawKey())
 	require.NoError(t, err)
 	requireDescMembers(t, desc, targets)
 	requireLeaseAt(t, tc, desc, targets[0])
+	return retries
 }
 
 func requireDescMembers(
@@ -94,10 +102,10 @@ func TestAdminRelocateRange(t *testing.T) {
 	}
 	var intercepted []intercept
 
-	requireNumAtomic := func(expAtomic int, expSingle int, f func()) {
+	requireNumAtomic := func(expAtomic int, expSingle int, f func() (retries int)) {
 		t.Helper()
 		intercepted = nil
-		f()
+		retries := f()
 		var actAtomic, actSingle int
 		for _, ic := range intercepted {
 			if ic.err != nil {
@@ -109,6 +117,7 @@ func TestAdminRelocateRange(t *testing.T) {
 				actSingle++
 			}
 		}
+		actAtomic -= retries
 		require.Equal(t, expAtomic, actAtomic, "wrong number of atomic changes: %+v", intercepted)
 		require.Equal(t, expSingle, actSingle, "wrong number of single changes: %+v", intercepted)
 	}
@@ -137,8 +146,8 @@ func TestAdminRelocateRange(t *testing.T) {
 	{
 		targets := tc.Targets(1, 0, 2)
 		// Expect two single additions, and that's it.
-		requireNumAtomic(0, 2, func() {
-			relocateAndCheck(t, tc, k, targets)
+		requireNumAtomic(0, 2, func() int {
+			return relocateAndCheck(t, tc, k, targets)
 		})
 	}
 
@@ -151,16 +160,16 @@ func TestAdminRelocateRange(t *testing.T) {
 		// Should carry out three swaps. Note that the leaseholder gets removed
 		// in the process (i.e. internally the lease must've been moved around
 		// to achieve that).
-		requireNumAtomic(3, 0, func() {
-			relocateAndCheck(t, tc, k, targets)
+		requireNumAtomic(3, 0, func() int {
+			return relocateAndCheck(t, tc, k, targets)
 		})
 	}
 
 	// s4 (LH) s5 s6 ---> s5 (LH)
 	// Pure downreplication.
 	{
-		requireNumAtomic(0, 2, func() {
-			relocateAndCheck(t, tc, k, tc.Targets(4))
+		requireNumAtomic(0, 2, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(4))
 		})
 	}
 
@@ -168,8 +177,8 @@ func TestAdminRelocateRange(t *testing.T) {
 	// Lateral movement while at replication factor one. In this case atomic
 	// replication changes cannot be used; we add-then-remove instead.
 	{
-		requireNumAtomic(0, 2, func() {
-			relocateAndCheck(t, tc, k, tc.Targets(2))
+		requireNumAtomic(0, 2, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2))
 		})
 	}
 
@@ -177,16 +186,16 @@ func TestAdminRelocateRange(t *testing.T) {
 	// A grab bag.
 	{
 		// s3 -(add)-> s3 s2 -(swap)-> s4 s2 -(add)-> s4 s2 s1 (=s2 s4 s1)
-		requireNumAtomic(1, 2, func() {
-			relocateAndCheck(t, tc, k, tc.Targets(1, 3, 0))
+		requireNumAtomic(1, 2, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(1, 3, 0))
 		})
 		// s2 s4 s1 -(add)-> s2 s4 s1 s6 (=s4 s2 s6 s1)
-		requireNumAtomic(0, 1, func() {
-			relocateAndCheck(t, tc, k, tc.Targets(3, 1, 5, 0))
+		requireNumAtomic(0, 1, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(3, 1, 5, 0))
 		})
 		// s4 s2 s6 s1 -(swap)-> s3 s2 s6 s1 -(swap)-> s3 s5 s6 s1 -(del)-> s3 s5 s6 -(del)-> s3 s5
-		requireNumAtomic(2, 2, func() {
-			relocateAndCheck(t, tc, k, tc.Targets(2, 4))
+		requireNumAtomic(2, 2, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 4))
 		})
 	}
 }
