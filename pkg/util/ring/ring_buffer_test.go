@@ -11,9 +11,10 @@
 package ring
 
 import (
-	"fmt"
 	"math/rand"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 const maxCount = 1000
@@ -22,43 +23,37 @@ func testRingBuffer(t *testing.T, count int) {
 	var buffer Buffer
 	naiveBuffer := make([]interface{}, 0, count)
 	for elementIdx := 0; elementIdx < count; elementIdx++ {
-		if buffer.Len() != len(naiveBuffer) {
-			t.Errorf("Ring buffer returned incorrect Len: expected %v, found %v", len(naiveBuffer), buffer.Len())
-			panic("")
-		}
-
-		op := rand.Float64()
-		if op < 0.35 {
+		switch rand.Intn(4) {
+		case 0:
 			buffer.AddFirst(elementIdx)
 			naiveBuffer = append([]interface{}{elementIdx}, naiveBuffer...)
-		} else if op < 0.70 {
+		case 1:
 			buffer.AddLast(elementIdx)
 			naiveBuffer = append(naiveBuffer, elementIdx)
-		} else if op < 0.85 {
+		case 2:
 			if len(naiveBuffer) > 0 {
 				buffer.RemoveFirst()
-				naiveBuffer = naiveBuffer[1:]
+				// NB: shift to preserve length.
+				copy(naiveBuffer, naiveBuffer[1:])
+				naiveBuffer = naiveBuffer[:len(naiveBuffer)-1]
 			}
-		} else {
+		case 3:
 			if len(naiveBuffer) > 0 {
 				buffer.RemoveLast()
 				naiveBuffer = naiveBuffer[:len(naiveBuffer)-1]
 			}
+		default:
+			t.Fatal("unexpected")
 		}
 
+		require.Equal(t, len(naiveBuffer), buffer.Len())
 		for pos, el := range naiveBuffer {
 			res := buffer.Get(pos)
-			if res != el {
-				panic(fmt.Sprintf("Ring buffer returned incorrect value in position %v: expected %+v, found %+v", pos, el, res))
-			}
+			require.Equal(t, el, res)
 		}
 		if len(naiveBuffer) > 0 {
-			if buffer.GetFirst() != naiveBuffer[0] {
-				panic(fmt.Sprintf("Ring buffer returned incorrect value of the first element: expected %+v, found %+v", naiveBuffer[0], buffer.GetFirst()))
-			}
-			if buffer.GetLast() != naiveBuffer[len(naiveBuffer)-1] {
-				panic(fmt.Sprintf("Ring buffer returned incorrect value of the last element: expected %+v, found %+v", naiveBuffer[len(naiveBuffer)-1], buffer.GetLast()))
-			}
+			require.Equal(t, naiveBuffer[0], buffer.GetFirst())
+			require.Equal(t, naiveBuffer[len(naiveBuffer)-1], buffer.GetLast())
 		}
 	}
 }
@@ -67,4 +62,55 @@ func TestRingBuffer(t *testing.T) {
 	for count := 1; count <= maxCount; count++ {
 		testRingBuffer(t, count)
 	}
+}
+
+func TestRingBufferCapacity(t *testing.T) {
+	var b Buffer
+
+	require.Panics(t, func() { b.Reserve(-1) })
+	require.Equal(t, 0, b.Len())
+	require.Equal(t, 0, b.Cap())
+
+	b.Reserve(0)
+	require.Equal(t, 0, b.Len())
+	require.Equal(t, 0, b.Cap())
+
+	b.AddFirst("a")
+	require.Equal(t, 1, b.Len())
+	require.Equal(t, 1, b.Cap())
+	require.Panics(t, func() { b.Reserve(0) })
+	require.Equal(t, 1, b.Len())
+	require.Equal(t, 1, b.Cap())
+	b.Reserve(1)
+	require.Equal(t, 1, b.Len())
+	require.Equal(t, 1, b.Cap())
+	b.Reserve(2)
+	require.Equal(t, 1, b.Len())
+	require.Equal(t, 2, b.Cap())
+
+	b.AddLast("z")
+	require.Equal(t, 2, b.Len())
+	require.Equal(t, 2, b.Cap())
+	require.Panics(t, func() { b.Reserve(1) })
+	require.Equal(t, 2, b.Len())
+	require.Equal(t, 2, b.Cap())
+	b.Reserve(2)
+	require.Equal(t, 2, b.Len())
+	require.Equal(t, 2, b.Cap())
+	b.Reserve(9)
+	require.Equal(t, 2, b.Len())
+	require.Equal(t, 9, b.Cap())
+
+	b.RemoveFirst()
+	require.Equal(t, 1, b.Len())
+	require.Equal(t, 9, b.Cap())
+	b.Reserve(1)
+	require.Equal(t, 1, b.Len())
+	require.Equal(t, 9, b.Cap())
+	b.RemoveLast()
+	require.Equal(t, 0, b.Len())
+	require.Equal(t, 9, b.Cap())
+	b.Reserve(0)
+	require.Equal(t, 0, b.Len())
+	require.Equal(t, 9, b.Cap())
 }
