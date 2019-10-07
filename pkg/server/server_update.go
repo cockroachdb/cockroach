@@ -15,36 +15,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
 )
-
-// TestingKnobs groups testing knobs for the Server.
-type TestingKnobs struct {
-	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
-	// automatic version upgrade mechanism.
-	DisableAutomaticVersionUpgrade int32 // accessed atomically
-	// DefaultZoneConfigOverride, if set, overrides the default zone config defined in `pkg/config/zone.go`
-	DefaultZoneConfigOverride *config.ZoneConfig
-	// DefaultSystemZoneConfigOverride, if set, overrides the default system zone config defined in `pkg/config/zone.go`
-	DefaultSystemZoneConfigOverride *config.ZoneConfig
-	// PauseAfterGettingRPCAddress, if non-nil, instructs the server to wait until
-	// the channel is closed after getting an RPC serving address.
-	PauseAfterGettingRPCAddress chan struct{}
-	// SignalAfterGettingRPCAddress, if non-nil, is closed after the server gets
-	// an RPC server address.
-	SignalAfterGettingRPCAddress chan struct{}
-	// ContextTestingKnobs allows customization of the RPC context testing knobs.
-	ContextTestingKnobs rpc.ContextTestingKnobs
-}
-
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // startAttemptUpgrade attempts to upgrade cluster version.
 func (s *Server) startAttemptUpgrade(ctx context.Context) {
