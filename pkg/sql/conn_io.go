@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -94,7 +95,7 @@ type StmtBuf struct {
 		cond *sync.Cond
 
 		// data contains the elements of the buffer.
-		data []Command
+		data ring.Buffer // []Command
 
 		// startPos indicates the index of the first command currently in data
 		// relative to the start of the connection.
@@ -398,7 +399,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	if buf.mu.closed {
 		return errors.AssertionFailedf("buffer is closed")
 	}
-	buf.mu.data = append(buf.mu.data, cmd)
+	buf.mu.data.AddLast(cmd)
 	buf.mu.lastPos++
 
 	buf.mu.cond.Signal()
@@ -426,10 +427,11 @@ func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 		if err != nil {
 			return nil, 0, err
 		}
-		if cmdIdx < len(buf.mu.data) {
-			return buf.mu.data[cmdIdx], curPos, nil
+		len := buf.mu.data.Len()
+		if cmdIdx < len {
+			return buf.mu.data.Get(cmdIdx).(Command), curPos, nil
 		}
-		if cmdIdx != len(buf.mu.data) {
+		if cmdIdx != len {
 			return nil, 0, errors.AssertionFailedf(
 				"can only wait for next command; corrupt cursor: %d", errors.Safe(curPos))
 		}
@@ -473,8 +475,7 @@ func (buf *StmtBuf) ltrim(ctx context.Context, pos CmdPos) {
 		if buf.mu.startPos == pos {
 			break
 		}
-		buf.mu.data[0] = nil
-		buf.mu.data = buf.mu.data[1:]
+		buf.mu.data.RemoveFirst()
 		buf.mu.startPos++
 	}
 }
@@ -509,7 +510,7 @@ func (buf *StmtBuf) seekToNextBatch() error {
 		buf.mu.Unlock()
 		return err
 	}
-	if cmdIdx == len(buf.mu.data) {
+	if cmdIdx == buf.mu.data.Len() {
 		buf.mu.Unlock()
 		return errors.AssertionFailedf("invalid seek start point")
 	}
@@ -529,7 +530,7 @@ func (buf *StmtBuf) seekToNextBatch() error {
 			return err
 		}
 
-		if _, ok := buf.mu.data[cmdIdx].(Sync); ok {
+		if _, ok := buf.mu.data.Get(cmdIdx).(Sync); ok {
 			foundSync = true
 		}
 
