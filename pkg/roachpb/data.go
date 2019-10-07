@@ -984,7 +984,7 @@ func (t *Transaction) Update(o *Transaction) {
 		*t = *o
 		return
 	} else if t.ID != o.ID {
-		log.Fatalf(context.Background(), "updating txn %v with different txn %v", t, o)
+		log.Fatalf(context.Background(), "updating txn %s with different txn %s", t.String(), o.String())
 		return
 	}
 	if len(t.Key) == 0 {
@@ -1012,7 +1012,7 @@ func (t *Transaction) Update(o *Transaction) {
 			}
 		case ABORTED:
 			if o.Status == COMMITTED {
-				log.Warningf(context.Background(), "updating ABORTED txn %v with COMMITTED txn %v", t, o)
+				log.Warningf(context.Background(), "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
 			}
 		case COMMITTED:
 			// Nothing to do.
@@ -1040,7 +1040,7 @@ func (t *Transaction) Update(o *Transaction) {
 	} else /* t.Epoch > o.Epoch */ {
 		// Ignore epoch-specific state from previous epoch.
 		if o.Status == COMMITTED {
-			log.Warningf(context.Background(), "updating txn %v with COMMITTED txn at earlier epoch %v", t, o)
+			log.Warningf(context.Background(), "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
 		}
 	}
 
