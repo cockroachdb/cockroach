@@ -274,7 +274,11 @@ func (f *stubFactory) ConstructDelete(
 }
 
 func (f *stubFactory) ConstructDeleteRange(
-	table cat.Table, needed exec.ColumnOrdinalSet, indexConstraint *constraint.Constraint,
+	table cat.Table,
+	needed exec.ColumnOrdinalSet,
+	indexConstraint *constraint.Constraint,
+	maxReturnedKeys int,
+	allowAutoCommit bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
