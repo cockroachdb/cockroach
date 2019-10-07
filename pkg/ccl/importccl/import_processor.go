@@ -11,13 +11,10 @@ package importccl
 import (
 	"context"
 	"math"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -88,43 +85,14 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 		defer tracing.FinishSpan(span)
 		defer conv.inputFinished(ctx)
 
-		job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
-		if err != nil {
-			return err
-		}
-
-		progFn := func(pct float32) error {
-			if cp.spec.IngestDirectly {
-				return nil
-			}
-			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				d := details.(*jobspb.Progress_Import).Import
-				slotpct := pct * cp.spec.Progress.Contribution
-				if len(d.SamplingProgress) > 0 {
-					d.SamplingProgress[cp.spec.Progress.Slot] = slotpct
-				} else {
-					d.ReadProgress[cp.spec.Progress.Slot] = slotpct
-				}
-				return d.Completed()
-			})
-		}
-
-		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
+		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, cp.flowCtx.Cfg.Settings)
 	})
 
-	if cp.spec.IngestDirectly {
-		// IngestDirectly means this reader will just ingest the KVs that the
-		// producer emitted to the chan, and the only result we push into distsql at
-		// the end is one row containing an encoded BulkOpSummary.
-		group.GoCtx(func(ctx context.Context) error {
-			return cp.ingestKvs(ctx, kvCh)
-		})
-	} else {
-		// Sample KVs
-		group.GoCtx(func(ctx context.Context) error {
-			return cp.emitKvs(ctx, kvCh)
-		})
-	}
+	// Ingest the KVs that the producer emitted to the chan and the row result
+	// at the end is one row containing an encoded BulkOpSummary.
+	group.GoCtx(func(ctx context.Context) error {
+		return cp.ingestKvs(ctx, kvCh)
+	})
 
 	if err := group.Wait(); err != nil {
 		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
@@ -175,81 +143,6 @@ func makeInputConverter(
 	default:
 		return nil, errors.Errorf("Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
 	}
-}
-
-type sampleFunc func(roachpb.KeyValue) bool
-
-// sampleRate is a sampleFunc that samples a row with a probability of the
-// row's size / the sample size.
-type sampleRate struct {
-	rnd        *rand.Rand
-	sampleSize float64
-}
-
-func (s sampleRate) sample(kv roachpb.KeyValue) bool {
-	sz := float64(len(kv.Key) + len(kv.Value.RawBytes))
-	prob := sz / s.sampleSize
-	return prob > s.rnd.Float64()
-}
-
-func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.KVBatch) error {
-	ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
-	defer tracing.FinishSpan(span)
-
-	var fn sampleFunc
-	var sampleAll bool
-	if cp.spec.SampleSize == 0 {
-		sampleAll = true
-	} else {
-		sr := sampleRate{
-			rnd:        rand.New(rand.NewSource(rand.Int63())),
-			sampleSize: float64(cp.spec.SampleSize),
-		}
-		fn = sr.sample
-	}
-
-	// Populate the split-point spans which have already been imported.
-	var completedSpans roachpb.SpanGroup
-	job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
-	if err != nil {
-		return err
-	}
-	progress := job.Progress()
-	if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
-		completedSpans.Add(details.Import.SpanProgress...)
-	} else {
-		return errors.Errorf("unexpected progress type %T", progress)
-	}
-
-	for kvBatch := range kvCh {
-		for _, kv := range kvBatch.KVs {
-			// Allow KV pairs to be dropped if they belong to a completed span.
-			if completedSpans.Contains(kv.Key) {
-				continue
-			}
-
-			rowRequired := sampleAll || keys.IsDescriptorKey(kv.Key)
-			if rowRequired || fn(kv) {
-				var row sqlbase.EncDatumRow
-				if rowRequired {
-					row = sqlbase.EncDatumRow{
-						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
-					}
-				} else {
-					// Don't send the value for rows returned for sampling
-					row = sqlbase.EncDatumRow{
-						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-					}
-				}
-				if cp.output.Push(row, nil) != execinfra.NeedMoreRows {
-					return errors.New("unexpected closure of consumer")
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using

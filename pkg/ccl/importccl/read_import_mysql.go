@@ -85,14 +85,13 @@ func (m *mysqldumpReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
 	format roachpb.IOFileFormat,
-	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, m.readFile, progressFn, settings)
+	return readInputFiles(ctx, dataFiles, format, m.readFile, settings)
 }
 
 func (m *mysqldumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string,
 ) error {
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)
