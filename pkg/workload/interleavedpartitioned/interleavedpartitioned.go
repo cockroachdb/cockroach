@@ -749,7 +749,9 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 			}
 			if _, err := db.Exec(
 				fmt.Sprintf(
-					"ALTER PARTITION west OF TABLE sessions CONFIGURE ZONE USING lease_preferences = '[[+zone=%s]]'",
+					"ALTER PARTITION west OF TABLE sessions CONFIGURE ZONE USING"+
+						" lease_preferences = '[[+zone=%[1]s]]', "+
+						"constraints = '[+zone=%[1]s]'",
 					w.westZoneName,
 				),
 			); err != nil {
@@ -757,7 +759,9 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 			}
 			if _, err := db.Exec(
 				fmt.Sprintf(
-					"ALTER PARTITION east OF TABLE sessions CONFIGURE ZONE USING lease_preferences = '[[+zone=%s]]'",
+					"ALTER PARTITION east OF TABLE sessions CONFIGURE ZONE USING"+
+						" lease_preferences = '[[+zone=%[1]s]]', "+
+						"constraints = '[+zone=%[1]s]'",
 					w.eastZoneName,
 				),
 			); err != nil {
