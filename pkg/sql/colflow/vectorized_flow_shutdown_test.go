@@ -153,7 +153,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
 					synchronizerInputs = append(synchronizerInputs, colexec.Operator(inbox))
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
+				synchronizer := colexec.NewUnorderedSynchronizer(synchronizerInputs, typs, &wg)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				runOutboxInbox := func(
