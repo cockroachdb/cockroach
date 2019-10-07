@@ -883,7 +883,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		return tc.mu.storedErr
 	case txnFinalized:
 		msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
-			"Trying to execute: %s", ba)
+			"Trying to execute: %s", ba.Summary())
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
