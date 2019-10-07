@@ -89,9 +89,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 
-			l := workloadccl.ImportDataLoader{
-				DirectIngestion: true,
-			}
+			l := workloadccl.ImportDataLoader{}
 			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
