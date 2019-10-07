@@ -300,10 +300,9 @@ func MakeFixture(
 // ImportDataLoader is an InitialDataLoader implementation that loads data with
 // IMPORT. The zero-value gets some sane defaults for the tunable settings.
 type ImportDataLoader struct {
-	DirectIngestion bool
-	FilesPerNode    int
-	InjectStats     bool
-	CSVServer       string
+	FilesPerNode int
+	InjectStats  bool
+	CSVServer    string
 }
 
 // InitialDataLoad implements the InitialDataLoader interface.
@@ -318,7 +317,7 @@ func (l ImportDataLoader) InitialDataLoad(
 	start := timeutil.Now()
 	const useConnectionDB = ``
 	bytes, err := ImportFixture(
-		ctx, db, gen, useConnectionDB, l.DirectIngestion, l.FilesPerNode, l.InjectStats, l.CSVServer)
+		ctx, db, gen, useConnectionDB, l.FilesPerNode, l.InjectStats, l.CSVServer)
 	if err != nil {
 		return 0, errors.Wrap(err, `importing fixture`)
 	}
@@ -338,7 +337,6 @@ func ImportFixture(
 	sqlDB *gosql.DB,
 	gen workload.Generator,
 	dbName string,
-	directIngestion bool,
 	filesPerNode int,
 	injectStats bool,
 	csvServer string,
@@ -379,7 +377,7 @@ func ImportFixture(
 		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
 		g.GoCtx(func(ctx context.Context) error {
 			tableBytes, err := importFixtureTable(
-				ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */, injectStats)
+				ctx, sqlDB, dbName, table, paths, `` /* output */, injectStats)
 			atomic.AddInt64(&bytesAtomic, tableBytes)
 			return errors.Wrapf(err, `importing table %s`, table.Name)
 		})
@@ -396,7 +394,6 @@ func importFixtureTable(
 	dbName string,
 	table workload.Table,
 	paths []string,
-	directIngestion bool,
 	output string,
 	injectStats bool,
 ) (int64, error) {
@@ -417,9 +414,6 @@ func importFixtureTable(
 	if len(output) > 0 {
 		params = append(params, output)
 		fmt.Fprintf(&buf, `, transform=$%d`, len(params))
-	}
-	if directIngestion {
-		buf.WriteString(`, experimental_direct_ingestion`)
 	}
 	var rows, index, tableBytes int64
 	var discard driver.Value
