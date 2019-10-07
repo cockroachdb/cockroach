@@ -264,7 +264,7 @@ func benchmarkWriteType(b *testing.B, d tree.Datum, format pgwirebase.FormatCode
 	}
 	if format == pgwirebase.FormatBinary {
 		writeMethod = func(ctx context.Context, d tree.Datum, loc *time.Location) {
-			buf.writeBinaryDatum(ctx, d, loc, 0)
+			buf.writeBinaryDatum(ctx, d, loc, d.ResolvedType().Oid())
 		}
 	}
 
@@ -278,6 +278,9 @@ func benchmarkWriteType(b *testing.B, d tree.Datum, format pgwirebase.FormatCode
 		// to take much longer. See http://stackoverflow.com/a/37624250/3435257.
 		// buf.wrapped.Reset() should be fast enough to be negligible.
 		writeMethod(ctx, d, nil)
+		if buf.err != nil {
+			b.Fatal(buf.err)
+		}
 		buf.wrapped.Reset()
 	}
 }
