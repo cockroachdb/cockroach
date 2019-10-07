@@ -240,10 +240,10 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	}
 
 	const filesPerNode = 1
-	const noDirectIngest, noInjectStats = false, false
+	const noInjectStats = false
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	_, err := ImportFixture(
-		ctx, db, gen, `d`, noDirectIngest, filesPerNode, noInjectStats, ts.URL,
+		ctx, db, gen, `d`, filesPerNode, noInjectStats, ts.URL,
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,

@@ -91,10 +91,6 @@ var fixturesMakeFilesPerNode = fixturesMakeCmd.PersistentFlags().Int(
 	`files-per-node`, 1,
 	`number of file URLs to generate per node when using csv-server`)
 
-var fixturesImportDirectIngestionTable = fixturesImportCmd.PersistentFlags().Bool(
-	`experimental-direct-ingestion`, false,
-	`Use the faster, but limited and still quite experimental, IMPORT without a distributed sort`)
-
 var fixturesImportFilesPerNode = fixturesImportCmd.PersistentFlags().Int(
 	`files-per-node`, 1,
 	`number of file URLs to generate per node`)
@@ -341,10 +337,9 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	}
 
 	l := workloadccl.ImportDataLoader{
-		DirectIngestion: *fixturesImportDirectIngestionTable,
-		FilesPerNode:    *fixturesImportFilesPerNode,
-		InjectStats:     *fixturesImportInjectStats,
-		CSVServer:       *fixturesMakeImportCSVServerURL,
+		FilesPerNode: *fixturesImportFilesPerNode,
+		InjectStats:  *fixturesImportInjectStats,
+		CSVServer:    *fixturesMakeImportCSVServerURL,
 	}
 	if _, err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
 		return err
