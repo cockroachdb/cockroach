@@ -216,27 +216,33 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return errors.Errorf("Please specify a valid region.")
 	}
 
-	// Only use one region if we're not creating a distributed cluster.
+	var zones []string // contains an az corresponding to each entry in names
+	// Only use one zone in one region if we're not creating a distributed cluster.
 	if !opts.GeoDistributed {
-		regions = []string{regions[0]}
-	}
-
-	// Distribute the nodes amongst availability zones.
-	zonesPerRegion := len(names) / len(regions)
-	leftover := len(names) % len(regions)
-	var zones []string
-	for i, region := range regions {
-		regionZones, err := p.regionZones(region, p.opts.CreateZones)
+		regionZones, err := p.regionZones(regions[0], p.opts.CreateZones)
 		if err != nil {
 			return err
 		}
-		totalZonesPerRegion := zonesPerRegion
-		if leftover > i {
-			totalZonesPerRegion++
+		for range names {
+			zones = append(zones, regionZones[0])
 		}
-		for j := 0; j < totalZonesPerRegion; j++ {
-			zoneIndex := j % len(regionZones)
-			zones = append(zones, regionZones[zoneIndex])
+	} else {
+		// Distribute the nodes amongst availability zones if geo distributed.
+		zonesPerRegion := len(names) / len(regions)
+		leftover := len(names) % len(regions)
+		for i, region := range regions {
+			regionZones, err := p.regionZones(region, p.opts.CreateZones)
+			if err != nil {
+				return err
+			}
+			totalZonesPerRegion := zonesPerRegion
+			if leftover > i {
+				totalZonesPerRegion++
+			}
+			for j := 0; j < totalZonesPerRegion; j++ {
+				zoneIndex := j % len(regionZones)
+				zones = append(zones, regionZones[zoneIndex])
+			}
 		}
 	}
 	var g errgroup.Group
