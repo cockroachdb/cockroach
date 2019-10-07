@@ -225,10 +225,7 @@ func workerRun(
 		// Limit how quickly the load generator sends requests based on --max-rate.
 		if limiter != nil {
 			if err := limiter.Wait(ctx); err != nil {
-				if err == ctx.Err() {
-					return
-				}
-				panic(err)
+				return
 			}
 		}
 
