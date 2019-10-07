@@ -1635,7 +1635,7 @@ func (ex *connExecutor) execCopyIn(
 			// going through the state machine.
 			ex.state.sqlTimestamp = txnTS
 			ex.statsCollector = ex.newStatsCollector()
-			ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+			ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 			ex.initPlanner(ctx, p)
 			ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
 		},
@@ -2079,7 +2079,7 @@ func (ex *connExecutor) recordError(ctx context.Context, err error) {
 // newStatsCollector returns a sqlStatsCollector that will record stats in the
 // session's stats containers.
 func (ex *connExecutor) newStatsCollector() *sqlStatsCollector {
-	return newSQLStatsCollector(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+	return newSQLStatsCollector(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 }
 
 // cancelQuery is part of the registrySession interface.
