@@ -676,8 +676,6 @@ var pgjdbcBlackList19_2 = blacklist{
 	"org.postgresql.test.jdbc2.CopyTest.testCopyOutByRow":                                                                                                                      "unknown",
 	"org.postgresql.test.jdbc2.CopyTest.testCopyQuery":                                                                                                                         "unknown",
 	"org.postgresql.test.jdbc2.CopyTest.testLockReleaseOnCancelFailure":                                                                                                        "unknown",
-	"org.postgresql.test.jdbc2.CursorFetchTest.testGetRow[binary = FORCE]":                                                                                                     "40195",
-	"org.postgresql.test.jdbc2.CursorFetchTest.testGetRow[binary = REGULAR]":                                                                                                   "40195",
 	"org.postgresql.test.jdbc2.CursorFetchTest.testMultistatement[binary = FORCE]":                                                                                             "40195",
 	"org.postgresql.test.jdbc2.CursorFetchTest.testMultistatement[binary = REGULAR]":                                                                                           "40195",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testEncoding":                                                                                                              "unknown",
