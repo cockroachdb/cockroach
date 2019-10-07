@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -232,13 +231,8 @@ func (p *planner) populateExplain(
 		} else if !vectorizedThresholdMet && ctxSessionData.VectorizeMode == sessiondata.VectorizeAuto {
 			isVec = false
 		} else {
-			thisNodeID := distSQLPlanner.nodeDesc.NodeID
-			for nodeID, flow := range flows {
-				fuseOpt := flowinfra.FuseNormally
-				if nodeID == thisNodeID && !isDistSQL {
-					fuseOpt = flowinfra.FuseAggressively
-				}
-				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, fuseOpt)
+			for _, flow := range flows {
+				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors)
 				isVec = isVec && (err == nil)
 			}
 		}
