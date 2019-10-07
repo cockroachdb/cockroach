@@ -248,15 +248,28 @@ func (r *clusterRegistry) markClusterAsSaved(c *cluster, msg string) {
 	r.mu.Unlock()
 }
 
+type clusterWithMsg struct {
+	*cluster
+	savedMsg string
+}
+
 // savedClusters returns the list of clusters that have been saved for
 // debugging.
-func (r *clusterRegistry) savedClusters() map[*cluster]string {
+func (r *clusterRegistry) savedClusters() []clusterWithMsg {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	res := make(map[*cluster]string, len(r.mu.savedClusters))
+	res := make([]clusterWithMsg, len(r.mu.savedClusters))
+	i := 0
 	for c, msg := range r.mu.savedClusters {
-		res[c] = msg
+		res[i] = clusterWithMsg{
+			cluster:  c,
+			savedMsg: msg,
+		}
+		i++
 	}
+	sort.Slice(res, func(i, j int) bool {
+		return strings.Compare(res[i].name, res[j].name) < 0
+	})
 	return res
 }
 
