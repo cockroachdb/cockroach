@@ -189,9 +189,6 @@ func (ds *ServerImpl) setupFlow(
 	} else if localState.IsLocal {
 		// If we're a local flow, we don't need a "follows from" relationship: we're
 		// going to run this flow synchronously.
-		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
-		//  If that field is unset, we might still want to create a child span if
-		//  this flow is run synchronously.
 		sp = tracing.StartChildSpan(opName, parentSpan, logtags.FromContext(ctx), false /* separateRecording */)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
@@ -219,10 +216,29 @@ func (ds *ServerImpl) setupFlow(
 	)
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 
+	// Figure out what txn the flow needs to run in, if any.
+	// For local flows, the txn comes from localState.Txn. For non-local ones, we
+	// create a txn based on the request's TxnCoordMeta.
+	var txn *client.Txn
+	if !localState.IsLocal {
+		if meta := req.TxnCoordMeta; meta != nil {
+			if meta.Txn.Status != roachpb.PENDING {
+				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
+					meta.Txn)
+			}
+			// The flow will run in a LeafTxn because we do not want each distributed
+			// Txn to heartbeat the transaction.
+			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+		}
+	} else {
+		txn = localState.Txn
+	}
+
 	var evalCtx *tree.EvalContext
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
 		evalCtx.Mon = &monitor
+		evalCtx.Txn = txn
 	} else {
 		location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
 		if err != nil {
@@ -277,6 +293,7 @@ func (ds *ServerImpl) setupFlow(
 			// TODO(andrei): This is wrong. Each processor should override Ctx with its
 			// own context.
 			Context:          ctx,
+			Txn:              txn,
 			Planner:          &sqlbase.DummyEvalPlanner{},
 			SessionAccessor:  &sqlbase.DummySessionAccessor{},
 			Sequence:         &sqlbase.DummySequenceOperators{},
@@ -300,6 +317,7 @@ func (ds *ServerImpl) setupFlow(
 		Cfg:            &ds.ServerConfig,
 		ID:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
+		Txn:            txn,
 		NodeID:         nodeID,
 		TraceKV:        req.TraceKV,
 		Local:          localState.IsLocal,
@@ -310,15 +328,7 @@ func (ds *ServerImpl) setupFlow(
 	// to restore the original value which can have data races under stress.
 	isVectorized := sessiondata.VectorizeExecMode(req.EvalContext.Vectorize) != sessiondata.VectorizeOff
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
-	opt := flowinfra.FuseNormally
-	if localState.IsLocal {
-		// If there's no remote flows, fuse everything. This is needed in order for
-		// us to be able to use the RootTxn for the flow 's execution; the RootTxn
-		// doesn't allow for concurrent operations. Local flows with mutations need
-		// to use the RootTxn.
-		opt = flowinfra.FuseAggressively
-	}
-	if err := f.Setup(ctx, &req.Flow, opt); err != nil {
+	if err := f.Setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
@@ -332,27 +342,6 @@ func (ds *ServerImpl) setupFlow(
 	if f.IsVectorized() {
 		telemetry.Inc(sqltelemetry.VecExecCounter)
 	}
-
-	// Figure out what txn the flow needs to run in, if any. For gateway flows
-	// that have no remote flows and also no concurrency, the txn comes from
-	// localState.Txn. Otherwise, we create a txn based on the request's
-	// TxnCoordMeta.
-	var txn *client.Txn
-	if localState.IsLocal && !f.ConcurrentExecution() {
-		txn = localState.Txn
-	} else {
-		if meta := req.TxnCoordMeta; meta != nil {
-			if meta.Txn.Status != roachpb.PENDING {
-				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
-					meta.Txn)
-			}
-			// The flow will run in a LeafTxn because we do not want each distributed
-			// Txn to heartbeat the transaction.
-			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
-		}
-	}
-	f.SetTxn(txn)
-
 	return ctx, f, nil
 }
 
@@ -381,12 +370,7 @@ func (ds *ServerImpl) SetupSyncFlow(
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
 ) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor,
-		req, output, LocalState{})
-	if err != nil {
-		return nil, nil, err
-	}
-	return ctx, f, err
+	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
 }
 
 // LocalState carries information that is required to set up a flow with wrapped
@@ -394,14 +378,8 @@ func (ds *ServerImpl) SetupSyncFlow(
 type LocalState struct {
 	EvalContext *tree.EvalContext
 
-	// IsLocal is set if the flow is running on the gateway and there are no
-	// remote flows.
+	// IsLocal is true if the flow is being run locally in the first place.
 	IsLocal bool
-
-	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
-	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.
-	// If there is concurrency, a LeafTxn will be created.
-	Txn *client.Txn
 
 	/////////////////////////////////////////////
 	// Fields below are empty if IsLocal == false
@@ -410,11 +388,12 @@ type LocalState struct {
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
 	LocalProcs []execinfra.LocalProcessor
+	Txn        *client.Txn
 }
 
 // SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node.
-// It's used by the gateway node to set up the flows local to it.
-// It's the same as SetupSyncFlow except it takes the localState.
+// It's used by the gateway node to set up the flows local to it. Otherwise,
+// the same as SetupSyncFlow.
 func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,
@@ -422,12 +401,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	output execinfra.RowReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output,
-		localState)
-	if err != nil {
-		return nil, nil, err
-	}
-	return ctx, f, err
+	return ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.

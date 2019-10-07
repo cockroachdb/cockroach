@@ -30,12 +30,11 @@ type unorderedSynchronizerMsg struct {
 	b        coldata.Batch
 }
 
-var _ Operator = &ParallelUnorderedSynchronizer{}
-var _ execinfra.OpNode = &ParallelUnorderedSynchronizer{}
+var _ Operator = &UnorderedSynchronizer{}
 
-// ParallelUnorderedSynchronizer is an Operator that combines multiple Operator streams
+// UnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
-type ParallelUnorderedSynchronizer struct {
+type UnorderedSynchronizer struct {
 	inputs []Operator
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
@@ -60,14 +59,13 @@ type ParallelUnorderedSynchronizer struct {
 	done        bool
 	zeroBatch   coldata.Batch
 	// externalWaitGroup refers to the WaitGroup passed in externally. Since the
-	// ParallelUnorderedSynchronizer spawns goroutines, this allows callers to
-	// wait for the completion of these goroutines.
+	// UnorderedSynchronizer spawns goroutines, this allows callers to wait for
+	// the completion of these goroutines.
 	externalWaitGroup *sync.WaitGroup
 	// internalWaitGroup refers to the WaitGroup internally managed by the
-	// ParallelUnorderedSynchronizer. This will only ever be incremented by the
-	// ParallelUnorderedSynchronizer and decremented by the input goroutines. This
-	// allows the ParallelUnorderedSynchronizer to wait only on internal
-	// goroutines.
+	// UnorderedSynchronizer. This will only ever be incremented by the
+	// UnorderedSynchronizer and decremented by the input goroutines. This allows
+	// the UnorderedSynchronizer to wait only on internal goroutines.
 	internalWaitGroup *sync.WaitGroup
 	cancelFn          context.CancelFunc
 	batchCh           chan *unorderedSynchronizerMsg
@@ -75,24 +73,24 @@ type ParallelUnorderedSynchronizer struct {
 }
 
 // ChildCount implements the execinfra.OpNode interface.
-func (s *ParallelUnorderedSynchronizer) ChildCount() int {
+func (s *UnorderedSynchronizer) ChildCount() int {
 	return len(s.inputs)
 }
 
 // Child implements the execinfra.OpNode interface.
-func (s *ParallelUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
+func (s *UnorderedSynchronizer) Child(nth int) execinfra.OpNode {
 	return s.inputs[nth]
 }
 
-// NewParallelUnorderedSynchronizer creates a new ParallelUnorderedSynchronizer.
-// On the first call to Next, len(inputs) goroutines are spawned to read each
-// input asynchronously (to not be limited by a slow input). These will
-// increment the passed-in WaitGroup and decrement when done. It is also
-// guaranteed that these spawned goroutines will have completed on any error or
-// zero-length batch received from Next.
-func NewParallelUnorderedSynchronizer(
+// NewUnorderedSynchronizer creates a new UnorderedSynchronizer. On the first
+// call to Next, len(inputs) goroutines are spawned to read each input
+// asynchronously (to not be limited by a slow input). These will increment
+// the passed-in WaitGroup and decrement when done. It is also guaranteed that
+// these spawned goroutines will have completed on any error or zero-length
+// batch received from Next.
+func NewUnorderedSynchronizer(
 	inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
-) *ParallelUnorderedSynchronizer {
+) *UnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
 		// Buffer readNextBatch chans to allow for non-blocking writes. There will
@@ -101,7 +99,7 @@ func NewParallelUnorderedSynchronizer(
 	}
 	zeroBatch := coldata.NewMemBatchWithSize(typs, 0)
 	zeroBatch.SetLength(0)
-	return &ParallelUnorderedSynchronizer{
+	return &UnorderedSynchronizer{
 		inputs:            inputs,
 		readNextBatch:     readNextBatch,
 		batches:           make([]coldata.Batch, len(inputs)),
@@ -118,7 +116,7 @@ func NewParallelUnorderedSynchronizer(
 }
 
 // Init is part of the Operator interface.
-func (s *ParallelUnorderedSynchronizer) Init() {
+func (s *UnorderedSynchronizer) Init() {
 	for _, input := range s.inputs {
 		input.Init()
 	}
@@ -132,7 +130,7 @@ func (s *ParallelUnorderedSynchronizer) Init() {
 // error on s.errCh, resulting in the first error pushed to be observed by the
 // Next goroutine. Inputs are asynchronous so that the synchronizer is minimally
 // affected by slow inputs.
-func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
+func (s *UnorderedSynchronizer) init(ctx context.Context) {
 	ctx, s.cancelFn = contextutil.WithCancel(ctx)
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input Operator, inputIdx int) func() {
@@ -201,7 +199,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 }
 
 // Next is part of the Operator interface.
-func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+func (s *UnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if s.done {
 		// TODO(yuzefovich): do we want to be on the safe side and explicitly set
 		// the length here (and below) to 0?
