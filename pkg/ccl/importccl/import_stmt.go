@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -28,23 +27,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -62,9 +56,6 @@ const (
 	importOptionDecompress = "decompress"
 	importOptionOversample = "oversample"
 	importOptionSkipFKs    = "skip_foreign_keys"
-
-	importOptionDirectIngest = "experimental_direct_ingestion"
-	importOptionSortedIngest = "experimental_sorted_ingestion"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -88,9 +79,6 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionOversample: sql.KVStringOptRequireValue,
 
 	importOptionSkipFKs: sql.KVStringOptRequireNoValue,
-
-	importOptionDirectIngest: sql.KVStringOptRequireNoValue,
-	importOptionSortedIngest: sql.KVStringOptRequireNoValue,
 
 	pgMaxRowSize: sql.KVStringOptRequireValue,
 }
@@ -375,13 +363,6 @@ func importPlanHook(
 			}
 		}
 
-		_, ingestDirectly := opts[importOptionDirectIngest]
-		_, ingestSorted := opts[importOptionSortedIngest]
-		if ingestDirectly && ingestSorted {
-			return pgerror.Newf(pgcode.Syntax, "cannot use %q with %q", importOptionDirectIngest, importOptionSortedIngest)
-		}
-		ingestDirectly = !ingestSorted
-
 		var tableDetails []jobspb.ImportDetails_Table
 		jobDesc, err := importJobDescription(p, importStmt, nil, files, opts)
 		if err != nil {
@@ -540,14 +521,13 @@ func importPlanHook(
 			Description: jobDesc,
 			Username:    p.User(),
 			Details: jobspb.ImportDetails{
-				URIs:           files,
-				Format:         format,
-				ParentID:       parentID,
-				Tables:         tableDetails,
-				SSTSize:        sstSize,
-				Oversample:     oversample,
-				SkipFKs:        skipFKs,
-				IngestDirectly: ingestDirectly,
+				URIs:       files,
+				Format:     format,
+				ParentID:   parentID,
+				Tables:     tableDetails,
+				SSTSize:    sstSize,
+				Oversample: oversample,
+				SkipFKs:    skipFKs,
 			},
 			Progress: jobspb.ImportProgress{},
 		})
@@ -557,90 +537,6 @@ func importPlanHook(
 		return <-errCh
 	}
 	return fn, backupccl.RestoreHeader, nil, false, nil
-}
-
-func doDistributedCSVTransform(
-	ctx context.Context,
-	job *jobs.Job,
-	files []string,
-	p sql.PlanHookState,
-	parentID sqlbase.ID,
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
-	format roachpb.IOFileFormat,
-	walltime int64,
-	sstSize int64,
-	oversample int64,
-	ingestDirectly bool,
-) (roachpb.BulkOpSummary, error) {
-	if ingestDirectly {
-		return sql.DistIngest(ctx, p, job, tables, files, format, walltime)
-		// TODO(dt): check for errors in job records as is done below.
-	}
-
-	evalCtx := p.ExtendedEvalContext()
-
-	ci := sqlbase.ColTypeInfoFromColTypes([]types.T{
-		*types.String,
-		*types.Bytes,
-		*types.Bytes,
-		*types.Bytes,
-		*types.Bytes,
-	})
-	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
-	defer func() {
-		if rows != nil {
-			rows.Close(ctx)
-		}
-	}()
-
-	if err := sql.LoadCSV(
-		ctx,
-		p,
-		job,
-		sql.NewRowResultWriter(rows),
-		tables,
-		files,
-		format,
-		walltime,
-		sstSize,
-		oversample,
-	); err != nil {
-
-		// Check if this was a context canceled error and restart if it was.
-		if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
-			if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
-				return roachpb.BulkOpSummary{}, jobs.NewRetryJobError("node failure")
-			}
-		}
-
-		// If the job was canceled, any of the distsql processors could have been
-		// the first to encounter the .Progress error. This error's string is sent
-		// through distsql back here, so we can't examine the err type in this case
-		// to see if it's a jobs.InvalidStatusError. Instead, attempt to update the
-		// job progress to coerce out the correct error type. If the update succeeds
-		// then return the original error, otherwise return this error instead so
-		// it can be cleaned up at a higher level.
-		if err := job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			d := details.(*jobspb.Progress_Import).Import
-			return d.Completed()
-		}); err != nil {
-			return roachpb.BulkOpSummary{}, err
-		}
-		return roachpb.BulkOpSummary{}, err
-	}
-
-	var res roachpb.BulkOpSummary
-	n := rows.Len()
-	for i := 0; i < n; i++ {
-		row := rows.At(i)
-		var counts roachpb.BulkOpSummary
-		if err := protoutil.Unmarshal([]byte(*row[1].(*tree.DBytes)), &counts); err != nil {
-			return roachpb.BulkOpSummary{}, err
-		}
-		res.Add(counts)
-	}
-
-	return res, nil
 }
 
 type importResumer struct {
@@ -852,25 +748,6 @@ func (r *importResumer) Resume(
 	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
 
-	if details.BackupPath != "" {
-		return errors.Errorf("transform is no longer supported")
-	}
-
-	parentID := details.ParentID
-	sstSize := details.SSTSize
-
-	if sstSize == 0 {
-		// The distributed importer will correctly chunk up large ranges into
-		// multiple ssts that can be imported. In order to reduce the number of
-		// ranges and increase the average range size after import, set a target of
-		// some arbitrary multiple larger than the maximum sst size. Without this
-		// the range sizes were somewhere between 1MB and > 64MB. Targeting a much
-		// higher size should cause many ranges to be somewhere around the max range
-		// size. This should also cause the distsql plan and range router to be much
-		// smaller since there are fewer overall ranges.
-		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
-	}
-
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
@@ -930,12 +807,8 @@ func (r *importResumer) Resume(
 	walltime := details.Walltime
 	files := details.URIs
 	format := details.Format
-	oversample := details.Oversample
-	ingestDirectly := details.IngestDirectly
 
-	res, err := doDistributedCSVTransform(
-		ctx, r.job, files, p, parentID, tables, format, walltime, sstSize, oversample, ingestDirectly,
-	)
+	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, walltime)
 	if err != nil {
 		return err
 	}
