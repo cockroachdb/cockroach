@@ -11,9 +11,11 @@
 package main
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 var issueRegexp = regexp.MustCompile(`See: https://github.com/cockroachdb/cockroach/issues/(\d+)`)
@@ -78,4 +80,107 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 	}
 
 	return tests, passed, failedTestToIssue, nil
+}
+
+// parseAndSummarizeJavaORMTestsResults parses the test output of running a
+// test suite for some Java ORM against cockroach and summarizes it. If an
+// unexpected result is observed (for example, a test unexpectedly failed or
+// passed), a new blacklist is populated.
+func parseAndSummarizeJavaORMTestsResults(
+	ctx context.Context,
+	t *test,
+	c *cluster,
+	node nodeListOption,
+	ormName string,
+	testOutput []byte,
+	blacklistName string,
+	expectedFailures blacklist,
+	version string,
+	latestTag string,
+) {
+	var failUnexpectedCount, failExpectedCount int
+	var passUnexpectedCount, passExpectedCount int
+	// Put all the results in a giant map of [testname]result.
+	results := make(map[string]string)
+	// Put all issue hints in a map of [testname]issue.
+	allIssueHints := make(map[string]string)
+	// Current failures are any tests that reported as failed, regardless of if
+	// they were expected or not.
+	var currentFailures, allTests []string
+	runTests := make(map[string]struct{})
+	filesRaw := strings.Split(string(testOutput), "\n")
+
+	// There is always at least one entry that's just space characters, remove
+	// it.
+	var files []string
+	for _, f := range filesRaw {
+		file := strings.TrimSpace(f)
+		if len(file) > 0 {
+			files = append(files, file)
+		}
+	}
+	for i, file := range files {
+		t.l.Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
+		fileOutput, err := repeatRunWithBuffer(
+			ctx,
+			c,
+			t.l,
+			node,
+			fmt.Sprintf("fetching results file %s", file),
+			fmt.Sprintf("cat %s", file),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tests, passed, issueHints, err := extractFailureFromJUnitXML(fileOutput)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for testName, issue := range issueHints {
+			allIssueHints[testName] = issue
+		}
+		for i, test := range tests {
+			// There is at least a single test that's run twice, so if we already
+			// have a result, skip it.
+			if _, alreadyTested := results[test]; alreadyTested {
+				continue
+			}
+			allTests = append(allTests, test)
+			issue, expectedFailure := expectedFailures[test]
+			if len(issue) == 0 || issue == "unknown" {
+				issue = issueHints[test]
+			}
+			pass := passed[i]
+			switch {
+			case pass && !expectedFailure:
+				results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
+				passExpectedCount++
+			case pass && expectedFailure:
+				results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
+					test, maybeAddGithubLink(issue),
+				)
+				passUnexpectedCount++
+			case !pass && expectedFailure:
+				results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
+					test, maybeAddGithubLink(issue),
+				)
+				failExpectedCount++
+				currentFailures = append(currentFailures, test)
+			case !pass && !expectedFailure:
+				results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
+					test, maybeAddGithubLink(issue))
+				failUnexpectedCount++
+				currentFailures = append(currentFailures, test)
+			}
+			runTests[test] = struct{}{}
+		}
+	}
+
+	summarizeORMTestsResults(
+		t, ormName, blacklistName, expectedFailures,
+		version, latestTag, currentFailures, allTests, runTests, results,
+		failUnexpectedCount, failExpectedCount, 0, /* ignoredCount */
+		0 /* skipCount */, 0, /* unexpectedSkipCount */
+		passUnexpectedCount, passExpectedCount, allIssueHints,
+	)
 }
