@@ -167,7 +167,7 @@ type txnPipeliner struct {
 	st *cluster.Settings
 	// Optional; used to condense intent spans, if provided. If not provided,
 	// a transaction's write footprint may grow without bound.
-	ri       *RangeIterator
+	riGen    RangeIteratorGen
 	wrapped  lockedSender
 	disabled bool
 
@@ -453,7 +453,7 @@ func (tp *txnPipeliner) updateWriteTracking(
 ) {
 	// After adding new writes to the write footprint, check whether we need to
 	// condense the set to stay below memory limits.
-	defer tp.footprint.maybeCondense(ctx, tp.ri, trackedWritesMaxSize.Get(&tp.st.SV))
+	defer tp.footprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
 
 	// If the request failed, add all intent writes directly to the write
 	// footprint. This reduces the likelihood of dangling intents blocking
@@ -842,7 +842,9 @@ func (s *condensableSpanSet) mergeAndSort() (distinct bool) {
 // exceeded, the method is more aggressive in its attempt to reduce the memory
 // footprint of the span set. Not only will it merge overlapping spans, but
 // spans within the same range boundaries are also condensed.
-func (s *condensableSpanSet) maybeCondense(ctx context.Context, ri *RangeIterator, maxBytes int64) {
+func (s *condensableSpanSet) maybeCondense(
+	ctx context.Context, riGen RangeIteratorGen, maxBytes int64,
+) {
 	if s.bytes < maxBytes {
 		return
 	}
@@ -856,11 +858,11 @@ func (s *condensableSpanSet) maybeCondense(ctx context.Context, ri *RangeIterato
 		return
 	}
 
-	if ri == nil {
-		// If we were not given a RangeIterator, we cannot condense the spans.
+	if riGen == nil {
+		// If we were not given a RangeIteratorGen, we cannot condense the spans.
 		return
 	}
-	defer ri.Reset()
+	ri := riGen()
 
 	// Divide spans by range boundaries and condense. Iterate over spans
 	// using a range iterator and add each to a bucket keyed by range

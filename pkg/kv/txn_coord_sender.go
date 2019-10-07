@@ -476,9 +476,9 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	// txnLockGatekeeper at the bottom of the stack to connect it with the
 	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
 	// is initialized.
-	var ri *RangeIterator
+	var riGen RangeIteratorGen
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
-		ri = NewRangeIterator(ds)
+		riGen = ds.rangeIteratorGen
 	}
 	// Some interceptors are only needed by roots.
 	if typ == client.RootTxn {
@@ -504,8 +504,8 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		}
 	}
 	tcs.interceptorAlloc.txnPipeliner = txnPipeliner{
-		st: tcf.st,
-		ri: ri,
+		st:    tcf.st,
+		riGen: riGen,
 	}
 	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,

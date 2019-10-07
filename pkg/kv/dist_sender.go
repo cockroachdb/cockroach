@@ -195,6 +195,9 @@ type DistSender struct {
 	// It is copied out of the rpcContext at construction time and used in
 	// testing.
 	clusterID *base.ClusterIDContainer
+	// rangeIteratorGen returns a range iterator bound to the DistSender.
+	// Used to avoid allocations.
+	rangeIteratorGen RangeIteratorGen
 
 	// disableFirstRangeUpdates disables updates of the first range via
 	// gossip. Used by tests which want finer control of the contents of the
@@ -280,6 +283,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds.clusterID = &cfg.RPCContext.ClusterID
 	ds.nodeDialer = cfg.NodeDialer
 	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
+	ds.rangeIteratorGen = func() *RangeIterator { return NewRangeIterator(ds) }
 
 	if g != nil {
 		ctx := ds.AnnotateCtx(context.Background())
