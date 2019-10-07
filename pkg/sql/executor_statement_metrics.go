@@ -128,7 +128,7 @@ func (ex *connExecutor) recordStatementSummary(
 	bytesRead int64,
 	rowsRead int64,
 ) {
-	phaseTimes := ex.statsCollector.phaseTimes
+	phaseTimes := &ex.statsCollector.phaseTimes
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
