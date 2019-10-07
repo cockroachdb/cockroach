@@ -36,8 +36,13 @@ const (
 	// is suspected to be removed should be processed by the queue.
 	// A Replica is suspected to have been removed if either it is in the
 	// candidate Raft state (which is a typical sign of having been removed
-	// from the group) or it is a learner which has been removed but never heard
-	// about that removal.
+	// from the group) or it is not in the VOTER_FULL state. Replicas which are
+	// in the LEARNER state will never become candidates. It seems possible that
+	// a range will quiesce and never tell a VOTER_OUTGOING that is was removed.
+	// Cases where a replica gets stuck in VOTER_INCOMING seem farfetched and
+	// would require the replica to be removed from the range before it ever
+	// learned about its promotion but that state shouldn't last long so we
+	// also treat idle replicas in that state as suspect.
 	ReplicaGCQueueSuspectTimeout = 1 * time.Second
 )
 
@@ -139,7 +144,15 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		lastActivity.Forward(*lease.ProposedTS)
 	}
 
-	isSuspect := replDesc.GetType() == roachpb.LEARNER
+	// It is critical to think of the replica as suspect if it is a learner as
+	// it both shouldn't be a learner for long but will never become a candidate.
+	// It is less critical to consider joint configuration members as suspect
+	// but in cases where a replica is removed but only ever hears about the
+	// command which sets it to VOTER_OUTGOING we would conservatively wait
+	// 10 days before removing the node. Finally we consider replicas which are
+	// VOTER_INCOMING as suspect because no replica should stay in that state for
+	// too long and being conservative here doesn't seem worthwhile.
+	isSuspect := replDesc.GetType() != roachpb.VOTER_FULL
 	if raftStatus := repl.RaftStatus(); raftStatus != nil {
 		isSuspect = isSuspect ||
 			(raftStatus.SoftState.RaftState == raft.StateCandidate ||
