@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
 )
 
@@ -307,6 +308,11 @@ func benchmarkWriteBytes(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDBytes("testing"), format)
 }
 
+func benchmarkWriteUUID(b *testing.B, format pgwirebase.FormatCode) {
+	u := uuid.MakeV4()
+	benchmarkWriteType(b, tree.NewDUuid(tree.DUuid{UUID: u}), format)
+}
+
 func benchmarkWriteString(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDString("testing"), format)
 }
@@ -395,6 +401,13 @@ func BenchmarkWriteTextBytes(b *testing.B) {
 }
 func BenchmarkWriteBinaryBytes(b *testing.B) {
 	benchmarkWriteBytes(b, pgwirebase.FormatBinary)
+}
+
+func BenchmarkWriteTextUUID(b *testing.B) {
+	benchmarkWriteUUID(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryUUID(b *testing.B) {
+	benchmarkWriteUUID(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextString(b *testing.B) {
