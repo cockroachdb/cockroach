@@ -844,6 +844,10 @@ func (c *conn) handleClose(ctx context.Context, buf *pgwirebase.ReadBuffer) erro
 		})
 }
 
+// If no format codes are provided then all arguments/result-columns use
+// the default format, text.
+var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
+
 // handleBind queues instructions for creating a portal from a prepared
 // statement.
 // An error is returned iff the statement buffer has been closed. In that case,
@@ -872,27 +876,28 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	switch numQArgFormatCodes {
 	case 0:
 		// No format codes means all arguments are passed as text.
-		qArgFormatCodes = []pgwirebase.FormatCode{
-			pgwirebase.FormatText,
-		}
+		qArgFormatCodes = formatCodesAllText
 	case 1:
 		// `1` means read one code and apply it to every argument.
 		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
-		qArgFormatCodes = []pgwirebase.FormatCode{
-			pgwirebase.FormatCode(ch),
+		code := pgwirebase.FormatCode(ch)
+		if code == pgwirebase.FormatText {
+			qArgFormatCodes = formatCodesAllText
+		} else {
+			qArgFormatCodes = []pgwirebase.FormatCode{code}
 		}
 	default:
 		qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgFormatCodes)
 		// Read one format code for each argument and apply it to that argument.
 		for i := range qArgFormatCodes {
-			code, err := buf.GetUint16()
+			ch, err := buf.GetUint16()
 			if err != nil {
 				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 			}
-			qArgFormatCodes[i] = pgwirebase.FormatCode(code)
+			qArgFormatCodes[i] = pgwirebase.FormatCode(ch)
 		}
 	}
 
@@ -933,17 +938,18 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	switch numColumnFormatCodes {
 	case 0:
 		// All columns will use the text format.
-		columnFormatCodes = []pgwirebase.FormatCode{
-			pgwirebase.FormatText,
-		}
+		columnFormatCodes = formatCodesAllText
 	case 1:
-		// All columns will use the one specficied format.
+		// All columns will use the one specified format.
 		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
-		columnFormatCodes = []pgwirebase.FormatCode{
-			pgwirebase.FormatCode(ch),
+		code := pgwirebase.FormatCode(ch)
+		if code == pgwirebase.FormatText {
+			columnFormatCodes = formatCodesAllText
+		} else {
+			columnFormatCodes = []pgwirebase.FormatCode{code}
 		}
 	default:
 		columnFormatCodes = make([]pgwirebase.FormatCode, numColumnFormatCodes)
