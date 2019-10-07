@@ -1875,18 +1875,18 @@ type sqlStatsCollector struct {
 	// into sqlStats set as the session's current app.
 	appStats *appStats
 	// phaseTimes tracks session-level phase times.
-	phaseTimes *phaseTimes
+	phaseTimes phaseTimes
 }
 
 // newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
 // phaseTimes is an array, not a slice, so this performs a copy-by-value.
 func newSQLStatsCollector(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes,
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
 ) *sqlStatsCollector {
 	return &sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: &phaseTimes,
+		phaseTimes: *phaseTimes,
 	}
 }
 
@@ -1914,10 +1914,10 @@ func (s *sqlStatsCollector) recordTransaction(txnTimeSec float64, ev txnEvent, i
 	s.appStats.recordTransaction(txnTimeSec, ev, implicit)
 }
 
-func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes) {
+func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
 	*s = sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: &phaseTimes,
+		phaseTimes: *phaseTimes,
 	}
 }
