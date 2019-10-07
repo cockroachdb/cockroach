@@ -167,46 +167,5 @@ func WrapPayloadDetails(details Details) interface {
 	}
 }
 
-// Completed returns the total complete percent of processing this table. There
-// are two phases: sampling, SST writing. The SST phase is divided into two
-// stages: read CSV, write SST. Thus, the entire progress can be measured
-// by (sampling + read csv + write sst) progress. Since there are multiple
-// distSQL processors running these stages, we assign slots to each one, and
-// they are in charge of updating their portion of the progress. Since we read
-// over CSV files twice (once for sampling, once for SST writing), we must
-// indicate which phase we are in. This is done using the SamplingProgress
-// slice, which is empty if we are in the second stage (and can thus be
-// implied as complete).
-func (d ImportProgress) Completed() float32 {
-	const (
-		// These ratios are approximate after running simple benchmarks.
-		samplingPhaseContribution = 0.1
-		readStageContribution     = 0.65
-		writeStageContribution    = 0.25
-	)
-
-	sum := func(fs []float32) float32 {
-		var total float32
-		for _, f := range fs {
-			total += f
-		}
-		return total
-	}
-	sampling := sum(d.SamplingProgress) * samplingPhaseContribution
-	if len(d.SamplingProgress) == 0 {
-		// SamplingProgress is empty iff we are in the second phase. If so, the
-		// first phase is implied as fully complete.
-		sampling = samplingPhaseContribution
-	}
-	read := sum(d.ReadProgress) * readStageContribution
-	write := sum(d.WriteProgress) * writeStageContribution
-	completed := sampling + read + write
-	// Float addition can round such that the sum is > 1.
-	if completed > 1 {
-		completed = 1
-	}
-	return completed
-}
-
 // ChangefeedTargets is a set of id targets with metadata.
 type ChangefeedTargets map[sqlbase.ID]ChangefeedTarget

@@ -82,13 +82,12 @@ func (c *csvInputReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
 	format roachpb.IOFileFormat,
-	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, c.readFile, progressFn, settings)
+	return readInputFiles(ctx, dataFiles, format, c.readFile, settings)
 }
 
-func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn progressFn) error {
+func (c *csvInputReader) flushBatch(ctx context.Context, finished bool) error {
 	// if the batch isn't empty, we need to flush it.
 	if len(c.batch.r) > 0 {
 		select {
@@ -97,9 +96,6 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn p
 		case c.recordCh <- c.batch:
 		}
 	}
-	if progressErr := progFn(finished); progressErr != nil {
-		return progressErr
-	}
 	if !finished {
 		c.batch.r = make([][]string, 0, c.batchSize)
 	}
@@ -107,7 +103,7 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn p
 }
 
 func (c *csvInputReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string,
 ) error {
 	cr := csv.NewReader(input)
 	if c.opts.Comma != 0 {
@@ -129,7 +125,7 @@ func (c *csvInputReader) readFile(
 		finished := err == io.EOF
 		if finished || len(c.batch.r) >= c.batchSize {
 			c.batch.progress = input.ReadFraction()
-			if err := c.flushBatch(ctx, finished, progressFn); err != nil {
+			if err := c.flushBatch(ctx, finished); err != nil {
 				return err
 			}
 			c.batch.rowOffset = i

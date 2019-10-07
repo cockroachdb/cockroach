@@ -57,14 +57,13 @@ func (d *mysqloutfileReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
 	format roachpb.IOFileFormat,
-	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, d.readFile, progressFn, settings)
+	return readInputFiles(ctx, dataFiles, format, d.readFile, settings)
 }
 
 func (d *mysqloutfileReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string,
 ) error {
 	d.conv.KvBatch.Source = inputIdx
 	d.conv.FractionFn = input.ReadFraction
