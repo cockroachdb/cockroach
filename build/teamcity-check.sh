@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 
+# Set this to 1 to require a "release justification" note in the commit message
+# or the PR description.
+require_justification=0
+
 set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
 tc_prepare
 
-# TODO(jordan): remove this after we cut the 19.2 branch.
-tc_start_block "Ensure commit message contains a release justification"
-# Ensure master branch commits have a release justification until 19.2 goes out the door.
-if [[ $(git log -n1 | grep -ci "Release justification: \S\+") == 0 ]]; then
-  echo "Build Failed. No Release justification in the commit message or in the PR description." >&2
-  echo "Commits must have a Release justification of the form:" >&2
-  echo "Release justification: <some description of why this commit is safe to add to the release branch.>" >&2
-  exit 1
+if [ "$require_justification" = 1 ]; then
+  tc_start_block "Ensure commit message contains a release justification"
+  # Ensure master branch commits have a release justification.
+  if [[ $(git log -n1 | grep -ci "Release justification: \S\+") == 0 ]]; then
+    echo "Build Failed. No Release justification in the commit message or in the PR description." >&2
+    echo "Commits must have a Release justification of the form:" >&2
+    echo "Release justification: <some description of why this commit is safe to add to the release branch.>" >&2
+    exit 1
+  fi
+  tc_end_block "Ensure commit message contains a release justification"
 fi
-tc_end_block "Ensure commit message contains a release justification"
 
 tc_start_block "Ensure dependencies are up-to-date"
 run build/builder.sh go install ./vendor/github.com/golang/dep/cmd/dep ./pkg/cmd/github-pull-request-make
