@@ -44,6 +44,8 @@ IFS='
 '
 notes=($($grep -iE '^release note' "$1"))
 
+# Set this to 1 to require a release justification note.
+require_justification=0
 justification=($($grep -iE '^release justification: \S+' "$1"))
 
 IFS=$saveIFS
@@ -62,9 +64,9 @@ hint() {
     echo "- $*" >&2
 }
 
-if [ 0 = ${#justification[*]} ]; then
+if [ "$require_justification" = 1 -a  0 = ${#justification[*]} ]; then
     warn "No release justification specified."
-    echo "Try: 'Release justification: This commit is safe for 19.2 because..." >&2
+    echo "Try: 'Release justification: This commit is safe for this release because..." >&2
     echo >&2
 fi
 
