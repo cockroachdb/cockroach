@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParallelUnorderedSynchronizer(t *testing.T) {
+func TestUnorderedSynchronizer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
@@ -49,7 +49,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, typs, &wg)
+	s := NewUnorderedSynchronizer(inputs, typs, &wg)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	var cancel bool
@@ -117,14 +117,14 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		ctx = context.Background()
 		wg  sync.WaitGroup
 	)
-	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
+	s := NewUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
 	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 	require.True(t, testutils.IsError(err, expectedErr), err)
 }
 
-func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
+func BenchmarkUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
 	typs := []coltypes.T{coltypes.Int64}
@@ -136,7 +136,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(inputs, typs, &wg)
+	s := NewUnorderedSynchronizer(inputs, typs, &wg)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
