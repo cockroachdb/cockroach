@@ -152,6 +152,7 @@ the test tags.
 				parallelism:  parallelism,
 				artifactsDir: artifacts,
 				user:         username,
+				clusterID:    clusterID,
 			})
 		},
 	}
@@ -179,6 +180,7 @@ the test tags.
 				parallelism:  parallelism,
 				artifactsDir: artifacts,
 				user:         username,
+				clusterID:    clusterID,
 			})
 		},
 	}
@@ -230,6 +232,7 @@ type cliCfg struct {
 	parallelism  int
 	artifactsDir string
 	user         string
+	clusterID    string
 }
 
 func runTests(register func(*testRegistry), cfg cliCfg) error {
@@ -259,6 +262,7 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 		user:                      getUser(cfg.user),
 		cpuQuota:                  cfg.cpuQuota,
 		keepClustersOnTestFailure: cfg.debugEnabled,
+		clusterID:                 cfg.clusterID,
 	}
 	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout); err != nil {
 		return err
