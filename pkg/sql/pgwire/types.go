@@ -167,7 +167,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.write(s)
 
 	case *tree.DInterval:
-		b.writeLengthPrefixedString(v.ValueAsString())
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())
