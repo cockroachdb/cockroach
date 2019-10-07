@@ -141,9 +141,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.Contents)
 
 	case *tree.DDate:
-		s := v.Date.String()
-		b.putInt32(int32(len(s)))
-		b.write([]byte(s))
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DTime:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
