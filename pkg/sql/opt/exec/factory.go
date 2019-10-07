@@ -422,11 +422,8 @@ type Factory interface {
 	// possible when certain conditions hold true (see canUseDeleteRange for more
 	// details). See the comment for ConstructScan for descriptions of the
 	// parameters, since DeleteRange combines Delete + Scan into a single operator.
-	ConstructDeleteRange(
-		table cat.Table,
-		needed ColumnOrdinalSet,
-		indexConstraint *constraint.Constraint,
-	) (Node, error)
+	ConstructDeleteRange(table cat.Table, needed ColumnOrdinalSet, indexConstraint *constraint.Constraint,
+		maxReturnedKeys int, allowAutoCommit bool) (Node, error)
 
 	// ConstructCreateTable returns a node that implements a CREATE TABLE
 	// statement.
