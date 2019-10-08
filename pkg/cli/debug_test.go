@@ -151,22 +151,25 @@ func TestRemoveDeadReplicas(t *testing.T) {
 
 					// The surviving nodes get a real store, others are just in memory.
 					var storePaths []string
-					clusterArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{}}
+					clusterArgs := base.TestClusterArgs{
+						ServerArgsPerNode: map[int]base.TestServerArgs{},
+					}
 					deadReplicas := map[roachpb.StoreID]struct{}{}
 
 					for i := 0; i < testCase.totalNodes; i++ {
+						args := base.TestServerArgs{}
+						args.ScanMaxIdleTime = time.Millisecond
+						args.ScanMaxIdleTime = time.Millisecond
 						storeID := roachpb.StoreID(i + 1)
 						if i < testCase.survivingNodes {
 							path := filepath.Join(baseDir, fmt.Sprintf("store%d", storeID))
 							storePaths = append(storePaths, path)
 							// ServerArgsPerNode uses 0-based index, not node ID.
-							clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
-								StoreSpecs:      []base.StoreSpec{{Path: path}},
-								ScanMaxIdleTime: time.Millisecond,
-							}
+							args.StoreSpecs = []base.StoreSpec{{Path: path}}
 						} else {
 							deadReplicas[storeID] = struct{}{}
 						}
+						clusterArgs.ServerArgsPerNode[i] = args
 					}
 
 					// Start the cluster, let it replicate, then stop it. Since the
