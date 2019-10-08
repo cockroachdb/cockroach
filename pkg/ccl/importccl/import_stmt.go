@@ -284,6 +284,16 @@ func importPlanHook(
 				format.MysqlOut.HasEscape = true
 				format.MysqlOut.Escape = c
 			}
+			if override, ok := opts[csvSkip]; ok {
+				skip, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %s value", csvSkip)
+				}
+				if skip < 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be >= 0", csvSkip)
+				}
+				format.MysqlOut.Skip = uint32(skip)
+			}
 		case "MYSQLDUMP":
 			telemetry.Count("import.format.mysqldump")
 			format.Format = roachpb.IOFileFormat_Mysqldump
