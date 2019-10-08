@@ -53,7 +53,7 @@ func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}
 }
 
-// IsIntentOf returns true if the meta record is an intent of the supplied
+// IsIntentOf returns true if the meta record is an intent of the supplied m
 // transaction.
 func IsIntentOf(meta *enginepb.MVCCMetadata, txn *roachpb.Transaction) bool {
 	return meta.Txn != nil && txn != nil && meta.Txn.ID == txn.ID
