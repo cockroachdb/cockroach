@@ -516,9 +516,13 @@ func (r *Replica) adminUnsplitWithDescriptor(
 func (r *Replica) executeAdminCommandWithDescriptor(
 	ctx context.Context, updateDesc func(*roachpb.RangeDescriptor) error,
 ) *roachpb.Error {
+	// Retry forever as long as we see errors we know will resolve.
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxRetries = 10
-	var lastErr error
+	// Randomize quite a lot just in case someone else also interferes with us
+	// in a retry loop. Note that this is speculative; there wasn't an incident
+	// that suggested this.
+	retryOpts.RandomizationFactor = 0.5
+	lastErr := ctx.Err()
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
 		// The replica may have been destroyed since the start of the retry loop.
 		// We need to explicitly check this condition. Having a valid lease, as we
@@ -552,10 +556,9 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 				return false
 			}
 		}); !retry {
-			return roachpb.NewError(lastErr)
+			break
 		}
 	}
-	// If we broke out of the loop after MaxRetries, return the last error.
 	return roachpb.NewError(lastErr)
 }
 
