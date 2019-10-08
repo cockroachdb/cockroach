@@ -71,7 +71,7 @@ func (x *BackfillerSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (BackfillerSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{0, 0}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{0, 0}
 }
 
 // BackfillerSpec is the specification for a "schema change backfiller".
@@ -107,7 +107,7 @@ func (m *BackfillerSpec) Reset()         { *m = BackfillerSpec{} }
 func (m *BackfillerSpec) String() string { return proto.CompactTextString(m) }
 func (*BackfillerSpec) ProtoMessage()    {}
 func (*BackfillerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{0}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{0}
 }
 func (m *BackfillerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -147,7 +147,7 @@ func (m *JobProgress) Reset()         { *m = JobProgress{} }
 func (m *JobProgress) String() string { return proto.CompactTextString(m) }
 func (*JobProgress) ProtoMessage()    {}
 func (*JobProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{1}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{1}
 }
 func (m *JobProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -188,7 +188,7 @@ type ReadImportDataSpec struct {
 	// empty (and table_desc above is not specified), the processor should read
 	// all tables in the input, determining their schemas on the fly.
 	Tables map[string]*ReadImportDataSpec_ImportTable `protobuf:"bytes,9,rep,name=tables" json:"tables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// uri is a storageccl.ExportStorage URI pointing to the CSV files to be
+	// uri is a cloud.ExternalStorage URI pointing to the CSV files to be
 	// read. The map key must be unique across the entire IMPORT job.
 	Uri                    map[int32]string `protobuf:"bytes,7,rep,name=uri" json:"uri,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Progress               JobProgress      `protobuf:"bytes,6,opt,name=progress" json:"progress"`
@@ -205,7 +205,7 @@ func (m *ReadImportDataSpec) Reset()         { *m = ReadImportDataSpec{} }
 func (m *ReadImportDataSpec) String() string { return proto.CompactTextString(m) }
 func (*ReadImportDataSpec) ProtoMessage()    {}
 func (*ReadImportDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{2}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{2}
 }
 func (m *ReadImportDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -243,7 +243,7 @@ func (m *ReadImportDataSpec_ImportTable) Reset()         { *m = ReadImportDataSp
 func (m *ReadImportDataSpec_ImportTable) String() string { return proto.CompactTextString(m) }
 func (*ReadImportDataSpec_ImportTable) ProtoMessage()    {}
 func (*ReadImportDataSpec_ImportTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{2, 0}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{2, 0}
 }
 func (m *ReadImportDataSpec_ImportTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -274,7 +274,7 @@ var xxx_messageInfo_ReadImportDataSpec_ImportTable proto.InternalMessageInfo
 // name, size, checksum, observed start and end keys. See ccs/sqlccl/csv.go
 // for implementation.
 type SSTWriterSpec struct {
-	// destination as a storageccl.ExportStorage URI pointing to an export store
+	// destination as a cloud.ExternalStorage URI pointing to an export store
 	// location (directory).
 	Destination string `protobuf:"bytes,1,opt,name=destination" json:"destination"`
 	// walltimeNanos is the MVCC time at which the created KVs will be written.
@@ -288,7 +288,7 @@ func (m *SSTWriterSpec) Reset()         { *m = SSTWriterSpec{} }
 func (m *SSTWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*SSTWriterSpec) ProtoMessage()    {}
 func (*SSTWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{3}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{3}
 }
 func (m *SSTWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -324,7 +324,7 @@ func (m *SSTWriterSpec_SpanName) Reset()         { *m = SSTWriterSpec_SpanName{}
 func (m *SSTWriterSpec_SpanName) String() string { return proto.CompactTextString(m) }
 func (*SSTWriterSpec_SpanName) ProtoMessage()    {}
 func (*SSTWriterSpec_SpanName) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{3, 0}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{3, 0}
 }
 func (m *SSTWriterSpec_SpanName) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -353,7 +353,7 @@ var xxx_messageInfo_SSTWriterSpec_SpanName proto.InternalMessageInfo
 // writes them to CSV files at uri. It outputs a row per file written with
 // the file name, row count and byte size.
 type CSVWriterSpec struct {
-	// destination as a storageccl.ExportStorage URI pointing to an export store
+	// destination as a cloud.ExternalStorage URI pointing to an export store
 	// location (directory).
 	Destination string             `protobuf:"bytes,1,opt,name=destination" json:"destination"`
 	NamePattern string             `protobuf:"bytes,2,opt,name=name_pattern,json=namePattern" json:"name_pattern"`
@@ -366,7 +366,7 @@ func (m *CSVWriterSpec) Reset()         { *m = CSVWriterSpec{} }
 func (m *CSVWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*CSVWriterSpec) ProtoMessage()    {}
 func (*CSVWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{4}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{4}
 }
 func (m *CSVWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -401,7 +401,7 @@ func (m *BulkRowWriterSpec) Reset()         { *m = BulkRowWriterSpec{} }
 func (m *BulkRowWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*BulkRowWriterSpec) ProtoMessage()    {}
 func (*BulkRowWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_886e1812ecf024a9, []int{5}
+	return fileDescriptor_processors_bulk_io_9174bad2405501c8, []int{5}
 }
 func (m *BulkRowWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2474,10 +2474,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors_bulk_io.proto", fileDescriptor_processors_bulk_io_886e1812ecf024a9)
+	proto.RegisterFile("sql/execinfrapb/processors_bulk_io.proto", fileDescriptor_processors_bulk_io_9174bad2405501c8)
 }
 
-var fileDescriptor_processors_bulk_io_886e1812ecf024a9 = []byte{
+var fileDescriptor_processors_bulk_io_9174bad2405501c8 = []byte{
 	// 1060 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x56, 0x41, 0x6f, 0xdb, 0x36,
 	0x14, 0xb6, 0x2c, 0xc9, 0xb1, 0xe9, 0x24, 0xf0, 0x88, 0xae, 0xd0, 0x82, 0xcd, 0x31, 0xbc, 0xa6,

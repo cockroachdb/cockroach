@@ -182,27 +182,27 @@ extern ExportResponseDefaultTypeInternal _ExportResponse_default_instance_;
 class ExportResponse_File;
 class ExportResponse_FileDefaultTypeInternal;
 extern ExportResponse_FileDefaultTypeInternal _ExportResponse_File_default_instance_;
-class ExportStorage;
-class ExportStorageDefaultTypeInternal;
-extern ExportStorageDefaultTypeInternal _ExportStorage_default_instance_;
-class ExportStorage_Azure;
-class ExportStorage_AzureDefaultTypeInternal;
-extern ExportStorage_AzureDefaultTypeInternal _ExportStorage_Azure_default_instance_;
-class ExportStorage_GCS;
-class ExportStorage_GCSDefaultTypeInternal;
-extern ExportStorage_GCSDefaultTypeInternal _ExportStorage_GCS_default_instance_;
-class ExportStorage_Http;
-class ExportStorage_HttpDefaultTypeInternal;
-extern ExportStorage_HttpDefaultTypeInternal _ExportStorage_Http_default_instance_;
-class ExportStorage_LocalFilePath;
-class ExportStorage_LocalFilePathDefaultTypeInternal;
-extern ExportStorage_LocalFilePathDefaultTypeInternal _ExportStorage_LocalFilePath_default_instance_;
-class ExportStorage_S3;
-class ExportStorage_S3DefaultTypeInternal;
-extern ExportStorage_S3DefaultTypeInternal _ExportStorage_S3_default_instance_;
-class ExportStorage_Workload;
-class ExportStorage_WorkloadDefaultTypeInternal;
-extern ExportStorage_WorkloadDefaultTypeInternal _ExportStorage_Workload_default_instance_;
+class ExternalStorage;
+class ExternalStorageDefaultTypeInternal;
+extern ExternalStorageDefaultTypeInternal _ExternalStorage_default_instance_;
+class ExternalStorage_Azure;
+class ExternalStorage_AzureDefaultTypeInternal;
+extern ExternalStorage_AzureDefaultTypeInternal _ExternalStorage_Azure_default_instance_;
+class ExternalStorage_GCS;
+class ExternalStorage_GCSDefaultTypeInternal;
+extern ExternalStorage_GCSDefaultTypeInternal _ExternalStorage_GCS_default_instance_;
+class ExternalStorage_Http;
+class ExternalStorage_HttpDefaultTypeInternal;
+extern ExternalStorage_HttpDefaultTypeInternal _ExternalStorage_Http_default_instance_;
+class ExternalStorage_LocalFilePath;
+class ExternalStorage_LocalFilePathDefaultTypeInternal;
+extern ExternalStorage_LocalFilePathDefaultTypeInternal _ExternalStorage_LocalFilePath_default_instance_;
+class ExternalStorage_S3;
+class ExternalStorage_S3DefaultTypeInternal;
+extern ExternalStorage_S3DefaultTypeInternal _ExternalStorage_S3_default_instance_;
+class ExternalStorage_Workload;
+class ExternalStorage_WorkloadDefaultTypeInternal;
+extern ExternalStorage_WorkloadDefaultTypeInternal _ExternalStorage_Workload_default_instance_;
 class GCRequest;
 class GCRequestDefaultTypeInternal;
 extern GCRequestDefaultTypeInternal _GCRequest_default_instance_;
@@ -456,13 +456,13 @@ template<> ::cockroach::roachpb::ExportRequest* Arena::CreateMaybeMessage<::cock
 template<> ::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportRequest_StorageByLocalityKvEntry_DoNotUse>(Arena*);
 template<> ::cockroach::roachpb::ExportResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportResponse>(Arena*);
 template<> ::cockroach::roachpb::ExportResponse_File* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportResponse_File>(Arena*);
-template<> ::cockroach::roachpb::ExportStorage* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportStorage>(Arena*);
-template<> ::cockroach::roachpb::ExportStorage_Azure* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportStorage_Azure>(Arena*);
-template<> ::cockroach::roachpb::ExportStorage_GCS* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportStorage_GCS>(Arena*);
-template<> ::cockroach::roachpb::ExportStorage_Http* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportStorage_Http>(Arena*);
-template<> ::cockroach::roachpb::ExportStorage_LocalFilePath* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportStorage_LocalFilePath>(Arena*);
-template<> ::cockroach::roachpb::ExportStorage_S3* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportStorage_S3>(Arena*);
-template<> ::cockroach::roachpb::ExportStorage_Workload* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportStorage_Workload>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage_Azure* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Azure>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage_GCS* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_GCS>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage_Http* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Http>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage_LocalFilePath* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_LocalFilePath>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage_S3* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_S3>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage_Workload* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Workload>(Arena*);
 template<> ::cockroach::roachpb::GCRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest>(Arena*);
 template<> ::cockroach::roachpb::GCRequest_GCKey* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest_GCKey>(Arena*);
 template<> ::cockroach::roachpb::GCResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::GCResponse>(Arena*);
@@ -610,7 +610,7 @@ const PushTxnType PushTxnType_MIN = PUSH_TIMESTAMP;
 const PushTxnType PushTxnType_MAX = PUSH_TOUCH;
 const int PushTxnType_ARRAYSIZE = PushTxnType_MAX + 1;
 
-enum ExportStorageProvider {
+enum ExternalStorageProvider {
   Unknown = 0,
   LocalFile = 1,
   Http = 2,
@@ -618,13 +618,13 @@ enum ExportStorageProvider {
   GoogleCloud = 4,
   Azure = 5,
   Workload = 6,
-  ExportStorageProvider_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
-  ExportStorageProvider_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+  ExternalStorageProvider_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  ExternalStorageProvider_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
-bool ExportStorageProvider_IsValid(int value);
-const ExportStorageProvider ExportStorageProvider_MIN = Unknown;
-const ExportStorageProvider ExportStorageProvider_MAX = Workload;
-const int ExportStorageProvider_ARRAYSIZE = ExportStorageProvider_MAX + 1;
+bool ExternalStorageProvider_IsValid(int value);
+const ExternalStorageProvider ExternalStorageProvider_MIN = Unknown;
+const ExternalStorageProvider ExternalStorageProvider_MAX = Workload;
+const int ExternalStorageProvider_ARRAYSIZE = ExternalStorageProvider_MAX + 1;
 
 enum MVCCFilter {
   Latest = 0,
@@ -9839,24 +9839,24 @@ class ComputeChecksumResponse : public ::google::protobuf::MessageLite /* @@prot
 };
 // -------------------------------------------------------------------
 
-class ExportStorage_LocalFilePath : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExportStorage.LocalFilePath) */ {
+class ExternalStorage_LocalFilePath : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.LocalFilePath) */ {
  public:
-  ExportStorage_LocalFilePath();
-  virtual ~ExportStorage_LocalFilePath();
+  ExternalStorage_LocalFilePath();
+  virtual ~ExternalStorage_LocalFilePath();
 
-  ExportStorage_LocalFilePath(const ExportStorage_LocalFilePath& from);
+  ExternalStorage_LocalFilePath(const ExternalStorage_LocalFilePath& from);
 
-  inline ExportStorage_LocalFilePath& operator=(const ExportStorage_LocalFilePath& from) {
+  inline ExternalStorage_LocalFilePath& operator=(const ExternalStorage_LocalFilePath& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ExportStorage_LocalFilePath(ExportStorage_LocalFilePath&& from) noexcept
-    : ExportStorage_LocalFilePath() {
+  ExternalStorage_LocalFilePath(ExternalStorage_LocalFilePath&& from) noexcept
+    : ExternalStorage_LocalFilePath() {
     *this = ::std::move(from);
   }
 
-  inline ExportStorage_LocalFilePath& operator=(ExportStorage_LocalFilePath&& from) noexcept {
+  inline ExternalStorage_LocalFilePath& operator=(ExternalStorage_LocalFilePath&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -9865,34 +9865,34 @@ class ExportStorage_LocalFilePath : public ::google::protobuf::MessageLite /* @@
     return *this;
   }
   #endif
-  static const ExportStorage_LocalFilePath& default_instance();
+  static const ExternalStorage_LocalFilePath& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ExportStorage_LocalFilePath* internal_default_instance() {
-    return reinterpret_cast<const ExportStorage_LocalFilePath*>(
-               &_ExportStorage_LocalFilePath_default_instance_);
+  static inline const ExternalStorage_LocalFilePath* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage_LocalFilePath*>(
+               &_ExternalStorage_LocalFilePath_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     76;
 
-  void Swap(ExportStorage_LocalFilePath* other);
-  friend void swap(ExportStorage_LocalFilePath& a, ExportStorage_LocalFilePath& b) {
+  void Swap(ExternalStorage_LocalFilePath* other);
+  friend void swap(ExternalStorage_LocalFilePath& a, ExternalStorage_LocalFilePath& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ExportStorage_LocalFilePath* New() const final {
-    return CreateMaybeMessage<ExportStorage_LocalFilePath>(NULL);
+  inline ExternalStorage_LocalFilePath* New() const final {
+    return CreateMaybeMessage<ExternalStorage_LocalFilePath>(NULL);
   }
 
-  ExportStorage_LocalFilePath* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<ExportStorage_LocalFilePath>(arena);
+  ExternalStorage_LocalFilePath* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage_LocalFilePath>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const ExportStorage_LocalFilePath& from);
-  void MergeFrom(const ExportStorage_LocalFilePath& from);
+  void CopyFrom(const ExternalStorage_LocalFilePath& from);
+  void MergeFrom(const ExternalStorage_LocalFilePath& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -9908,7 +9908,7 @@ class ExportStorage_LocalFilePath : public ::google::protobuf::MessageLite /* @@
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(ExportStorage_LocalFilePath* other);
+  void InternalSwap(ExternalStorage_LocalFilePath* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -9943,7 +9943,7 @@ class ExportStorage_LocalFilePath : public ::google::protobuf::MessageLite /* @@
   ::google::protobuf::uint32 node_id() const;
   void set_node_id(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportStorage.LocalFilePath)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.LocalFilePath)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -9954,24 +9954,24 @@ class ExportStorage_LocalFilePath : public ::google::protobuf::MessageLite /* @@
 };
 // -------------------------------------------------------------------
 
-class ExportStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExportStorage.Http) */ {
+class ExternalStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.Http) */ {
  public:
-  ExportStorage_Http();
-  virtual ~ExportStorage_Http();
+  ExternalStorage_Http();
+  virtual ~ExternalStorage_Http();
 
-  ExportStorage_Http(const ExportStorage_Http& from);
+  ExternalStorage_Http(const ExternalStorage_Http& from);
 
-  inline ExportStorage_Http& operator=(const ExportStorage_Http& from) {
+  inline ExternalStorage_Http& operator=(const ExternalStorage_Http& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ExportStorage_Http(ExportStorage_Http&& from) noexcept
-    : ExportStorage_Http() {
+  ExternalStorage_Http(ExternalStorage_Http&& from) noexcept
+    : ExternalStorage_Http() {
     *this = ::std::move(from);
   }
 
-  inline ExportStorage_Http& operator=(ExportStorage_Http&& from) noexcept {
+  inline ExternalStorage_Http& operator=(ExternalStorage_Http&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -9980,34 +9980,34 @@ class ExportStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_in
     return *this;
   }
   #endif
-  static const ExportStorage_Http& default_instance();
+  static const ExternalStorage_Http& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ExportStorage_Http* internal_default_instance() {
-    return reinterpret_cast<const ExportStorage_Http*>(
-               &_ExportStorage_Http_default_instance_);
+  static inline const ExternalStorage_Http* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage_Http*>(
+               &_ExternalStorage_Http_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     77;
 
-  void Swap(ExportStorage_Http* other);
-  friend void swap(ExportStorage_Http& a, ExportStorage_Http& b) {
+  void Swap(ExternalStorage_Http* other);
+  friend void swap(ExternalStorage_Http& a, ExternalStorage_Http& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ExportStorage_Http* New() const final {
-    return CreateMaybeMessage<ExportStorage_Http>(NULL);
+  inline ExternalStorage_Http* New() const final {
+    return CreateMaybeMessage<ExternalStorage_Http>(NULL);
   }
 
-  ExportStorage_Http* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<ExportStorage_Http>(arena);
+  ExternalStorage_Http* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage_Http>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const ExportStorage_Http& from);
-  void MergeFrom(const ExportStorage_Http& from);
+  void CopyFrom(const ExternalStorage_Http& from);
+  void MergeFrom(const ExternalStorage_Http& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -10023,7 +10023,7 @@ class ExportStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_in
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(ExportStorage_Http* other);
+  void InternalSwap(ExternalStorage_Http* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -10053,7 +10053,7 @@ class ExportStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_in
   ::std::string* release_baseuri();
   void set_allocated_baseuri(::std::string* baseuri);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportStorage.Http)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.Http)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -10063,24 +10063,24 @@ class ExportStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_in
 };
 // -------------------------------------------------------------------
 
-class ExportStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExportStorage.S3) */ {
+class ExternalStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.S3) */ {
  public:
-  ExportStorage_S3();
-  virtual ~ExportStorage_S3();
+  ExternalStorage_S3();
+  virtual ~ExternalStorage_S3();
 
-  ExportStorage_S3(const ExportStorage_S3& from);
+  ExternalStorage_S3(const ExternalStorage_S3& from);
 
-  inline ExportStorage_S3& operator=(const ExportStorage_S3& from) {
+  inline ExternalStorage_S3& operator=(const ExternalStorage_S3& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ExportStorage_S3(ExportStorage_S3&& from) noexcept
-    : ExportStorage_S3() {
+  ExternalStorage_S3(ExternalStorage_S3&& from) noexcept
+    : ExternalStorage_S3() {
     *this = ::std::move(from);
   }
 
-  inline ExportStorage_S3& operator=(ExportStorage_S3&& from) noexcept {
+  inline ExternalStorage_S3& operator=(ExternalStorage_S3&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -10089,34 +10089,34 @@ class ExportStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_inse
     return *this;
   }
   #endif
-  static const ExportStorage_S3& default_instance();
+  static const ExternalStorage_S3& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ExportStorage_S3* internal_default_instance() {
-    return reinterpret_cast<const ExportStorage_S3*>(
-               &_ExportStorage_S3_default_instance_);
+  static inline const ExternalStorage_S3* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage_S3*>(
+               &_ExternalStorage_S3_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     78;
 
-  void Swap(ExportStorage_S3* other);
-  friend void swap(ExportStorage_S3& a, ExportStorage_S3& b) {
+  void Swap(ExternalStorage_S3* other);
+  friend void swap(ExternalStorage_S3& a, ExternalStorage_S3& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ExportStorage_S3* New() const final {
-    return CreateMaybeMessage<ExportStorage_S3>(NULL);
+  inline ExternalStorage_S3* New() const final {
+    return CreateMaybeMessage<ExternalStorage_S3>(NULL);
   }
 
-  ExportStorage_S3* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<ExportStorage_S3>(arena);
+  ExternalStorage_S3* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage_S3>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const ExportStorage_S3& from);
-  void MergeFrom(const ExportStorage_S3& from);
+  void CopyFrom(const ExternalStorage_S3& from);
+  void MergeFrom(const ExternalStorage_S3& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -10132,7 +10132,7 @@ class ExportStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_inse
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(ExportStorage_S3* other);
+  void InternalSwap(ExternalStorage_S3* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -10260,7 +10260,7 @@ class ExportStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_inse
   ::std::string* release_auth();
   void set_allocated_auth(::std::string* auth);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportStorage.S3)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.S3)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -10277,24 +10277,24 @@ class ExportStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_inse
 };
 // -------------------------------------------------------------------
 
-class ExportStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExportStorage.GCS) */ {
+class ExternalStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.GCS) */ {
  public:
-  ExportStorage_GCS();
-  virtual ~ExportStorage_GCS();
+  ExternalStorage_GCS();
+  virtual ~ExternalStorage_GCS();
 
-  ExportStorage_GCS(const ExportStorage_GCS& from);
+  ExternalStorage_GCS(const ExternalStorage_GCS& from);
 
-  inline ExportStorage_GCS& operator=(const ExportStorage_GCS& from) {
+  inline ExternalStorage_GCS& operator=(const ExternalStorage_GCS& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ExportStorage_GCS(ExportStorage_GCS&& from) noexcept
-    : ExportStorage_GCS() {
+  ExternalStorage_GCS(ExternalStorage_GCS&& from) noexcept
+    : ExternalStorage_GCS() {
     *this = ::std::move(from);
   }
 
-  inline ExportStorage_GCS& operator=(ExportStorage_GCS&& from) noexcept {
+  inline ExternalStorage_GCS& operator=(ExternalStorage_GCS&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -10303,34 +10303,34 @@ class ExportStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_ins
     return *this;
   }
   #endif
-  static const ExportStorage_GCS& default_instance();
+  static const ExternalStorage_GCS& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ExportStorage_GCS* internal_default_instance() {
-    return reinterpret_cast<const ExportStorage_GCS*>(
-               &_ExportStorage_GCS_default_instance_);
+  static inline const ExternalStorage_GCS* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage_GCS*>(
+               &_ExternalStorage_GCS_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     79;
 
-  void Swap(ExportStorage_GCS* other);
-  friend void swap(ExportStorage_GCS& a, ExportStorage_GCS& b) {
+  void Swap(ExternalStorage_GCS* other);
+  friend void swap(ExternalStorage_GCS& a, ExternalStorage_GCS& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ExportStorage_GCS* New() const final {
-    return CreateMaybeMessage<ExportStorage_GCS>(NULL);
+  inline ExternalStorage_GCS* New() const final {
+    return CreateMaybeMessage<ExternalStorage_GCS>(NULL);
   }
 
-  ExportStorage_GCS* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<ExportStorage_GCS>(arena);
+  ExternalStorage_GCS* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage_GCS>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const ExportStorage_GCS& from);
-  void MergeFrom(const ExportStorage_GCS& from);
+  void CopyFrom(const ExternalStorage_GCS& from);
+  void MergeFrom(const ExternalStorage_GCS& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -10346,7 +10346,7 @@ class ExportStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_ins
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(ExportStorage_GCS* other);
+  void InternalSwap(ExternalStorage_GCS* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -10432,7 +10432,7 @@ class ExportStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::std::string* release_credentials();
   void set_allocated_credentials(::std::string* credentials);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportStorage.GCS)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.GCS)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -10446,24 +10446,24 @@ class ExportStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_ins
 };
 // -------------------------------------------------------------------
 
-class ExportStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExportStorage.Azure) */ {
+class ExternalStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.Azure) */ {
  public:
-  ExportStorage_Azure();
-  virtual ~ExportStorage_Azure();
+  ExternalStorage_Azure();
+  virtual ~ExternalStorage_Azure();
 
-  ExportStorage_Azure(const ExportStorage_Azure& from);
+  ExternalStorage_Azure(const ExternalStorage_Azure& from);
 
-  inline ExportStorage_Azure& operator=(const ExportStorage_Azure& from) {
+  inline ExternalStorage_Azure& operator=(const ExternalStorage_Azure& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ExportStorage_Azure(ExportStorage_Azure&& from) noexcept
-    : ExportStorage_Azure() {
+  ExternalStorage_Azure(ExternalStorage_Azure&& from) noexcept
+    : ExternalStorage_Azure() {
     *this = ::std::move(from);
   }
 
-  inline ExportStorage_Azure& operator=(ExportStorage_Azure&& from) noexcept {
+  inline ExternalStorage_Azure& operator=(ExternalStorage_Azure&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -10472,34 +10472,34 @@ class ExportStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc_i
     return *this;
   }
   #endif
-  static const ExportStorage_Azure& default_instance();
+  static const ExternalStorage_Azure& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ExportStorage_Azure* internal_default_instance() {
-    return reinterpret_cast<const ExportStorage_Azure*>(
-               &_ExportStorage_Azure_default_instance_);
+  static inline const ExternalStorage_Azure* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage_Azure*>(
+               &_ExternalStorage_Azure_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     80;
 
-  void Swap(ExportStorage_Azure* other);
-  friend void swap(ExportStorage_Azure& a, ExportStorage_Azure& b) {
+  void Swap(ExternalStorage_Azure* other);
+  friend void swap(ExternalStorage_Azure& a, ExternalStorage_Azure& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ExportStorage_Azure* New() const final {
-    return CreateMaybeMessage<ExportStorage_Azure>(NULL);
+  inline ExternalStorage_Azure* New() const final {
+    return CreateMaybeMessage<ExternalStorage_Azure>(NULL);
   }
 
-  ExportStorage_Azure* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<ExportStorage_Azure>(arena);
+  ExternalStorage_Azure* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage_Azure>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const ExportStorage_Azure& from);
-  void MergeFrom(const ExportStorage_Azure& from);
+  void CopyFrom(const ExternalStorage_Azure& from);
+  void MergeFrom(const ExternalStorage_Azure& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -10515,7 +10515,7 @@ class ExportStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc_i
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(ExportStorage_Azure* other);
+  void InternalSwap(ExternalStorage_Azure* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -10587,7 +10587,7 @@ class ExportStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc_i
   ::std::string* release_account_key();
   void set_allocated_account_key(::std::string* account_key);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportStorage.Azure)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.Azure)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -10600,24 +10600,24 @@ class ExportStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc_i
 };
 // -------------------------------------------------------------------
 
-class ExportStorage_Workload : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExportStorage.Workload) */ {
+class ExternalStorage_Workload : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.Workload) */ {
  public:
-  ExportStorage_Workload();
-  virtual ~ExportStorage_Workload();
+  ExternalStorage_Workload();
+  virtual ~ExternalStorage_Workload();
 
-  ExportStorage_Workload(const ExportStorage_Workload& from);
+  ExternalStorage_Workload(const ExternalStorage_Workload& from);
 
-  inline ExportStorage_Workload& operator=(const ExportStorage_Workload& from) {
+  inline ExternalStorage_Workload& operator=(const ExternalStorage_Workload& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ExportStorage_Workload(ExportStorage_Workload&& from) noexcept
-    : ExportStorage_Workload() {
+  ExternalStorage_Workload(ExternalStorage_Workload&& from) noexcept
+    : ExternalStorage_Workload() {
     *this = ::std::move(from);
   }
 
-  inline ExportStorage_Workload& operator=(ExportStorage_Workload&& from) noexcept {
+  inline ExternalStorage_Workload& operator=(ExternalStorage_Workload&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -10626,34 +10626,34 @@ class ExportStorage_Workload : public ::google::protobuf::MessageLite /* @@proto
     return *this;
   }
   #endif
-  static const ExportStorage_Workload& default_instance();
+  static const ExternalStorage_Workload& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ExportStorage_Workload* internal_default_instance() {
-    return reinterpret_cast<const ExportStorage_Workload*>(
-               &_ExportStorage_Workload_default_instance_);
+  static inline const ExternalStorage_Workload* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage_Workload*>(
+               &_ExternalStorage_Workload_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     81;
 
-  void Swap(ExportStorage_Workload* other);
-  friend void swap(ExportStorage_Workload& a, ExportStorage_Workload& b) {
+  void Swap(ExternalStorage_Workload* other);
+  friend void swap(ExternalStorage_Workload& a, ExternalStorage_Workload& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ExportStorage_Workload* New() const final {
-    return CreateMaybeMessage<ExportStorage_Workload>(NULL);
+  inline ExternalStorage_Workload* New() const final {
+    return CreateMaybeMessage<ExternalStorage_Workload>(NULL);
   }
 
-  ExportStorage_Workload* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<ExportStorage_Workload>(arena);
+  ExternalStorage_Workload* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage_Workload>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const ExportStorage_Workload& from);
-  void MergeFrom(const ExportStorage_Workload& from);
+  void CopyFrom(const ExternalStorage_Workload& from);
+  void MergeFrom(const ExternalStorage_Workload& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -10669,7 +10669,7 @@ class ExportStorage_Workload : public ::google::protobuf::MessageLite /* @@proto
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(ExportStorage_Workload* other);
+  void InternalSwap(ExternalStorage_Workload* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -10775,7 +10775,7 @@ class ExportStorage_Workload : public ::google::protobuf::MessageLite /* @@proto
   ::google::protobuf::int64 batch_end() const;
   void set_batch_end(::google::protobuf::int64 value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportStorage.Workload)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.Workload)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -10791,24 +10791,24 @@ class ExportStorage_Workload : public ::google::protobuf::MessageLite /* @@proto
 };
 // -------------------------------------------------------------------
 
-class ExportStorage : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExportStorage) */ {
+class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage) */ {
  public:
-  ExportStorage();
-  virtual ~ExportStorage();
+  ExternalStorage();
+  virtual ~ExternalStorage();
 
-  ExportStorage(const ExportStorage& from);
+  ExternalStorage(const ExternalStorage& from);
 
-  inline ExportStorage& operator=(const ExportStorage& from) {
+  inline ExternalStorage& operator=(const ExternalStorage& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ExportStorage(ExportStorage&& from) noexcept
-    : ExportStorage() {
+  ExternalStorage(ExternalStorage&& from) noexcept
+    : ExternalStorage() {
     *this = ::std::move(from);
   }
 
-  inline ExportStorage& operator=(ExportStorage&& from) noexcept {
+  inline ExternalStorage& operator=(ExternalStorage&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -10817,34 +10817,34 @@ class ExportStorage : public ::google::protobuf::MessageLite /* @@protoc_inserti
     return *this;
   }
   #endif
-  static const ExportStorage& default_instance();
+  static const ExternalStorage& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ExportStorage* internal_default_instance() {
-    return reinterpret_cast<const ExportStorage*>(
-               &_ExportStorage_default_instance_);
+  static inline const ExternalStorage* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage*>(
+               &_ExternalStorage_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     82;
 
-  void Swap(ExportStorage* other);
-  friend void swap(ExportStorage& a, ExportStorage& b) {
+  void Swap(ExternalStorage* other);
+  friend void swap(ExternalStorage& a, ExternalStorage& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ExportStorage* New() const final {
-    return CreateMaybeMessage<ExportStorage>(NULL);
+  inline ExternalStorage* New() const final {
+    return CreateMaybeMessage<ExternalStorage>(NULL);
   }
 
-  ExportStorage* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<ExportStorage>(arena);
+  ExternalStorage* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage>(arena);
   }
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     final;
-  void CopyFrom(const ExportStorage& from);
-  void MergeFrom(const ExportStorage& from);
+  void CopyFrom(const ExternalStorage& from);
+  void MergeFrom(const ExternalStorage& from);
   void Clear() final;
   bool IsInitialized() const final;
 
@@ -10860,7 +10860,7 @@ class ExportStorage : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(ExportStorage* other);
+  void InternalSwap(ExternalStorage* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -10874,12 +10874,12 @@ class ExportStorage : public ::google::protobuf::MessageLite /* @@protoc_inserti
 
   // nested types ----------------------------------------------------
 
-  typedef ExportStorage_LocalFilePath LocalFilePath;
-  typedef ExportStorage_Http Http;
-  typedef ExportStorage_S3 S3;
-  typedef ExportStorage_GCS GCS;
-  typedef ExportStorage_Azure Azure;
-  typedef ExportStorage_Workload Workload;
+  typedef ExternalStorage_LocalFilePath LocalFilePath;
+  typedef ExternalStorage_Http Http;
+  typedef ExternalStorage_S3 S3;
+  typedef ExternalStorage_GCS GCS;
+  typedef ExternalStorage_Azure Azure;
+  typedef ExternalStorage_Workload Workload;
 
   // accessors -------------------------------------------------------
 
@@ -10887,88 +10887,88 @@ class ExportStorage : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void clear_localfile();
   static const int kLocalFileFieldNumber = 2;
   private:
-  const ::cockroach::roachpb::ExportStorage_LocalFilePath& _internal_localfile() const;
+  const ::cockroach::roachpb::ExternalStorage_LocalFilePath& _internal_localfile() const;
   public:
-  const ::cockroach::roachpb::ExportStorage_LocalFilePath& localfile() const;
-  ::cockroach::roachpb::ExportStorage_LocalFilePath* release_localfile();
-  ::cockroach::roachpb::ExportStorage_LocalFilePath* mutable_localfile();
-  void set_allocated_localfile(::cockroach::roachpb::ExportStorage_LocalFilePath* localfile);
+  const ::cockroach::roachpb::ExternalStorage_LocalFilePath& localfile() const;
+  ::cockroach::roachpb::ExternalStorage_LocalFilePath* release_localfile();
+  ::cockroach::roachpb::ExternalStorage_LocalFilePath* mutable_localfile();
+  void set_allocated_localfile(::cockroach::roachpb::ExternalStorage_LocalFilePath* localfile);
 
   bool has_httppath() const;
   void clear_httppath();
   static const int kHttpPathFieldNumber = 3;
   private:
-  const ::cockroach::roachpb::ExportStorage_Http& _internal_httppath() const;
+  const ::cockroach::roachpb::ExternalStorage_Http& _internal_httppath() const;
   public:
-  const ::cockroach::roachpb::ExportStorage_Http& httppath() const;
-  ::cockroach::roachpb::ExportStorage_Http* release_httppath();
-  ::cockroach::roachpb::ExportStorage_Http* mutable_httppath();
-  void set_allocated_httppath(::cockroach::roachpb::ExportStorage_Http* httppath);
+  const ::cockroach::roachpb::ExternalStorage_Http& httppath() const;
+  ::cockroach::roachpb::ExternalStorage_Http* release_httppath();
+  ::cockroach::roachpb::ExternalStorage_Http* mutable_httppath();
+  void set_allocated_httppath(::cockroach::roachpb::ExternalStorage_Http* httppath);
 
-  // .cockroach.roachpb.ExportStorage.GCS GoogleCloudConfig = 4;
+  // .cockroach.roachpb.ExternalStorage.GCS GoogleCloudConfig = 4;
   bool has_googlecloudconfig() const;
   void clear_googlecloudconfig();
   static const int kGoogleCloudConfigFieldNumber = 4;
   private:
-  const ::cockroach::roachpb::ExportStorage_GCS& _internal_googlecloudconfig() const;
+  const ::cockroach::roachpb::ExternalStorage_GCS& _internal_googlecloudconfig() const;
   public:
-  const ::cockroach::roachpb::ExportStorage_GCS& googlecloudconfig() const;
-  ::cockroach::roachpb::ExportStorage_GCS* release_googlecloudconfig();
-  ::cockroach::roachpb::ExportStorage_GCS* mutable_googlecloudconfig();
-  void set_allocated_googlecloudconfig(::cockroach::roachpb::ExportStorage_GCS* googlecloudconfig);
+  const ::cockroach::roachpb::ExternalStorage_GCS& googlecloudconfig() const;
+  ::cockroach::roachpb::ExternalStorage_GCS* release_googlecloudconfig();
+  ::cockroach::roachpb::ExternalStorage_GCS* mutable_googlecloudconfig();
+  void set_allocated_googlecloudconfig(::cockroach::roachpb::ExternalStorage_GCS* googlecloudconfig);
 
-  // .cockroach.roachpb.ExportStorage.S3 S3Config = 5;
+  // .cockroach.roachpb.ExternalStorage.S3 S3Config = 5;
   bool has_s3config() const;
   void clear_s3config();
   static const int kS3ConfigFieldNumber = 5;
   private:
-  const ::cockroach::roachpb::ExportStorage_S3& _internal_s3config() const;
+  const ::cockroach::roachpb::ExternalStorage_S3& _internal_s3config() const;
   public:
-  const ::cockroach::roachpb::ExportStorage_S3& s3config() const;
-  ::cockroach::roachpb::ExportStorage_S3* release_s3config();
-  ::cockroach::roachpb::ExportStorage_S3* mutable_s3config();
-  void set_allocated_s3config(::cockroach::roachpb::ExportStorage_S3* s3config);
+  const ::cockroach::roachpb::ExternalStorage_S3& s3config() const;
+  ::cockroach::roachpb::ExternalStorage_S3* release_s3config();
+  ::cockroach::roachpb::ExternalStorage_S3* mutable_s3config();
+  void set_allocated_s3config(::cockroach::roachpb::ExternalStorage_S3* s3config);
 
-  // .cockroach.roachpb.ExportStorage.Azure AzureConfig = 6;
+  // .cockroach.roachpb.ExternalStorage.Azure AzureConfig = 6;
   bool has_azureconfig() const;
   void clear_azureconfig();
   static const int kAzureConfigFieldNumber = 6;
   private:
-  const ::cockroach::roachpb::ExportStorage_Azure& _internal_azureconfig() const;
+  const ::cockroach::roachpb::ExternalStorage_Azure& _internal_azureconfig() const;
   public:
-  const ::cockroach::roachpb::ExportStorage_Azure& azureconfig() const;
-  ::cockroach::roachpb::ExportStorage_Azure* release_azureconfig();
-  ::cockroach::roachpb::ExportStorage_Azure* mutable_azureconfig();
-  void set_allocated_azureconfig(::cockroach::roachpb::ExportStorage_Azure* azureconfig);
+  const ::cockroach::roachpb::ExternalStorage_Azure& azureconfig() const;
+  ::cockroach::roachpb::ExternalStorage_Azure* release_azureconfig();
+  ::cockroach::roachpb::ExternalStorage_Azure* mutable_azureconfig();
+  void set_allocated_azureconfig(::cockroach::roachpb::ExternalStorage_Azure* azureconfig);
 
-  // .cockroach.roachpb.ExportStorage.Workload WorkloadConfig = 7;
+  // .cockroach.roachpb.ExternalStorage.Workload WorkloadConfig = 7;
   bool has_workloadconfig() const;
   void clear_workloadconfig();
   static const int kWorkloadConfigFieldNumber = 7;
   private:
-  const ::cockroach::roachpb::ExportStorage_Workload& _internal_workloadconfig() const;
+  const ::cockroach::roachpb::ExternalStorage_Workload& _internal_workloadconfig() const;
   public:
-  const ::cockroach::roachpb::ExportStorage_Workload& workloadconfig() const;
-  ::cockroach::roachpb::ExportStorage_Workload* release_workloadconfig();
-  ::cockroach::roachpb::ExportStorage_Workload* mutable_workloadconfig();
-  void set_allocated_workloadconfig(::cockroach::roachpb::ExportStorage_Workload* workloadconfig);
+  const ::cockroach::roachpb::ExternalStorage_Workload& workloadconfig() const;
+  ::cockroach::roachpb::ExternalStorage_Workload* release_workloadconfig();
+  ::cockroach::roachpb::ExternalStorage_Workload* mutable_workloadconfig();
+  void set_allocated_workloadconfig(::cockroach::roachpb::ExternalStorage_Workload* workloadconfig);
 
-  // .cockroach.roachpb.ExportStorageProvider provider = 1;
+  // .cockroach.roachpb.ExternalStorageProvider provider = 1;
   void clear_provider();
   static const int kProviderFieldNumber = 1;
-  ::cockroach::roachpb::ExportStorageProvider provider() const;
-  void set_provider(::cockroach::roachpb::ExportStorageProvider value);
+  ::cockroach::roachpb::ExternalStorageProvider provider() const;
+  void set_provider(::cockroach::roachpb::ExternalStorageProvider value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportStorage)
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::cockroach::roachpb::ExportStorage_LocalFilePath* localfile_;
-  ::cockroach::roachpb::ExportStorage_Http* httppath_;
-  ::cockroach::roachpb::ExportStorage_GCS* googlecloudconfig_;
-  ::cockroach::roachpb::ExportStorage_S3* s3config_;
-  ::cockroach::roachpb::ExportStorage_Azure* azureconfig_;
-  ::cockroach::roachpb::ExportStorage_Workload* workloadconfig_;
+  ::cockroach::roachpb::ExternalStorage_LocalFilePath* localfile_;
+  ::cockroach::roachpb::ExternalStorage_Http* httppath_;
+  ::cockroach::roachpb::ExternalStorage_GCS* googlecloudconfig_;
+  ::cockroach::roachpb::ExternalStorage_S3* s3config_;
+  ::cockroach::roachpb::ExternalStorage_Azure* azureconfig_;
+  ::cockroach::roachpb::ExternalStorage_Workload* workloadconfig_;
   int provider_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -11215,13 +11215,13 @@ class WriteBatchResponse : public ::google::protobuf::MessageLite /* @@protoc_in
 // -------------------------------------------------------------------
 
 class ExportRequest_StorageByLocalityKvEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<ExportRequest_StorageByLocalityKvEntry_DoNotUse, 
-    ::std::string, ::cockroach::roachpb::ExportStorage,
+    ::std::string, ::cockroach::roachpb::ExternalStorage,
     ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
     ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
     0 > {
 public:
   typedef ::google::protobuf::internal::MapEntryLite<ExportRequest_StorageByLocalityKvEntry_DoNotUse, 
-    ::std::string, ::cockroach::roachpb::ExportStorage,
+    ::std::string, ::cockroach::roachpb::ExternalStorage,
     ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
     ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
     0 > SuperType;
@@ -11322,9 +11322,9 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   int storage_by_locality_kv_size() const;
   void clear_storage_by_locality_kv();
   static const int kStorageByLocalityKvFieldNumber = 8;
-  const ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >&
+  const ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExternalStorage >&
       storage_by_locality_kv() const;
-  ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >*
+  ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExternalStorage >*
       mutable_storage_by_locality_kv();
 
   bool has_header() const;
@@ -11342,12 +11342,12 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void clear_storage();
   static const int kStorageFieldNumber = 2;
   private:
-  const ::cockroach::roachpb::ExportStorage& _internal_storage() const;
+  const ::cockroach::roachpb::ExternalStorage& _internal_storage() const;
   public:
-  const ::cockroach::roachpb::ExportStorage& storage() const;
-  ::cockroach::roachpb::ExportStorage* release_storage();
-  ::cockroach::roachpb::ExportStorage* mutable_storage();
-  void set_allocated_storage(::cockroach::roachpb::ExportStorage* storage);
+  const ::cockroach::roachpb::ExternalStorage& storage() const;
+  ::cockroach::roachpb::ExternalStorage* release_storage();
+  ::cockroach::roachpb::ExternalStorage* mutable_storage();
+  void set_allocated_storage(::cockroach::roachpb::ExternalStorage* storage);
 
   bool has_start_time() const;
   void clear_start_time();
@@ -11388,12 +11388,12 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::MapFieldLite<
       ExportRequest_StorageByLocalityKvEntry_DoNotUse,
-      ::std::string, ::cockroach::roachpb::ExportStorage,
+      ::std::string, ::cockroach::roachpb::ExternalStorage,
       ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
       ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
       0 > storage_by_locality_kv_;
   ::cockroach::roachpb::RequestHeader* header_;
-  ::cockroach::roachpb::ExportStorage* storage_;
+  ::cockroach::roachpb::ExternalStorage* storage_;
   ::cockroach::util::hlc::Timestamp* start_time_;
   int mvcc_filter_;
   bool return_sst_;
@@ -11951,12 +11951,12 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
   void clear_dir();
   static const int kDirFieldNumber = 1;
   private:
-  const ::cockroach::roachpb::ExportStorage& _internal_dir() const;
+  const ::cockroach::roachpb::ExternalStorage& _internal_dir() const;
   public:
-  const ::cockroach::roachpb::ExportStorage& dir() const;
-  ::cockroach::roachpb::ExportStorage* release_dir();
-  ::cockroach::roachpb::ExportStorage* mutable_dir();
-  void set_allocated_dir(::cockroach::roachpb::ExportStorage* dir);
+  const ::cockroach::roachpb::ExternalStorage& dir() const;
+  ::cockroach::roachpb::ExternalStorage* release_dir();
+  ::cockroach::roachpb::ExternalStorage* mutable_dir();
+  void set_allocated_dir(::cockroach::roachpb::ExternalStorage* dir);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ImportRequest.File)
  private:
@@ -11964,7 +11964,7 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr path_;
   ::google::protobuf::internal::ArenaStringPtr sha512_;
-  ::cockroach::roachpb::ExportStorage* dir_;
+  ::cockroach::roachpb::ExternalStorage* dir_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -24197,1410 +24197,1410 @@ inline void ComputeChecksumResponse::set_allocated_checksum_id(::std::string* ch
 
 // -------------------------------------------------------------------
 
-// ExportStorage_LocalFilePath
+// ExternalStorage_LocalFilePath
 
 // string path = 1;
-inline void ExportStorage_LocalFilePath::clear_path() {
+inline void ExternalStorage_LocalFilePath::clear_path() {
   path_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_LocalFilePath::path() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+inline const ::std::string& ExternalStorage_LocalFilePath::path() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
   return path_.GetNoArena();
 }
-inline void ExportStorage_LocalFilePath::set_path(const ::std::string& value) {
+inline void ExternalStorage_LocalFilePath::set_path(const ::std::string& value) {
   
   path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
 }
 #if LANG_CXX11
-inline void ExportStorage_LocalFilePath::set_path(::std::string&& value) {
+inline void ExternalStorage_LocalFilePath::set_path(::std::string&& value) {
   
   path_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
 }
 #endif
-inline void ExportStorage_LocalFilePath::set_path(const char* value) {
+inline void ExternalStorage_LocalFilePath::set_path(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
 }
-inline void ExportStorage_LocalFilePath::set_path(const char* value, size_t size) {
+inline void ExternalStorage_LocalFilePath::set_path(const char* value, size_t size) {
   
   path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
 }
-inline ::std::string* ExportStorage_LocalFilePath::mutable_path() {
+inline ::std::string* ExternalStorage_LocalFilePath::mutable_path() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
   return path_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_LocalFilePath::release_path() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+inline ::std::string* ExternalStorage_LocalFilePath::release_path() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
   
   return path_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_LocalFilePath::set_allocated_path(::std::string* path) {
+inline void ExternalStorage_LocalFilePath::set_allocated_path(::std::string* path) {
   if (path != NULL) {
     
   } else {
     
   }
   path_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), path);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.LocalFilePath.path)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.LocalFilePath.path)
 }
 
-inline void ExportStorage_LocalFilePath::clear_node_id() {
+inline void ExternalStorage_LocalFilePath::clear_node_id() {
   node_id_ = 0u;
 }
-inline ::google::protobuf::uint32 ExportStorage_LocalFilePath::node_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.LocalFilePath.node_id)
+inline ::google::protobuf::uint32 ExternalStorage_LocalFilePath::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.LocalFilePath.node_id)
   return node_id_;
 }
-inline void ExportStorage_LocalFilePath::set_node_id(::google::protobuf::uint32 value) {
+inline void ExternalStorage_LocalFilePath::set_node_id(::google::protobuf::uint32 value) {
   
   node_id_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.LocalFilePath.node_id)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.LocalFilePath.node_id)
 }
 
 // -------------------------------------------------------------------
 
-// ExportStorage_Http
+// ExternalStorage_Http
 
 // string baseUri = 1;
-inline void ExportStorage_Http::clear_baseuri() {
+inline void ExternalStorage_Http::clear_baseuri() {
   baseuri_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Http::baseuri() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Http.baseUri)
+inline const ::std::string& ExternalStorage_Http::baseuri() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Http.baseUri)
   return baseuri_.GetNoArena();
 }
-inline void ExportStorage_Http::set_baseuri(const ::std::string& value) {
+inline void ExternalStorage_Http::set_baseuri(const ::std::string& value) {
   
   baseuri_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Http.baseUri)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Http.baseUri)
 }
 #if LANG_CXX11
-inline void ExportStorage_Http::set_baseuri(::std::string&& value) {
+inline void ExternalStorage_Http::set_baseuri(::std::string&& value) {
   
   baseuri_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Http.baseUri)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Http.baseUri)
 }
 #endif
-inline void ExportStorage_Http::set_baseuri(const char* value) {
+inline void ExternalStorage_Http::set_baseuri(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   baseuri_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Http.baseUri)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Http.baseUri)
 }
-inline void ExportStorage_Http::set_baseuri(const char* value, size_t size) {
+inline void ExternalStorage_Http::set_baseuri(const char* value, size_t size) {
   
   baseuri_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Http.baseUri)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Http.baseUri)
 }
-inline ::std::string* ExportStorage_Http::mutable_baseuri() {
+inline ::std::string* ExternalStorage_Http::mutable_baseuri() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Http.baseUri)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Http.baseUri)
   return baseuri_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Http::release_baseuri() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Http.baseUri)
+inline ::std::string* ExternalStorage_Http::release_baseuri() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Http.baseUri)
   
   return baseuri_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Http::set_allocated_baseuri(::std::string* baseuri) {
+inline void ExternalStorage_Http::set_allocated_baseuri(::std::string* baseuri) {
   if (baseuri != NULL) {
     
   } else {
     
   }
   baseuri_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), baseuri);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Http.baseUri)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Http.baseUri)
 }
 
 // -------------------------------------------------------------------
 
-// ExportStorage_S3
+// ExternalStorage_S3
 
 // string bucket = 1;
-inline void ExportStorage_S3::clear_bucket() {
+inline void ExternalStorage_S3::clear_bucket() {
   bucket_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::bucket() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.bucket)
+inline const ::std::string& ExternalStorage_S3::bucket() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.bucket)
   return bucket_.GetNoArena();
 }
-inline void ExportStorage_S3::set_bucket(const ::std::string& value) {
+inline void ExternalStorage_S3::set_bucket(const ::std::string& value) {
   
   bucket_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.bucket)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.bucket)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_bucket(::std::string&& value) {
+inline void ExternalStorage_S3::set_bucket(::std::string&& value) {
   
   bucket_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.bucket)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.bucket)
 }
 #endif
-inline void ExportStorage_S3::set_bucket(const char* value) {
+inline void ExternalStorage_S3::set_bucket(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   bucket_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.bucket)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.bucket)
 }
-inline void ExportStorage_S3::set_bucket(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_bucket(const char* value, size_t size) {
   
   bucket_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.bucket)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.bucket)
 }
-inline ::std::string* ExportStorage_S3::mutable_bucket() {
+inline ::std::string* ExternalStorage_S3::mutable_bucket() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.bucket)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.bucket)
   return bucket_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_bucket() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.bucket)
+inline ::std::string* ExternalStorage_S3::release_bucket() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.bucket)
   
   return bucket_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_bucket(::std::string* bucket) {
+inline void ExternalStorage_S3::set_allocated_bucket(::std::string* bucket) {
   if (bucket != NULL) {
     
   } else {
     
   }
   bucket_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), bucket);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.bucket)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.bucket)
 }
 
 // string prefix = 2;
-inline void ExportStorage_S3::clear_prefix() {
+inline void ExternalStorage_S3::clear_prefix() {
   prefix_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::prefix() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.prefix)
+inline const ::std::string& ExternalStorage_S3::prefix() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.prefix)
   return prefix_.GetNoArena();
 }
-inline void ExportStorage_S3::set_prefix(const ::std::string& value) {
+inline void ExternalStorage_S3::set_prefix(const ::std::string& value) {
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.prefix)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.prefix)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_prefix(::std::string&& value) {
+inline void ExternalStorage_S3::set_prefix(::std::string&& value) {
   
   prefix_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.prefix)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.prefix)
 }
 #endif
-inline void ExportStorage_S3::set_prefix(const char* value) {
+inline void ExternalStorage_S3::set_prefix(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.prefix)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.prefix)
 }
-inline void ExportStorage_S3::set_prefix(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_prefix(const char* value, size_t size) {
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.prefix)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.prefix)
 }
-inline ::std::string* ExportStorage_S3::mutable_prefix() {
+inline ::std::string* ExternalStorage_S3::mutable_prefix() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.prefix)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.prefix)
   return prefix_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_prefix() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.prefix)
+inline ::std::string* ExternalStorage_S3::release_prefix() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.prefix)
   
   return prefix_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_prefix(::std::string* prefix) {
+inline void ExternalStorage_S3::set_allocated_prefix(::std::string* prefix) {
   if (prefix != NULL) {
     
   } else {
     
   }
   prefix_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), prefix);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.prefix)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.prefix)
 }
 
 // string access_key = 3;
-inline void ExportStorage_S3::clear_access_key() {
+inline void ExternalStorage_S3::clear_access_key() {
   access_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::access_key() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.access_key)
+inline const ::std::string& ExternalStorage_S3::access_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.access_key)
   return access_key_.GetNoArena();
 }
-inline void ExportStorage_S3::set_access_key(const ::std::string& value) {
+inline void ExternalStorage_S3::set_access_key(const ::std::string& value) {
   
   access_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.access_key)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.access_key)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_access_key(::std::string&& value) {
+inline void ExternalStorage_S3::set_access_key(::std::string&& value) {
   
   access_key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.access_key)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.access_key)
 }
 #endif
-inline void ExportStorage_S3::set_access_key(const char* value) {
+inline void ExternalStorage_S3::set_access_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   access_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.access_key)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.access_key)
 }
-inline void ExportStorage_S3::set_access_key(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_access_key(const char* value, size_t size) {
   
   access_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.access_key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.access_key)
 }
-inline ::std::string* ExportStorage_S3::mutable_access_key() {
+inline ::std::string* ExternalStorage_S3::mutable_access_key() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.access_key)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.access_key)
   return access_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_access_key() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.access_key)
+inline ::std::string* ExternalStorage_S3::release_access_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.access_key)
   
   return access_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_access_key(::std::string* access_key) {
+inline void ExternalStorage_S3::set_allocated_access_key(::std::string* access_key) {
   if (access_key != NULL) {
     
   } else {
     
   }
   access_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), access_key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.access_key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.access_key)
 }
 
 // string secret = 4;
-inline void ExportStorage_S3::clear_secret() {
+inline void ExternalStorage_S3::clear_secret() {
   secret_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::secret() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.secret)
+inline const ::std::string& ExternalStorage_S3::secret() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.secret)
   return secret_.GetNoArena();
 }
-inline void ExportStorage_S3::set_secret(const ::std::string& value) {
+inline void ExternalStorage_S3::set_secret(const ::std::string& value) {
   
   secret_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.secret)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.secret)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_secret(::std::string&& value) {
+inline void ExternalStorage_S3::set_secret(::std::string&& value) {
   
   secret_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.secret)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.secret)
 }
 #endif
-inline void ExportStorage_S3::set_secret(const char* value) {
+inline void ExternalStorage_S3::set_secret(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   secret_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.secret)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.secret)
 }
-inline void ExportStorage_S3::set_secret(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_secret(const char* value, size_t size) {
   
   secret_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.secret)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.secret)
 }
-inline ::std::string* ExportStorage_S3::mutable_secret() {
+inline ::std::string* ExternalStorage_S3::mutable_secret() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.secret)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.secret)
   return secret_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_secret() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.secret)
+inline ::std::string* ExternalStorage_S3::release_secret() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.secret)
   
   return secret_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_secret(::std::string* secret) {
+inline void ExternalStorage_S3::set_allocated_secret(::std::string* secret) {
   if (secret != NULL) {
     
   } else {
     
   }
   secret_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), secret);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.secret)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.secret)
 }
 
 // string temp_token = 5;
-inline void ExportStorage_S3::clear_temp_token() {
+inline void ExternalStorage_S3::clear_temp_token() {
   temp_token_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::temp_token() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.temp_token)
+inline const ::std::string& ExternalStorage_S3::temp_token() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.temp_token)
   return temp_token_.GetNoArena();
 }
-inline void ExportStorage_S3::set_temp_token(const ::std::string& value) {
+inline void ExternalStorage_S3::set_temp_token(const ::std::string& value) {
   
   temp_token_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.temp_token)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.temp_token)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_temp_token(::std::string&& value) {
+inline void ExternalStorage_S3::set_temp_token(::std::string&& value) {
   
   temp_token_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.temp_token)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.temp_token)
 }
 #endif
-inline void ExportStorage_S3::set_temp_token(const char* value) {
+inline void ExternalStorage_S3::set_temp_token(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   temp_token_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.temp_token)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.temp_token)
 }
-inline void ExportStorage_S3::set_temp_token(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_temp_token(const char* value, size_t size) {
   
   temp_token_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.temp_token)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.temp_token)
 }
-inline ::std::string* ExportStorage_S3::mutable_temp_token() {
+inline ::std::string* ExternalStorage_S3::mutable_temp_token() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.temp_token)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.temp_token)
   return temp_token_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_temp_token() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.temp_token)
+inline ::std::string* ExternalStorage_S3::release_temp_token() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.temp_token)
   
   return temp_token_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_temp_token(::std::string* temp_token) {
+inline void ExternalStorage_S3::set_allocated_temp_token(::std::string* temp_token) {
   if (temp_token != NULL) {
     
   } else {
     
   }
   temp_token_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), temp_token);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.temp_token)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.temp_token)
 }
 
 // string endpoint = 6;
-inline void ExportStorage_S3::clear_endpoint() {
+inline void ExternalStorage_S3::clear_endpoint() {
   endpoint_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::endpoint() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.endpoint)
+inline const ::std::string& ExternalStorage_S3::endpoint() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.endpoint)
   return endpoint_.GetNoArena();
 }
-inline void ExportStorage_S3::set_endpoint(const ::std::string& value) {
+inline void ExternalStorage_S3::set_endpoint(const ::std::string& value) {
   
   endpoint_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.endpoint)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.endpoint)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_endpoint(::std::string&& value) {
+inline void ExternalStorage_S3::set_endpoint(::std::string&& value) {
   
   endpoint_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.endpoint)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.endpoint)
 }
 #endif
-inline void ExportStorage_S3::set_endpoint(const char* value) {
+inline void ExternalStorage_S3::set_endpoint(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   endpoint_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.endpoint)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.endpoint)
 }
-inline void ExportStorage_S3::set_endpoint(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_endpoint(const char* value, size_t size) {
   
   endpoint_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.endpoint)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.endpoint)
 }
-inline ::std::string* ExportStorage_S3::mutable_endpoint() {
+inline ::std::string* ExternalStorage_S3::mutable_endpoint() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.endpoint)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.endpoint)
   return endpoint_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_endpoint() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.endpoint)
+inline ::std::string* ExternalStorage_S3::release_endpoint() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.endpoint)
   
   return endpoint_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_endpoint(::std::string* endpoint) {
+inline void ExternalStorage_S3::set_allocated_endpoint(::std::string* endpoint) {
   if (endpoint != NULL) {
     
   } else {
     
   }
   endpoint_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), endpoint);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.endpoint)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.endpoint)
 }
 
 // string region = 7;
-inline void ExportStorage_S3::clear_region() {
+inline void ExternalStorage_S3::clear_region() {
   region_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::region() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.region)
+inline const ::std::string& ExternalStorage_S3::region() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.region)
   return region_.GetNoArena();
 }
-inline void ExportStorage_S3::set_region(const ::std::string& value) {
+inline void ExternalStorage_S3::set_region(const ::std::string& value) {
   
   region_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.region)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.region)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_region(::std::string&& value) {
+inline void ExternalStorage_S3::set_region(::std::string&& value) {
   
   region_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.region)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.region)
 }
 #endif
-inline void ExportStorage_S3::set_region(const char* value) {
+inline void ExternalStorage_S3::set_region(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   region_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.region)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.region)
 }
-inline void ExportStorage_S3::set_region(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_region(const char* value, size_t size) {
   
   region_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.region)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.region)
 }
-inline ::std::string* ExportStorage_S3::mutable_region() {
+inline ::std::string* ExternalStorage_S3::mutable_region() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.region)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.region)
   return region_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_region() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.region)
+inline ::std::string* ExternalStorage_S3::release_region() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.region)
   
   return region_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_region(::std::string* region) {
+inline void ExternalStorage_S3::set_allocated_region(::std::string* region) {
   if (region != NULL) {
     
   } else {
     
   }
   region_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), region);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.region)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.region)
 }
 
 // string auth = 8;
-inline void ExportStorage_S3::clear_auth() {
+inline void ExternalStorage_S3::clear_auth() {
   auth_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_S3::auth() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3.auth)
+inline const ::std::string& ExternalStorage_S3::auth() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3.auth)
   return auth_.GetNoArena();
 }
-inline void ExportStorage_S3::set_auth(const ::std::string& value) {
+inline void ExternalStorage_S3::set_auth(const ::std::string& value) {
   
   auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.S3.auth)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.S3.auth)
 }
 #if LANG_CXX11
-inline void ExportStorage_S3::set_auth(::std::string&& value) {
+inline void ExternalStorage_S3::set_auth(::std::string&& value) {
   
   auth_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.S3.auth)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.S3.auth)
 }
 #endif
-inline void ExportStorage_S3::set_auth(const char* value) {
+inline void ExternalStorage_S3::set_auth(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.S3.auth)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.S3.auth)
 }
-inline void ExportStorage_S3::set_auth(const char* value, size_t size) {
+inline void ExternalStorage_S3::set_auth(const char* value, size_t size) {
   
   auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.S3.auth)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.S3.auth)
 }
-inline ::std::string* ExportStorage_S3::mutable_auth() {
+inline ::std::string* ExternalStorage_S3::mutable_auth() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3.auth)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3.auth)
   return auth_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_S3::release_auth() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3.auth)
+inline ::std::string* ExternalStorage_S3::release_auth() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3.auth)
   
   return auth_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_S3::set_allocated_auth(::std::string* auth) {
+inline void ExternalStorage_S3::set_allocated_auth(::std::string* auth) {
   if (auth != NULL) {
     
   } else {
     
   }
   auth_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), auth);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3.auth)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3.auth)
 }
 
 // -------------------------------------------------------------------
 
-// ExportStorage_GCS
+// ExternalStorage_GCS
 
 // string bucket = 1;
-inline void ExportStorage_GCS::clear_bucket() {
+inline void ExternalStorage_GCS::clear_bucket() {
   bucket_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_GCS::bucket() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.GCS.bucket)
+inline const ::std::string& ExternalStorage_GCS::bucket() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.GCS.bucket)
   return bucket_.GetNoArena();
 }
-inline void ExportStorage_GCS::set_bucket(const ::std::string& value) {
+inline void ExternalStorage_GCS::set_bucket(const ::std::string& value) {
   
   bucket_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.GCS.bucket)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.GCS.bucket)
 }
 #if LANG_CXX11
-inline void ExportStorage_GCS::set_bucket(::std::string&& value) {
+inline void ExternalStorage_GCS::set_bucket(::std::string&& value) {
   
   bucket_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.GCS.bucket)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.GCS.bucket)
 }
 #endif
-inline void ExportStorage_GCS::set_bucket(const char* value) {
+inline void ExternalStorage_GCS::set_bucket(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   bucket_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.GCS.bucket)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.GCS.bucket)
 }
-inline void ExportStorage_GCS::set_bucket(const char* value, size_t size) {
+inline void ExternalStorage_GCS::set_bucket(const char* value, size_t size) {
   
   bucket_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.GCS.bucket)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.GCS.bucket)
 }
-inline ::std::string* ExportStorage_GCS::mutable_bucket() {
+inline ::std::string* ExternalStorage_GCS::mutable_bucket() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.GCS.bucket)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.GCS.bucket)
   return bucket_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_GCS::release_bucket() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.GCS.bucket)
+inline ::std::string* ExternalStorage_GCS::release_bucket() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.GCS.bucket)
   
   return bucket_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_GCS::set_allocated_bucket(::std::string* bucket) {
+inline void ExternalStorage_GCS::set_allocated_bucket(::std::string* bucket) {
   if (bucket != NULL) {
     
   } else {
     
   }
   bucket_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), bucket);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.GCS.bucket)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.GCS.bucket)
 }
 
 // string prefix = 2;
-inline void ExportStorage_GCS::clear_prefix() {
+inline void ExternalStorage_GCS::clear_prefix() {
   prefix_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_GCS::prefix() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.GCS.prefix)
+inline const ::std::string& ExternalStorage_GCS::prefix() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.GCS.prefix)
   return prefix_.GetNoArena();
 }
-inline void ExportStorage_GCS::set_prefix(const ::std::string& value) {
+inline void ExternalStorage_GCS::set_prefix(const ::std::string& value) {
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.GCS.prefix)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.GCS.prefix)
 }
 #if LANG_CXX11
-inline void ExportStorage_GCS::set_prefix(::std::string&& value) {
+inline void ExternalStorage_GCS::set_prefix(::std::string&& value) {
   
   prefix_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.GCS.prefix)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.GCS.prefix)
 }
 #endif
-inline void ExportStorage_GCS::set_prefix(const char* value) {
+inline void ExternalStorage_GCS::set_prefix(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.GCS.prefix)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.GCS.prefix)
 }
-inline void ExportStorage_GCS::set_prefix(const char* value, size_t size) {
+inline void ExternalStorage_GCS::set_prefix(const char* value, size_t size) {
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.GCS.prefix)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.GCS.prefix)
 }
-inline ::std::string* ExportStorage_GCS::mutable_prefix() {
+inline ::std::string* ExternalStorage_GCS::mutable_prefix() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.GCS.prefix)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.GCS.prefix)
   return prefix_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_GCS::release_prefix() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.GCS.prefix)
+inline ::std::string* ExternalStorage_GCS::release_prefix() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.GCS.prefix)
   
   return prefix_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_GCS::set_allocated_prefix(::std::string* prefix) {
+inline void ExternalStorage_GCS::set_allocated_prefix(::std::string* prefix) {
   if (prefix != NULL) {
     
   } else {
     
   }
   prefix_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), prefix);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.GCS.prefix)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.GCS.prefix)
 }
 
 // string auth = 3;
-inline void ExportStorage_GCS::clear_auth() {
+inline void ExternalStorage_GCS::clear_auth() {
   auth_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_GCS::auth() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.GCS.auth)
+inline const ::std::string& ExternalStorage_GCS::auth() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.GCS.auth)
   return auth_.GetNoArena();
 }
-inline void ExportStorage_GCS::set_auth(const ::std::string& value) {
+inline void ExternalStorage_GCS::set_auth(const ::std::string& value) {
   
   auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.GCS.auth)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.GCS.auth)
 }
 #if LANG_CXX11
-inline void ExportStorage_GCS::set_auth(::std::string&& value) {
+inline void ExternalStorage_GCS::set_auth(::std::string&& value) {
   
   auth_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.GCS.auth)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.GCS.auth)
 }
 #endif
-inline void ExportStorage_GCS::set_auth(const char* value) {
+inline void ExternalStorage_GCS::set_auth(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.GCS.auth)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.GCS.auth)
 }
-inline void ExportStorage_GCS::set_auth(const char* value, size_t size) {
+inline void ExternalStorage_GCS::set_auth(const char* value, size_t size) {
   
   auth_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.GCS.auth)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.GCS.auth)
 }
-inline ::std::string* ExportStorage_GCS::mutable_auth() {
+inline ::std::string* ExternalStorage_GCS::mutable_auth() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.GCS.auth)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.GCS.auth)
   return auth_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_GCS::release_auth() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.GCS.auth)
+inline ::std::string* ExternalStorage_GCS::release_auth() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.GCS.auth)
   
   return auth_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_GCS::set_allocated_auth(::std::string* auth) {
+inline void ExternalStorage_GCS::set_allocated_auth(::std::string* auth) {
   if (auth != NULL) {
     
   } else {
     
   }
   auth_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), auth);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.GCS.auth)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.GCS.auth)
 }
 
 // string billing_project = 4;
-inline void ExportStorage_GCS::clear_billing_project() {
+inline void ExternalStorage_GCS::clear_billing_project() {
   billing_project_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_GCS::billing_project() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.GCS.billing_project)
+inline const ::std::string& ExternalStorage_GCS::billing_project() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.GCS.billing_project)
   return billing_project_.GetNoArena();
 }
-inline void ExportStorage_GCS::set_billing_project(const ::std::string& value) {
+inline void ExternalStorage_GCS::set_billing_project(const ::std::string& value) {
   
   billing_project_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.GCS.billing_project)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.GCS.billing_project)
 }
 #if LANG_CXX11
-inline void ExportStorage_GCS::set_billing_project(::std::string&& value) {
+inline void ExternalStorage_GCS::set_billing_project(::std::string&& value) {
   
   billing_project_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.GCS.billing_project)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.GCS.billing_project)
 }
 #endif
-inline void ExportStorage_GCS::set_billing_project(const char* value) {
+inline void ExternalStorage_GCS::set_billing_project(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   billing_project_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.GCS.billing_project)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.GCS.billing_project)
 }
-inline void ExportStorage_GCS::set_billing_project(const char* value, size_t size) {
+inline void ExternalStorage_GCS::set_billing_project(const char* value, size_t size) {
   
   billing_project_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.GCS.billing_project)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.GCS.billing_project)
 }
-inline ::std::string* ExportStorage_GCS::mutable_billing_project() {
+inline ::std::string* ExternalStorage_GCS::mutable_billing_project() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.GCS.billing_project)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.GCS.billing_project)
   return billing_project_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_GCS::release_billing_project() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.GCS.billing_project)
+inline ::std::string* ExternalStorage_GCS::release_billing_project() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.GCS.billing_project)
   
   return billing_project_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_GCS::set_allocated_billing_project(::std::string* billing_project) {
+inline void ExternalStorage_GCS::set_allocated_billing_project(::std::string* billing_project) {
   if (billing_project != NULL) {
     
   } else {
     
   }
   billing_project_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), billing_project);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.GCS.billing_project)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.GCS.billing_project)
 }
 
 // string credentials = 5;
-inline void ExportStorage_GCS::clear_credentials() {
+inline void ExternalStorage_GCS::clear_credentials() {
   credentials_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_GCS::credentials() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.GCS.credentials)
+inline const ::std::string& ExternalStorage_GCS::credentials() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.GCS.credentials)
   return credentials_.GetNoArena();
 }
-inline void ExportStorage_GCS::set_credentials(const ::std::string& value) {
+inline void ExternalStorage_GCS::set_credentials(const ::std::string& value) {
   
   credentials_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.GCS.credentials)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.GCS.credentials)
 }
 #if LANG_CXX11
-inline void ExportStorage_GCS::set_credentials(::std::string&& value) {
+inline void ExternalStorage_GCS::set_credentials(::std::string&& value) {
   
   credentials_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.GCS.credentials)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.GCS.credentials)
 }
 #endif
-inline void ExportStorage_GCS::set_credentials(const char* value) {
+inline void ExternalStorage_GCS::set_credentials(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   credentials_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.GCS.credentials)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.GCS.credentials)
 }
-inline void ExportStorage_GCS::set_credentials(const char* value, size_t size) {
+inline void ExternalStorage_GCS::set_credentials(const char* value, size_t size) {
   
   credentials_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.GCS.credentials)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.GCS.credentials)
 }
-inline ::std::string* ExportStorage_GCS::mutable_credentials() {
+inline ::std::string* ExternalStorage_GCS::mutable_credentials() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.GCS.credentials)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.GCS.credentials)
   return credentials_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_GCS::release_credentials() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.GCS.credentials)
+inline ::std::string* ExternalStorage_GCS::release_credentials() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.GCS.credentials)
   
   return credentials_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_GCS::set_allocated_credentials(::std::string* credentials) {
+inline void ExternalStorage_GCS::set_allocated_credentials(::std::string* credentials) {
   if (credentials != NULL) {
     
   } else {
     
   }
   credentials_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), credentials);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.GCS.credentials)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.GCS.credentials)
 }
 
 // -------------------------------------------------------------------
 
-// ExportStorage_Azure
+// ExternalStorage_Azure
 
 // string container = 1;
-inline void ExportStorage_Azure::clear_container() {
+inline void ExternalStorage_Azure::clear_container() {
   container_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Azure::container() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Azure.container)
+inline const ::std::string& ExternalStorage_Azure::container() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Azure.container)
   return container_.GetNoArena();
 }
-inline void ExportStorage_Azure::set_container(const ::std::string& value) {
+inline void ExternalStorage_Azure::set_container(const ::std::string& value) {
   
   container_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Azure.container)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Azure.container)
 }
 #if LANG_CXX11
-inline void ExportStorage_Azure::set_container(::std::string&& value) {
+inline void ExternalStorage_Azure::set_container(::std::string&& value) {
   
   container_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Azure.container)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Azure.container)
 }
 #endif
-inline void ExportStorage_Azure::set_container(const char* value) {
+inline void ExternalStorage_Azure::set_container(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   container_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Azure.container)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Azure.container)
 }
-inline void ExportStorage_Azure::set_container(const char* value, size_t size) {
+inline void ExternalStorage_Azure::set_container(const char* value, size_t size) {
   
   container_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Azure.container)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Azure.container)
 }
-inline ::std::string* ExportStorage_Azure::mutable_container() {
+inline ::std::string* ExternalStorage_Azure::mutable_container() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Azure.container)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Azure.container)
   return container_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Azure::release_container() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Azure.container)
+inline ::std::string* ExternalStorage_Azure::release_container() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Azure.container)
   
   return container_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Azure::set_allocated_container(::std::string* container) {
+inline void ExternalStorage_Azure::set_allocated_container(::std::string* container) {
   if (container != NULL) {
     
   } else {
     
   }
   container_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), container);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Azure.container)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Azure.container)
 }
 
 // string prefix = 2;
-inline void ExportStorage_Azure::clear_prefix() {
+inline void ExternalStorage_Azure::clear_prefix() {
   prefix_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Azure::prefix() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Azure.prefix)
+inline const ::std::string& ExternalStorage_Azure::prefix() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Azure.prefix)
   return prefix_.GetNoArena();
 }
-inline void ExportStorage_Azure::set_prefix(const ::std::string& value) {
+inline void ExternalStorage_Azure::set_prefix(const ::std::string& value) {
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Azure.prefix)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Azure.prefix)
 }
 #if LANG_CXX11
-inline void ExportStorage_Azure::set_prefix(::std::string&& value) {
+inline void ExternalStorage_Azure::set_prefix(::std::string&& value) {
   
   prefix_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Azure.prefix)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Azure.prefix)
 }
 #endif
-inline void ExportStorage_Azure::set_prefix(const char* value) {
+inline void ExternalStorage_Azure::set_prefix(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Azure.prefix)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Azure.prefix)
 }
-inline void ExportStorage_Azure::set_prefix(const char* value, size_t size) {
+inline void ExternalStorage_Azure::set_prefix(const char* value, size_t size) {
   
   prefix_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Azure.prefix)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Azure.prefix)
 }
-inline ::std::string* ExportStorage_Azure::mutable_prefix() {
+inline ::std::string* ExternalStorage_Azure::mutable_prefix() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Azure.prefix)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Azure.prefix)
   return prefix_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Azure::release_prefix() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Azure.prefix)
+inline ::std::string* ExternalStorage_Azure::release_prefix() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Azure.prefix)
   
   return prefix_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Azure::set_allocated_prefix(::std::string* prefix) {
+inline void ExternalStorage_Azure::set_allocated_prefix(::std::string* prefix) {
   if (prefix != NULL) {
     
   } else {
     
   }
   prefix_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), prefix);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Azure.prefix)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Azure.prefix)
 }
 
 // string account_name = 3;
-inline void ExportStorage_Azure::clear_account_name() {
+inline void ExternalStorage_Azure::clear_account_name() {
   account_name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Azure::account_name() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Azure.account_name)
+inline const ::std::string& ExternalStorage_Azure::account_name() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Azure.account_name)
   return account_name_.GetNoArena();
 }
-inline void ExportStorage_Azure::set_account_name(const ::std::string& value) {
+inline void ExternalStorage_Azure::set_account_name(const ::std::string& value) {
   
   account_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Azure.account_name)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Azure.account_name)
 }
 #if LANG_CXX11
-inline void ExportStorage_Azure::set_account_name(::std::string&& value) {
+inline void ExternalStorage_Azure::set_account_name(::std::string&& value) {
   
   account_name_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Azure.account_name)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Azure.account_name)
 }
 #endif
-inline void ExportStorage_Azure::set_account_name(const char* value) {
+inline void ExternalStorage_Azure::set_account_name(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   account_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Azure.account_name)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Azure.account_name)
 }
-inline void ExportStorage_Azure::set_account_name(const char* value, size_t size) {
+inline void ExternalStorage_Azure::set_account_name(const char* value, size_t size) {
   
   account_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Azure.account_name)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Azure.account_name)
 }
-inline ::std::string* ExportStorage_Azure::mutable_account_name() {
+inline ::std::string* ExternalStorage_Azure::mutable_account_name() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Azure.account_name)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Azure.account_name)
   return account_name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Azure::release_account_name() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Azure.account_name)
+inline ::std::string* ExternalStorage_Azure::release_account_name() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Azure.account_name)
   
   return account_name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Azure::set_allocated_account_name(::std::string* account_name) {
+inline void ExternalStorage_Azure::set_allocated_account_name(::std::string* account_name) {
   if (account_name != NULL) {
     
   } else {
     
   }
   account_name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), account_name);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Azure.account_name)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Azure.account_name)
 }
 
 // string account_key = 4;
-inline void ExportStorage_Azure::clear_account_key() {
+inline void ExternalStorage_Azure::clear_account_key() {
   account_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Azure::account_key() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Azure.account_key)
+inline const ::std::string& ExternalStorage_Azure::account_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Azure.account_key)
   return account_key_.GetNoArena();
 }
-inline void ExportStorage_Azure::set_account_key(const ::std::string& value) {
+inline void ExternalStorage_Azure::set_account_key(const ::std::string& value) {
   
   account_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Azure.account_key)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Azure.account_key)
 }
 #if LANG_CXX11
-inline void ExportStorage_Azure::set_account_key(::std::string&& value) {
+inline void ExternalStorage_Azure::set_account_key(::std::string&& value) {
   
   account_key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Azure.account_key)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Azure.account_key)
 }
 #endif
-inline void ExportStorage_Azure::set_account_key(const char* value) {
+inline void ExternalStorage_Azure::set_account_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   account_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Azure.account_key)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Azure.account_key)
 }
-inline void ExportStorage_Azure::set_account_key(const char* value, size_t size) {
+inline void ExternalStorage_Azure::set_account_key(const char* value, size_t size) {
   
   account_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Azure.account_key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Azure.account_key)
 }
-inline ::std::string* ExportStorage_Azure::mutable_account_key() {
+inline ::std::string* ExternalStorage_Azure::mutable_account_key() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Azure.account_key)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Azure.account_key)
   return account_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Azure::release_account_key() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Azure.account_key)
+inline ::std::string* ExternalStorage_Azure::release_account_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Azure.account_key)
   
   return account_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Azure::set_allocated_account_key(::std::string* account_key) {
+inline void ExternalStorage_Azure::set_allocated_account_key(::std::string* account_key) {
   if (account_key != NULL) {
     
   } else {
     
   }
   account_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), account_key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Azure.account_key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Azure.account_key)
 }
 
 // -------------------------------------------------------------------
 
-// ExportStorage_Workload
+// ExternalStorage_Workload
 
 // string generator = 1;
-inline void ExportStorage_Workload::clear_generator() {
+inline void ExternalStorage_Workload::clear_generator() {
   generator_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Workload::generator() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Workload.generator)
+inline const ::std::string& ExternalStorage_Workload::generator() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Workload.generator)
   return generator_.GetNoArena();
 }
-inline void ExportStorage_Workload::set_generator(const ::std::string& value) {
+inline void ExternalStorage_Workload::set_generator(const ::std::string& value) {
   
   generator_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.generator)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.generator)
 }
 #if LANG_CXX11
-inline void ExportStorage_Workload::set_generator(::std::string&& value) {
+inline void ExternalStorage_Workload::set_generator(::std::string&& value) {
   
   generator_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Workload.generator)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Workload.generator)
 }
 #endif
-inline void ExportStorage_Workload::set_generator(const char* value) {
+inline void ExternalStorage_Workload::set_generator(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   generator_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Workload.generator)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Workload.generator)
 }
-inline void ExportStorage_Workload::set_generator(const char* value, size_t size) {
+inline void ExternalStorage_Workload::set_generator(const char* value, size_t size) {
   
   generator_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Workload.generator)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Workload.generator)
 }
-inline ::std::string* ExportStorage_Workload::mutable_generator() {
+inline ::std::string* ExternalStorage_Workload::mutable_generator() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Workload.generator)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Workload.generator)
   return generator_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Workload::release_generator() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Workload.generator)
+inline ::std::string* ExternalStorage_Workload::release_generator() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Workload.generator)
   
   return generator_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Workload::set_allocated_generator(::std::string* generator) {
+inline void ExternalStorage_Workload::set_allocated_generator(::std::string* generator) {
   if (generator != NULL) {
     
   } else {
     
   }
   generator_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), generator);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Workload.generator)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Workload.generator)
 }
 
 // string version = 2;
-inline void ExportStorage_Workload::clear_version() {
+inline void ExternalStorage_Workload::clear_version() {
   version_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Workload::version() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Workload.version)
+inline const ::std::string& ExternalStorage_Workload::version() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Workload.version)
   return version_.GetNoArena();
 }
-inline void ExportStorage_Workload::set_version(const ::std::string& value) {
+inline void ExternalStorage_Workload::set_version(const ::std::string& value) {
   
   version_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.version)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.version)
 }
 #if LANG_CXX11
-inline void ExportStorage_Workload::set_version(::std::string&& value) {
+inline void ExternalStorage_Workload::set_version(::std::string&& value) {
   
   version_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Workload.version)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Workload.version)
 }
 #endif
-inline void ExportStorage_Workload::set_version(const char* value) {
+inline void ExternalStorage_Workload::set_version(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   version_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Workload.version)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Workload.version)
 }
-inline void ExportStorage_Workload::set_version(const char* value, size_t size) {
+inline void ExternalStorage_Workload::set_version(const char* value, size_t size) {
   
   version_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Workload.version)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Workload.version)
 }
-inline ::std::string* ExportStorage_Workload::mutable_version() {
+inline ::std::string* ExternalStorage_Workload::mutable_version() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Workload.version)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Workload.version)
   return version_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Workload::release_version() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Workload.version)
+inline ::std::string* ExternalStorage_Workload::release_version() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Workload.version)
   
   return version_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Workload::set_allocated_version(::std::string* version) {
+inline void ExternalStorage_Workload::set_allocated_version(::std::string* version) {
   if (version != NULL) {
     
   } else {
     
   }
   version_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), version);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Workload.version)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Workload.version)
 }
 
 // string table = 3;
-inline void ExportStorage_Workload::clear_table() {
+inline void ExternalStorage_Workload::clear_table() {
   table_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Workload::table() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Workload.table)
+inline const ::std::string& ExternalStorage_Workload::table() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Workload.table)
   return table_.GetNoArena();
 }
-inline void ExportStorage_Workload::set_table(const ::std::string& value) {
+inline void ExternalStorage_Workload::set_table(const ::std::string& value) {
   
   table_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.table)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.table)
 }
 #if LANG_CXX11
-inline void ExportStorage_Workload::set_table(::std::string&& value) {
+inline void ExternalStorage_Workload::set_table(::std::string&& value) {
   
   table_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Workload.table)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Workload.table)
 }
 #endif
-inline void ExportStorage_Workload::set_table(const char* value) {
+inline void ExternalStorage_Workload::set_table(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   table_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Workload.table)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Workload.table)
 }
-inline void ExportStorage_Workload::set_table(const char* value, size_t size) {
+inline void ExternalStorage_Workload::set_table(const char* value, size_t size) {
   
   table_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Workload.table)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Workload.table)
 }
-inline ::std::string* ExportStorage_Workload::mutable_table() {
+inline ::std::string* ExternalStorage_Workload::mutable_table() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Workload.table)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Workload.table)
   return table_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Workload::release_table() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Workload.table)
+inline ::std::string* ExternalStorage_Workload::release_table() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Workload.table)
   
   return table_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Workload::set_allocated_table(::std::string* table) {
+inline void ExternalStorage_Workload::set_allocated_table(::std::string* table) {
   if (table != NULL) {
     
   } else {
     
   }
   table_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), table);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Workload.table)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Workload.table)
 }
 
 // repeated string flags = 4;
-inline int ExportStorage_Workload::flags_size() const {
+inline int ExternalStorage_Workload::flags_size() const {
   return flags_.size();
 }
-inline void ExportStorage_Workload::clear_flags() {
+inline void ExternalStorage_Workload::clear_flags() {
   flags_.Clear();
 }
-inline const ::std::string& ExportStorage_Workload::flags(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Workload.flags)
+inline const ::std::string& ExternalStorage_Workload::flags(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Workload.flags)
   return flags_.Get(index);
 }
-inline ::std::string* ExportStorage_Workload::mutable_flags(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Workload.flags)
+inline ::std::string* ExternalStorage_Workload::mutable_flags(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Workload.flags)
   return flags_.Mutable(index);
 }
-inline void ExportStorage_Workload::set_flags(int index, const ::std::string& value) {
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.flags)
+inline void ExternalStorage_Workload::set_flags(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.flags)
   flags_.Mutable(index)->assign(value);
 }
 #if LANG_CXX11
-inline void ExportStorage_Workload::set_flags(int index, ::std::string&& value) {
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.flags)
+inline void ExternalStorage_Workload::set_flags(int index, ::std::string&& value) {
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.flags)
   flags_.Mutable(index)->assign(std::move(value));
 }
 #endif
-inline void ExportStorage_Workload::set_flags(int index, const char* value) {
+inline void ExternalStorage_Workload::set_flags(int index, const char* value) {
   GOOGLE_DCHECK(value != NULL);
   flags_.Mutable(index)->assign(value);
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Workload.flags)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Workload.flags)
 }
-inline void ExportStorage_Workload::set_flags(int index, const char* value, size_t size) {
+inline void ExternalStorage_Workload::set_flags(int index, const char* value, size_t size) {
   flags_.Mutable(index)->assign(
     reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Workload.flags)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Workload.flags)
 }
-inline ::std::string* ExportStorage_Workload::add_flags() {
-  // @@protoc_insertion_point(field_add_mutable:cockroach.roachpb.ExportStorage.Workload.flags)
+inline ::std::string* ExternalStorage_Workload::add_flags() {
+  // @@protoc_insertion_point(field_add_mutable:cockroach.roachpb.ExternalStorage.Workload.flags)
   return flags_.Add();
 }
-inline void ExportStorage_Workload::add_flags(const ::std::string& value) {
+inline void ExternalStorage_Workload::add_flags(const ::std::string& value) {
   flags_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.ExportStorage.Workload.flags)
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ExternalStorage.Workload.flags)
 }
 #if LANG_CXX11
-inline void ExportStorage_Workload::add_flags(::std::string&& value) {
+inline void ExternalStorage_Workload::add_flags(::std::string&& value) {
   flags_.Add(std::move(value));
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.ExportStorage.Workload.flags)
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ExternalStorage.Workload.flags)
 }
 #endif
-inline void ExportStorage_Workload::add_flags(const char* value) {
+inline void ExternalStorage_Workload::add_flags(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   flags_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add_char:cockroach.roachpb.ExportStorage.Workload.flags)
+  // @@protoc_insertion_point(field_add_char:cockroach.roachpb.ExternalStorage.Workload.flags)
 }
-inline void ExportStorage_Workload::add_flags(const char* value, size_t size) {
+inline void ExternalStorage_Workload::add_flags(const char* value, size_t size) {
   flags_.Add()->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_add_pointer:cockroach.roachpb.ExportStorage.Workload.flags)
+  // @@protoc_insertion_point(field_add_pointer:cockroach.roachpb.ExternalStorage.Workload.flags)
 }
 inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
-ExportStorage_Workload::flags() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.ExportStorage.Workload.flags)
+ExternalStorage_Workload::flags() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ExternalStorage.Workload.flags)
   return flags_;
 }
 inline ::google::protobuf::RepeatedPtrField< ::std::string>*
-ExportStorage_Workload::mutable_flags() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ExportStorage.Workload.flags)
+ExternalStorage_Workload::mutable_flags() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ExternalStorage.Workload.flags)
   return &flags_;
 }
 
 // string format = 5;
-inline void ExportStorage_Workload::clear_format() {
+inline void ExternalStorage_Workload::clear_format() {
   format_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ExportStorage_Workload::format() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Workload.format)
+inline const ::std::string& ExternalStorage_Workload::format() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Workload.format)
   return format_.GetNoArena();
 }
-inline void ExportStorage_Workload::set_format(const ::std::string& value) {
+inline void ExternalStorage_Workload::set_format(const ::std::string& value) {
   
   format_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.format)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.format)
 }
 #if LANG_CXX11
-inline void ExportStorage_Workload::set_format(::std::string&& value) {
+inline void ExternalStorage_Workload::set_format(::std::string&& value) {
   
   format_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExportStorage.Workload.format)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.Workload.format)
 }
 #endif
-inline void ExportStorage_Workload::set_format(const char* value) {
+inline void ExternalStorage_Workload::set_format(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   format_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExportStorage.Workload.format)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.Workload.format)
 }
-inline void ExportStorage_Workload::set_format(const char* value, size_t size) {
+inline void ExternalStorage_Workload::set_format(const char* value, size_t size) {
   
   format_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExportStorage.Workload.format)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.Workload.format)
 }
-inline ::std::string* ExportStorage_Workload::mutable_format() {
+inline ::std::string* ExternalStorage_Workload::mutable_format() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.Workload.format)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.Workload.format)
   return format_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ExportStorage_Workload::release_format() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.Workload.format)
+inline ::std::string* ExternalStorage_Workload::release_format() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.Workload.format)
   
   return format_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ExportStorage_Workload::set_allocated_format(::std::string* format) {
+inline void ExternalStorage_Workload::set_allocated_format(::std::string* format) {
   if (format != NULL) {
     
   } else {
     
   }
   format_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), format);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.Workload.format)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.Workload.format)
 }
 
 // int64 batch_begin = 6;
-inline void ExportStorage_Workload::clear_batch_begin() {
+inline void ExternalStorage_Workload::clear_batch_begin() {
   batch_begin_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 ExportStorage_Workload::batch_begin() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Workload.batch_begin)
+inline ::google::protobuf::int64 ExternalStorage_Workload::batch_begin() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Workload.batch_begin)
   return batch_begin_;
 }
-inline void ExportStorage_Workload::set_batch_begin(::google::protobuf::int64 value) {
+inline void ExternalStorage_Workload::set_batch_begin(::google::protobuf::int64 value) {
   
   batch_begin_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.batch_begin)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.batch_begin)
 }
 
 // int64 batch_end = 7;
-inline void ExportStorage_Workload::clear_batch_end() {
+inline void ExternalStorage_Workload::clear_batch_end() {
   batch_end_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 ExportStorage_Workload::batch_end() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.Workload.batch_end)
+inline ::google::protobuf::int64 ExternalStorage_Workload::batch_end() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.Workload.batch_end)
   return batch_end_;
 }
-inline void ExportStorage_Workload::set_batch_end(::google::protobuf::int64 value) {
+inline void ExternalStorage_Workload::set_batch_end(::google::protobuf::int64 value) {
   
   batch_end_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.Workload.batch_end)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.Workload.batch_end)
 }
 
 // -------------------------------------------------------------------
 
-// ExportStorage
+// ExternalStorage
 
-// .cockroach.roachpb.ExportStorageProvider provider = 1;
-inline void ExportStorage::clear_provider() {
+// .cockroach.roachpb.ExternalStorageProvider provider = 1;
+inline void ExternalStorage::clear_provider() {
   provider_ = 0;
 }
-inline ::cockroach::roachpb::ExportStorageProvider ExportStorage::provider() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.provider)
-  return static_cast< ::cockroach::roachpb::ExportStorageProvider >(provider_);
+inline ::cockroach::roachpb::ExternalStorageProvider ExternalStorage::provider() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.provider)
+  return static_cast< ::cockroach::roachpb::ExternalStorageProvider >(provider_);
 }
-inline void ExportStorage::set_provider(::cockroach::roachpb::ExportStorageProvider value) {
+inline void ExternalStorage::set_provider(::cockroach::roachpb::ExternalStorageProvider value) {
   
   provider_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportStorage.provider)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.provider)
 }
 
-inline bool ExportStorage::has_localfile() const {
+inline bool ExternalStorage::has_localfile() const {
   return this != internal_default_instance() && localfile_ != NULL;
 }
-inline void ExportStorage::clear_localfile() {
+inline void ExternalStorage::clear_localfile() {
   if (GetArenaNoVirtual() == NULL && localfile_ != NULL) {
     delete localfile_;
   }
   localfile_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage_LocalFilePath& ExportStorage::_internal_localfile() const {
+inline const ::cockroach::roachpb::ExternalStorage_LocalFilePath& ExternalStorage::_internal_localfile() const {
   return *localfile_;
 }
-inline const ::cockroach::roachpb::ExportStorage_LocalFilePath& ExportStorage::localfile() const {
-  const ::cockroach::roachpb::ExportStorage_LocalFilePath* p = localfile_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.LocalFile)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage_LocalFilePath*>(
-      &::cockroach::roachpb::_ExportStorage_LocalFilePath_default_instance_);
+inline const ::cockroach::roachpb::ExternalStorage_LocalFilePath& ExternalStorage::localfile() const {
+  const ::cockroach::roachpb::ExternalStorage_LocalFilePath* p = localfile_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.LocalFile)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage_LocalFilePath*>(
+      &::cockroach::roachpb::_ExternalStorage_LocalFilePath_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage_LocalFilePath* ExportStorage::release_localfile() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.LocalFile)
+inline ::cockroach::roachpb::ExternalStorage_LocalFilePath* ExternalStorage::release_localfile() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.LocalFile)
   
-  ::cockroach::roachpb::ExportStorage_LocalFilePath* temp = localfile_;
+  ::cockroach::roachpb::ExternalStorage_LocalFilePath* temp = localfile_;
   localfile_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage_LocalFilePath* ExportStorage::mutable_localfile() {
+inline ::cockroach::roachpb::ExternalStorage_LocalFilePath* ExternalStorage::mutable_localfile() {
   
   if (localfile_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage_LocalFilePath>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_LocalFilePath>(GetArenaNoVirtual());
     localfile_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.LocalFile)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.LocalFile)
   return localfile_;
 }
-inline void ExportStorage::set_allocated_localfile(::cockroach::roachpb::ExportStorage_LocalFilePath* localfile) {
+inline void ExternalStorage::set_allocated_localfile(::cockroach::roachpb::ExternalStorage_LocalFilePath* localfile) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete localfile_;
@@ -25616,44 +25616,44 @@ inline void ExportStorage::set_allocated_localfile(::cockroach::roachpb::ExportS
     
   }
   localfile_ = localfile;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.LocalFile)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.LocalFile)
 }
 
-inline bool ExportStorage::has_httppath() const {
+inline bool ExternalStorage::has_httppath() const {
   return this != internal_default_instance() && httppath_ != NULL;
 }
-inline void ExportStorage::clear_httppath() {
+inline void ExternalStorage::clear_httppath() {
   if (GetArenaNoVirtual() == NULL && httppath_ != NULL) {
     delete httppath_;
   }
   httppath_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage_Http& ExportStorage::_internal_httppath() const {
+inline const ::cockroach::roachpb::ExternalStorage_Http& ExternalStorage::_internal_httppath() const {
   return *httppath_;
 }
-inline const ::cockroach::roachpb::ExportStorage_Http& ExportStorage::httppath() const {
-  const ::cockroach::roachpb::ExportStorage_Http* p = httppath_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.HttpPath)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage_Http*>(
-      &::cockroach::roachpb::_ExportStorage_Http_default_instance_);
+inline const ::cockroach::roachpb::ExternalStorage_Http& ExternalStorage::httppath() const {
+  const ::cockroach::roachpb::ExternalStorage_Http* p = httppath_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.HttpPath)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage_Http*>(
+      &::cockroach::roachpb::_ExternalStorage_Http_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage_Http* ExportStorage::release_httppath() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.HttpPath)
+inline ::cockroach::roachpb::ExternalStorage_Http* ExternalStorage::release_httppath() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.HttpPath)
   
-  ::cockroach::roachpb::ExportStorage_Http* temp = httppath_;
+  ::cockroach::roachpb::ExternalStorage_Http* temp = httppath_;
   httppath_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage_Http* ExportStorage::mutable_httppath() {
+inline ::cockroach::roachpb::ExternalStorage_Http* ExternalStorage::mutable_httppath() {
   
   if (httppath_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage_Http>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Http>(GetArenaNoVirtual());
     httppath_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.HttpPath)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.HttpPath)
   return httppath_;
 }
-inline void ExportStorage::set_allocated_httppath(::cockroach::roachpb::ExportStorage_Http* httppath) {
+inline void ExternalStorage::set_allocated_httppath(::cockroach::roachpb::ExternalStorage_Http* httppath) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete httppath_;
@@ -25669,45 +25669,45 @@ inline void ExportStorage::set_allocated_httppath(::cockroach::roachpb::ExportSt
     
   }
   httppath_ = httppath;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.HttpPath)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.HttpPath)
 }
 
-// .cockroach.roachpb.ExportStorage.GCS GoogleCloudConfig = 4;
-inline bool ExportStorage::has_googlecloudconfig() const {
+// .cockroach.roachpb.ExternalStorage.GCS GoogleCloudConfig = 4;
+inline bool ExternalStorage::has_googlecloudconfig() const {
   return this != internal_default_instance() && googlecloudconfig_ != NULL;
 }
-inline void ExportStorage::clear_googlecloudconfig() {
+inline void ExternalStorage::clear_googlecloudconfig() {
   if (GetArenaNoVirtual() == NULL && googlecloudconfig_ != NULL) {
     delete googlecloudconfig_;
   }
   googlecloudconfig_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage_GCS& ExportStorage::_internal_googlecloudconfig() const {
+inline const ::cockroach::roachpb::ExternalStorage_GCS& ExternalStorage::_internal_googlecloudconfig() const {
   return *googlecloudconfig_;
 }
-inline const ::cockroach::roachpb::ExportStorage_GCS& ExportStorage::googlecloudconfig() const {
-  const ::cockroach::roachpb::ExportStorage_GCS* p = googlecloudconfig_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.GoogleCloudConfig)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage_GCS*>(
-      &::cockroach::roachpb::_ExportStorage_GCS_default_instance_);
+inline const ::cockroach::roachpb::ExternalStorage_GCS& ExternalStorage::googlecloudconfig() const {
+  const ::cockroach::roachpb::ExternalStorage_GCS* p = googlecloudconfig_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.GoogleCloudConfig)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage_GCS*>(
+      &::cockroach::roachpb::_ExternalStorage_GCS_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage_GCS* ExportStorage::release_googlecloudconfig() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.GoogleCloudConfig)
+inline ::cockroach::roachpb::ExternalStorage_GCS* ExternalStorage::release_googlecloudconfig() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.GoogleCloudConfig)
   
-  ::cockroach::roachpb::ExportStorage_GCS* temp = googlecloudconfig_;
+  ::cockroach::roachpb::ExternalStorage_GCS* temp = googlecloudconfig_;
   googlecloudconfig_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage_GCS* ExportStorage::mutable_googlecloudconfig() {
+inline ::cockroach::roachpb::ExternalStorage_GCS* ExternalStorage::mutable_googlecloudconfig() {
   
   if (googlecloudconfig_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage_GCS>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_GCS>(GetArenaNoVirtual());
     googlecloudconfig_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.GoogleCloudConfig)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.GoogleCloudConfig)
   return googlecloudconfig_;
 }
-inline void ExportStorage::set_allocated_googlecloudconfig(::cockroach::roachpb::ExportStorage_GCS* googlecloudconfig) {
+inline void ExternalStorage::set_allocated_googlecloudconfig(::cockroach::roachpb::ExternalStorage_GCS* googlecloudconfig) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete googlecloudconfig_;
@@ -25723,45 +25723,45 @@ inline void ExportStorage::set_allocated_googlecloudconfig(::cockroach::roachpb:
     
   }
   googlecloudconfig_ = googlecloudconfig;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.GoogleCloudConfig)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.GoogleCloudConfig)
 }
 
-// .cockroach.roachpb.ExportStorage.S3 S3Config = 5;
-inline bool ExportStorage::has_s3config() const {
+// .cockroach.roachpb.ExternalStorage.S3 S3Config = 5;
+inline bool ExternalStorage::has_s3config() const {
   return this != internal_default_instance() && s3config_ != NULL;
 }
-inline void ExportStorage::clear_s3config() {
+inline void ExternalStorage::clear_s3config() {
   if (GetArenaNoVirtual() == NULL && s3config_ != NULL) {
     delete s3config_;
   }
   s3config_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage_S3& ExportStorage::_internal_s3config() const {
+inline const ::cockroach::roachpb::ExternalStorage_S3& ExternalStorage::_internal_s3config() const {
   return *s3config_;
 }
-inline const ::cockroach::roachpb::ExportStorage_S3& ExportStorage::s3config() const {
-  const ::cockroach::roachpb::ExportStorage_S3* p = s3config_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.S3Config)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage_S3*>(
-      &::cockroach::roachpb::_ExportStorage_S3_default_instance_);
+inline const ::cockroach::roachpb::ExternalStorage_S3& ExternalStorage::s3config() const {
+  const ::cockroach::roachpb::ExternalStorage_S3* p = s3config_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.S3Config)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage_S3*>(
+      &::cockroach::roachpb::_ExternalStorage_S3_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage_S3* ExportStorage::release_s3config() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.S3Config)
+inline ::cockroach::roachpb::ExternalStorage_S3* ExternalStorage::release_s3config() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.S3Config)
   
-  ::cockroach::roachpb::ExportStorage_S3* temp = s3config_;
+  ::cockroach::roachpb::ExternalStorage_S3* temp = s3config_;
   s3config_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage_S3* ExportStorage::mutable_s3config() {
+inline ::cockroach::roachpb::ExternalStorage_S3* ExternalStorage::mutable_s3config() {
   
   if (s3config_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage_S3>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_S3>(GetArenaNoVirtual());
     s3config_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.S3Config)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.S3Config)
   return s3config_;
 }
-inline void ExportStorage::set_allocated_s3config(::cockroach::roachpb::ExportStorage_S3* s3config) {
+inline void ExternalStorage::set_allocated_s3config(::cockroach::roachpb::ExternalStorage_S3* s3config) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete s3config_;
@@ -25777,45 +25777,45 @@ inline void ExportStorage::set_allocated_s3config(::cockroach::roachpb::ExportSt
     
   }
   s3config_ = s3config;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.S3Config)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.S3Config)
 }
 
-// .cockroach.roachpb.ExportStorage.Azure AzureConfig = 6;
-inline bool ExportStorage::has_azureconfig() const {
+// .cockroach.roachpb.ExternalStorage.Azure AzureConfig = 6;
+inline bool ExternalStorage::has_azureconfig() const {
   return this != internal_default_instance() && azureconfig_ != NULL;
 }
-inline void ExportStorage::clear_azureconfig() {
+inline void ExternalStorage::clear_azureconfig() {
   if (GetArenaNoVirtual() == NULL && azureconfig_ != NULL) {
     delete azureconfig_;
   }
   azureconfig_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage_Azure& ExportStorage::_internal_azureconfig() const {
+inline const ::cockroach::roachpb::ExternalStorage_Azure& ExternalStorage::_internal_azureconfig() const {
   return *azureconfig_;
 }
-inline const ::cockroach::roachpb::ExportStorage_Azure& ExportStorage::azureconfig() const {
-  const ::cockroach::roachpb::ExportStorage_Azure* p = azureconfig_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.AzureConfig)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage_Azure*>(
-      &::cockroach::roachpb::_ExportStorage_Azure_default_instance_);
+inline const ::cockroach::roachpb::ExternalStorage_Azure& ExternalStorage::azureconfig() const {
+  const ::cockroach::roachpb::ExternalStorage_Azure* p = azureconfig_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.AzureConfig)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage_Azure*>(
+      &::cockroach::roachpb::_ExternalStorage_Azure_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage_Azure* ExportStorage::release_azureconfig() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.AzureConfig)
+inline ::cockroach::roachpb::ExternalStorage_Azure* ExternalStorage::release_azureconfig() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.AzureConfig)
   
-  ::cockroach::roachpb::ExportStorage_Azure* temp = azureconfig_;
+  ::cockroach::roachpb::ExternalStorage_Azure* temp = azureconfig_;
   azureconfig_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage_Azure* ExportStorage::mutable_azureconfig() {
+inline ::cockroach::roachpb::ExternalStorage_Azure* ExternalStorage::mutable_azureconfig() {
   
   if (azureconfig_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage_Azure>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Azure>(GetArenaNoVirtual());
     azureconfig_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.AzureConfig)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.AzureConfig)
   return azureconfig_;
 }
-inline void ExportStorage::set_allocated_azureconfig(::cockroach::roachpb::ExportStorage_Azure* azureconfig) {
+inline void ExternalStorage::set_allocated_azureconfig(::cockroach::roachpb::ExternalStorage_Azure* azureconfig) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete azureconfig_;
@@ -25831,45 +25831,45 @@ inline void ExportStorage::set_allocated_azureconfig(::cockroach::roachpb::Expor
     
   }
   azureconfig_ = azureconfig;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.AzureConfig)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.AzureConfig)
 }
 
-// .cockroach.roachpb.ExportStorage.Workload WorkloadConfig = 7;
-inline bool ExportStorage::has_workloadconfig() const {
+// .cockroach.roachpb.ExternalStorage.Workload WorkloadConfig = 7;
+inline bool ExternalStorage::has_workloadconfig() const {
   return this != internal_default_instance() && workloadconfig_ != NULL;
 }
-inline void ExportStorage::clear_workloadconfig() {
+inline void ExternalStorage::clear_workloadconfig() {
   if (GetArenaNoVirtual() == NULL && workloadconfig_ != NULL) {
     delete workloadconfig_;
   }
   workloadconfig_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage_Workload& ExportStorage::_internal_workloadconfig() const {
+inline const ::cockroach::roachpb::ExternalStorage_Workload& ExternalStorage::_internal_workloadconfig() const {
   return *workloadconfig_;
 }
-inline const ::cockroach::roachpb::ExportStorage_Workload& ExportStorage::workloadconfig() const {
-  const ::cockroach::roachpb::ExportStorage_Workload* p = workloadconfig_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportStorage.WorkloadConfig)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage_Workload*>(
-      &::cockroach::roachpb::_ExportStorage_Workload_default_instance_);
+inline const ::cockroach::roachpb::ExternalStorage_Workload& ExternalStorage::workloadconfig() const {
+  const ::cockroach::roachpb::ExternalStorage_Workload* p = workloadconfig_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.WorkloadConfig)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage_Workload*>(
+      &::cockroach::roachpb::_ExternalStorage_Workload_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage_Workload* ExportStorage::release_workloadconfig() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportStorage.WorkloadConfig)
+inline ::cockroach::roachpb::ExternalStorage_Workload* ExternalStorage::release_workloadconfig() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.WorkloadConfig)
   
-  ::cockroach::roachpb::ExportStorage_Workload* temp = workloadconfig_;
+  ::cockroach::roachpb::ExternalStorage_Workload* temp = workloadconfig_;
   workloadconfig_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage_Workload* ExportStorage::mutable_workloadconfig() {
+inline ::cockroach::roachpb::ExternalStorage_Workload* ExternalStorage::mutable_workloadconfig() {
   
   if (workloadconfig_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage_Workload>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Workload>(GetArenaNoVirtual());
     workloadconfig_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportStorage.WorkloadConfig)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.WorkloadConfig)
   return workloadconfig_;
 }
-inline void ExportStorage::set_allocated_workloadconfig(::cockroach::roachpb::ExportStorage_Workload* workloadconfig) {
+inline void ExternalStorage::set_allocated_workloadconfig(::cockroach::roachpb::ExternalStorage_Workload* workloadconfig) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete workloadconfig_;
@@ -25885,7 +25885,7 @@ inline void ExportStorage::set_allocated_workloadconfig(::cockroach::roachpb::Ex
     
   }
   workloadconfig_ = workloadconfig;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportStorage.WorkloadConfig)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.WorkloadConfig)
 }
 
 // -------------------------------------------------------------------
@@ -26170,32 +26170,32 @@ inline void ExportRequest::clear_storage() {
   }
   storage_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage& ExportRequest::_internal_storage() const {
+inline const ::cockroach::roachpb::ExternalStorage& ExportRequest::_internal_storage() const {
   return *storage_;
 }
-inline const ::cockroach::roachpb::ExportStorage& ExportRequest::storage() const {
-  const ::cockroach::roachpb::ExportStorage* p = storage_;
+inline const ::cockroach::roachpb::ExternalStorage& ExportRequest::storage() const {
+  const ::cockroach::roachpb::ExternalStorage* p = storage_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportRequest.storage)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage*>(
-      &::cockroach::roachpb::_ExportStorage_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage*>(
+      &::cockroach::roachpb::_ExternalStorage_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage* ExportRequest::release_storage() {
+inline ::cockroach::roachpb::ExternalStorage* ExportRequest::release_storage() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.ExportRequest.storage)
   
-  ::cockroach::roachpb::ExportStorage* temp = storage_;
+  ::cockroach::roachpb::ExternalStorage* temp = storage_;
   storage_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage* ExportRequest::mutable_storage() {
+inline ::cockroach::roachpb::ExternalStorage* ExportRequest::mutable_storage() {
   
   if (storage_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage>(GetArenaNoVirtual());
     storage_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExportRequest.storage)
   return storage_;
 }
-inline void ExportRequest::set_allocated_storage(::cockroach::roachpb::ExportStorage* storage) {
+inline void ExportRequest::set_allocated_storage(::cockroach::roachpb::ExternalStorage* storage) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete storage_;
@@ -26321,12 +26321,12 @@ inline int ExportRequest::storage_by_locality_kv_size() const {
 inline void ExportRequest::clear_storage_by_locality_kv() {
   storage_by_locality_kv_.Clear();
 }
-inline const ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >&
+inline const ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExternalStorage >&
 ExportRequest::storage_by_locality_kv() const {
   // @@protoc_insertion_point(field_map:cockroach.roachpb.ExportRequest.storage_by_locality_kv)
   return storage_by_locality_kv_.GetMap();
 }
-inline ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExportStorage >*
+inline ::google::protobuf::Map< ::std::string, ::cockroach::roachpb::ExternalStorage >*
 ExportRequest::mutable_storage_by_locality_kv() {
   // @@protoc_insertion_point(field_mutable_map:cockroach.roachpb.ExportRequest.storage_by_locality_kv)
   return storage_by_locality_kv_.MutableMap();
@@ -26852,32 +26852,32 @@ inline void ImportRequest_File::clear_dir() {
   }
   dir_ = NULL;
 }
-inline const ::cockroach::roachpb::ExportStorage& ImportRequest_File::_internal_dir() const {
+inline const ::cockroach::roachpb::ExternalStorage& ImportRequest_File::_internal_dir() const {
   return *dir_;
 }
-inline const ::cockroach::roachpb::ExportStorage& ImportRequest_File::dir() const {
-  const ::cockroach::roachpb::ExportStorage* p = dir_;
+inline const ::cockroach::roachpb::ExternalStorage& ImportRequest_File::dir() const {
+  const ::cockroach::roachpb::ExternalStorage* p = dir_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ImportRequest.File.dir)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExportStorage*>(
-      &::cockroach::roachpb::_ExportStorage_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage*>(
+      &::cockroach::roachpb::_ExternalStorage_default_instance_);
 }
-inline ::cockroach::roachpb::ExportStorage* ImportRequest_File::release_dir() {
+inline ::cockroach::roachpb::ExternalStorage* ImportRequest_File::release_dir() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.ImportRequest.File.dir)
   
-  ::cockroach::roachpb::ExportStorage* temp = dir_;
+  ::cockroach::roachpb::ExternalStorage* temp = dir_;
   dir_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::ExportStorage* ImportRequest_File::mutable_dir() {
+inline ::cockroach::roachpb::ExternalStorage* ImportRequest_File::mutable_dir() {
   
   if (dir_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExportStorage>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage>(GetArenaNoVirtual());
     dir_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ImportRequest.File.dir)
   return dir_;
 }
-inline void ImportRequest_File::set_allocated_dir(::cockroach::roachpb::ExportStorage* dir) {
+inline void ImportRequest_File::set_allocated_dir(::cockroach::roachpb::ExternalStorage* dir) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete dir_;
@@ -33918,7 +33918,7 @@ template <> struct is_proto_enum< ::cockroach::roachpb::ReadConsistencyType> : :
 template <> struct is_proto_enum< ::cockroach::roachpb::ScanFormat> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::ChecksumMode> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::PushTxnType> : ::std::true_type {};
-template <> struct is_proto_enum< ::cockroach::roachpb::ExportStorageProvider> : ::std::true_type {};
+template <> struct is_proto_enum< ::cockroach::roachpb::ExternalStorageProvider> : ::std::true_type {};
 template <> struct is_proto_enum< ::cockroach::roachpb::MVCCFilter> : ::std::true_type {};
 
 }  // namespace protobuf
