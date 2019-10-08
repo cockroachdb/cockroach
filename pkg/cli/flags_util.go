@@ -379,41 +379,6 @@ func (f *tableDisplayFormat) Set(s string) error {
 	return nil
 }
 
-type storageEngine int
-
-const (
-	engineRocksDB storageEngine = iota
-	enginePebble
-)
-
-// Type implements the pflag.Value interface.
-func (f *storageEngine) Type() string { return "string" }
-
-// String implements the pflag.Value interface.
-func (f *storageEngine) String() string {
-	switch *f {
-	case engineRocksDB:
-		return "rocksdb"
-	case enginePebble:
-		return "experimental-pebble"
-	}
-	return ""
-}
-
-// Set implements the pflag.Value interface.
-func (f *storageEngine) Set(s string) error {
-	switch s {
-	case "rocksdb":
-		*f = engineRocksDB
-	case "experimental-pebble":
-		*f = enginePebble
-	default:
-		return fmt.Errorf("invalid storage engine: %s "+
-			"(possible values: rocksdb, experimental-pebble)", s)
-	}
-	return nil
-}
-
 // bytesOrPercentageValue is a flag that accepts an integer value, an integer
 // plus a unit (e.g. 32GB or 32GiB) or a percentage (e.g. 32%). In all these
 // cases, it transforms the string flag input into an int64 value.
