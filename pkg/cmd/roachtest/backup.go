@@ -48,22 +48,6 @@ func registerBackup(r *testRegistry) {
 				"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
 				fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}")
 
-			// NB: without this delay, the BACKUP operation sometimes claims that
-			// bank.bank doesn't exist, probably due to some gossip propagation
-			// delay.
-			//
-			// See https://github.com/cockroachdb/cockroach/issues/36841.
-			for i := 0; i < 5; i++ {
-				_, err := c.Conn(ctx, 1).ExecContext(ctx, "SELECT * FROM bank.bank LIMIT 1")
-				if err != nil {
-					c.l.Printf("%s", err)
-					time.Sleep(time.Second)
-					continue
-				}
-				c.l.Printf("found the table")
-				break
-			}
-
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
