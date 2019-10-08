@@ -675,7 +675,7 @@ var _ flowinfra.InboundStreamHandler = vectorizedInboundStreamHandler{}
 func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	_ *execinfrapb.ProducerMessage,
+	_ execinfrapb.ProducerMessage,
 	_ *flowinfra.FlowBase,
 ) error {
 	return s.RunWithStream(ctx, stream)

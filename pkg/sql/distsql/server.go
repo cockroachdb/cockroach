@@ -490,7 +490,7 @@ func (ds *ServerImpl) flowStreamInt(
 	}
 	defer cleanup()
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
-	return streamStrategy.Run(f.AnnotateCtx(ctx), stream, msg, f)
+	return streamStrategy.Run(f.AnnotateCtx(ctx), stream, *msg, f)
 }
 
 // FlowStream is part of the DistSQLServer interface.

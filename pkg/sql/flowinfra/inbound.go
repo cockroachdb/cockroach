@@ -29,7 +29,7 @@ type InboundStreamHandler interface {
 	// run is called once a FlowStream RPC is handled and a stream is obtained to
 	// make this stream accessible to the rest of the flow.
 	Run(
-		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f *FlowBase,
+		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg execinfrapb.ProducerMessage, f *FlowBase,
 	) error
 	// timeout is called with an error, which results in the teardown of the
 	// stream strategy with the given error.
@@ -49,7 +49,7 @@ var _ InboundStreamHandler = RowInboundStreamHandler{}
 func (s RowInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	firstMsg *execinfrapb.ProducerMessage,
+	firstMsg execinfrapb.ProducerMessage,
 	f *FlowBase,
 ) error {
 	return processInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
@@ -65,13 +65,13 @@ func (s RowInboundStreamHandler) Timeout(err error) {
 }
 
 // processInboundStream receives rows from a DistSQL_FlowStreamServer and sends
-// them to a RowReceiver. Optionally processes an initial StreamMessage that was
+// them to a RowReceiver. Also processes an initial StreamMessage that was
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
 func processInboundStream(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	firstMsg *execinfrapb.ProducerMessage,
+	firstMsg execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
 	f *FlowBase,
 ) error {
@@ -93,7 +93,7 @@ func processInboundStream(
 func processInboundStreamHelper(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	firstMsg *execinfrapb.ProducerMessage,
+	firstMsg execinfrapb.ProducerMessage,
 	dst execinfra.RowReceiver,
 	f *FlowBase,
 ) error {
@@ -107,13 +107,11 @@ func processInboundStreamHelper(
 		dst.ProducerDone()
 	}
 
-	if firstMsg != nil {
-		if res := processProducerMessage(
-			ctx, stream, dst, &sd, &draining, firstMsg,
-		); res.err != nil || res.consumerClosed {
-			sendErrToConsumer(res.err)
-			return res.err
-		}
+	if res := processProducerMessage(
+		ctx, stream, dst, &sd, &draining, &firstMsg,
+	); res.err != nil || res.consumerClosed {
+		sendErrToConsumer(res.err)
+		return res.err
 	}
 
 	// There's two goroutines involved in handling the RPC - the current one (the
