@@ -294,6 +294,9 @@ func importPlanHook(
 				}
 				format.MysqlOut.Skip = uint32(skip)
 			}
+			if override, ok := opts[csvNullIf]; ok {
+				format.MysqlOut.NullEncoding = &override
+			}
 		case "MYSQLDUMP":
 			telemetry.Count("import.format.mysqldump")
 			format.Format = roachpb.IOFileFormat_Mysqldump

@@ -457,6 +457,36 @@ d
 			data:   "a string, b string\nfoo,normal",
 			err:    "pq: skip must be >= 0",
 		},
+		{
+			name:   "nullif empty string",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', nullif = ''`,
+			typ:    "DELIMITED",
+			data:   ",normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"NULL", "normal"}},
+			},
+		},
+		{
+			name:   "nullif single char string",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', nullif = 'f'`,
+			typ:    "DELIMITED",
+			data:   "f,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"NULL", "normal"}},
+			},
+		},
+		{
+			name:   "nullif multiple char string",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', nullif = 'foo'`,
+			typ:    "DELIMITED",
+			data:   "foo,foop",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"NULL", "foop"}},
+			},
+		},
 
 		// PG COPY
 		{
