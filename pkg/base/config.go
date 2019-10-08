@@ -13,6 +13,7 @@ package base
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -147,6 +148,34 @@ const (
 	// Denotes Pebble as the underlying storage engine type.
 	EngineTypePebble
 )
+
+// Type implements the pflag.Value interface.
+func (e *EngineType) Type() string { return "string" }
+
+// String implements the pflag.Value interface.
+func (e *EngineType) String() string {
+	switch *e {
+	case EngineTypeRocksDB:
+		return "rocksdb"
+	case EngineTypePebble:
+		return "pebble"
+	}
+	return ""
+}
+
+// Set implements the pflag.Value interface.
+func (e *EngineType) Set(s string) error {
+	switch s {
+	case "rocksdb":
+		*e = EngineTypeRocksDB
+	case "pebble":
+		*e = EngineTypePebble
+	default:
+		return fmt.Errorf("invalid storage engine: %s "+
+			"(possible values: rocksdb, pebble)", s)
+	}
+	return nil
+}
 
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().

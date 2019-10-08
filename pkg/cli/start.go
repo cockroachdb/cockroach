@@ -368,10 +368,6 @@ func initTempStorageConfig(
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
 		}
 	}
-	storageEngine := base.EngineTypeRocksDB
-	if startCtx.tempEngine == enginePebble {
-		storageEngine = base.EngineTypePebble
-	}
 
 	// Initialize a base.TempStorageConfig based on first store's spec and
 	// cli flags.
@@ -380,7 +376,7 @@ func initTempStorageConfig(
 		st,
 		firstStore,
 		startCtx.tempDir,
-		storageEngine,
+		startCtx.tempEngine,
 		tempStorageMaxSizeBytes,
 		specIdx,
 	)
@@ -777,6 +773,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			for i, spec := range serverCfg.Stores.Specs {
 				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 			}
+			fmt.Fprintf(tw, "storage engine: \t%s\n", serverCfg.StorageEngine.String())
 			nodeID := s.NodeID()
 			if initialBoot {
 				if nodeID == server.FirstNodeID {

@@ -693,6 +693,14 @@ Also, if you use equal signs in the file path to a store, you must use the
 "path" field label.`,
 	}
 
+	StorageEngine = FlagInfo{
+		Name: "storage-engine",
+		Description: `
+Storage engine to use for the stores specified in the "--store" flag. Options
+are rocksdb (default), or experiemental-pebble.
+`,
+	}
+
 	Size = FlagInfo{
 		Name:      "size",
 		Shorthand: "z",
