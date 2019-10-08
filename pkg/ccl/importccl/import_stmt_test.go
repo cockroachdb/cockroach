@@ -399,6 +399,64 @@ d
 				`SELECT * from t`: {{`\x`}},
 			},
 		},
+		{
+			name:   "skip 0 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '0'`,
+			typ:    "DELIMITED",
+			data:   "foo,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"foo", "normal"}},
+			},
+		},
+		{
+			name:   "skip 1 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '1'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"foo", "normal"}},
+			},
+		},
+		{
+			name:   "skip 2 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '2'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"bar", "baz"}},
+			},
+		},
+		{
+			name:   "skip all lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '3'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {},
+			},
+		},
+		{
+			name:   "skip > all lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '4'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {},
+			},
+		},
+		{
+			name:   "skip -1 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '-1'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal",
+			err:    "pq: skip must be >= 0",
+		},
 
 		// PG COPY
 		{
