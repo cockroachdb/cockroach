@@ -42,7 +42,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var testingFatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_FATAL_ON_STATS_MISMATCH", false)
+var testingFatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_FATAL_ON_STATS_MISMATCH", true)
 
 const (
 	// collectChecksumTimeout controls how long we'll wait to collect a checksum

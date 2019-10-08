@@ -30,7 +30,7 @@ var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
 	24*time.Hour,
 )
 
-var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
+var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", true)
 
 type consistencyQueue struct {
 	*baseQueue
