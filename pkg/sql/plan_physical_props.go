@@ -21,10 +21,6 @@ import (
 // this node. The ordering information includes columns the output is ordered
 // by and columns for which we know all rows have the same value. See
 // physicalProps for more details.
-//
-// Stable after optimizePlan() (or makePlan).
-// Available after newPlan(), but may change on intermediate plan
-// nodes during optimizePlan() due to index selection.
 func planPhysicalProps(plan planNode) physicalProps {
 	switch n := plan.(type) {
 	case *explainPlanNode:

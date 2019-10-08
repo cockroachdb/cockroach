@@ -11,8 +11,6 @@
 package sqlbase
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -77,38 +75,6 @@ func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func CannotWriteToComputedColError(colName string) error {
 	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 		"cannot write directly to computed column %q", tree.ErrNameString(colName))
-}
-
-// ProcessComputedColumns adds columns which are computed to the set of columns
-// being updated and returns the computation exprs for those columns.
-//
-// The original column descriptors are listed at the beginning of
-// the first return slice, and the computed column descriptors come after that.
-// The 2nd return slice is an alias for the part of the 1st return slice
-// that corresponds to computed columns.
-// The 3rd slice has one expression per computed column; that is, its
-// length is equal to that of the 2nd return slice.
-//
-// TODO(justin/knz): This can be made less work intensive by only selecting
-// computed columns that depend on one of the updated columns. See issue
-// https://github.com/cockroachdb/cockroach/issues/23523.
-func ProcessComputedColumns(
-	ctx context.Context,
-	cols []ColumnDescriptor,
-	tn *tree.TableName,
-	tableDesc *ImmutableTableDescriptor,
-	txCtx *transform.ExprTransformContext,
-	evalCtx *tree.EvalContext,
-) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
-	computedCols := processColumnSet(nil, tableDesc, func(col *ColumnDescriptor) bool {
-		return col.IsComputed()
-	})
-	cols = append(cols, computedCols...)
-
-	// TODO(justin): it's unfortunate that this parses and typechecks the
-	// ComputeExprs on every query.
-	computedExprs, err := MakeComputedExprs(computedCols, tableDesc, tn, txCtx, evalCtx, false /* addingCols */)
-	return cols, computedCols, computedExprs, err
 }
 
 // MakeComputedExprs returns a slice of the computed expressions for the

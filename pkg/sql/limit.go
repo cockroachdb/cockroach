@@ -16,7 +16,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // limitNode represents a node that limits the number of rows
@@ -28,44 +27,6 @@ type limitNode struct {
 	evaluated  bool
 	count      int64
 	offset     int64
-}
-
-// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) {
-	if n == nil || (n.Count == nil && n.Offset == nil) {
-		// No LIMIT nor OFFSET; there is nothing special to do.
-		return nil, nil
-	}
-
-	res := limitNode{}
-
-	data := []struct {
-		name string
-		src  tree.Expr
-		dst  *tree.TypedExpr
-	}{
-		{"LIMIT", n.Count, &res.countExpr},
-		{"OFFSET", n.Offset, &res.offsetExpr},
-	}
-
-	// We need to save and restore the previous value of the field in
-	// semaCtx in case we are recursively called within a subquery
-	// context.
-	scalarProps := &p.semaCtx.Properties
-	defer scalarProps.Restore(*scalarProps)
-	for _, datum := range data {
-		if datum.src != nil {
-			scalarProps.Require(datum.name, tree.RejectSpecial)
-
-			normalized, err := p.analyzeExpr(ctx, datum.src, nil, tree.IndexedVarHelper{}, types.Int, true, datum.name)
-			if err != nil {
-				return nil, err
-			}
-
-			*datum.dst = normalized
-		}
-	}
-	return &res, nil
 }
 
 func (n *limitNode) startExec(params runParams) error {

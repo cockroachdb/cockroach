@@ -24,12 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -42,68 +40,6 @@ type createTableNode struct {
 	sourcePlan planNode
 
 	run createTableRun
-}
-
-// CreateTable creates a table.
-// Privileges: CREATE on database.
-//   Notes: postgres/mysql require CREATE on database.
-func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
-	dbDesc, err := p.ResolveUncachedDatabase(ctx, &n.Table)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
-		return nil, err
-	}
-
-	n.HoistConstraints()
-
-	var sourcePlan planNode
-	var synthRowID bool
-	if n.As() {
-		// The sourcePlan is needed to determine the set of columns to use
-		// to populate the new table descriptor in Start() below.
-		// This planning step is also necessary to populate db/schema details in the
-		// table names in-place, to later store in the table descriptor.
-		sourcePlan, err = p.Select(ctx, n.AsSource, []*types.T{})
-		if err != nil {
-			return nil, err
-		}
-
-		numColNames := 0
-		for i := 0; i < len(n.Defs); i++ {
-			if _, ok := n.Defs[i].(*tree.ColumnTableDef); ok {
-				numColNames++
-			}
-		}
-		numColumns := len(planColumns(sourcePlan))
-		if numColNames != 0 && numColNames != numColumns {
-			sourcePlan.Close(ctx)
-			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
-				"CREATE TABLE specifies %d column name%s, but data source has %d column%s",
-				numColNames, util.Pluralize(int64(numColNames)),
-				numColumns, util.Pluralize(int64(numColumns))))
-		}
-
-		// Synthesize an input column that provides the default value for the
-		// hidden rowid column, if none of the provided columns are specified
-		// as the PRIMARY KEY.
-		synthRowID = true
-		for _, def := range n.Defs {
-			if d, ok := def.(*tree.ColumnTableDef); ok && d.PrimaryKey {
-				synthRowID = false
-				break
-			}
-		}
-	}
-
-	ct := &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}
-	ct.run.synthRowID = synthRowID
-	// This method is only invoked if the heuristic planner was used in the
-	// planning stage.
-	ct.run.fromHeuristicPlanner = true
-	return ct, nil
 }
 
 // createTableRun contains the run-time state of createTableNode

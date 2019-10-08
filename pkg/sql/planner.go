@@ -153,9 +153,7 @@ type planner struct {
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	txCtx                 transform.ExprTransformContext
-	subqueryVisitor       subqueryVisitor
 	nameResolutionVisitor sqlbase.NameResolutionVisitor
-	srfExtractionVisitor  srfExtractionVisitor
 	tableName             tree.TableName
 
 	// Use a common datum allocator across all the plan nodes. This separates the

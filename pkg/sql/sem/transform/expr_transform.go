@@ -20,9 +20,8 @@ import (
 // should be used in planner instance to avoid re-allocation of these
 // visitors between uses.
 type ExprTransformContext struct {
-	normalizeVisitor      tree.NormalizeVisitor
-	isAggregateVisitor    IsAggregateVisitor
-	containsWindowVisitor ContainsWindowVisitor
+	normalizeVisitor   tree.NormalizeVisitor
+	isAggregateVisitor IsAggregateVisitor
 }
 
 // NormalizeExpr is a wrapper around EvalContex.NormalizeExpr which
@@ -59,15 +58,4 @@ func (t *ExprTransformContext) AggregateInExpr(
 	}
 	tree.WalkExprConst(&t.isAggregateVisitor, expr)
 	return t.isAggregateVisitor.Aggregated
-}
-
-// WindowFuncInExpr determines if an Expr contains a window function, using
-// the Parser's embedded visitor.
-// TODO(knz/radu): this is not the right way to go about checking
-// these things. Instead whatever analysis occurs prior on the expression
-// should collect scalar properties (see tree.ScalarProperties) and
-// then the collected properties should be tested directly.
-func (t *ExprTransformContext) WindowFuncInExpr(expr tree.Expr) bool {
-	t.containsWindowVisitor = ContainsWindowVisitor{}
-	return t.containsWindowVisitor.ContainsWindowFunc(expr)
 }
