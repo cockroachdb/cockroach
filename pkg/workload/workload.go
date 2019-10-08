@@ -48,6 +48,10 @@ type FlagMeta struct {
 	// RuntimeOnly may be set to true only if the corresponding flag has no
 	// impact on the behavior of any Tables in this workload.
 	RuntimeOnly bool
+	// IgnoreForPersistance may be set to true when the flag has an impact on the
+	// initial data, but should be ignored when constructing a path to persist
+	// that data. In practice, this is used with a flag to control batch sizes.
+	IgnoreForPersistance bool
 	// CheckConsistencyOnly is expected to be true only if the corresponding
 	// flag only has an effect on the CheckConsistency hook.
 	CheckConsistencyOnly bool

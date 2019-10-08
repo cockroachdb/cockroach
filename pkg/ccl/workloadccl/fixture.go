@@ -100,7 +100,7 @@ func serializeOptions(gen workload.Generator) string {
 	var buf bytes.Buffer
 	flags := f.Flags()
 	flags.VisitAll(func(f *pflag.Flag) {
-		if flags.Meta != nil && flags.Meta[f.Name].RuntimeOnly {
+		if m := flags.Meta; m != nil && (m[f.Name].RuntimeOnly || m[f.Name].IgnoreForPersistance) {
 			return
 		}
 		if buf.Len() > 0 {
@@ -189,21 +189,23 @@ func csvServerPaths(
 	// so our "integer multiple" is picked to be 1 to minimize this effect. Too
 	// bad about the progress tracking granularity.
 	numFiles := numNodes
-	rowStep := table.InitialRows.NumBatches / numFiles
-	if rowStep == 0 {
-		rowStep = 1
+	batchStep := table.InitialRows.NumBatches / numFiles
+	if batchStep == 0 {
+		batchStep = 1
 	}
 
 	var paths []string
-	for rowIdx := 0; ; {
-		chunkRowStart, chunkRowEnd := rowIdx, rowIdx+rowStep
-		if chunkRowEnd > table.InitialRows.NumBatches {
-			chunkRowEnd = table.InitialRows.NumBatches
+	for batchIdx := 0; batchIdx < table.InitialRows.NumBatches; {
+		chunkBatchStart, chunkBatchEnd := batchIdx, batchIdx+batchStep
+		if chunkBatchEnd > table.InitialRows.NumBatches {
+			chunkBatchEnd = table.InitialRows.NumBatches
 		}
+		batchIdx = chunkBatchEnd
 
 		params := url.Values{
-			`row-start`: []string{strconv.Itoa(chunkRowStart)},
-			`row-end`:   []string{strconv.Itoa(chunkRowEnd)},
+			// TODO(dan): Change these to "batch-start" and "batch-end" after 19.2.
+			`row-start`: []string{strconv.Itoa(chunkBatchStart)},
+			`row-end`:   []string{strconv.Itoa(chunkBatchEnd)},
 			`version`:   []string{gen.Meta().Version},
 		}
 		if f, ok := gen.(workload.Flagser); ok {
@@ -218,11 +220,6 @@ func csvServerPaths(
 		path := fmt.Sprintf(`%s/csv/%s/%s?%s`,
 			csvServerURL, gen.Meta().Name, table.Name, params.Encode())
 		paths = append(paths, path)
-
-		rowIdx = chunkRowEnd
-		if rowIdx >= table.InitialRows.NumBatches {
-			break
-		}
 	}
 	return paths
 }
