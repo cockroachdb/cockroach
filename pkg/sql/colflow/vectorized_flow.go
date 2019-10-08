@@ -818,9 +818,13 @@ var _ flowinfra.InboundStreamHandler = vectorizedInboundStreamHandler{}
 func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
-	_ *execinfrapb.ProducerMessage,
+	msg *execinfrapb.ProducerMessage,
 	_ *flowinfra.FlowBase,
 ) error {
+	if len(msg.Data.RawBytes) > 0 {
+		// TODO(andrei): We should accept data in the first message. See #41456.
+		return errors.AssertionFailedf("unexpected data in first message for vectorized stream")
+	}
 	return s.RunWithStream(ctx, stream)
 }
 

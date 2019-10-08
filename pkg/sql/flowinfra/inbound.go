@@ -26,10 +26,18 @@ import (
 
 // InboundStreamHandler is a handler of an inbound stream.
 type InboundStreamHandler interface {
-	// run is called once a FlowStream RPC is handled and a stream is obtained to
+	// Run is called once a FlowStream RPC is handled and a stream is obtained to
 	// make this stream accessible to the rest of the flow.
+	//
+	// firstMsg is the first message received on the stream. The first message is
+	// read from the connection before Run is called because it is used to
+	// determine which flow the stream is addressed to. Passed by pointer as it
+	// might be large.
 	Run(
-		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f *FlowBase,
+		ctx context.Context,
+		stream execinfrapb.DistSQL_FlowStreamServer,
+		firstMsg *execinfrapb.ProducerMessage,
+		f *FlowBase,
 	) error
 	// timeout is called with an error, which results in the teardown of the
 	// stream strategy with the given error.
@@ -65,7 +73,7 @@ func (s RowInboundStreamHandler) Timeout(err error) {
 }
 
 // processInboundStream receives rows from a DistSQL_FlowStreamServer and sends
-// them to a RowReceiver. Optionally processes an initial StreamMessage that was
+// them to a RowReceiver. Also processes an initial StreamMessage that was
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
 func processInboundStream(
@@ -75,7 +83,9 @@ func processInboundStream(
 	dst execinfra.RowReceiver,
 	f *FlowBase,
 ) error {
-
+	if firstMsg == nil {
+		// !!!
+	}
 	err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f)
 
 	// err, if set, will also be propagated to the producer
@@ -107,13 +117,11 @@ func processInboundStreamHelper(
 		dst.ProducerDone()
 	}
 
-	if firstMsg != nil {
-		if res := processProducerMessage(
-			ctx, stream, dst, &sd, &draining, firstMsg,
-		); res.err != nil || res.consumerClosed {
-			sendErrToConsumer(res.err)
-			return res.err
-		}
+	if res := processProducerMessage(
+		ctx, stream, dst, &sd, &draining, firstMsg,
+	); res.err != nil || res.consumerClosed {
+		sendErrToConsumer(res.err)
+		return res.err
 	}
 
 	// There's two goroutines involved in handling the RPC - the current one (the
