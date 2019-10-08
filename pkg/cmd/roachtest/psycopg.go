@@ -11,14 +11,10 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"fmt"
 	"regexp"
 )
 
-var psycopgResultRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^ ']*)(?: u?['"](?P<reason>.*)['"])?`)
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
 
 // This test runs psycopg full test suite against a single cockroach node.
@@ -121,58 +117,7 @@ func registerPsycopg(r *testRegistry) {
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
-
-		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
-		for scanner.Scan() {
-			match := psycopgResultRegex.FindStringSubmatch(scanner.Text())
-			if match != nil {
-				groups := map[string]string{}
-				for i, name := range match {
-					groups[psycopgResultRegex.SubexpNames()[i]] = name
-				}
-				test := fmt.Sprintf("%s.%s", groups["class"], groups["name"])
-				var skipReason string
-				if groups["result"] == "skipped" {
-					skipReason = groups["reason"]
-				}
-				pass := groups["result"] == "ok"
-				results.allTests = append(results.allTests, test)
-
-				ignoredIssue, expectedIgnored := ignoredlist[test]
-				issue, expectedFailure := expectedFailures[test]
-				switch {
-				case expectedIgnored:
-					results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
-					results.ignoredCount++
-				case len(skipReason) > 0 && expectedFailure:
-					results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (unexpected)", test, skipReason)
-					results.unexpectedSkipCount++
-				case len(skipReason) > 0:
-					results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, skipReason)
-					results.skipCount++
-				case pass && !expectedFailure:
-					results.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
-					results.passExpectedCount++
-				case pass && expectedFailure:
-					results.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
-						test, maybeAddGithubLink(issue),
-					)
-					results.passUnexpectedCount++
-				case !pass && expectedFailure:
-					results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
-						test, maybeAddGithubLink(issue),
-					)
-					results.failExpectedCount++
-					results.currentFailures = append(results.currentFailures, test)
-				case !pass && !expectedFailure:
-					results.results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
-					results.failUnexpectedCount++
-					results.currentFailures = append(results.currentFailures, test)
-				}
-				results.runTests[test] = struct{}{}
-			}
-		}
-
+		results.parsePythonUnittestOutput(rawResults, ignoredlist, expectedFailures)
 		results.summarizeAll(
 			t, "psycopg" /* ormName */, blacklistName, expectedFailures,
 			version, latestTag,

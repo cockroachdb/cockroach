@@ -27,6 +27,7 @@ func registerTests(r *testRegistry) {
 	registerDecommission(r)
 	registerDiskFull(r)
 	registerDiskStalledDetection(r)
+	registerDjango(r)
 	registerDrop(r)
 	registerElectionAfterRestart(r)
 	registerEncryption(r)
