@@ -134,6 +134,18 @@ func (d *mysqloutfileReader) readFile(
 		return nil
 	}
 
+	for i := uint32(0); i < d.opts.Skip; {
+		c, _, err := reader.ReadRune()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if c == d.opts.RowSeparator {
+			i++
+		}
+	}
 	for {
 		c, w, err := reader.ReadRune()
 		finished := err == io.EOF
