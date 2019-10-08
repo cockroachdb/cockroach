@@ -247,7 +247,7 @@ const (
 	CrashShutdown        = "57P02"
 	CannotConnectNow     = "57P03"
 	DatabaseDropped      = "57P04"
-	// Class 58 - System  (errors external to PostgreSQL itself)
+	// Class 58 - System
 	System        = "58000"
 	Io            = "58030"
 	UndefinedFile = "58P01"
@@ -301,11 +301,6 @@ const (
 	// when there's no code known yet.
 	Uncategorized = "XXUUU"
 
-	// RangeUnavailable signals that some data from the cluster cannot be
-	// accessed (e.g. because all replicas awol).
-	// We're using the postgres "Internal Error" error class "XX".
-	RangeUnavailable = "XXC00"
-
 	// CCLRequired signals that a CCL binary is required to complete this
 	// task.
 	CCLRequired = "XXC01"
@@ -332,4 +327,24 @@ const (
 	//       serious error with code "XXA00" occurred; if expected,
 	//       must use 'error pgcode XXA00 ...'
 	TransactionCommittedWithSchemaChangeFailure = "XXA00"
+
+	// Class 58C - System errors related to CockroachDB node problems.
+
+	// RangeUnavailable signals that some data from the cluster cannot be
+	// accessed (e.g. because all replicas awol).
+	// We're using the postgres "Internal Error" error class "XX".
+	RangeUnavailable = "58C00"
+	// DeprecatedRangeUnavailable is code that we used for RangeUnavailable until 19.2.
+	// 20.1 needs to recognize it coming from 19.2 nodes.
+	// TODO(andrei): remove in 20.2.
+	DeprecatedRangeUnavailable = "XXC00"
+
+	// InternalConnectionFailure refers to a networking error encountered
+	// internally on a connection between different Cockroach nodes.
+	InternalConnectionFailure = "58C01"
+	// DeprecatedInternalConnectionFailure is code that we used for
+	// InternalConnectionFailure until 19.2.
+	// 20.1 needs to recognize it coming from 19.2 nodes.
+	// TODO(andrei): remove in 20.2.
+	DeprecatedInternalConnectionFailure = "XXC03"
 )
