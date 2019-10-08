@@ -72,8 +72,8 @@ GROUP BY i.relname,
 ORDER BY i.relname
 ----
 name              primary  unique  indkey  column_indexes  column_names  definition
-customers_id_idx  false    false   2       {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.public.customers (id ASC)
-primary           true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.public.customers (name ASC)
+customers_id_idx  false    false   2       {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.public.customers USING btree (id ASC)
+primary           true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.public.customers USING btree (name ASC)
 
 
 query TT colnames
@@ -137,3 +137,28 @@ AND t.relname = 'b'
 AND i.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = ANY (current_schemas(false)))
 ----
 1
+
+statement ok
+CREATE TABLE c (a INT, b INT, PRIMARY KEY (a, b))
+
+# ActiveRecord query for determining primary key cols.
+query T
+SELECT
+    a.attname
+FROM
+    (
+        SELECT
+            indrelid, indkey, generate_subscripts(indkey, 1) AS idx
+        FROM
+            pg_index
+        WHERE
+            indrelid = '"c"'::REGCLASS AND indisprimary
+    )
+        AS i
+    JOIN pg_attribute AS a ON
+            a.attrelid = i.indrelid AND a.attnum = i.indkey[i.idx]
+ORDER BY
+    i.idx
+----
+a
+b

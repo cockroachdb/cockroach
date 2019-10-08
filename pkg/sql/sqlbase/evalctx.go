@@ -34,8 +34,10 @@ func (so *DummySequenceOperators) ParseQualifiedTableName(
 }
 
 // ResolveTableName is part of the tree.EvalDatabase interface.
-func (so *DummySequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errSequenceOperators
+func (so *DummySequenceOperators) ResolveTableName(
+	ctx context.Context, tn *tree.TableName,
+) (tree.ID, error) {
+	return 0, errSequenceOperators
 }
 
 // LookupSchema is part of the tree.EvalDatabase interface.
@@ -90,8 +92,10 @@ func (ep *DummyEvalPlanner) LookupSchema(
 }
 
 // ResolveTableName is part of the tree.EvalDatabase interface.
-func (ep *DummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errEvalPlanner
+func (ep *DummyEvalPlanner) ResolveTableName(
+	ctx context.Context, tn *tree.TableName,
+) (tree.ID, error) {
+	return 0, errEvalPlanner
 }
 
 // ParseType is part of the tree.EvalPlanner interface.
