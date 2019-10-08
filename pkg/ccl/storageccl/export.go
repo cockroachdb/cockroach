@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,9 +72,9 @@ func evalExport(
 	}
 	defer cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Finish()
 
-	makeExportStorage := !args.ReturnSST || args.Storage != roachpb.ExportStorage{} ||
+	makeExternalStorage := !args.ReturnSST || args.Storage != roachpb.ExternalStorage{} ||
 		(args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0)
-	if makeExportStorage || log.V(1) {
+	if makeExternalStorage || log.V(1) {
 		log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 	} else {
 		// Requests that don't write to export storage are expected to be small.
@@ -85,9 +86,9 @@ func evalExport(
 	// backups). If that map isn't set or there's no match, fall back to
 	// args.Storage.
 	var localityKV string
-	var exportStore ExportStorage
-	if makeExportStorage {
-		var storeConf roachpb.ExportStorage
+	var exportStore cloud.ExternalStorage
+	if makeExternalStorage {
+		var storeConf roachpb.ExternalStorage
 		var err error
 		foundStoreByLocality := false
 		if args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0 {
@@ -97,7 +98,7 @@ func evalExport(
 		if !foundStoreByLocality {
 			storeConf = args.Storage
 		}
-		exportStore, err = MakeExportStorage(ctx, storeConf, cArgs.EvalCtx.ClusterSettings())
+		exportStore, err = cloud.MakeExternalStorage(ctx, storeConf, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -185,8 +186,8 @@ func SHA512ChecksumData(data []byte) ([]byte, error) {
 }
 
 func getMatchingStore(
-	locality *roachpb.Locality, storageByLocalityKV map[string]*roachpb.ExportStorage,
-) (string, roachpb.ExportStorage, bool) {
+	locality *roachpb.Locality, storageByLocalityKV map[string]*roachpb.ExternalStorage,
+) (string, roachpb.ExternalStorage, bool) {
 	kvs := locality.Tiers
 	// When matching, more specific KVs in the node locality take precedence
 	// over less specific ones.
@@ -195,5 +196,5 @@ func getMatchingStore(
 			return kvs[i].String(), *store, true
 		}
 	}
-	return "", roachpb.ExportStorage{}, false
+	return "", roachpb.ExternalStorage{}, false
 }

@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -54,7 +54,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	basepath := args[0]
 	if !strings.Contains(basepath, "://") {
 		var err error
-		basepath, err = storageccl.MakeLocalStorageURI(basepath)
+		basepath, err = cloud.MakeLocalStorageURI(basepath)
 		if err != nil {
 			return err
 		}

@@ -472,7 +472,7 @@ func (f *cloudFeedFactory) Feed(create string, args ...interface{}) (TestFeed, e
 	f.feedIdx++
 	sinkURI := `experimental-nodelocal:///` + feedDir
 	// TODO(dan): This is a pretty unsatisfying way to test that the sink passes
-	// through params it doesn't understand to ExportStorage.
+	// through params it doesn't understand to ExternalStorage.
 	sinkURI += `?should_be=ignored`
 	createStmt.SinkURI = tree.NewStrVal(sinkURI)
 
@@ -613,7 +613,7 @@ func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 
 func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
 	if strings.HasSuffix(path, `.tmp`) {
-		// File in the process of being written by ExportStorage. Ignore.
+		// File in the process of being written by ExternalStorage. Ignore.
 		return nil
 	}
 

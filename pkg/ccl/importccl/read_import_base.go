@@ -17,11 +17,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -33,7 +33,7 @@ type readFileFunc func(context.Context, *fileReader, int32, string, progressFn) 
 // key part of dataFiles is the unique index of the data file among all files in
 // the IMPORT. progressFn, if not nil, is periodically invoked with a percentage
 // of the total progress of reading through all of the files. This percentage
-// attempts to use the Size() method of ExportStorage to determine how many
+// attempts to use the Size() method of ExternalStorage to determine how many
 // bytes must be read of the input files, and reports the percent of bytes read
 // among all dataFiles. If any Size() fails for any file, then progress is
 // reported only after each file has been read.
@@ -51,11 +51,11 @@ func readInputFiles(
 	fileSizes := make(map[int32]int64, len(dataFiles))
 	// Attempt to fetch total number of bytes for all files.
 	for id, dataFile := range dataFiles {
-		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
+		conf, err := cloud.ExternalStorageConfFromURI(dataFile)
 		if err != nil {
 			return err
 		}
-		es, err := storageccl.MakeExportStorage(ctx, conf, settings)
+		es, err := cloud.MakeExternalStorage(ctx, conf, settings)
 		if err != nil {
 			return err
 		}
@@ -82,11 +82,11 @@ func readInputFiles(
 		default:
 		}
 		if err := func() error {
-			conf, err := storageccl.ExportStorageConfFromURI(dataFile)
+			conf, err := cloud.ExternalStorageConfFromURI(dataFile)
 			if err != nil {
 				return err
 			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, settings)
+			es, err := cloud.MakeExternalStorage(ctx, conf, settings)
 			if err != nil {
 				return err
 			}

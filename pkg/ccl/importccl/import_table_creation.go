@@ -14,7 +14,6 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -40,7 +40,7 @@ const (
 func readCreateTableFromStore(
 	ctx context.Context, filename string, settings *cluster.Settings,
 ) (*tree.CreateTable, error) {
-	store, err := storageccl.ExportStorageFromURI(ctx, filename, settings)
+	store, err := cloud.ExternalStorageFromURI(ctx, filename, settings)
 	if err != nil {
 		return nil, err
 	}

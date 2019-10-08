@@ -18,7 +18,6 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,11 +63,11 @@ func Load(
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)
 
-	conf, err := storageccl.ExportStorageConfFromURI(uri)
+	conf, err := cloud.ExternalStorageConfFromURI(uri)
 	if err != nil {
 		return backupccl.BackupDescriptor{}, err
 	}
-	dir, err := storageccl.MakeExportStorage(ctx, conf, cluster.NoSettings)
+	dir, err := cloud.MakeExternalStorage(ctx, conf, cluster.NoSettings)
 	if err != nil {
 		return backupccl.BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
 	}
@@ -333,7 +333,7 @@ func insertStmtToKVs(
 func writeSST(
 	ctx context.Context,
 	backup *backupccl.BackupDescriptor,
-	base storageccl.ExportStorage,
+	base cloud.ExternalStorage,
 	tempPrefix string,
 	kvs []engine.MVCCKeyValue,
 	ts hlc.Timestamp,
