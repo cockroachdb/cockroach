@@ -1528,14 +1528,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
-	mtc.stopStore(2)
-	if err := storage.ProposeAddSSTable(
-		context.Background(), "k", "v", mtc.clocks[0].Now(), mtc.stores[0],
-	); err != nil {
-		t.Fatal(err)
-	}
-	mtc.restartStore(2)
-
 	mtc.initGossipNetwork()
 
 	// Once we know our peers, trigger a scan.
