@@ -32,4 +32,10 @@ binaries you've touched. For example, the command line that you might use
 while iterating on jepsen tests is `make bin/roachtest &&
 roachtest run jepsen/1/bank/split`
 
-TODO: document process for creating and reusing a cluster.
+To keep your cluster after the roachtest finishes, use the `--debug` flag
+with `roachtest run`. You can use `roachprod` to connect to your cluster and
+examine the state by using `roachprod setup-ssh <cluster name>`. This will print
+out an IP address to connect to using `ssh`. To have `roachtest` reuse an
+existing cluster, pass the `--cluster <clustername` argument to 
+`roachtest run`. 
+
