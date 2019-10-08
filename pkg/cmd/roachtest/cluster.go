@@ -45,10 +45,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	aws = "aws"
+	gce = "gce"
+)
+
 var (
 	local       bool
 	cockroach   string
-	cloud                    = "gce"
+	cloud                    = gce
 	encrypt     encryptValue = "false"
 	machine     string
 	workload    string
@@ -465,6 +470,7 @@ func MachineTypeToCPUs(s string) int {
 	return -1
 }
 
+// Default AWS machine type when none is specified.
 func awsMachineType(cpus int) string {
 	switch {
 	case cpus <= 2:
@@ -488,21 +494,21 @@ func awsMachineType(cpus int) string {
 }
 
 func machineTypeFlag(machineType string) string {
-	ssd := isSSD(machineType)
 	switch cloud {
-	case "aws":
-		if ssd {
+	case aws:
+		if isSSD(machineType) {
 			return "--aws-machine-type-ssd"
 		} else {
 			return "--aws-machine-type"
 		}
-	case "gce":
+	case gce:
 		return "--gce-machine-type"
 	default:
 		panic(fmt.Sprintf("unsupported cloud: %s\n", cloud))
 	}
 }
 
+// Default GCE machine type when none is specified.
 func gceMachineType(cpus int) string {
 	// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
 	// machines have a decent amount of RAM. We could use customer machine
@@ -515,18 +521,20 @@ func gceMachineType(cpus int) string {
 }
 
 func isSSD(machineType string) bool {
-	if cloud != "aws" {
+	if cloud != aws {
 		return false
 	}
 
 	typeAndSize := strings.Split(machineType, ".")
 	if len(typeAndSize) == 2 {
 		awsType := typeAndSize[0]
-		// All SSD machine types that we use end in 'd', except for the i3 type.
-		return awsType == "i3" || strings.HasSuffix(awsType, "d")
+		// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
+		return strings.HasPrefix(awsType, "i3") || strings.HasSuffix(awsType, "d")
 	}
 
-	fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", machineType)
+	if _, err := fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", machineType); err != nil {
+		// Ignore error.
+	}
 	os.Exit(1)
 	return false
 }
@@ -655,7 +663,7 @@ func (s *clusterSpec) args() []string {
 	var args []string
 
 	switch cloud {
-	case "aws":
+	case aws:
 		if s.Zones != "" {
 			fmt.Fprintf(os.Stderr, "zones spec not yet supported on AWS: %s\n", s.Zones)
 			os.Exit(1)
@@ -674,9 +682,9 @@ func (s *clusterSpec) args() []string {
 			// If no machine type was specified, choose
 			// one based on the cloud and CPU count.
 			switch cloud {
-			case "aws":
+			case aws:
 				machineType = awsMachineType(s.CPUs)
-			case "gce":
+			case gce:
 				machineType = gceMachineType(s.CPUs)
 			}
 		}
