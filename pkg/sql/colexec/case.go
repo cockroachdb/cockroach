@@ -42,7 +42,7 @@ func (c *caseOp) ChildCount() int {
 
 func (c *caseOp) Child(nth int) execinfra.OpNode {
 	if nth == 0 {
-		return c.buffer.input
+		return c.buffer
 	} else if nth < len(c.caseOps)+1 {
 		return c.caseOps[nth-1]
 	} else if nth == 1+len(c.caseOps) {
