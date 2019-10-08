@@ -9,6 +9,7 @@
 package importccl
 
 import (
+	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
@@ -27,7 +28,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type readFileFunc func(context.Context, *fileReader, int32, string, progressFn) error
+type readFileFunc func(context.Context, *fileReader, int32, string, progressFn, chan string) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -125,9 +126,57 @@ func readInputFiles(
 				}
 			}
 
-			if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
-				return errors.Wrap(err, dataFile)
+			var rejected chan string
+			if format.Format == roachpb.IOFileFormat_MysqlOutfile && format.MysqlOut.SaveRejected {
+				rejected = make(chan string)
 			}
+			grp := ctxgroup.WithContext(ctx)
+			grp.GoCtx(func(ctx context.Context) error {
+				if rejected == nil {
+					return nil
+				}
+				suffix := ".rejected"
+				if es.Conf().Provider == roachpb.ExportStorageProvider_Http {
+					suffix = "/rejected"
+				}
+				conf, err := storageccl.ExportStorageConfFromURI(dataFile + suffix)
+				if err != nil {
+					return err
+				}
+				rejectedStorage, err := storageccl.MakeExportStorage(ctx, conf, settings)
+				if err != nil {
+					return err
+				}
+				defer rejectedStorage.Close()
+				var buf []byte
+				first := true
+				for s := range rejected {
+					if !first {
+						buf = append(buf, string(format.MysqlOut.RowSeparator)...)
+					}
+					buf = append(buf, s...)
+					first = false
+				}
+				if err := rejectedStorage.WriteFile(ctx, "", bytes.NewReader(buf)); err != nil {
+					return err
+				}
+				return nil
+			})
+
+			grp.GoCtx(func(ctx context.Context) error {
+				if rejected != nil {
+					defer close(rejected)
+				}
+				if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn, rejected); err != nil {
+					return errors.Wrap(err, dataFile)
+				}
+				return nil
+			})
+
+			if err := grp.Wait(); err != nil {
+				return err
+			}
+
 			if updateFromFiles {
 				if err := progressFn(float32(currentFile) / float32(len(dataFiles))); err != nil {
 					return err

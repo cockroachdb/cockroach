@@ -446,7 +446,12 @@ func (m *pgDumpReader) readFiles(
 }
 
 func (m *pgDumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	progressFn progressFn,
+	rejected chan string,
 ) error {
 	var inserts, count int64
 	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
