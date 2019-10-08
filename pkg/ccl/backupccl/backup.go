@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,7 +88,7 @@ var BackupCheckpointInterval = time.Minute
 func ReadBackupDescriptorFromURI(
 	ctx context.Context, uri string, settings *cluster.Settings,
 ) (BackupDescriptor, error) {
-	exportStore, err := storageccl.ExportStorageFromURI(ctx, uri, settings)
+	exportStore, err := cloud.ExternalStorageFromURI(ctx, uri, settings)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -110,7 +110,7 @@ func ReadBackupDescriptorFromURI(
 // readBackupDescriptor reads and unmarshals a BackupDescriptor from filename in
 // the provided export store.
 func readBackupDescriptor(
-	ctx context.Context, exportStore storageccl.ExportStorage, filename string,
+	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
 ) (BackupDescriptor, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
@@ -146,7 +146,7 @@ func readBackupDescriptor(
 }
 
 func readBackupPartitionDescriptor(
-	ctx context.Context, exportStore storageccl.ExportStorage, filename string,
+	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
 ) (BackupPartitionDescriptor, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
@@ -526,7 +526,7 @@ func backupJobDescription(
 	}
 
 	for _, t := range to {
-		sanitizedTo, err := storageccl.SanitizeExportStorageURI(t)
+		sanitizedTo, err := cloud.SanitizeExternalStorageURI(t)
 		if err != nil {
 			return "", err
 		}
@@ -534,7 +534,7 @@ func backupJobDescription(
 	}
 
 	for _, from := range incrementalFrom {
-		sanitizedFrom, err := storageccl.SanitizeExportStorageURI(from)
+		sanitizedFrom, err := cloud.SanitizeExternalStorageURI(from)
 		if err != nil {
 			return "", err
 		}
@@ -570,7 +570,7 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 func writeBackupDescriptor(
 	ctx context.Context,
 	settings *cluster.Settings,
-	exportStore storageccl.ExportStorage,
+	exportStore cloud.ExternalStorage,
 	filename string,
 	desc *BackupDescriptor,
 ) error {
@@ -597,7 +597,7 @@ func writeBackupDescriptor(
 // backup.
 func writeBackupPartitionDescriptor(
 	ctx context.Context,
-	exportStore storageccl.ExportStorage,
+	exportStore cloud.ExternalStorage,
 	filename string,
 	desc *BackupPartitionDescriptor,
 ) error {
@@ -665,8 +665,8 @@ func backup(
 	db *client.DB,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
-	defaultStore storageccl.ExportStorage,
-	storageByLocalityKV map[string]*roachpb.ExportStorage,
+	defaultStore cloud.ExternalStorage,
+	storageByLocalityKV map[string]*roachpb.ExternalStorage,
 	job *jobs.Job,
 	backupDesc *BackupDescriptor,
 	checkpointDesc *BackupDescriptor,
@@ -873,7 +873,7 @@ func backup(
 			}
 
 			if err := func() error {
-				store, err := storageccl.MakeExportStorage(ctx, *conf, settings)
+				store, err := cloud.MakeExternalStorage(ctx, *conf, settings)
 				if err != nil {
 					return err
 				}
@@ -917,11 +917,11 @@ func sanitizeLocalityKV(kv string) string {
 func VerifyUsableExportTarget(
 	ctx context.Context,
 	settings *cluster.Settings,
-	exportStore storageccl.ExportStorage,
+	exportStore cloud.ExternalStorage,
 	readable string,
 ) error {
 	if r, err := exportStore.ReadFile(ctx, BackupDescriptorName); err == nil {
-		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
+		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		r.Close()
 		return pgerror.Newf(pgcode.DuplicateFile,
@@ -929,7 +929,7 @@ func VerifyUsableExportTarget(
 			readable, BackupDescriptorName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
-		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
+		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		r.Close()
 		return pgerror.Newf(pgcode.DuplicateFile,
@@ -1027,7 +1027,7 @@ func backupPlanHook(
 		if err != nil {
 			return nil
 		}
-		defaultStore, err := storageccl.ExportStorageFromURI(ctx, defaultURI, p.ExecCfg().Settings)
+		defaultStore, err := cloud.ExternalStorageFromURI(ctx, defaultURI, p.ExecCfg().Settings)
 		if err != nil {
 			return err
 		}
@@ -1305,17 +1305,17 @@ func (b *backupResumer) Resume(
 	}
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
-	defaultConf, err := storageccl.ExportStorageConfFromURI(details.URI)
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URI)
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
-	defaultStore, err := storageccl.MakeExportStorage(ctx, defaultConf, b.settings)
+	defaultStore, err := cloud.MakeExternalStorage(ctx, defaultConf, b.settings)
 	if err != nil {
 		return errors.Wrapf(err, "make storage")
 	}
-	storageByLocalityKV := make(map[string]*roachpb.ExportStorage)
+	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
-		conf, err := storageccl.ExportStorageConfFromURI(uri)
+		conf, err := cloud.ExternalStorageConfFromURI(uri)
 		if err != nil {
 			return err
 		}
@@ -1336,7 +1336,7 @@ func (b *backupResumer) Resume(
 		// TODO(benesch): distinguish between a missing checkpoint, which simply
 		// indicates the prior backup attempt made no progress, and a corrupted
 		// checkpoint, which is more troubling. Sadly, storageccl doesn't provide a
-		// "not found" error that's consistent across all ExportStorage
+		// "not found" error that's consistent across all ExternalStorage
 		// implementations.
 		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *b.job.ID(), err)
 	}
@@ -1371,11 +1371,11 @@ func (b *backupResumer) OnTerminal(
 		details := b.job.Details().(jobspb.BackupDetails)
 		// For all backups, partitioned or not, the main BACKUP manifest is stored at
 		// details.URI.
-		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
+		conf, err := cloud.ExternalStorageConfFromURI(details.URI)
 		if err != nil {
 			return err
 		}
-		exportStore, err := storageccl.MakeExportStorage(ctx, conf, b.settings)
+		exportStore, err := cloud.MakeExternalStorage(ctx, conf, b.settings)
 		if err != nil {
 			return err
 		}

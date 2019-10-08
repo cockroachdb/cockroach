@@ -84,7 +84,7 @@ message BackupDescriptor {
   reserved 6;
   roachpb.BulkOpSummary entry_counts = 12 [(gogoproto.nullable) = false];
 
-  roachpb.ExportStorage dir = 7 [(gogoproto.nullable) = false];
+  roachpb.ExternalStorage dir = 7 [(gogoproto.nullable) = false];
 
   uint32 format_version = 8;
 
