@@ -73,6 +73,8 @@ message MySQLOutfileOptions {
   optional bool has_escape = 5 [(gogoproto.nullable) = false];
   // escape is the character used to prefix the other delimiters (--fields-escaped-by)
   optional int32 escape = 6 [(gogoproto.nullable) = false];
+  // skip the first N lines of the input (e.g. to ignore column headers) when reading.
+  optional uint32 ignore_lines = 7 [(gogoproto.nullable) = false];
 }
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.

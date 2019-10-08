@@ -399,6 +399,64 @@ d
 				`SELECT * from t`: {{`\x`}},
 			},
 		},
+		{
+			name:   "ignore 0 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', ignore_lines = '0'`,
+			typ:    "DELIMITED",
+			data:   "foo,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"foo", "normal"}},
+			},
+		},
+		{
+			name:   "ignore 1 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', ignore_lines = '1'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"foo", "normal"}},
+			},
+		},
+		{
+			name:   "ignore 2 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', ignore_lines = '2'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"bar", "baz"}},
+			},
+		},
+		{
+			name:   "ignore all lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', ignore_lines = '3'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {},
+			},
+		},
+		{
+			name:   "ignore > all lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', ignore_lines = '4'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {},
+			},
+		},
+		{
+			name:   "ignore -1 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', ignore_lines = '-1'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal",
+			err:    "pq: ignore_lines must be >= 0",
+		},
 
 		// PG COPY
 		{

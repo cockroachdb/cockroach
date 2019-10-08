@@ -52,10 +52,11 @@ const (
 	csvNullIf    = "nullif"
 	csvSkip      = "skip"
 
-	mysqlOutfileRowSep   = "rows_terminated_by"
-	mysqlOutfileFieldSep = "fields_terminated_by"
-	mysqlOutfileEnclose  = "fields_enclosed_by"
-	mysqlOutfileEscape   = "fields_escaped_by"
+	mysqlOutfileRowSep      = "rows_terminated_by"
+	mysqlOutfileFieldSep    = "fields_terminated_by"
+	mysqlOutfileEnclose     = "fields_enclosed_by"
+	mysqlOutfileEscape      = "fields_escaped_by"
+	mysqlOutfileIgnoreLines = "ignore_lines"
 
 	importOptionSSTSize    = "sstsize"
 	importOptionDecompress = "decompress"
@@ -77,10 +78,11 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	csvNullIf:    sql.KVStringOptRequireValue,
 	csvSkip:      sql.KVStringOptRequireValue,
 
-	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
-	mysqlOutfileFieldSep: sql.KVStringOptRequireValue,
-	mysqlOutfileEnclose:  sql.KVStringOptRequireValue,
-	mysqlOutfileEscape:   sql.KVStringOptRequireValue,
+	mysqlOutfileRowSep:      sql.KVStringOptRequireValue,
+	mysqlOutfileFieldSep:    sql.KVStringOptRequireValue,
+	mysqlOutfileEnclose:     sql.KVStringOptRequireValue,
+	mysqlOutfileEscape:      sql.KVStringOptRequireValue,
+	mysqlOutfileIgnoreLines: sql.KVStringOptRequireValue,
 
 	importOptionSSTSize:    sql.KVStringOptRequireValue,
 	importOptionDecompress: sql.KVStringOptRequireValue,
@@ -283,6 +285,16 @@ func importPlanHook(
 				}
 				format.MysqlOut.HasEscape = true
 				format.MysqlOut.Escape = c
+			}
+			if override, ok := opts[mysqlOutfileIgnoreLines]; ok {
+				skip, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %s value", mysqlOutfileIgnoreLines)
+				}
+				if skip < 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be >= 0", mysqlOutfileIgnoreLines)
+				}
+				format.MysqlOut.IgnoreLines = uint32(skip)
 			}
 		case "MYSQLDUMP":
 			telemetry.Count("import.format.mysqldump")
