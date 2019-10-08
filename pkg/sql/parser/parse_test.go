@@ -724,6 +724,7 @@ func TestParse(t *testing.T) {
 		{`SELECT 'foo'::TIMESTAMP(6)`},
 		{`SELECT 'foo'::TIMESTAMPTZ(6)`},
 		{`SELECT 'foo'::TIME(6)`},
+		{`SELECT '0'::INTERVAL`},
 
 		{`SELECT '192.168.0.1'::INET`},
 		{`SELECT '192.168.0.1':::INET`},
@@ -1606,6 +1607,11 @@ func TestParse2(t *testing.T) {
 		{`SELECT 'a' NOT SIMILAR TO '\a' ESCAPE ''`, `SELECT not_similar_to_escape('a', e'\\a', '')`},
 
 		{`SELECT (ARRAY (1, 2))[1]`, `SELECT (ARRAY[1, 2])[1]`},
+
+		// Interval precision is syntactic sugar.
+		{`SELECT '0'::INTERVAL(6)`, `SELECT '0'::INTERVAL`},
+		// Interval constructor gets eagerly processed.
+		{`SELECT INTERVAL '0'`, `SELECT '00:00:00'`},
 
 		// Pretty printing the FAMILY INET function is not normal due to the grammar
 		// definition of FAMILY.

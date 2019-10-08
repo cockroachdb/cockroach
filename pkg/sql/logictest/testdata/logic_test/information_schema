@@ -273,6 +273,7 @@ pg_catalog          pg_am
 pg_catalog          pg_attrdef
 pg_catalog          pg_attribute
 pg_catalog          pg_auth_members
+pg_catalog          pg_available_extensions
 pg_catalog          pg_cast
 pg_catalog          pg_class
 pg_catalog          pg_collation
@@ -410,6 +411,7 @@ pg_am
 pg_attrdef
 pg_attribute
 pg_auth_members
+pg_available_extensions
 pg_cast
 pg_class
 pg_collation
@@ -554,6 +556,7 @@ system         pg_catalog          pg_am                              SYSTEM VIE
 system         pg_catalog          pg_attrdef                         SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_attribute                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_auth_members                    SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_available_extensions            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_cast                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_class                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_collation                       SYSTEM VIEW  NO                  1
@@ -1354,6 +1357,7 @@ NULL     public   system         pg_catalog          pg_am                      
 NULL     public   system         pg_catalog          pg_attrdef                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_attribute                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_auth_members                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_available_extensions            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_cast                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_class                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_collation                       SELECT          NULL          YES
@@ -1644,6 +1648,7 @@ NULL     public   system         pg_catalog          pg_am                      
 NULL     public   system         pg_catalog          pg_attrdef                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_attribute                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_auth_members                    SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_available_extensions            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_cast                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_class                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_collation                       SELECT          NULL          YES

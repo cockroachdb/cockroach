@@ -400,9 +400,12 @@ func (p *planner) ParseQualifiedTableName(
 }
 
 // ResolveTableName implements the tree.EvalDatabase interface.
-func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	_, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
-	return err
+func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
+	desc, err := ResolveExistingObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
+	if err != nil {
+		return 0, err
+	}
+	return tree.ID(desc.ID), nil
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
