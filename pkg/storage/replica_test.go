@@ -11905,6 +11905,33 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 	}
 }
 
+func TestReplicateQueueProcessOne(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	requeue, err := tc.store.replicateQueue.processOneChange(ctx, tc.repl, func() bool { return false }, true /* dryRun */)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "is not leader")
+	require.False(t, requeue)
+
+	_, pErr := tc.repl.redirectOnOrAcquireLease(ctx)
+	require.Nil(t, pErr)
+
+	errBoom := errors.New("boom")
+	tc.repl.mu.Lock()
+	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
+	tc.repl.mu.Unlock()
+
+	requeue, err = tc.store.replicateQueue.processOneChange(ctx, tc.repl, func() bool { return false }, true /* dryRun */)
+	require.Equal(t, errBoom, err)
+	require.False(t, requeue)
+}
+
 func enableTraceDebugUseAfterFree() (restore func()) {
 	prev := trace.DebugUseAfterFinish
 	trace.DebugUseAfterFinish = true

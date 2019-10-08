@@ -292,7 +292,16 @@ func (rq *replicateQueue) process(
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context, repl *Replica, canTransferLease func() bool, dryRun bool,
 ) (requeue bool, _ error) {
+	// Check lease and destroy status here. The queue does this higher up already, but
+	// adminScatter (and potential other future callers) also call this method and don't
+	// perform this check, which could lead to infinite loops.
+	if  _, err := repl.IsDestroyed(); err != nil  {
+		return false,err
+	}
 	desc, zone := repl.DescAndZone()
+	if _, ok := repl.leaseGoodToGo(ctx); !ok {
+		return false, errors.Errorf("replica is not leader")
+	}
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
