@@ -1627,6 +1627,7 @@ func (ex *connExecutor) execCopyIn(
 	}
 	cm, err := newCopyMachine(
 		ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
+
 		// resetPlanner
 		func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
 			// HACK: We're reaching inside ex.state and changing sqlTimestamp by hand.
@@ -1638,6 +1639,12 @@ func (ex *connExecutor) execCopyIn(
 			ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 			ex.initPlanner(ctx, p)
 			ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
+		},
+
+		// execInsertPlan
+		func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
+			_, _, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, false /* distribute */)
+			return err
 		},
 	)
 	if err != nil {

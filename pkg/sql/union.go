@@ -79,22 +79,6 @@ type unionNode struct {
 	all bool
 }
 
-// Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) Union(
-	ctx context.Context, n *tree.UnionClause, desiredTypes []*types.T,
-) (planNode, error) {
-	left, err := p.newPlan(ctx, n.Left, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-	right, err := p.newPlan(ctx, n.Right, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.newUnionNode(n.Type, n.All, left, right)
-}
-
 func (p *planner) newUnionNode(
 	typ tree.UnionType, all bool, left, right planNode,
 ) (planNode, error) {

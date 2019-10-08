@@ -643,39 +643,6 @@ func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Unlock()
 }
 
-// forEachRow calls the provided closure for each successful call to
-// planNode.Next with planNode.Values, making sure to properly track memory
-// usage.
-func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
-	next, err := p.Next(params)
-	for ; next; next, err = p.Next(params) {
-		if err := f(p.Values()); err != nil {
-			return err
-		}
-	}
-	return err
-}
-
-// If the plan has a fast path we attempt to query that,
-// otherwise we fall back to counting via plan.Next().
-func countRowsAffected(params runParams, p planNode) (int, error) {
-	if a, ok := p.(planNodeFastPath); ok {
-		if count, res := a.FastPathResults(); res {
-			if params.extendedEvalCtx.Tracing.Enabled() {
-				log.VEvent(params.ctx, 2, "fast path completed")
-			}
-			return count, nil
-		}
-	}
-
-	count := 0
-	err := forEachRow(params, p, func(_ tree.Datums) error {
-		count++
-		return nil
-	})
-	return count, err
-}
-
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondata.DistSQLExecMode,
 ) bool {

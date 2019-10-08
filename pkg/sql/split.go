@@ -15,10 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
@@ -33,67 +31,6 @@ type splitNode struct {
 	rows           planNode
 	run            splitRun
 	expirationTime hlc.Timestamp
-}
-
-// Split executes a KV split.
-// Privileges: INSERT on table.
-func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
-	tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT)
-	if err != nil {
-		return nil, err
-	}
-	// Calculate the desired types for the select statement. It is OK if the
-	// select statement returns fewer columns (the relevant prefix is used).
-	desiredTypes := make([]*types.T, len(index.ColumnIDs))
-	for i, colID := range index.ColumnIDs {
-		c, err := tableDesc.FindColumnByID(colID)
-		if err != nil {
-			return nil, err
-		}
-		desiredTypes[i] = &c.Type
-	}
-
-	// Create the plan for the split rows source.
-	rows, err := p.newPlan(ctx, n.Rows, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	cols := planColumns(rows)
-	if len(cols) == 0 {
-		return nil, errors.Errorf("no columns in SPLIT AT data")
-	}
-	if len(cols) > len(index.ColumnIDs) {
-		return nil, errors.Errorf("too many columns in SPLIT AT data")
-	}
-	for i := range cols {
-		if !cols[i].Typ.Equivalent(desiredTypes[i]) {
-			return nil, errors.Errorf(
-				"SPLIT AT data column %d (%s) must be of type %s, not type %s",
-				i+1, index.ColumnNames[i], desiredTypes[i], cols[i].Typ,
-			)
-		}
-	}
-
-	expirationTime := hlc.MaxTimestamp
-	if n.ExpireExpr != nil {
-		typedExpireExpr, err := n.ExpireExpr.TypeCheck(&p.semaCtx, types.String)
-		if err != nil {
-			return nil, err
-		}
-		expirationTime, err = parseExpirationTime(p.EvalContext(), typedExpireExpr)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &splitNode{
-		force:          p.SessionData().ForceSplitAt,
-		tableDesc:      tableDesc.TableDesc(),
-		index:          index,
-		rows:           rows,
-		expirationTime: expirationTime,
-	}, nil
 }
 
 // splitRun contains the run-time state of splitNode during local execution.

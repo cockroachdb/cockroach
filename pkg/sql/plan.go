@@ -15,17 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -88,9 +81,7 @@ func (r *runParams) creationTimeForNewTableDescriptor() hlc.Timestamp {
 // planNode instances:
 // - planVisitor.visit()           (walk.go)
 // - planNodeNames                 (walk.go)
-// - planMaker.optimizeFilters()   (filter_opt.go)
 // - setLimitHint()                (limit_hint.go)
-// - planOrdering()                (plan_ordering.go)
 // - planColumns()                 (plan_columns.go)
 //
 type planNode interface {
@@ -100,7 +91,6 @@ type planNode interface {
 	// encountered or if there is no more work to do. For statements
 	// that return a result set, the Values() method will return one row
 	// of results each time that Next() returns true.
-	// See executor.go: forEachRow() for an example.
 	//
 	// Available after startPlan(). It is illegal to call Next() after it returns
 	// false. It is legal to call Next() even if the node implements
@@ -258,10 +248,6 @@ type planTop struct {
 	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
 	deps planDependencies
 
-	// cteNameEnvironment collects the mapping from common table expression alias
-	// to the planNodes that represent their source.
-	cteNameEnvironment cteNameEnvironment
-
 	// hasStar collects whether any star expansion has occurred during
 	// logical plan construction. This is used by CREATE VIEW until
 	// #10028 is addressed.
@@ -380,173 +366,6 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 	}
 
 	return nil, nil
-}
-
-// newPlan constructs a planNode from a statement. This is used
-// recursively by the various node constructors.
-func (p *planner) newPlan(
-	ctx context.Context, stmt tree.Statement, desiredTypes []*types.T,
-) (planNode, error) {
-	tracing.AnnotateTrace()
-
-	// This will set the system DB trigger for transactions containing
-	// schema-modifying statements that have no effect, such as
-	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
-	// where the table already exists. This will generate some false
-	// schema cache refreshes, but that's expected to be quite rare in practice.
-	canModifySchema := tree.CanModifySchema(stmt)
-	if canModifySchema {
-		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, unimplemented.NewWithIssuef(26508,
-				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
-		}
-	}
-
-	if p.EvalContext().TxnReadOnly {
-		if canModifySchema || tree.CanWriteData(stmt) {
-			return nil, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", stmt.StatementTag())
-		}
-	}
-
-	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
-		return plan, err
-	}
-
-	switch n := stmt.(type) {
-	case *tree.AlterIndex:
-		return p.AlterIndex(ctx, n)
-	case *tree.AlterTable:
-		return p.AlterTable(ctx, n)
-	case *tree.AlterSequence:
-		return p.AlterSequence(ctx, n)
-	case *tree.AlterUserSetPassword:
-		return p.AlterUserSetPassword(ctx, n)
-	case *tree.CancelQueries:
-		return p.CancelQueries(ctx, n)
-	case *tree.CancelSessions:
-		return p.CancelSessions(ctx, n)
-	case *tree.CommentOnColumn:
-		return p.CommentOnColumn(ctx, n)
-	case *tree.CommentOnDatabase:
-		return p.CommentOnDatabase(ctx, n)
-	case *tree.CommentOnTable:
-		return p.CommentOnTable(ctx, n)
-	case *tree.ControlJobs:
-		return p.ControlJobs(ctx, n)
-	case *tree.Scrub:
-		return p.Scrub(ctx, n)
-	case *tree.CreateDatabase:
-		return p.CreateDatabase(ctx, n)
-	case *tree.CreateIndex:
-		return p.CreateIndex(ctx, n)
-	case *tree.CreateTable:
-		return p.CreateTable(ctx, n)
-	case *tree.CreateUser:
-		return p.CreateUser(ctx, n)
-	case *tree.CreateView:
-		return p.CreateView(ctx, n)
-	case *tree.CreateSequence:
-		return p.CreateSequence(ctx, n)
-	case *tree.CreateStats:
-		return p.CreateStatistics(ctx, n)
-	case *tree.Deallocate:
-		return p.Deallocate(ctx, n)
-	case *tree.Delete:
-		return p.Delete(ctx, n, desiredTypes)
-	case *tree.Discard:
-		return p.Discard(ctx, n)
-	case *tree.DropDatabase:
-		return p.DropDatabase(ctx, n)
-	case *tree.DropIndex:
-		return p.DropIndex(ctx, n)
-	case *tree.DropTable:
-		return p.DropTable(ctx, n)
-	case *tree.DropView:
-		return p.DropView(ctx, n)
-	case *tree.DropSequence:
-		return p.DropSequence(ctx, n)
-	case *tree.DropUser:
-		return p.DropUser(ctx, n)
-	case *tree.Grant:
-		return p.Grant(ctx, n)
-	case *tree.Insert:
-		return p.Insert(ctx, n, desiredTypes)
-	case *tree.ParenSelect:
-		return p.newPlan(ctx, n.Select, desiredTypes)
-	case *tree.Relocate:
-		return p.Relocate(ctx, n)
-	case *tree.RenameColumn:
-		return p.RenameColumn(ctx, n)
-	case *tree.RenameDatabase:
-		return p.RenameDatabase(ctx, n)
-	case *tree.RenameIndex:
-		return p.RenameIndex(ctx, n)
-	case *tree.RenameTable:
-		return p.RenameTable(ctx, n)
-	case *tree.Revoke:
-		return p.Revoke(ctx, n)
-	case *tree.Scatter:
-		return p.Scatter(ctx, n)
-	case *tree.Select:
-		return p.Select(ctx, n, desiredTypes)
-	case *tree.SelectClause:
-		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, nil, /* with */
-			desiredTypes, publicColumns)
-	case *tree.SetClusterSetting:
-		return p.SetClusterSetting(ctx, n)
-	case *tree.SetZoneConfig:
-		return p.SetZoneConfig(ctx, n)
-	case *tree.SetVar:
-		return p.SetVar(ctx, n)
-	case *tree.SetTransaction:
-		return p.SetTransaction(n)
-	case *tree.SetSessionAuthorizationDefault:
-		return p.SetSessionAuthorizationDefault()
-	case *tree.SetSessionCharacteristics:
-		return p.SetSessionCharacteristics(n)
-	case *tree.ShowClusterSetting:
-		return p.ShowClusterSetting(ctx, n)
-	case *tree.ShowHistogram:
-		return p.ShowHistogram(ctx, n)
-	case *tree.ShowTableStats:
-		return p.ShowTableStats(ctx, n)
-	case *tree.ShowTraceForSession:
-		return p.ShowTrace(ctx, n)
-	case *tree.ShowZoneConfig:
-		return p.ShowZoneConfig(ctx, n)
-	case *tree.ShowFingerprints:
-		return p.ShowFingerprints(ctx, n)
-	case *tree.Split:
-		return p.Split(ctx, n)
-	case *tree.Unsplit:
-		return p.Unsplit(ctx, n)
-	case *tree.Truncate:
-		return p.Truncate(ctx, n)
-	case *tree.UnionClause:
-		return p.Union(ctx, n, desiredTypes)
-	case *tree.Update:
-		return p.Update(ctx, n, desiredTypes)
-	case *tree.ValuesClause:
-		return p.Values(ctx, n, desiredTypes)
-	case *tree.ValuesClauseWithNames:
-		return p.Values(ctx, n, desiredTypes)
-	case tree.CCLOnlyStatement:
-		return nil, pgerror.Newf(pgcode.CCLRequired,
-			"a CCL binary is required to use this statement type: %T", stmt)
-	default:
-		var catalog optCatalog
-		catalog.init(p)
-		catalog.reset()
-		newStmt, err := delegate.TryDelegate(ctx, &catalog, p.EvalContext(), stmt)
-		if err != nil {
-			return nil, err
-		}
-		if newStmt != nil {
-			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
-		}
-		return nil, errors.AssertionFailedf("unknown statement type: %T", stmt)
-	}
 }
 
 // Mark transaction as operating on the system DB if the descriptor id
