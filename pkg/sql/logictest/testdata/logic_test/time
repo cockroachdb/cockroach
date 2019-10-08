@@ -313,12 +313,12 @@ SELECT extract(second from time '12:01:02.345678')
 query I
 SELECT extract(millisecond from time '12:01:02.345678')
 ----
-345
+2345
 
 query I
 SELECT extract(microsecond from time '12:01:02.345678')
 ----
-345678
+2345678
 
 query I
 SELECT extract(epoch from time '12:00:00')

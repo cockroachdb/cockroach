@@ -127,12 +127,12 @@ extract(second from '2010-01-10 12:13:14.1+00:00'::timestamp)
 eval
 extract(millisecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)
 ----
-123
+14123
 
 eval
 extract(microsecond from '2010-01-10 12:13:14.123456+00:00'::timestamp)
 ----
-123456
+14123456
 
 eval
 extract(epoch from '2010-01-10 12:13:14.1+00:00'::timestamp)
