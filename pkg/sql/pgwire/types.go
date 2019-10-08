@@ -129,7 +129,11 @@ func (b *writeBuffer) writeTextDatum(
 		b.write([]byte(result))
 
 	case *tree.DUuid:
-		b.writeLengthPrefixedString(v.UUID.String())
+		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+		s := b.putbuf[4 : 4+36]
+		v.UUID.StringBytes(s)
+		b.putInt32(int32(len(s)))
+		b.write(s)
 
 	case *tree.DIPAddr:
 		b.writeLengthPrefixedString(v.IPAddr.String())
@@ -163,7 +167,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.write(s)
 
 	case *tree.DInterval:
-		b.writeLengthPrefixedString(v.ValueAsString())
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())

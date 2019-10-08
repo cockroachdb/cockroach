@@ -944,8 +944,11 @@ func (sc *SchemaChanger) exec(
 	// Wait for the schema change to propagate to all nodes after this function
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
-	waitToUpdateLeases := func(refreshStats bool) {
+	waitToUpdateLeases := func(refreshStats bool) error {
 		if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+			if err == sqlbase.ErrDescriptorNotFound {
+				return err
+			}
 			log.Warningf(ctx, "waiting to update leases: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
@@ -956,13 +959,13 @@ func (sc *SchemaChanger) exec(
 		if refreshStats {
 			sc.refreshStats()
 		}
+		return nil
 	}
 
 	if sc.mutationID == sqlbase.InvalidMutationID {
 		// Nothing more to do.
 		isCreateTableAs := tableDesc.Adding() && tableDesc.IsAs()
-		waitToUpdateLeases(isCreateTableAs /* refreshStats */)
-		return nil
+		return waitToUpdateLeases(isCreateTableAs /* refreshStats */)
 	}
 
 	// Acquire lease.
@@ -1018,7 +1021,17 @@ func (sc *SchemaChanger) exec(
 	// Run through mutation state machine and backfill.
 	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx)
 
-	defer waitToUpdateLeases(err == nil /* refreshStats */)
+	defer func() {
+		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && err != sqlbase.ErrDescriptorNotFound {
+			// We only expect ErrDescriptorNotFound to be returned. This happens
+			// when the table descriptor was deleted. We can ignore this error.
+
+			log.Warningf(ctx, "unexpected error while waiting for leases to update: %+v", err)
+			// As we are dismissing the error, go through the recording motions.
+			// This ensures that any important error gets reported to Sentry, etc.
+			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+		}
+	}()
 
 	// Purge the mutations if the application of the mutations failed due to
 	// a permanent error. All other errors are transient errors that are

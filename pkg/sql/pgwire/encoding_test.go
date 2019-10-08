@@ -235,22 +235,16 @@ func BenchmarkEncodings(b *testing.B) {
 			d := tc.Datum
 
 			b.Run("text", func(b *testing.B) {
-				b.StopTimer()
 				for i := 0; i < b.N; i++ {
 					buf.reset()
 					buf.textFormatter.Buffer.Reset()
-					b.StartTimer()
 					buf.writeTextDatum(ctx, d, conv)
-					b.StopTimer()
 				}
 			})
 			b.Run("binary", func(b *testing.B) {
-				b.StopTimer()
 				for i := 0; i < b.N; i++ {
 					buf.reset()
-					b.StartTimer()
 					buf.writeBinaryDatum(ctx, d, time.UTC, tc.Oid)
-					b.StopTimer()
 				}
 			})
 		})

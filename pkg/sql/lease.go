@@ -299,20 +299,15 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, lease *s
 func (s LeaseStore) WaitForOneVersion(
 	ctx context.Context, tableID sqlbase.ID, retryOpts retry.Options,
 ) (sqlbase.DescriptorVersion, error) {
-	desc := &sqlbase.Descriptor{}
-	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	var tableDesc *sqlbase.TableDescriptor
+	var err error
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		// Get the current version of the table descriptor non-transactionally.
 		//
 		// TODO(pmattis): Do an inconsistent read here?
-		ts, err := s.db.GetProtoTs(ctx, descKey, desc)
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, s.db, tableID)
 		if err != nil {
 			return 0, err
-		}
-		tableDesc = desc.Table(ts)
-		if tableDesc == nil {
-			return 0, errors.Errorf("ID %d is not a table", tableID)
 		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
