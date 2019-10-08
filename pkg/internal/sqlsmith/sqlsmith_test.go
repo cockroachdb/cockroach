@@ -32,6 +32,7 @@ var (
 	flagNoMutations = flag.Bool("no-mutations", false, "disables mutations during testing")
 	flagNoWiths     = flag.Bool("no-withs", false, "disables WITHs during testing")
 	flagVec         = flag.Bool("vec", false, "attempt to generate vectorized-friendly queries")
+	flagCheckVec    = flag.Bool("check-vec", false, "fail if a generated statement cannot be vectorized")
 )
 
 func init() {
@@ -70,11 +71,6 @@ func TestGenerateParse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if *flagVec {
-		// After all introspection is done, turn vec on.
-		db.Exec(t, `SET vectorize = experimental_always`)
-	}
-
 	seen := map[string]bool{}
 	for i := 0; i < *flagNum; i++ {
 		stmt := smither.Generate()
@@ -87,6 +83,34 @@ func TestGenerateParse(t *testing.T) {
 		}
 		stmt = prettyCfg.Pretty(parsed.AST)
 		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
+		if *flagCheckVec {
+			if _, err := sqlDB.Exec(fmt.Sprintf("EXPLAIN (vec) %s", stmt)); err != nil {
+				es := err.Error()
+				ok := false
+				// It is hard to make queries that can always
+				// be vectorized. Hard code a list of error
+				// messages we are ok with.
+				for _, s := range []string{
+					// If the optimizer removes stuff due
+					// to something like a `WHERE false`,
+					// vec will fail with an error message
+					// like this. This is hard to fix
+					// because things like `WHERE true AND
+					// false` similarly remove rows but are
+					// harder to detect.
+					"num_rows:0",
+					"unsorted distinct",
+				} {
+					if strings.Contains(es, s) {
+						ok = true
+						break
+					}
+				}
+				if !ok {
+					t.Fatal(err)
+				}
+			}
+		}
 		if *flagExec {
 			db.Exec(t, `SET statement_timeout = '9s'`)
 			if _, err := sqlDB.Exec(stmt); err != nil {
@@ -94,9 +118,6 @@ func TestGenerateParse(t *testing.T) {
 				if !seen[es] {
 					seen[es] = true
 					fmt.Printf("ERR (%d): %v\n", i, err)
-					if *flagVec && strings.Contains(es, "unable to vectorize execution plan") {
-						t.Fatal()
-					}
 				}
 			}
 		}
