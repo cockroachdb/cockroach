@@ -256,6 +256,12 @@ func (rq *replicateQueue) process(
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
+			if testingAggressiveConsistencyChecks {
+				if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+					log.Warning(ctx, err)
+				}
+			}
+
 			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */)
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the snapshot failed, we log the

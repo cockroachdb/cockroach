@@ -183,7 +183,7 @@ func (r *Replica) CheckConsistency(
 			// ContainsEstimates is true if the replica's persisted MVCCStats had ContainsEstimates set.
 			// If this was *not* the case, the replica believed it had accurate stats. But we just found
 			// out that this isn't true.
-			log.Fatalf(ctx, "found a delta of %+v", log.Safe(delta))
+			log.Fatalf(ctx, "found a delta of %+v in %+v", log.Safe(delta), results)
 		}
 
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
