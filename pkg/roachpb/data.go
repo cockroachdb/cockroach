@@ -1281,7 +1281,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if txn == nil || txn.OrigTimestampWasObserved {
+	if txn == nil {
 		return false, nil
 	}
 	timestamp := txn.Timestamp

@@ -232,6 +232,9 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	pErr *roachpb.Error,
 	maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error, hlc.Timestamp) {
+	if ba.Txn.OrigTimestampWasObserved {
+		return nil, pErr, hlc.Timestamp{}
+	}
 	// Check for an error which can be retried after updating spans.
 	canRetryTxn, retryTxn := roachpb.CanTransactionRetryAtRefreshedTimestamp(ctx, pErr)
 	if !canRetryTxn || !sr.canAutoRetry {
