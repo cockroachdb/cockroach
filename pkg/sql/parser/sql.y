@@ -8616,6 +8616,7 @@ extract_arg:
 | HOUR
 | MINUTE
 | SECOND
+| SCONST
 
 // OVERLAY() arguments
 // SQL99 defines the OVERLAY() function:
