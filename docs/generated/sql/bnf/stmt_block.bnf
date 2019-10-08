@@ -2393,6 +2393,7 @@ extract_arg ::=
 	| 'HOUR'
 	| 'MINUTE'
 	| 'SECOND'
+	| 'SCONST'
 
 overlay_placing ::=
 	'PLACING' a_expr
