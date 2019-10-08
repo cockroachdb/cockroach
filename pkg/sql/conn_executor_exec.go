@@ -362,7 +362,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS, stmt.NumAnnotations)
 
 	if os.ImplicitTxn.Get() {
@@ -863,7 +863,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
 		return rwMode, now.GoTime(), nil, nil
 	}
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime(), 0 /* numAnnotations */)
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
@@ -1300,7 +1300,7 @@ func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
 }
 
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool) {
-	phaseTimes := ex.statsCollector.phaseTimes
+	phaseTimes := &ex.statsCollector.phaseTimes
 	phaseTimes[transactionEnd] = timeutil.Now()
 	txnStart := phaseTimes[transactionStart]
 	txnEnd := phaseTimes[transactionEnd]
