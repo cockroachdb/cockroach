@@ -6,7 +6,12 @@ extract(year from '2010-09-28'::date)
 2010
 
 eval
-extract(year from '2010-09-28'::date)
+extract('year' from '2010-09-28'::date)
+----
+2010
+
+eval
+extract('YEAR' from '2010-09-28'::date)
 ----
 2010
 
@@ -143,6 +148,16 @@ extract(epoch from '2010-01-10 12:13:14.1+00:00'::timestamp)
 
 eval
 extract_duration(hour from '123m')
+----
+2
+
+eval
+extract_duration('hour' from '123m')
+----
+2
+
+eval
+extract_duration('HOUR' from '123m')
 ----
 2
 
