@@ -93,32 +93,31 @@ EXPLAIN SELECT * FROM
   JOIN twocolumn AS c (d, e) ON a.b = c.d AND c.d = onecolumn.x
 LIMIT 1
 ----
-·                         distributed  false
-·                         vectorized   false
-render                    ·            ·
- └── limit                ·            ·
-      │                   count        1
-      └── hash-join       ·            ·
-           │              type         inner
-           │              equality     (x) = (x)
-           ├── hash-join  ·            ·
-           │    │         type         inner
-           │    │         equality     (x) = (x)
-           │    ├── scan  ·            ·
-           │    │         table        twocolumn@primary
-           │    │         spans        ALL
-           │    └── scan  ·            ·
-           │              table        onecolumn@primary
-           │              spans        ALL
-           └── hash-join  ·            ·
-                │         type         inner
-                │         equality     (x) = (x)
-                ├── scan  ·            ·
-                │         table        onecolumn@primary
-                │         spans        ALL
-                └── scan  ·            ·
-·                         table        twocolumn@primary
-·                         spans        ALL
+·                    distributed  false
+·                    vectorized   false
+limit                ·            ·
+ │                   count        1
+ └── hash-join       ·            ·
+      │              type         inner
+      │              equality     (x) = (x)
+      ├── hash-join  ·            ·
+      │    │         type         inner
+      │    │         equality     (x) = (x)
+      │    ├── scan  ·            ·
+      │    │         table        onecolumn@primary
+      │    │         spans        ALL
+      │    └── scan  ·            ·
+      │              table        twocolumn@primary
+      │              spans        ALL
+      └── hash-join  ·            ·
+           │         type         inner
+           │         equality     (x) = (x)
+           ├── scan  ·            ·
+           │         table        onecolumn@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        twocolumn@primary
+·                    spans        ALL
 
 # The following queries verify that only the necessary columns are scanned.
 query TTTTT
