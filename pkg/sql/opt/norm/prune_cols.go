@@ -221,6 +221,9 @@ func (c *CustomFuncs) PruneCols(target memo.RelExpr, neededCols opt.ColSet) memo
 	case *memo.ValuesExpr:
 		return c.pruneValuesCols(t, neededCols)
 
+	case *memo.WithScanExpr:
+		return c.pruneWithScanCols(t, neededCols)
+
 	case *memo.ProjectExpr:
 		passthrough := t.Passthrough.Intersection(neededCols)
 		projections := make(memo.ProjectionsExpr, 0, len(t.Projections))
@@ -296,6 +299,26 @@ func (c *CustomFuncs) pruneScanCols(scan *memo.ScanExpr, neededCols opt.ColSet) 
 	new := scan.ScanPrivate
 	new.Cols = c.OutputCols(scan).Intersection(neededCols)
 	return c.f.ConstructScan(&new)
+}
+
+// pruneWithScanCols constructs a new WithScan operator based on the given
+// existing WithScan operator, but projecting only the needed columns.
+func (c *CustomFuncs) pruneWithScanCols(
+	scan *memo.WithScanExpr, neededCols opt.ColSet,
+) memo.RelExpr {
+	// Make copy of scan private and update columns.
+	new := scan.WithScanPrivate
+
+	new.InCols = make(opt.ColList, 0, neededCols.Len())
+	new.OutCols = make(opt.ColList, 0, neededCols.Len())
+	for i := range scan.WithScanPrivate.OutCols {
+		if neededCols.Contains(scan.WithScanPrivate.OutCols[i]) {
+			new.InCols = append(new.InCols, scan.WithScanPrivate.InCols[i])
+			new.OutCols = append(new.OutCols, scan.WithScanPrivate.OutCols[i])
+		}
+	}
+
+	return c.f.ConstructWithScan(&new)
 }
 
 // pruneValuesCols constructs a new Values operator based on the given existing
@@ -418,8 +441,9 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 	relProps.SetAvailable(props.PruneCols)
 
 	switch e.Op() {
-	case opt.ScanOp, opt.ValuesOp:
-		// All columns can potentially be pruned from the Scan and Values operators.
+	case opt.ScanOp, opt.ValuesOp, opt.WithScanOp:
+		// All columns can potentially be pruned from the Scan, Values, and WithScan
+		// operators.
 		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
 
 	case opt.SelectOp:
@@ -520,6 +544,11 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// Only the "free" RETURNING columns can be pruned away (i.e. the columns
 		// required by the mutation only because they're being returned).
 		relProps.Rule.PruneCols = relProps.OutputCols.Difference(neededCols)
+
+	case opt.WithOp:
+		// WithOp passes through its input unchanged, so it has the same pruning
+		// characteristics as its input.
+		relProps.Rule.PruneCols = DerivePruneCols(e.(*memo.WithExpr).Main)
 
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the
