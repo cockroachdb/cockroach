@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/cache"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -107,7 +106,7 @@ func NewPebbleTempEngine(
 	opts := &pebble.Options{
 		// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
 		// now.
-		Cache: cache.New(128 << 20),
+		Cache: pebble.NewCache(128 << 20),
 		// The Pebble temp engine does not use MVCC Encoding. Instead, the
 		// caller-provided key is used as-is (with the prefix prepended). See
 		// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
