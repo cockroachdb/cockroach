@@ -141,19 +141,36 @@ func shouldOutput(operator execinfra.OpNode, verbose bool) bool {
 }
 
 func formatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
+	seenOps := make(map[reflect.Value]struct{})
 	if shouldOutput(operator, verbose) {
-		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose)
+		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose, seenOps)
 	} else {
-		doFormatOpChain(operator, node, verbose)
+		doFormatOpChain(operator, node, verbose, seenOps)
 	}
 }
-func doFormatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
+func doFormatOpChain(
+	operator execinfra.OpNode,
+	node treeprinter.Node,
+	verbose bool,
+	seenOps map[reflect.Value]struct{},
+) {
 	for i := 0; i < operator.ChildCount(); i++ {
 		child := operator.Child(i)
+		childOpValue := reflect.ValueOf(child)
+		childOpName := reflect.TypeOf(child).String()
+		if _, seenOp := seenOps[childOpValue]; seenOp {
+			// We have already seen this operator, so in order to not repeat the full
+			// chain again, we will simply print out this operator's name and will
+			// not recurse into its children. Note that we print out the name
+			// unequivocally.
+			node.Child(childOpName)
+			continue
+		}
+		seenOps[childOpValue] = struct{}{}
 		if shouldOutput(child, verbose) {
-			doFormatOpChain(child, node.Child(reflect.TypeOf(child).String()), verbose)
+			doFormatOpChain(child, node.Child(childOpName), verbose, seenOps)
 		} else {
-			doFormatOpChain(child, node, verbose)
+			doFormatOpChain(child, node, verbose, seenOps)
 		}
 	}
 }
