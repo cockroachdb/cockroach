@@ -332,4 +332,8 @@ const (
 	//       serious error with code "XXA00" occurred; if expected,
 	//       must use 'error pgcode XXA00 ...'
 	TransactionCommittedWithSchemaChangeFailure = "XXA00"
+
+	// InternalConnectionFailure refers to a networking error encountered
+	// internally on a connection between different Cockroach nodes.
+	InternalConnectionFailure = "XXC03"
 )

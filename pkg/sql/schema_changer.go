@@ -219,7 +219,7 @@ func isPermanentSchemaChangeError(err error) bool {
 	}
 
 	switch pgerror.GetPGCode(err) {
-	case pgcode.SerializationFailure, pgcode.ConnectionFailure:
+	case pgcode.SerializationFailure, pgcode.InternalConnectionFailure:
 		return false
 
 	case pgcode.Internal, pgcode.RangeUnavailable:
