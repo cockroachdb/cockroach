@@ -893,12 +893,14 @@ func (p *filterPlanningState) remapIVars(expr execinfrapb.Expression) execinfrap
 		// Now we simply need to convert the "custom" ordinal symbol by removing
 		// the pound sign (in the example above, after this loop we will have
 		// `@1 = @2`).
-		for idx := len(p.indexVarMap); idx > 0; idx-- {
-			ret.Expr = strings.ReplaceAll(
-				ret.Expr,
-				fmt.Sprintf("@#%d", idx),
-				fmt.Sprintf("@%d", idx),
-			)
+		for _, idx := range p.indexVarMap {
+			if idx != -1 {
+				ret.Expr = strings.ReplaceAll(
+					ret.Expr,
+					fmt.Sprintf("@#%d", idx+1),
+					fmt.Sprintf("@%d", idx+1),
+				)
+			}
 		}
 	}
 	return ret
