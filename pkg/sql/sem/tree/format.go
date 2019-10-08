@@ -116,6 +116,16 @@ const (
 	// representation like -Inf. Negative values are preserved "inside"
 	// the numeric by enclosing them within parentheses.
 	FmtParsableNumerics
+
+	// FmtPGAttrdefAdbin is used to produce expressions formatted in a way that's
+	// as close as possible to what clients expect to live in the pg_attrdef.adbin
+	// column. Specifically, this strips type annotations, since Postgres doesn't
+	// know what those are.
+	FmtPGAttrdefAdbin
+
+	// FmtPGIndexDef is used to produce CREATE INDEX statements that are
+	// compatible with pg_get_indexdef.
+	FmtPGIndexDef
 )
 
 // Composite/derived flag definitions follow.

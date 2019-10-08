@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -406,7 +407,7 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		if err != nil {
 			return nil, err
 		}
-		if err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
+		if _, err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
 			return nil, err
 		}
 		if ctx.SessionData.Database != "" && ctx.SessionData.Database != string(tn.CatalogName) {
@@ -819,9 +820,12 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				r, err := ctx.InternalExecutor.QueryRow(
 					ctx.Ctx(), "pg_get_coldesc",
-					ctx.Txn,
-					"SELECT description FROM pg_catalog.pg_description WHERE objoid=$1 AND objsubid=$2 LIMIT 1",
-					args[0], args[1])
+					ctx.Txn, `
+SELECT COALESCE(c.comment, pc.comment) FROM system.comments c
+FULL OUTER JOIN crdb_internal.predefined_comments pc
+ON pc.object_id=c.object_id AND pc.sub_id=c.sub_id AND pc.type = c.type
+WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
+`, keys.ColumnCommentType, args[0], args[1])
 				if err != nil {
 					return nil, err
 				}

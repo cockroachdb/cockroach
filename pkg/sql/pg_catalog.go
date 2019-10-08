@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -189,6 +190,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogAttrDefTableID:             pgCatalogAttrDefTable,
 		sqlbase.PgCatalogAttributeTableID:           pgCatalogAttributeTable,
 		sqlbase.PgCatalogAuthMembersTableID:         pgCatalogAuthMembersTable,
+		sqlbase.PgCatalogAvailableExtensionsTableID: pgCatalogAvailableExtensionsTable,
 		sqlbase.PgCatalogCastTableID:                pgCatalogCastTable,
 		sqlbase.PgCatalogClassTableID:               pgCatalogClassTable,
 		sqlbase.PgCatalogCollationTableID:           pgCatalogCollationTable,
@@ -343,7 +345,15 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						// pg_attrdef only expects rows for columns with default values.
 						return nil
 					}
-					defSrc := tree.NewDString(*column.DefaultExpr)
+					var defSrc *tree.DString
+					expr, err := parser.ParseExpr(*column.DefaultExpr)
+					if err != nil {
+						defSrc = tree.NewDString(*column.DefaultExpr)
+					} else {
+						ctx := tree.NewFmtCtx(tree.FmtPGAttrdefAdbin)
+						ctx.FormatNode(expr)
+						defSrc = tree.NewDString(ctx.String())
+					}
 					return addRow(
 						h.ColumnOid(table.ID, column.ID), // oid
 						defaultOid(table.ID),             // adrelid
@@ -494,6 +504,22 @@ CREATE TABLE pg_catalog.pg_auth_members (
 					tree.MakeDBool(tree.DBool(isAdmin)), // admin_option
 				)
 			})
+	},
+}
+
+var pgCatalogAvailableExtensionsTable = virtualSchemaTable{
+	comment: `available extensions
+https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_available_extensions (
+	name NAME,
+	default_version TEXT,
+	installed_version TEXT,
+	comment TEXT
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// We support no extensions.
+		return nil
 	},
 }
 
@@ -1480,7 +1506,9 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Interleave = intlDef
 	}
-	return indexDef.String(), nil
+	fmtCtx := tree.NewFmtCtx(tree.FmtPGIndexDef)
+	fmtCtx.FormatNode(&indexDef)
+	return fmtCtx.String(), nil
 }
 
 var pgCatalogInheritsTable = virtualSchemaTable{
