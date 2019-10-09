@@ -14,8 +14,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"sort"
-	"strings"
 )
 
 var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -207,154 +205,10 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal("could not find any test result files")
 		}
 
-		var failUnexpectedCount, failExpectedCount int
-		var passUnexpectedCount, passExpectedCount, notRunCount int
-		// Put all the results in a giant map of [testname]result
-		results := make(map[string]string)
-		// Put all issue hints in a map of [testname]issue
-		allIssueHints := make(map[string]string)
-		// Current failures are any tests that reported as failed, regardless of if
-		// they were expected or not.
-		var currentFailures, allTests []string
-		runTests := make(map[string]struct{})
-		filesRaw := strings.Split(string(output), "\n")
-
-		// There is always at least one entry that's just space characters, remove
-		// it.
-		var files []string
-		for _, f := range filesRaw {
-			file := strings.TrimSpace(f)
-			if len(file) > 0 {
-				files = append(files, file)
-			}
-		}
-		for i, file := range files {
-			t.l.Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
-			fileOutput, err := repeatRunWithBuffer(
-				ctx,
-				c,
-				t.l,
-				node,
-				fmt.Sprintf("fetching results file %s", file),
-				fmt.Sprintf("cat %s", file),
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			tests, passed, issueHints, err := extractFailureFromJUnitXML(fileOutput)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for testName, issue := range issueHints {
-				allIssueHints[testName] = issue
-			}
-			for i, test := range tests {
-				// There is at least a single test that's run twice, so if we already
-				// have a result, skip it.
-				if _, alreadyTested := results[test]; alreadyTested {
-					continue
-				}
-				allTests = append(allTests, test)
-				issue, expectedFailure := expectedFailures[test]
-				if len(issue) == 0 || issue == "unknown" {
-					issue = issueHints[test]
-				}
-				pass := passed[i]
-				switch {
-				case pass && !expectedFailure:
-					results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
-					passExpectedCount++
-				case pass && expectedFailure:
-					results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
-						test, maybeAddGithubLink(issue),
-					)
-					passUnexpectedCount++
-				case !pass && expectedFailure:
-					results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
-						test, maybeAddGithubLink(issue),
-					)
-					failExpectedCount++
-					currentFailures = append(currentFailures, test)
-				case !pass && !expectedFailure:
-					results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
-						test, maybeAddGithubLink(issue))
-					failUnexpectedCount++
-					currentFailures = append(currentFailures, test)
-				}
-				runTests[test] = struct{}{}
-			}
-		}
-		// Collect all the tests that were not run.
-		for test, issue := range expectedFailures {
-			if _, ok := runTests[test]; ok {
-				continue
-			}
-			allTests = append(allTests, test)
-			results[test] = fmt.Sprintf("--- FAIL: %s - %s (not run)", test, maybeAddGithubLink(issue))
-			notRunCount++
-		}
-
-		// Log all the test results. We re-order the tests alphabetically here as
-		// gradle picks the test order based on a directory walk.
-		sort.Strings(allTests)
-		for _, test := range allTests {
-			result, ok := results[test]
-			if !ok {
-				t.Fatalf("can't find %s in test result list", test)
-			}
-			t.l.Printf("%s\n", result)
-		}
-
-		t.l.Printf("------------------------\n")
-
-		var bResults strings.Builder
-		fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
-		fmt.Fprintf(&bResults, "Tests run against Hibernate %s\n", latestTag)
-		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
-			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
+		parseAndSummarizeJavaORMTestsResults(
+			ctx, t, c, node, "hibernate" /* ormName */, output,
+			blacklistName, expectedFailures, version, latestTag,
 		)
-
-		p := func(msg string, count int) {
-			testString := "tests"
-			if count == 1 {
-				testString = "test"
-			}
-			fmt.Fprintf(&bResults, "%d %s %s\n", count, testString, msg)
-		}
-		p("passed", passUnexpectedCount+passExpectedCount)
-		p("failed", failUnexpectedCount+failExpectedCount)
-		p("passed unexpectedly", passUnexpectedCount)
-		p("failed unexpectedly", failUnexpectedCount)
-		p("expected failed, but not run", notRunCount)
-
-		fmt.Fprintf(&bResults, "For a full summary look at the hibernate artifacts \n")
-		t.l.Printf("%s\n", bResults.String())
-		t.l.Printf("------------------------\n")
-
-		if failUnexpectedCount > 0 || passUnexpectedCount > 0 || notRunCount > 0 {
-			// Create a new hibernate_blacklist so we can easily update this test.
-			sort.Strings(currentFailures)
-			var b strings.Builder
-			fmt.Fprintf(&b, "Here is new hibernate blacklist that can be used to update the test:\n\n")
-			fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
-			for _, test := range currentFailures {
-				issue := expectedFailures[test]
-				if len(issue) == 0 || issue == "unknown" {
-					issue = allIssueHints[test]
-				}
-				if len(issue) == 0 {
-					issue = "unknown"
-				}
-				fmt.Fprintf(&b, "  \"%s\": \"%s\",\n", test, issue)
-			}
-			fmt.Fprintf(&b, "}\n\n")
-			t.l.Printf("\n\n%s\n\n", b.String())
-			t.l.Printf("------------------------\n")
-			t.Fatalf("\n%s\nAn updated blacklist (%s) is available in the artifacts' hibernate log\n",
-				bResults.String(),
-				blacklistName,
-			)
-		}
 	}
 
 	r.Add(testSpec{

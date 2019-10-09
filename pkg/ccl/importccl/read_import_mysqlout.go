@@ -103,7 +103,7 @@ func (d *mysqloutfileReader) readFile(
 			}
 			row = append(row, tree.DNull)
 			gotNull = false
-		} else if !d.opts.HasEscape && field == "NULL" {
+		} else if !d.opts.HasEscape && (field == "NULL" || d.opts.NullEncoding != nil && field == *d.opts.NullEncoding) {
 			row = append(row, tree.DNull)
 		} else {
 			datum, err := tree.ParseStringAs(d.conv.VisibleColTypes[len(row)], field, d.conv.EvalCtx)
