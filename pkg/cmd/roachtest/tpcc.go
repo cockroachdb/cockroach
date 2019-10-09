@@ -41,12 +41,6 @@ type tpccOptions struct {
 	During     func(context.Context) error // for running a function during the test
 	Duration   time.Duration
 
-	// ZFS, if set, will make the cluster use a ZFS volume.
-	// Be careful with ClusterReusePolicy when using this.
-	//
-	// TODO(andrei): move this to the test's cluster spec.
-	ZFS bool
-
 	// The CockroachDB versions to deploy. The first one indicates the first node,
 	// etc. To use the main binary, specify "". When Versions is nil, it defaults
 	// to "" for all nodes. When it is specified, len(Versions) needs to match the
@@ -93,7 +87,7 @@ func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) st
 }
 
 func setupTPCC(
-	ctx context.Context, t *test, c *cluster, warehouses int, zfs bool, versions []string,
+	ctx context.Context, t *test, c *cluster, warehouses int, versions []string,
 ) (crdbNodes, workloadNode nodeListOption) {
 	crdbNodes = c.Range(1, c.spec.NodeCount-1)
 	workloadNode = c.Node(c.spec.NodeCount)
@@ -137,29 +131,9 @@ func setupTPCC(
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		if zfs {
-			if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
-				// Use ZFS so the initial store dumps can be instantly rolled back to their
-				// pristine state. Useful for iterating quickly on the test, especially when
-				// used in a repro.
-				c.Reformat(ctx, crdbNodes, "zfs")
-
-				t.Status("loading dataset")
-				c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
-				waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
-				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
-				c.Stop(ctx, crdbNodes)
-
-				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
-			}
-			t.Status(`restoring store dumps`)
-			c.Run(ctx, crdbNodes, "sudo zfs rollback data1@pristine")
-			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
-		} else {
-			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
-			waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
-			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
-		}
+		c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
+		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
+		c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
 	}()
 	return crdbNodes, workloadNode
 }
@@ -171,7 +145,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		opts.Duration = time.Minute
 		rampDuration = 30 * time.Second
 	}
-	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts.Warehouses, opts.ZFS, opts.Versions)
+	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts.Warehouses, opts.Versions)
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
@@ -342,7 +316,6 @@ func registerTPCC(r *testRegistry) {
 						DrainAndQuit: false,
 					}
 				},
-				ZFS: false, // change to true during debugging/development
 			})
 		},
 	})
