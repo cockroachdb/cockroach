@@ -99,6 +99,7 @@ SUFFIX       := $(GOEXE)
 INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
+YARNCMD      := $(shell if yarnpkg --version >/dev/null; then echo yarnpkg\ ; else echo yarn\ ; fi 2>/dev/null)
 
 ifeq "$(findstring -j,$(shell ps -o args= $$PPID))" ""
 ifdef NCPUS
@@ -282,7 +283,7 @@ endif
 
 .SECONDARY: pkg/ui/yarn.installed
 pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
-	$(NODE_RUN) -C pkg/ui yarn install --offline
+	$(NODE_RUN) -C pkg/ui $(YARNCMD)install --offline
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
 	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
@@ -290,7 +291,7 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 	# reproducable builds.
 	$(NODE_RUN) pkg/ui/bin/gen-protobuf-cli-deps.js > pkg/ui/node_modules/protobufjs/cli/package.json
 	ln -sf ../../../yarn.protobufjs-cli.lock pkg/ui/node_modules/protobufjs/cli/yarn.lock
-	$(NODE_RUN) -C pkg/ui/node_modules/protobufjs/cli yarn install --offline
+	$(NODE_RUN) -C pkg/ui/node_modules/protobufjs/cli $(YARNCMD)install --offline
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf pkg/ui/node_modules/@types/node
@@ -1285,7 +1286,7 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
 	$(NODE_RUN) -C pkg/ui $(TSLINT) -c tslint.json *.js
 	$(NODE_RUN) -C pkg/ui $(TSC)
-	@if $(NODE_RUN) -C pkg/ui yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+	@if $(NODE_RUN) -C pkg/ui $(YARNCMD)list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
@@ -1342,7 +1343,7 @@ pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/st
 	goimports -w $@
 
 pkg/ui/yarn.opt.installed:
-	$(NODE_RUN) -C pkg/ui/opt yarn install
+	$(NODE_RUN) -C pkg/ui/opt $(YARNCMD)install
 	touch $@
 
 .PHONY: ui-watch-secure
