@@ -84,6 +84,7 @@ lookup-join  ·                      ·
  │           type                   inner
  │           equality               (a) = (c)
  │           equality cols are key  ·
+ │           parallel               ·
  └── scan    ·                      ·
 ·            table                  ab@primary
 ·            spans                  ALL
