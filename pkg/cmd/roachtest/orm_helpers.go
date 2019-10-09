@@ -31,7 +31,8 @@ func summarizeORMTestsResults(
 	currentFailures, allTests []string,
 	runTests map[string]struct{},
 	results map[string]string,
-	failUnexpectedCount, failExpectedCount, ignoredCount, skipCount, unexpectedSkipCount int,
+	failUnexpectedCount, failExpectedCount, ignoredCount int,
+	skipCount, unexpectedSkipCount int,
 	passUnexpectedCount, passExpectedCount int,
 	allIssueHints map[string]string,
 ) {
@@ -58,6 +59,28 @@ func summarizeORMTestsResults(
 
 	t.l.Printf("------------------------\n")
 
+	printORMTestsResults(
+		t, ormName, blacklistName, expectedFailures, version, latestTag,
+		currentFailures, failUnexpectedCount, failExpectedCount, ignoredCount,
+		skipCount, unexpectedSkipCount, passUnexpectedCount, passExpectedCount,
+		notRunCount, allIssueHints)
+}
+
+// printORMTestsResults prints out the results of running an ORM test suite
+// against a cockroach node. It is similar to summarizeORMTestsResults except
+// that it doesn't pay attention to all the tests - only to the failed ones.
+// If a test suite outputs only the failures, then this method should be used.
+func printORMTestsResults(
+	t *test,
+	ormName, blacklistName string,
+	expectedFailures blacklist,
+	version, latestTag string,
+	currentFailures []string,
+	failUnexpectedCount, failExpectedCount, ignoredCount int,
+	skipCount, unexpectedSkipCount int,
+	passUnexpectedCount, passExpectedCount, notRunCount int,
+	allIssueHints map[string]string,
+) {
 	var bResults strings.Builder
 	fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
 	fmt.Fprintf(&bResults, "Tests run against %s %s\n", ormName, latestTag)

@@ -89,8 +89,8 @@ func registerPsycopg(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
-		if expectedFailureList == nil {
+		blacklistName, expectedFailures, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
+		if expectedFailures == nil {
 			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)
 		}
 		if ignoredlist == nil {
@@ -142,7 +142,7 @@ func registerPsycopg(r *testRegistry) {
 				allTests = append(allTests, test)
 
 				ignoredIssue, expectedIgnored := ignoredlist[test]
-				issue, expectedFailure := expectedFailureList[test]
+				issue, expectedFailure := expectedFailures[test]
 				switch {
 				case expectedIgnored:
 					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
@@ -177,7 +177,7 @@ func registerPsycopg(r *testRegistry) {
 		}
 
 		summarizeORMTestsResults(
-			t, "psycopg" /* ormName */, blacklistName, expectedFailureList,
+			t, "psycopg" /* ormName */, blacklistName, expectedFailures,
 			version, latestTag, currentFailures, allTests, runTests, results,
 			failUnexpectedCount, failExpectedCount, ignoredCount, skipCount,
 			unexpectedSkipCount, passUnexpectedCount, passExpectedCount,
