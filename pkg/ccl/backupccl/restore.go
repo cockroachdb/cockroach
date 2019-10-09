@@ -926,16 +926,7 @@ func splitAndScatter(
 	}
 
 	importSpanChunksCh := make(chan []importEntry)
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// If the cluster supports sticky bits, then we should use the sticky bit to
-	// ensure that the splits are not automatically split by the merge queue. If
-	// the cluster does not support sticky bits, we disable the merge queue via
-	// gossip, so we can just set the split to expire immediately.
-	stickyBitEnabled := settings.Version.IsActive(cluster.VersionStickyBit)
-	expirationTime := hlc.Timestamp{}
-	if stickyBitEnabled {
-		expirationTime = db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	}
+	expirationTime := db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
 		for idx, importSpanChunk := range importSpanChunks {
@@ -1201,22 +1192,6 @@ func restore(
 		highWaterMark     int
 	}{
 		highWaterMark: -1,
-	}
-
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// If the cluster supports sticky bits, then we don't have to worry about the
-	// merge queue automatically merging the splits performed during RESTORE.
-	// Otherwise, we have to rely on the gossip mechanism to disable the merge
-	// queue for the table IDs being restored into.
-	stickyBitEnabled := settings.Version.IsActive(cluster.VersionStickyBit)
-	if !stickyBitEnabled {
-		tableIDs := make([]uint32, 0, len(tables))
-		for _, t := range tables {
-			tableIDs = append(tableIDs, uint32(t.ID))
-		}
-		disableCtx, cancel := context.WithCancel(restoreCtx)
-		defer cancel()
-		gossip.DisableMerges(disableCtx, tableIDs)
 	}
 
 	// Get TableRekeys to use when importing raw data.

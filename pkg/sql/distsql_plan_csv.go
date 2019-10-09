@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -177,16 +176,7 @@ func presplitTableBoundaries(
 	cfg *ExecutorConfig,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 ) error {
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// If the cluster supports sticky bits, then we should use the sticky bit to
-	// ensure that the splits are not automatically split by the merge queue. If
-	// the cluster does not support sticky bits, we disable the merge queue via
-	// gossip, so we can just set the split to expire immediately.
-	stickyBitEnabled := cfg.Settings.Version.IsActive(cluster.VersionStickyBit)
-	expirationTime := hlc.Timestamp{}
-	if stickyBitEnabled {
-		expirationTime = cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	}
+	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
 		for _, span := range tbl.Desc.AllIndexSpans() {
 			if err := cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {

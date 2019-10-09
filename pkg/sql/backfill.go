@@ -1260,20 +1260,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	// TODO(jeffreyxiao): Remove check in 20.1.
-	// If the cluster supports sticky bits, then we should use the sticky bit to
-	// ensure that the splits are not automatically split by the merge queue. If
-	// the cluster does not support sticky bits, we disable the merge queue via
-	// gossip, so we can just set the split to expire immediately.
-	stickyBitEnabled := sc.execCfg.Settings.Version.IsActive(cluster.VersionStickyBit)
-	expirationTime := hlc.Timestamp{}
-	if !stickyBitEnabled {
-		disableCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
-	} else {
-		expirationTime = sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	}
+	expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 
 	for _, span := range addingSpans {
 		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
