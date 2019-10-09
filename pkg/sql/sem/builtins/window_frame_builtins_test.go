@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 const maxInt = 1000000
@@ -250,6 +251,7 @@ func partitionToString(ctx context.Context, partition tree.IndexedRows) string {
 }
 
 func TestSlidingWindow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, count := range []int{1, 17, 253} {
 		testSlidingWindow(t, count)
 	}
