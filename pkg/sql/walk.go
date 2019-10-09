@@ -223,9 +223,15 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *indexJoinNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
+			inputCols := planColumns(n.input)
+			cols := make([]string, len(n.keyCols))
+			for i, c := range n.keyCols {
+				cols[i] = inputCols[c].Name
+			}
+			v.observer.attr(name, "key columns", strings.Join(cols, ", "))
 			v.expr(name, "filter", -1, n.table.filter)
 		}
-		v.visitConcrete(n.index)
+		n.input = v.visit(n.input)
 
 	case *lookupJoinNode:
 		if v.observer.attr != nil {
@@ -378,14 +384,11 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *sortNode:
 		if v.observer.attr != nil {
-			var columns sqlbase.ResultColumns
-			if n.plan != nil {
-				columns = planColumns(n.plan)
-			}
-			// We use n.ordering and not plan.Ordering() because
-			// plan.Ordering() does not include the added sort columns not
-			// present in the output.
+			columns := planColumns(n.plan)
 			v.observer.attr(name, "order", formatOrdering(n.ordering, columns))
+			if p := n.alreadyOrderedPrefix; p > 0 {
+				v.observer.attr(name, "already ordered", formatOrdering(n.ordering[:p], columns))
+			}
 		}
 		n.plan = v.visit(n.plan)
 
@@ -700,10 +703,6 @@ func formatOrdering(ordering sqlbase.ColumnOrdering, cols sqlbase.ResultColumns)
 func nodeName(plan planNode) string {
 	// Some nodes have custom names depending on attributes.
 	switch n := plan.(type) {
-	case *sortNode:
-		if !n.needSort {
-			return "nosort"
-		}
 	case *scanNode:
 		if n.reverse {
 			return "revscan"

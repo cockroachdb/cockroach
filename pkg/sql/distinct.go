@@ -33,6 +33,10 @@ type distinctNode struct {
 	// Subset of distinctOnColIdxs on which the input guarantees an ordering.
 	// All rows that are equal on these columns appear contiguously in the input.
 	columnsInOrder util.FastIntSet
+
+	// The properties contain the ordering that must be maintained by this node
+	// (used by the distsql planner).
+	props physicalProps
 }
 
 func (n *distinctNode) startExec(params runParams) error {

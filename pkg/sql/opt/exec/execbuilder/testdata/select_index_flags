@@ -89,6 +89,7 @@ filter           ·            ·
  │               filter       (a >= 20) AND (a <= 30)
  └── index-join  ·            ·
       │          table        abcd@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@b
 ·                spans        ALL
@@ -103,6 +104,7 @@ filter             ·            ·
  │                 filter       (a >= 20) AND (a <= 30)
  └── index-join    ·            ·
       │            table        abcd@primary
+      │            key columns  a
       └── revscan  ·            ·
 ·                  table        abcd@b
 ·                  spans        ALL
@@ -115,6 +117,7 @@ EXPLAIN SELECT * FROM abcd@b ORDER BY b DESC LIMIT 5
 ·             vectorized   true
 index-join    ·            ·
  │            table        abcd@primary
+ │            key columns  a
  └── revscan  ·            ·
 ·             table        abcd@b
 ·             spans        ALL
@@ -128,6 +131,7 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} ORDER BY b DESC LIMIT 5
 ·             vectorized   true
 index-join    ·            ·
  │            table        abcd@primary
+ │            key columns  a
  └── revscan  ·            ·
 ·             table        abcd@b
 ·             spans        ALL
@@ -146,6 +150,7 @@ limit                 ·            ·
       │               order        -b
       └── index-join  ·            ·
            │          table        abcd@primary
+           │          key columns  a
            └── scan   ·            ·
 ·                     table        abcd@b
 ·                     spans        ALL
@@ -160,6 +165,7 @@ filter           ·            ·
  │               filter       (a >= 20) AND (a <= 30)
  └── index-join  ·            ·
       │          table        abcd@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@cd
 ·                spans        ALL
@@ -198,6 +204,7 @@ render                ·            ·
       │               filter       (c >= 20) AND (c <= 30)
       └── index-join  ·            ·
            │          table        abcd@primary
+           │          key columns  a
            └── scan   ·            ·
 ·                     table        abcd@b
 ·                     spans        ALL
@@ -233,6 +240,7 @@ filter           ·            ·
  │               filter       (c >= 20) AND (c < 40)
  └── index-join  ·            ·
       │          table        abcd@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@b
 ·                spans        ALL
@@ -246,6 +254,7 @@ filter           ·            ·
  │               filter       (a >= 20) AND (a <= 30)
  └── index-join  ·            ·
       │          table        abcd@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@b
 ·                spans        ALL
@@ -257,6 +266,7 @@ EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ·           vectorized   true
 index-join  ·            ·
  │          table        abcd@primary
+ │          key columns  a
  └── scan   ·            ·
 ·           table        abcd@cd
 ·           spans        /10-/11

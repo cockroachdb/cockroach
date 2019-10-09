@@ -55,8 +55,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *scanNode:
 		return n.resultColumns
-	case *sortNode:
-		return n.columns
 	case *unionNode:
 		return n.columns
 	case *valuesNode:
@@ -141,6 +139,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source, mut)
 	case *scanBufferNode:
 		return getPlanColumns(n.buffer, mut)
+	case *sortNode:
+		return getPlanColumns(n.plan, mut)
 
 	case *rowSourceToPlanNode:
 		return n.planCols

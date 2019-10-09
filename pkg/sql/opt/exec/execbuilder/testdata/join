@@ -1493,6 +1493,7 @@ filter           ·            ·
  │               filter       c = 6.0
  └── index-join  ·            ·
       │          table        zigzag@primary
+      │          key columns  a
       └── scan   ·            ·
 ·                table        zigzag@b_idx
 ·                spans        /5-/6
@@ -1584,6 +1585,7 @@ filter           ·            ·
  │               filter       c IS NULL
  └── index-join  ·            ·
       │          table        zigzag2@primary
+      │          key columns  rowid
       └── scan   ·            ·
 ·                table        zigzag2@a_b_idx
 ·                spans        /1/2-/1/3

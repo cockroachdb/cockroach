@@ -16,6 +16,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ·           vectorized   false                        ·       ·
 index-join  ·            ·                            (a, b)  ·
  │          table        d@primary                    ·       ·
+ │          key columns  a                            ·       ·
  └── scan   ·            ·                            (a)     ·
 ·           table        d@foo_inv                    ·       ·
 ·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
@@ -27,6 +28,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": {"b": [1]}}'
 ·           vectorized   false                                    ·       ·
 index-join  ·            ·                                        (a, b)  ·
  │          table        d@primary                                ·       ·
+ │          key columns  a                                        ·       ·
  └── scan   ·            ·                                        (a)     ·
 ·           table        d@foo_inv                                ·       ·
 ·           spans        /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
@@ -38,6 +40,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": [[2]]}}';
 ·           vectorized   false                                            ·       ·
 index-join  ·            ·                                                (a, b)  ·
  │          table        d@primary                                        ·       ·
+ │          key columns  a                                                ·       ·
  └── scan   ·            ·                                                (a)     ·
 ·           table        d@foo_inv                                        ·       ·
 ·           spans        /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
@@ -49,6 +52,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b":true}}';
 ·           vectorized   false                         ·       ·
 index-join  ·            ·                             (a, b)  ·
  │          table        d@primary                     ·       ·
+ │          key columns  a                             ·       ·
  └── scan   ·            ·                             (a)     ·
 ·           table        d@foo_inv                     ·       ·
 ·           spans        /"a"/"b"/True-/"a"/"b"/False  ·       ·
@@ -60,6 +64,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
 ·           vectorized   false                    ·       ·
 index-join  ·            ·                        (a, b)  ·
  │          table        d@primary                ·       ·
+ │          key columns  a                        ·       ·
  └── scan   ·            ·                        (a)     ·
 ·           table        d@foo_inv                ·       ·
 ·           spans        /Arr/1-/Arr/1/PrefixEnd  ·       ·
@@ -71,6 +76,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a": {"b": [1]}}]'
 ·           vectorized   false                                            ·       ·
 index-join  ·            ·                                                (a, b)  ·
  │          table        d@primary                                        ·       ·
+ │          key columns  a                                                ·       ·
  └── scan   ·            ·                                                (a)     ·
 ·           table        d@foo_inv                                        ·       ·
 ·           spans        /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
@@ -104,6 +110,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ·           vectorized   false                        ·       ·
 index-join  ·            ·                            (a, b)  ·
  │          table        d@primary                    ·       ·
+ │          key columns  a                            ·       ·
  └── scan   ·            ·                            (a)     ·
 ·           table        d@foo_inv                    ·       ·
 ·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
@@ -115,6 +122,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
 ·           vectorized   false                                ·       ·
 index-join  ·            ·                                    (a, b)  ·
  │          table        d@primary                            ·       ·
+ │          key columns  a                                    ·       ·
  └── scan   ·            ·                                    (a)     ·
 ·           table        d@foo_inv                            ·       ·
 ·           spans        /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
@@ -133,6 +141,7 @@ EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ·           vectorized   false                        ·       ·
 index-join  ·            ·                            (a, b)  ·
  │          table        d@primary                    ·       ·
+ │          key columns  a                            ·       ·
  └── scan   ·            ·                            (a)     ·
 ·           table        d@foo_inv                    ·       ·
 ·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
@@ -301,6 +310,7 @@ filter           ·            ·                         (a, b)  ·
  │               filter       b @> '{"a": {}, "b": 2}'  ·       ·
  └── index-join  ·            ·                         (a, b)  ·
       │          table        d@primary                 ·       ·
+      │          key columns  a                         ·       ·
       └── scan   ·            ·                         (a)     ·
 ·                table        d@foo_inv                 ·       ·
 ·                spans        /"b"/2-/"b"/2/PrefixEnd   ·       ·

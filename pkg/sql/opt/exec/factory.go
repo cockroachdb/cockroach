@@ -180,7 +180,9 @@ type Factory interface {
 	// The orderedCols are a subset of distinctCols; the input is required to be
 	// ordered along these columns (i.e. all rows with the same values on these
 	// columns are a contiguous part of the input).
-	ConstructDistinct(input Node, distinctCols, orderedCols ColumnOrdinalSet) (Node, error)
+	ConstructDistinct(
+		input Node, distinctCols, orderedCols ColumnOrdinalSet, reqOrdering OutputOrdering,
+	) (Node, error)
 
 	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT
 	// operation (either the ALL or the DISTINCT version). The left and right
@@ -189,17 +191,26 @@ type Factory interface {
 
 	// ConstructSort returns a node that performs a resorting of the rows produced
 	// by the input node.
-	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
+	//
+	// When the input is partially sorted we can execute a "segmented" sort. In
+	// this case alreadyOrderedPrefix is non-zero and the input is ordered by
+	// ordering[:alreadyOrderedPrefix].
+	ConstructSort(input Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int) (Node, error)
 
 	// ConstructOrdinality returns a node that appends an ordinality column to
 	// each row in the input node.
 	ConstructOrdinality(input Node, colName string) (Node, error)
 
-	// ConstructIndexJoin returns a node that performs an index join.
-	// The input must be created by ConstructScan for the same table; cols is the
-	// set of columns produced by the index join.
+	// ConstructIndexJoin returns a node that performs an index join. The input
+	// contains the primary key (on the columns identified as keyCols).
+	//
+	// The index join produces the given table columns (in ordinal order).
 	ConstructIndexJoin(
-		input Node, table cat.Table, cols ColumnOrdinalSet, reqOrdering OutputOrdering,
+		input Node,
+		table cat.Table,
+		keyCols []ColumnOrdinal,
+		tableCols ColumnOrdinalSet,
+		reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructLookupJoin returns a node that preforms a lookup join.
@@ -542,7 +553,9 @@ const (
 	SubqueryAllRows
 )
 
-// ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
+// ColumnOrdinal is the 0-based ordinal index of a cat.Table column or a column
+// produced by a Node.
+// TODO(radu): separate these two usages for clarity of the interface.
 type ColumnOrdinal int32
 
 // ColumnOrdinalSet contains a set of ColumnOrdinal values as ints.
