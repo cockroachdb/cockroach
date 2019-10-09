@@ -946,7 +946,7 @@ func (sc *SchemaChanger) exec(
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
 		if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
-			if err == sqlbase.ErrDescriptorNotFound {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				return err
 			}
 			log.Warningf(ctx, "waiting to update leases: %+v", err)
@@ -1022,7 +1022,7 @@ func (sc *SchemaChanger) exec(
 	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx)
 
 	defer func() {
-		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && err != sqlbase.ErrDescriptorNotFound {
+		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && !errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			// We only expect ErrDescriptorNotFound to be returned. This happens
 			// when the table descriptor was deleted. We can ignore this error.
 
@@ -1990,7 +1990,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if shouldLogSchemaChangeError(err) {
 							log.Warningf(ctx, "Error executing schema change: %s", err)
 						}
-						if err == sqlbase.ErrDescriptorNotFound {
+						if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 							// Someone deleted this table. Don't try to run the schema
 							// changer again. Note that there's no gossip update for the
 							// deletion which would remove this schemaChanger.
