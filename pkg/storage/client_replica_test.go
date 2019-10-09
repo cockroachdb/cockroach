@@ -50,7 +50,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
-	"golang.org/x/sync/errgroup"
 )
 
 func strToValue(s string) *roachpb.Value {
@@ -2547,304 +2546,6 @@ func TestReplicaTombstone(t *testing.T) {
 	})
 }
 
-// This test is designed to exercise cases where requests might have received
-// AmbiguousResultError despite the proposing replica being able to disambiguate
-// the result. These exercised cases occur when a former leaseholder is removed
-// after transferring away the lease.
-//
-// At the time of writing this test are three hazardous cases:
-//
-//  (1) The outgoing leaseholder learns about its removal before applying the
-//      lease transfer. This could happen if it has a lot left to apply but it
-//      does indeed know in its log that it is either no longer the leaseholder
-//      or that some of its commands will apply successfully.
-//
-//  (2) The replica learns about its removal after applying the lease transfer
-//      but it potentially still has pending commands which it thinks might
-//      have been proposed. This can occur if there are commands which are
-//      proposed after lease transfer has been proposed but before the lease
-//      transfer has applied. This can also occur if commands are re-ordered
-//      by raft due to a leadership change.
-//
-//  (3) The replica learns about its removal after applying the lease transfer
-//      but proposed a command evaluated under the old lease after the lease
-//      transfer has been applied. This can occur if there are commands evaluate
-//      before the lease transfer is proposed but are not inserted into the
-//      proposal buffer until after it has been applied.
-//
-// Cases (1) and (3) are not dealt with in this iteration of this test. They
-// will be prevented in a follow-up commit which will prevent outstanding
-// proposals from overlapping with lease transfers by utilizing latches.
-//
-// Case (2) will be handled by explicitly failing out pending proposals when
-// a lease transfer applies. All outstanding proposals are known at this point
-// to not be able to commit.
-func TestRemovalGenerallyDoesNotReturnAnAmbiguousError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// This test is unfortunately complicated to create the desired scenario.
-	// The goal is to catch a replica in a state where it has committed a lease
-	// transfer to another replica but not yet applied that transfer. In this
-	// moment we'll wait ensure that the replica then proposes a new command which
-	// was evaluated underneath this old lease.
-	//
-	// In order to do this we inject a hooks into the outgoing lease holder
-	// and the raft transport for the new lease holder. We then use this state
-	// to coordinate the order of events. The servers will be configured to apply
-	// a single raft command per raft-ready.
-	//
-	// The intended sequence of events is as follows:
-	//
-	//  (a) Propose a large number of increment commands to the new lease holder
-	//      concurrently to create a tail of unapplied entries.
-	//  (b) Detect these proposals in the TestingProposalFilter.
-	//  (c) Block one of these proposals to be unblocked only after the lease
-	//      transfer is known to be committed on the incoming lease holder.
-	//  (d) Issue a lease transfer.
-	//  (e) Detect the MsgApp which appends the lease transfer to the incoming
-	//      lease holders log and record its raft index into state.
-	//  (f) Unblock the previously blocked increment command which will lead
-	//      to its proposal.
-	//  (g) Detect the MsgApp which when received will make the lease transfer
-	//      committed on the incoming lease holder. At this point drop all
-	//      raft requests and responses intended for the outgoing leaseholder.
-	//  (h) Block the outgoing leaseholder from applying the lease transfer.
-	//  (i) Remove the outgoing leaseholder from the range (it won't hear about
-	//      this).
-	//  (j) Unblock the application of the lease transfer (and raft in general)
-	//  (k) Wait until the later proposal is proposed to raft before allowing the
-	//      outgoing replica to hear about its removal with a ReplicaTooOldError.
-	//
-	// Before the commit in which this test was included, (j) would not have done
-	// anything about the outstanding proposal and (k) would have lead to an
-	// AmbiguousResultError. After the change (j) will lead to the proposal
-	// receiving a NotLeaseHolderError.
-
-	// We use a relatively large number of increments and commit commands one
-	// at a time in order to ensure that the outgoing leaseholder has entries
-	// left to apply.
-	const incs = 20
-	type testState struct {
-		syncutil.RWMutex
-		cond sync.Cond
-
-		scratchRangeDesc roachpb.RangeDescriptor
-
-		// Used to detect the receipt of the lease transfer by the incoming
-		// lease holder and to record its raftIndex.
-		leaseTransferID storagebase.CmdIDKey
-		raftIndex       uint64
-
-		// Used to detect the proposal of the command which came after the lease
-		// transfer.
-		proposalAfterLeaseTransferID storagebase.CmdIDKey
-
-		// Used to detect that all of the increment commands have made it to the
-		// proposal filter on the outgoing lease holder.
-		proposedIncs int
-
-		// Set to true when the leaseTransfer is known to be committed by the
-		// incoming lease holder.
-		leaseTransferCommitted bool
-		// Set to true when the command proposed after the lease transfer is known
-		// to have been proposed to raft.
-		proposedCommandAfterLeaseTransfer bool
-		// Set to true to unblock everything at the end of the test.
-		unblocked bool
-	}
-	var (
-		state       testState
-		updateState = func(f func()) {
-			defer state.cond.Broadcast()
-			state.Lock()
-			defer state.Unlock()
-			f()
-		}
-		waitForState = func(cond func() bool) {
-			state.RLock()
-			defer state.RUnlock()
-			for !cond() {
-				state.cond.Wait()
-			}
-		}
-		isScratchRange = func(rangeID roachpb.RangeID) bool {
-			state.RLock()
-			defer state.RUnlock()
-			return rangeID == state.scratchRangeDesc.RangeID
-		}
-	)
-	state.cond.L = state.RLocker()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			RaftConfig: base.RaftConfig{
-				// Only apply one command at a time. This way we can stop application
-				// one store 0 before it is in the ready which will apply the command
-				// which moves the lease to store 1 but after that command is known to
-				// be committed on store 1.
-				RaftMaxCommittedSizePerReady: 1,
-			},
-			Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-				TestingProposalFilter: storagebase.ReplicaProposalFilter(
-					func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-						if !isScratchRange(args.Req.RangeID) {
-							return nil
-						}
-						if _, isInc := args.Req.GetArg(roachpb.Increment); isInc {
-							var numIncs int
-							updateState(func() {
-								numIncs = state.proposedIncs
-								state.proposedIncs++ // part of (b)
-							})
-							// Pick the first request and block it from being propsoed until
-							// after the lease transfer has been proposed. This should allow
-							// us to exercise cases where proposals in the proposals map which
-							// perhaps haven't even been proposed to raft get a non-ambiguous
-							// error.
-							if numIncs == 0 { // (c)
-								// Unblock the command once we know that the lease transfer
-								// has been appended to the incoming leaseholder's raft log (f).
-								waitForState(func() bool { return state.raftIndex > 0 })
-							}
-						}
-						// Used to get the CmdID to implement (e).
-						if _, ok := args.Req.GetArg(roachpb.TransferLease); ok {
-							updateState(func() { state.leaseTransferID = args.CmdID })
-						}
-						return nil
-					},
-				),
-				TestingApplyFilter: storagebase.ReplicaApplyFilter(
-					func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
-						// Block the application of the lease transfer (h).
-						waitForState(func() (b bool) {
-							return args.StoreID != 1 /* s0.StoreID() */ ||
-								args.RangeID != state.scratchRangeDesc.RangeID ||
-								(state.unblocked || args.State == nil || args.State.Lease == nil)
-						})
-						return 0, nil
-					},
-				),
-			}},
-		},
-		ReplicationMode: base.ReplicationManual,
-	})
-	defer tc.Stopper().Stop(context.TODO())
-
-	// We want to propose a whole bunch of requests and then propose a lease
-	// transfer. As soon as we see that the lease transfer has committed then
-	// we want to block all application until we know that the next replica has
-	// applied the lease transfer.
-	scratch := tc.ScratchRange(t)
-	makeKey := func() roachpb.Key {
-		return append(scratch[:len(scratch):len(scratch)], uuid.MakeV4().String()...)
-	}
-
-	desc := tc.AddReplicasOrFatal(t, scratch, tc.Target(1), tc.Target(2))
-	require.NoError(t, tc.WaitForVoters(scratch, tc.Target(1), tc.Target(2)))
-	updateState(func() { state.scratchRangeDesc = desc })
-	// Set up the raft transport to block messages to the outgoing leaseholder
-	// once the lease transfer is known to apply on the incoming leaseholder (g).
-	s0 := getFirstStore(t, tc.Server(0))
-	s0Funcs := noopRaftHandlerFuncs()
-	s0Funcs.dropReq = func(r *storage.RaftMessageRequest) bool {
-		state.RLock()
-		defer state.RUnlock()
-		return state.leaseTransferCommitted && !state.unblocked
-	}
-	s0Funcs.dropResp = func(r *storage.RaftMessageResponse) bool {
-		state.RLock()
-		defer state.RUnlock()
-		// Wait until the unblocked command has been proposed before allowing
-		// raft responses through (k).
-		return state.proposedCommandAfterLeaseTransfer && !state.unblocked
-	}
-	tc.Servers[0].RaftTransport().Listen(s0.StoreID(), &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
-		RaftMessageHandler:         s0,
-		unreliableRaftHandlerFuncs: s0Funcs,
-	})
-
-	// Set up the raft transport on the incoming leaseholder to detect events
-	// and update the state.
-	s1 := getFirstStore(t, tc.Server(1))
-	s1Funcs := noopRaftHandlerFuncs()
-	s1Funcs.dropReq = func(r *storage.RaftMessageRequest) bool {
-		state.Lock()
-		defer state.Unlock()
-		if state.leaseTransferCommitted {
-			return false
-		}
-		defer state.cond.Broadcast()
-		if state.raftIndex > 0 && r.Message.Commit >= state.raftIndex {
-			// Detect the message which commits the lease transfer on the
-			// incoming leaseholder (g).
-			state.leaseTransferCommitted = true
-		} else if r.Message.Type == raftpb.MsgApp {
-			for _, e := range r.Message.Entries {
-				id, _ := storage.DecodeRaftCommand(e.Data)
-				if id == state.leaseTransferID {
-					// Record the raft index of the lease transfer being appended to
-					// the incoming leaseholder's log (e).
-					state.raftIndex = e.Index
-				} else if id == state.proposalAfterLeaseTransferID {
-					// Detect that the command proposed after the lease transfer has
-					// made it to raft (k).
-					state.proposedCommandAfterLeaseTransfer = true
-				}
-			}
-		}
-		return false
-	}
-	tc.Servers[1].RaftTransport().Listen(s1.StoreID(), &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
-		RaftMessageHandler:         s1,
-		unreliableRaftHandlerFuncs: s1Funcs,
-	})
-	// Propose a bunch of increment commands (a).
-	var g errgroup.Group
-	for i := 0; i < incs; i++ {
-		g.Go(func() error {
-			_, err := tc.Server(0).DB().Inc(context.TODO(), makeKey(), 1)
-			return err
-		})
-	}
-	// Detect that they have all been proposed (b).
-	// One of them will be blocked from being proposed (c).
-	waitForState(func() bool { return state.proposedIncs >= incs })
-	// Issue the lease transfer (d).
-	transferErr := make(chan error, 1)
-	go func() { transferErr <- tc.TransferRangeLease(desc, tc.Target(1)) }()
-	// Along the way we'll detect that the lease transfer was appended to the
-	// incoming leaseholder's log (e) and unblock the blocked proposal (f).
-	// Wait for the lease transfer to be known to be committed (g).
-	waitForState(func() bool {
-		return state.leaseTransferCommitted
-	})
-	// At this point the outgoing leaseholder will be blocked from applying
-	// the lease tranfer (h).
-
-	// Issue a new increment to the incoming leaseholder to demonstrate that it
-	// does indeed have the lease.
-	_, err := tc.Server(1).DB().Inc(context.TODO(), makeKey(), 1)
-	require.Nil(t, err)
-	// Remove the outgoing leaseholder from the range (i).
-	_, err = tc.Server(1).DB().AdminChangeReplicas(context.TODO(), scratch, desc,
-		[]roachpb.ReplicationChange{{
-			ChangeType: roachpb.REMOVE_REPLICA,
-			Target:     tc.Target(0),
-		}})
-	require.NoError(t, err)
-	// Unblock raft application on store 0 which will release the raftMu and allow
-	// the outgoing leaseholder to propose the command which followed the lease
-	// transfer (j).
-	updateState(func() { state.unblocked = true })
-	// At this point we'll detect this final proposal and then allow the outgoing
-	// lease holder to learn about its removal (k).
-	// Ensure that we don't get any ambiguous errors which boil up to the client.
-	require.NoError(t, g.Wait())
-	require.NoError(t, <-transferErr)
-}
-
 // TestAdminRelocateRangeSafety exercises a situation where calls to
 // AdminRelocateRange can race with calls to ChangeReplicas and verifies
 // that such races do not leave the range in an under-replicated state.
@@ -3100,6 +2801,114 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		close(blockRangeDescriptorReadChan)
 		wg.Wait()
 	})
+}
+
+// This test is designed to demonstrate that it is not possible to have pending
+// proposals concurrent with a TransferLeaseRequest. This property ensures that
+// we cannot possibly receive AmbiguousResultError due to an outgoing leaseholder
+// being removed while still having pending proposals for a lease which did not
+// expire (i.e. was transferred cooperatively using TransferLease rather than
+// being taken with a RequestLease).
+//
+// At the time of writing this test were three hazardous cases which are now
+// avoided:
+//
+//  (1) The outgoing leaseholder learns about its removal before applying the
+//      lease transfer. This could happen if it has a lot left to apply but it
+//      does indeed know in its log that it is either no longer the leaseholder
+//      or that some of its commands will apply successfully.
+//
+//  (2) The replica learns about its removal after applying the lease transfer
+//      but it potentially still has pending commands which it thinks might
+//      have been proposed. This can occur if there are commands which are
+//      proposed after lease transfer has been proposed but before the lease
+//      transfer has applied. This can also occur if commands are re-ordered
+//      by raft due to a leadership change.
+//
+//  (3) The replica learns about its removal after applying the lease transfer
+//      but proposed a command evaluated under the old lease after the lease
+//      transfer has been applied. This can occur if there are commands evaluate
+//      before the lease transfer is proposed but are not inserted into the
+//      proposal buffer until after it has been applied.
+//
+// None of these cases are possible any longer as latches now prevent writes
+// from occurring concurrently with TransferLeaseRequests. (1) is prevented
+// because all proposals will need to apply before the TransferLeaseRequest
+// can be evaluated. (2) and (3) are not possible because either the commands
+// in question acquire their latches before the TransferLeaseRequest in which
+// case they'll apply before the TransferLease can be proposed or they acquire
+// their latches after the TransferLease applies in which case they will fail
+// due to NotLeaseHolderError prior to application.
+func TestTransferLeaseBlocksWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We want to verify that we will not propose a TransferLeaseRequest while
+	// there is an outstanding proposal.
+	var scratchRangeID atomic.Value
+	scratchRangeID.Store(roachpb.RangeID(0))
+	blockInc := make(chan chan struct{})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				TestingProposalFilter: storagebase.ReplicaProposalFilter(
+					func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+						if args.Req.RangeID != scratchRangeID.Load().(roachpb.RangeID) {
+							return nil
+						}
+						// Block increment requests on blockInc.
+						if _, isInc := args.Req.GetArg(roachpb.Increment); isInc {
+							unblock := make(chan struct{})
+							blockInc <- unblock
+							<-unblock
+						}
+						return nil
+					},
+				),
+			}},
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(context.TODO())
+
+	scratch := tc.ScratchRange(t)
+	makeKey := func() roachpb.Key {
+		return append(scratch[:len(scratch):len(scratch)], uuid.MakeV4().String()...)
+	}
+	desc := tc.AddReplicasOrFatal(t, scratch, tc.Target(1), tc.Target(2))
+	scratchRangeID.Store(desc.RangeID)
+	require.NoError(t, tc.WaitForVoters(scratch, tc.Target(1), tc.Target(2)))
+
+	// Launch a goroutine to increment a value, it will block in the proposal
+	// filter.
+	incErr := make(chan error)
+	go func() {
+		_, err := tc.Server(1).DB().Inc(context.TODO(), makeKey(), 1)
+		incErr <- err
+	}()
+
+	// Wait for the increment to be blocked on the proposal filter so we know
+	// it holds a write latch.
+	unblock := <-blockInc
+
+	// Launch a goroutine to transfer the lease to store 1.
+	transferErr := make(chan error)
+	go func() {
+		transferErr <- tc.TransferRangeLease(desc, tc.Target(1))
+	}()
+
+	// Ensure that the lease transfer doesn't succeed.
+	// We don't wait that long because we don't want this test to take too long.
+	// The theory is that if we weren't acquiring latches over the keyspace then
+	// the lease transfer could succeed before we unblocked the increment request.
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case err := <-transferErr:
+		t.Fatalf("did not expect transfer to complete, got %v", err)
+	}
+
+	close(unblock)
+	require.NoError(t, <-incErr)
+	require.NoError(t, <-transferErr)
 }
 
 // getRangeInfo retreives range info by performing a get against the provided
