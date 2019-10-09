@@ -223,7 +223,7 @@ func NewJoinReader(
 		jr.fetcher = NewRowFetcherStatCollector(&fetcher)
 		jr.FinishTrace = jr.outputStatsToTrace
 	} else {
-		jr.fetcher = &RowFetcherWrapper{Fetcher: &fetcher}
+		jr.fetcher = &fetcher
 	}
 
 	jr.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
@@ -500,9 +500,9 @@ func (jr *JoinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 
 		// Fetch the next row and copy it into the row container.
-		lookedUpRow, meta := jr.fetcher.Next()
-		if meta != nil {
-			jr.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
+		lookedUpRow, _, _, err := jr.fetcher.NextRow(jr.Ctx)
+		if err != nil {
+			jr.MoveToDraining(scrub.UnwrapScrubError(err))
 			return jrStateUnknown, jr.DrainHelper()
 		}
 		if lookedUpRow == nil {
@@ -641,7 +641,6 @@ func (jr *JoinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 func (jr *JoinReader) Start(ctx context.Context) context.Context {
 	jr.input.Start(ctx)
 	ctx = jr.StartInternal(ctx, joinReaderProcName)
-	jr.fetcher.Start(ctx)
 	jr.runningState = jrReadingInput
 	return ctx
 }
