@@ -1188,9 +1188,7 @@ func removeDeadReplicas(
 				return !ok
 			})
 			if canMakeProgress {
-				return false, errors.Errorf("Range %s has dead peers but has not lost quorum; let the "+
-					"cluster run in the current state until these replicas have been removed before retrying "+
-					"this operation.", &desc)
+				return false, nil
 			}
 
 			// Rewrite the range as having a single replica. The winning
