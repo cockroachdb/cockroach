@@ -188,6 +188,7 @@ lookup-join       ·                      ·                                    
  │                type                   inner                                ·       ·
  │                equality               (a) = (a)                            ·       ·
  │                equality cols are key  ·                                    ·       ·
+ │                parallel               ·                                    ·       ·
  │                pred                   @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
  └── zigzag-join  ·                      ·                                    (a)     ·
       │           type                   inner                                ·       ·
@@ -208,6 +209,7 @@ lookup-join       ·                      ·                                    
  │                type                   inner                                          ·       ·
  │                equality               (a) = (a)                                      ·       ·
  │                equality cols are key  ·                                              ·       ·
+ │                parallel               ·                                              ·       ·
  │                pred                   @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
  └── zigzag-join  ·                      ·                                              (a)     ·
       │           type                   inner                                          ·       ·
@@ -228,6 +230,7 @@ lookup-join       ·                      ·                                   (
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
+ │                parallel               ·                                   ·       ·
  │                pred                   @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
  └── zigzag-join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
@@ -251,6 +254,7 @@ lookup-join       ·                      ·                                    
  │                type                   inner                                ·       ·
  │                equality               (a) = (a)                            ·       ·
  │                equality cols are key  ·                                    ·       ·
+ │                parallel               ·                                    ·       ·
  │                pred                   @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
  └── zigzag-join  ·                      ·                                    (a)     ·
       │           type                   inner                                ·       ·
@@ -271,6 +275,7 @@ lookup-join       ·                      ·                                    
  │                type                   inner                                          ·       ·
  │                equality               (a) = (a)                                      ·       ·
  │                equality cols are key  ·                                              ·       ·
+ │                parallel               ·                                              ·       ·
  │                pred                   @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
  └── zigzag-join  ·                      ·                                              (a)     ·
       │           type                   inner                                          ·       ·
@@ -291,6 +296,7 @@ lookup-join       ·                      ·                                   (
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
+ │                parallel               ·                                   ·       ·
  │                pred                   @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
  └── zigzag-join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
