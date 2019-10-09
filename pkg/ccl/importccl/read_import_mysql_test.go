@@ -114,7 +114,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 
 	noop := func(_ bool) error { return nil }
 
-	if err := converter.readFile(ctx, wrapped, 1, "", noop); err != nil {
+	if err := converter.readFile(ctx, wrapped, 1, "", noop, nil); err != nil {
 		t.Fatal(err)
 	}
 	converter.inputFinished(ctx)
