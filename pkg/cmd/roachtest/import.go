@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -48,32 +47,6 @@ func registerImportTPCC(r *testRegistry) {
 		m.Wait()
 	}
 
-	runImportDirectIngestion := func(ctx context.Context, t *test, c *cluster, warehouses int) {
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Start(ctx, t)
-
-		t.Status("importing")
-		m := newMonitor(ctx, c)
-		dul := NewDiskUsageLogger(c)
-		m.Go(dul.Runner)
-		hc := NewHealthChecker(c, c.All())
-		m.Go(hc.Runner)
-
-		m.Go(func(ctx context.Context) error {
-			defer dul.Done()
-			defer hc.Done()
-			cmd := fmt.Sprintf(
-				`./cockroach workload fixtures import tpcc --warehouses=%d --experimental-direct-ingestion`+
-					` --checks=false`,
-				warehouses)
-			importStart := timeutil.Now()
-			c.Run(ctx, c.Node(1), cmd)
-			t.l.Printf("IMPORT finished in %s\n", timeutil.Since(importStart))
-			return nil
-		})
-		m.Wait()
-	}
-
 	const warehouses = 1000
 	for _, numNodes := range []int{4, 32} {
 		r.Add(testSpec{
@@ -94,15 +67,6 @@ func registerImportTPCC(r *testRegistry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Skip("#37349 - OOMing", "" /* details */)
 			runImportTPCC(ctx, t, c, geoWarehouses)
-		},
-	})
-	r.Add(testSpec{
-		Name:       `import/experimental-direct-ingestion`,
-		MinVersion: `v19.2.0`,
-		Cluster:    makeClusterSpec(3, cpu(16)),
-		Timeout:    2 * time.Hour,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runImportDirectIngestion(ctx, t, c, warehouses)
 		},
 	})
 }

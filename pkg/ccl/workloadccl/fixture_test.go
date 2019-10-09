@@ -183,40 +183,21 @@ func TestImportFixture(t *testing.T) {
 	}
 
 	const filesPerNode = 1
-	sqlDB.Exec(t, `CREATE DATABASE distsort`)
+
+	sqlDB.Exec(t, `CREATE DATABASE ingest`)
 	_, err := ImportFixture(
-		ctx, db, gen, `distsort`, false /* directIngestion */, filesPerNode, true, /* injectStats */
+		ctx, db, gen, `ingest`, filesPerNode, false, /* injectStats */
 		``, /* csvServer */
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
-		`SELECT count(*) FROM distsort.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
-
-	sqlDB.CheckQueryResults(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-           FROM [SHOW STATISTICS FOR TABLE distsort.fx]`,
-		[][]string{
-			{"__auto__", "{key}", "100", "100", "0"},
-			{"__auto__", "{value}", "100", "1", "5"},
-		})
-
-	sqlDB.Exec(t, `CREATE DATABASE direct`)
-	_, err = ImportFixture(
-		ctx, db, gen, `direct`, true /* directIngestion */, filesPerNode, false, /* injectStats */
-		``, /* csvServer */
-	)
-	require.NoError(t, err)
-	sqlDB.CheckQueryResults(t,
-		`SELECT count(*) FROM direct.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
-
-	fingerprints := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE distsort.fx`)
-	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE direct.fx`, fingerprints)
+		`SELECT count(*) FROM ingest.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 
 	// Since we did not inject stats, the IMPORT should have triggered
 	// automatic stats collection.
 	sqlDB.CheckQueryResultsRetry(t,
 		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-           FROM [SHOW STATISTICS FOR TABLE direct.fx]`,
+           FROM [SHOW STATISTICS FOR TABLE ingest.fx]`,
 		[][]string{
 			{"__auto__", "{key}", "10", "10", "0"},
 			{"__auto__", "{value}", "10", "1", "0"},
@@ -240,10 +221,10 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	}
 
 	const filesPerNode = 1
-	const noDirectIngest, noInjectStats = false, false
+	const noInjectStats = false
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	_, err := ImportFixture(
-		ctx, db, gen, `d`, noDirectIngest, filesPerNode, noInjectStats, ts.URL,
+		ctx, db, gen, `d`, filesPerNode, noInjectStats, ts.URL,
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,

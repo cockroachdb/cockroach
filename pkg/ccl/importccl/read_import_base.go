@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type readFileFunc func(context.Context, *fileReader, int32, string, progressFn) error
+type readFileFunc func(context.Context, *fileReader, int32, string) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -42,12 +42,10 @@ func readInputFiles(
 	dataFiles map[int32]string,
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
-	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
 	done := ctx.Done()
 
-	var totalBytes, readBytes int64
 	fileSizes := make(map[int32]int64, len(dataFiles))
 	// Attempt to fetch total number of bytes for all files.
 	for id, dataFile := range dataFiles {
@@ -64,14 +62,10 @@ func readInputFiles(
 		if sz <= 0 {
 			// Don't log dataFile here because it could leak auth information.
 			log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
-			totalBytes = 0
 			break
 		}
 		fileSizes[id] = sz
-		totalBytes += sz
 	}
-	updateFromFiles := progressFn != nil && totalBytes == 0
-	updateFromBytes := progressFn != nil && totalBytes > 0
 
 	currentFile := 0
 	for dataFileIndex, dataFile := range dataFiles {
@@ -105,33 +99,8 @@ func readInputFiles(
 			defer decompressed.Close()
 			src.Reader = decompressed
 
-			wrappedProgressFn := func(finished bool) error { return nil }
-			if updateFromBytes {
-				const progressBytes = 100 << 20
-				var lastReported int64
-				wrappedProgressFn = func(finished bool) error {
-					progressed := src.counter.n - lastReported
-					// progressBytes is the number of read bytes at which to report job progress. A
-					// low value may cause excessive updates in the job table which can lead to
-					// very large rows due to MVCC saving each version.
-					if finished || progressed > progressBytes {
-						readBytes += progressed
-						lastReported = src.counter.n
-						if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
-							return err
-						}
-					}
-					return nil
-				}
-			}
-
-			if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
+			if err := fileFunc(ctx, src, dataFileIndex, dataFile); err != nil {
 				return errors.Wrap(err, dataFile)
-			}
-			if updateFromFiles {
-				if err := progressFn(float32(currentFile) / float32(len(dataFiles))); err != nil {
-					return err
-				}
 			}
 			return nil
 		}(); err != nil {
@@ -197,11 +166,9 @@ func (f fileReader) ReadFraction() float32 {
 	return float32(f.counter.n) / float32(f.total)
 }
 
-type progressFn func(finished bool) error
-
 type inputConverter interface {
 	start(group ctxgroup.Group)
-	readFiles(ctx context.Context, dataFiles map[int32]string, format roachpb.IOFileFormat, progressFn func(float32) error, settings *cluster.Settings) error
+	readFiles(ctx context.Context, dataFiles map[int32]string, format roachpb.IOFileFormat, settings *cluster.Settings) error
 	inputFinished(ctx context.Context)
 }
 

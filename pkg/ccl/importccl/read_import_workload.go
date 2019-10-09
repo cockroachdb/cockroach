@@ -102,11 +102,7 @@ func makeDatumFromColOffset(
 }
 
 func (w *workloadReader) readFiles(
-	ctx context.Context,
-	dataFiles map[int32]string,
-	_ roachpb.IOFileFormat,
-	_ func(float32) error,
-	_ *cluster.Settings,
+	ctx context.Context, dataFiles map[int32]string, _ roachpb.IOFileFormat, _ *cluster.Settings,
 ) error {
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))

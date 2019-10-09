@@ -233,15 +233,6 @@ func NewProcessor(
 		}
 		return NewReadImportDataProcessor(flowCtx, processorID, *core.ReadImport, outputs[0])
 	}
-	if core.SSTWriter != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
-			return nil, err
-		}
-		if NewSSTWriterProcessor == nil {
-			return nil, errors.New("SSTWriter processor unimplemented")
-		}
-		return NewSSTWriterProcessor(flowCtx, processorID, *core.SSTWriter, inputs[0], outputs[0])
-	}
 	if core.CSVWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
@@ -343,10 +334,6 @@ type VectorizeAlwaysException interface {
 // NewReadImportDataProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
 var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
-
-// NewSSTWriterProcessor is externally implemented and registered by
-// ccl/sqlccl/csv.go.
-var NewSSTWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.SSTWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewCSVWriterProcessor is externally implemented.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)

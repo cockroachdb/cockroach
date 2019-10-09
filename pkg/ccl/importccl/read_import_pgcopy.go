@@ -65,10 +65,9 @@ func (d *pgCopyReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
 	format roachpb.IOFileFormat,
-	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, d.readFile, progressFn, settings)
+	return readInputFiles(ctx, dataFiles, format, d.readFile, settings)
 }
 
 type postgreStreamCopy struct {
@@ -258,7 +257,7 @@ func (c copyData) String() string {
 }
 
 func (d *pgCopyReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string,
 ) error {
 	s := bufio.NewScanner(input)
 	s.Split(bufio.ScanLines)

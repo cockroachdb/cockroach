@@ -812,38 +812,24 @@ COPY t (a, b, c) FROM stdin;
 	sqlDB.Exec(t, `CREATE TABLE blah (i int8)`)
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
-	for _, direct := range []bool{false, true} {
-		// this test is big and slow as is, so we can't afford to double it in race.
-		if util.RaceEnabled && direct {
-			continue
-		}
-
-		for i, tc := range tests {
-			if direct {
-				if tc.with == "" {
-					tc.with = "WITH experimental_direct_ingestion"
-				} else {
-					tc.with += ", experimental_direct_ingestion"
-				}
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
+			dbName := fmt.Sprintf("d%d", i)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
+			defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
+			var q string
+			if tc.create != "" {
+				q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
+			} else {
+				q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
 			}
-			t.Run(fmt.Sprintf("%s: %s direct=%v", tc.typ, tc.name, direct), func(t *testing.T) {
-				dbName := fmt.Sprintf("d%d", i)
-				sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
-				defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
-				var q string
-				if tc.create != "" {
-					q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
-				} else {
-					q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
-				}
-				t.Log(q)
-				dataString = tc.data
-				sqlDB.ExpectErr(t, tc.err, q, srv.URL)
-				for query, res := range tc.query {
-					sqlDB.CheckQueryResults(t, query, res)
-				}
-			})
-		}
+			t.Log(q)
+			dataString = tc.data
+			sqlDB.ExpectErr(t, tc.err, q, srv.URL)
+			for query, res := range tc.query {
+				sqlDB.CheckQueryResults(t, query, res)
+			}
+		})
 	}
 
 	t.Run("mysqlout multiple", func(t *testing.T) {
@@ -1751,8 +1737,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Tests for user specified target columns in IMPORT INTO statements.
 	//
 	// Tests IMPORT INTO with various target column sets, and an implicit PK
-	// provided by the hidden column row_id. Some statements are run with
-	// experimental_direct_ingestion.
+	// provided by the hidden column row_id.
 	t.Run("target-cols-with-default-pk", func(t *testing.T) {
 		var data string
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1783,7 +1768,7 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 
-			sqlDB.Exec(t, `IMPORT INTO t (a, f) CSV DATA ($1) WITH experimental_direct_ingestion`, srv.URL)
+			sqlDB.Exec(t, `IMPORT INTO t (a, f) CSV DATA ($1)`, srv.URL)
 			sqlDB.CheckQueryResults(t, `SELECT * FROM t`,
 				sqlDB.QueryStr(t, `SELECT 1, NULL, NULL, NULL, NULL, 'teststr'`),
 			)
@@ -2005,12 +1990,12 @@ func TestImportIntoCSV(t *testing.T) {
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		sqlDB.Exec(t,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
 		)
 
 		sqlDB.ExpectErr(
 			t, `ingested key collides with an existing one: /Table/\d+/1/0/0`,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
 
@@ -2028,7 +2013,7 @@ func TestImportIntoCSV(t *testing.T) {
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
 		sqlDB.Exec(t,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.fileWithDupKeySameValue[0]),
+			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.fileWithDupKeySameValue[0]),
 		)
 
 		// Verify correct number of rows via COUNT.
@@ -2039,9 +2024,9 @@ func TestImportIntoCSV(t *testing.T) {
 		}
 	})
 
-	// This tests key collision detection when using regular import, and importing
-	// a source file with the colliding key sandwiched between valid keys.
-	t.Run("regular-import-into-key-collision", func(t *testing.T) {
+	// This tests key collision detection and importing a source file with the
+	// colliding key sandwiched between valid keys.
+	t.Run("import-into-key-collision", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
@@ -2052,22 +2037,6 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.ExpectErr(
 			t, `ingested key collides with an existing one: /Table/\d+/1/0/0`,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.fileWithShadowKeys[0]),
-		)
-	})
-
-	// This tests key collision detection when using direct ingest, and importing
-	// a source file with the colliding key sandwiched between valid keys.
-	t.Run("direct-import-into-key-collision", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer sqlDB.Exec(t, `DROP TABLE t`)
-
-		sqlDB.Exec(t,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.files[0]),
-		)
-
-		sqlDB.ExpectErr(
-			t, `ingested key collides with an existing one: /Table/\d+/1/0/0`,
-			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s) WITH experimental_direct_ingestion`, testFiles.fileWithShadowKeys[0]),
 		)
 	})
 
@@ -2434,6 +2403,9 @@ func TestImportWorkerFailure(t *testing.T) {
 // was not able to fail in the way listed by the second bug.
 func TestImportLivenessWithRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("TODO(dt): this relies on chunking done by prior version of IMPORT." +
+		"Rework this test, or replace it with resume-tests + jobs infra tests.")
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval

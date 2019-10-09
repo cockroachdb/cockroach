@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -434,15 +433,6 @@ func (c *ReadImportDataSpec) summary() (string, []string) {
 		ss = append(ss, s)
 	}
 	return "ReadImportData", ss
-}
-
-// summary implements the diagramCellType interface.
-func (s *SSTWriterSpec) summary() (string, []string) {
-	var res []string
-	for _, span := range s.Spans {
-		res = append(res, fmt.Sprintf("%s: %s", span.Name, keys.PrettyPrint(nil, span.End)))
-	}
-	return "SSTWriter", res
 }
 
 // summary implements the diagramCellType interface.
