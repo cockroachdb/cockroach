@@ -1167,8 +1167,11 @@ func (tc *TxnCoordSender) OrigTimestamp() hlc.Timestamp {
 func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	txn := &tc.mu.txn
 	tc.mu.txn.OrigTimestampWasObserved = true
-	return tc.mu.txn.OrigTimestamp
+	commitTS := txn.OrigTimestamp
+	commitTS.Forward(txn.RefreshedTimestamp)
+	return commitTS
 }
 
 // CommitTimestampFixed is part of the client.TxnSender interface.
