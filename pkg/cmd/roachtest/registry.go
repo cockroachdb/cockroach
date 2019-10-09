@@ -33,6 +33,7 @@ func registerTests(r *testRegistry) {
 	registerEncryption(r)
 	registerFlowable(r)
 	registerFollowerReads(r)
+	registerGopg(r)
 	registerGossip(r)
 	registerHibernate(r)
 	registerHotSpotSplits(r)
