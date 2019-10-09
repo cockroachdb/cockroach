@@ -584,10 +584,12 @@ func registerKVRangeLookups(r *testRegistry) {
 				concurrency+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
 			start := timeutil.Now()
-			c.Run(ctx, c.Node(nodes+1), cmd)
+			err := c.RunE(ctx, c.Node(nodes+1), cmd)
 			end := timeutil.Now()
-			verifyLookupsPerSec(ctx, c, t, c.Node(1), start, end, maximumRangeLookupsPerSec)
-			return nil
+			if err == nil {
+				verifyLookupsPerSec(ctx, c, t, c.Node(1), start, end, maximumRangeLookupsPerSec)
+			}
+			return err
 		})
 
 		<-doneInit
