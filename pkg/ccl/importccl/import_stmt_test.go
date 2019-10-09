@@ -52,7 +52,7 @@ import (
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skipf("failing on teamcity with testrace")
+	//t.Skipf("failing on teamcity with testrace")
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
@@ -236,26 +236,31 @@ d
 		},
 
 		// MySQL OUTFILE
+		// If err field is non-empty, the query filed specifies what expect
+		// to get from the rows that are parsed correctly (see option experimental_save_rejected).
 		{
 			name:   "too many imported columns",
 			create: `i int8`,
 			typ:    "DELIMITED",
-			data:   "1\t2",
-			err:    "row 1: too many columns, expected 1",
+			data:   "1\t2\n3",
+			err:    "row 1: too many columns, got 2 expected 1",
+			query:  map[string][][]string{`SELECT * from t`: {{"3"}}},
 		},
 		{
 			name:   "cannot parse data",
 			create: `i int8, j int8`,
 			typ:    "DELIMITED",
-			data:   "bad_int\t2",
+			data:   "bad_int\t2\n3\t4",
 			err:    "row 1: parse",
+			query:  map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
 		},
 		{
 			name:   "unexpected number of columns",
 			create: `a string, b string`,
 			typ:    "DELIMITED",
-			data:   "1,2",
+			data:   "1,2\n3\t4",
 			err:    "row 1: unexpected number of columns, expected 2 got 1",
+			query:  map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
 		},
 		{
 			name:   "unexpected number of columns in 1st row",
@@ -263,6 +268,7 @@ d
 			typ:    "DELIMITED",
 			data:   "1,2\n3\t4",
 			err:    "row 1: unexpected number of columns, expected 2 got 1",
+			query:  map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
 		},
 		{
 			name:   "field enclosure",
@@ -299,16 +305,18 @@ d
 			create: `a string, b string`,
 			with:   `WITH fields_enclosed_by = '$'`,
 			typ:    "DELIMITED",
-			data:   "$foo\tnormal",
+			data:   "$foo\tnormal\nbaz\tbar",
 			err:    "row 1: unmatched field enclosure at start of field",
+			query:  map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
 			name:   "unmatched field enclosure at end",
 			create: `a string, b string`,
 			with:   `WITH fields_enclosed_by = '$'`,
 			typ:    "DELIMITED",
-			data:   "foo$\tnormal",
+			data:   "foo$\tnormal\nbar\tbaz",
 			err:    "row 1: unmatched field enclosure at end of field",
+			query:  map[string][][]string{`SELECT * from t`: {{"bar", "baz"}}},
 		},
 		{
 			name:   "unmatched field enclosure 2nd field",
@@ -317,6 +325,7 @@ d
 			typ:    "DELIMITED",
 			data:   "normal\t$foo",
 			err:    "row 1: unmatched field enclosure at start of field",
+			query:  map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
 			name:   "unmatched field enclosure at end 2nd field",
@@ -325,6 +334,7 @@ d
 			typ:    "DELIMITED",
 			data:   "normal\tfoo$",
 			err:    "row 1: unmatched field enclosure at end of field",
+			query:  map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
 			name:   "unmatched literal",
@@ -333,6 +343,7 @@ d
 			typ:    "DELIMITED",
 			data:   `\`,
 			err:    "row 1: unmatched literal",
+			query:  map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
 			name:   "escaped field enclosure",
@@ -372,6 +383,7 @@ d
 			typ:    "DELIMITED",
 			data:   "\\N1",
 			err:    "row 1: unexpected data after null encoding",
+			query:  map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
 			name:   `double null`,
@@ -380,6 +392,7 @@ d
 			typ:    "DELIMITED",
 			data:   "\\N\\N",
 			err:    "row 1: unexpected null encoding",
+			query:  map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
 			name:   `null and \N without escape`,
@@ -829,10 +842,13 @@ COPY t (a, b, c) FROM stdin;
 		},
 	}
 
-	var dataString string
+	var dataString, rejectedString string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			fmt.Fprint(w, dataString)
+		}
+		if r.Method == "PUT" {
+			fmt.Fprint(w, rejectedString)
 		}
 	}))
 	defer srv.Close()
@@ -842,24 +858,47 @@ COPY t (a, b, c) FROM stdin;
 	sqlDB.Exec(t, `CREATE TABLE blah (i int8)`)
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
-	for i, tc := range tests {
-		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
-			dbName := fmt.Sprintf("d%d", i)
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
-			defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
-			var q string
-			if tc.create != "" {
-				q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
-			} else {
-				q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
+	for _, saveRejected := range []bool{false, true} {
+		// this test is big and slow as is, so we can't afford to double it in race.
+		if util.RaceEnabled && saveRejected {
+			continue
+		}
+
+		for i, tc := range tests {
+			if tc.typ != "DELIMITED" && saveRejected {
+				continue
 			}
-			t.Log(q)
-			dataString = tc.data
-			sqlDB.ExpectErr(t, tc.err, q, srv.URL)
-			for query, res := range tc.query {
-				sqlDB.CheckQueryResults(t, query, res)
+			if saveRejected {
+				if tc.with == "" {
+					tc.with = "WITH experimental_save_rejected"
+				} else {
+					tc.with += ", experimental_save_rejected"
+				}
 			}
-		})
+			t.Run(fmt.Sprintf("%s: %s save_rejected=%v", tc.typ, tc.name, saveRejected), func(t *testing.T) {
+				dbName := fmt.Sprintf("d%d", i)
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
+				var q string
+				if tc.create != "" {
+					q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
+				} else {
+					q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
+				}
+				t.Log(q, srv.URL)
+				dataString = tc.data
+				if !saveRejected || tc.query == nil {
+					sqlDB.ExpectErr(t, tc.err, q, srv.URL)
+				} else {
+					sqlDB.Exec(t, q, srv.URL)
+				}
+				if tc.err == "" || saveRejected {
+					for query, res := range tc.query {
+						sqlDB.CheckQueryResults(t, query, res)
+					}
+				}
+			})
+		}
 	}
 
 	t.Run("mysqlout multiple", func(t *testing.T) {

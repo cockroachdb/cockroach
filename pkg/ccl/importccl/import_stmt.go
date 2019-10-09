@@ -52,11 +52,12 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
-	importOptionSSTSize          = "sstsize"
-	importOptionDecompress       = "decompress"
-	importOptionOversample       = "oversample"
-	importOptionSkipFKs          = "skip_foreign_keys"
+	importOptionSSTSize      = "sstsize"
+	importOptionDecompress   = "decompress"
+	importOptionOversample   = "oversample"
+	importOptionSkipFKs      = "skip_foreign_keys"
 	importOptionDisableGlobMatch = "disable_glob_matching"
+	importOptionSaveRejected = "experimental_save_rejected"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
@@ -75,9 +76,10 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	mysqlOutfileEnclose:  sql.KVStringOptRequireValue,
 	mysqlOutfileEscape:   sql.KVStringOptRequireValue,
 
-	importOptionSSTSize:    sql.KVStringOptRequireValue,
-	importOptionDecompress: sql.KVStringOptRequireValue,
-	importOptionOversample: sql.KVStringOptRequireValue,
+	importOptionSSTSize:      sql.KVStringOptRequireValue,
+	importOptionDecompress:   sql.KVStringOptRequireValue,
+	importOptionOversample:   sql.KVStringOptRequireValue,
+	importOptionSaveRejected: sql.KVStringOptRequireNoValue,
 
 	importOptionSkipFKs:          sql.KVStringOptRequireNoValue,
 	importOptionDisableGlobMatch: sql.KVStringOptRequireNoValue,
@@ -310,6 +312,11 @@ func importPlanHook(
 			}
 			if override, ok := opts[csvNullIf]; ok {
 				format.MysqlOut.NullEncoding = &override
+			}
+			// TODO(spaskob): Refactor so that the save rejected option
+			// is passed in all import formats not just DELIMITED.
+			if _, ok := opts[importOptionSaveRejected]; ok {
+				format.MysqlOut.SaveRejected = true
 			}
 		case "MYSQLDUMP":
 			telemetry.Count("import.format.mysqldump")
