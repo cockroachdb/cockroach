@@ -17,86 +17,91 @@
   left 0
   top 0
   z-index 98
-  background-color: transparent
+  background-color transparent
 
 .trigger-wrapper
   z-index 99
   position relative
 
 .range-selector
-  position: absolute
-  top: 64px
-  background-color: white
-  box-shadow: 0px 0px 7px 1px rgba(0,0,0,0.10)
-  padding: 20px
-  border-radius: 2px
-  display: flex
-  flex-direction: row
-  align-items: flex-start;
-  cursor: default
+  position absolute
+  top 64px
+  background-color white
+  box-shadow 0px 0px 7px 1px rgba(0,0,0,0.10)
+  padding 20px
+  border-radius 2px
+  display flex
+  flex-direction row
+  align-items flex-start;
+  cursor default
   min-width 530px
   &>div
-    display: flex
-    flex-direction: column
-    &:not(:last-child) 
-      border-right: 1px solid #e5e5e5
+    display flex
+    flex-direction column
+    &not(last-child) 
+      border-right 1px solid #e5e5e5
   ._title
-    color: $body-color
-    font-weight: bold
-    font-size: 12px
-    margin-bottom: 8px
-    line-height: 2;
-    letter-spacing: 0.1px;
+    color $body-color
+    font-weight bold
+    font-size 12px
+    margin-bottom 8px
+    line-height 2;
+    letter-spacing 0.1px;
   ._time-button
-    text-align: left
-    padding: 0
-    margin: 0
+    text-align left
+    padding 0
+    margin 0
     span
-      color: $body-color
-      font-family: Lato-Regular
-      font-size: 14px
-      font-weight: normal
-      font-style: normal
-      font-stretch: normal
-      line-height: 1.57
-      letter-spacing: 0.1px
-      text-transform: none;
+      color $body-color
+      font-family Lato-Regular
+      font-size 14px
+      font-weight normal
+      font-style normal
+      font-stretch normal
+      line-height 1.57
+      letter-spacing 0.1px
+      text-transform none;
     &.active
       span
-        font-family: Lato-Bold
-        font-weight: bold;
-        line-height: 1.71;
-        color: $link-color
+        font-family Lato-Bold
+        font-weight bold;
+        line-height 1.71;
+        color $link-color
 
 .trigger
+  &.Select
+    display flex
   .Select-value-label
-    margin-right: 10px;
-    font-family: Lato-Regular;
-    font-size: 14px;
-    color: $link-color
+    margin-right 10px
+    font-family Lato-Regular
+    font-size 14px;
+    color $link-color
+  ._label-time
+    font-size: 13.5px
+    font-family Lato-Bold
 
 .ant-calendar-today-btn
-  color: $link-color
+  color $link-color
 ._quick-view
-  padding-right: 20px
+  padding-right 20px
 ._now-button
-  width: 100%
-  text-align: center
-  margin: 0
-  padding: 0
-  text-transform: none
+  width 100%
+  text-align center
+  margin 0
+  padding 0
+  text-transform none
   span
-    color: $link-color
-    font-size: 14px
-    line-height: 1.71;
-    letter-spacing: 0.1px;
+    color $link-color
+    font-size 14px
+    line-height 1.71;
+    letter-spacing 0.1px;
 ._start
-  padding: 0 20px
+  padding 0 20px
 ._end
-  padding-left: 20px
+  padding-left 20px
 
 .ant-calendar-picker
-  margin-bottom: 16px
+  margin-bottom 16px
 
 .ant-calendar-picker, .ant-time-picker
-  width: 100%
+  width 100%

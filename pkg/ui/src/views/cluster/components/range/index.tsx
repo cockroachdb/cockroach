@@ -23,12 +23,21 @@ type RangeOption = {
   value: string;
   label: string;
 };
+
+export type Selected = {
+  dateStart?: string;
+  dateEnd?: string;
+  timeStart?: string;
+  timeEnd?: string;
+  title?: string;
+};
+
 interface RangeSelectProps {
   options: RangeOption[];
   onChange: (arg0: RangeOption) => void;
   changeDate: (arg0: moment.Moment, arg1: DateTypes) => void;
   value: TimeWindow;
-  selected: string;
+  selected: Selected;
   useTimeRange: boolean;
 }
 interface RangeSelectState {
@@ -83,9 +92,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   renderOptions = () => {
     const { options, selected } = this.props;
-    return options.map(option => (
+    return options.map(option => option.label !== "Custom" && (
       <Button
-        className={`_time-button ${selected === option.value && "active" || ""}`}
+        className={`_time-button ${selected.title === option.value && "active" || ""}`}
         onClick={this.onChangeOption(option)}
         type="link"
         ghost
@@ -97,8 +106,12 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   findSelectedValue = () => {
     const { options, selected } = this.props;
-    const value = options.find(option => option.value === selected);
-    return value ? value.label : selected;
+    const value = options.find(option => option.value === selected.title);
+    return value ? (
+      <span className="Select-value-label">{value.label}</span>
+    ) : (
+      <span className="Select-value-label">{selected.dateStart} <span className="_label-time">{selected.timeStart}</span> - {selected.dateEnd} <span className="_label-time">{selected.timeEnd}</span></span>
+    );
   }
 
   getDisabledHours = (isStart?: boolean) => () => {
@@ -174,6 +187,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
         <div className="_start">
           <span className="_title">Start</span>
           <DatePicker
+            dropdownClassName="disabled-year"
             value={start}
             disabledDate={(currentDate) => currentDate >= (end || moment())}
             allowClear={false}
@@ -195,6 +209,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
         <div className="_end">
           <span className="_title">End</span>
           <DatePicker
+            dropdownClassName="disabled-year"
             value={end}
             disabledDate={(currentDate) => (currentDate > moment() || currentDate <= (start || moment()))}
             allowClear={false}
@@ -224,7 +239,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             className={`trigger Select ${opened && "is-open" || ""}`}
             onClick={() => this.setState({ opened: !opened })}
           >
-            <span className="Select-value-label">{selectedValue}</span>
+            <span className="Select-value-label">
+              {selectedValue}
+            </span>
             <div className="Select-control">
               <div className="Select-arrow-zone">
                 <span className="Select-arrow"></span>

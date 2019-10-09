@@ -130,3 +130,58 @@
 .nvd3 text
   opacity .6
   font-size 10px
+
+.ant-divider
+  background #c8cbd4
+  margin-left 0
+  margin-right 22px
+  &.ant-divider-vertical
+    height auto
+.ant-tooltip-inner
+  font-size 12px
+.ant-input, .ant-time-picker-input
+  height 40px
+  padding 0px 11px
+  border-radius 3px
+  border solid 1px #c8cbd4
+  &:focus
+    border solid 1px #3a7ce1
+    box-shadow none
+  &:hover
+    border-color #3a7ce1
+
+.ant-calendar-picker:hover .ant-calendar-picker-input:not(.ant-input-disabled)
+  border-color #3a7ce1
+
+.ant-calendar
+  font-size 12px
+  font-family Lato
+
+.ant-calendar-today .ant-calendar-date
+  color #3a7ce1
+  border-color #3a7ce1
+
+.ant-time-picker-panel-select li:focus
+
+.ant-calendar-date, .ant-time-picker-panel-select li
+  color #5F6C87
+  &.ant-time-picker-panel-select-option-disabled
+    color rgba(0, 0, 0, 0.25)
+  &:hover
+    background #eff5fe
+  &:focus
+    color #3a7ce1
+
+.ant-calendar-disabled-cell .ant-calendar-date
+  background #f5f5f5
+
+.ant-calendar-disabled-cell.ant-calendar-today .ant-calendar-date::before
+  border none
+
+.disabled-year
+  .ant-calendar-header .ant-calendar-next-month-btn
+    right 15px
+  .ant-calendar-header .ant-calendar-prev-month-btn
+    left 15px
+  .ant-calendar-prev-year-btn, .ant-calendar-next-year-btn
+    display none

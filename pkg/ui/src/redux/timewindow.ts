@@ -97,7 +97,7 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
       sampleSize: moment.duration(30, "minutes"),
     },
     "1 month": {
-      windowSize: moment.duration(1, "month"),
+      windowSize: moment.duration(30, "days"),
       windowValid: moment.duration(20, "minutes"),
       sampleSize: moment.duration(1, "hour"),
     },
@@ -122,6 +122,8 @@ export class TimeWindowState {
   useTimeRage: boolean;
   constructor() {
     this.scale = availableTimeScales["10 min"];
+    this.useTimeRage = false;
+    this.scaleChanged = false;
   }
 }
 
@@ -138,6 +140,7 @@ export function timeWindowReducer(state = new TimeWindowState(), action: Action)
       state = _.clone(state);
       state.currentWindow = data;
       state.useTimeRage = true;
+      state.scaleChanged = false;
       return state;
     case SET_SCALE:
       const { payload: scale } = action as PayloadAction<TimeScale>;
@@ -146,7 +149,7 @@ export function timeWindowReducer(state = new TimeWindowState(), action: Action)
         state.useTimeRage = true;
       } else if (state.scale.key !== scale.key) {
         state.useTimeRage = false;
-      } 
+      }
       state.scale = scale;
       state.scaleChanged = true;
       return state;

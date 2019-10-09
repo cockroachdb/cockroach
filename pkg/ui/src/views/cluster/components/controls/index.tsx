@@ -33,11 +33,11 @@ class TimeFrameControls extends React.Component<RangeSelectProps> {
     const left = _.includes(disabledArrows, ArrowDirection.LEFT);
     const center = _.includes(disabledArrows, ArrowDirection.CENTER);
     const right = _.includes(disabledArrows, ArrowDirection.RIGHT);
-
+    const delay = .3;
     return (
       <div className="controls-content">
         <ButtonGroup>
-          <Tooltip placement="bottom" title="previous timeframe">
+          <Tooltip placement="bottom" title="previous timeframe" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
             <Button
               onClick={this.handleChangeArrow(ArrowDirection.LEFT)}
               disabled={left}
@@ -45,7 +45,7 @@ class TimeFrameControls extends React.Component<RangeSelectProps> {
               icon="fast-backward"
             />
           </Tooltip>
-          <Tooltip placement="bottom" title="Now">
+          <Tooltip placement="bottom" title="Now" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
             <Button
               onClick={this.handleChangeArrow(ArrowDirection.CENTER)}
               disabled={center}
@@ -53,7 +53,7 @@ class TimeFrameControls extends React.Component<RangeSelectProps> {
               icon="caret-right"
             />
           </Tooltip>
-          <Tooltip placement="bottom" title="next timeframe">
+          <Tooltip placement="bottom" title="next timeframe" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
             <Button
               onClick={this.handleChangeArrow(ArrowDirection.RIGHT)}
               disabled={right}

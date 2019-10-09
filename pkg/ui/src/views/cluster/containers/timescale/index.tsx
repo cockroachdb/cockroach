@@ -24,6 +24,7 @@ import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/compo
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
+import { Divider } from "antd";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
@@ -54,45 +55,48 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
     const newSettings = timewindow.availableTimeScales[newTimescaleKey.value];
     newSettings.windowEnd = null;
     if (newSettings) {
+      this.setQueryParamsByDates(newSettings.windowSize, moment());
       this.props.setTimeScale(newSettings);
     }
   }
 
   arrowClick = (direction: ArrowDirection) => {
-    const { currentWindow } = this.props;
-    let selected = _.clone(this.props.currentScale);
-
-    selected.windowSize = moment.duration(moment(currentWindow.end).diff(currentWindow.start));
+    const { currentWindow, currentScale } = this.props;
+    const windowSize = moment.duration(moment(currentWindow.end).diff(currentWindow.start));
+    const seconds = windowSize.asSeconds();
+    let selected = {};
+    let key = currentScale.key;
+    let windowEnd = currentWindow.end || moment.utc();
 
     switch (direction) {
       case ArrowDirection.RIGHT:
-        if (selected.windowEnd) {
-          selected.windowEnd.add(selected.windowSize);
+        if (windowEnd) {
+          windowEnd = windowEnd.add(seconds, "seconds");
         }
         break;
       case ArrowDirection.LEFT:
-        selected.windowEnd = currentWindow.end.utc() || moment.utc();
-        selected.windowEnd.subtract(selected.windowSize);
+        windowEnd = windowEnd.subtract(seconds, "seconds");
         break;
       case ArrowDirection.CENTER:
-        selected.windowEnd = moment.utc();
+        windowEnd = moment.utc();
         break;
       default:
         console.error("Unknown direction: ", direction);
     }
-
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
-    if (!selected.windowEnd || selected.windowEnd > moment().subtract(selected.windowValid)) {
-      if (_.find(timewindow.availableTimeScales, { windowSize: selected.windowSize })) {
-        selected = _.find(timewindow.availableTimeScales, { windowSize: selected.windowSize });
+    if (!windowEnd || windowEnd > moment().subtract(currentScale.windowValid)) {
+      if (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data })) {
+        selected = (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data });
       } else {
-        selected.key = "Custom";
+        key = "Custom";
       }
     } else {
-      selected.key = "Custom";
+      key = "Custom";
     }
-    this.props.setTimeScale(selected);
+
+    this.setQueryParamsByDates(windowSize, windowEnd);
+    this.props.setTimeScale({ ...currentScale, windowEnd, windowSize, key, ...selected });
   }
 
   getTimescaleOptions = () => {
@@ -170,6 +174,17 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
     }
   }
 
+  setQueryParamsByDates = (duration: moment.Duration, dateEnd: moment.Moment) => {
+    const { router, location } = this.props;
+    const seconds = duration.clone().asSeconds();
+    const end = dateEnd.clone();
+    const start =  moment.utc(end.subtract(seconds, "seconds")).format("X");
+    router.push({
+      pathname: location.pathname,
+      search: `?start=${start}&end=${moment.utc(dateEnd).format("X")}`,
+    });
+  }
+
   setDatesByQueryParams = (dates: timewindow.TimeWindow) => {
     const selected = _.clone(this.props.currentScale);
     const end  = dates.end || moment().set({hours: 23, minutes: 59, seconds: 0});
@@ -207,11 +222,19 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
 
   getTimeRangeTitle = () => {
     const { currentWindow, currentScale } = this.props;
-    const format = "M/DD/YYYY hh:mm:ss A";
+    const dateFormat = "M/D/YYYY";
+    const timeFormat = "h:mm:ss A";
     if (currentScale.key === "Custom") {
-      return `${moment(currentWindow.start).format(format)} - ${moment(currentWindow.end).format(format)}`;
+      return {
+        dateStart: moment.utc(currentWindow.start).format(dateFormat),
+        dateEnd: moment.utc(currentWindow.end).format(dateFormat),
+        timeStart: moment.utc(currentWindow.start).format(timeFormat),
+        timeEnd: moment.utc(currentWindow.end).format(timeFormat),
+      };
     } else {
-      return currentScale.key;
+      return {
+        title: currentScale.key,
+      };
     }
   }
 
@@ -231,25 +254,28 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
 
   render() {
     const { useTimeRange, currentScale, currentWindow } = this.props;
-    return <div className="timescale">
-      <Dropdown
-        title="TIME"
-        options={[]}
-        selected={currentScale.key}
-        onChange={this.changeSettings}
-        content={
-          <RangeSelect
-            value={currentWindow}
-            useTimeRange={useTimeRange}
-            selected={this.getTimeRangeTitle()}
-            onChange={this.changeSettings}
-            changeDate={this.setDate}
-            options={this.getTimescaleOptions()}
-          />
-        }
-      />
-      <TimeFrameControls disabledArrows={this.generateDisabledArrows()} onArrowClick={this.arrowClick} />
-    </div>;
+    return (
+      <div className="timescale">
+        <Divider type="vertical" />
+        <TimeFrameControls disabledArrows={this.generateDisabledArrows()} onArrowClick={this.arrowClick} />
+        <Dropdown
+          title="TIME"
+          options={[]}
+          selected={currentScale.key}
+          onChange={this.changeSettings}
+          content={
+            <RangeSelect
+              value={currentWindow}
+              useTimeRange={useTimeRange}
+              selected={this.getTimeRangeTitle()}
+              onChange={this.changeSettings}
+              changeDate={this.setDate}
+              options={this.getTimescaleOptions()}
+            />
+          }
+        />
+      </div>
+    );
   }
 }
 
