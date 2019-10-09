@@ -954,7 +954,7 @@ EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ·                         vectorized   false                                      ·                         ·
 render                    ·            ·                                          (a int)                   ·
  │                        render 0     (1)[int]                                   ·                         ·
- └── distinct             ·            ·                                          (column5 decimal, v int)  weak-key(column5,v)
+ └── distinct             ·            ·                                          (column5 decimal, v int)  ·
       │                   distinct on  column5, v                                 ·                         ·
       └── filter          ·            ·                                          (column5 decimal, v int)  ·
            │              filter       ((column5)[decimal] > (1)[decimal])[bool]  ·                         ·

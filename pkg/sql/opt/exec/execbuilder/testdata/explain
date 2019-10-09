@@ -521,6 +521,7 @@ sort             ·            ·           (a, b)              +b
  │               order        +b          ·                   ·
  └── index-join  ·            ·           (a, b)              ·
       │          table        tc@primary  ·                   ·
+      │          key columns  rowid       ·                   ·
       └── scan   ·            ·           (a, rowid[hidden])  ·
 ·                table        tc@c        ·                   ·
 ·                spans        /10-/11     ·                   ·

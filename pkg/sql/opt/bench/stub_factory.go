@@ -119,7 +119,7 @@ func (f *stubFactory) ConstructScalarGroupBy(
 }
 
 func (f *stubFactory) ConstructDistinct(
-	input exec.Node, distinctCols, orderedCols exec.ColumnOrdinalSet,
+	input exec.Node, distinctCols, orderedCols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -131,7 +131,7 @@ func (f *stubFactory) ConstructSetOp(
 }
 
 func (f *stubFactory) ConstructSort(
-	input exec.Node, ordering sqlbase.ColumnOrdering,
+	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -141,7 +141,11 @@ func (f *stubFactory) ConstructOrdinality(input exec.Node, colName string) (exec
 }
 
 func (f *stubFactory) ConstructIndexJoin(
-	input exec.Node, table cat.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
+	input exec.Node,
+	table cat.Table,
+	keyCols []exec.ColumnOrdinal,
+	tableCols exec.ColumnOrdinalSet,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

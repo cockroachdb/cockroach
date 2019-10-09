@@ -90,6 +90,7 @@ filter           ·            ·                                               
  │               filter       ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·                      ·
  └── index-join  ·            ·                                                     (a, b, c)              ·
       │          table        abc@primary                                           ·                      ·
+      │          key columns  rowid                                                 ·                      ·
       └── scan   ·            ·                                                     (a, b, rowid[hidden])  ·
 ·                table        abc@abc_a_b_idx                                       ·                      ·
 ·                spans        /1/2-/8/10                                            ·                      ·

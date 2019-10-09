@@ -124,7 +124,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
 ----
 ·               distributed  false    ·       ·
 ·               vectorized   true     ·       ·
-distinct        ·            ·        (z)     weak-key(z); +z
+distinct        ·            ·        (z)     ·
  │              distinct on  z        ·       ·
  │              order key    z        ·       ·
  └── render     ·            ·        (z)     +z
@@ -162,7 +162,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
 ----
 ·          distributed  false         ·       ·
 ·          vectorized   true          ·       ·
-distinct   ·            ·             (a, b)  weak-key(a,b); +a,+b
+distinct   ·            ·             (a, b)  ·
  │         distinct on  a, b          ·       ·
  │         order key    a, b          ·       ·
  └── scan  ·            ·             (a, b)  +a,+b
@@ -195,7 +195,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
 ----
 ·          distributed  false   ·    ·
 ·          vectorized   true    ·    ·
-distinct   ·            ·       (v)  weak-key(v); +v
+distinct   ·            ·       (v)  ·
  │         distinct on  v       ·    ·
  │         order key    v       ·    ·
  └── scan  ·            ·       (v)  +v
@@ -208,7 +208,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
 ----
 ·          distributed  false   ·    ·
 ·          vectorized   true    ·    ·
-distinct   ·            ·       (v)  weak-key(v); +v
+distinct   ·            ·       (v)  ·
  │         distinct on  v       ·    ·
  │         order key    v       ·    ·
  └── scan  ·            ·       (v)  +v

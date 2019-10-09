@@ -52,11 +52,11 @@ EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 render                    ·            ·          (c, b)  ·
  │                        render 0     c          ·       ·
  │                        render 1     b          ·       ·
- └── limit                ·            ·          (b, c)  weak-key(b,c); +b
+ └── limit                ·            ·          (b, c)  +b
       │                   count        2          ·       ·
-      └── sort            ·            ·          (b, c)  weak-key(b,c); +b
+      └── sort            ·            ·          (b, c)  +b
            │              order        +b         ·       ·
-           └── distinct   ·            ·          (b, c)  weak-key(b,c)
+           └── distinct   ·            ·          (b, c)  ·
                 │         distinct on  b, c       ·       ·
                 └── scan  ·            ·          (b, c)  ·
 ·                         table        t@primary  ·       ·
@@ -264,16 +264,18 @@ scan  ·            ·
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 30 ORDER BY b, a, d
 ----
-·                     distributed  false
-·                     vectorized   false
-render                ·            ·
- └── sort             ·            ·
-      │               order        +b,+a,+d
-      └── index-join  ·            ·
-           │          table        abc@primary
-           └── scan   ·            ·
-·                     table        abc@ba
-·                     spans        /11-/30
+·                     distributed      false
+·                     vectorized       false
+render                ·                ·
+ └── sort             ·                ·
+      │               order            +b,+a,+d
+      │               already ordered  +b,+a
+      └── index-join  ·                ·
+           │          table            abc@primary
+           │          key columns      a, b, c
+           └── scan   ·                ·
+·                     table            abc@ba
+·                     spans            /11-/30
 
 # An inequality should not be enough to force the use of the index.
 query TTT
@@ -907,6 +909,7 @@ sort                  ·            ·                (x, y, z)              +x
       │               filter       x = y            ·                      ·
       └── index-join  ·            ·                (x, y, z)              ·
            │          table        xyz@primary      ·                      ·
+           │          key columns  rowid            ·                      ·
            └── scan   ·            ·                (y, z, rowid[hidden])  ·
 ·                     table        xyz@xyz_z_y_idx  ·                      ·
 ·                     spans        /1/!NULL-/2      ·                      ·

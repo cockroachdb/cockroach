@@ -69,7 +69,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
 ·          distributed  true         ·          ·
 ·          vectorized   false        ·          ·
-distinct   ·            ·            (x, y, z)  weak-key(x,y,z)
+distinct   ·            ·            (x, y, z)  ·
  │         distinct on  x, y, z      ·          ·
  └── scan  ·            ·            (x, y, z)  ·
 ·          table        xyz@primary  ·          ·
@@ -86,7 +86,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
 ·               distributed  true         ·          ·
 ·               vectorized   false        ·          ·
-distinct        ·            ·            (x, y, z)  weak-key(x,y,z); +x
+distinct        ·            ·            (x, y, z)  +x
  │              distinct on  x, y, z      ·          ·
  │              order key    x            ·          ·
  └── sort       ·            ·            (x, y, z)  +x
@@ -107,7 +107,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
 ·               distributed  true         ·       ·
 ·               vectorized   false        ·       ·
-distinct        ·            ·            (x, y)  weak-key(y); +y,+x
+distinct        ·            ·            (x, y)  +y
  │              distinct on  y            ·       ·
  │              order key    y            ·       ·
  └── sort       ·            ·            (x, y)  +y,+x
@@ -144,7 +144,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 render          ·            ·            (a, b)     +a,+b
  │              render 0     a            ·          ·
  │              render 1     b            ·          ·
- └── distinct   ·            ·            (a, b, c)  weak-key(a,b); +a,+b,+c
+ └── distinct   ·            ·            (a, b, c)  +a,+b
       │         distinct on  a, b         ·          ·
       │         order key    a, b         ·          ·
       └── scan  ·            ·            (a, b, c)  +a,+b,+c

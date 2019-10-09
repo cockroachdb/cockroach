@@ -354,9 +354,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			return cannotDistribute, err
 		}
 		// If we have to sort, distribute the query.
-		if n.needSort {
-			rec = rec.compose(shouldDistribute)
-		}
+		rec = rec.compose(shouldDistribute)
 		return rec, nil
 
 	case *joinNode:
@@ -408,7 +406,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		if _, err := dsp.checkSupportForNode(n.table); err != nil {
 			return cannotDistribute, err
 		}
-		return dsp.checkSupportForNode(n.index)
+		return dsp.checkSupportForNode(n.input)
 
 	case *lookupJoinNode:
 		if err := dsp.checkExpr(n.onCond); err != nil {
@@ -1232,48 +1230,20 @@ func (dsp *DistSQLPlanner) selectRenders(
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
 func (dsp *DistSQLPlanner) addSorters(p *PhysicalPlan, n *sortNode) {
+	// Sorting is needed; we add a stage of sorting processors.
+	ordering := execinfrapb.ConvertToMappedSpecOrdering(n.ordering, p.PlanToStreamColMap)
 
-	matchLen := planPhysicalProps(n.plan).computeMatch(n.ordering)
-
-	if matchLen < len(n.ordering) {
-		// Sorting is needed; we add a stage of sorting processors.
-		ordering := execinfrapb.ConvertToMappedSpecOrdering(n.ordering, p.PlanToStreamColMap)
-
-		p.AddNoGroupingStage(
-			execinfrapb.ProcessorCoreUnion{
-				Sorter: &execinfrapb.SorterSpec{
-					OutputOrdering:   ordering,
-					OrderingMatchLen: uint32(matchLen),
-				},
+	p.AddNoGroupingStage(
+		execinfrapb.ProcessorCoreUnion{
+			Sorter: &execinfrapb.SorterSpec{
+				OutputOrdering:   ordering,
+				OrderingMatchLen: uint32(n.alreadyOrderedPrefix),
 			},
-			execinfrapb.PostProcessSpec{},
-			p.ResultTypes,
-			ordering,
-		)
-	}
-
-	if len(n.columns) != len(p.PlanToStreamColMap) {
-		// In cases like:
-		//   SELECT a FROM t ORDER BY b
-		// we have columns (b) that are only used for sorting. These columns are not
-		// in the output columns of the sortNode; we set a projection such that the
-		// plan results map 1-to-1 to sortNode columns.
-		//
-		// Note that internally, AddProjection might retain more columns than
-		// necessary so we can preserve the p.Ordering between parallel streams
-		// when they merge later.
-		p.PlanToStreamColMap = p.PlanToStreamColMap[:len(n.columns)]
-		columns := make([]uint32, 0, len(n.columns))
-		for i, col := range p.PlanToStreamColMap {
-			if col < 0 {
-				// This column isn't needed; ignore it.
-				continue
-			}
-			p.PlanToStreamColMap[i] = len(columns)
-			columns = append(columns, uint32(col))
-		}
-		p.AddProjection(columns)
-	}
+		},
+		execinfrapb.PostProcessSpec{},
+		p.ResultTypes,
+		ordering,
+	)
 }
 
 // addAggregators adds aggregators corresponding to a groupNode and updates the plan to
@@ -1845,13 +1815,26 @@ func (dsp *DistSQLPlanner) addAggregators(
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *PlanningCtx, n *indexJoinNode,
 ) (PhysicalPlan, error) {
-	plan, err := dsp.createTableReaders(planCtx, n.index, n.index.desc.PrimaryIndex.ColumnIDs)
+	plan, err := dsp.createPlanForNode(planCtx, n.input)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
 
+	// In "index-join mode", the join reader assumes that the PK cols are a prefix
+	// of the input stream columns (see #40749). We need a projection to make that
+	// happen. The other columns are not used by the join reader.
+	pkCols := make([]uint32, len(n.keyCols))
+	for i := range n.keyCols {
+		streamColOrd := plan.PlanToStreamColMap[n.keyCols[i]]
+		if streamColOrd == -1 {
+			panic("key column not in planToStreamColMap")
+		}
+		pkCols[i] = uint32(streamColOrd)
+	}
+	plan.AddProjection(pkCols)
+
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:      *n.index.desc.TableDesc(),
+		Table:      *n.table.desc.TableDesc(),
 		IndexIdx:   0,
 		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
 	}
@@ -1888,7 +1871,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			types,
-			dsp.convertOrdering(planPhysicalProps(n), plan.PlanToStreamColMap),
+			dsp.convertOrdering(n.props, plan.PlanToStreamColMap),
 		)
 	} else {
 		// Use a single join reader (if there is a single stream, on that node; if

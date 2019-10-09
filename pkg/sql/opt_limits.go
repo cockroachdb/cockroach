@@ -71,13 +71,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.applyLimit(n.plan, getLimit(count, n.offset), false /* soft */)
 
 	case *sortNode:
-		if n.needSort {
-			// We can't propagate the limit, because the sort
-			// potentially needs all rows.
-			numRows = math.MaxInt64
-			soft = true
-		}
-		p.applyLimit(n.plan, numRows, soft)
+		// We can't propagate the limit, because the sort potentially needs all
+		// rows.
+		p.setUnlimited(n.plan)
 
 	case *groupNode:
 		if n.needOnlyOneRow {
@@ -91,7 +87,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *indexJoinNode:
 		// If we have a limit in the table node (i.e. post-index-join), the
 		// limit in the index is soft.
-		p.applyLimit(n.index, numRows, soft || !isFilterTrue(n.table.filter))
+		p.applyLimit(n.input, numRows, soft || !isFilterTrue(n.table.filter))
 		p.setUnlimited(n.table)
 
 	case *unionNode:

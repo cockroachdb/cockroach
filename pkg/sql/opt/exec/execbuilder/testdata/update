@@ -391,6 +391,7 @@ count                           ·            ·               ()               
                 │               filter       a = 1           ·                   ·
                 └── index-join  ·            ·               (a, b, c)           ·
                      │          table        t38799@primary  ·                   ·
+                     │          key columns  a               ·                   ·
                      └── scan   ·            ·               (a, b)              ·
 ·                               table        t38799@foo      ·                   ·
 ·                               spans        ALL             ·                   ·
