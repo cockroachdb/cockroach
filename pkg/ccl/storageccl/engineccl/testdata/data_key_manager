@@ -1,0 +1,120 @@
+init
+dir1
+5
+----
+
+load
+----
+
+get-active-data-key
+----
+none
+
+get-active-store-key
+----
+none
+
+set-active-store-key id=foo
+----
+
+get-active-data-key
+----
+present
+
+record-active-data-key
+----
+
+wait
+2
+----
+
+compare-active-data-key
+----
+same
+
+wait
+4
+----
+
+compare-active-data-key
+----
+different
+
+get-active-data-key
+----
+present
+
+record-active-data-key
+----
+
+check-all-recorded-data-keys
+----
+
+init
+dir2
+5
+active-store-key foo
+active-data-key data1
+----
+
+load
+----
+
+get-active-data-key
+----
+present
+
+get-active-store-key
+----
+foo
+
+record-active-data-key
+----
+
+wait
+10
+----
+
+compare-active-data-key
+----
+same
+
+set-active-store-key id=bar
+----
+
+get-store-key id=foo
+----
+present
+
+get-store-key id=bar
+----
+present
+
+get-active-store-key
+----
+bar
+
+compare-active-data-key
+----
+different
+
+check-exposed val=false
+----
+
+init
+dir3
+5
+active-store-key foo
+active-data-key data1
+----
+
+load
+----
+
+set-active-store-key-plain id=bar
+----
+
+check-exposed val=true
+----
+
+
