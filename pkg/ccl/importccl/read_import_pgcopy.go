@@ -258,7 +258,12 @@ func (c copyData) String() string {
 }
 
 func (d *pgCopyReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	progressFn progressFn,
+	rejected chan string,
 ) error {
 	s := bufio.NewScanner(input)
 	s.Split(bufio.ScanLines)
