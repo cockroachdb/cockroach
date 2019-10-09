@@ -262,7 +262,7 @@ func configureZone(db *gosql.DB, cfg zoneConfig, table, partition string, partId
 		opts = fmt.Sprintf(`constraints = '[+%s]'`, kv)
 	case partitionedLeases:
 		// Place one replica in the zone and give that replica lease preference.
-		opts = fmt.Sprintf(`constraints = '{"+%s":1}', lease_preferences = '[[+%s]]'`, kv, kv)
+		opts = fmt.Sprintf(`num_replicas = COPY FROM PARENT, constraints = '{"+%s":1}', lease_preferences = '[[+%s]]'`, kv, kv)
 	default:
 		panic("unexpected")
 	}
