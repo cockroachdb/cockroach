@@ -232,12 +232,12 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     );
 
     return (
-      <div>
+      <div className="Range">
+        <div className="click-zone" onClick={() => this.setState({ opened: !opened })}/>
         {opened && <div className="trigger-container" onClick={() => this.setState({ opened: false })} />}
         <div className="trigger-wrapper">
           <div
             className={`trigger Select ${opened && "is-open" || ""}`}
-            onClick={() => this.setState({ opened: !opened })}
           >
             <span className="Select-value-label">
               {selectedValue}
