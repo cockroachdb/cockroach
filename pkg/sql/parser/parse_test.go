@@ -1671,6 +1671,8 @@ func TestParse2(t *testing.T) {
 		// Special extract syntax
 		{`SELECT EXTRACT(second from now())`,
 			`SELECT extract('second', now())`},
+		{`SELECT EXTRACT('second' from now())`,
+			`SELECT extract('second', now())`},
 		// Special trim syntax
 		{`SELECT TRIM('xy' from 'xyxtrimyyx')`,
 			`SELECT btrim('xyxtrimyyx', 'xy')`},
