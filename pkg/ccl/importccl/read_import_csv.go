@@ -103,7 +103,7 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool) error {
 }
 
 func (c *csvInputReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string,
+	ctx context.Context, input *fileReader, inputIdx int32, inputName string, rejected chan string,
 ) error {
 	cr := csv.NewReader(input)
 	if c.opts.Comma != 0 {
