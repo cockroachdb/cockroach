@@ -133,7 +133,7 @@ func (n *projectSetNode) Next(params runParams) (bool, error) {
 					if gen == nil {
 						gen = builtins.EmptyGenerator()
 					}
-					if err := gen.Start(); err != nil {
+					if err := gen.Start(params.ctx, params.extendedEvalCtx.Txn); err != nil {
 						return false, err
 					}
 					n.run.gens[i] = gen
@@ -157,7 +157,7 @@ func (n *projectSetNode) Next(params runParams) (bool, error) {
 				// Yes. Is there still work to do for the current row?
 				if !n.run.done[i] {
 					// Yes; heck whether this source still has some values available.
-					hasVals, err := gen.Next()
+					hasVals, err := gen.Next(params.ctx)
 					if err != nil {
 						return false, err
 					}

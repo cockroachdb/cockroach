@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -63,102 +64,127 @@ func testAggregateResultDeepCopy(
 }
 
 func TestAvgIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntAvgAggregate, makeIntTestDatum(10))
 }
 
 func TestAvgFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newFloatAvgAggregate, makeFloatTestDatum(10))
 }
 
 func TestAvgDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newDecimalAvgAggregate, makeDecimalTestDatum(10))
 }
 
 func TestBoolAndResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newBoolAndAggregate, makeBoolTestDatum(10))
 }
 
 func TestBoolOrResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newBoolOrAggregate, makeBoolTestDatum(10))
 }
 
 func TestCountResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newCountAggregate, makeIntTestDatum(10))
 }
 
 func TestMaxIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMaxAggregate, makeIntTestDatum(10))
 }
 
 func TestMaxFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMaxAggregate, makeFloatTestDatum(10))
 }
 
 func TestMaxDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMaxAggregate, makeDecimalTestDatum(10))
 }
 
 func TestMaxBoolResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMaxAggregate, makeBoolTestDatum(10))
 }
 
 func TestMinIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMinAggregate, makeIntTestDatum(10))
 }
 
 func TestMinFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMinAggregate, makeFloatTestDatum(10))
 }
 
 func TestMinDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMinAggregate, makeDecimalTestDatum(10))
 }
 
 func TestMinBoolResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newMinAggregate, makeBoolTestDatum(10))
 }
 
 func TestSumSmallIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newSmallIntSumAggregate, makeSmallIntTestDatum(10))
 }
 
 func TestSumIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntSumAggregate, makeIntTestDatum(10))
 }
 
 func TestSumFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newFloatSumAggregate, makeFloatTestDatum(10))
 }
 
 func TestSumDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newDecimalSumAggregate, makeDecimalTestDatum(10))
 }
 
 func TestSumIntervalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntervalSumAggregate, makeIntervalTestDatum(10))
 }
 
 func TestVarianceIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntVarianceAggregate, makeIntTestDatum(10))
 }
 
 func TestVarianceFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newFloatVarianceAggregate, makeFloatTestDatum(10))
 }
 
 func TestVarianceDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newDecimalVarianceAggregate, makeDecimalTestDatum(10))
 }
 
 func TestStdDevIntResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newIntStdDevAggregate, makeIntTestDatum(10))
 }
 
 func TestStdDevFloatResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newFloatStdDevAggregate, makeFloatTestDatum(10))
 }
 
 func TestStdDevDecimalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testAggregateResultDeepCopy(t, newDecimalStdDevAggregate, makeDecimalTestDatum(10))
 }
 
@@ -236,10 +262,12 @@ func makeIntervalTestDatum(count int) []tree.Datum {
 }
 
 func TestArrayAggNameOverload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testArrayAggAliasedTypeOverload(t, types.Name)
 }
 
 func TestArrayAggOidOverload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testArrayAggAliasedTypeOverload(t, types.Oid)
 }
 
