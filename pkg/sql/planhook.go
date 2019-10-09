@@ -60,6 +60,12 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 // We pass this as one interface, rather than individually passing each field or
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
+//
+// The PlanHookState is used by modules that are under the CCL. Since the OSS
+// modules cannot depend on the CCL modules, the CCL modules need to inform the
+// planner when they should be invoked (via plan hooks). The only way for the
+// CCL statements to get access to a "planner" is through this PlanHookState
+// that gets passed back due to this inversion of roles.
 type PlanHookState interface {
 	SchemaResolver
 	RunParams(ctx context.Context) runParams
@@ -96,12 +102,16 @@ type PlanHookState interface {
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
 // tree.Statement. If the func returned by the hook is non-nil, it is used to
 // construct a planNode that runs that func in a goroutine during Start.
+//
+// See PlanHookState comments for information about why plan hooks are needed.
 func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
 }
 
 // AddWrappedPlanHook adds a hook used to short-circuit creating a planNode from a
 // tree.Statement. If the returned plan is non-nil, it is used directly by the planner.
+//
+// See PlanHookState comments for information about why plan hooks are needed.
 func AddWrappedPlanHook(f wrappedPlanHookFn) {
 	wrappedPlanHooks = append(wrappedPlanHooks, f)
 }
