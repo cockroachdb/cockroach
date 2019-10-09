@@ -172,10 +172,14 @@ func (o *Outbox) handleStreamErr(
 	ctx context.Context, opName string, err error, cancelFn context.CancelFunc,
 ) {
 	if err == io.EOF {
-		log.Infof(ctx, "Outbox calling cancelFn after %s EOF", opName)
+		if log.V(1) {
+			log.Infof(ctx, "Outbox calling cancelFn after %s EOF", opName)
+		}
 		cancelFn()
 	} else {
-		log.Errorf(ctx, "Outbox %s connection error: %+v", opName, err)
+		if log.V(1) {
+			log.Warningf(ctx, "Outbox %s connection error: %+v", opName, err)
+		}
 	}
 }
 
@@ -218,7 +222,7 @@ func (o *Outbox) sendBatches(
 		}
 
 		if err := execerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
-			log.Errorf(ctx, "Outbox Next error: %+v", err)
+			log.Warningf(ctx, "Outbox Next error: %+v", err)
 			return false, err
 		}
 		if o.batch.Length() == 0 {
@@ -281,7 +285,9 @@ func (o *Outbox) runWithStream(
 			msg, err := stream.Recv()
 			if err != nil {
 				if err != io.EOF {
-					log.Errorf(ctx, "Outbox Recv connection error: %+v", err)
+					if log.V(1) {
+						log.Warningf(ctx, "Outbox Recv connection error: %+v", err)
+					}
 				}
 				break
 			}
