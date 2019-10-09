@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
@@ -223,6 +224,24 @@ func MakeExternalStorage(
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
 
+// URINeedsGlobExpansion checks if URI can be expanded by checking if it contains wildcard characters.
+// This should be used before passing a URI into ListFiles().
+func URINeedsGlobExpansion(uri string) bool {
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	// We don't support listing files for workload and http.
+	unsupported := []string{"workload", "http", "https", "experimental-workload"}
+	for _, str := range unsupported {
+		if parsedURI.Scheme == str {
+			return false
+		}
+	}
+
+	return strings.ContainsAny(uri, "*?[")
+}
+
 // ExternalStorage provides functions to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
 // Generally an implementation is instantiated pointing to some base path or
@@ -246,6 +265,10 @@ type ExternalStorage interface {
 
 	// WriteFile should write the content to requested name.
 	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
+
+	// ListFiles should treat the ExternalStorage URI as a glob
+	// pattern, and return a list of files that match the pattern.
+	ListFiles(ctx context.Context) ([]string, error)
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
@@ -272,8 +295,9 @@ var (
 )
 
 type localFileStorage struct {
-	cfg  roachpb.ExternalStorage_LocalFilePath // constains un-prefixed base -- DO NOT use for I/O ops.
-	base string                                // the prefixed base, for I/O ops on this node.
+	cfg           roachpb.ExternalStorage_LocalFilePath // contains un-prefixed filepath -- DO NOT use for I/O ops.
+	base          string                                // relative filepath prefixed with externalIODir, for I/O ops on this node.
+	externalIODir string                                // directory in which reads and writes are authorized.
 }
 
 var _ ExternalStorage = &localFileStorage{}
@@ -297,6 +321,7 @@ func makeLocalStorage(
 	// TODO(dt): check that this node is cfg.NodeID if non-zero.
 
 	localBase := cfg.Path
+	externalDir := ""
 	// In non-server execution we have no settings and no restriction on local IO.
 	if settings != nil {
 		if settings.ExternalIODir == "" {
@@ -304,12 +329,13 @@ func makeLocalStorage(
 		}
 		// we prefix with the IO dir
 		localBase = filepath.Clean(filepath.Join(settings.ExternalIODir, localBase))
+		externalDir = settings.ExternalIODir
 		// ... and make sure we didn't ../ our way back out.
 		if !strings.HasPrefix(localBase, settings.ExternalIODir) {
 			return nil, errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
 		}
 	}
-	return &localFileStorage{base: localBase, cfg: cfg}, nil
+	return &localFileStorage{base: localBase, cfg: cfg, externalIODir: externalDir}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExternalStorage {
@@ -349,6 +375,24 @@ func (l *localFileStorage) WriteFile(
 
 func (l *localFileStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(l.base, basename))
+}
+
+func (l *localFileStorage) ListFiles(_ context.Context) ([]string, error) {
+	var fileList []string
+	matches, err := filepath.Glob(l.base)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to match pattern provided")
+	}
+
+	for _, fileName := range matches {
+		uri, err := MakeLocalStorageURI(strings.TrimPrefix(fileName, l.externalIODir))
+		if err != nil {
+			continue
+		}
+		fileList = append(fileList, uri)
+	}
+
+	return fileList, nil
 }
 
 func (l *localFileStorage) Delete(_ context.Context, basename string) error {
@@ -451,6 +495,10 @@ func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io
 			_, err := h.reqNoBody(ctx, "PUT", basename, content)
 			return err
 		})
+}
+
+func (h *httpStorage) ListFiles(_ context.Context) ([]string, error) {
+	return nil, errors.New(`http storage does not support listing files`)
 }
 
 func (h *httpStorage) Delete(ctx context.Context, basename string) error {
@@ -682,6 +730,48 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 	return out.Body, nil
 }
 
+func getBucketBeforeWildcard(path string) string {
+	globIndex := strings.IndexAny(path, "*?[")
+	if globIndex < 0 {
+		return path
+	}
+	return filepath.Dir(path[:globIndex])
+}
+
+func (s *s3Storage) ListFiles(ctx context.Context) ([]string, error) {
+	var fileList []string
+	baseBucket := getBucketBeforeWildcard(*s.bucket)
+
+	err := s.s3.ListObjectsPagesWithContext(
+		ctx,
+		&s3.ListObjectsInput{
+			Bucket: &baseBucket,
+		},
+		func(page *s3.ListObjectsOutput, lastPage bool) bool {
+			for _, fileObject := range page.Contents {
+				matches, err := filepath.Match(s.prefix, *fileObject.Key)
+				if err != nil {
+					continue
+				}
+				if matches {
+					s3URL := url.URL{
+						Scheme: "s3",
+						Host:   *s.bucket,
+						Path:   *fileObject.Key,
+					}
+					fileList = append(fileList, s3URL.String())
+				}
+			}
+			return !lastPage
+		},
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, `failed to list s3 bucket`)
+	}
+
+	return fileList, nil
+}
+
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete s3 object",
 		timeoutSetting.Get(&s.settings.SV),
@@ -836,6 +926,37 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 	return rc, err
 }
 
+func (g *gcsStorage) ListFiles(ctx context.Context) ([]string, error) {
+	var fileList []string
+	it := g.bucket.Objects(ctx, &gcs.Query{
+		Prefix: getBucketBeforeWildcard(g.prefix),
+	})
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to list files in gcs bucket")
+		}
+
+		matches, errMatch := filepath.Match(g.prefix, attrs.Name)
+		if errMatch != nil {
+			continue
+		}
+		if matches {
+			gsURL := url.URL{
+				Scheme: "gs",
+				Host:   attrs.Bucket,
+				Path:   attrs.Name,
+			}
+			fileList = append(fileList, gsURL.String())
+		}
+	}
+
+	return fileList, nil
+}
+
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete gcs file",
 		timeoutSetting.Get(&g.settings.SV),
@@ -930,6 +1051,34 @@ func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCl
 	}
 	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
 	return reader, nil
+}
+
+func (s *azureStorage) ListFiles(ctx context.Context) ([]string, error) {
+	var fileList []string
+	response, err := s.container.ListBlobsFlatSegment(ctx,
+		azblob.Marker{},
+		azblob.ListBlobsSegmentOptions{Prefix: getBucketBeforeWildcard(s.prefix)},
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to list files for specified blob")
+	}
+
+	for _, blob := range response.Segment.BlobItems {
+		matches, err := filepath.Match(s.prefix, blob.Name)
+		if err != nil {
+			continue
+		}
+		if matches {
+			azureURL := url.URL{
+				Scheme: "azure",
+				Host:   strings.TrimPrefix(s.container.URL().Path, "/"),
+				Path:   blob.Name,
+			}
+			fileList = append(fileList, azureURL.String())
+		}
+	}
+
+	return fileList, nil
 }
 
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
@@ -1054,7 +1203,7 @@ func (s *workloadStorage) Conf() roachpb.ExternalStorage {
 
 func (s *workloadStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
 	if basename != `` {
-		return nil, errors.New(`basenames are not supported by workload storage`)
+		return nil, errors.Errorf(`basenames are not supported by workload storage`)
 	}
 	r := workload.NewCSVRowsReader(s.table, int(s.conf.BatchBegin), int(s.conf.BatchEnd))
 	return ioutil.NopCloser(r), nil
@@ -1063,8 +1212,13 @@ func (s *workloadStorage) ReadFile(_ context.Context, basename string) (io.ReadC
 func (s *workloadStorage) WriteFile(_ context.Context, _ string, _ io.ReadSeeker) error {
 	return errors.Errorf(`workload storage does not support writes`)
 }
+
+func (s *workloadStorage) ListFiles(_ context.Context) ([]string, error) {
+	return nil, errors.Errorf(`workload storage does not support listing files`)
+}
+
 func (s *workloadStorage) Delete(_ context.Context, _ string) error {
-	return errors.Errorf(`workload storage does not support writes`)
+	return errors.Errorf(`workload storage does not support deletes`)
 }
 func (s *workloadStorage) Size(_ context.Context, _ string) (int64, error) {
 	return 0, errors.Errorf(`workload storage does not support sizing`)
