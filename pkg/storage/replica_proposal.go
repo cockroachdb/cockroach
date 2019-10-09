@@ -370,6 +370,21 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		// Also clear and disable the push transaction queue. Any waiters
 		// must be redirected to the new lease holder.
 		r.txnWaitQueue.Clear(true /* disable */)
+
+		// Fail out all pending proposals as they must have been proposed under the
+		// previous lease.
+		r.mu.Lock()
+		r.mu.proposalBuf.FlushLockedWithoutProposing()
+		nle := newNotLeaseHolderError(&newLease, r.store.StoreID(), r.mu.state.Desc)
+		for _, p := range r.mu.proposals {
+			if !p.applied {
+				r.cleanupFailedProposalLocked(p)
+				p.finishApplication(proposalResult{
+					Err: roachpb.NewError(nle),
+				})
+			}
+		}
+		r.mu.Unlock()
 	}
 
 	// If we're the current raft leader, may want to transfer the leadership to

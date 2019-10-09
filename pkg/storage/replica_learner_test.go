@@ -80,12 +80,18 @@ func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
 	return base.TestingKnobs{Store: &k.storeKnobs}, &k
 }
 
+func getFirstStore(t *testing.T, s serverutils.TestServerInterface) *storage.Store {
+	t.Helper()
+	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	return store
+}
+
 func getFirstStoreReplica(
 	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
 ) (*storage.Store, *storage.Replica) {
 	t.Helper()
-	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
-	require.NoError(t, err)
+	store := getFirstStore(t, s)
 	var repl *storage.Replica
 	testutils.SucceedsSoon(t, func() error {
 		repl = store.LookupReplica(roachpb.RKey(key))
