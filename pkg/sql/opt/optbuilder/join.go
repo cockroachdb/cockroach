@@ -31,7 +31,18 @@ import (
 // return values.
 func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope *scope) {
 	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, inScope)
-	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, inScope)
+
+	isLateral := false
+	inScopeRight := inScope
+	// If this is a lateral join, use leftScope as inScope for the right side.
+	// The right side scope of a LATERAL join includes the columns produced by
+	// the left side.
+	if t, ok := join.Right.(*tree.AliasedTableExpr); ok && t.Lateral {
+		isLateral = true
+		inScopeRight = leftScope
+	}
+
+	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, inScopeRight)
 
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
@@ -103,7 +114,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		left := leftScope.expr.(memo.RelExpr)
 		right := rightScope.expr.(memo.RelExpr)
 		outScope.expr = b.constructJoin(
-			joinType, left, right, filters, &memo.JoinPrivate{Flags: flags},
+			joinType, left, right, filters, &memo.JoinPrivate{Flags: flags}, isLateral,
 		)
 		return outScope
 
@@ -167,20 +178,35 @@ func (b *Builder) findJoinColsToValidate(scope *scope) util.FastIntSet {
 	return ords
 }
 
+var invalidLateralJoin = pgerror.New(pgcode.Syntax, "The combining JOIN type must be INNER or LEFT for a LATERAL reference")
+
 func (b *Builder) constructJoin(
 	joinType sqlbase.JoinType,
 	left, right memo.RelExpr,
 	on memo.FiltersExpr,
 	private *memo.JoinPrivate,
+	isLateral bool,
 ) memo.RelExpr {
 	switch joinType {
 	case sqlbase.InnerJoin:
+		if isLateral {
+			return b.factory.ConstructInnerJoinApply(left, right, on, private)
+		}
 		return b.factory.ConstructInnerJoin(left, right, on, private)
 	case sqlbase.LeftOuterJoin:
+		if isLateral {
+			return b.factory.ConstructLeftJoinApply(left, right, on, private)
+		}
 		return b.factory.ConstructLeftJoin(left, right, on, private)
 	case sqlbase.RightOuterJoin:
+		if isLateral {
+			panic(invalidLateralJoin)
+		}
 		return b.factory.ConstructRightJoin(left, right, on, private)
 	case sqlbase.FullOuterJoin:
+		if isLateral {
+			panic(invalidLateralJoin)
+		}
 		return b.factory.ConstructFullJoin(left, right, on, private)
 	default:
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
@@ -351,6 +377,7 @@ func (jb *usingJoinBuilder) finishBuild() {
 		jb.rightScope.expr.(memo.RelExpr),
 		jb.filters,
 		&memo.JoinPrivate{Flags: jb.joinFlags},
+		false, /* isLateral */
 	)
 
 	if !jb.ifNullCols.Empty() {
