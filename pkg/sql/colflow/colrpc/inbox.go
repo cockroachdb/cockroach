@@ -346,7 +346,9 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 	// It is safe to Send without holding the mutex because it is legal to call
 	// Send and Recv from different goroutines.
 	if err := i.streamMu.stream.Send(&execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}); err != nil {
-		log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
+		if log.V(1) {
+			log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
+		}
 		return err
 	}
 	return nil
@@ -398,7 +400,9 @@ func (i *Inbox) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	defer i.closeLocked()
 
 	if err := i.maybeInitLocked(ctx); err != nil {
-		log.Warningf(ctx, "Inbox unable to initialize stream while draining metadata: %+v", err)
+		if log.V(1) {
+			log.Warningf(ctx, "Inbox unable to initialize stream while draining metadata: %+v", err)
+		}
 		return allMeta
 	}
 	if !drainSignalSent {
@@ -415,7 +419,9 @@ func (i *Inbox) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 			if err == io.EOF {
 				break
 			}
-			log.Warningf(ctx, "Inbox Recv connection error while draining metadata: %+v", err)
+			if log.V(1) {
+				log.Warningf(ctx, "Inbox Recv connection error while draining metadata: %+v", err)
+			}
 			return allMeta
 		}
 		for _, remoteMeta := range msg.Data.Metadata {
