@@ -283,6 +283,9 @@ func importPlanHook(
 				}
 				format.MysqlOut.Skip = uint32(skip)
 			}
+			if override, ok := opts[csvNullIf]; ok {
+				format.MysqlOut.NullEncoding = &override
+			}
 		case "MYSQLDUMP":
 			telemetry.Count("import.format.mysqldump")
 			format.Format = roachpb.IOFileFormat_Mysqldump
@@ -796,22 +799,6 @@ func (r *importResumer) Resume(
 		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
 			return err
 		}
-	}
-
-	// TODO(jeffreyxiao): Remove this check in 20.1.
-	// If the cluster supports sticky bits, then we don't have to worry about the
-	// merge queue automatically merging the splits performed during IMPORT.
-	// Otherwise, we have to rely on the gossip mechanism to disable the merge
-	// queue for the table IDs being imported into.
-	stickyBitEnabled := r.settings.Version.IsActive(cluster.VersionStickyBit)
-	if !stickyBitEnabled {
-		tableIDs := make([]uint32, 0, len(tables))
-		for _, t := range tables {
-			tableIDs = append(tableIDs, uint32(t.Desc.ID))
-		}
-		disableCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		p.ExecCfg().Gossip.DisableMerges(disableCtx, tableIDs)
 	}
 
 	walltime := details.Walltime
