@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -35,8 +34,8 @@ var maxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_
 // startAssertEngineHealth starts a goroutine that periodically verifies that
 // syncing the engines is possible within maxSyncDuration. If not,
 // the process is terminated (with an attempt at a descriptive message).
-func startAssertEngineHealth(ctx context.Context, stopper *stop.Stopper, engines []engine.Engine) {
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+func (n *Node) startAssertEngineHealth(ctx context.Context, engines []engine.Engine) {
+	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		t := timeutil.NewTimer()
 		t.Reset(0)
 
@@ -45,8 +44,8 @@ func startAssertEngineHealth(ctx context.Context, stopper *stop.Stopper, engines
 			case <-t.C:
 				t.Read = true
 				t.Reset(10 * time.Second)
-				assertEngineHealth(ctx, engines, maxSyncDuration)
-			case <-stopper.ShouldQuiesce():
+				n.assertEngineHealth(ctx, engines, maxSyncDuration)
+			case <-n.stopper.ShouldQuiesce():
 				return
 			}
 		}
@@ -58,10 +57,13 @@ func guaranteedExitFatal(ctx context.Context, msg string, args ...interface{}) {
 	log.Shout(ctx, log.Severity_FATAL, fmt.Sprintf(msg, args...))
 }
 
-func assertEngineHealth(ctx context.Context, engines []engine.Engine, maxDuration time.Duration) {
+func (n *Node) assertEngineHealth(
+	ctx context.Context, engines []engine.Engine, maxDuration time.Duration,
+) {
 	for _, eng := range engines {
 		func() {
 			t := time.AfterFunc(maxDuration, func() {
+				n.metrics.DiskStalls.Inc(1)
 				var stats string
 				if rocks, ok := eng.(*engine.RocksDB); ok {
 					stats = "\n" + rocks.GetCompactionStats()

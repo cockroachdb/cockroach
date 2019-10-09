@@ -808,7 +808,7 @@ func TestChartCatalogMetrics(t *testing.T) {
 	}
 
 	if len(undefinedMetrics) > 0 {
-		t.Fatalf(`The following metrics need are no longer present and  need to be removed
+		t.Fatalf(`The following metrics need are no longer present and need to be removed
 			from the chart catalog (pkg/ts/chart_catalog.go):%v`, undefinedMetrics)
 	}
 

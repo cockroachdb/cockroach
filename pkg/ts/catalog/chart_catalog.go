@@ -578,6 +578,13 @@ var charts = []sectionDescription{
 					"exec.success",
 				},
 			},
+			{
+				Title:       "Storage Engine Stalls",
+				Downsampler: DescribeAggregator_MAX,
+				Rate:        DescribeDerivative_NON_NEGATIVE_DERIVATIVE,
+				Percentiles: false,
+				Metrics:     []string{"engine.stalls"},
+			},
 		},
 	},
 	{
