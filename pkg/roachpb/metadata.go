@@ -299,7 +299,7 @@ func (r *RangeDescriptor) Validate() error {
 	return nil
 }
 
-func (r *RangeDescriptor) String() string {
+func (r RangeDescriptor) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "r%d:", r.RangeID)
 
