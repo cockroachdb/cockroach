@@ -134,7 +134,7 @@ func newTableReader(
 		tr.fetcher = execinfra.NewRowFetcherStatCollector(&fetcher)
 		tr.FinishTrace = tr.outputStatsToTrace
 	} else {
-		tr.fetcher = &execinfra.RowFetcherWrapper{Fetcher: &fetcher}
+		tr.fetcher = &fetcher
 	}
 
 	return tr, nil
@@ -152,29 +152,20 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
-	// Like every processor, the tableReader will have a context with a log tag
-	// and a span. The underlying fetcher inherits the proc's span, but not the
-	// log tag.
-	fetcherCtx := ctx
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
-	if procSpan := opentracing.SpanFromContext(ctx); procSpan != nil {
-		fetcherCtx = opentracing.ContextWithSpan(fetcherCtx, procSpan)
-	}
 
-	// This call doesn't do much; the real "starting" is below.
-	tr.fetcher.Start(fetcherCtx)
 	limitBatches := execinfra.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			fetcherCtx, tr.FlowCtx.Txn, tr.spans,
+			ctx, tr.FlowCtx.Txn, tr.spans,
 			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
 		err = tr.fetcher.StartInconsistentScan(
-			fetcherCtx, tr.FlowCtx.Cfg.DB, initialTS,
+			ctx, tr.FlowCtx.Cfg.DB, initialTS,
 			tr.maxTimestampAge, tr.spans,
 			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
 		)
@@ -202,16 +193,9 @@ func (tr *tableReader) Release() {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
-		row, meta := tr.fetcher.Next()
-
-		if meta != nil {
-			if meta.Err != nil {
-				tr.MoveToDraining(nil /* err */)
-			}
-			return nil, meta
-		}
-		if row == nil {
-			tr.MoveToDraining(nil /* err */)
+		row, _, _, err := tr.fetcher.NextRow(tr.Ctx)
+		if row == nil || err != nil {
+			tr.MoveToDraining(err)
 			break
 		}
 
