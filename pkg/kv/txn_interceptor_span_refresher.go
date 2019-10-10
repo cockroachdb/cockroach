@@ -412,12 +412,16 @@ func (sr *txnSpanRefresher) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 		sr.refreshReads = nil
 		sr.refreshWrites = nil
 	} else if !sr.refreshInvalid {
-		sr.refreshReads, _ = roachpb.MergeSpans(
-			append(append([]roachpb.Span(nil), sr.refreshReads...), meta.RefreshReads...),
-		)
-		sr.refreshWrites, _ = roachpb.MergeSpans(
-			append(append([]roachpb.Span(nil), sr.refreshWrites...), meta.RefreshWrites...),
-		)
+		if meta.RefreshReads != nil {
+			sr.refreshReads, _ = roachpb.MergeSpans(
+				append(append([]roachpb.Span(nil), sr.refreshReads...), meta.RefreshReads...),
+			)
+		}
+		if meta.RefreshWrites != nil {
+			sr.refreshWrites, _ = roachpb.MergeSpans(
+				append(append([]roachpb.Span(nil), sr.refreshWrites...), meta.RefreshWrites...),
+			)
+		}
 	}
 	// Recompute the size of the refreshes.
 	sr.refreshSpansBytes = 0

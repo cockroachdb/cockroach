@@ -33,6 +33,9 @@ type RangeIterator struct {
 	pErr    *roachpb.Error
 }
 
+// RangeIteratorGen is a generator of RangeIterators.
+type RangeIteratorGen func() *RangeIterator
+
 // NewRangeIterator creates a new RangeIterator.
 func NewRangeIterator(ds *DistSender) *RangeIterator {
 	return &RangeIterator{
@@ -113,6 +116,9 @@ func (ri *RangeIterator) Error() *roachpb.Error {
 func (ri *RangeIterator) Reset() {
 	*ri = RangeIterator{ds: ri.ds}
 }
+
+// Silence unused warning.
+var _ = (*RangeIterator)(nil).Reset
 
 // Next advances the iterator to the next range. The direction of
 // advance is dependent on whether the iterator is reversed. The
