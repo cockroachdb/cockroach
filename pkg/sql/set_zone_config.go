@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -386,8 +387,48 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			return err
 		}
 
-		// Copy the fields set by the INHERIT field command.
-		partialZone.CopyFromZone(*completeZone, copyFromParentList)
+		// We need to inherit zone configuration information from the correct zone,
+		// not completeZone.
+		{
+			// Function for getting the zone config within the current transaction.
+			getKey := func(key roachpb.Key) (*roachpb.Value, error) {
+				kv, err := params.p.txn.Get(params.ctx, key)
+				if err != nil {
+					return nil, err
+				}
+				return kv.Value, nil
+			}
+			// Get all fields that the current zone would inherit from its parent.
+			zoneInheritedFields := config.ZoneConfig{}
+			if err := completeZoneConfig(&zoneInheritedFields, uint32(targetID), getKey); err != nil {
+				return err
+			}
+			// Only modify partialZone if are operating on a zone, not a subZone. This
+			// occurs when we are not operating on an index.
+			if index == nil {
+				partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
+			}
+			// If we are editing a subzone, then partialSubzone will not be nil.
+			// In this case, we need to update partialSubzone.Config as well.
+			if partialSubzone != nil {
+				// In the case we have just an index, we should copy from the inherited
+				// zone's fields (whether that was the table or database).
+				if partition == "" {
+					partialSubzone.Config.CopyFromZone(zoneInheritedFields, copyFromParentList)
+				} else {
+					// In the case of updating a partition, we need try inheriting fields
+					// from the subzone's index, and inherit the remainder from the zone.
+					subzoneInheritedFields := config.ZoneConfig{}
+					if indexSubzone := completeZone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
+						subzoneInheritedFields.InheritFromParent(&indexSubzone.Config)
+					}
+					subzoneInheritedFields.InheritFromParent(&zoneInheritedFields)
+					// After inheriting fields, copy the requested ones into the
+					// partialSubzone.Config.
+					partialSubzone.Config.CopyFromZone(subzoneInheritedFields, copyFromParentList)
+				}
+			}
+		}
 
 		if deleteZone {
 			if index != nil {
