@@ -40,4 +40,7 @@ const (
 	DefaultHostDir  = "${HOME}/.roachprod/hosts"
 	EmailDomain     = "@cockroachlabs.com"
 	Local           = "local"
+
+	// SharedUser is the linux username for shared use on all vms.
+	SharedUser = "ubuntu"
 )
