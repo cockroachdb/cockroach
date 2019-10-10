@@ -101,7 +101,7 @@ with &1 (t0)
       ├── fd: ()-->(27)
       ├── select
       │    ├── columns: x:14(int!null) column1:17(int) column2:18(oid!null) column3:19(date) column4:20(string) true_agg:25(bool!null)
-      │    ├── stats: [rows=1e-06, distinct(14)=1e-06, null(14)=0, distinct(18)=1e-06, null(18)=0, distinct(25)=1e-06, null(25)=0]
+      │    ├── stats: [rows=1e-06, distinct(25)=1e-06, null(25)=0]
       │    ├── key: (14,17-20)
       │    ├── fd: (14,17-20)-->(25)
       │    ├── group-by
