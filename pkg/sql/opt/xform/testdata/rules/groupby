@@ -806,11 +806,11 @@ memo (optimized, ~9KB, required=[presentation: array_agg:5])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:5]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1079.63
+ │         └── cost: 1079.62
  ├── G2: (group-by G4 G5 cols=(4),ordering=+(2|3) opt(4)) (group-by G4 G5 cols=(4),ordering=+(2|3)) (group-by G4 G5 cols=(4),ordering=+4,+(2|3)) (group-by G4 G5 cols=(4),ordering=+(2|3),+4)
  │    └── []
  │         ├── best: (group-by G4="[ordering: +(2|3) opt(4)]" G5 cols=(4),ordering=+(2|3) opt(4))
- │         └── cost: 1079.53
+ │         └── cost: 1079.52
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7) (select G9 G7)
  │    ├── [ordering: +(2|3) opt(4)]
@@ -818,13 +818,13 @@ memo (optimized, ~9KB, required=[presentation: array_agg:5])
  │    │    └── cost: 1079.12
  │    ├── [ordering: +(2|3),+4]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1080.04
+ │    │    └── cost: 1080.01
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (select G8="[ordering: +2]" G7)
  │    │    └── cost: 1079.12
  │    ├── [ordering: +4,+(2|3)]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1080.04
+ │    │    └── cost: 1080.01
  │    └── []
  │         ├── best: (select G8 G7)
  │         └── cost: 1079.12
@@ -900,11 +900,11 @@ memo (optimized, ~9KB, required=[presentation: sum:5])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:5]
  │         ├── best: (project G2 G3 sum)
- │         └── cost: 1079.69
+ │         └── cost: 1079.68
  ├── G2: (group-by G4 G5 cols=(2,4)) (group-by G4 G5 cols=(2,4),ordering=+(2|3)) (group-by G4 G5 cols=(2,4),ordering=+4)
  │    └── []
  │         ├── best: (group-by G4="[ordering: +(2|3)]" G5 cols=(2,4),ordering=+(2|3))
- │         └── cost: 1079.58
+ │         └── cost: 1079.57
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7) (select G9 G7)
  │    ├── [ordering: +(2|3)]
@@ -912,7 +912,7 @@ memo (optimized, ~9KB, required=[presentation: sum:5])
  │    │    └── cost: 1079.12
  │    ├── [ordering: +4]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1079.99
+ │    │    └── cost: 1079.97
  │    └── []
  │         ├── best: (select G8 G7)
  │         └── cost: 1079.12

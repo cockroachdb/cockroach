@@ -160,7 +160,7 @@ project
  ├── stats: [rows=120]
  └── select
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
-      ├── stats: [rows=120, distinct(3)=97.6, null(3)=0, distinct(4)=2, null(4)=0]
+      ├── stats: [rows=120, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
@@ -402,10 +402,10 @@ SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
 ----
 project
  ├── columns: max:5(int)
- ├── stats: [rows=119]
+ ├── stats: [rows=132.222222]
  └── select
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
-      ├── stats: [rows=119, distinct(3)=97.6, null(3)=0, distinct(4)=2, null(4)=0]
+      ├── stats: [rows=132.222222, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
@@ -431,7 +431,7 @@ SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
 select
  ├── columns: sum:5(decimal!null) s:4(string)
- ├── stats: [rows=0.9, distinct(5)=0.9, null(5)=0]
+ ├── stats: [rows=1, distinct(5)=1, null(5)=0]
  ├── key: (4)
  ├── fd: ()-->(5)
  ├── group-by
