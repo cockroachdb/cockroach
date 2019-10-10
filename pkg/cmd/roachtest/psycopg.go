@@ -94,8 +94,8 @@ func registerPsycopg(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
-		if expectedFailureList == nil {
+		blacklistName, expectedFailures, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
+		if expectedFailures == nil {
 			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)
 		}
 		if ignoredlist == nil {
@@ -120,15 +120,7 @@ func registerPsycopg(r *testRegistry) {
 		c.l.Printf("Test Results: %s", rawResults)
 
 		// Find all the failed and errored tests.
-
-		var failUnexpectedCount, failExpectedCount, ignoredCount, skipCount, unexpectedSkipCount int
-		var passUnexpectedCount, passExpectedCount int
-		// Put all the results in a giant map of [testname]result
-		results := make(map[string]string)
-		// Current failures are any tests that reported as failed, regardless of if
-		// they were expected or not.
-		var currentFailures, allTests []string
-		runTests := make(map[string]struct{})
+		results := newORMTestsResults()
 
 		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
 		for scanner.Scan() {
@@ -144,49 +136,46 @@ func registerPsycopg(r *testRegistry) {
 					skipReason = groups["reason"]
 				}
 				pass := groups["result"] == "ok"
-				allTests = append(allTests, test)
+				results.allTests = append(results.allTests, test)
 
 				ignoredIssue, expectedIgnored := ignoredlist[test]
-				issue, expectedFailure := expectedFailureList[test]
+				issue, expectedFailure := expectedFailures[test]
 				switch {
 				case expectedIgnored:
-					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
-					ignoredCount++
+					results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
+					results.ignoredCount++
 				case len(skipReason) > 0 && expectedFailure:
-					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (unexpected)", test, skipReason)
-					unexpectedSkipCount++
+					results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (unexpected)", test, skipReason)
+					results.unexpectedSkipCount++
 				case len(skipReason) > 0:
-					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, skipReason)
-					skipCount++
+					results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, skipReason)
+					results.skipCount++
 				case pass && !expectedFailure:
-					results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
-					passExpectedCount++
+					results.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
+					results.passExpectedCount++
 				case pass && expectedFailure:
-					results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
+					results.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
 						test, maybeAddGithubLink(issue),
 					)
-					passUnexpectedCount++
+					results.passUnexpectedCount++
 				case !pass && expectedFailure:
-					results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
+					results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
 						test, maybeAddGithubLink(issue),
 					)
-					failExpectedCount++
-					currentFailures = append(currentFailures, test)
+					results.failExpectedCount++
+					results.currentFailures = append(results.currentFailures, test)
 				case !pass && !expectedFailure:
-					results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
-					failUnexpectedCount++
-					currentFailures = append(currentFailures, test)
+					results.results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
+					results.failUnexpectedCount++
+					results.currentFailures = append(results.currentFailures, test)
 				}
-				runTests[test] = struct{}{}
+				results.runTests[test] = struct{}{}
 			}
 		}
 
-		summarizeORMTestsResults(
-			t, "psycopg" /* ormName */, blacklistName, expectedFailureList,
-			version, latestTag, currentFailures, allTests, runTests, results,
-			failUnexpectedCount, failExpectedCount, ignoredCount, skipCount,
-			unexpectedSkipCount, passUnexpectedCount, passExpectedCount,
-			nil, /* allIssueHints */
+		results.summarizeAll(
+			t, "psycopg" /* ormName */, blacklistName, expectedFailures,
+			version, latestTag,
 		)
 	}
 

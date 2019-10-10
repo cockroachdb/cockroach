@@ -102,6 +102,55 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 	return tests, passed, failedTestToIssue, nil
 }
 
+// parseJUnitXML parses testOutputInJUnitXMLFormat and updates the receiver
+// accordingly.
+func (r *ormTestsResults) parseJUnitXML(
+	t *test, expectedFailures blacklist, testOutputInJUnitXMLFormat []byte,
+) {
+	tests, passed, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for testName, issue := range issueHints {
+		r.allIssueHints[testName] = issue
+	}
+	for i, test := range tests {
+		// There is at least a single test that's run twice, so if we already
+		// have a result, skip it.
+		if _, alreadyTested := r.results[test]; alreadyTested {
+			continue
+		}
+		r.allTests = append(r.allTests, test)
+		issue, expectedFailure := expectedFailures[test]
+		if len(issue) == 0 || issue == "unknown" {
+			issue = issueHints[test]
+		}
+		pass := passed[i]
+		switch {
+		case pass && !expectedFailure:
+			r.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
+			r.passExpectedCount++
+		case pass && expectedFailure:
+			r.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
+				test, maybeAddGithubLink(issue),
+			)
+			r.passUnexpectedCount++
+		case !pass && expectedFailure:
+			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
+				test, maybeAddGithubLink(issue),
+			)
+			r.failExpectedCount++
+			r.currentFailures = append(r.currentFailures, test)
+		case !pass && !expectedFailure:
+			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
+				test, maybeAddGithubLink(issue))
+			r.failUnexpectedCount++
+			r.currentFailures = append(r.currentFailures, test)
+		}
+		r.runTests[test] = struct{}{}
+	}
+}
+
 // parseAndSummarizeJavaORMTestsResults parses the test output of running a
 // test suite for some Java ORM against cockroach and summarizes it. If an
 // unexpected result is observed (for example, a test unexpectedly failed or
@@ -118,16 +167,7 @@ func parseAndSummarizeJavaORMTestsResults(
 	version string,
 	latestTag string,
 ) {
-	var failUnexpectedCount, failExpectedCount int
-	var passUnexpectedCount, passExpectedCount int
-	// Put all the results in a giant map of [testname]result.
-	results := make(map[string]string)
-	// Put all issue hints in a map of [testname]issue.
-	allIssueHints := make(map[string]string)
-	// Current failures are any tests that reported as failed, regardless of if
-	// they were expected or not.
-	var currentFailures, allTests []string
-	runTests := make(map[string]struct{})
+	results := newORMTestsResults()
 	filesRaw := strings.Split(string(testOutput), "\n")
 
 	// There is always at least one entry that's just space characters, remove
@@ -152,55 +192,11 @@ func parseAndSummarizeJavaORMTestsResults(
 		if err != nil {
 			t.Fatal(err)
 		}
-		tests, passed, issueHints, err := extractFailureFromJUnitXML(fileOutput)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for testName, issue := range issueHints {
-			allIssueHints[testName] = issue
-		}
-		for i, test := range tests {
-			// There is at least a single test that's run twice, so if we already
-			// have a result, skip it.
-			if _, alreadyTested := results[test]; alreadyTested {
-				continue
-			}
-			allTests = append(allTests, test)
-			issue, expectedFailure := expectedFailures[test]
-			if len(issue) == 0 || issue == "unknown" {
-				issue = issueHints[test]
-			}
-			pass := passed[i]
-			switch {
-			case pass && !expectedFailure:
-				results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
-				passExpectedCount++
-			case pass && expectedFailure:
-				results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
-					test, maybeAddGithubLink(issue),
-				)
-				passUnexpectedCount++
-			case !pass && expectedFailure:
-				results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
-					test, maybeAddGithubLink(issue),
-				)
-				failExpectedCount++
-				currentFailures = append(currentFailures, test)
-			case !pass && !expectedFailure:
-				results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
-					test, maybeAddGithubLink(issue))
-				failUnexpectedCount++
-				currentFailures = append(currentFailures, test)
-			}
-			runTests[test] = struct{}{}
-		}
+
+		results.parseJUnitXML(t, expectedFailures, fileOutput)
 	}
 
-	summarizeORMTestsResults(
-		t, ormName, blacklistName, expectedFailures,
-		version, latestTag, currentFailures, allTests, runTests, results,
-		failUnexpectedCount, failExpectedCount, 0, /* ignoredCount */
-		0 /* skipCount */, 0, /* unexpectedSkipCount */
-		passUnexpectedCount, passExpectedCount, allIssueHints,
+	results.summarizeAll(
+		t, ormName, blacklistName, expectedFailures, version, latestTag,
 	)
 }
