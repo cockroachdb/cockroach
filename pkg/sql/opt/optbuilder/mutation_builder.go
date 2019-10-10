@@ -135,15 +135,21 @@ type mutationBuilder struct {
 	// UPDATE ... FROM queries, as the columns from the FROM tables must be
 	// made accessible to the RETURNING clause.
 	extraAccessibleCols []scopeColumn
+
+	// ctx is the current build context.
+	ctx buildCtx
 }
 
-func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
+func (mb *mutationBuilder) init(
+	b *Builder, opName string, tab cat.Table, alias tree.TableName, ctx buildCtx,
+) {
 	mb.b = b
 	mb.md = b.factory.Metadata()
 	mb.opName = opName
 	mb.tab = tab
 	mb.alias = alias
 	mb.targetColList = make(opt.ColList, 0, tab.DeletableColumnCount())
+	mb.ctx = ctx
 
 	// Allocate segmented array of scope column ordinals.
 	n := tab.DeletableColumnCount()
@@ -241,7 +247,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	// If there is a FROM clause present, we must join all the tables
 	// together with the table being updated.
 	if fromClausePresent {
-		fromScope := mb.b.buildFromTables(from, inScope)
+		fromScope := mb.b.buildFromTables(from, inScope, mb.ctx)
 
 		// Check that the same table name is not used multiple times.
 		mb.b.validateJoinTableNames(mb.outScope, fromScope)

@@ -182,7 +182,7 @@ func (b *Builder) Build() (err error) {
 
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
-	outScope := b.buildStmt(b.stmt, nil /* desiredTypes */, b.allocScope())
+	outScope := b.buildStmt(b.stmt, nil /* desiredTypes */, b.allocScope(), rootBuildCtx)
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
 	return nil
@@ -194,6 +194,23 @@ func (b *Builder) Build() (err error) {
 func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
 	return unimplemented.NewWithIssueDetailf(issue, detail, format, args...)
 }
+
+// buildCtx describes what kinds of expressions are allowed at a given point in
+// time.
+// TODO(justin): pull in other things, like b.insideViewDef, and possibly more.
+type buildCtx struct {
+	atRoot bool
+}
+
+// child returns a buildCtx suitable for building an input to an expression.
+func (b buildCtx) child() buildCtx {
+	// Today, we always want the empty context, but this could change in the future.
+	return buildCtx{}
+}
+
+// rootBuildCtx is the build context for expressions valid at a root. Notably,
+// mutating CTEs are allowed at the root.
+var rootBuildCtx = buildCtx{atRoot: true}
 
 // buildStmt builds a set of memo groups that represent the given SQL
 // statement.
@@ -212,7 +229,7 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 //           "parent" scope that is still visible. The top-level memo expression
 //           for the built statement/expression is returned in outScope.expr.
 func (b *Builder) buildStmt(
-	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
+	stmt tree.Statement, desiredTypes []*types.T, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	if b.insideViewDef {
 		// A black list of statements that can't be used from inside a view.
@@ -229,19 +246,19 @@ func (b *Builder) buildStmt(
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.Delete:
-		return b.buildDelete(stmt, inScope)
+		return b.buildDelete(stmt, inScope, ctx)
 
 	case *tree.Insert:
-		return b.buildInsert(stmt, inScope)
+		return b.buildInsert(stmt, inScope, ctx)
 
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, desiredTypes, inScope, ctx)
 
 	case *tree.Select:
-		return b.buildSelect(stmt, desiredTypes, inScope)
+		return b.buildSelect(stmt, desiredTypes, inScope, ctx)
 
 	case *tree.Update:
-		return b.buildUpdate(stmt, inScope)
+		return b.buildUpdate(stmt, inScope, ctx)
 
 	case *tree.CreateTable:
 		return b.buildCreateTable(stmt, inScope)
@@ -256,25 +273,25 @@ func (b *Builder) buildStmt(
 		return b.buildShowTrace(stmt, inScope)
 
 	case *tree.Split:
-		return b.buildAlterTableSplit(stmt, inScope)
+		return b.buildAlterTableSplit(stmt, inScope, ctx)
 
 	case *tree.Unsplit:
-		return b.buildAlterTableUnsplit(stmt, inScope)
+		return b.buildAlterTableUnsplit(stmt, inScope, ctx)
 
 	case *tree.Relocate:
-		return b.buildAlterTableRelocate(stmt, inScope)
+		return b.buildAlterTableRelocate(stmt, inScope, ctx)
 
 	case *tree.ControlJobs:
-		return b.buildControlJobs(stmt, inScope)
+		return b.buildControlJobs(stmt, inScope, ctx)
 
 	case *tree.CancelQueries:
-		return b.buildCancelQueries(stmt, inScope)
+		return b.buildCancelQueries(stmt, inScope, ctx)
 
 	case *tree.CancelSessions:
-		return b.buildCancelSessions(stmt, inScope)
+		return b.buildCancelSessions(stmt, inScope, ctx)
 
 	case *tree.Export:
-		return b.buildExport(stmt, inScope)
+		return b.buildExport(stmt, inScope, ctx)
 
 	default:
 		// See if this statement can be rewritten to another statement using the
@@ -288,7 +305,7 @@ func (b *Builder) buildStmt(
 			// register all those dependencies with the metadata (for cache
 			// invalidation). We don't care about caching plans for these statements.
 			b.DisableMemoReuse = true
-			return b.buildStmt(newStmt, desiredTypes, inScope)
+			return b.buildStmt(newStmt, desiredTypes, inScope, ctx)
 		}
 
 		// See if we have an opaque handler registered for this statement type.

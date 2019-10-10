@@ -788,3 +788,48 @@ with &1 (cte)
            ├──  description:6(string) => description:11(string)
            ├──  columns:7(string) => columns:12(string)
            └──  ordering:8(string) => ordering:13(string)
+
+# Mutating WITHs not allowed at non-root positions.
+build
+SELECT * FROM (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (UPDATE y SET a = 4 RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+# Certain contexts besides the literal root allow mutating CTEs, like
+# underneath an EXPLAIN.
+build
+EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
+----
+explain
+ ├── columns: tree:6(string) field:7(string) description:8(string)
+ └── with &1 (foo)
+      ├── columns: a:5(int!null)
+      ├── project
+      │    ├── columns: y.a:1(int!null)
+      │    └── insert y
+      │         ├── columns: y.a:1(int!null) rowid:2(int!null)
+      │         ├── insert-mapping:
+      │         │    ├──  column1:3 => y.a:1
+      │         │    └──  column4:4 => rowid:2
+      │         └── project
+      │              ├── columns: column4:4(int) column1:3(int!null)
+      │              ├── values
+      │              │    ├── columns: column1:3(int!null)
+      │              │    └── tuple [type=tuple{int}]
+      │              │         └── const: 1 [type=int]
+      │              └── projections
+      │                   └── function: unique_rowid [type=int]
+      └── with-scan &1 (foo)
+           ├── columns: a:5(int!null)
+           └── mapping:
+                └──  y.a:1(int) => a:5(int)

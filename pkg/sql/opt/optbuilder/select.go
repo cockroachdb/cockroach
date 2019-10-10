@@ -42,7 +42,7 @@ const (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildDataSource(
-	texpr tree.TableExpr, indexFlags *tree.IndexFlags, inScope *scope,
+	texpr tree.TableExpr, indexFlags *tree.IndexFlags, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
@@ -52,7 +52,7 @@ func (b *Builder) buildDataSource(
 			indexFlags = source.IndexFlags
 		}
 
-		outScope = b.buildDataSource(source.Expr, indexFlags, inScope)
+		outScope = b.buildDataSource(source.Expr, indexFlags, inScope, ctx)
 
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality("ordinality", outScope)
@@ -64,7 +64,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.JoinTableExpr:
-		return b.buildJoin(source, inScope)
+		return b.buildJoin(source, inScope, ctx)
 
 	case *tree.TableName:
 		tn := source
@@ -113,13 +113,13 @@ func (b *Builder) buildDataSource(
 		}
 
 	case *tree.ParenTableExpr:
-		return b.buildDataSource(source.Expr, indexFlags, inScope)
+		return b.buildDataSource(source.Expr, indexFlags, inScope, ctx)
 
 	case *tree.RowsFromExpr:
 		return b.buildZip(source.Items, inScope)
 
 	case *tree.Subquery:
-		outScope = b.buildStmt(source.Select, nil /* desiredTypes */, inScope)
+		outScope = b.buildStmt(source.Select, nil /* desiredTypes */, inScope, ctx.child())
 
 		// Treat the subquery result as an anonymous data source (i.e. column names
 		// are not qualified). Remove hidden columns, as they are not accessible
@@ -134,7 +134,7 @@ func (b *Builder) buildDataSource(
 		// for a top-level CTE, so it cannot refer to anything in the input scope.
 		// See #41078.
 		emptyScope := &scope{builder: b}
-		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
+		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope, ctx.child())
 		if len(innerScope.cols) == 0 {
 			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"statement source \"%v\" does not return any columns", source.Statement))
@@ -219,7 +219,7 @@ func (b *Builder) buildView(
 		defer func() { b.trackViewDeps = true }()
 	}
 
-	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b})
+	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b}, rootBuildCtx)
 
 	// Update data source name to be the name of the view. And if view columns
 	// are specified, then update names of output columns.
@@ -573,7 +573,7 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 }
 
 func (b *Builder) buildCTE(
-	ctes []*tree.CTE, inScope *scope,
+	ctes []*tree.CTE, inScope *scope, ctx buildCtx,
 ) (outScope *scope, addedCTEs []cteSource) {
 	outScope = inScope.push()
 
@@ -581,7 +581,7 @@ func (b *Builder) buildCTE(
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
-		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
+		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope, ctx.child())
 		cteScope.removeHiddenCols()
 		cols := cteScope.cols
 		name := ctes[i].Name.Alias
@@ -639,6 +639,15 @@ func (b *Builder) buildCTE(
 		})
 		cte := &b.ctes[len(b.ctes)-1]
 		outScope.ctes[ctes[i].Name.Alias.String()] = cte
+
+		if cteScope.expr.Relational().CanMutate && !ctx.atRoot {
+			panic(
+				pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"WITH clause containing a data-modifying statement must be at the top level",
+				),
+			)
+		}
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
@@ -670,18 +679,18 @@ func (b *Builder) wrapWithCTEs(expr memo.RelExpr, ctes []cteSource) memo.RelExpr
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectStmt(
-	stmt tree.SelectStatement, desiredTypes []*types.T, inScope *scope,
+	stmt tree.SelectStatement, desiredTypes []*types.T, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, desiredTypes, inScope, ctx)
 
 	case *tree.SelectClause:
-		return b.buildSelectClause(stmt, nil /* orderBy */, desiredTypes, inScope)
+		return b.buildSelectClause(stmt, nil /* orderBy */, desiredTypes, inScope, ctx)
 
 	case *tree.UnionClause:
-		return b.buildUnion(stmt, desiredTypes, inScope)
+		return b.buildUnion(stmt, desiredTypes, inScope, ctx)
 
 	case *tree.ValuesClause:
 		return b.buildValuesClause(stmt, desiredTypes, inScope)
@@ -697,7 +706,7 @@ func (b *Builder) buildSelectStmt(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelect(
-	stmt *tree.Select, desiredTypes []*types.T, inScope *scope,
+	stmt *tree.Select, desiredTypes []*types.T, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
@@ -750,16 +759,16 @@ func (b *Builder) buildSelect(
 
 	var ctes []cteSource
 	if with != nil {
-		inScope, ctes = b.buildCTE(with.CTEList, inScope)
+		inScope, ctes = b.buildCTE(with.CTEList, inScope, ctx)
 	}
 
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.SelectClause:
-		outScope = b.buildSelectClause(t, orderBy, desiredTypes, inScope)
+		outScope = b.buildSelectClause(t, orderBy, desiredTypes, inScope, ctx)
 
 	case *tree.UnionClause:
-		outScope = b.buildUnion(t, desiredTypes, inScope)
+		outScope = b.buildUnion(t, desiredTypes, inScope, ctx)
 
 	case *tree.ValuesClause:
 		outScope = b.buildValuesClause(t, desiredTypes, inScope)
@@ -802,9 +811,13 @@ func (b *Builder) buildSelect(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectClause(
-	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []*types.T, inScope *scope,
+	sel *tree.SelectClause,
+	orderBy tree.OrderBy,
+	desiredTypes []*types.T,
+	inScope *scope,
+	ctx buildCtx,
 ) (outScope *scope) {
-	fromScope := b.buildFrom(sel.From, inScope)
+	fromScope := b.buildFrom(sel.From, inScope, ctx)
 	b.processWindowDefs(sel, fromScope)
 	b.buildWhere(sel.Where, fromScope)
 
@@ -867,7 +880,7 @@ func (b *Builder) buildSelectClause(
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
-func (b *Builder) buildFrom(from tree.From, inScope *scope) (outScope *scope) {
+func (b *Builder) buildFrom(from tree.From, inScope *scope, ctx buildCtx) (outScope *scope) {
 	// The root AS OF clause is recognized and handled by the executor. The only
 	// thing that must be done at this point is to ensure that if any timestamps
 	// are specified, the root SELECT was an AS OF SYSTEM TIME and that the time
@@ -877,7 +890,7 @@ func (b *Builder) buildFrom(from tree.From, inScope *scope) (outScope *scope) {
 	}
 
 	if len(from.Tables) > 0 {
-		outScope = b.buildFromTables(from.Tables, inScope)
+		outScope = b.buildFromTables(from.Tables, inScope, ctx)
 	} else {
 		outScope = inScope.push()
 		outScope.expr = b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
@@ -933,15 +946,17 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outScope *scope) {
+func (b *Builder) buildFromTables(
+	tables tree.TableExprs, inScope *scope, ctx buildCtx,
+) (outScope *scope) {
 	// If there are any lateral data sources, we need to build the join tree
 	// left-deep instead of right-deep.
 	for i := range tables {
 		if b.exprIsLateral(tables[i]) {
-			return b.buildFromWithLateral(tables, inScope)
+			return b.buildFromWithLateral(tables, inScope, ctx)
 		}
 	}
-	return b.buildFromTablesRightDeep(tables, inScope)
+	return b.buildFromTablesRightDeep(tables, inScope, ctx)
 }
 
 // buildFromTablesRightDeep recursively builds a series of InnerJoin
@@ -962,16 +977,16 @@ func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outSc
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildFromTablesRightDeep(
-	tables tree.TableExprs, inScope *scope,
+	tables tree.TableExprs, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope)
+	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope, ctx.child())
 
 	// Recursively build table join.
 	tables = tables[1:]
 	if len(tables) == 0 {
 		return outScope
 	}
-	tableScope := b.buildFromTablesRightDeep(tables, inScope)
+	tableScope := b.buildFromTablesRightDeep(tables, inScope, ctx)
 
 	// Check that the same table name is not used multiple times.
 	b.validateJoinTableNames(outScope, tableScope)
@@ -1010,8 +1025,10 @@ func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
 //
 //   buildFromTablesRightDeep: a JOIN (b JOIN c)
 //   buildFromWithLateral:     (a JOIN b) JOIN c
-func (b *Builder) buildFromWithLateral(tables tree.TableExprs, inScope *scope) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope)
+func (b *Builder) buildFromWithLateral(
+	tables tree.TableExprs, inScope *scope, ctx buildCtx,
+) (outScope *scope) {
+	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope, ctx)
 	for i := 1; i < len(tables); i++ {
 		scope := inScope
 		// Lateral expressions need to be able to refer to the expressions that
@@ -1019,7 +1036,7 @@ func (b *Builder) buildFromWithLateral(tables tree.TableExprs, inScope *scope) (
 		if b.exprIsLateral(tables[i]) {
 			scope = outScope
 		}
-		tableScope := b.buildDataSource(tables[i], nil /* indexFlags */, scope)
+		tableScope := b.buildDataSource(tables[i], nil /* indexFlags */, scope, ctx)
 
 		// Check that the same table name is not used multiple times.
 		b.validateJoinTableNames(outScope, tableScope)

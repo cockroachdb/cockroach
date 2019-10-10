@@ -24,7 +24,9 @@ import (
 )
 
 // buildAlterTableSplit builds an ALTER TABLE/INDEX .. SPLIT AT .. statement.
-func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outScope *scope) {
+func (b *Builder) buildAlterTableSplit(
+	split *tree.Split, inScope *scope, ctx buildCtx,
+) (outScope *scope) {
 	flags := cat.Flags{
 		AvoidDescriptorCaches: true,
 		NoTableStats:          true,
@@ -47,7 +49,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
-	inputScope := b.buildSelect(split.Rows, colTypes, emptyScope)
+	inputScope := b.buildSelect(split.Rows, colTypes, emptyScope, ctx.child())
 	checkInputColumns("SPLIT AT", inputScope, colNames, colTypes, 1)
 
 	// Build the expiration scalar.
@@ -82,7 +84,9 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 }
 
 // buildAlterTableUnsplit builds an ALTER TABLE/INDEX .. UNSPLIT AT/ALL .. statement.
-func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) (outScope *scope) {
+func (b *Builder) buildAlterTableUnsplit(
+	unsplit *tree.Unsplit, inScope *scope, ctx buildCtx,
+) (outScope *scope) {
 	flags := cat.Flags{
 		AvoidDescriptorCaches: true,
 		NoTableStats:          true,
@@ -118,7 +122,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	inputScope := b.buildStmt(unsplit.Rows, colTypes, &scope{builder: b})
+	inputScope := b.buildStmt(unsplit.Rows, colTypes, &scope{builder: b}, ctx)
 	checkInputColumns("UNSPLIT AT", inputScope, colNames, colTypes, 1)
 	private.Props = inputScope.makePhysicalProps()
 
@@ -131,7 +135,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 
 // buildAlterTableRelocate builds an ALTER TABLE/INDEX .. UNSPLIT AT/ALL .. statement.
 func (b *Builder) buildAlterTableRelocate(
-	relocate *tree.Relocate, inScope *scope,
+	relocate *tree.Relocate, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	flags := cat.Flags{
 		AvoidDescriptorCaches: true,
@@ -169,7 +173,7 @@ func (b *Builder) buildAlterTableRelocate(
 
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	inputScope := b.buildStmt(relocate.Rows, colTypes, &scope{builder: b})
+	inputScope := b.buildStmt(relocate.Rows, colTypes, &scope{builder: b}, ctx)
 	checkInputColumns(cmdName, inputScope, colNames, colTypes, 2)
 
 	outScope.expr = b.factory.ConstructAlterTableRelocate(

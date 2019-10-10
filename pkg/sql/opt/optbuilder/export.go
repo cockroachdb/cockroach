@@ -18,14 +18,14 @@ import (
 )
 
 // buildExport builds an EXPORT statement.
-func (b *Builder) buildExport(export *tree.Export, inScope *scope) (outScope *scope) {
+func (b *Builder) buildExport(export *tree.Export, inScope *scope, ctx buildCtx) (outScope *scope) {
 	if err := b.catalog.RequireAdminRole(b.ctx, "EXPORT"); err != nil {
 		panic(err)
 	}
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
-	inputScope := b.buildSelect(export.Query, nil /* desiredTypes */, emptyScope)
+	inputScope := b.buildSelect(export.Query, nil /* desiredTypes */, emptyScope, ctx.child())
 
 	texpr := emptyScope.resolveType(export.File, types.String)
 	fileName := b.buildScalar(

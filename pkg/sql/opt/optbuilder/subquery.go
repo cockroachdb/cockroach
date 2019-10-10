@@ -96,7 +96,7 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedE
 
 	// Build the subquery. We cannot build the subquery earlier because we do
 	// not know the desired types until TypeCheck is called.
-	s.buildSubquery(desiredTypes)
+	s.buildSubquery(desiredTypes, buildCtx{})
 
 	// The typing for subqueries is complex, but regular.
 	//
@@ -201,7 +201,7 @@ func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 // buildSubquery builds a relational expression that represents this subquery.
 // It stores the resulting relational expression in s.node, and also updates
 // s.cols and s.ordering with the output columns and ordering of the subquery.
-func (s *subquery) buildSubquery(desiredTypes []*types.T) {
+func (s *subquery) buildSubquery(desiredTypes []*types.T, ctx buildCtx) {
 	if s.scope.replaceSRFs {
 		// We need to save and restore the previous value of the replaceSRFs field in
 		// case we are recursively called within a subquery context.
@@ -215,7 +215,7 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 	defer func() { s.scope.builder.subquery = outer }()
 	s.scope.builder.subquery = s
 
-	outScope := s.scope.builder.buildStmt(s.Subquery.Select, desiredTypes, s.scope)
+	outScope := s.scope.builder.buildStmt(s.Subquery.Select, desiredTypes, s.scope, ctx.child())
 	ord := outScope.ordering
 
 	// Treat the subquery result as an anonymous data source (i.e. column names

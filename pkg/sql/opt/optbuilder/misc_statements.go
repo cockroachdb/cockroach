@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScope *scope) {
+func (b *Builder) buildControlJobs(
+	n *tree.ControlJobs, inScope *scope, ctx buildCtx,
+) (outScope *scope) {
 	if err := b.catalog.RequireAdminRole(b.ctx, n.StatementTag()); err != nil {
 		panic(err)
 	}
@@ -27,7 +29,7 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
 	colTypes := []*types.T{types.Int}
-	inputScope := b.buildStmt(n.Jobs, colTypes, emptyScope)
+	inputScope := b.buildStmt(n.Jobs, colTypes, emptyScope, ctx.child())
 
 	checkInputColumns(
 		fmt.Sprintf("%s JOBS", tree.JobCommandToStatement[n.Command]),
@@ -47,12 +49,14 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 	return outScope
 }
 
-func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (outScope *scope) {
+func (b *Builder) buildCancelQueries(
+	n *tree.CancelQueries, inScope *scope, ctx buildCtx,
+) (outScope *scope) {
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
 	colTypes := []*types.T{types.String}
-	inputScope := b.buildStmt(n.Queries, colTypes, emptyScope)
+	inputScope := b.buildStmt(n.Queries, colTypes, emptyScope, ctx)
 
 	checkInputColumns(
 		"CANCEL QUERIES",
@@ -72,12 +76,14 @@ func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (out
 	return outScope
 }
 
-func (b *Builder) buildCancelSessions(n *tree.CancelSessions, inScope *scope) (outScope *scope) {
+func (b *Builder) buildCancelSessions(
+	n *tree.CancelSessions, inScope *scope, ctx buildCtx,
+) (outScope *scope) {
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
 	colTypes := []*types.T{types.String}
-	inputScope := b.buildStmt(n.Sessions, colTypes, emptyScope)
+	inputScope := b.buildStmt(n.Sessions, colTypes, emptyScope, ctx)
 
 	checkInputColumns(
 		"CANCEL SESSIONS",
