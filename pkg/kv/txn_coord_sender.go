@@ -461,7 +461,7 @@ func NewTxnCoordSenderFactory(
 
 // TransactionalSender is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) TransactionalSender(
-	typ client.TxnType, meta roachpb.TxnCoordMeta,
+	typ client.TxnType, meta roachpb.TxnCoordMeta, pri roachpb.UserPriority,
 ) client.TxnSender {
 	meta.Txn.AssertInitialized(context.TODO())
 	tcs := &TxnCoordSender{
@@ -469,6 +469,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.txnState = txnPending
+	tcs.mu.userPriority = pri
 
 	// Create a stack of request/response interceptors. All of the objects in
 	// this stack are pre-allocated on the TxnCoordSender struct, so this just
@@ -739,6 +740,7 @@ func (tc *TxnCoordSender) Send(
 	// comes, and unlock again in the defer below.
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	tc.mu.active = true
 
 	if pErr := tc.maybeRejectClientLocked(ctx, &ba); pErr != nil {
 		return nil, pErr
@@ -781,17 +783,6 @@ func (tc *TxnCoordSender) Send(
 		return nil, nil
 	}
 
-	if !tc.mu.active {
-		tc.mu.active = true
-		// If we haven't generate a transaction priority before, do it now.
-		//
-		// NOTE(andrei): Unfortunately, as of August 2018, txn.Priority == 0 is also
-		// true when the priority has been generated from MinUserPriority. In that
-		// case, we'll generate it again.
-		if tc.mu.txn.Priority == 0 {
-			tc.mu.txn.Priority = roachpb.MakePriority(tc.mu.userPriority)
-		}
-	}
 	// Clone the Txn's Proto so that future modifications can be made without
 	// worrying about synchronization.
 	ba.Txn = tc.mu.txn.Clone()
@@ -1151,9 +1142,7 @@ func (tc *TxnCoordSender) TxnStatus() roachpb.TransactionStatus {
 func (tc *TxnCoordSender) SetUserPriority(pri roachpb.UserPriority) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-
-	// Negative priorities come from txn.InternalSetPriority.
-	if tc.mu.active && pri > 0 {
+	if tc.mu.active && pri != tc.mu.userPriority {
 		return errors.Errorf("cannot change the user priority of a running transaction")
 	}
 	tc.mu.userPriority = pri

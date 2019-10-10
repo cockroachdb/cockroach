@@ -105,7 +105,7 @@ type testSenderFactory struct {
 }
 
 func (f *testSenderFactory) TransactionalSender(
-	typ client.TxnType, coordMeta roachpb.TxnCoordMeta,
+	typ client.TxnType, coordMeta roachpb.TxnCoordMeta, _ roachpb.UserPriority,
 ) client.TxnSender {
 	return client.NewMockTransactionalSender(
 		func(
