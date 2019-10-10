@@ -11,13 +11,13 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 ----
 project
  ├── columns: k:1(int!null) x:5(int!null)
- ├── stats: [rows=100]
- ├── cost: 2124.745
+ ├── stats: [rows=99]
+ ├── cost: 2124.725
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join (hash)
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int!null)
-      ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0]
-      ├── cost: 2123.735
+      ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+      ├── cost: 2123.725
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
       ├── scan b
       │    ├── columns: x:5(int)
@@ -49,8 +49,8 @@ inner-join (merge)
  ├── flags: no-lookup-join;no-hash-join
  ├── left ordering: +1
  ├── right ordering: +5
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
- ├── cost: 2339.37569
+ ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(5)=99, null(5)=0]
+ ├── cost: 2339.27569
  ├── fd: (1)==(5), (5)==(1)
  ├── scan a
  │    ├── columns: k:1(int!null)
@@ -78,8 +78,8 @@ inner-join (lookup a)
  ├── columns: k:4(int!null) x:1(int!null)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [1] = [4]
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
- ├── cost: 7090.03
+ ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(4)=99, null(4)=0]
+ ├── cost: 7069.53
  ├── fd: (1)==(4), (4)==(1)
  ├── scan b
  │    ├── columns: x:1(int)
@@ -96,7 +96,7 @@ SELECT k, x FROM a INNER LOOKUP JOIN b ON k=x
 inner-join (hash)
  ├── columns: k:1(int!null) x:5(int!null)
  ├── flags: no-merge-join;no-hash-join
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
+ ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(5)=99, null(5)=0]
  ├── cost: 1e+100
  ├── fd: (1)==(5), (5)==(1)
  ├── scan a
@@ -133,15 +133,15 @@ SELECT * FROM abc WHERE c = 1
 ----
 index-join abc
  ├── columns: a:1(int!null) b:2(int) c:3(int!null)
- ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(3)=1, null(3)=0]
- ├── cost: 50.609
+ ├── stats: [rows=9.9000002, distinct(3)=1, null(3)=0]
+ ├── cost: 50.609001
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
       ├── columns: a:1(int!null) c:3(int!null)
       ├── constraint: /3/1: [/1 - /1]
-      ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(3)=1, null(3)=0]
-      ├── cost: 10.306
+      ├── stats: [rows=9.9000002, distinct(3)=1, null(3)=0]
+      ├── cost: 10.3060002
       ├── key: (1)
       └── fd: ()-->(3)
 
@@ -230,7 +230,7 @@ project
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:6(string!null) b:7(uuid!null) c:8(uuid!null)
       ├── key columns: [1 2 3] = [6 7 8]
-      ├── stats: [rows=500.488759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=10, null(4)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=25, null(8)=0]
+      ├── stats: [rows=500.488759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=25, null(8)=0]
       ├── cost: 1550.06
       ├── fd: ()-->(1,2,6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
       ├── select
@@ -340,7 +340,7 @@ project
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) i:5(int!null) j:6(int!null) k:7(int!null) l:8(int!null) m:9(int!null) n:10(int!null) a:12(string!null) b:13(uuid!null) c:14(uuid!null)
       ├── key columns: [1 2 3] = [12 13 14]
-      ├── stats: [rows=1.25e-15, distinct(1)=1e-20, null(1)=0, distinct(2)=1e-20, null(2)=0, distinct(3)=1e-20, null(3)=0, distinct(4)=1e-20, null(4)=0, distinct(5)=1e-20, null(5)=0, distinct(6)=1e-20, null(6)=0, distinct(7)=1e-20, null(7)=0, distinct(8)=1e-20, null(8)=0, distinct(9)=1e-20, null(9)=0, distinct(10)=1e-20, null(10)=0, distinct(12)=1e-20, null(12)=0, distinct(13)=1e-20, null(13)=0, distinct(14)=1e-20, null(14)=0]
+      ├── stats: [rows=1.25e-15, distinct(1)=1e-20, null(1)=0, distinct(2)=1e-20, null(2)=0, distinct(3)=1e-20, null(3)=0, distinct(12)=1e-20, null(12)=0, distinct(13)=1e-20, null(13)=0, distinct(14)=1e-20, null(14)=0]
       ├── cost: 12200.06
       ├── fd: ()-->(1,2,5-10,12,13), (1)==(12), (12)==(1), (2)==(13), (13)==(2), (3)==(14), (14)==(3)
       ├── select
