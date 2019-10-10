@@ -58,5 +58,5 @@ message LeaseStatus {
   // State of the lease at timestamp.
   LeaseState state = 3;
   // Liveness if this is an epoch-based lease.
-  Liveness liveness = 4;
+  Liveness liveness = 4 [(gogoproto.nullable) = false];
 }
