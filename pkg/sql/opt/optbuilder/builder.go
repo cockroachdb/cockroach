@@ -181,7 +181,7 @@ func (b *Builder) Build() (err error) {
 
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
-	outScope := b.buildStmt(b.stmt, nil /* desiredTypes */, b.allocScope())
+	outScope := b.buildStmtAtRoot(b.stmt, nil /* desiredTypes */, b.allocScope())
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
 	return nil
@@ -192,6 +192,19 @@ func (b *Builder) Build() (err error) {
 // pg code FeatureNotSupported.
 func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
 	return unimplemented.NewWithIssueDetailf(issue, detail, format, args...)
+}
+
+// buildStmtAtRoot builds a statement, beginning a new conceptual query
+// "context".
+func (b *Builder) buildStmtAtRoot(
+	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
+) (outScope *scope) {
+	defer func(prevAtRoot bool) {
+		inScope.atRoot = prevAtRoot
+	}(inScope.atRoot)
+	inScope.atRoot = true
+
+	return b.buildStmt(stmt, desiredTypes, inScope)
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
