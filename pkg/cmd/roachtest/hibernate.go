@@ -35,34 +35,12 @@ func registerHibernate(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"change database replication and GC time",
-			`./cockroach sql --insecure -e `+
-				`"ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;"`,
-		); err != nil {
-			t.Fatal(err)
-		}
-		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"change database replication and GC time",
-			`./cockroach sql --insecure -e `+
-				`"ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;"`,
-		); err != nil {
+		version, err := fetchCockroachVersion(ctx, c, node[0])
+		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"change jobs retention time",
-			`./cockroach sql --insecure -e "SET CLUSTER SETTING jobs.retention_time = '180s';"`,
-		); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
@@ -140,10 +118,6 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
-		if err != nil {
-			t.Fatal(err)
-		}
 		blacklistName, expectedFailures, _, _ := hibernateBlacklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
