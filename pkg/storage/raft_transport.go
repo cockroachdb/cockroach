@@ -492,6 +492,7 @@ func (t *RaftTransport) processQueue(
 			return err
 		case req := <-ch:
 			batch.Requests = append(batch.Requests, *req)
+			req.release()
 			// Pull off as many queued requests as possible.
 			//
 			// TODO(peter): Think about limiting the size of the batch we send.
@@ -499,6 +500,7 @@ func (t *RaftTransport) processQueue(
 				select {
 				case req = <-ch:
 					batch.Requests = append(batch.Requests, *req)
+					req.release()
 				default:
 					done = true
 				}
@@ -532,8 +534,9 @@ func (t *RaftTransport) getQueue(
 // SendAsync sends a message to the recipient specified in the request. It
 // returns false if the outgoing queue is full. The returned bool may be a false
 // positive but will never be a false negative; if sent is true the message may
-// or may not actually be sent but if it's false the message definitely was
-// not sent.
+// or may not actually be sent but if it's false the message definitely was not
+// sent. If the method does return true, it is not safe to continue using the
+// reference to the provided request.
 func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionClass) (sent bool) {
 	toNodeID := req.ToReplica.NodeID
 	stats := t.getStats(toNodeID, class)
