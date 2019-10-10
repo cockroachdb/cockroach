@@ -142,10 +142,11 @@ func (p *testProcessor) processReady(_ context.Context, rangeID roachpb.RangeID)
 	p.mu.Unlock()
 }
 
-func (p *testProcessor) processRequestQueue(_ context.Context, rangeID roachpb.RangeID) {
+func (p *testProcessor) processRequestQueue(_ context.Context, rangeID roachpb.RangeID) bool {
 	p.mu.Lock()
 	p.mu.raftRequest[rangeID]++
 	p.mu.Unlock()
+	return false
 }
 
 func (p *testProcessor) processTick(_ context.Context, rangeID roachpb.RangeID) bool {

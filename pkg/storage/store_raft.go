@@ -418,38 +418,28 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.scheduler.EnqueueRaftReady(rangeID)
 }
 
-func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID) {
+func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID) bool {
 	value, ok := s.replicaQueues.Load(int64(rangeID))
 	if !ok {
-		return
+		return false
 	}
 	q := (*raftRequestQueue)(value)
 	q.Lock()
 	infos := q.infos
 	q.infos = nil
 	q.Unlock()
+	if len(infos) == 0 {
+		return false
+	}
 
-	var lastRepl *Replica
 	var hadError bool
-	for i, info := range infos {
-		last := i == len(infos)-1
-		pErr := s.withReplicaForRequest(ctx, info.req, func(ctx context.Context, r *Replica) *roachpb.Error {
-			// Save the last Replica we see, since we don't know in advance which
-			// requests will fail during Replica retrieval. We want this later
-			// so we can handle the Raft Ready state all at once.
-			lastRepl = r
-			pErr := s.processRaftRequestWithReplica(ctx, r, info.req)
-			if last {
-				// If this is the last request, we can handle raft.Ready without
-				// giving up the lock. Set lastRepl to nil, so we don't handle it
-				// down below as well.
-				lastRepl = nil
-				_, expl, err := r.handleRaftReadyRaftMuLocked(ctx, noSnap)
-				maybeFatalOnRaftReadyErr(ctx, expl, err)
-			}
-			return pErr
-		})
-		if pErr != nil {
+	for i := range infos {
+		info := &infos[i]
+		if pErr := s.withReplicaForRequest(
+			ctx, info.req, func(ctx context.Context, r *Replica) *roachpb.Error {
+				return s.processRaftRequestWithReplica(ctx, r, info.req)
+			},
+		); pErr != nil {
 			hadError = true
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
 				// Seems excessive to log this on every occurrence as the other side
@@ -479,18 +469,10 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		}
 	}
 
-	// If lastRepl is not nil, that means that some of the requests succeeded during
-	// Replica retrieval (withReplicaForRequest) but that the last request did not,
-	// otherwise we would have handled this above and set lastRepl to nil.
-	if lastRepl != nil {
-		// lastRepl will be unlocked when we exit withReplicaForRequest above.
-		// It's fine to relock it here (by calling handleRaftReady instead of
-		// handleRaftReadyRaftMuLocked) since racing to handle Raft Ready won't
-		// have any undesirable results.
-		ctx = lastRepl.AnnotateCtx(ctx)
-		_, expl, err := lastRepl.handleRaftReady(ctx, noSnap)
-		maybeFatalOnRaftReadyErr(ctx, expl, err)
-	}
+	// NB: Even if we had errors and the corresponding replica no longer
+	// exists, returning true here won't cause a new, uninitialized replica
+	// to be created in processReady().
+	return true // ready
 }
 
 func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {

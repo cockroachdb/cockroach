@@ -103,10 +103,15 @@ func (q *rangeIDQueue) back() *rangeIDChunk {
 }
 
 type raftProcessor interface {
+	// Process a raft.Ready struct containing entries and messages that are
+	// ready to read, be saved to stable storage, committed, or sent to other
+	// peers.
 	processReady(context.Context, roachpb.RangeID)
-	processRequestQueue(context.Context, roachpb.RangeID)
-	// Process a raft tick for the specified range. Return true if the range
-	// should be queued for ready processing.
+	// Process all queued messages for the specified range.
+	// Return true if the range should be queued for ready processing.
+	processRequestQueue(context.Context, roachpb.RangeID) bool
+	// Process a raft tick for the specified range.
+	// Return true if the range should be queued for ready processing.
 	processTick(context.Context, roachpb.RangeID) bool
 }
 
@@ -199,6 +204,17 @@ func (s *raftScheduler) worker(ctx context.Context) {
 		s.mu.state[id] = stateQueued
 		s.mu.Unlock()
 
+		// Process requests first. This avoids a scenario where a tick and a
+		// "quiesce" message are processed in the same iteration and intervening
+		// raft ready processing unquiesces the replica because the tick triggers
+		// an election.
+		if state&stateRaftRequest != 0 {
+			// processRequestQueue returns true if the range should perform ready
+			// processing. Do not reorder this below the call to processReady.
+			if s.processor.processRequestQueue(ctx, id) {
+				state |= stateRaftReady
+			}
+		}
 		if state&stateRaftTick != 0 {
 			// processRaftTick returns true if the range should perform ready
 			// processing. Do not reorder this below the call to processReady.
@@ -206,36 +222,8 @@ func (s *raftScheduler) worker(ctx context.Context) {
 				state |= stateRaftReady
 			}
 		}
-		// TODO(nvanbenschoten): Consider removing the call to handleRaftReady
-		// from processRequestQueue. If we did this then processReady would be
-		// the only place where we call into handleRaftReady. This would
-		// eliminate superfluous calls into the function and would improve
-		// batching. It would also simplify the code in processRequestQueue.
-		//
-		// The code change here would likely look something like:
-		//
-		//  if state&stateRaftRequest != 0 {
-		//  	if s.processor.processRequestQueue(ctx, id) {
-		//  		state |= stateRaftReady
-		//  	}
-		//  }
-		//
-		// Initial experimentation with this approach indicated that it reduced
-		// throughput for single-Range write-heavy workloads. More investigation
-		// is needed to determine whether that should be expected.
 		if state&stateRaftReady != 0 {
 			s.processor.processReady(ctx, id)
-		}
-		// Process requests last. This avoids a scenario where a tick and a
-		// "quiesce" message are processed in the same iteration and intervening
-		// raft ready processing unquiesced the replica. Note that request
-		// processing could also occur first, it just shouldn't occur in between
-		// ticking and ready processing. It is possible for a tick to be enqueued
-		// concurrently with the quiescing in which case the replica will
-		// unquiesce when the tick is processed, but we'll wake the leader in
-		// that case.
-		if state&stateRaftRequest != 0 {
-			s.processor.processRequestQueue(ctx, id)
 		}
 
 		s.mu.Lock()
