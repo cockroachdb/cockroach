@@ -671,7 +671,7 @@ with &1 (cte)
 build
 WITH cte AS (INSERT INTO abcde VALUES (1)) SELECT * FROM cte
 ----
-error (0A000): WITH clause "cte" does not have a RETURNING clause
+error (0A000): WITH clause "cte" does not return any columns
 
 # Use SRF in RETURNING clause.
 build

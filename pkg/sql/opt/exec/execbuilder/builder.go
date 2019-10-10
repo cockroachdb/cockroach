@@ -93,6 +93,14 @@ func (b *Builder) DisableTelemetry() {
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
 func (b *Builder) Build() (_ exec.Plan, err error) {
+	plan, err := b.build(b.e)
+	if err != nil {
+		return nil, err
+	}
+	return b.factory.ConstructPlan(plan.root, b.subqueries, b.postqueries)
+}
+
+func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -107,27 +115,16 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 		}
 	}()
 
-	root, err := b.build(b.e)
-	if err != nil {
-		return nil, err
-	}
-	return b.factory.ConstructPlan(root, b.subqueries, b.postqueries)
-}
-
-func (b *Builder) build(e opt.Expr) (exec.Node, error) {
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
-		return nil, errors.AssertionFailedf("building execution for non-relational operator %s", log.Safe(e.Op()))
+		return execPlan{}, errors.AssertionFailedf(
+			"building execution for non-relational operator %s", log.Safe(e.Op()),
+		)
 	}
 
 	b.autoCommit = b.canAutoCommit(rel)
 
-	plan, err := b.buildRelational(rel)
-	if err != nil {
-		return nil, err
-	}
-
-	return plan.root, nil
+	return b.buildRelational(rel)
 }
 
 // BuildScalar converts a scalar expression to a TypedExpr. Variables are mapped

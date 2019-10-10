@@ -1036,6 +1036,7 @@ opt_create_stats_options ::=
 
 with_clause ::=
 	'WITH' cte_list
+	| 'WITH' 'RECURSIVE' cte_list
 
 table_name_expr_with_index ::=
 	table_name opt_index_flags

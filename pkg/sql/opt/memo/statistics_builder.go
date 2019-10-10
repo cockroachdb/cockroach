@@ -379,7 +379,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp,
-		opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
+		opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp, opt.RecursiveCTEOp:
 		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.WithOp:

@@ -41,7 +41,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 
 	var ctes []cteSource
 	if del.With != nil {
-		inScope, ctes = b.buildCTE(del.With.CTEList, inScope)
+		inScope, ctes = b.buildCTEs(del.With, inScope)
 	}
 
 	// DELETE FROM xx AS yy - we want to know about xx (tn) because

@@ -155,3 +155,184 @@ EXECUTE z6(3)
 ----
 1 4
 2 5
+
+# Recursive CTE example from postgres docs.
+query T
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+  UNION ALL
+    SELECT n+1 FROM t WHERE n < 100
+)
+SELECT sum(n) FROM t
+----
+5050
+
+# Test where initial query has duplicate columns.
+query II
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 0, 0
+  UNION ALL
+    SELECT a+1, b+10 FROM cte WHERE a < 5
+) SELECT * FROM cte;
+----
+0  0
+1  10
+2  20
+3  30
+4  40
+5  50
+
+# Test where recursive query has duplicate columns.
+query II
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 0, 1
+  UNION ALL
+    SELECT a+1, a+1 FROM cte WHERE a < 5
+) SELECT * FROM cte;
+----
+0  1
+1  1
+2  2
+3  3
+4  4
+5  5
+
+# Recursive CTE examples adapted from
+# https://malisper.me/generating-fractals-with-postgres-escape-time-fractals.
+query T
+WITH RECURSIVE points AS (
+  SELECT i::float * 0.05 AS r, j::float * 0.05 AS c
+  FROM generate_series(-20, 20) AS a (i), generate_series(-40, 20) AS b (j)
+), iterations AS (
+     SELECT r,
+            c,
+            0.0::float AS zr,
+            0.0::float AS zc,
+            0 AS iteration
+     FROM points
+   UNION ALL
+     SELECT r,
+            c,
+            zr*zr - zc*zc + c AS zr,
+            2*zr*zc + r AS zc,
+            iteration+1 AS iteration
+     FROM iterations WHERE zr*zr + zc*zc < 4 AND iteration < 20
+), final_iteration AS (
+  SELECT * FROM iterations WHERE iteration = 20
+), marked_points AS (
+   SELECT r,
+          c,
+          (CASE WHEN EXISTS (SELECT 1 FROM final_iteration i WHERE p.r = i.r AND p.c = i.c)
+                THEN 'oo' ELSE '··' END) AS marker FROM points p
+), lines AS (
+   SELECT r, string_agg(marker, '' ORDER BY c ASC) AS r_text
+   FROM marked_points
+   GROUP BY r
+) SELECT string_agg(r_text, E'\n' ORDER BY r DESC) FROM lines
+----
+················································································oo········································
+············································································oo············································
+··········································································oooo············································
+······································································oo··oooo············································
+········································································oooooooo··········································
+······································································oooooooooooo········································
+········································································oooooooo··········································
+··························································oo····oooooooooooooooooooo··oo··································
+··························································oooo··oooooooooooooooooooooooo··································
+··························································oooooooooooooooooooooooooooooooooooooo··························
+··························································oooooooooooooooooooooooooooooooooooooo··························
+····················································oooooooooooooooooooooooooooooooooooooooooo····························
+······················································oooooooooooooooooooooooooooooooooooooooo····························
+····················································oooooooooooooooooooooooooooooooooooooooooooooo························
+··································oo····oo··········oooooooooooooooooooooooooooooooooooooooooooo··························
+··································oooooooooooo······oooooooooooooooooooooooooooooooooooooooooooo··························
+··································oooooooooooooo····oooooooooooooooooooooooooooooooooooooooooooooo························
+································oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo························
+······························oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··························
+··························oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo····························
+··oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo······························
+··························oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo····························
+······························oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··························
+································oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo························
+··································oooooooooooooo····oooooooooooooooooooooooooooooooooooooooooooooo························
+··································oooooooooooo······oooooooooooooooooooooooooooooooooooooooooooo··························
+··································oo····oo··········oooooooooooooooooooooooooooooooooooooooooooo··························
+····················································oooooooooooooooooooooooooooooooooooooooooooooo························
+······················································oooooooooooooooooooooooooooooooooooooooo····························
+····················································oooooooooooooooooooooooooooooooooooooooooo····························
+··························································oooooooooooooooooooooooooooooooooooooo··························
+··························································oooooooooooooooooooooooooooooooooooooo··························
+··························································oooo··oooooooooooooooooooooooo··································
+··························································oo····oooooooooooooooooooo··oo··································
+········································································oooooooo··········································
+······································································oooooooooooo········································
+········································································oooooooo··········································
+······································································oo··oooo············································
+··········································································oooo············································
+············································································oo············································
+················································································oo········································
+
+query T
+WITH RECURSIVE points AS (
+  SELECT i::float * 0.05 AS r, j::float * 0.05 AS c
+  FROM generate_series(-20, 20) AS a (i), generate_series(-30, 30) AS b (j)
+), iterations AS (
+   SELECT r, c, c::float AS zr, r::float AS zc, 0 AS iteration FROM points
+   UNION ALL
+   SELECT r, c, zr*zr - zc*zc + 1 - 1.61803398875 AS zr, 2*zr*zc AS zc, iteration+1 AS iteration
+   FROM iterations WHERE zr*zr + zc*zc < 4 AND iteration < 20
+), final_iteration AS (
+  SELECT * FROM iterations WHERE iteration = 20
+), marked_points AS (
+   SELECT r, c, (CASE WHEN EXISTS (SELECT 1 FROM final_iteration i WHERE p.r = i.r AND p.c = i.c)
+                  THEN 'oo'
+                  ELSE '··'
+                  END) AS marker
+   FROM points p
+), rows AS (
+   SELECT r, string_agg(marker, '' ORDER BY c ASC) AS r_text
+   FROM marked_points
+   GROUP BY r
+) SELECT string_agg(r_text, E'\n' ORDER BY r DESC) FROM rows
+----
+··························································································································
+··························································································································
+····························································oo····························································
+····························································oo····························································
+························································oooooooooo························································
+························································oooooooooo························································
+························································oooooooooo························································
+··············································oo··oooooooooooooooooooooo··oo··············································
+··············································oooooooooooooooooooooooooooooo··············································
+············································oooooooooooooooooooooooooooooooooo············································
+··········································oooooooooooooooooooooooooooooooooooooo··········································
+························oooo····oo········oooooooooooooooooooooooooooooooooooooo········oo····oooo························
+························oooooooooooooo····oooooooooooooooooooooooooooooooooooooo····oooooooooooooo························
+······················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo······················
+····················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo····················
+··················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··················
+··················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··················
+··········oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··········
+··········oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··········
+······oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo······
+····oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo····
+······oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo······
+··········oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··········
+··········oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··········
+··················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··················
+··················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo··················
+····················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo····················
+······················oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo······················
+························oooooooooooooo····oooooooooooooooooooooooooooooooooooooo····oooooooooooooo························
+························oooo····oo········oooooooooooooooooooooooooooooooooooooo········oo····oooo························
+··········································oooooooooooooooooooooooooooooooooooooo··········································
+············································oooooooooooooooooooooooooooooooooo············································
+··············································oooooooooooooooooooooooooooooo··············································
+··············································oo··oooooooooooooooooooooo··oo··············································
+························································oooooooooo························································
+························································oooooooooo························································
+························································oooooooooo························································
+····························································oo····························································
+····························································oo····························································
+··························································································································
+··························································································································

@@ -792,6 +792,37 @@ func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *pr
 	}
 }
 
+func (b *logicalPropsBuilder) buildRecursiveCTEProps(rec *RecursiveCTEExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, rec, &rel.Shared)
+
+	// Output Columns
+	// --------------
+	rel.OutputCols = rec.OutCols.ToSet()
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// No outer columns.
+
+	// Functional Dependencies
+	// -----------------------
+	// No known FDs.
+
+	// Cardinality
+	// -----------
+	// At least the cardinality of the initial buffer.
+	rel.Cardinality = props.AnyCardinality.AtLeast(rec.Initial.Relational().Cardinality)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildUnknown(rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
 	b.buildBasicProps(explain, explain.ColList, rel)
 }

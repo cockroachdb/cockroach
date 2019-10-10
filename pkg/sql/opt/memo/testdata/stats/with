@@ -57,36 +57,36 @@ with &1 (foo)
 # Regression test for #40296.
 opt disable=InlineWith
 WITH
-	t0 AS ((VALUES (0, 0:::OID, NULL, '')) UNION (VALUES (NULL, 0:::OID,'1970-09-08'::DATE, NULL)))
+  t0 AS ((VALUES (0, 0:::OID, NULL, '')) UNION (VALUES (NULL, 0:::OID,'1970-09-08'::DATE, NULL)))
 SELECT
-	NULL
+  NULL
 FROM
-	a, t0
+  a, t0
 WHERE
-	EXISTS(
-		WITH
-			t1 AS (SELECT NULL)
-		SELECT
-			t0.column2, a.y
-	);
+  EXISTS(
+    WITH
+      t1 AS (SELECT NULL)
+    SELECT
+      t0.column2, a.y
+  );
 ----
 with &1 (t0)
  ├── columns: "?column?":27(unknown)
  ├── stats: [rows=10000]
  ├── fd: ()-->(27)
  ├── union
- │    ├── columns: column1:9(int) column2:10(oid!null) column3:11(date) column4:12(string)
- │    ├── left columns: column1:1(int) column2:2(oid) column3:13(date) column4:4(string)
+ │    ├── columns: column1:10(int) column2:11(oid!null) column3:12(date) column4:13(string)
+ │    ├── left columns: column1:1(int) column2:2(oid) column3:9(date) column4:4(string)
  │    ├── right columns: column1:5(int) column2:6(oid) column3:7(date) column4:8(string)
  │    ├── cardinality: [1 - 2]
- │    ├── stats: [rows=2, distinct(9-12)=2, null(9-12)=2]
- │    ├── key: (9-12)
+ │    ├── stats: [rows=2, distinct(10-13)=2, null(10-13)=2]
+ │    ├── key: (10-13)
  │    ├── values
- │    │    ├── columns: column1:1(int!null) column2:2(oid!null) column4:4(string!null) column3:13(date)
+ │    │    ├── columns: column1:1(int!null) column2:2(oid!null) column4:4(string!null) column3:9(date)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(1,2,4,13)=1, null(1,2,4,13)=1]
+ │    │    ├── stats: [rows=1, distinct(1,2,4,9)=1, null(1,2,4,9)=1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2,4,13)
+ │    │    ├── fd: ()-->(1,2,4,9)
  │    │    └── (0, 0, '', NULL) [type=tuple{int, oid, string, date}]
  │    └── values
  │         ├── columns: column1:5(int) column2:6(oid!null) column3:7(date!null) column4:8(string)

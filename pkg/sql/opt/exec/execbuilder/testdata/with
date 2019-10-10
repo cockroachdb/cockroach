@@ -92,3 +92,25 @@ hash-join  ·            ·                   (col)  ·
  └── scan  ·            ·                   (col)  ·
 ·          table        table39010@primary  ·      ·
 ·          spans        ALL                 ·      ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  WITH RECURSIVE t(n) AS (
+      VALUES (1)
+    UNION ALL
+      SELECT n+1 FROM t WHERE n < 100
+  )
+  SELECT sum(n) FROM t
+----
+·                             distributed    false               ·          ·
+·                             vectorized     false               ·          ·
+group                         ·              ·                   (sum)      ·
+ │                            aggregate 0    sum(n)              ·          ·
+ │                            scalar         ·                   ·          ·
+ └── render                   ·              ·                   (n)        ·
+      │                       render 0       column1             ·          ·
+      └── recursive cte node  ·              ·                   (column1)  ·
+           │                  label          working buffer (t)  ·          ·
+           └── values         ·              ·                   (column1)  ·
+·                             size           1 column, 1 row     ·          ·
+·                             row 0, expr 0  1                   ·          ·

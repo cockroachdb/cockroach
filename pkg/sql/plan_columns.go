@@ -141,6 +141,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.buffer, mut)
 	case *sortNode:
 		return getPlanColumns(n.plan, mut)
+	case *recursiveCTENode:
+		return getPlanColumns(n.initial, mut)
 
 	case *rowSourceToPlanNode:
 		return n.planCols
