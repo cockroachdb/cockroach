@@ -104,7 +104,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 		if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		formatted := tracing.FormatRecordedSpans(collect())
+		formatted := collect().String()
 		if err := testutils.MatchInOrder(formatted,
 			"evaluating AddSSTable",
 			"sideloadable proposal detected",
@@ -180,7 +180,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
+			if err := testutils.MatchInOrder(collect().String(),
 				"evaluating AddSSTable",
 				"sideloadable proposal detected",
 				"ingested SSTable at index",
