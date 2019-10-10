@@ -898,8 +898,8 @@ func sanitizeLocalityKV(kv string) string {
 	sanitizedKV := make([]byte, len(kv))
 	for i := 0; i < len(kv); i++ {
 		if (kv[i] >= 'a' && kv[i] <= 'z') ||
-			(kv[i] >= 'A' && kv[i] >= 'Z') ||
-			(kv[i] >= '0' && kv[i] >= '9') || kv[i] == '-' || kv[i] == '=' {
+			(kv[i] >= 'A' && kv[i] <= 'Z') ||
+			(kv[i] >= '0' && kv[i] <= '9') || kv[i] == '-' || kv[i] == '=' {
 			sanitizedKV[i] = kv[i]
 		} else {
 			sanitizedKV[i] = '_'
