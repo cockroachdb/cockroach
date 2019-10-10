@@ -95,7 +95,7 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
- ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=499.999999, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=6321.5735, null(7)=0]
+ ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=0, distinct(5)=500, null(5)=0]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── scan xysd
@@ -227,7 +227,7 @@ project
  ├── fd: ()-->(6), (1)-->(2-4), (3,4)~~>(1,2)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
-      ├── stats: [rows=500000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0, distinct(6)=1, null(6)=0, distinct(7)=10000, null(7)=0]
+      ├── stats: [rows=500000, distinct(6)=1, null(6)=0]
       ├── key: (1,7)
       ├── fd: ()-->(6), (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5)
       ├── inner-join (hash)
@@ -295,7 +295,7 @@ group-by
  ├── fd: (1,6)-->(8)
  ├── inner-join (hash)
  │    ├── columns: x:1(int!null) u:5(int!null) v:6(int!null)
- │    ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(1,6)=10000, null(1,6)=0]
+ │    ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(5)=500, null(5)=0, distinct(1,6)=10000, null(1,6)=0]
  │    ├── fd: (1)==(5), (5)==(1)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null)
@@ -316,7 +316,7 @@ SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u)
 ----
 semi-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=500, distinct(1)=500, null(1)=0, distinct(4)=325.66078, null(4)=0]
+ ├── stats: [rows=500, distinct(1)=500, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
@@ -356,7 +356,7 @@ SELECT * FROM xysd JOIN uv ON x=u AND y=v
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
- ├── stats: [rows=25, distinct(1)=25, null(1)=0, distinct(2)=25, null(2)=0, distinct(4)=24.3852937, null(4)=0, distinct(5)=25, null(5)=0, distinct(6)=25, null(6)=0]
+ ├── stats: [rows=25, distinct(1)=25, null(1)=0, distinct(2)=25, null(2)=0, distinct(5)=25, null(5)=0, distinct(6)=25, null(6)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
@@ -376,7 +376,7 @@ SELECT * FROM xysd JOIN uv ON x=u AND y+v=5 AND y > 0 AND y < 300
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
- ├── stats: [rows=3333.33333, distinct(1)=500, null(1)=0, distinct(2)=298.995696, null(2)=0, distinct(4)=499.363351, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
+ ├── stats: [rows=3333.33333, distinct(1)=500, null(1)=0, distinct(5)=500, null(5)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
@@ -582,11 +582,11 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN (SELECT * FROM xyz WHERE x=10) 
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
- ├── stats: [rows=10.3490885, distinct(1)=1, null(1)=0, distinct(3)=0.999982217, null(3)=0, distinct(5)=1, null(5)=0]
+ ├── stats: [rows=10.3537072, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
  ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
- │    ├── stats: [rows=9.9, distinct(1)=9.47039924, null(1)=0.099, distinct(3)=1, null(3)=0]
+ │    ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0.1, distinct(3)=1, null(3)=0]
  │    ├── fd: ()-->(3)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
@@ -595,7 +595,7 @@ inner-join (hash)
  │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── select
  │    ├── columns: x:5(int!null) y:6(int) z:7(int)
- │    ├── stats: [rows=9.9, distinct(5)=1, null(5)=0]
+ │    ├── stats: [rows=10, distinct(5)=1, null(5)=0]
  │    ├── fd: ()-->(5)
  │    ├── scan xyz
  │    │    ├── columns: x:5(int) y:6(int) z:7(int)
@@ -610,11 +610,11 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
- ├── stats: [rows=10.4536248, distinct(1)=1, null(1)=0, distinct(3)=0.999971315, null(3)=0, distinct(5)=1, null(5)=0]
+ ├── stats: [rows=10.3537072, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
  ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
- │    ├── stats: [rows=9.9, distinct(1)=9.47039924, null(1)=0.099, distinct(3)=1, null(3)=0]
+ │    ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0.1, distinct(3)=1, null(3)=0]
  │    ├── fd: ()-->(3)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
@@ -676,7 +676,7 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
- ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(4)=499.999999, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=6321.5735, null(7)=0, distinct(2,3)=4323.45892, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
+ ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.99851, null(2)=2500, distinct(3)=499.977311, null(3)=50, distinct(5)=499, null(5)=0, distinct(2,3)=3160.69477, null(2,3)=2525, distinct(3,5)=5000, null(3,5)=2525, distinct(1,2,7)=5000, null(1,2,7)=2500]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── scan xysd
@@ -831,6 +831,41 @@ project
       │    └── fd: (7)-->(5,6)
       └── filters (true)
 
+norm
+SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
+----
+semi-join (hash)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=500, distinct(1)=500, null(1)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan uv
+ │    ├── columns: u:5(int)
+ │    └── stats: [rows=10000, distinct(5)=500, null(5)=5000]
+ └── filters
+      └── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+norm
+SELECT * FROM uv WHERE EXISTS(SELECT * FROM xysd WHERE x=u)
+----
+semi-join (hash)
+ ├── columns: u:1(int) v:2(int!null)
+ ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
+ ├── scan uv
+ │    ├── columns: u:1(int) v:2(int!null)
+ │    └── stats: [rows=10000, distinct(1)=500, null(1)=5000, distinct(2)=100, null(2)=0]
+ ├── scan xysd
+ │    ├── columns: x:4(int!null)
+ │    ├── stats: [rows=5000, distinct(4)=5000, null(4)=0]
+ │    └── key: (4)
+ └── filters
+      └── x = u [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
 # Merge join (inner).
 expr colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 (MergeJoin
@@ -850,7 +885,7 @@ inner-join (merge)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
  ├── left ordering: +1
  ├── right ordering: +5
- ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(4)=499.999999, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=6321.5735, null(7)=0, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
+ ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(5)=499, null(5)=0, distinct(2,3)=5000, null(2,3)=2525, distinct(3,5)=5000, null(3,5)=2525, distinct(1,2,7)=5000, null(1,2,7)=2500]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── scan xysd

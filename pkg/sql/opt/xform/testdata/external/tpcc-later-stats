@@ -944,7 +944,7 @@ project
  └── scan customer@customer_idx
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
       ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
-      ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+      ├── stats: [rows=3, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
       ├── cost: 3.31
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4)
@@ -1220,7 +1220,7 @@ project
  ├── prune: (1,4,5,17)
  └── index-join customer
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
-      ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+      ├── stats: [rows=3, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
       ├── cost: 16.19
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
@@ -1229,7 +1229,7 @@ project
       └── scan customer@customer_idx
            ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
            ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
-           ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+           ├── stats: [rows=3, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
            ├── cost: 3.31
            ├── key: (1)
            ├── fd: ()-->(2,3,6), (1)-->(4)
@@ -1264,7 +1264,7 @@ project
            ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null)
            ├── constraint: /3/2/4/-1: [/10/100/50 - /10/100/50]
            ├── limit: 1
-           ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
+           ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
            ├── cost: 1.09
            ├── key: ()
            ├── fd: ()-->(1-4)
@@ -1285,7 +1285,7 @@ project
  └── scan order_line
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
-      ├── stats: [rows=9.93538619, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=9.93489892, null(5)=0]
+      ├── stats: [rows=9.93538619, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
       ├── cost: 11.7337557
       ├── fd: ()-->(1-3)
       ├── prune: (1-3,5-9)
@@ -1586,7 +1586,7 @@ update order_line
       ├── scan order_line
       │    ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null) ol_number:14(int!null) ol_i_id:15(int!null) ol_supply_w_id:16(int) ol_delivery_d:17(timestamp) ol_quantity:18(int) ol_amount:19(decimal) ol_dist_info:20(char)
       │    ├── constraint: /13/12/-11/14: [/10/1/2167 - /10/1/2167] [/10/2/2167 - /10/2/2167] [/10/3/2167 - /10/3/2167] [/10/4/2167 - /10/4/2167] [/10/5/2167 - /10/5/2167] [/10/6/2167 - /10/6/2167] [/10/7/2167 - /10/7/2167] [/10/8/2167 - /10/8/2167] [/10/9/2167 - /10/9/2167] [/10/10/2167 - /10/10/2167]
-      │    ├── stats: [rows=99.3538619, distinct(11)=1, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=14.9800702, null(14)=0, distinct(15)=99.3051499, null(15)=0]
+      │    ├── stats: [rows=99.3538619, distinct(11)=1, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=1, null(13)=0]
       │    ├── cost: 119.234634
       │    ├── key: (12,14)
       │    ├── fd: ()-->(11,13), (12,14)-->(15-20)
@@ -1648,7 +1648,7 @@ scalar-group-by
  ├── inner-join (lookup stock)
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
- │    ├── stats: [rows=229.899982, distinct(1)=19.9997964, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=198.51294, null(5)=0, distinct(11)=198.51294, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=30.3178347, null(13)=0]
+ │    ├── stats: [rows=229.899982, distinct(3)=1, null(3)=0, distinct(5)=198.51294, null(5)=0, distinct(11)=198.51294, null(11)=0, distinct(12)=1, null(12)=0]
  │    ├── cost: 1453.05964
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
@@ -1833,7 +1833,7 @@ scalar-group-by
  ├── prune: (8)
  ├── select
  │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
- │    ├── stats: [rows=33.3333333, distinct(2)=9.8265847, null(2)=0, distinct(3)=9.8265847, null(3)=0]
+ │    ├── stats: [rows=33.3333333]
  │    ├── cost: 12569.46
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(4-6)
@@ -1943,7 +1943,7 @@ except-all
  ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
  ├── right columns: o_w_id:6(int) o_d_id:5(int) o_id:4(int)
  ├── stats: [rows=11322]
- ├── cost: 74276759.6
+ ├── cost: 74145776.6
  ├── scan new_order
  │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
  │    ├── stats: [rows=11322]
@@ -1953,14 +1953,14 @@ except-all
  │    └── interesting orderings: (+3,+2,+1)
  └── project
       ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
-      ├── stats: [rows=6560471]
-      ├── cost: 74198927.1
+      ├── stats: [rows=11322]
+      ├── cost: 74133435.6
       ├── key: (4-6)
       ├── prune: (4-6)
       ├── interesting orderings: (+6,+5,-4)
       └── select
            ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
-           ├── stats: [rows=6560471, distinct(4)=659230.57, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=1, null(9)=11322]
+           ├── stats: [rows=11322, distinct(9)=1, null(9)=11322]
            ├── cost: 74133322.3
            ├── key: (4-6)
            ├── fd: ()-->(9)
@@ -1988,18 +1988,18 @@ except-all
  ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── right columns: no_w_id:11(int) no_d_id:10(int) no_o_id:9(int)
- ├── stats: [rows=6560471]
- ├── cost: 74342251
+ ├── stats: [rows=11322]
+ ├── cost: 74145776.6
  ├── project
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    ├── stats: [rows=6560471]
- │    ├── cost: 74198927.1
+ │    ├── stats: [rows=11322]
+ │    ├── cost: 74133435.6
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    └── select
  │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │         ├── stats: [rows=6560471, distinct(1)=659230.57, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=11322]
+ │         ├── stats: [rows=11322, distinct(6)=1, null(6)=11322]
  │         ├── cost: 74133322.3
  │         ├── key: (1-3)
  │         ├── fd: ()-->(6)
@@ -2138,31 +2138,31 @@ scalar-group-by
  ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 818357133
+ ├── cost: 818077920
  ├── key: ()
  ├── fd: ()-->(19)
  ├── prune: (19)
  ├── select
  │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    ├── stats: [rows=2186906.23]
- │    ├── cost: 818335264
+ │    ├── stats: [rows=39097.1049]
+ │    ├── cost: 818077529
  │    ├── full-join (merge)
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
  │    │    ├── left ordering: +3,+2,-1
  │    │    ├── right ordering: +11,+10,-9
- │    │    ├── stats: [rows=6560718.68]
- │    │    ├── cost: 818269657
+ │    │    ├── stats: [rows=117291.315]
+ │    │    ├── cost: 818076356
  │    │    ├── project
  │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    │    │    ├── stats: [rows=6560471, distinct(1)=659230.57, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
- │    │    │    ├── cost: 74198927.1
+ │    │    │    ├── stats: [rows=11322, distinct(1)=11226.2921, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ │    │    │    ├── cost: 74133435.6
  │    │    │    ├── key: (1-3)
  │    │    │    ├── ordering: +3,+2,-1
  │    │    │    ├── prune: (1-3)
  │    │    │    ├── interesting orderings: (+3,+2,-1)
  │    │    │    └── select
  │    │    │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │    │    │         ├── stats: [rows=6560471, distinct(1)=659230.57, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=11322]
+ │    │    │         ├── stats: [rows=11322, distinct(1)=11226.2921, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=11322]
  │    │    │         ├── cost: 74133322.3
  │    │    │         ├── key: (1-3)
  │    │    │         ├── fd: ()-->(6)
@@ -2184,14 +2184,14 @@ scalar-group-by
  │    │    │                   └── null [type=unknown]
  │    │    ├── project
  │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
- │    │    │    ├── stats: [rows=275.057668, distinct(9)=275.044618, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
- │    │    │    ├── cost: 743939515
+ │    │    │    ├── stats: [rows=106092, distinct(9)=97907.0099, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+ │    │    │    ├── cost: 743940574
  │    │    │    ├── ordering: +11,+10,-9
  │    │    │    ├── prune: (9-11)
  │    │    │    ├── interesting orderings: (+11,+10,-9)
  │    │    │    └── select
  │    │    │         ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
- │    │    │         ├── stats: [rows=275.057668, distinct(9)=275.044618, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=275.057668]
+ │    │    │         ├── stats: [rows=106092, distinct(9)=97907.0099, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=106092]
  │    │    │         ├── cost: 743939513
  │    │    │         ├── fd: ()-->(15)
  │    │    │         ├── ordering: +11,+10,-9 opt(15) [actual: +11,+10,-9]
