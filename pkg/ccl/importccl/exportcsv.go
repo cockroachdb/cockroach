@@ -154,7 +154,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err != nil {
 				return err
 			}
-			es, err := cloud.MakeExternalStorage(ctx, conf, sp.flowCtx.Cfg.Settings)
+			es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
 			if err != nil {
 				return err
 			}
