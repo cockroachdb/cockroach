@@ -23,12 +23,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	_ "github.com/go-sql-driver/mysql" // registers the MySQL driver to gosql
 	_ "github.com/lib/pq"              // registers the pg driver to gosql
 )
 
-func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+// BenchmarkFn is a function that runs a benchmark using the given SQLRunner.
+type BenchmarkFn func(b *testing.B, db *sqlutils.SQLRunner)
+
+func benchmarkCockroach(b *testing.B, f BenchmarkFn) {
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{UseDatabase: "bench"})
 	defer s.Stopper().Stop(context.TODO())
@@ -37,10 +41,10 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 		b.Fatal(err)
 	}
 
-	f(b, db)
+	f(b, sqlutils.MakeSQLRunner(db))
 }
 
-func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+func benchmarkMultinodeCockroach(b *testing.B, f BenchmarkFn) {
 	tc := testcluster.StartTestCluster(b, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
@@ -53,10 +57,10 @@ func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB
 	}
 	defer tc.Stopper().Stop(context.TODO())
 
-	f(b, tc.Conns[0])
+	f(b, sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2]))
 }
 
-func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+func benchmarkPostgres(b *testing.B, f BenchmarkFn) {
 	// Note: the following uses SSL. To run this, make sure your local
 	// Postgres server has SSL enabled. To use Cockroach's checked-in
 	// testing certificates for Postgres' SSL, first determine the
@@ -98,14 +102,13 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	}
 	defer db.Close()
 
-	if _, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS bench`); err != nil {
-		b.Fatal(err)
-	}
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(b, `CREATE SCHEMA IF NOT EXISTS bench`)
 
-	f(b, db)
+	f(b, r)
 }
 
-func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+func benchmarkMySQL(b *testing.B, f BenchmarkFn) {
 	const addr = "localhost:3306"
 	if conn, err := net.Dial("tcp", addr); err != nil {
 		b.Skipf("unable to connect to mysql server on %s: %s", addr, err)
@@ -119,16 +122,15 @@ func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	}
 	defer db.Close()
 
-	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
-		b.Fatal(err)
-	}
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(b, `CREATE DATABASE IF NOT EXISTS bench`)
 
-	f(b, db)
+	f(b, r)
 }
 
 // ForEachDB iterates the given benchmark over multiple database engines.
-func ForEachDB(b *testing.B, fn func(*testing.B, *gosql.DB)) {
-	for _, dbFn := range []func(*testing.B, func(*testing.B, *gosql.DB)){
+func ForEachDB(b *testing.B, fn BenchmarkFn) {
+	for _, dbFn := range []func(*testing.B, BenchmarkFn){
 		benchmarkCockroach,
 		benchmarkMultinodeCockroach,
 		benchmarkPostgres,
