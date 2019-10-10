@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/reports"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -79,7 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -437,6 +438,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
 
+	// This function defines how ExternalStorage objects are created.
+	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+		return cloud.MakeExternalStorage(ctx, dest, st)
+	}
+	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
+		return cloud.ExternalStorageFromURI(ctx, uri, st)
+	}
+
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
 
@@ -486,6 +495,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}),
 
 		EnableEpochRangeLeases: true,
+		ExternalStorage:        externalStorage,
+		ExternalStorageFromURI: externalStorageFromURI,
 	}
 	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*storage.StoreTestingKnobs)
@@ -578,6 +589,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Gossip:       s.gossip,
 		NodeDialer:   s.nodeDialer,
 		LeaseManager: s.leaseMgr,
+
+		ExternalStorage:        externalStorage,
+		ExternalStorageFromURI: externalStorageFromURI,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -72,6 +73,7 @@ func getSink(
 	targets jobspb.ChangefeedTargets,
 	settings *cluster.Settings,
 	timestampOracle timestampLowerBoundOracle,
+	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 ) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
@@ -185,7 +187,10 @@ func getSink(
 		u.RawQuery = q.Encode()
 		q = url.Values{}
 		makeSink = func() (Sink, error) {
-			return makeCloudStorageSink(u.String(), nodeID, fileSize, settings, opts, timestampOracle)
+			return makeCloudStorageSink(
+				u.String(), nodeID, fileSize, settings,
+				opts, timestampOracle, makeExternalStorageFromURI,
+			)
 		}
 	case u.Scheme == sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink

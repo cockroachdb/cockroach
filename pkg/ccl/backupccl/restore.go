@@ -67,12 +67,14 @@ var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
 }
 
 func loadBackupDescs(
-	ctx context.Context, uris []string, settings *cluster.Settings,
+	ctx context.Context,
+	uris []string,
+	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 ) ([]BackupDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri, makeExternalStorageFromURI)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}
@@ -90,7 +92,7 @@ func loadBackupDescs(
 // default) original backup locality values to URIs that currently contain
 // the backup files.
 func getBackupLocalityInfo(
-	ctx context.Context, uris []string, settings *cluster.Settings,
+	ctx context.Context, uris []string, p sql.PlanHookState,
 ) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	var info jobspb.RestoreDetails_BackupLocalityInfo
 	if len(uris) == 1 {
@@ -102,7 +104,7 @@ func getBackupLocalityInfo(
 		if err != nil {
 			return info, errors.Wrapf(err, "export configuration")
 		}
-		store, err := cloud.MakeExternalStorage(ctx, conf, settings)
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, conf)
 		if err != nil {
 			return info, errors.Wrapf(err, "make storage")
 		}
@@ -1458,13 +1460,13 @@ func doRestorePlan(
 	for i, uris := range from {
 		// The first URI in the list must contain the main BACKUP manifest.
 		defaultURIs[i] = uris[0]
-		info, err := getBackupLocalityInfo(ctx, uris, p.ExecCfg().Settings)
+		info, err := getBackupLocalityInfo(ctx, uris, p)
 		if err != nil {
 			return err
 		}
 		localityInfo[i] = info
 	}
-	mainBackupDescs, err := loadBackupDescs(ctx, defaultURIs, p.ExecCfg().Settings)
+	mainBackupDescs, err := loadBackupDescs(ctx, defaultURIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 	if err != nil {
 		return err
 	}
@@ -1587,9 +1589,11 @@ func doRestorePlan(
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
 func loadBackupSQLDescs(
-	ctx context.Context, details jobspb.RestoreDetails, settings *cluster.Settings,
+	ctx context.Context,
+	details jobspb.RestoreDetails,
+	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 ) ([]BackupDescriptor, BackupDescriptor, []sqlbase.Descriptor, error) {
-	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
+	backupDescs, err := loadBackupDescs(ctx, details.URIs, makeExternalStorageFromURI)
 	if err != nil {
 		return nil, BackupDescriptor{}, nil, err
 	}
@@ -1726,7 +1730,9 @@ func (r *restoreResumer) Resume(
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
-	backupDescs, latestBackupDesc, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
+	backupDescs, latestBackupDesc, sqlDescs, err := loadBackupSQLDescs(
+		ctx, details, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+	)
 	if err != nil {
 		return err
 	}

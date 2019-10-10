@@ -467,7 +467,7 @@ func importPlanHook(
 			seqVals := make(map[sqlbase.ID]int64)
 
 			if importStmt.Bundle {
-				store, err := cloud.ExternalStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
+				store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, files[0])
 				if err != nil {
 					return err
 				}
@@ -521,7 +521,7 @@ func importPlanHook(
 					if err != nil {
 						return err
 					}
-					create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+					create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 					if err != nil {
 						return err
 					}
