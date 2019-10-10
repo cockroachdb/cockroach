@@ -572,8 +572,10 @@ func registerKVRangeLookups(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
-			cmd := fmt.Sprintf("./workload init kv {pgurl:1-%d} --splits=1000", nodes)
-			c.Run(ctx, c.Node(nodes+1), cmd)
+			cmd := fmt.Sprintf("./workload init kv --splits=1000 {pgurl:1}")
+			if err := c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
+				return err
+			}
 			close(doneInit)
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=" + ifLocal("10s", "10m")
@@ -584,7 +586,9 @@ func registerKVRangeLookups(r *testRegistry) {
 				concurrency+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
 			start := timeutil.Now()
-			c.Run(ctx, c.Node(nodes+1), cmd)
+			if err := c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
+				return err
+			}
 			end := timeutil.Now()
 			verifyLookupsPerSec(ctx, c, t, c.Node(1), start, end, maximumRangeLookupsPerSec)
 			return nil

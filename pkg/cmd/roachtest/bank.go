@@ -336,7 +336,15 @@ func isExpectedRelocateError(err error) bool {
 	// for more failure modes not caught here. We decided to avoid adding
 	// to this catchall and to fix the root causes instead.
 	// We've also seen "breaker open" errors here.
-	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present|received invalid ChangeReplicasTrigger .* to remove self)")
+	whitelist := []string{
+		"descriptor changed",
+		"unable to remove replica .* which is not present",
+		"unable to add replica .* which is already present",
+		"received invalid ChangeReplicasTrigger .* to remove self",
+		"failed to apply snapshot: raft group deleted",
+	}
+	pattern := "(" + strings.Join(whitelist, "|") + ")"
+	return testutils.IsError(err, pattern)
 }
 
 func accountDistribution(r *rand.Rand) *rand.Zipf {

@@ -373,14 +373,16 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 	}
 
 	if err := cmd.Run(); err != nil {
-		cancel()
-		wg.Wait() // synchronize access to ring buffer
-
-		// Context deadline exceeded errors opaquely appear as "signal killed" when
-		// manifested. We surface this error explicitly.
-		if ctx.Err() == context.DeadlineExceeded {
-			return ctx.Err()
+		// Context errors opaquely appear as "signal killed" when manifested.
+		// We surface this error explicitly.
+		if ctx.Err() != nil {
+			err = ctx.Err()
 		}
+
+		// Synchronize access to ring buffers before using them to create an
+		// error to return.
+		cancel()
+		wg.Wait()
 		return errors.Wrapf(
 			err,
 			"%s returned:\nstderr:\n%s\nstdout:\n%s",
@@ -2126,12 +2128,10 @@ func (m *monitor) Go(fn func(context.Context) error) {
 	})
 }
 
-var errTestAlreadyFailed = errors.New("already failed")
-
 func (m *monitor) WaitE() error {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
-		return errTestAlreadyFailed
+		return errors.New("already failed")
 	}
 
 	return m.wait(roachprod, "monitor", m.nodes)
@@ -2142,7 +2142,7 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if err := m.WaitE(); err != nil && err != errTestAlreadyFailed && !m.t.Failed() {
+	if err := m.WaitE(); err != nil && !m.t.Failed() {
 		m.t.Fatal(err)
 	}
 }
