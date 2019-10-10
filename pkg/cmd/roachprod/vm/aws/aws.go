@@ -69,6 +69,7 @@ type providerOpts struct {
 
 	MachineType        string
 	SSDMachineType     string
+	CPUOptions         string
 	RemoteUserName     string
 	EBSVolumeType      string
 	EBSVolumeSize      int
@@ -123,6 +124,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	// for directly-attached SSD support. This is 4 core, 16GB ram, 150GB ssd.
 	flags.StringVar(&o.SSDMachineType, ProviderName+"-machine-type-ssd", defaultSSDMachineType,
 		"Machine type for --local-ssd (see https://aws.amazon.com/ec2/instance-types/)")
+
+	flags.StringVar(&o.CPUOptions, ProviderName+"-cpu-options", defaultSSDMachineType,
+		"Options to specify number of cores and threads per core (see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-optimize-cpu.html#instance-specify-cpu-options)")
 
 	// AWS images generally use "ubuntu" or "ec2-user"
 	flags.StringVar(&o.RemoteUserName, ProviderName+"-user",
@@ -597,6 +601,8 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		machineType = p.opts.MachineType
 	}
 
+	cpuOptions := p.opts.CPUOptions
+
 	// We avoid the need to make a second call to set the tags by jamming
 	// all of our metadata into the TagSpec.
 	tagSpecs := fmt.Sprintf(
@@ -638,6 +644,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--count", "1",
 		"--image-id", az.region.AMI,
 		"--instance-type", machineType,
+		"--cpu-options", cpuOptions,
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,
