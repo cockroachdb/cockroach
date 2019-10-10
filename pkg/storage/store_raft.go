@@ -654,7 +654,8 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		log.Fatal(ctx, "cannot coalesce both heartbeats and responses")
 	}
 
-	chReq := &RaftMessageRequest{
+	chReq := newRaftMessageRequest()
+	*chReq = RaftMessageRequest{
 		RangeID: 0,
 		ToReplica: roachpb.ReplicaDescriptor{
 			NodeID:    to.NodeID,
@@ -677,6 +678,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	}
 
 	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
+		chReq.release()
 		for _, beat := range beats {
 			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
 				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)

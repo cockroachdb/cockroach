@@ -356,7 +356,9 @@ func TestSendAndReceive(t *testing.T) {
 			ReplicaID: replicaIDs[toStoreID],
 		},
 	}
-	if !transports[storeNodes[fromStoreID]].SendAsync(expReq, rpc.DefaultClass) {
+	// NB: argument passed to SendAsync is not safe to use after; make a copy.
+	expReqCopy := *expReq
+	if !transports[storeNodes[fromStoreID]].SendAsync(&expReqCopy, rpc.DefaultClass) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
 	// NB: proto.Equal will panic here since it doesn't know about `gogoproto.casttype`.
