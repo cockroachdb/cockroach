@@ -416,7 +416,7 @@ type handleRaftReadyStats struct {
 var noSnap IncomingSnapshot
 
 // handleRaftReady processes a raft.Ready containing entries and messages that
-// are ready to read, be saved to stable storage, committed or sent to other
+// are ready to read, be saved to stable storage, committed, or sent to other
 // peers. It takes a non-empty IncomingSnapshot to indicate that it is
 // about to process a snapshot.
 //
