@@ -231,7 +231,9 @@ type TxnSenderFactory interface {
 	// DistSQL flow.
 	// coordMeta is the TxnCoordMeta which contains the transaction whose requests
 	// this sender will carry.
-	TransactionalSender(typ TxnType, coordMeta roachpb.TxnCoordMeta) TxnSender
+	TransactionalSender(
+		typ TxnType, coordMeta roachpb.TxnCoordMeta, pri roachpb.UserPriority,
+	) TxnSender
 	// NonTransactionalSender returns a sender to be used for non-transactional
 	// requests. Generally this is a sender that TransactionalSender() wraps.
 	NonTransactionalSender() Sender
@@ -392,7 +394,7 @@ func MakeMockTxnSenderFactory(
 
 // TransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) TransactionalSender(
-	_ TxnType, coordMeta roachpb.TxnCoordMeta,
+	_ TxnType, coordMeta roachpb.TxnCoordMeta, _ roachpb.UserPriority,
 ) TxnSender {
 	return NewMockTransactionalSender(f.senderFunc, &coordMeta.Txn)
 }
@@ -410,9 +412,9 @@ var _ TxnSenderFactory = NonTransactionalFactoryFunc(nil)
 
 // TransactionalSender is part of the TxnSenderFactory.
 func (f NonTransactionalFactoryFunc) TransactionalSender(
-	typ TxnType, _ roachpb.TxnCoordMeta,
+	_ TxnType, _ roachpb.TxnCoordMeta, _ roachpb.UserPriority,
 ) TxnSender {
-	panic("not supported ")
+	panic("not supported")
 }
 
 // NonTransactionalSender is part of the TxnSenderFactory.
