@@ -12,7 +12,6 @@ package bench
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"net"
@@ -33,16 +32,14 @@ import (
 // in its TPC-B(ish) mode.
 func BenchmarkPgbenchQuery(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
-		if err := SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		if err := SetupBenchDB(db.DB, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
 		}
 		src := rand.New(rand.NewSource(5432))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if err := RunOne(db, src, 20000); err != nil {
-				b.Fatal(err)
-			}
+			RunOne(b, db, src, 20000)
 		}
 		b.StopTimer()
 	})
@@ -52,8 +49,8 @@ func BenchmarkPgbenchQuery(b *testing.B) {
 // in its TPC-B(ish) mode.
 func BenchmarkPgbenchQueryParallel(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
-		if err := SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		if err := SetupBenchDB(db.DB, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
 		}
 
@@ -67,17 +64,10 @@ func BenchmarkPgbenchQueryParallel(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			src := rand.New(rand.NewSource(5432))
 			r := retry.Start(retryOpts)
-			var err error
 			for pb.Next() {
 				r.Reset()
 				for r.Next() {
-					err = RunOne(db, src, 20000)
-					if err == nil {
-						break
-					}
-				}
-				if err != nil {
-					b.Fatal(err)
+					RunOne(b, db, src, 20000)
 				}
 			}
 		})
