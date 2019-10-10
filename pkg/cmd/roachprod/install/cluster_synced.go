@@ -674,7 +674,6 @@ exit 1
 		knownHostsData = stdout.Bytes()
 		return nil, nil
 	})
-	const sharedUser = "ubuntu"
 	c.Parallel("distributing known_hosts", len(c.Nodes), 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
@@ -690,11 +689,24 @@ tmp="$(tempfile -p 'roachprod' -m 0644 )"
 on_exit() {
     rm -f "${tmp}"
 }
-echo "${known_hosts_data}" > "${tmp}"
 trap on_exit EXIT
+echo "${known_hosts_data}" > "${tmp}"
 cat "${tmp}" >> ~/.ssh/known_hosts
-if [[ "$(whoami)" != "` + sharedUser + `" ]]; then
-    sudo -u ` + sharedUser + ` bash -c "cat ${tmp} >> ~` + sharedUser + `/.ssh/known_hosts"
+# If our bootstrapping user is not the shared user install all of the
+# relevant ssh files from the bootstrapping user into the shared user's
+# .ssh directory.
+if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
+    # Ensure that the shared user has a .ssh directory
+    sudo -u ` + config.SharedUser +
+			` bash -c "mkdir -p ~` + config.SharedUser + `/.ssh"
+    # This somewhat absurd incantation ensures that we properly shell quote
+    # filenames so that they both aren't expanded and work even if the filenames
+    # include spaces.
+    sudo find ~/.ssh -type f -execdir bash -c 'install \
+        --owner ` + config.SharedUser + ` \
+        --group ` + config.SharedUser + ` \
+        --mode $(stat -c "%a" '"'"'{}'"'"') \
+        '"'"'{}'"'"' ~` + config.SharedUser + `/.ssh' \;
 fi
 `
 		if out, err := sess.CombinedOutput(cmd); err != nil {
@@ -731,11 +743,11 @@ fi
 echo "${keys_data}" >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
 install --mode 0600 "${tmp2}" ~/.ssh/authorized_keys
-if [[ "$(whoami)" != "` + sharedUser + `" ]]; then
+if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
     sudo install --mode 0600 \
-        --owner ` + sharedUser + `\
-        --group ` + sharedUser + `\
-        "${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys
+        --owner ` + config.SharedUser + `\
+        --group ` + config.SharedUser + `\
+        "${tmp2}" ~` + config.SharedUser + `/.ssh/authorized_keys
 fi
 `
 			if out, err := sess.CombinedOutput(cmd); err != nil {
