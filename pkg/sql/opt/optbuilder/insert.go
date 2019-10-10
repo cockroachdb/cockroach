@@ -156,7 +156,7 @@ func init() {
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
 	var ctes []cteSource
 	if ins.With != nil {
-		inScope, ctes = b.buildCTE(ins.With.CTEList, inScope)
+		inScope, ctes = b.buildCTEs(ins.With, inScope)
 	}
 
 	// INSERT INTO xx AS yy - we want to know about xx (tn) because

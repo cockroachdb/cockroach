@@ -159,7 +159,7 @@ func TestStatementReuses(t *testing.T) {
 			t.Run(test, func(t *testing.T) {
 				rows, err := db.Query("EXPLAIN WITH a AS (" + test + ") TABLE a")
 				if err != nil {
-					if testutils.IsError(err, "does not have a RETURNING clause") {
+					if testutils.IsError(err, "does not return any columns") {
 						// This error is acceptable and does not constitute a test failure.
 						return
 					}
