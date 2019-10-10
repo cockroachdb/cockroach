@@ -99,7 +99,7 @@ type Pebble struct {
 	readOnly bool
 }
 
-var _ Engine = &Pebble{}
+var _ WithSSTables = &Pebble{}
 
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(path string, cfg *pebble.Options) (*Pebble, error) {
@@ -513,6 +513,24 @@ func (p *Pebble) LinkFile(oldname, newname string) error {
 // CreateCheckpoint implements the Engine interface.
 func (p *Pebble) CreateCheckpoint(dir string) error {
 	return p.db.Checkpoint(dir)
+}
+
+// GetSSTables implements the WithSSTables interface.
+func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
+	for level, tables := range p.db.SSTables() {
+		for _, table := range tables {
+			startKey, _ := DecodeMVCCKey(table.Smallest.UserKey)
+			endKey, _ := DecodeMVCCKey(table.Largest.UserKey)
+			info := SSTableInfo{
+				Level: level,
+				Size:  int64(table.Size),
+				Start: startKey,
+				End:   endKey,
+			}
+			sstables = append(sstables, info)
+		}
+	}
+	return sstables
 }
 
 // pebbleFile wraps a pebble File and implements the DBFile interface.
