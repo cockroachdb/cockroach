@@ -101,6 +101,9 @@ type scope struct {
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages.
 	context string
+
+	// atRoot is whether we are currently at a root context.
+	atRoot bool
 }
 
 // cteSource represents a CTE in the given query.

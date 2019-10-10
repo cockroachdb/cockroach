@@ -1216,3 +1216,86 @@ with &3 (cte)
       └── mapping:
            ├──  a:3(int) => a:13(int)
            └──  b:4(int) => b:14(int)
+
+# Mutating WITHs not allowed at non-root positions.
+build
+SELECT * FROM (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (UPDATE y SET a = 4 RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+# Certain contexts besides the literal root allow mutating CTEs, like
+# underneath an EXPLAIN.
+build
+EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
+----
+explain
+ ├── columns: tree:6(string) field:7(string) description:8(string)
+ └── with &1 (foo)
+      ├── columns: a:5(int!null)
+      ├── project
+      │    ├── columns: y.a:1(int!null)
+      │    └── insert y
+      │         ├── columns: y.a:1(int!null) rowid:2(int!null)
+      │         ├── insert-mapping:
+      │         │    ├──  column1:3 => y.a:1
+      │         │    └──  column4:4 => rowid:2
+      │         └── project
+      │              ├── columns: column4:4(int) column1:3(int!null)
+      │              ├── values
+      │              │    ├── columns: column1:3(int!null)
+      │              │    └── tuple [type=tuple{int}]
+      │              │         └── const: 1 [type=int]
+      │              └── projections
+      │                   └── function: unique_rowid [type=int]
+      └── with-scan &1 (foo)
+           ├── columns: a:5(int!null)
+           └── mapping:
+                └──  y.a:1(int) => a:5(int)
+
+exec-ddl
+CREATE TABLE a(x INT);
+----
+
+build
+INSERT INTO a(x)
+        (WITH b(z) AS (VALUES (1),(2),(3)) SELECT z+1 AS w FROM b)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  w:5 => x:1
+ │    └──  column6:6 => rowid:2
+ └── project
+      ├── columns: column6:6(int) w:5(int)
+      ├── with &1 (b)
+      │    ├── columns: w:5(int)
+      │    ├── values
+      │    │    ├── columns: column1:3(int!null)
+      │    │    ├── tuple [type=tuple{int}]
+      │    │    │    └── const: 1 [type=int]
+      │    │    ├── tuple [type=tuple{int}]
+      │    │    │    └── const: 2 [type=int]
+      │    │    └── tuple [type=tuple{int}]
+      │    │         └── const: 3 [type=int]
+      │    └── project
+      │         ├── columns: w:5(int)
+      │         ├── with-scan &1 (b)
+      │         │    ├── columns: z:4(int!null)
+      │         │    └── mapping:
+      │         │         └──  column1:3(int) => z:4(int)
+      │         └── projections
+      │              └── plus [type=int]
+      │                   ├── variable: z [type=int]
+      │                   └── const: 1 [type=int]
+      └── projections
+           └── function: unique_rowid [type=int]

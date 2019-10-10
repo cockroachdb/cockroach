@@ -44,6 +44,10 @@ const (
 func (b *Builder) buildDataSource(
 	texpr tree.TableExpr, indexFlags *tree.IndexFlags, inScope *scope,
 ) (outScope *scope) {
+	defer func(prevAtRoot bool) {
+		inScope.atRoot = prevAtRoot
+	}(inScope.atRoot)
+	inScope.atRoot = false
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
@@ -603,7 +607,17 @@ func (b *Builder) buildCTEs(
 			bindingProps: cteExpr.Relational(),
 			id:           id,
 		}
-		outScope.ctes[aliasStr] = &addedCTEs[i]
+		cte := &addedCTEs[i]
+		outScope.ctes[addedCTEs[i].name.Alias.String()] = cte
+
+		if cteExpr.Relational().CanMutate && !inScope.atRoot {
+			panic(
+				pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"WITH clause containing a data-modifying statement must be at the top level",
+				),
+			)
+		}
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
@@ -653,6 +667,32 @@ func (b *Builder) buildSelectStmt(
 
 	default:
 		panic(errors.AssertionFailedf("unknown select statement type: %T", stmt))
+	}
+}
+
+// processWith builds a WITH expression and adds its tables to the scope. It
+// then returns the modified scope along with a closure that wraps a provided
+// scope with the built WITH.
+func (b *Builder) processWith(
+	with *tree.With, inScope *scope,
+) (outScope *scope, wrapWiths func(*scope)) {
+	if with == nil {
+		return inScope, func(*scope) {}
+	}
+
+	var ctes []cteSource
+	inScope, ctes = b.buildCTEs(with, inScope)
+	prevAtRoot := inScope.atRoot
+	inScope.atRoot = false
+
+	return inScope, func(outScope *scope) {
+		// This can happen sometimes if we are panicking due to an error (which will
+		// be caught higher up in the stack).
+		if outScope == nil {
+			return
+		}
+		inScope.atRoot = prevAtRoot
+		outScope.expr = b.wrapWithCTEs(outScope.expr, ctes)
 	}
 }
 
@@ -713,10 +753,9 @@ func (b *Builder) buildSelect(
 		}
 	}
 
-	var ctes []cteSource
-	if with != nil {
-		inScope, ctes = b.buildCTEs(with, inScope)
-	}
+	var wrapWiths func(*scope)
+	inScope, wrapWiths = b.processWith(with, inScope)
+	defer func() { wrapWiths(outScope) }()
 
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
@@ -751,8 +790,6 @@ func (b *Builder) buildSelect(
 	if limit != nil {
 		b.buildLimit(limit, inScope, outScope)
 	}
-
-	outScope.expr = b.wrapWithCTEs(outScope.expr, ctes)
 
 	// TODO(rytaft): Support FILTER expression.
 	return outScope
