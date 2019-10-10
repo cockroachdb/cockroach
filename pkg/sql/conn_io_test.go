@@ -177,7 +177,7 @@ func TestStmtBufLtrim(t *testing.T) {
 	buf.AdvanceOne()
 	trimPos := CmdPos(2)
 	buf.ltrim(ctx, trimPos)
-	if l := len(buf.mu.data); l != 3 {
+	if l := buf.mu.data.Len(); l != 3 {
 		t.Fatalf("expected 3 left, got: %d", l)
 	}
 	if s := buf.mu.startPos; s != 2 {
