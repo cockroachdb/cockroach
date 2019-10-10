@@ -4450,6 +4450,8 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("x")
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	ctx := context.Background()

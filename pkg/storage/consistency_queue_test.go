@@ -367,6 +367,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("x")
+
 	ctx := context.Background()
 
 	path, cleanup := testutils.TempDir(t)
