@@ -397,7 +397,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
 		require.Equal(t, ``, errMsg)
-		formattedTrace := tracing.FormatRecordedSpans(trace)
+		formattedTrace := trace.String()
 		expectedMessages := []string{
 			`transitioning out of joint configuration`,
 		}
@@ -436,7 +436,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, ``, errMsg)
 		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
-		require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
+		require.Contains(t, trace.String(), msg)
 		return tc.LookupRangeOrFatal(t, scratchStartKey)
 	}
 	desc := checkNoGC()
@@ -499,7 +499,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 			return errors.New(errMsg)
 		}
 		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
-		formattedTrace := tracing.FormatRecordedSpans(trace)
+		formattedTrace := trace.String()
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
 		}
@@ -623,7 +623,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 			if !strings.Contains(errMsg, `descriptor changed`) {
 				return errors.Errorf(`expected "descriptor changed" error got: %s`, errMsg)
 			}
-			formattedTrace := tracing.FormatRecordedSpans(trace)
+			formattedTrace := trace.String()
 			expectedMessages := []string{
 				`could not promote .*n3,s3.* to voter, rolling back: change replicas of r\d+ failed: descriptor changed`,
 				`learner to roll back not found`,
@@ -757,7 +757,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 				return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
 			}
 			const msg = `cannot serve follower reads`
-			formattedTrace := tracing.FormatRecordedSpans(collect())
+			formattedTrace := collect().String()
 			if !strings.Contains(formattedTrace, msg) {
 				return errors.Errorf("expected a trace with `%s` got:\n%s", msg, formattedTrace)
 			}
@@ -970,7 +970,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
 		require.Equal(t, ``, errMsg)
-		formattedTrace := tracing.FormatRecordedSpans(trace)
+		formattedTrace := trace.String()
 		expectedMessages := []string{
 			`removing learner replicas \[n2,s2\]`,
 			`merging to produce range: /Table/Max-/Max`,
@@ -1005,7 +1005,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 			trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 			require.NoError(t, err)
 			require.Equal(t, ``, errMsg)
-			formattedTrace := tracing.FormatRecordedSpans(trace)
+			formattedTrace := trace.String()
 			expectedMessages := []string{
 				`transitioning out of joint configuration`,
 				`merging to produce range: /Table/Max-/Max`,

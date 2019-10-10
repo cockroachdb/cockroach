@@ -829,17 +829,17 @@ func matchesWithoutFileLine(msg string, expected string) bool {
 // be called before cancel()).
 //
 // Note that to convert the recorded spans into text, you can use
-// FormatRecordedSpans. Tests can also use FindMsgInRecording().
+// Recording.String(). Tests can also use FindMsgInRecording().
 func ContextWithRecordingSpan(
 	ctx context.Context, opName string,
-) (retCtx context.Context, getRecording func() []RecordedSpan, cancel func()) {
+) (retCtx context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
 	sp := tr.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
 	StartRecording(sp, SingleNodeRecording)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
-	getRecording = func() []RecordedSpan {
+	getRecording = func() Recording {
 		return GetRecording(sp)
 	}
 	cancel = func() {
