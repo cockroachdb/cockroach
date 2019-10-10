@@ -302,14 +302,12 @@ func TestBatchRepr(t *testing.T) {
 
 		// The keys in the batch have the internal MVCC encoding applied which for
 		// this test implies an appended 0 byte.
-		// TODO(itsbilal): Treat SingleDeletions as Deletions until pebble.Batch
-		// works with SingleDelete.
 		expOps := []string{
 			"put(a\x00,value)",
 			"delete(b\x00)",
 			"merge(c\x00)",
 			"put(e\x00,)",
-			"delete(d\x00)",
+			"single_delete(d\x00)",
 		}
 		if !reflect.DeepEqual(expOps, ops) {
 			t.Fatalf("expected %v, but found %v", expOps, ops)
