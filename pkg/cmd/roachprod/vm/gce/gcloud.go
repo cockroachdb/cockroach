@@ -98,7 +98,7 @@ type jsonVM struct {
 }
 
 // Convert the JSON VM data into our common VM type
-func (jsonVM *jsonVM) toVM(project string) *vm.VM {
+func (jsonVM *jsonVM) toVM(project string, opts *providerOpts) (ret *vm.VM) {
 	var vmErrors []error
 	var err error
 
@@ -139,20 +139,25 @@ func (jsonVM *jsonVM) toVM(project string) *vm.VM {
 
 	machineType := lastComponent(jsonVM.MachineType)
 	zone := lastComponent(jsonVM.Zone)
-
-	return &vm.VM{
-		Name:       jsonVM.Name,
-		CreatedAt:  jsonVM.CreationTimestamp,
-		Errors:     vmErrors,
-		DNS:        fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
-		Lifetime:   lifetime,
-		PrivateIP:  privateIP,
-		Provider:   ProviderName,
-		ProviderID: jsonVM.Name,
-		PublicIP:   publicIP,
+	remoteUser := config.SharedUser
+	if !opts.useSharedUser {
 		// N.B. gcloud uses the local username to log into instances rather
-		// than the username on the authenticated Google account.
-		RemoteUser:  config.OSUser.Username,
+		// than the username on the authenticated Google account but we set
+		// up the shared user at cluster creation time. Allow use of the
+		// local username if requested.
+		remoteUser = config.OSUser.Username
+	}
+	return &vm.VM{
+		Name:        jsonVM.Name,
+		CreatedAt:   jsonVM.CreationTimestamp,
+		Errors:      vmErrors,
+		DNS:         fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
+		Lifetime:    lifetime,
+		PrivateIP:   privateIP,
+		Provider:    ProviderName,
+		ProviderID:  jsonVM.Name,
+		PublicIP:    publicIP,
+		RemoteUser:  remoteUser,
 		VPC:         vpc,
 		MachineType: machineType,
 		Zone:        zone,
@@ -174,6 +179,10 @@ type providerOpts struct {
 	ServiceAccount string
 	MachineType    string
 	Zones          []string
+
+	// useSharedUser indicates that the shared user rather than the personal
+	// user should be used to ssh into the remote machines.
+	useSharedUser bool
 }
 
 // projectsVal is the implementation for the --gce-projects flag. It populates
@@ -268,6 +277,11 @@ func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		},
 		ProviderName+"-project", /* name */
 		usage)
+
+	flags.BoolVar(&o.useSharedUser,
+		ProviderName+"-use-shared-user", true,
+		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
+			config.SharedUser, config.OSUser.Username))
 }
 
 // Provider is the GCE implementation of the vm.Provider interface.
@@ -503,7 +517,7 @@ func (p *Provider) List() (vm.List, error) {
 
 		// Now, convert the json payload into our common VM type
 		for _, jsonVM := range jsonVMS {
-			vms = append(vms, *jsonVM.toVM(prj))
+			vms = append(vms, *jsonVM.toVM(prj, &p.opts))
 		}
 	}
 
