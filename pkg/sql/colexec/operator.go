@@ -219,3 +219,19 @@ func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
 	s.batch.SetLength(1)
 	return s.batch
 }
+
+// feedOperator is used to feed an Operator chain with input by manually
+// setting the next batch.
+type feedOperator struct {
+	ZeroInputNode
+	NonExplainable
+	batch coldata.Batch
+}
+
+func (feedOperator) Init() {}
+
+func (o *feedOperator) Next(context.Context) coldata.Batch {
+	return o.batch
+}
+
+var _ Operator = &feedOperator{}

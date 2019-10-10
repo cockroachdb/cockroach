@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -1000,6 +1001,10 @@ func planSelectionOperators(
 	case *tree.IndexedVar:
 		return NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, memUsed, nil
 	case *tree.AndExpr:
+		// AND expressions are handled by an implicit AND'ing of selection vectors.
+		// First we select out the tuples that are true on the left side, and then,
+		// only among the matched tuples, we select out the tuples that are true on
+		// the right side.
 		var leftOp, rightOp Operator
 		var memUsedLeft, memUsedRight int
 		leftOp, _, ct, memUsedLeft, err = planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
@@ -1013,7 +1018,23 @@ func planSelectionOperators(
 		// OR expressions are handled by converting them to an equivalent CASE
 		// statement. Since CASE statements don't have a selection form, plan a
 		// projection and then convert the resulting boolean to a selection vector.
-		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, expr, columnTypes, input)
+		//
+		// Rewrite the OR expression as an equivalent CASE expression.
+		// "a OR b" becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END".
+		// This way we can take advantage of the short-circuiting logic built into
+		// the CASE operator. (b should not be evaluated if a is true.)
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			[]*tree.When{
+				{Cond: t.Left, Val: tree.DBoolTrue},
+				{Cond: t.Right, Val: tree.DBoolTrue},
+			},
+			tree.DBoolFalse,
+			types.Bool)
+		if err != nil {
+			return nil, resultIdx, ct, memUsed, err
+		}
+		op, resultIdx, ct, memUsed, err = planProjectionOperators(ctx, caseExpr, columnTypes, input)
 		op = NewBoolVecToSelOp(op, resultIdx)
 		return op, resultIdx, ct, memUsed, err
 	case *tree.CaseExpr:
@@ -1216,39 +1237,8 @@ func planProjectionOperators(
 		op := NewCaseOp(buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 
 		return op, caseOutputIdx, ct, memUsed, nil
-	case *tree.AndExpr:
-		var leftOp, rightOp Operator
-		var leftIdx, rightIdx, lMemUsed, rMemUsed int
-		leftOp, leftIdx, ct, lMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, t.TypedLeft(), types.Bool, columnTypes, input)
-		if err != nil {
-			return nil, resultIdx, ct, 0, err
-		}
-		rightOp, rightIdx, ct, rMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, t.TypedRight(), types.Bool, ct, leftOp)
-		if err != nil {
-			return nil, resultIdx, ct, 0, err
-		}
-		// Add a new boolean column that ands the two output columns.
-		resultIdx = len(ct)
-		ct = append(ct, *t.ResolvedType())
-		andOp := NewAndOp(rightOp, leftIdx, rightIdx, resultIdx)
-		return andOp, resultIdx, ct, lMemUsed + rMemUsed, nil
-	case *tree.OrExpr:
-		// Rewrite the OR expression as an equivalent CASE expression.
-		// "a OR b" becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END".
-		// This way we can take advantage of the short-circuiting logic built into
-		// the CASE operator. (b should not be evaluated if a is true.)
-		caseExpr, err := tree.NewTypedCaseExpr(
-			nil,
-			[]*tree.When{
-				{Cond: t.Left, Val: tree.DBoolTrue},
-				{Cond: t.Right, Val: tree.DBoolTrue},
-			},
-			tree.DBoolFalse,
-			types.Bool)
-		if err != nil {
-			return nil, resultIdx, ct, memUsed, err
-		}
-		return planProjectionOperators(ctx, caseExpr, columnTypes, input)
+	case *tree.AndExpr, *tree.OrExpr:
+		return planLogicalProjectionOp(ctx, expr, columnTypes, input)
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
@@ -1329,4 +1319,57 @@ func planProjectionExpr(
 		memUsed += sMem.EstimateStaticMemoryUsage()
 	}
 	return op, resultIdx, ct, leftMem + rightMem + memUsed, err
+}
+
+// planLogicalProjectionOp plans all the needed operators for a projection of
+// a logical operation (either AND or OR).
+func planLogicalProjectionOp(
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []types.T, input Operator,
+) (op Operator, resultIdx int, ct []types.T, memUsed int, err error) {
+	// Add a new boolean column that will store the result of the projection.
+	resultIdx = len(columnTypes)
+	ct = append(columnTypes, *types.Bool)
+	var (
+		typedLeft, typedRight                       tree.TypedExpr
+		leftProjOpChain, rightProjOpChain, outputOp Operator
+		leftIdx, rightIdx, lMemUsed, rMemUsed       int
+		leftFeedOp, rightFeedOp                     feedOperator
+	)
+	switch t := expr.(type) {
+	case *tree.AndExpr:
+		typedLeft = t.TypedLeft()
+		typedRight = t.TypedRight()
+	case *tree.OrExpr:
+		typedLeft = t.TypedLeft()
+		typedRight = t.TypedRight()
+	default:
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected logical expression type %s", t.String()))
+	}
+	leftProjOpChain, leftIdx, ct, lMemUsed, err = planTypedMaybeNullProjectionOperators(
+		ctx, typedLeft, types.Bool, ct, &leftFeedOp,
+	)
+	if err != nil {
+		return nil, resultIdx, ct, 0, err
+	}
+	rightProjOpChain, rightIdx, ct, rMemUsed, err = planTypedMaybeNullProjectionOperators(
+		ctx, typedRight, types.Bool, ct, &rightFeedOp,
+	)
+	if err != nil {
+		return nil, resultIdx, ct, 0, err
+	}
+	switch expr.(type) {
+	case *tree.AndExpr:
+		outputOp = NewAndProjOp(
+			input, leftProjOpChain, rightProjOpChain,
+			&leftFeedOp, &rightFeedOp,
+			leftIdx, rightIdx, resultIdx,
+		)
+	case *tree.OrExpr:
+		outputOp = NewOrProjOp(
+			input, leftProjOpChain, rightProjOpChain,
+			&leftFeedOp, &rightFeedOp,
+			leftIdx, rightIdx, resultIdx,
+		)
+	}
+	return outputOp, resultIdx, ct, lMemUsed + rMemUsed, nil
 }

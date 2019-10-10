@@ -152,22 +152,6 @@ type mergeJoinInput struct {
 	source Operator
 }
 
-// feedOperator is used to feed the distincter with input by manually setting
-// the next batch.
-type feedOperator struct {
-	ZeroInputNode
-	NonExplainable
-	batch coldata.Batch
-}
-
-func (feedOperator) Init() {}
-
-func (o *feedOperator) Next(context.Context) coldata.Batch {
-	return o.batch
-}
-
-var _ Operator = &feedOperator{}
-
 // The merge join operator uses a probe and build approach to generate the
 // join. What this means is that instead of going through and expanding the
 // cross product row by row, the operator performs two passes.
