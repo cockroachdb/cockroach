@@ -10,15 +10,12 @@
 
 @require "~styl/base/palette.styl"
 
-.Range
-  position: relative
-
 .click-zone 
   position: absolute
-  top: -13px;
-  left: -72px;
-  right: -10px;
-  bottom: -13px;
+  top 0
+  left 0
+  right 0
+  bottom 0
   z-index 100
 
 .trigger-container
@@ -32,12 +29,10 @@
 
 .trigger-wrapper
   z-index 99
-  position relative
 
 .range-selector
   position absolute
-  top: 38px
-  left: -72px
+  top: 50px
   background-color white
   box-shadow 0px 0px 7px 1px rgba(0,0,0,0.10)
   padding 20px
@@ -47,14 +42,15 @@
   align-items flex-start
   cursor default
   min-width 530px
+  z-index 99
   &>div
     display flex
     flex-direction column
-    &not(last-child) 
+    &:not(:last-child)
       border-right 1px solid #e5e5e5
   ._title
     color $body-color
-    font-weight bold
+    font-family Lato-Bold
     font-size 12px
     margin-bottom 8px
     line-height 2
@@ -96,17 +92,6 @@
   color $link-color
 ._quick-view
   padding-right 20px
-._now-button
-  width 100%
-  text-align center
-  margin 0
-  padding 0
-  text-transform none
-  span
-    color $link-color
-    font-size 14px
-    line-height 1.71
-    letter-spacing 0.1px
 ._start
   padding 0 20px
 ._end

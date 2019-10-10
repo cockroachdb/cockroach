@@ -42,12 +42,30 @@ interface RangeSelectProps {
 }
 interface RangeSelectState {
   opened: boolean;
+  width: number;
 }
 
 class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
   state = {
     opened: false,
+    width: window.innerWidth,
   };
+
+  private rangeContainer = React.createRef<HTMLDivElement>();
+
+  componentDidMount() {
+    window.addEventListener("resize", this.updateDimensions);
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener("resize", this.updateDimensions);
+  }
+
+  updateDimensions = () => {
+    this.setState({
+      width: window.innerWidth,
+    });
+  }
 
   isValid = (date: moment.Moment, direction: DateTypes) => {
     const { value } = this.props;
@@ -82,7 +100,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     }
   }
 
-  renderTimePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} className="_now-button" type="link" size="small">Now</Button>;
+  renderTimePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="link" size="small">Now</Button>;
+
+  renderDatePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="link" size="small">Today</Button>;
 
   onChangeOption = (option: RangeOption) => () => {
     const { onChange } = this.props;
@@ -171,15 +191,17 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   render() {
     const { value, useTimeRange } = this.props;
-    const { opened } = this.state;
+    const { opened, width } = this.state;
     const start = useTimeRange ? moment.utc(value.start) : null;
     const end = useTimeRange ? moment.utc(value.end) : null;
     const datePickerFormat = "M/DD/YYYY";
     const timePickerFormat = "h:mm:ss A";
     const selectedValue = this.findSelectedValue();
     const isSameDate = useTimeRange && moment(start).isSame(end, "day");
+    const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
+    const left = width >= (containerLeft + 500) ? 0 : width - (containerLeft + 500);
     const content = (
-      <div className="range-selector">
+      <div className="range-selector" style={{ left }}>
         <div className="_quick-view">
           <span className="_title">Quick view</span>
           {this.renderOptions()}
@@ -189,17 +211,19 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
           <DatePicker
             dropdownClassName="disabled-year"
             value={start}
-            disabledDate={(currentDate) => currentDate >= (end || moment())}
+            disabledDate={(currentDate) => (currentDate > (end || moment()))}
             allowClear={false}
-            format={`${datePickerFormat} ${moment(start).isSame(moment.utc(), "day") && "[Today]" || ""}`}
+            format={`${datePickerFormat} ${moment(start).isSame(moment.utc(), "day") && "[- Today]" || ""}`}
             onChange={this.onChangeDate(DateTypes.DATE_FROM)}
+            renderExtraFooter={this.renderDatePickerAddon(DateTypes.DATE_FROM)}
+            showToday={false}
           />
           <TimePicker
             value={start}
             allowClear={false}
-            format={`${timePickerFormat} ${moment(start).isSame(moment.utc(), "minute") && "[Now]" || ""}`}
+            format={`${timePickerFormat} ${moment(start).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
             use12Hours
-            addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}
+            addon={this.renderTimePickerAddon(DateTypes.DATE_FROM)}
             onChange={this.onChangeDate(DateTypes.DATE_FROM)}
             disabledHours={isSameDate && this.getDisabledHours(true) || undefined}
             disabledMinutes={isSameDate && this.getDisabledMinutes(true) || undefined}
@@ -211,15 +235,17 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
           <DatePicker
             dropdownClassName="disabled-year"
             value={end}
-            disabledDate={(currentDate) => (currentDate > moment() || currentDate <= (start || moment()))}
+            disabledDate={(currentDate) => (currentDate > moment() || currentDate < (start || moment()))}
             allowClear={false}
-            format={`${datePickerFormat} ${moment(end).isSame(moment.utc(), "day") && "[Today]" || ""}`}
+            format={`${datePickerFormat} ${moment(end).isSame(moment.utc(), "day") && "[- Today]" || ""}`}
             onChange={this.onChangeDate(DateTypes.DATE_TO)}
+            renderExtraFooter={this.renderDatePickerAddon(DateTypes.DATE_TO)}
+            showToday={false}
           />
           <TimePicker
             value={end}
             allowClear={false}
-            format={`${timePickerFormat} ${moment(end).isSame(moment.utc(), "minute") && "[Now]" || ""}`}
+            format={`${timePickerFormat} ${moment(end).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
             use12Hours
             addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}
             onChange={this.onChangeDate(DateTypes.DATE_TO)}
@@ -232,7 +258,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     );
 
     return (
-      <div className="Range">
+      <div ref={this.rangeContainer} className="Range">
         <div className="click-zone" onClick={() => this.setState({ opened: !opened })}/>
         {opened && <div className="trigger-container" onClick={() => this.setState({ opened: false })} />}
         <div className="trigger-wrapper">
