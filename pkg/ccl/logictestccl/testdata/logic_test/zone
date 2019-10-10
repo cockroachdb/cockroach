@@ -828,3 +828,107 @@ ALTER INDEX validateTandemFields@secondary CONFIGURE ZONE USING range_min_bytes 
 
 statement error pq: could not validate zone config: range_min_bytes and range_max_bytes must be set together
 ALTER PARTITION indexPartition OF INDEX validateTandemFields@secondary CONFIGURE ZONE USING range_min_bytes = 66666
+
+# Test that copy from parent works as expected.
+statement ok
+CREATE TABLE copy_from_parent (x INT PRIMARY KEY);
+ALTER TABLE copy_from_parent PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
+
+statement ok
+ALTER DATABASE test CONFIGURE ZONE USING num_replicas = 7
+
+# Test that first inheriting from the parent database works correctly.
+statement ok
+ALTER TABLE copy_from_parent CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+query TT
+SELECT table_name, raw_config_sql FROM crdb_internal.zones WHERE table_name = 'copy_from_parent'
+----
+copy_from_parent  ALTER TABLE test.public.copy_from_parent CONFIGURE ZONE USING
+                  num_replicas = 7
+
+# Test that resetting the field manually works correctly.
+statement ok
+ALTER TABLE copy_from_parent CONFIGURE ZONE USING num_replicas = 3
+
+query TT
+SELECT table_name, raw_config_sql FROM crdb_internal.zones WHERE table_name = 'copy_from_parent'
+----
+copy_from_parent  ALTER TABLE test.public.copy_from_parent CONFIGURE ZONE USING
+                  num_replicas = 3
+
+# Test that trying to apply COPY FROM PARENT again picks up the parent's value.
+statement ok
+ALTER TABLE copy_from_parent CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+query TT
+SELECT table_name, raw_config_sql FROM crdb_internal.zones WHERE table_name = 'copy_from_parent'
+----
+copy_from_parent  ALTER TABLE test.public.copy_from_parent CONFIGURE ZONE USING
+                  num_replicas = 7
+
+# Test that the partition can inherit the table's configuration values.
+statement ok
+ALTER PARTITION p1 OF TABLE copy_from_parent CONFIGURE ZONE USING num_replicas = 3
+
+query TTTT
+SELECT table_name, index_name, partition_name, raw_config_sql FROM crdb_internal.zones
+WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_name = 'p1'
+----
+copy_from_parent  primary p1  ALTER PARTITION p1 OF INDEX test.public.copy_from_parent@primary CONFIGURE ZONE USING
+                              num_replicas = 3
+
+statement ok
+ALTER PARTITION p1 OF TABLE copy_from_parent CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+query TTTT
+SELECT table_name, index_name, partition_name, raw_config_sql FROM crdb_internal.zones
+WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_name = 'p1'
+----
+copy_from_parent  primary p1  ALTER PARTITION p1 OF INDEX test.public.copy_from_parent@primary CONFIGURE ZONE USING
+                              num_replicas = 7
+
+statement ok
+ALTER INDEX copy_from_parent@primary CONFIGURE ZONE USING num_replicas = 5
+
+query TTTT
+SELECT table_name, index_name, partition_name, raw_config_sql FROM crdb_internal.zones
+WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_name IS NULL
+----
+copy_from_parent  primary  NULL ALTER INDEX test.public.copy_from_parent@primary CONFIGURE ZONE USING
+                                num_replicas = 5
+
+
+# Test that an index can inherit from its parent.
+statement ok
+ALTER INDEX copy_from_parent@primary CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+query TTTT
+SELECT table_name, index_name, partition_name, raw_config_sql FROM crdb_internal.zones
+WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_name IS NULL
+----
+copy_from_parent  primary  NULL ALTER INDEX test.public.copy_from_parent@primary CONFIGURE ZONE USING
+                                num_replicas = 7
+
+# Test that a partition can inherit from its parent index configuration.
+
+# First change the index's field value.
+statement ok
+ALTER INDEX copy_from_parent@primary CONFIGURE ZONE USING num_replicas = 9
+
+query TTTT
+SELECT table_name, index_name, partition_name, raw_config_sql FROM crdb_internal.zones
+WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_name IS NULL
+----
+copy_from_parent  primary  NULL ALTER INDEX test.public.copy_from_parent@primary CONFIGURE ZONE USING
+                                num_replicas = 9
+
+statement ok
+ALTER PARTITION p1 OF TABLE copy_from_parent CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+query TTTT
+SELECT table_name, index_name, partition_name, raw_config_sql FROM crdb_internal.zones
+WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_name = 'p1'
+----
+copy_from_parent  primary p1  ALTER PARTITION p1 OF INDEX test.public.copy_from_parent@primary CONFIGURE ZONE USING
+                              num_replicas = 9
