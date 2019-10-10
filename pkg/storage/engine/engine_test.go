@@ -13,6 +13,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"math/rand"
 	"path/filepath"
 	"reflect"
@@ -487,6 +488,30 @@ func TestEngineMerge(t *testing.T) {
 			if !reflect.DeepEqual(resultV, expectedV) {
 				t.Errorf("unexpected append-merge result: %v != %v", resultV, expectedV)
 			}
+		}
+	}, t)
+}
+
+func TestFlushWithSSTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	runWithAllEngines(func(engine Engine, t *testing.T) {
+		batch := engine.NewBatch()
+		for i := 0; i < 10000; i++ {
+			key := make([]byte, 4)
+			binary.BigEndian.PutUint32(key, uint32(i))
+			err := batch.Put(MVCCKey{Key: key}, []byte("foobar"))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		batch.Commit(true)
+		batch.Close()
+		engine.Flush()
+
+		ssts := engine.(WithSSTables).GetSSTables()
+		if len(ssts) == 0 {
+			t.Fatal("expected non-zero sstables, got 0")
 		}
 	}, t)
 }
