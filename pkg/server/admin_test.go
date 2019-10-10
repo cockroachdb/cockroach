@@ -795,7 +795,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		{sql.EventLogCreateDatabase, false, 0, 3},
 		{sql.EventLogDropTable, false, 0, 2},
 		{sql.EventLogCreateTable, false, 0, 3},
-		{sql.EventLogSetClusterSetting, false, 0, 5},
+		{sql.EventLogSetClusterSetting, false, 0, 4},
 		{sql.EventLogCreateTable, true, 0, 3},
 		{sql.EventLogCreateTable, true, -1, 3},
 		{sql.EventLogCreateTable, true, 2, 2},

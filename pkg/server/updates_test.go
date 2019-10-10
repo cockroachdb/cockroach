@@ -731,10 +731,10 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	// 3 + 4 = 7: set 3 initially and org is set mid-test for 3 altered settings,
-	// plus version, reporting, trace and secret settings are set in startup
+	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
+	// plus version, reporting and secret settings are set in startup
 	// migrations.
-	if expected, actual := 7, len(r.last.AlteredSettings); expected != actual {
+	if expected, actual := 6, len(r.last.AlteredSettings); expected != actual {
 		t.Fatalf("expected %d changed settings, got %d: %v", expected, actual, r.last.AlteredSettings)
 	}
 	for key, expected := range map[string]string{
@@ -742,7 +742,6 @@ func TestReportUsage(t *testing.T) {
 		"diagnostics.reporting.enabled":            "true",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
-		"trace.debug.enable":                       "false",
 		"version":                                  cluster.BinaryServerVersion.String(),
 		"cluster.secret":                           "<redacted>",
 	} {

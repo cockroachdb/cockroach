@@ -99,11 +99,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: populateVersionSetting,
 	},
 	{
-		// Introduced in v1.1. Permanent migration.
-		name:   "persist trace.debug.enable = 'false'",
-		workFn: disableNetTrace,
-	},
-	{
 		// Introduced in v2.0. Baked into v2.1.
 		name:             "create system.table_statistics table",
 		newDescriptorIDs: staticIDs(keys.TableStatisticsTableID),
@@ -629,7 +624,6 @@ func runStmtAsRootWithRetry(
 // from what was defined in code.
 var SettingsDefaultOverrides = map[string]string{
 	"diagnostics.reporting.enabled": "true",
-	"trace.debug.enable":            "false",
 	"cluster.secret":                "<random>",
 }
 
@@ -640,11 +634,6 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	}
 	return runStmtAsRootWithRetry(
 		ctx, r, "optInToDiagnosticsStatReporting", `SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
-}
-
-func disableNetTrace(ctx context.Context, r runner) error {
-	return runStmtAsRootWithRetry(
-		ctx, r, "disableNetTrace", `SET CLUSTER SETTING trace.debug.enable = false`)
 }
 
 func initializeClusterSecret(ctx context.Context, r runner) error {
