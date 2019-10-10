@@ -57,40 +57,49 @@ func alterZoneConfigAndClusterSettings(
 	return nil
 }
 
-// summarizeORMTestsResults summarizes the result of running an ORM test suite
+// ormTestsResults is a helper struct to be used in all roachtests for ORMs and
+// drivers' compatibility.
+type ormTestsResults struct {
+	currentFailures, allTests                    []string
+	failUnexpectedCount, failExpectedCount       int
+	ignoredCount, skipCount, unexpectedSkipCount int
+	passUnexpectedCount, passExpectedCount       int
+	// Put all the results in a giant map of [testname]result.
+	results map[string]string
+	// Put all issue hints in a map of [testname]issue.
+	allIssueHints map[string]string
+	runTests      map[string]struct{}
+}
+
+func newORMTestsResults() *ormTestsResults {
+	return &ormTestsResults{
+		results:       make(map[string]string),
+		allIssueHints: make(map[string]string),
+		runTests:      make(map[string]struct{}),
+	}
+}
+
+// summarizeAll summarizes the result of running an ORM or a driver test suite
 // against a cockroach node. If an unexpected result is observed (for example,
 // a test unexpectedly failed or passed), a new blacklist is populated.
-//
-// allIssueHints (when non-nil) is a map from name of a failed test to a github
-// issue that explains the failure, if the error message contained a reference
-// to an issue.
-func summarizeORMTestsResults(
-	t *test,
-	ormName, blacklistName string,
-	expectedFailures blacklist,
-	version, latestTag string,
-	currentFailures, allTests []string,
-	runTests map[string]struct{},
-	results map[string]string,
-	failUnexpectedCount, failExpectedCount, ignoredCount, skipCount, unexpectedSkipCount int,
-	passUnexpectedCount, passExpectedCount int,
-	allIssueHints map[string]string,
+func (r *ormTestsResults) summarizeAll(
+	t *test, ormName, blacklistName string, expectedFailures blacklist, version, latestTag string,
 ) {
 	// Collect all the tests that were not run.
 	notRunCount := 0
 	for test, issue := range expectedFailures {
-		if _, ok := runTests[test]; ok {
+		if _, ok := r.runTests[test]; ok {
 			continue
 		}
-		allTests = append(allTests, test)
-		results[test] = fmt.Sprintf("--- FAIL: %s - %s (not run)", test, maybeAddGithubLink(issue))
+		r.allTests = append(r.allTests, test)
+		r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (not run)", test, maybeAddGithubLink(issue))
 		notRunCount++
 	}
 
 	// Log all the test results. We re-order the tests alphabetically here.
-	sort.Strings(allTests)
-	for _, test := range allTests {
-		result, ok := results[test]
+	sort.Strings(r.allTests)
+	for _, test := range r.allTests {
+		result, ok := r.results[test]
 		if !ok {
 			t.Fatalf("can't find %s in test result list", test)
 		}
@@ -99,11 +108,27 @@ func summarizeORMTestsResults(
 
 	t.l.Printf("------------------------\n")
 
+	r.summarizeFailed(
+		t, ormName, blacklistName, expectedFailures, version, latestTag, notRunCount,
+	)
+}
+
+// summarizeFailed prints out the results of running an ORM or a driver test
+// suite against a cockroach node. It is similar to summarizeAll except that it
+// doesn't pay attention to all the tests - only to the failed ones.
+// If a test suite outputs only the failures, then this method should be used.
+func (r *ormTestsResults) summarizeFailed(
+	t *test,
+	ormName, blacklistName string,
+	expectedFailures blacklist,
+	version, latestTag string,
+	notRunCount int,
+) {
 	var bResults strings.Builder
 	fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
 	fmt.Fprintf(&bResults, "Tests run against %s %s\n", ormName, latestTag)
 	fmt.Fprintf(&bResults, "%d Total Tests Run\n",
-		passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
+		r.passExpectedCount+r.passUnexpectedCount+r.failExpectedCount+r.failUnexpectedCount,
 	)
 
 	p := func(msg string, count int) {
@@ -113,30 +138,30 @@ func summarizeORMTestsResults(
 		}
 		fmt.Fprintf(&bResults, "%d %s %s\n", count, testString, msg)
 	}
-	p("passed", passUnexpectedCount+passExpectedCount)
-	p("failed", failUnexpectedCount+failExpectedCount)
-	p("skipped", skipCount)
-	p("ignored", ignoredCount)
-	p("passed unexpectedly", passUnexpectedCount)
-	p("failed unexpectedly", failUnexpectedCount)
-	p("expected failed but skipped", unexpectedSkipCount)
+	p("passed", r.passUnexpectedCount+r.passExpectedCount)
+	p("failed", r.failUnexpectedCount+r.failExpectedCount)
+	p("skipped", r.skipCount)
+	p("ignored", r.ignoredCount)
+	p("passed unexpectedly", r.passUnexpectedCount)
+	p("failed unexpectedly", r.failUnexpectedCount)
+	p("expected failed but skipped", r.unexpectedSkipCount)
 	p("expected failed but not run", notRunCount)
 
 	fmt.Fprintf(&bResults, "For a full summary look at the %s artifacts \n", ormName)
 	t.l.Printf("%s\n", bResults.String())
 	t.l.Printf("------------------------\n")
 
-	if failUnexpectedCount > 0 || passUnexpectedCount > 0 ||
-		notRunCount > 0 || unexpectedSkipCount > 0 {
+	if r.failUnexpectedCount > 0 || r.passUnexpectedCount > 0 ||
+		notRunCount > 0 || r.unexpectedSkipCount > 0 {
 		// Create a new blacklist so we can easily update this test.
-		sort.Strings(currentFailures)
+		sort.Strings(r.currentFailures)
 		var b strings.Builder
 		fmt.Fprintf(&b, "Here is new %s blacklist that can be used to update the test:\n\n", ormName)
 		fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
-		for _, test := range currentFailures {
+		for _, test := range r.currentFailures {
 			issue := expectedFailures[test]
-			if (len(issue) == 0 || issue == "unknown") && allIssueHints != nil {
-				issue = allIssueHints[test]
+			if len(issue) == 0 || issue == "unknown" {
+				issue = r.allIssueHints[test]
 			}
 			if len(issue) == 0 {
 				issue = "unknown"
