@@ -37,6 +37,15 @@ func registerPsycopg(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
+		version, err := fetchCockroachVersion(ctx, c, node[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+			t.Fatal(err)
+		}
+
 		t.Status("cloning psycopg and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(ctx, c, "psycopg", "psycopg2", psycopgReleaseTagRegex)
 		if err != nil {
@@ -85,10 +94,6 @@ func registerPsycopg(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
-		if err != nil {
-			t.Fatal(err)
-		}
 		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
 		if expectedFailureList == nil {
 			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)

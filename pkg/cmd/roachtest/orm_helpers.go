@@ -11,10 +11,51 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 )
+
+// alterZoneConfigAndClusterSettings changes the zone configurations so that GC
+// occurs more quickly and jobs are retained for less time. This is useful for
+// most ORM tests because they create/drop/alter tables frequently, which can
+// cause thousands of table descriptors and schema change jobs to accumulate
+// rapidly, thereby decreasing performance.
+func alterZoneConfigAndClusterSettings(
+	ctx context.Context, version string, c *cluster, nodeIdx int,
+) error {
+	db, err := c.ConnE(ctx, nodeIdx)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if _, err := db.ExecContext(
+		ctx, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+	); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(
+		ctx, `ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+	); err != nil {
+		return err
+	}
+
+	// TODO(rafi): remove this check once we stop testing against 2.0 and 2.1
+	if strings.HasPrefix(version, "v2.0") || strings.HasPrefix(version, "v2.1") {
+		return nil
+	}
+
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER SETTING jobs.retention_time = '180s';`,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // summarizeORMTestsResults summarizes the result of running an ORM test suite
 // against a cockroach node. If an unexpected result is observed (for example,

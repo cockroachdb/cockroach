@@ -34,6 +34,15 @@ func registerPgjdbc(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
+		version, err := fetchCockroachVersion(ctx, c, node[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+			t.Fatal(err)
+		}
+
 		t.Status("cloning pgjdbc and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
 			ctx, c, "pgjdbc", "pgjdbc", pgjdbcReleaseTagRegex,
@@ -106,10 +115,6 @@ func registerPgjdbc(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
-		if err != nil {
-			t.Fatal(err)
-		}
 		blacklistName, expectedFailures, _, _ := pgjdbcBlacklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No pgjdbc blacklist defined for cockroach version %s", version)
