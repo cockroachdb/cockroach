@@ -102,10 +102,33 @@ func (d *mysqloutfileReader) readFile(
 	addField := func() error {
 		defer func() {
 			fieldParts = fieldParts[:0]
+			readingField = false
+			gotEncloser = false
 		}()
 		// Don't even try to add fields when we are in a bad row.
 		if gotOffendingRow {
 			return nil
+		}
+		if nextLiteral {
+			return makeRowErr(inputName, count, pgcode.Syntax, "unmatched literal")
+		}
+		// If previous symbol was field encloser it should be
+		// dropped as it only marks end of field. Otherwise
+		// throw an error since we don;t expect unmatched encloser.
+		if gotEncloser {
+			// If the encloser marked end of field
+			// drop it.
+			if readingField {
+				fieldParts = fieldParts[:len(fieldParts)-1]
+			} else {
+				// Unexpected since we did not see one at start of field.
+				gotEncloser = false
+				return makeRowErr(inputName, count, pgcode.Syntax,
+					"unmatched field enclosure at end of field")
+			}
+		} else if readingField {
+			return makeRowErr(inputName, count, pgcode.Syntax,
+				"unmatched field enclosure at start of field")
 		}
 		field := string(fieldParts)
 		if len(row) >= len(d.conv.VisibleCols) {
@@ -113,12 +136,12 @@ func (d *mysqloutfileReader) readFile(
 				"too many columns, got %d expected %d: %#v", len(row)+1, len(d.conv.VisibleCols), row)
 		}
 		if gotNull {
+			gotNull = false
 			if len(field) != 0 {
 				return makeRowErr(inputName, count, pgcode.Syntax,
 					"unexpected data after null encoding: %v", row)
 			}
 			row = append(row, tree.DNull)
-			gotNull = false
 		} else if !d.opts.HasEscape && (field == "NULL" || d.opts.NullEncoding != nil && field == *d.opts.NullEncoding) {
 			row = append(row, tree.DNull)
 		} else {
@@ -128,21 +151,36 @@ func (d *mysqloutfileReader) readFile(
 				return wrapRowErr(err, inputName, count, pgcode.Syntax,
 					"parse %q as %s", col.Name, col.Type.SQLString())
 			}
-
 			row = append(row, datum)
 		}
 		return nil
 	}
 	addRow := func() error {
 		defer func() {
+			if gotOffendingRow && d.opts.SaveRejected {
+				rejected <- string(savedRow)
+				countRejected++
+			}
+			savedRow = savedRow[:0]
+			gotOffendingRow = false
 			row = row[:0]
+			fieldParts = fieldParts[:0]
 		}()
+		if gotOffendingRow {
+			return nil
+		}
+		if err := addField(); err != nil {
+			gotOffendingRow = true
+			return err
+		}
 		if len(row) != len(d.conv.VisibleCols) {
+			gotOffendingRow = true
 			return makeRowErr(inputName, count, pgcode.Syntax,
 				"unexpected number of columns, expected %d got %d: %#v", len(d.conv.VisibleCols), len(row), row)
 		}
 		copy(d.conv.Datums, row)
 		if err := d.conv.Row(ctx, inputIdx, count); err != nil {
+			gotOffendingRow = true
 			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
 		count++
@@ -173,30 +211,8 @@ func (d *mysqloutfileReader) readFile(
 
 		// First check that if we're done and everything looks good.
 		if finished {
-			if nextLiteral {
-				return false, makeRowErr(inputName, count, pgcode.Syntax, "unmatched literal")
-			}
-			// If previous symbol was field encloser it should be
-			// dropped as it only marks end of field. Otherwise
-			// throw an error since we don;t expect unmatched encloser.
-			if gotEncloser {
-				if readingField {
-					fieldParts = fieldParts[:len(fieldParts)-1]
-				} else {
-					return false, makeRowErr(inputName, count, pgcode.Syntax,
-						"unmatched field enclosure at end of field")
-				}
-			} else if readingField {
-				return false, makeRowErr(inputName, count, pgcode.Syntax,
-					"unmatched field enclosure at start of field")
-			}
-			if len(fieldParts) > 0 {
-				if err := addField(); err != nil {
-					return false, err
-				}
-			}
-			// flush the last row if we have one.
-			if len(row) > 0 {
+			if len(savedRow) > 0 || (d.opts.SaveRejected && gotOffendingRow) {
+				// flush the last row.
 				if err := addRow(); err != nil {
 					return false, err
 				}
@@ -243,6 +259,8 @@ func (d *mysqloutfileReader) readFile(
 					fieldParts = append(fieldParts, rune(byte(26)))
 				case 'N':
 					if gotNull {
+						gotNull = false
+						gotOffendingRow = true
 						return false, makeRowErr(inputName, count, pgcode.Syntax, "unexpected null encoding")
 					}
 					gotNull = true
@@ -263,28 +281,16 @@ func (d *mysqloutfileReader) readFile(
 		// Are we done with the field, or even the whole row?
 		if (!readingField || gotEncloser) &&
 			(c == d.opts.FieldSeparator || c == d.opts.RowSeparator) {
-			if gotEncloser {
-				// If the encloser marked end of field
-				// drop it.
-				if readingField {
-					fieldParts = fieldParts[:len(fieldParts)-1]
-				} else {
-					// Unexpected since we did not see one at start of field.
-					gotEncloser = false
-					return false, makeRowErr(inputName, count, pgcode.Syntax,
-						"unmatched field enclosure at end of field")
-				}
-			}
-			if err := addField(); err != nil {
-				return false, err
-			}
 			if c == d.opts.RowSeparator {
 				if err := addRow(); err != nil {
 					return false, err
 				}
+			} else {
+				if err := addField(); err != nil {
+					gotOffendingRow = true
+					return false, err
+				}
 			}
-			readingField = false
-			gotEncloser = false
 			return false, nil
 		}
 
@@ -318,17 +324,9 @@ func (d *mysqloutfileReader) readFile(
 		if err != nil {
 			if d.opts.SaveRejected {
 				log.Error(ctx, err)
-				gotOffendingRow = true
-				if finished || c == d.opts.RowSeparator {
-					rejected <- string(savedRow)
-					countRejected++
-					if countRejected > 1000 { // TODO(spaskob): turn the magic constant into an option
-						return makeRowErr(inputName, count, pgcode.Syntax,
-							"too many parsing errors encountered %d", countRejected)
-					}
-					savedRow = savedRow[:0]
-					row = row[:0]
-					gotOffendingRow = false
+				if countRejected > 1000 { // TODO(spaskob): turn the magic constant into an option
+					return makeRowErr(inputName, count, pgcode.Syntax,
+						"too many parsing errors encountered %d", countRejected)
 				}
 			} else {
 				return err

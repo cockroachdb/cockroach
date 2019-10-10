@@ -109,9 +109,6 @@ func readInputFiles(
 					var buf []byte
 					atFirstLine := true
 					for s := range rejected {
-						if !atFirstLine {
-							buf = append(buf, string(format.MysqlOut.RowSeparator)...)
-						}
 						buf = append(buf, s...)
 						atFirstLine = false
 					}
