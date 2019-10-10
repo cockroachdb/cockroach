@@ -45,38 +45,58 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 		XMLName   xml.Name   `xml:"testsuite"`
 		TestCases []TestCase `xml:"testcase"`
 	}
+	type TestSuites struct {
+		XMLName    xml.Name    `xml:"testsuites"`
+		TestSuites []TestSuite `xml:"testsuite"`
+	}
 
 	var testSuite TestSuite
 	_ = testSuite.XMLName
-
-	if err := xml.Unmarshal(contents, &testSuite); err != nil {
-		return nil, nil, nil, err
-	}
+	var testSuites TestSuites
+	_ = testSuites.XMLName
 
 	var tests []string
 	var passed []bool
 	var failedTestToIssue = make(map[string]string)
-	for _, testCase := range testSuite.TestCases {
-		if testCase.Skipped != nil {
-			continue
-		}
-		testName := fmt.Sprintf("%s.%s", testCase.ClassName, testCase.Name)
-		testPassed := len(testCase.Failure.Message) == 0 && len(testCase.Error.Message) == 0
-		tests = append(tests, testName)
-		passed = append(passed, testPassed)
-		if !testPassed {
-			message := testCase.Failure.Message
-			if len(message) == 0 {
-				message = testCase.Error.Message
+	processTestSuite := func(testSuite TestSuite) {
+		for _, testCase := range testSuite.TestCases {
+			if testCase.Skipped != nil {
+				continue
 			}
+			testName := fmt.Sprintf("%s.%s", testCase.ClassName, testCase.Name)
+			testPassed := len(testCase.Failure.Message) == 0 && len(testCase.Error.Message) == 0
+			tests = append(tests, testName)
+			passed = append(passed, testPassed)
+			if !testPassed {
+				message := testCase.Failure.Message
+				if len(message) == 0 {
+					message = testCase.Error.Message
+				}
 
-			issue := "unknown"
-			match := issueRegexp.FindStringSubmatch(message)
-			if match != nil {
-				issue = match[1]
+				issue := "unknown"
+				match := issueRegexp.FindStringSubmatch(message)
+				if match != nil {
+					issue = match[1]
+				}
+				failedTestToIssue[testName] = issue
 			}
-			failedTestToIssue[testName] = issue
 		}
+	}
+
+	// First, we try to parse the XML with an assumption that there are multiple
+	// test suites in contents.
+	if err := xml.Unmarshal(contents, &testSuites); err == nil {
+		// The parsing was successful, so we process each test suite.
+		for _, testSuite := range testSuites.TestSuites {
+			processTestSuite(testSuite)
+		}
+	} else {
+		// The parsing wasn't successful, so now we try to parse the XML with an
+		// assumption that there is a single test suite.
+		if err := xml.Unmarshal(contents, &testSuite); err != nil {
+			return nil, nil, nil, err
+		}
+		processTestSuite(testSuite)
 	}
 
 	return tests, passed, failedTestToIssue, nil
