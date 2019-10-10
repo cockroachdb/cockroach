@@ -172,8 +172,18 @@ func (g *Gen) NewV3(ns UUID, name string) UUID {
 // NewV4 returns a randomly generated UUID.
 func (g *Gen) NewV4() (UUID, error) {
 	u := UUID{}
-	if _, err := io.ReadFull(g.rand, u[:]); err != nil {
-		return Nil, err
+	if r, ok := g.rand.(defaultRandReader); ok {
+		if n, err := r.Read(u[:]); n != len(u) {
+			panic("math/rand.Read always returns len(p)")
+		} else if err != nil {
+			panic("math/rand.Read always returns a nil error")
+		}
+	} else {
+		willEscape := UUID{}
+		if _, err := io.ReadFull(g.rand, willEscape[:]); err != nil {
+			return Nil, err
+		}
+		u = willEscape
 	}
 	u.SetVersion(V4)
 	u.SetVariant(VariantRFC4122)
