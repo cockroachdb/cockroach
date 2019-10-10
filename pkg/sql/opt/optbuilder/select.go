@@ -119,7 +119,7 @@ func (b *Builder) buildDataSource(
 		return b.buildZip(source.Items, inScope)
 
 	case *tree.Subquery:
-		outScope = b.buildStmt(source.Select, nil /* desiredTypes */, inScope)
+		outScope = b.buildStmt(source.Select, nil /* desiredTypes */, inScope, buildCtx{})
 
 		// Treat the subquery result as an anonymous data source (i.e. column names
 		// are not qualified). Remove hidden columns, as they are not accessible
@@ -134,7 +134,7 @@ func (b *Builder) buildDataSource(
 		// for a top-level CTE, so it cannot refer to anything in the input scope.
 		// See #41078.
 		emptyScope := &scope{builder: b}
-		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
+		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope, buildCtx{})
 		if len(innerScope.cols) == 0 {
 			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"statement source \"%v\" does not return any columns", source.Statement))
@@ -219,7 +219,7 @@ func (b *Builder) buildView(
 		defer func() { b.trackViewDeps = true }()
 	}
 
-	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b})
+	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b}, rootBuildCtx)
 
 	// Update data source name to be the name of the view. And if view columns
 	// are specified, then update names of output columns.
@@ -573,7 +573,7 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 }
 
 func (b *Builder) buildCTE(
-	ctes []*tree.CTE, inScope *scope,
+	ctes []*tree.CTE, inScope *scope, mutationsAllowed bool,
 ) (outScope *scope, addedCTEs []cteSource) {
 	outScope = inScope.push()
 
@@ -581,7 +581,7 @@ func (b *Builder) buildCTE(
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
-		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
+		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope, buildCtx{})
 		cteScope.removeHiddenCols()
 		cols := cteScope.cols
 		name := ctes[i].Name.Alias
@@ -639,6 +639,15 @@ func (b *Builder) buildCTE(
 		})
 		cte := &b.ctes[len(b.ctes)-1]
 		outScope.ctes[ctes[i].Name.Alias.String()] = cte
+
+		if cteScope.expr.Relational().CanMutate && !mutationsAllowed {
+			panic(
+				pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"WITH clause containing a data-modifying statement must be at the top level",
+				),
+			)
+		}
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
@@ -670,12 +679,12 @@ func (b *Builder) wrapWithCTEs(expr memo.RelExpr, ctes []cteSource) memo.RelExpr
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectStmt(
-	stmt tree.SelectStatement, desiredTypes []*types.T, inScope *scope,
+	stmt tree.SelectStatement, desiredTypes []*types.T, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, desiredTypes, inScope, ctx)
 
 	case *tree.SelectClause:
 		return b.buildSelectClause(stmt, nil /* orderBy */, desiredTypes, inScope)
@@ -697,7 +706,7 @@ func (b *Builder) buildSelectStmt(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelect(
-	stmt *tree.Select, desiredTypes []*types.T, inScope *scope,
+	stmt *tree.Select, desiredTypes []*types.T, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
@@ -750,7 +759,7 @@ func (b *Builder) buildSelect(
 
 	var ctes []cteSource
 	if with != nil {
-		inScope, ctes = b.buildCTE(with.CTEList, inScope)
+		inScope, ctes = b.buildCTE(with.CTEList, inScope, ctx.atRoot)
 	}
 
 	// NB: The case statements are sorted lexicographically.

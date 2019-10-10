@@ -182,7 +182,7 @@ func (b *Builder) Build() (err error) {
 
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
-	outScope := b.buildStmt(b.stmt, nil /* desiredTypes */, b.allocScope())
+	outScope := b.buildStmt(b.stmt, nil /* desiredTypes */, b.allocScope(), rootBuildCtx)
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
 	return nil
@@ -194,6 +194,17 @@ func (b *Builder) Build() (err error) {
 func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
 	return unimplemented.NewWithIssueDetailf(issue, detail, format, args...)
 }
+
+// buildCtx describes what kinds of expressions are allowed at a given point in
+// time.
+// TODO(justin): pull in other things, like b.insideViewDef, and possibly more.
+type buildCtx struct {
+	atRoot bool
+}
+
+// rootBuildCtx is the build context for expressions valid at a root. Notably,
+// mutating CTEs are allowed at the root.
+var rootBuildCtx = buildCtx{atRoot: true}
 
 // buildStmt builds a set of memo groups that represent the given SQL
 // statement.
@@ -212,7 +223,7 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 //           "parent" scope that is still visible. The top-level memo expression
 //           for the built statement/expression is returned in outScope.expr.
 func (b *Builder) buildStmt(
-	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
+	stmt tree.Statement, desiredTypes []*types.T, inScope *scope, ctx buildCtx,
 ) (outScope *scope) {
 	if b.insideViewDef {
 		// A black list of statements that can't be used from inside a view.
@@ -229,19 +240,19 @@ func (b *Builder) buildStmt(
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.Delete:
-		return b.buildDelete(stmt, inScope)
+		return b.buildDelete(stmt, inScope, ctx)
 
 	case *tree.Insert:
-		return b.buildInsert(stmt, inScope)
+		return b.buildInsert(stmt, inScope, ctx)
 
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, desiredTypes, inScope, ctx)
 
 	case *tree.Select:
-		return b.buildSelect(stmt, desiredTypes, inScope)
+		return b.buildSelect(stmt, desiredTypes, inScope, ctx)
 
 	case *tree.Update:
-		return b.buildUpdate(stmt, inScope)
+		return b.buildUpdate(stmt, inScope, ctx)
 
 	case *tree.CreateTable:
 		return b.buildCreateTable(stmt, inScope)
@@ -288,7 +299,7 @@ func (b *Builder) buildStmt(
 			// register all those dependencies with the metadata (for cache
 			// invalidation). We don't care about caching plans for these statements.
 			b.DisableMemoReuse = true
-			return b.buildStmt(newStmt, desiredTypes, inScope)
+			return b.buildStmt(newStmt, desiredTypes, inScope, ctx)
 		}
 
 		// See if we have an opaque handler registered for this statement type.

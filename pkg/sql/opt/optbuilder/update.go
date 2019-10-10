@@ -63,7 +63,7 @@ import (
 // limit. The ORDER BY makes no additional guarantees about the order in which
 // mutations are applied, or the order of any returned rows (i.e. it won't
 // become a physical property required of the Update operator).
-func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
+func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope, ctx buildCtx) (outScope *scope) {
 	if upd.OrderBy != nil && upd.Limit == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"UPDATE statement requires LIMIT when ORDER BY is used"))
@@ -76,7 +76,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 
 	var ctes []cteSource
 	if upd.With != nil {
-		inScope, ctes = b.buildCTE(upd.With.CTEList, inScope)
+		inScope, ctes = b.buildCTE(upd.With.CTEList, inScope, ctx.atRoot)
 	}
 
 	// UPDATE xx AS yy - we want to know about xx (tn) because
@@ -153,7 +153,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 				for i := range desiredTypes {
 					desiredTypes[i] = mb.md.ColumnMeta(mb.targetColList[targetIdx+i]).Type
 				}
-				outScope := mb.b.buildSelectStmt(t.Select, desiredTypes, mb.outScope)
+				outScope := mb.b.buildSelectStmt(t.Select, desiredTypes, mb.outScope, buildCtx{})
 				mb.subqueries = append(mb.subqueries, outScope)
 				n = len(outScope.cols)
 

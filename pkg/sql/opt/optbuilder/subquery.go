@@ -215,7 +215,7 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 	defer func() { s.scope.builder.subquery = outer }()
 	s.scope.builder.subquery = s
 
-	outScope := s.scope.builder.buildStmt(s.Subquery.Select, desiredTypes, s.scope)
+	outScope := s.scope.builder.buildStmt(s.Subquery.Select, desiredTypes, s.scope, buildCtx{})
 	ord := outScope.ordering
 
 	// Treat the subquery result as an anonymous data source (i.e. column names

@@ -28,7 +28,7 @@ import (
 // limit. The ORDER BY makes no additional guarantees about the order in which
 // mutations are applied, or the order of any returned rows (i.e. it won't
 // become a physical property required of the Delete operator).
-func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope) {
+func (b *Builder) buildDelete(del *tree.Delete, inScope *scope, ctx buildCtx) (outScope *scope) {
 	// UX friendliness safeguard.
 	if del.Where == nil && b.evalCtx.SessionData.SafeUpdates {
 		panic(pgerror.DangerousStatementf("DELETE without WHERE clause"))
@@ -41,7 +41,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 
 	var ctes []cteSource
 	if del.With != nil {
-		inScope, ctes = b.buildCTE(del.With.CTEList, inScope)
+		inScope, ctes = b.buildCTE(del.With.CTEList, inScope, ctx.atRoot)
 	}
 
 	// DELETE FROM xx AS yy - we want to know about xx (tn) because

@@ -47,7 +47,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
-	inputScope := b.buildSelect(split.Rows, colTypes, emptyScope)
+	inputScope := b.buildSelect(split.Rows, colTypes, emptyScope, buildCtx{})
 	checkInputColumns("SPLIT AT", inputScope, colNames, colTypes, 1)
 
 	// Build the expiration scalar.
@@ -118,7 +118,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	inputScope := b.buildStmt(unsplit.Rows, colTypes, &scope{builder: b})
+	inputScope := b.buildStmt(unsplit.Rows, colTypes, &scope{builder: b}, buildCtx{})
 	checkInputColumns("UNSPLIT AT", inputScope, colNames, colTypes, 1)
 	private.Props = inputScope.makePhysicalProps()
 
@@ -169,7 +169,7 @@ func (b *Builder) buildAlterTableRelocate(
 
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	inputScope := b.buildStmt(relocate.Rows, colTypes, &scope{builder: b})
+	inputScope := b.buildStmt(relocate.Rows, colTypes, &scope{builder: b}, buildCtx{})
 	checkInputColumns(cmdName, inputScope, colNames, colTypes, 2)
 
 	outScope.expr = b.factory.ConstructAlterTableRelocate(

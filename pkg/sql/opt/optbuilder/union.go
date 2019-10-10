@@ -28,7 +28,7 @@ import (
 func (b *Builder) buildUnion(
 	clause *tree.UnionClause, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
-	leftScope := b.buildSelect(clause.Left, desiredTypes, inScope)
+	leftScope := b.buildSelect(clause.Left, desiredTypes, inScope, buildCtx{})
 	// Try to propagate types left-to-right, if we didn't already have desired
 	// types.
 	if len(desiredTypes) == 0 {
@@ -37,7 +37,7 @@ func (b *Builder) buildUnion(
 			desiredTypes[i] = leftScope.cols[i].typ
 		}
 	}
-	rightScope := b.buildSelect(clause.Right, desiredTypes, inScope)
+	rightScope := b.buildSelect(clause.Right, desiredTypes, inScope, buildCtx{})
 
 	// Remove any hidden columns, as they are not included in the Union.
 	leftScope.removeHiddenCols()

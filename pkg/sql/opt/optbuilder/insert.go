@@ -153,10 +153,10 @@ func init() {
 // operator). Not propagating input orderings avoids an extra sort when the
 // ON CONFLICT clause is present, since it joins a new set of rows to the input
 // and thereby scrambles the input ordering.
-func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
+func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope, ctx buildCtx) (outScope *scope) {
 	var ctes []cteSource
 	if ins.With != nil {
-		inScope, ctes = b.buildCTE(ins.With.CTEList, inScope)
+		inScope, ctes = b.buildCTE(ins.With.CTEList, inScope, ctx.atRoot)
 	}
 
 	// INSERT INTO xx AS yy - we want to know about xx (tn) because
@@ -550,7 +550,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		}
 	}
 
-	mb.outScope = mb.b.buildSelect(inputRows, desiredTypes, inScope)
+	mb.outScope = mb.b.buildSelect(inputRows, desiredTypes, inScope, buildCtx{})
 
 	if len(mb.targetColList) != 0 {
 		// Target columns already exist, so ensure that the number of input

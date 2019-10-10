@@ -27,7 +27,7 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
 	colTypes := []*types.T{types.Int}
-	inputScope := b.buildStmt(n.Jobs, colTypes, emptyScope)
+	inputScope := b.buildStmt(n.Jobs, colTypes, emptyScope, buildCtx{})
 
 	checkInputColumns(
 		fmt.Sprintf("%s JOBS", tree.JobCommandToStatement[n.Command]),
@@ -52,7 +52,7 @@ func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (out
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
 	colTypes := []*types.T{types.String}
-	inputScope := b.buildStmt(n.Queries, colTypes, emptyScope)
+	inputScope := b.buildStmt(n.Queries, colTypes, emptyScope, buildCtx{})
 
 	checkInputColumns(
 		"CANCEL QUERIES",
@@ -77,7 +77,7 @@ func (b *Builder) buildCancelSessions(n *tree.CancelSessions, inScope *scope) (o
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
 	colTypes := []*types.T{types.String}
-	inputScope := b.buildStmt(n.Sessions, colTypes, emptyScope)
+	inputScope := b.buildStmt(n.Sessions, colTypes, emptyScope, buildCtx{})
 
 	checkInputColumns(
 		"CANCEL SESSIONS",
