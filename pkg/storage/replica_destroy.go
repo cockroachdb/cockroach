@@ -98,7 +98,10 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	//
 	// TODO(benesch): we would ideally atomically suggest the compaction with
 	// the deletion of the data itself.
-	if ms != (enginepb.MVCCStats{}) {
+	//
+	// TODO(itsbilal): Remove the compactor != nil check once Pebble supports
+	// GetSSTables.
+	if ms != (enginepb.MVCCStats{}) && r.store.compactor != nil {
 		desc := r.Desc()
 		r.store.compactor.Suggest(ctx, storagepb.SuggestedCompaction{
 			StartKey: roachpb.Key(desc.StartKey),
