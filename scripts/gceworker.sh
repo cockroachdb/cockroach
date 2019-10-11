@@ -63,12 +63,24 @@ case "${cmd}" in
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     stop)
+    read -r -p "This will stop the VM. Are you sure? [yes] " response
+    response=${response,,} # to lowercase
+    if [[ $response != "yes" ]]; then
+      echo Aborting
+      exit 1
+    fi
     gcloud compute instances stop "${NAME}"
     ;;
     delete|destroy)
+    read -r -p "This will delete the VM! Are you sure? [yes] " response
+    response=${response,,} # to lowercase
+    if [[ $response != "yes" ]]; then
+      echo Aborting
+      exit 1
+    fi
     status=0
-    gcloud compute firewall-rules delete "${NAME}-mosh" || status=$((status+1))
-    gcloud compute instances delete "${NAME}" || status=$((status+1))
+    gcloud compute firewall-rules delete "${NAME}-mosh" --quiet || status=$((status+1))
+    gcloud compute instances delete "${NAME}" --quiet || status=$((status+1))
     exit ${status}
     ;;
     ssh)
