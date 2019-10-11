@@ -53,7 +53,7 @@ import (
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	//t.Skipf("failing on teamcity with testrace")
+	t.Skipf("failing on teamcity with testrace")
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
@@ -241,25 +241,25 @@ d
 		// If err field is non-empty, the query filed specifies what expect
 		// to get from the rows that are parsed correctly (see option experimental_save_rejected).
 		{
-			name:     "empty file",
-			create:   `a string`,
-			typ:      "DELIMITED",
-			data:     "",
-			query:    map[string][][]string{`SELECT * from t`: {}},
+			name:   "empty file",
+			create: `a string`,
+			typ:    "DELIMITED",
+			data:   "",
+			query:  map[string][][]string{`SELECT * from t`: {}},
 		},
 		{
-			name:     "empty field",
-			create:   `a string, b string`,
-			typ:      "DELIMITED",
-			data:     "\t",
-			query:    map[string][][]string{`SELECT * from t`: {{"", ""}}},
+			name:   "empty field",
+			create: `a string, b string`,
+			typ:    "DELIMITED",
+			data:   "\t",
+			query:  map[string][][]string{`SELECT * from t`: {{"", ""}}},
 		},
 		{
-			name:     "empty line",
-			create:   `a string`,
-			typ:      "DELIMITED",
-			data:     "\n",
-			query:    map[string][][]string{`SELECT * from t`: {{""}}},
+			name:   "empty line",
+			create: `a string`,
+			typ:    "DELIMITED",
+			data:   "\n",
+			query:  map[string][][]string{`SELECT * from t`: {{""}}},
 		},
 		{
 			name:     "too many imported columns",

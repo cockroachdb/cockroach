@@ -116,11 +116,13 @@ func readInputFiles(
 						// no rejected rows
 						return nil
 					}
-					suffix := ".rejected"
-					if es.Conf().Provider == roachpb.ExternalStorageProvider_Http {
-						suffix = "/rejected"
+					rejectedFile := dataFile
+					parsedURI, err := url.Parse(rejectedFile)
+					if err != nil {
+						return err
 					}
-					conf, err := cloud.ExternalStorageConfFromURI(dataFile + suffix)
+					parsedURI.Path = parsedURI.Path + ".rejected"
+					conf, err := cloud.ExternalStorageConfFromURI(rejectedFile)
 					if err != nil {
 						return err
 					}

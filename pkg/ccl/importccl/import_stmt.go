@@ -52,12 +52,12 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
-	importOptionSSTSize      = "sstsize"
-	importOptionDecompress   = "decompress"
-	importOptionOversample   = "oversample"
-	importOptionSkipFKs      = "skip_foreign_keys"
+	importOptionSSTSize          = "sstsize"
+	importOptionDecompress       = "decompress"
+	importOptionOversample       = "oversample"
+	importOptionSkipFKs          = "skip_foreign_keys"
 	importOptionDisableGlobMatch = "disable_glob_matching"
-	importOptionSaveRejected = "experimental_save_rejected"
+	importOptionSaveRejected     = "experimental_save_rejected"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
