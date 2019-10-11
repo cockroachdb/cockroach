@@ -25,15 +25,6 @@ import (
 	"time"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/syncmap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -47,6 +38,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/syncmap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 )
 
 func init() {
@@ -261,7 +260,7 @@ func NewServerWithInterceptor(
 
 type heartbeatResult struct {
 	everSucceeded bool  // true if the heartbeat has ever succeeded
-	err           error // heartbeat error. should not be nil if everSucceeded is false
+	err           error // heartbeat error, initialized to ErrNotHeartbeated
 }
 
 // Connection is a wrapper around grpc.ClientConn. It prevents the underlying
@@ -273,8 +272,7 @@ type Connection struct {
 	initialHeartbeatDone chan struct{} // closed after first heartbeat
 	stopper              *stop.Stopper
 
-	initOnce      sync.Once
-	validatedOnce sync.Once
+	initOnce sync.Once
 }
 
 func newConnection(stopper *stop.Stopper) *Connection {
@@ -305,15 +303,10 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// If connection is invalid, return latest heartbeat error.
 	h := c.heartbeatResult.Load().(heartbeatResult)
 	if !h.everSucceeded {
+		// If we've never succeeded, h.err will be ErrNotHeartbeated.
 		return nil, netutil.NewInitialHeartBeatFailedError(h.err)
 	}
 	return c.grpcConn, nil
-}
-
-func (c *Connection) setInitialHeartbeatDone() {
-	c.validatedOnce.Do(func() {
-		close(c.initialHeartbeatDone)
-	})
 }
 
 // Health returns an error indicating the success or failure of the
@@ -716,6 +709,14 @@ func (ctx *Context) ConnHealth(target string) error {
 func (ctx *Context) runHeartbeat(
 	conn *Connection, target string, redialChan <-chan struct{},
 ) error {
+	initialHeartbeatDone := false
+	setInitialHeartbeatDone := func() {
+		if !initialHeartbeatDone {
+			close(conn.initialHeartbeatDone)
+			initialHeartbeatDone = true
+		}
+	}
+	defer setInitialHeartbeatDone()
 	maxOffset := ctx.LocalClock.MaxOffset()
 	clusterID := ctx.ClusterID.Get()
 
@@ -795,7 +796,7 @@ func (ctx *Context) runHeartbeat(
 			everSucceeded: everSucceeded,
 			err:           err,
 		})
-		conn.setInitialHeartbeatDone()
+		setInitialHeartbeatDone()
 
 		heartbeatTimer.Reset(ctx.heartbeatInterval)
 	}
