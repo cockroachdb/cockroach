@@ -161,5 +161,6 @@ define VALID_VARS
   XCXX
   XGOARCH
   XGOOS
+  YARNCMD
   prefix
 endef
