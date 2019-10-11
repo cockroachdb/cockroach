@@ -83,6 +83,10 @@ type HashRowContainer interface {
 	// rows.
 	NewUnmarkedIterator(context.Context) RowIterator
 
+	// UnsafeReset resets the container, allowing for reuse. It renders all
+	// previously allocated rows unsafe.
+	UnsafeReset(context.Context) error
+
 	// Close frees up resources held by the HashRowContainer.
 	Close(context.Context)
 }
@@ -234,6 +238,13 @@ func (h *HashMemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRo
 		return err
 	}
 	return h.addRowToBucket(ctx, row, rowIdx)
+}
+
+// UnsafeReset is part of HashRowContainer interface.
+func (h *HashMemRowContainer) UnsafeReset(ctx context.Context) error {
+	h.bucketsAcc.Empty(ctx)
+	h.buckets = make(map[string][]int)
+	return h.MemRowContainer.UnsafeReset(ctx)
 }
 
 // Close implements the HashRowContainer interface.

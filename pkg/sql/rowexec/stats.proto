@@ -67,3 +67,10 @@ message WindowerStats {
   int64 max_allocated_mem = 2;
   int64 max_allocated_disk = 3;
 }
+
+// MergeHashJoinerStats are the stats collected during a mergeHashJoiner run.
+message MergeHashJoinerStats {
+  InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 3;
+}
