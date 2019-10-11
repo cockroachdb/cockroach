@@ -33,14 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
-	humanize "github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
 
@@ -892,83 +889,7 @@ func (r *RocksDB) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)
 
 // Capacity queries the underlying file system for disk capacity information.
 func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
-	fileSystemUsage := gosigar.FileSystemUsage{}
-	dir := r.cfg.Dir
-	if dir == "" {
-		// This is an in-memory instance. Pretend we're empty since we
-		// don't know better and only use this for testing. Using any
-		// part of the actual file system here can throw off allocator
-		// rebalancing in a hard-to-trace manner. See #7050.
-		return roachpb.StoreCapacity{
-			Capacity:  r.cfg.MaxSizeBytes,
-			Available: r.cfg.MaxSizeBytes,
-		}, nil
-	}
-	if err := fileSystemUsage.Get(dir); err != nil {
-		return roachpb.StoreCapacity{}, err
-	}
-
-	if fileSystemUsage.Total > math.MaxInt64 {
-		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
-	}
-	if fileSystemUsage.Avail > math.MaxInt64 {
-		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Avail), humanizeutil.IBytes(math.MaxInt64))
-	}
-	fsuTotal := int64(fileSystemUsage.Total)
-	fsuAvail := int64(fileSystemUsage.Avail)
-
-	// Find the total size of all the files in the r.dir and all its
-	// subdirectories.
-	var totalUsedBytes int64
-	if errOuter := filepath.Walk(r.cfg.Dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// This can happen if rocksdb removes files out from under us - just keep
-			// going to get the best estimate we can.
-			if os.IsNotExist(err) {
-				return nil
-			}
-			// Special-case: if the store-dir is configured using the root of some fs,
-			// e.g. "/mnt/db", we might have special fs-created files like lost+found
-			// that we can't read, so just ignore them rather than crashing.
-			if os.IsPermission(err) && filepath.Base(path) == "lost+found" {
-				return nil
-			}
-			return err
-		}
-		if info.Mode().IsRegular() {
-			totalUsedBytes += info.Size()
-		}
-		return nil
-	}); errOuter != nil {
-		return roachpb.StoreCapacity{}, errOuter
-	}
-
-	// If no size limitation have been placed on the store size or if the
-	// limitation is greater than what's available, just return the actual
-	// totals.
-	if r.cfg.MaxSizeBytes == 0 || r.cfg.MaxSizeBytes >= fsuTotal || r.cfg.Dir == "" {
-		return roachpb.StoreCapacity{
-			Capacity:  fsuTotal,
-			Available: fsuAvail,
-			Used:      totalUsedBytes,
-		}, nil
-	}
-
-	available := r.cfg.MaxSizeBytes - totalUsedBytes
-	if available > fsuAvail {
-		available = fsuAvail
-	}
-	if available < 0 {
-		available = 0
-	}
-
-	return roachpb.StoreCapacity{
-		Capacity:  r.cfg.MaxSizeBytes,
-		Available: available,
-		Used:      totalUsedBytes,
-	}, nil
+	return computeCapacity(r.cfg.Dir, r.cfg.MaxSizeBytes)
 }
 
 // Compact forces compaction over the entire database.
@@ -3378,6 +3299,8 @@ func notFoundErrOrDefault(err error) error {
 // DBFile is an interface for interacting with DBWritableFile in RocksDB.
 type DBFile interface {
 	// Append appends data to this DBFile.
+	//
+	// TODO(itsbilal): Rename this to Write([]byte) to adhere to io.Writer.
 	Append(data []byte) error
 	// Close closes this DBFile.
 	Close() error
