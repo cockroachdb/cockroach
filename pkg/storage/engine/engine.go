@@ -241,6 +241,10 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
+	//
+	// TODO(itsbilal): All calls to ClearIterRange pass in metadata keys for
+	// start and end that have a zero timestamp. Change the type of those args
+	// to roachpb.Key to make this expectation explicit.
 	ClearIterRange(iter Iterator, start, end MVCCKey) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged

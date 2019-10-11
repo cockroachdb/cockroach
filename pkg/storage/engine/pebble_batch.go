@@ -197,18 +197,21 @@ func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 		panic("distinct batch open")
 	}
 
-	pebbleIter, ok := iter.(*pebbleIterator)
-	if !ok {
+	var pebbleIter *pebble.Iterator
+	switch i := iter.(type) {
+	case *pebbleIterator:
+		pebbleIter = i.iter
+	case *pebbleBatchIterator:
+		pebbleIter = i.iter
+	default:
 		return errors.Errorf("%T is not a pebble iterator", iter)
 	}
 	// Note that this method has the side effect of modifying iter's bounds.
-	// Since all calls to `ClearIterRange` are on new throwaway iterators, this
-	// should be fine.
-	pebbleIter.lowerBoundBuf = EncodeKeyToBuf(pebbleIter.lowerBoundBuf[:0], start)
-	pebbleIter.options.LowerBound = pebbleIter.lowerBoundBuf
-	pebbleIter.upperBoundBuf = EncodeKeyToBuf(pebbleIter.upperBoundBuf[:0], end)
-	pebbleIter.options.UpperBound = pebbleIter.upperBoundBuf
-	pebbleIter.iter.SetBounds(pebbleIter.lowerBoundBuf, pebbleIter.upperBoundBuf)
+	// Since all calls to `ClearIterRange` are on new throwaway iterators with no
+	// lower bounds, calling SetUpperBound should be sufficient and safe.
+	// Furthermore, the start and end keys are always metadata keys (i.e.
+	// have zero timestamps), so we can ignore the bounds' MVCC timestamps.
+	iter.SetUpperBound(end.Key)
 
 	for ; ; iter.Next() {
 		valid, err := iter.Valid()
@@ -218,8 +221,7 @@ func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 			break
 		}
 
-		p.buf = EncodeKeyToBuf(p.buf[:0], iter.Key())
-		err = p.batch.Delete(p.buf, nil)
+		err = p.batch.Delete(pebbleIter.Key(), nil)
 		if err != nil {
 			return err
 		}
