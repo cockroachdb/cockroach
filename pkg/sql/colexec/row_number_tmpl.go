@@ -27,6 +27,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
+// TODO(yuzefovich): add benchmarks.
+
+// NewRowNumberOperator creates a new Operator that computes window function
+// ROW_NUMBER. outputColIdx specifies in which coldata.Vec the operator should
+// put its output (if there is no such column, a new column is appended).
+func NewRowNumberOperator(input Operator, outputColIdx int, partitionColIdx int) Operator {
+	base := rowNumberBase{
+		OneInputNode:    NewOneInputNode(input),
+		outputColIdx:    outputColIdx,
+		partitionColIdx: partitionColIdx,
+	}
+	if partitionColIdx == -1 {
+		return &rowNumberNoPartitionOp{base}
+	}
+	return &rowNumberWithPartitionOp{base}
+}
+
+// rowNumberBase extracts common fields and common initialization of two
+// variations of row number operators. Note that it is not an operator itself
+// and should not be used directly.
+type rowNumberBase struct {
+	OneInputNode
+	outputColIdx    int
+	partitionColIdx int
+
+	rowNumber int64
+}
+
+func (r *rowNumberBase) Init() {
+	r.Input().Init()
+}
+
 // {{ range . }}
 
 type _ROW_NUMBER_STRINGOp struct {
