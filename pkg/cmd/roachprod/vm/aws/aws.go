@@ -125,7 +125,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.SSDMachineType, ProviderName+"-machine-type-ssd", defaultSSDMachineType,
 		"Machine type for --local-ssd (see https://aws.amazon.com/ec2/instance-types/)")
 
-	flags.StringVar(&o.CPUOptions, ProviderName+"-cpu-options", defaultSSDMachineType,
+	flags.StringVar(&o.CPUOptions, ProviderName+"-cpu-options", "",
 		"Options to specify number of cores and threads per core (see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-optimize-cpu.html#instance-specify-cpu-options)")
 
 	// AWS images generally use "ubuntu" or "ec2-user"
@@ -644,13 +644,15 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--count", "1",
 		"--image-id", az.region.AMI,
 		"--instance-type", machineType,
-		"--cpu-options", cpuOptions,
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,
 		"--subnet-id", az.subnetID,
 		"--tag-specifications", tagSpecs,
 		"--user-data", "file://" + filename,
+	}
+	if cpuOptions != "" {
+		args = append(args, "--cpu-options", cpuOptions)
 	}
 
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
