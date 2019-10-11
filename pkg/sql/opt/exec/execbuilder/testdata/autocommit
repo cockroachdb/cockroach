@@ -29,7 +29,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 
@@ -46,7 +48,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
@@ -66,7 +70,9 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 2 CPut to (n1,s1):1
 
@@ -86,7 +92,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
@@ -103,11 +111,13 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 2 CPut to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 2 CPut to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -123,11 +133,13 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 2 CPut to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 2 CPut to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -156,7 +168,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 
@@ -173,7 +187,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
@@ -193,7 +209,9 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 2 Put to (n1,s1):1
 
@@ -213,7 +231,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
@@ -230,11 +250,13 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 2 Put to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 2 Put to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Upsert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -250,11 +272,13 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 2 Put to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 2 Put to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -283,7 +307,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 Scan to (n1,s1):1
 dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
@@ -304,7 +330,9 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 Scan to (n1,s1):1
 dist sender send  r24: sending batch 2 Put to (n1,s1):1
@@ -325,7 +353,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 Scan to (n1,s1):1
 dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
@@ -343,12 +373,14 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 2 Put to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Put to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Update with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -364,12 +396,14 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 2 Put to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Put to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -398,7 +432,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
@@ -415,7 +451,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
@@ -435,7 +473,9 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 DelRng to (n1,s1):1
 
@@ -455,7 +495,9 @@ true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message     LIKE '%sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r24: sending batch 1 Scan to (n1,s1):1
 dist sender send  r24: sending batch 2 Del, 1 EndTxn to (n1,s1):1
@@ -473,12 +515,14 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 2 Del to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Del to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -494,12 +538,14 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 2 Del to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 2 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 2 Del to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 INSERT INTO ab VALUES (12, 0);
@@ -541,12 +587,14 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 2 CPut, 2 InitPut to (n1,s1):1
-dist sender send                                         r24: sending batch 2 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 4 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 2 CPut, 2 InitPut to (n1,s1):1
+dist sender send  r24: sending batch 2 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 SET TRACING=ON;
@@ -560,13 +608,15 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 1 Put, 1 CPut, 1 Del to (n1,s1):1
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 3 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 Put, 1 CPut, 1 Del to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 SET TRACING=ON;
@@ -580,13 +630,15 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 1 Del to (n1,s1):1
-dist sender send                                         r24: sending batch 1 Scan to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 1 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 Del to (n1,s1):1
+dist sender send  r24: sending batch 1 Scan to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # -----------------------
 # Multiple mutation tests
@@ -606,12 +658,14 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 2 CPut to (n1,s1):1
-dist sender send                                         r24: sending batch 2 CPut to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 4 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 2 CPut to (n1,s1):1
+dist sender send  r24: sending batch 2 CPut to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 SET TRACING=ON;
@@ -626,9 +680,11 @@ false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE '%sending batch%'
+WHERE message       LIKE '%sending batch%'
+  AND message   NOT LIKE '%PushTxn%'
+  AND message   NOT LIKE '%QueryTxn%'
+  AND operation NOT LIKE '%async%'
 ----
-dist sender send                                         r24: sending batch 2 CPut to (n1,s1):1
-dist sender send                                         r24: sending batch 2 CPut to (n1,s1):1
-dist sender send                                         r24: sending batch 1 EndTxn to (n1,s1):1
-[async] kv.DistSender: sending pre-commit query intents  r24: sending batch 4 QueryIntent to (n1,s1):1
+dist sender send  r24: sending batch 2 CPut to (n1,s1):1
+dist sender send  r24: sending batch 2 CPut to (n1,s1):1
+dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
