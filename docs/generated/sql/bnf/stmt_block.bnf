@@ -699,6 +699,7 @@ unreserved_keyword ::=
 	| 'KEYS'
 	| 'KV'
 	| 'LANGUAGE'
+	| 'LAST'
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
 	| 'LEASE'
@@ -724,6 +725,7 @@ unreserved_keyword ::=
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
 	| 'NOWAIT'
+	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
 	| 'OF'
 	| 'OFF'
@@ -1762,7 +1764,7 @@ index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*
 
 sortby ::=
-	a_expr opt_asc_desc
+	a_expr opt_asc_desc opt_nulls_order
 	| 'PRIMARY' 'KEY' table_name opt_asc_desc
 	| 'INDEX' table_name '@' index_name opt_asc_desc
 
@@ -2013,6 +2015,11 @@ create_as_constraint_def ::=
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
+
+opt_nulls_order ::=
+	'NULLS' 'FIRST'
+	| 'NULLS' 'LAST'
+	| 
 
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem

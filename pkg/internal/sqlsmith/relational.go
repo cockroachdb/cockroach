@@ -687,7 +687,8 @@ func makeSelect(s *Smither) (tree.Statement, bool) {
 		order := make(tree.OrderBy, len(refs))
 		for i, r := range refs {
 			order[i] = &tree.Order{
-				Expr: r.item,
+				Expr:       r.item,
+				NullsOrder: tree.NullsFirst,
 			}
 		}
 		stmt = &tree.Select{

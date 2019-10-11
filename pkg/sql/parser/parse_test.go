@@ -856,6 +856,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t ORDER BY INDEX t@foo DESC`},
 		{`SELECT a FROM t ORDER BY INDEX t@primary`},
 		{`SELECT a FROM t ORDER BY INDEX t@like`},
+		{`SELECT a FROM t ORDER BY a NULLS FIRST`},
+		{`SELECT a FROM t ORDER BY a ASC NULLS FIRST`},
+		{`SELECT a FROM t ORDER BY a DESC NULLS LAST`},
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
@@ -3112,6 +3115,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT CURRENT_TIME()`, 26097, `current_time`},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`},
 		{`SELECT a(b) WITHIN GROUP (ORDER BY c)`, 0, `within group`},
+
+		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``},
+		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``},
 
 		{`CREATE TABLE a(b BOX)`, 21286, `box`},
 		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`},
