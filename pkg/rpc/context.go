@@ -291,7 +291,7 @@ func NewServerWithInterceptor(
 
 type heartbeatResult struct {
 	everSucceeded bool  // true if the heartbeat has ever succeeded
-	err           error // heartbeat error. should not be nil if everSucceeded is false
+	err           error // heartbeat error, initialized to ErrNotHeartbeated
 }
 
 // state is a helper to return the heartbeatState implied by a heartbeatResult.
@@ -321,8 +321,7 @@ type Connection struct {
 	// the lifetime of a Connection object.
 	remoteNodeID roachpb.NodeID
 
-	initOnce      sync.Once
-	validatedOnce sync.Once
+	initOnce sync.Once
 }
 
 func newConnectionToNodeID(stopper *stop.Stopper, remoteNodeID roachpb.NodeID) *Connection {
@@ -354,15 +353,10 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// If connection is invalid, return latest heartbeat error.
 	h := c.heartbeatResult.Load().(heartbeatResult)
 	if !h.everSucceeded {
+		// If we've never succeeded, h.err will be ErrNotHeartbeated.
 		return nil, netutil.NewInitialHeartBeatFailedError(h.err)
 	}
 	return c.grpcConn, nil
-}
-
-func (c *Connection) setInitialHeartbeatDone() {
-	c.validatedOnce.Do(func() {
-		close(c.initialHeartbeatDone)
-	})
 }
 
 // Health returns an error indicating the success or failure of the
@@ -1027,12 +1021,22 @@ func (ctx *Context) runHeartbeat(
 	conn *Connection, target string, redialChan <-chan struct{},
 ) (retErr error) {
 	ctx.metrics.HeartbeatLoopsStarted.Inc(1)
+	// setInitialHeartbeatDone is idempotent and is critical to notify Connect
+	// callers of the failure in the case where no heartbeat is ever sent.
 	state := updateHeartbeatState(&ctx.metrics, heartbeatNotRunning, heartbeatInitializing)
+	initialHeartbeatDone := false
+	setInitialHeartbeatDone := func() {
+		if !initialHeartbeatDone {
+			close(conn.initialHeartbeatDone)
+			initialHeartbeatDone = true
+		}
+	}
 	defer func() {
 		if retErr != nil {
 			ctx.metrics.HeartbeatLoopsExited.Inc(1)
 		}
 		updateHeartbeatState(&ctx.metrics, state, heartbeatNotRunning)
+		setInitialHeartbeatDone()
 	}()
 	maxOffset := ctx.LocalClock.MaxOffset()
 	maxOffsetNanos := maxOffset.Nanoseconds()
@@ -1137,7 +1141,7 @@ func (ctx *Context) runHeartbeat(
 			}
 			state = updateHeartbeatState(&ctx.metrics, state, hr.state())
 			conn.heartbeatResult.Store(hr)
-			conn.setInitialHeartbeatDone()
+			setInitialHeartbeatDone()
 			return nil
 		}); err != nil {
 			return err
