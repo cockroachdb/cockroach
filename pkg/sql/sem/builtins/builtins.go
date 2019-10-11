@@ -2869,15 +2869,17 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"str", types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var collation string
 				switch t := args[0].(type) {
 				case *tree.DString:
-					return tree.NewDString("default"), nil
+					collation = "default"
 				case *tree.DCollatedString:
-					return tree.NewDString(t.Locale), nil
+					collation = t.Locale
 				default:
 					return tree.DNull, pgerror.Newf(pgcode.DatatypeMismatch,
 						"collations are not supported by type: %s", t.ResolvedType())
 				}
+				return tree.NewDString(fmt.Sprintf(`"%s"`, collation)), nil
 			},
 			Info: "Returns the collation of the argument",
 		},
