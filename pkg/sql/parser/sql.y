@@ -350,6 +350,9 @@ func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
 func (u *sqlSymUnion) dir() tree.Direction {
     return u.val.(tree.Direction)
 }
+func (u *sqlSymUnion) nullsOrder() tree.NullsOrder {
+    return u.val.(tree.NullsOrder)
+}
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
 }
@@ -533,14 +536,14 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> KEY KEYS KV
 
-%token <str> LANGUAGE LATERAL LC_CTYPE LC_COLLATE
+%token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
-%token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NUMERIC
+%token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
@@ -787,6 +790,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.Expr> alter_column_default
 %type <tree.Direction> opt_asc_desc
+%type <tree.NullsOrder> opt_nulls_order
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
@@ -1003,7 +1007,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <privilege.List> privileges
 %type <tree.AuditMode> audit_mode
 
-%type <str> relocate_kw 
+%type <str> relocate_kw
 
 %type <*tree.SetZoneConfig> set_zone_config
 
@@ -3915,7 +3919,7 @@ show_ranges_stmt:
   {
     $$.val = &tree.ShowRanges{TableOrIndex: $5.tableIndexName()}
   }
-| SHOW RANGES FROM DATABASE database_name 
+| SHOW RANGES FROM DATABASE database_name
   {
     $$.val = &tree.ShowRanges{DatabaseName: tree.Name($5)}
   }
@@ -6135,9 +6139,26 @@ sortby_list:
   }
 
 sortby:
-  a_expr opt_asc_desc
+  a_expr opt_asc_desc opt_nulls_order
   {
-    $$.val = &tree.Order{OrderType: tree.OrderByColumn, Expr: $1.expr(), Direction: $2.dir()}
+    /* FORCE DOC */
+    dir := $2.dir()
+    nullsOrder := $3.nullsOrder()
+    // We currently only support the opposite of Postgres defaults.
+    if nullsOrder != tree.DefaultNullsOrder {
+      if dir == tree.Descending && nullsOrder == tree.NullsFirst {
+        return unimplementedWithIssue(sqllex, 6224)
+      }
+      if dir != tree.Descending && nullsOrder == tree.NullsLast {
+        return unimplementedWithIssue(sqllex, 6224)
+      }
+    }
+    $$.val = &tree.Order{
+      OrderType:  tree.OrderByColumn,
+      Expr:       $1.expr(),
+      Direction:  dir,
+      NullsOrder: nullsOrder,
+    }
   }
 | PRIMARY KEY table_name opt_asc_desc
   {
@@ -6153,6 +6174,20 @@ sortby:
       Table:     name,
       Index:     tree.UnrestrictedName($4),
     }
+  }
+
+opt_nulls_order:
+  NULLS FIRST
+  {
+    $$.val = tree.NullsFirst
+  }
+| NULLS LAST
+  {
+    $$.val = tree.NullsLast
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.DefaultNullsOrder
   }
 
 // TODO(pmattis): Support ordering using arbitrary math ops?
@@ -9358,6 +9393,7 @@ unreserved_keyword:
 | KEYS
 | KV
 | LANGUAGE
+| LAST
 | LC_COLLATE
 | LC_CTYPE
 | LEASE
@@ -9383,6 +9419,7 @@ unreserved_keyword:
 | NORMAL
 | NO_INDEX_JOIN
 | NOWAIT
+| NULLS
 | IGNORE_FOREIGN_KEYS
 | OF
 | OFF

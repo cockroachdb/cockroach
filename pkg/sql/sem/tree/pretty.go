@@ -1132,6 +1132,9 @@ func (node *Order) doc(p *PrettyCfg) pretty.Doc {
 	if node.Direction != DefaultDirection {
 		d = p.nestUnder(d, pretty.Text(node.Direction.String()))
 	}
+	if node.NullsOrder != DefaultNullsOrder {
+		d = p.nestUnder(d, pretty.Text(node.NullsOrder.String()))
+	}
 	return d
 }
 
