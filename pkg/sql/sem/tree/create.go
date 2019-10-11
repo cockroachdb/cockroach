@@ -67,8 +67,9 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 
 // IndexElem represents a column with a direction in a CREATE INDEX statement.
 type IndexElem struct {
-	Column    Name
-	Direction Direction
+	Column     Name
+	Direction  Direction
+	NullsOrder NullsOrder
 }
 
 // Format implements the NodeFormatter interface.
@@ -77,6 +78,10 @@ func (node *IndexElem) Format(ctx *FmtCtx) {
 	if node.Direction != DefaultDirection {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.Direction.String())
+	}
+	if node.NullsOrder != DefaultNullsOrder {
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.NullsOrder.String())
 	}
 }
 
