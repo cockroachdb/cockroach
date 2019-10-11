@@ -290,8 +290,11 @@ func NewServerWithInterceptor(
 }
 
 type heartbeatResult struct {
-	everSucceeded bool  // true if the heartbeat has ever succeeded
-	err           error // heartbeat error. should not be nil if everSucceeded is false
+	everSucceeded bool // true if the heartbeat has ever succeeded
+
+	// heartbeat error. If nil and everSucceeded is false then no heartbeat
+	// has ever been sent.
+	err error
 }
 
 // state is a helper to return the heartbeatState implied by a heartbeatResult.
@@ -354,6 +357,9 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// If connection is invalid, return latest heartbeat error.
 	h := c.heartbeatResult.Load().(heartbeatResult)
 	if !h.everSucceeded {
+		if h.err == nil {
+			h.err = grpcutil.ErrCannotReuseClientConn
+		}
 		return nil, netutil.NewInitialHeartBeatFailedError(h.err)
 	}
 	return c.grpcConn, nil
@@ -1027,6 +1033,9 @@ func (ctx *Context) runHeartbeat(
 	conn *Connection, target string, redialChan <-chan struct{},
 ) (retErr error) {
 	ctx.metrics.HeartbeatLoopsStarted.Inc(1)
+	// setInitialHeartbeatDone is idempotent and is critical to notify Connect
+	// callers of the failure in the case where no heartbeat is ever sent.
+	defer conn.setInitialHeartbeatDone()
 	state := updateHeartbeatState(&ctx.metrics, heartbeatNotRunning, heartbeatInitializing)
 	defer func() {
 		if retErr != nil {

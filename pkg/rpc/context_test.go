@@ -1659,6 +1659,49 @@ func TestTestingKnobs(t *testing.T) {
 	}
 }
 
+// This test ensures that clients cannot be left waiting on
+// `Connection.Connect()` calls in the rare case where a heartbeat loop
+// exits before attempting to send its first heartbeat. See #41521.
+func TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	clusterID := uuid.MakeV4()
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	rpcCtx := newTestContext(clusterID, clock, stopper)
+
+	const serverNodeID = 1
+	serverCtx := newTestContext(clusterID, clock, stopper)
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+
+	s := NewServer(serverCtx)
+	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	c := newConnectionToNodeID(stopper, 1)
+	redialChan := make(chan struct{})
+	close(redialChan)
+
+	c.grpcConn, _, c.dialErr = rpcCtx.grpcDialRaw(remoteAddr, serverNodeID, DefaultClass)
+	require.NoError(t, c.dialErr)
+	// It is possible that the redial chan being closed is not seen on the first
+	// pass through the loop.
+	if err := rpcCtx.runHeartbeat(c, "", redialChan); err != nil {
+		require.EqualError(t, err, grpcutil.ErrCannotReuseClientConn.Error())
+		// Even when the runHeartbeat returns, we could have heartbeated successfully.
+		// If we did not, then we expect the `not yet heartbeated` error.
+		if _, err = c.Connect(context.Background()); err != nil {
+			require.Regexp(t, "not yet heartbeated", err)
+		}
+	}
+	require.NoError(t, c.grpcConn.Close())
+}
+
 func BenchmarkGRPCDial(b *testing.B) {
 	if testing.Short() {
 		b.Skip("TODO: fix benchmark")
