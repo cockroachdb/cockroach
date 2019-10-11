@@ -159,6 +159,14 @@ func (p *pebbleIterator) UnsafeKey() MVCCKey {
 	return mvccKey
 }
 
+// unsafeRawKey returns the raw key from the underlying pebble.Iterator.
+func (p *pebbleIterator) unsafeRawKey() []byte {
+	if valid, err := p.Valid(); err != nil || !valid {
+		return nil
+	}
+	return p.iter.Key()
+}
+
 // UnsafeValue implements the Iterator interface.
 func (p *pebbleIterator) UnsafeValue() []byte {
 	if valid, err := p.Valid(); err != nil || !valid {
