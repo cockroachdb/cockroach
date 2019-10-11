@@ -699,6 +699,7 @@ unreserved_keyword ::=
 	| 'KEYS'
 	| 'KV'
 	| 'LANGUAGE'
+	| 'LAST'
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
 	| 'LEASE'
@@ -724,6 +725,7 @@ unreserved_keyword ::=
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
 	| 'NOWAIT'
+	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
 	| 'OF'
 	| 'OFF'
@@ -1738,7 +1740,7 @@ opt_name ::=
 	| 
 
 index_elem ::=
-	a_expr opt_asc_desc
+	a_expr opt_asc_desc opt_nulls_order
 
 storing ::=
 	'COVERING'
@@ -1762,7 +1764,7 @@ index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*
 
 sortby ::=
-	a_expr opt_asc_desc
+	a_expr opt_asc_desc opt_nulls_order
 	| 'PRIMARY' 'KEY' table_name opt_asc_desc
 	| 'INDEX' table_name '@' index_name opt_asc_desc
 
@@ -1996,6 +1998,11 @@ sequence_option_elem ::=
 opt_asc_desc ::=
 	'ASC'
 	| 'DESC'
+	| 
+
+opt_nulls_order ::=
+	'NULLS' 'FIRST'
+	| 'NULLS' 'LAST'
 	| 
 
 list_partitions ::=
