@@ -110,3 +110,28 @@ CREATE TABLE a (a INT PRIMARY KEY)
 query I
 (SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
 ----
+
+# Ensure that mutations under a UNION or UNION ALL error out (#40853).
+statement error mutations not supported under UNION
+SELECT * FROM uniontest
+UNION SELECT * FROM [INSERT INTO uniontest VALUES (1), (1) RETURNING k, v]
+
+statement error mutations not supported under UNION
+SELECT * FROM [INSERT INTO uniontest VALUES (1), (1) RETURNING k, v]
+UNION ALL SELECT * FROM uniontest
+
+statement error mutations not supported under UNION
+SELECT * FROM uniontest
+UNION SELECT * FROM (
+  WITH cte AS (INSERT INTO uniontest VALUES (1), (1) RETURNING k, v) SELECT * FROM cte
+)
+
+# We get same error with single-use CTEs.
+statement error mutations not supported under UNION
+WITH cte AS (INSERT INTO uniontest VALUES (1), (1) RETURNING k, v)
+(SELECT * FROM cte UNION SELECT * FROM uniontest)
+
+# Other set ops are allowed.
+statement ok
+SELECT * FROM uniontest
+EXCEPT SELECT * FROM [INSERT INTO uniontest VALUES (1), (1) RETURNING k, v]

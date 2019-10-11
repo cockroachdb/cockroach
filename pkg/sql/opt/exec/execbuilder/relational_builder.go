@@ -1024,6 +1024,14 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		panic(pgerror.NewAssertionErrorf("invalid operator %s", log.Safe(set.Op())))
 	}
 
+	// This restriction is due to the way we execute union; it is lifted in 19.2.
+	if typ == tree.UnionOp && (leftExpr.Relational().CanMutate || rightExpr.Relational().CanMutate) {
+		// We can't return an unimplemented error, because we will fall back on the
+		// heuristic planner.
+		err := pgerror.NewErrorf(pgerror.CodeSyntaxError, "mutations not supported under UNION")
+		return execPlan{}, err
+	}
+
 	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root)
 	if err != nil {
 		return execPlan{}, err
