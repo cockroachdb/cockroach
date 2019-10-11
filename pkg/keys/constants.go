@@ -295,8 +295,12 @@ const (
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
 	// NOTE: IDs must be <= MaxSystemConfigDescID.
-	SystemDatabaseID  = 1
-	NamespaceTableID  = 2
+	SystemDatabaseID = 1
+
+	// We do not need to gossip the system.namespace table like we did when
+	// CockroachDB was first implemented
+	// NamespaceTableID  = 2
+
 	DescriptorTableID = 3
 	UsersTableID      = 4
 	ZonesTableID      = 5
@@ -330,6 +334,7 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
+	NamespaceTableID                     = 29
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
