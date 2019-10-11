@@ -397,7 +397,7 @@ func registerTPCC(r *testRegistry) {
 		LoadConfig: singlePartitionedLoadgen,
 
 		LoadWarehouses: 2000,
-		EstimatedMax:   600,
+		EstimatedMax:   900,
 	})
 }
 
@@ -728,6 +728,14 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				t.Fatal(err)
 			}
 			c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
+			// Increase the maximum connection limit to ensure that no TPC-C
+			// load gen workers get stuck during connection initialization.
+			// 10k warehouses requires at least 20,000 connections, so add a
+			// bit of breathing room and check the warehouse count.
+			c.Run(ctx, loadNodes, "sed -i 's/maxconn 4096/maxconn 21000/' haproxy.cfg")
+			if b.LoadWarehouses > 1E4 {
+				t.Fatal("HAProxy config supports up to 10k warehouses")
+			}
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 		}
 
