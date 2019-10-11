@@ -12,7 +12,10 @@ package execinfra
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"math/rand"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -140,4 +143,62 @@ func (r *RowDisposer) ProducerDone() {}
 // Types is part of the RowReceiver interface.
 func (r *RowDisposer) Types() []types.T {
 	return nil
+}
+
+// GenerateEqualityColumns produces a random permutation of nEqCols random
+// columns on a table with nCols columns, so nEqCols must be not greater than
+// nCols.
+func GenerateEqualityColumns(rng *rand.Rand, nCols int, nEqCols int) []uint32 {
+	if nEqCols > nCols {
+		panic("nEqCols > nCols in GenerateEqualityColumns")
+	}
+	eqCols := make([]uint32, 0, nEqCols)
+	for _, eqCol := range rng.Perm(nCols)[:nEqCols] {
+		eqCols = append(eqCols, uint32(eqCol))
+	}
+	return eqCols
+}
+
+// GenerateOnExpr populates an execinfrapb.Expression that contains a single
+// comparison which can be either comparing a column from the left against a
+// column from the right or comparing a column from either side against a
+// constant.
+// If forceConstComparison is true, then the comparison against the constant
+// will be used.
+func GenerateOnExpr(
+	rng *rand.Rand, nCols int, nEqCols int, colTypes []types.T, forceConstComparison bool,
+) execinfrapb.Expression {
+	var comparison string
+	r := rng.Float64()
+	if r < 0.25 {
+		comparison = "<"
+	} else if r < 0.5 {
+		comparison = ">"
+	} else if r < 0.75 {
+		comparison = "="
+	} else {
+		comparison = "<>"
+	}
+	// When all columns are used in equality comparison between inputs, there is
+	// only one interesting case when a column from either side is compared
+	// against a constant. The second conditional is us choosing to compare
+	// against a constant.
+	if nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison {
+		colIdx := rng.Intn(nCols)
+		if rng.Float64() >= 0.5 {
+			// Use right side.
+			colIdx += nCols
+		}
+		constDatum := sqlbase.RandDatum(rng, &colTypes[colIdx], true /* nullOk */)
+		constDatumString := constDatum.String()
+		if strings.Contains(constDatumString, "NaN") || strings.Contains(constDatumString, "Inf") {
+			// We need to surround special values with quotes.
+			constDatumString = fmt.Sprintf("'%s'", constDatumString)
+		}
+		return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s %s", colIdx+1, comparison, constDatumString)}
+	}
+	// We will compare a column from the left against a column from the right.
+	leftColIdx := rng.Intn(nCols) + 1
+	rightColIdx := rng.Intn(nCols) + nCols + 1
+	return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s @%d", leftColIdx, comparison, rightColIdx)}
 }

@@ -385,7 +385,7 @@ message HashJoinerSpec {
   // DEPRECATED
   //
   // Extra merged columns that are added in case of OUTER JOINS. These
-  // columns occupy first positions in a row amd it's the left value if it's not
+  // columns occupy first positions in a row and it's the left value if it's not
   // NULL, otherwise it's the right value. In INNER JOIN case no merged columns are
   // needed since left stream values are guaranteed to be not NULL.
   //

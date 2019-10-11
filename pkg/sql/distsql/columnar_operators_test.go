@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -185,7 +185,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	for run := 1; run < nRuns; run++ {
+	for run := 0; run < nRuns; run++ {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
@@ -204,7 +204,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 							inputTypes = generateRandomSupportedTypes(rng, nCols)
 							lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 							rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-							lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+							lEqCols = execinfra.GenerateEqualityColumns(rng, nCols, nEqCols)
 							// Since random types might not be comparable, we use the same
 							// equality columns for both inputs.
 							rEqCols = lEqCols
@@ -213,8 +213,8 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 							inputTypes = intTyps[:nCols]
 							lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 							rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-							lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-							rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+							lEqCols = execinfra.GenerateEqualityColumns(rng, nCols, nEqCols)
+							rEqCols = execinfra.GenerateEqualityColumns(rng, nCols, nEqCols)
 						}
 
 						outputTypes := append(inputTypes, inputTypes...)
@@ -229,7 +229,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 						var onExpr execinfrapb.Expression
 						if triedWithoutOnExpr {
 							colTypes := append(inputTypes, inputTypes...)
-							onExpr = generateOnExpr(rng, nCols, nEqCols, colTypes, usingRandomTypes)
+							onExpr = execinfra.GenerateOnExpr(rng, nCols, nEqCols, colTypes, usingRandomTypes)
 						}
 						hjSpec := &execinfrapb.HashJoinerSpec{
 							LeftEqColumns:  lEqCols,
@@ -265,20 +265,6 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 			}
 		}
 	}
-}
-
-// generateEqualityColumns produces a random permutation of nEqCols random
-// columns on a table with nCols columns, so nEqCols must be not greater than
-// nCols.
-func generateEqualityColumns(rng *rand.Rand, nCols int, nEqCols int) []uint32 {
-	if nEqCols > nCols {
-		panic("nEqCols > nCols in generateEqualityColumns")
-	}
-	eqCols := make([]uint32, 0, nEqCols)
-	for _, eqCol := range rng.Perm(nCols)[:nEqCols] {
-		eqCols = append(eqCols, uint32(eqCol))
-	}
-	return eqCols
 }
 
 func TestMergeJoinerAgainstProcessor(t *testing.T) {
@@ -330,7 +316,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	for run := 1; run < nRuns; run++ {
+	for run := 0; run < nRuns; run++ {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
@@ -395,7 +381,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 						var onExpr execinfrapb.Expression
 						if triedWithoutOnExpr {
 							colTypes := append(inputTypes, inputTypes...)
-							onExpr = generateOnExpr(rng, nCols, nOrderingCols, colTypes, usingRandomTypes)
+							onExpr = execinfra.GenerateOnExpr(rng, nCols, nOrderingCols, colTypes, usingRandomTypes)
 						}
 						mjSpec := &execinfrapb.MergeJoinerSpec{
 							OnExpr:        onExpr,
@@ -449,50 +435,6 @@ func generateColumnOrdering(
 		}
 	}
 	return orderingCols
-}
-
-// generateOnExpr populates a distsqlpb.Expression that contains a single
-// comparison which can be either comparing a column from the left against a
-// column from the right or comparing a column from either side against a
-// constant.
-// If forceConstComparison is true, then the comparison against the constant
-// will be used.
-func generateOnExpr(
-	rng *rand.Rand, nCols int, nEqCols int, colTypes []types.T, forceConstComparison bool,
-) execinfrapb.Expression {
-	var comparison string
-	r := rng.Float64()
-	if r < 0.25 {
-		comparison = "<"
-	} else if r < 0.5 {
-		comparison = ">"
-	} else if r < 0.75 {
-		comparison = "="
-	} else {
-		comparison = "<>"
-	}
-	// When all columns are used in equality comparison between inputs, there is
-	// only one interesting case when a column from either side is compared
-	// against a constant. The second conditional is us choosing to compare
-	// against a constant.
-	if nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison {
-		colIdx := rng.Intn(nCols)
-		if rng.Float64() >= 0.5 {
-			// Use right side.
-			colIdx += nCols
-		}
-		constDatum := sqlbase.RandDatum(rng, &colTypes[colIdx], true /* nullOk */)
-		constDatumString := constDatum.String()
-		if strings.Contains(constDatumString, "NaN") || strings.Contains(constDatumString, "Inf") {
-			// We need to surround special values with quotes.
-			constDatumString = fmt.Sprintf("'%s'", constDatumString)
-		}
-		return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s %s", colIdx+1, comparison, constDatumString)}
-	}
-	// We will compare a column from the left against a column from the right.
-	leftColIdx := rng.Intn(nCols) + 1
-	rightColIdx := rng.Intn(nCols) + nCols + 1
-	return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s @%d", leftColIdx, comparison, rightColIdx)}
 }
 
 func TestWindowFunctionsAgainstProcessor(t *testing.T) {

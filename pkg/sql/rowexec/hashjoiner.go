@@ -698,16 +698,10 @@ func (h *hashJoiner) receiveNext(
 		//    |  44  |  51  |
 		//    | NULL |  52  |
 		//    | NULL |  52  |
-		hasNull := false
-		for _, c := range h.EqCols[side] {
-			if row[c].IsNull() {
-				hasNull = true
-				break
-			}
-		}
+
 		// row has no NULLs in its equality columns (or we are considering NULLs to
 		// be equal), so it might match a row from the other side.
-		if !hasNull || h.nullEquality {
+		if !hasNullInEqCol(row, h.EqCols[side]) || h.nullEquality {
 			return row, nil, false, nil
 		}
 
@@ -718,6 +712,17 @@ func (h *hashJoiner) receiveNext(
 		// If this point is reached, row had NULLs in its equality columns but
 		// should not be emitted. Throw it away and get the next row.
 	}
+}
+
+// hasNullInEqCol returns whether row has NULL value in one of the eqCols
+// columns.
+func hasNullInEqCol(row sqlbase.EncDatumRow, eqCols []uint32) bool {
+	for _, c := range eqCols {
+		if row[c].IsNull() {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldEmitUnmatched returns whether this row should be emitted if it doesn't
