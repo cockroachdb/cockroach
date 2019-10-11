@@ -293,7 +293,9 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	kvs, _ /* splits */ := schema.GetInitialValues()
 	userSQL := append(kvs, descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real system tables and partitioned user tables.
-	subzoneSQL := append(userSQL,
+	var userSQLCopy = make([]roachpb.KeyValue, len(userSQL))
+	copy(userSQLCopy, userSQL)
+	subzoneSQL := append(userSQLCopy,
 		zoneConfig(start+1, subzone("a", ""), subzone("c", "e")),
 		zoneConfig(start+5, subzone("b", ""), subzone("c", "d"), subzone("d", "")))
 
@@ -404,7 +406,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.SystemConfigSplitKey), keys.SystemDatabaseID},
 
 		// Gossiped system tables should refer to the SystemDatabaseID.
-		{tkey(keys.NamespaceTableID), keys.SystemDatabaseID},
+		{tkey(keys.NamespaceTableID), keys.NamespaceTableID},
 		{tkey(keys.ZonesTableID), keys.SystemDatabaseID},
 
 		// Non-gossiped system tables should refer to themselves.
