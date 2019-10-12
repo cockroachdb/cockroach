@@ -1,2 +1,0 @@
-opt_interleave ::=
-	'INTERLEAVE' 'IN' 'PARENT' table_name '(' name_list ')'

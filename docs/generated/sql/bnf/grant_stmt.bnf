@@ -1,4 +1,0 @@
-grant_stmt ::=
-	'GRANT' ( 'ALL' | ( ( ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* ) ) 'ON' ( ( ( table_name ) ( ( ',' table_name ) )* ) | 'TABLE' ( ( table_name ) ( ( ',' table_name ) )* ) | 'DATABASE' ( ( name ) ( ( ',' name ) )* ) ) 'TO' ( ( name ) ( ( ',' name ) )* )
-	| 'GRANT' ( ( ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* ) 'TO' ( ( name ) ( ( ',' name ) )* )
-	| 'GRANT' ( ( ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'GRANT' | 'SELECT' ) ) )* ) 'TO' ( ( name ) ( ( ',' name ) )* ) 'WITH' 'ADMIN' 'OPTION'

@@ -1,2 +1,0 @@
-family_def ::=
-	'FAMILY' opt_family_name '(' name ( ( ',' name ) )* ')'

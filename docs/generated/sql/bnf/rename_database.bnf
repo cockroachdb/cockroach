@@ -1,2 +1,0 @@
-alter_rename_database_stmt ::=
-	'ALTER' 'DATABASE' database_name 'RENAME' 'TO' database_name

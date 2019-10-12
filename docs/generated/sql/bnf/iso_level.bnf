@@ -1,6 +1,0 @@
-iso_level ::=
-	'READ' 'UNCOMMITTED'
-	| 'READ' 'COMMITTED'
-	| 'SNAPSHOT'
-	| 'REPEATABLE' 'READ'
-	| 'SERIALIZABLE'

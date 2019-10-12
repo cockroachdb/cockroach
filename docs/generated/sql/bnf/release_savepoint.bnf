@@ -1,3 +1,0 @@
-release_stmt ::=
-	'RELEASE' 'SAVEPOINT' name
-	| 'RELEASE' name

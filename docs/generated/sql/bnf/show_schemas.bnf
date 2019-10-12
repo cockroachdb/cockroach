@@ -1,3 +1,0 @@
-show_schemas_stmt ::=
-	'SHOW' 'SCHEMAS' 'FROM' name
-	| 'SHOW' 'SCHEMAS'

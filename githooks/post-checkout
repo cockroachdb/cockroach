@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -e
-
-if [ "$1" != "$2" ]; then # previous ref != new ref.
-  exec git submodule update --init --recursive
-fi

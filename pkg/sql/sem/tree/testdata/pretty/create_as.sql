@@ -1,1 +1,0 @@
-CREATE TABLE t (id) AS VALUES (1);

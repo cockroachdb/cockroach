@@ -1,5 +1,0 @@
-commit_stmt ::=
-	'COMMIT' 'TRANSACTION'
-	| 'COMMIT' 
-	| 'END' 'TRANSACTION'
-	| 'END' 

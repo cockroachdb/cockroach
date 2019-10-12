@@ -1,3 +1,0 @@
-alter_rename_sequence_stmt ::=
-	'ALTER' 'SEQUENCE' current_name 'RENAME' 'TO' new_name
-	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' current_name 'RENAME' 'TO' new_name

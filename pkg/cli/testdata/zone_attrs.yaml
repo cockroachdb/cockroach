@@ -1,2 +1,0 @@
-num_replicas: 1
-constraints: [+zone=us-east-1a,+ssd]

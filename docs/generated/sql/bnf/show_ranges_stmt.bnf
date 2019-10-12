@@ -1,4 +1,0 @@
-show_ranges_stmt ::=
-	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
-	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
-	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name

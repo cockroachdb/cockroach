@@ -1,1 +1,0 @@
-select sum(a) over w, avg(b) over (partition by c order by d rows e preceding), min(f) over (order by g range between unbounded preceding and h following exclude ties) from t window w as (partition by i groups between j preceding and current row exclude no others)

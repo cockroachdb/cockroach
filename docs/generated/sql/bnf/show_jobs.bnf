@@ -1,4 +1,0 @@
-show_jobs_stmt ::=
-	'SHOW' 'AUTOMATIC' 'JOBS'
-	| 'SHOW'  'JOBS'
-	| 'SHOW' 'JOB' iconst64

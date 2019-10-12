@@ -1,3 +1,0 @@
-alter_user_stmt ::=
-	'ALTER' name 'WITH' password
-	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' password

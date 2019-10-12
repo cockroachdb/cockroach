@@ -1,1 +1,0 @@
-select bool 'foo'

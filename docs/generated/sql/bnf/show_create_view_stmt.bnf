@@ -1,2 +1,0 @@
-show_create_view_stmt ::=
-	'SHOW' 'CREATE' 'VIEW' view_name

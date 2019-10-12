@@ -1,3 +1,0 @@
-alter_onetable_stmt ::=
-	'ALTER' 'TABLE' table_name 'VALIDATE' 'CONSTRAINT' constraint_name
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'VALIDATE' 'CONSTRAINT' constraint_name

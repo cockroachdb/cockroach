@@ -1,1 +1,0 @@
-DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k
