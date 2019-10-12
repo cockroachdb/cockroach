@@ -13,9 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"strings"
 	"time"
 
@@ -48,13 +46,6 @@ func runDiskStalledDetection(
 	ctx context.Context, t *test, c *cluster, affectsLogDir bool, affectsDataDir bool,
 ) {
 	n := c.Node(1)
-	tmpDir, err := ioutil.TempDir("", "stalled")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-	}()
 
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Run(ctx, n, "sudo umount -f {store-dir}/faulty || true")
