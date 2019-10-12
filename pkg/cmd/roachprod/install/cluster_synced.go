@@ -209,12 +209,12 @@ func (c *SyncedCluster) Wipe(preserveCerts bool) {
 				cmd += fmt.Sprintf(`rm -fr ${HOME}/local/%d/%s ;`, c.Nodes[i], dir)
 			}
 		} else {
-			cmd = `find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
-rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} \; ;
-rm -fr logs ;
+			cmd = `sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; &&
+sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} &&
+sudo rm -fr logs &&
 `
 			if !preserveCerts {
-				cmd += "rm -fr certs* ;\n"
+				cmd += "sudo rm -fr certs* ;\n"
 			}
 		}
 		return sess.CombinedOutput(cmd)
