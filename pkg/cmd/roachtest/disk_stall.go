@@ -51,7 +51,7 @@ func runDiskStalledDetection(
 	c.Run(ctx, n, "sudo umount -f {store-dir}/faulty || true")
 	c.Run(ctx, n, "mkdir -p {store-dir}/{real,faulty} || true")
 	// Make sure the actual logs are downloaded as artifacts.
-	c.Run(ctx, n, "rm -f logs/real && ln -s {store-dir}/real/logs logs/real || true")
+	c.Run(ctx, n, "rm -f logs && ln -s {store-dir}/real/logs logs || true")
 
 	t.Status("setting up charybdefs")
 
