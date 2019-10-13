@@ -44,17 +44,37 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 }
 
 func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {
-	const getIndexesQuery = `
-    SELECT table_name,
-           index_name,
-           non_unique::BOOL,
-           seq_in_index,
-           column_name,
-           direction,
-           storing::BOOL,
-           implicit::BOOL
-    FROM %[4]s.information_schema.statistics
-    WHERE table_catalog=%[1]s AND table_schema=%[5]s AND table_name=%[2]s`
+	getIndexesQuery := `
+SELECT
+	table_name,
+	index_name,
+	non_unique::BOOL,
+	seq_in_index,
+	column_name,
+	direction,
+	storing::BOOL,
+	implicit::BOOL`
+
+	if n.WithComment {
+		getIndexesQuery += `,
+	obj_description(pg_class.oid) AS comment`
+	}
+
+	getIndexesQuery += `
+FROM
+	%[4]s.information_schema.statistics`
+
+	if n.WithComment {
+		getIndexesQuery += `
+	LEFT JOIN pg_class ON
+		statistics.index_name = pg_class.relname`
+	}
+
+	getIndexesQuery += `
+WHERE
+	table_catalog=%[1]s
+	AND table_schema=%[5]s
+	AND table_name=%[2]s`
 
 	return d.showTableDetails(n.Table, getIndexesQuery)
 }
