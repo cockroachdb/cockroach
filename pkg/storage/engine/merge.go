@@ -14,7 +14,41 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/pebble"
 )
+
+func serializeMergeInputs(sources ...roachpb.InternalTimeSeriesData) ([][]byte, error) {
+	// Wrap each proto in an inlined MVCC value, and marshal each wrapped value
+	// to bytes. This is the format required by the engine.
+	srcBytes := make([][]byte, 0, len(sources))
+	var val roachpb.Value
+	for _, src := range sources {
+		if err := val.SetProto(&src); err != nil {
+			return nil, err
+		}
+		bytes, err := protoutil.Marshal(&enginepb.MVCCMetadata{
+			RawBytes: val.RawBytes,
+		})
+		if err != nil {
+			return nil, err
+		}
+		srcBytes = append(srcBytes, bytes)
+	}
+	return srcBytes, nil
+}
+
+func deserializeMergeOutput(mergedBytes []byte) (roachpb.InternalTimeSeriesData, error) {
+	// Unmarshal merged bytes and extract the time series value within.
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(mergedBytes, &meta); err != nil {
+		return roachpb.InternalTimeSeriesData{}, err
+	}
+	mergedTS, err := MakeValue(meta).GetTimeseries()
+	if err != nil {
+		return roachpb.InternalTimeSeriesData{}, err
+	}
+	return mergedTS, nil
+}
 
 // MergeInternalTimeSeriesData exports the engine's C++ merge logic for
 // InternalTimeSeriesData to higher level packages. This is intended primarily
@@ -29,28 +63,12 @@ import (
 func MergeInternalTimeSeriesData(
 	mergeIntoNil, usePartialMerge bool, sources ...roachpb.InternalTimeSeriesData,
 ) (roachpb.InternalTimeSeriesData, error) {
-	// Wrap each proto in an inlined MVCC value, and marshal each wrapped value
-	// to bytes. This is the format required by the engine.
-	srcBytes := make([][]byte, 0, len(sources))
-	var val roachpb.Value
-	for _, src := range sources {
-		if err := val.SetProto(&src); err != nil {
-			return roachpb.InternalTimeSeriesData{}, err
-		}
-		bytes, err := protoutil.Marshal(&enginepb.MVCCMetadata{
-			RawBytes: val.RawBytes,
-		})
-		if err != nil {
-			return roachpb.InternalTimeSeriesData{}, err
-		}
-		srcBytes = append(srcBytes, bytes)
-	}
-
 	// Merge every element into a nil byte slice, one at a time.
-	var (
-		mergedBytes []byte
-		err         error
-	)
+	var mergedBytes []byte
+	srcBytes, err := serializeMergeInputs(sources...)
+	if err != nil {
+		return roachpb.InternalTimeSeriesData{}, nil
+	}
 	if !mergeIntoNil {
 		mergedBytes = srcBytes[0]
 		srcBytes = srcBytes[1:]
@@ -72,15 +90,23 @@ func MergeInternalTimeSeriesData(
 			return roachpb.InternalTimeSeriesData{}, err
 		}
 	}
+	return deserializeMergeOutput(mergedBytes)
+}
 
-	// Unmarshal merged bytes and extract the time series value within.
-	var meta enginepb.MVCCMetadata
-	if err := protoutil.Unmarshal(mergedBytes, &meta); err != nil {
-		return roachpb.InternalTimeSeriesData{}, err
-	}
-	mergedTS, err := MakeValue(meta).GetTimeseries()
+// MergeInternalTimeSeriesDataPebble exports Pebble's merge logic for
+// InternalTimeSeriesData to higher level packages. This is intended primarily
+// for consumption by high level testing of time series functionality.
+func MergeInternalTimeSeriesDataPebble(
+	sources ...roachpb.InternalTimeSeriesData,
+) (roachpb.InternalTimeSeriesData, error) {
+	srcBytes, err := serializeMergeInputs(sources...)
 	if err != nil {
-		return roachpb.InternalTimeSeriesData{}, err
+		return roachpb.InternalTimeSeriesData{}, nil
 	}
-	return mergedTS, nil
+	merger := MVCCMerger(pebble.DefaultLogger)
+	var mergedBytes []byte = srcBytes[0]
+	for _, bytes := range srcBytes[1:] {
+		mergedBytes = merger.Merge(nil /* key */, mergedBytes, bytes, nil /* buf */)
+	}
+	return deserializeMergeOutput(mergedBytes)
 }
