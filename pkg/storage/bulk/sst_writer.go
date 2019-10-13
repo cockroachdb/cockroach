@@ -13,7 +13,6 @@ package bulk
 import (
 	"bytes"
 	"io"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -89,29 +88,20 @@ func (dummyDeleteRangeCollector) Name() string {
 	return "DeleteRangeTblPropCollectorFactory"
 }
 
-var pebbleOpts = func() *pebble.Options {
-	merger := *pebble.DefaultMerger
-	merger.Name = "nullptr"
-	opts := &pebble.Options{
-		TableFormat: pebble.TableFormatLevelDB,
-		Comparer:    engine.MVCCComparer,
-		Merger:      &merger,
-	}
-	opts.EnsureDefaults()
-	opts.TablePropertyCollectors = append(
-		opts.TablePropertyCollectors,
-		func() pebble.TablePropertyCollector { return &timeboundPropCollector{} },
-		func() pebble.TablePropertyCollector { return &dummyDeleteRangeCollector{} },
-	)
-	return opts
-}()
-
 // MakeSSTWriter creates a new SSTWriter.
 func MakeSSTWriter() SSTWriter {
+	opts := sstable.WriterOptions{
+		BlockSize:   64 * 1024,
+		TableFormat: pebble.TableFormatLevelDB,
+		Comparer:    engine.MVCCComparer,
+		MergerName:  "nullptr",
+		TablePropertyCollectors: []func() pebble.TablePropertyCollector{
+			func() pebble.TablePropertyCollector { return &timeboundPropCollector{} },
+			func() pebble.TablePropertyCollector { return &dummyDeleteRangeCollector{} },
+		},
+	}
 	f := &memFile{}
-	// Setting the IndexBlockSize to MaxInt disables twoLevelIndexes in Pebble.
-	// TODO(pbardea): Remove the IndexBlockSize option when https://github.com/cockroachdb/pebble/issues/285 is resolved.
-	sst := sstable.NewWriter(f, pebbleOpts, pebble.LevelOptions{BlockSize: 64 * 1024, IndexBlockSize: math.MaxInt32})
+	sst := sstable.NewWriter(f, opts)
 	return SSTWriter{fw: sst, f: f}
 }
 
