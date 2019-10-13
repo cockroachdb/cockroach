@@ -20,13 +20,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var readerOpts = func() *sstable.Options {
-	opts := &sstable.Options{
-		Comparer: MVCCComparer,
-	}
-	return opts.EnsureDefaults()
-}()
-
 type sstIterator struct {
 	sst  *sstable.Reader
 	iter sstable.Iterator
@@ -52,7 +45,9 @@ func NewSSTIterator(path string) (SimpleIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	sst, err := sstable.NewReader(file, readerOpts)
+	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
+		Comparer: MVCCComparer,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +59,9 @@ func NewSSTIterator(path string) (SimpleIterator, error) {
 // Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
 // format.
 func NewMemSSTIterator(data []byte, verify bool) (SimpleIterator, error) {
-	sst, err := sstable.NewReader(vfs.NewMemFile(data), readerOpts)
+	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
+		Comparer: MVCCComparer,
+	})
 	if err != nil {
 		return nil, err
 	}
