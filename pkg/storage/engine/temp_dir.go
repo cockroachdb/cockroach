@@ -35,6 +35,12 @@ func CreateTempDir(parentDir, prefix string, stopper *stop.Stopper) (string, err
 		return "", err
 	}
 
+	// TempDir creates a directory with permissions 0700. Manually change the
+	// permissions to be 0755 like every other directory created by cockroach.
+	if err := os.Chmod(tempPath, 0755); err != nil {
+		return "", err
+	}
+
 	absPath, err := filepath.Abs(tempPath)
 	if err != nil {
 		return "", err
