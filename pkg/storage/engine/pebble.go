@@ -71,22 +71,6 @@ var MVCCComparer = &pebble.Comparer{
 	Name: "cockroach_comparator",
 }
 
-// MVCCMerger is a pebble.Merger object that implements the merge operator used
-// by Cockroach.
-var MVCCMerger = &pebble.Merger{
-	Name: "cockroach_merge_operator",
-
-	Merge: func(key, oldValue, newValue, buf []byte) []byte {
-		// TODO(itsbilal): Port the merge operator from C++ to Go.
-		// Until then, call the C++ merge operator directly.
-		ret, err := goMerge(oldValue, newValue)
-		if err != nil {
-			return nil
-		}
-		return ret
-	},
-}
-
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
 	db *pebble.DB
@@ -104,7 +88,12 @@ var _ WithSSTables = &Pebble{}
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(path string, cfg *pebble.Options) (*Pebble, error) {
 	cfg.Comparer = MVCCComparer
-	cfg.Merger = MVCCMerger
+	cfg.Merger = &pebble.Merger{
+		Name: "cockroach_merge_operator",
+		Merge: func(key, oldValue, newValue, buf []byte) []byte {
+			return merge(key, oldValue, newValue, buf, cfg.Logger)
+		},
+	}
 
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
