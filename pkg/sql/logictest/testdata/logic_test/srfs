@@ -1099,3 +1099,33 @@ SELECT t.* FROM unnest(ARRAY[(1,2),(3,4)]) AS t
 t
 (1,2)
 (3,4)
+
+
+subtest variadic_unnest
+
+# TODO: test with (array, NULL)
+# TODO: test with (NULL, NULL)
+# TODO: test with unnest(ARRAY[1,2], ARRAY[(1,2),(3,4)])
+# TODO: SELECT * FROM unnest(array[1,2], array[3,4,5]) AS t(a, b);
+
+query II
+SELECT unnest(ARRAY[1,2], ARRAY['a','b'])
+----
+1  a
+2  b
+
+query I colnames
+SELECT * FROM unnest(ARRAY[1,2]), ARRAY['a', 'b'])
+----
+unnest unnest
+1  a
+2  b
+
+
+query I colnames
+SELECT unnest(ARRAY[1,2], ARRAY['a','b'], ARRAY[1.1, 2.2])
+----
+unnest unnest unnest
+1  a  1.1
+2  b  2.2
+
