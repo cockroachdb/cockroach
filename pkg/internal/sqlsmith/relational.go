@@ -326,6 +326,9 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 							item: tree.NewColumnItem(rightAliasName, rightColElem.Column),
 						},
 					})
+					if len(cols) >= len(leftIdx.Columns) {
+						break
+					}
 				}
 				if len(cols) > 0 {
 					return rightTableName, cols
