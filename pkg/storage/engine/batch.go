@@ -14,7 +14,6 @@ import (
 	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 )
@@ -116,32 +115,16 @@ func (b *RocksDBBatchBuilder) getRepr() []byte {
 	return b.batch.Repr()
 }
 
-func putUint32(b []byte, v uint32) {
-	b[0] = byte(v >> 24)
-	b[1] = byte(v >> 16)
-	b[2] = byte(v >> 8)
-	b[3] = byte(v)
-}
-
-func putUint64(b []byte, v uint64) {
-	b[0] = byte(v >> 56)
-	b[1] = byte(v >> 48)
-	b[2] = byte(v >> 40)
-	b[3] = byte(v >> 32)
-	b[4] = byte(v >> 24)
-	b[5] = byte(v >> 16)
-	b[6] = byte(v >> 8)
-	b[7] = byte(v)
-}
-
 // Put sets the given key to the value provided.
 //
 // It is safe to modify the contents of the arguments after Put returns.
 func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
-	deferredOp, _ := b.batch.SetDeferred(key.Len(), len(value), nil)
-	EncodeKeyToBuf(deferredOp.Key, key)
+	keyLen := key.Len()
+	deferredOp := b.batch.SetDeferred(keyLen, len(value))
+	encodeKeyToBuf(deferredOp.Key, key, keyLen)
 	copy(deferredOp.Value, value)
-	deferredOp.Finish()
+	// NB: the batch is not indexed, obviating the need to call
+	// deferredOp.Finish.
 }
 
 // Merge is a high-performance write operation used for values which are
@@ -151,28 +134,34 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 //
 // It is safe to modify the contents of the arguments after Merge returns.
 func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
-	deferredOp, _ := b.batch.MergeDeferred(key.Len(), len(value), nil)
-	EncodeKeyToBuf(deferredOp.Key, key)
+	keyLen := key.Len()
+	deferredOp := b.batch.MergeDeferred(keyLen, len(value))
+	encodeKeyToBuf(deferredOp.Key, key, keyLen)
 	copy(deferredOp.Value, value)
-	deferredOp.Finish()
+	// NB: the batch is not indexed, obviating the need to call
+	// deferredOp.Finish.
 }
 
 // Clear removes the item from the db with the given key.
 //
 // It is safe to modify the contents of the arguments after Clear returns.
 func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
-	deferredOp, _ := b.batch.DeleteDeferred(key.Len(), nil)
-	EncodeKeyToBuf(deferredOp.Key, key)
-	deferredOp.Finish()
+	keyLen := key.Len()
+	deferredOp := b.batch.DeleteDeferred(keyLen)
+	encodeKeyToBuf(deferredOp.Key, key, keyLen)
+	// NB: the batch is not indexed, obviating the need to call
+	// deferredOp.Finish.
 }
 
 // SingleClear removes the most recent item from the db with the given key.
 //
 // It is safe to modify the contents of the arguments after SingleClear returns.
 func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
-	// TODO(itsbilal): When pebble.Batch supports SingleDelete, use that instead.
-	// Until then, alias this operation to regular Delete.
-	b.Clear(key)
+	keyLen := key.Len()
+	deferredOp := b.batch.SingleDeleteDeferred(keyLen)
+	encodeKeyToBuf(deferredOp.Key, key, keyLen)
+	// NB: the batch is not indexed, obviating the need to call
+	// deferredOp.Finish.
 }
 
 // LogData adds a blob of log data to the batch. It will be written to the WAL,
@@ -205,52 +194,47 @@ func (b *RocksDBBatchBuilder) Count() uint32 {
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
 // encoding must match with the encoding in engine/db.cc:EncodeKey().
 func EncodeKey(key MVCCKey) []byte {
-	return EncodeKeyToBuf(nil, key)
+	keyLen := key.Len()
+	buf := make([]byte, keyLen)
+	encodeKeyToBuf(buf, key, keyLen)
+	return buf
 }
 
 // EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
 // This encoding must match with the encoding in engine/db.cc:EncodeKey().
 func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
-	// TODO(dan): Unify this with (*RocksDBBatchBuilder).encodeKey.
-
-	const (
-		timestampSentinelLen      = 1
-		walltimeEncodedLen        = 8
-		logicalEncodedLen         = 4
-		timestampEncodedLengthLen = 1
-	)
-
-	timestampLength := 0
-	if key.Timestamp != (hlc.Timestamp{}) {
-		timestampLength = timestampSentinelLen + walltimeEncodedLen
-		if key.Timestamp.Logical != 0 {
-			timestampLength += logicalEncodedLen
-		}
-	}
-
-	sz := len(key.Key) + timestampLength + timestampEncodedLengthLen
-	if cap(buf) < sz {
-		buf = make([]byte, sz)
+	keyLen := key.Len()
+	if cap(buf) < keyLen {
+		buf = make([]byte, keyLen)
 	} else {
-		buf = buf[:sz]
+		buf = buf[:keyLen]
 	}
+	encodeKeyToBuf(buf, key, keyLen)
+	return buf
+}
+
+func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
+	const (
+		timestampSentinelLen = 1
+		walltimeEncodedLen   = 8
+		logicalEncodedLen    = 4
+	)
 
 	copy(buf, key.Key)
 
 	pos := len(key.Key)
+	timestampLength := keyLen - pos - 1
 	if timestampLength > 0 {
 		buf[pos] = 0
 		pos += timestampSentinelLen
-		putUint64(buf[pos:], uint64(key.Timestamp.WallTime))
+		binary.BigEndian.PutUint64(buf[pos:], uint64(key.Timestamp.WallTime))
 		pos += walltimeEncodedLen
 		if key.Timestamp.Logical != 0 {
-			putUint32(buf[pos:], uint32(key.Timestamp.Logical))
+			binary.BigEndian.PutUint32(buf[pos:], uint32(key.Timestamp.Logical))
 			pos += logicalEncodedLen
 		}
 	}
 	buf[len(buf)-1] = byte(timestampLength)
-
-	return buf
 }
 
 // DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation. This

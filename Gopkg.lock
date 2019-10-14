@@ -427,20 +427,20 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:76f5abe2591e8f84524dc5cbeaf4dcb4d67565b9e994bafb6cf0879f586c989d"
+  digest = "1:eb5b95cb849809eecc0f19778ea2b79d9c892208f4c57741b25102d2ceba9fa6"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
     "bloom",
-    "cache",
     "internal/arenaskl",
     "internal/base",
-    "internal/batch",
     "internal/batchskl",
     "internal/bytealloc",
+    "internal/cache",
     "internal/crc",
     "internal/humanize",
     "internal/manifest",
+    "internal/private",
     "internal/rangedel",
     "internal/rate",
     "internal/rawalloc",
@@ -450,7 +450,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "1acac2061f9f5430a7c69e1e5afedfdaeab9e4ef"
+  revision = "edde981dcc258907bdcc010017d1a7ccc6b59174"
 
 [[projects]]
   branch = "master"
@@ -1961,7 +1961,6 @@
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     "github.com/cockroachdb/logtags",
     "github.com/cockroachdb/pebble",
-    "github.com/cockroachdb/pebble/cache",
     "github.com/cockroachdb/pebble/sstable",
     "github.com/cockroachdb/pebble/tool",
     "github.com/cockroachdb/pebble/vfs",
