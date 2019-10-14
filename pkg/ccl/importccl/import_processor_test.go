@@ -13,10 +13,11 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,28 +29,33 @@ import (
 
 func TestConverterFlushesBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(nil)
 
 	// Reset batch size setting upon test completion.
 	defer row.TestingSetDatumRowConverterBatchSize(0)()
 
 	// Returns a map of file id -> URI for the specified test inputs.
+	base, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working dir: %v", err)
+	}
 	makeInputsSpec := func(inputs ...string) map[int32]string {
-		base, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("Failed to get working dir: %v", err)
-		}
 		res := make(map[int32]string)
 		for id, path := range inputs {
-			if res[int32(id)], err = cloud.MakeLocalStorageURI(filepath.Join(base, path)); err != nil {
-				t.Fatalf("Failed to make local uri: %v", err)
-			}
+			res[int32(id)] = cloud.MakeLocalStorageURI(path)
 		}
 		return res
 	}
 
 	// Helper to create external storage
+	client, stopper, err := blobs.TestBlobServiceClient(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stopper.Stop(ctx)
 	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-		return cloud.MakeExternalStorage(ctx, dest, nil)
+		return cloud.MakeExternalStorage(ctx, dest, &cluster.Settings{ExternalIODir: base}, client)
 	}
 
 	// Returns an import spec for the specified "create table" statement.
@@ -81,9 +87,6 @@ func TestConverterFlushesBatches(t *testing.T) {
 			return fmt.Sprintf("%s-flush-%d-records", inputFormat, batchSize)
 		}
 	}
-
-	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(nil)
 
 	tests := []struct {
 		inputFormat roachpb.IOFileFormat_FileFormat

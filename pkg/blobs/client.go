@@ -50,6 +50,9 @@ type BlobClient interface {
 
 	// Stat gets the size (in bytes) of a specified file from a remote node.
 	Stat(ctx context.Context, from roachpb.NodeID, file string) (*blobspb.BlobStat, error)
+
+	// GetNodeID gets the current node's nodeID
+	GetNodeID() roachpb.NodeID
 }
 
 var _ BlobClient = &remoteClient{}
@@ -70,7 +73,7 @@ func (c *remoteClient) getBlobClient(
 ) (blobspb.BlobClient, error) {
 	conn, err := c.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
-		return nil, errors.Wrap(err, "connecting to node")
+		return nil, errors.Wrapf(err, "connecting to node %d", nodeID)
 	}
 	return blobspb.NewBlobClient(conn), nil
 }
@@ -158,6 +161,10 @@ func (c *remoteClient) Stat(
 	return resp, nil
 }
 
+func (c *remoteClient) GetNodeID() roachpb.NodeID {
+	panic("unimplemented")
+}
+
 var _ BlobClient = &localClient{}
 
 // localClient executes the local blob service's code
@@ -201,6 +208,10 @@ func (c *localClient) Stat(
 	ctx context.Context, _ roachpb.NodeID, file string,
 ) (*blobspb.BlobStat, error) {
 	return c.localStorage.Stat(file)
+}
+
+func (c *localClient) GetNodeID() roachpb.NodeID {
+	panic("unimplemented")
 }
 
 var _ BlobClient = &wrapperClient{}
@@ -266,4 +277,8 @@ func (c *wrapperClient) Stat(
 ) (*blobspb.BlobStat, error) {
 	client := c.getClient(from)
 	return client.Stat(ctx, from, file)
+}
+
+func (c *wrapperClient) GetNodeID() roachpb.NodeID {
+	return c.self
 }

@@ -17,6 +17,7 @@ import (
 	"io"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -63,11 +64,17 @@ func Load(
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)
 
+	blobClient, stopper, err := blobs.TestBlobServiceClient("")
+	if err != nil {
+		return backupccl.BackupDescriptor{}, err
+	}
+	defer stopper.Stop(ctx)
+
 	conf, err := cloud.ExternalStorageConfFromURI(uri)
 	if err != nil {
 		return backupccl.BackupDescriptor{}, err
 	}
-	dir, err := cloud.MakeExternalStorage(ctx, conf, cluster.NoSettings)
+	dir, err := cloud.MakeExternalStorage(ctx, conf, cluster.NoSettings, blobClient)
 	if err != nil {
 		return backupccl.BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
 	}

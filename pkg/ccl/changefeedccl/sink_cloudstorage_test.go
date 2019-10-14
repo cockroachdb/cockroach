@@ -18,6 +18,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -71,8 +72,11 @@ func TestCloudStorageSink(t *testing.T) {
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
 	e, err := makeJSONEncoder(opts)
 	require.NoError(t, err)
+
+	client, stopper, err := blobs.TestBlobServiceClient(settings.ExternalIODir)
+	defer stopper.Stop(ctx)
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(ctx, uri, settings)
+		return cloud.ExternalStorageFromURI(ctx, uri, settings, client)
 	}
 
 	t.Run(`golden`, func(t *testing.T) {
