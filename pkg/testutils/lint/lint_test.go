@@ -1191,7 +1191,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroach/pkg/server/debug/pprofui: path$`),
 			stream.GrepNot(`cockroach/pkg/util/caller: path$`),
-			stream.GrepNot(`cockroach/pkg/ccl/storageccl: path$`),
+			stream.GrepNot(`cockroach/pkg/storage/cloud: path$`),
 			stream.GrepNot(`cockroach/pkg/ccl/workloadccl: path$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
