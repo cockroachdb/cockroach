@@ -133,19 +133,31 @@ func (h *mtcStoreRaftMessageHandler) HandleRaftRequest(
 	req *storage.RaftMessageRequest,
 	respStream storage.RaftMessageResponseStream,
 ) *roachpb.Error {
-	return h.mtc.Store(h.storeIdx).HandleRaftRequest(ctx, req, respStream)
+	store := h.mtc.Store(h.storeIdx)
+	if store == nil {
+		return roachpb.NewErrorf("store not found")
+	}
+	return store.HandleRaftRequest(ctx, req, respStream)
 }
 
 func (h *mtcStoreRaftMessageHandler) HandleRaftResponse(
 	ctx context.Context, resp *storage.RaftMessageResponse,
 ) error {
-	return h.mtc.Store(h.storeIdx).HandleRaftResponse(ctx, resp)
+	store := h.mtc.Store(h.storeIdx)
+	if store == nil {
+		return errors.New("store not found")
+	}
+	return store.HandleRaftResponse(ctx, resp)
 }
 
 func (h *mtcStoreRaftMessageHandler) HandleSnapshot(
 	header *storage.SnapshotRequest_Header, respStream storage.SnapshotResponseStream,
 ) error {
-	return h.mtc.Store(h.storeIdx).HandleSnapshot(header, respStream)
+	store := h.mtc.Store(h.storeIdx)
+	if store == nil {
+		return errors.New("store not found")
+	}
+	return store.HandleSnapshot(header, respStream)
 }
 
 // mtcPartitionedRange is a convenient abstraction to create a range on a node
