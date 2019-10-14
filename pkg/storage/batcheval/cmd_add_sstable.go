@@ -174,6 +174,24 @@ func EvalAddSSTable(
 	stats.ContainsEstimates = !args.DisallowShadowing
 	ms.Add(stats)
 
+	if args.IngestAsWrites {
+		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes)via regular write batch", stats.KeyCount, len(args.Data))
+		dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
+		for {
+			ok, err := dataIter.Valid()
+			if err != nil {
+				return result.Result{}, err
+			} else if !ok {
+				break
+			}
+			if err := batch.Put(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+				return result.Result{}, err
+			}
+			dataIter.Next()
+		}
+		return result.Result{}, nil
+	}
+
 	return result.Result{
 		Replicated: storagepb.ReplicatedEvalResult{
 			AddSSTable: &storagepb.ReplicatedEvalResult_AddSSTable{

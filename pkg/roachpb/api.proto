@@ -1471,6 +1471,8 @@ message AddSSTableRequest {
   // MVCCStats, instead of computing the stats for the SSTable by iterating it.
   // Including these stats can make the evaluation of AddSSTable much cheaper.
   storage.engine.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
+
+  bool ingest_as_writes = 5;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
