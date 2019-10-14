@@ -1,5 +1,5 @@
 {
   "devDependencies": {
-    "webpack-dashboard": "^2.1.0"
+    "webpack-dashboard": "^3.2.0"
   }
 }
