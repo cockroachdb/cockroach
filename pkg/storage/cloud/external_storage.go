@@ -21,7 +21,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,6 +34,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -172,13 +173,16 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 
 // ExternalStorageFromURI returns an ExternalStorage for the given URI.
 func ExternalStorageFromURI(
-	ctx context.Context, uri string, settings *cluster.Settings,
+	ctx context.Context,
+	uri string,
+	settings *cluster.Settings,
+	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri)
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, settings)
+	return MakeExternalStorage(ctx, conf, settings, blobClientFactory)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with sensitive
@@ -199,12 +203,15 @@ func SanitizeExternalStorageURI(path string) (string, error) {
 
 // MakeExternalStorage creates an ExternalStorage from the given config.
 func MakeExternalStorage(
-	ctx context.Context, dest roachpb.ExternalStorage, settings *cluster.Settings,
+	ctx context.Context,
+	dest roachpb.ExternalStorage,
+	settings *cluster.Settings,
+	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExternalStorageProvider_LocalFile:
 		telemetry.Count("external-io.nodelocal")
-		return makeLocalStorage(dest.LocalFile, settings)
+		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory)
 	case roachpb.ExternalStorageProvider_Http:
 		telemetry.Count("external-io.http")
 		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
@@ -239,7 +246,7 @@ func URINeedsGlobExpansion(uri string) bool {
 		}
 	}
 
-	return strings.ContainsAny(uri, "*?[")
+	return strings.ContainsAny(parsedURI.Path, "*?[")
 }
 
 // ExternalStorageFactory describes a factory function for ExternalStorage.
@@ -301,47 +308,48 @@ var (
 )
 
 type localFileStorage struct {
-	cfg           roachpb.ExternalStorage_LocalFilePath // contains un-prefixed filepath -- DO NOT use for I/O ops.
-	base          string                                // relative filepath prefixed with externalIODir, for I/O ops on this node.
-	externalIODir string                                // directory in which reads and writes are authorized.
+	cfg        roachpb.ExternalStorage_LocalFilePath // contains un-prefixed filepath -- DO NOT use for I/O ops.
+	base       string                                // relative filepath prefixed with externalIODir, for I/O ops on this node.
+	blobClient blobs.BlobClient                      // inter-node file sharing service
 }
 
 var _ ExternalStorage = &localFileStorage{}
 
-// MakeLocalStorageURI converts a local path (absolute or relative) to a
+// MakeLocalStorageURI converts a local path (should always be relative) to a
 // valid nodelocal URI.
-func MakeLocalStorageURI(path string) (string, error) {
-	path, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
+func MakeLocalStorageURI(path string) string {
+	return fmt.Sprintf("nodelocal:///%s", path)
+}
+
+func makeNodeLocalURIWithNodeID(nodeID roachpb.NodeID, path string) string {
+	path = strings.TrimPrefix(path, "/")
+	if nodeID == 0 {
+		return fmt.Sprintf("nodelocal:///%s", path)
 	}
-	return fmt.Sprintf("nodelocal://%s", path), nil
+	return fmt.Sprintf("nodelocal://%d/%s", nodeID, path)
 }
 
 func makeLocalStorage(
-	cfg roachpb.ExternalStorage_LocalFilePath, settings *cluster.Settings,
+	ctx context.Context,
+	cfg roachpb.ExternalStorage_LocalFilePath,
+	settings *cluster.Settings,
+	blobClientFactory blobs.BlobClientFactory,
 ) (ExternalStorage, error) {
 	if cfg.Path == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
-	// TODO(dt): check that this node is cfg.NodeID if non-zero.
+	client, err := blobClientFactory(ctx, cfg.NodeID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create blob client")
+	}
 
-	localBase := cfg.Path
-	externalDir := ""
 	// In non-server execution we have no settings and no restriction on local IO.
 	if settings != nil {
 		if settings.ExternalIODir == "" {
 			return nil, errors.Errorf("local file access is disabled")
 		}
-		// we prefix with the IO dir
-		localBase = filepath.Clean(filepath.Join(settings.ExternalIODir, localBase))
-		externalDir = settings.ExternalIODir
-		// ... and make sure we didn't ../ our way back out.
-		if !strings.HasPrefix(localBase, settings.ExternalIODir) {
-			return nil, errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
-		}
 	}
-	return &localFileStorage{base: localBase, cfg: cfg, externalIODir: externalDir}, nil
+	return &localFileStorage{base: cfg.Path, cfg: cfg, blobClient: client}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExternalStorage {
@@ -351,66 +359,46 @@ func (l *localFileStorage) Conf() roachpb.ExternalStorage {
 	}
 }
 
+func joinRelativePath(filePath string, file string) string {
+	// Joining "." to make this a relative path.
+	// This ensures path.Clean does not simplify in unexpected ways.
+	return path.Join(".", filePath, file)
+}
+
 func (l *localFileStorage) WriteFile(
-	_ context.Context, basename string, content io.ReadSeeker,
+	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	p := filepath.Join(l.base, basename)
-	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-		return errors.Wrap(err, "creating local external storage path")
-	}
-	tmpP := p + `.tmp`
-	f, err := os.Create(tmpP)
-	if err != nil {
-		return errors.Wrapf(err, "creating local external tmp file %q", tmpP)
-	}
-	defer func() {
-		f.Close()
-		if err == nil {
-			err = errors.Wrapf(os.Rename(tmpP, p), "renaming to local export file %q", p)
-		}
-	}()
-	_, err = io.Copy(f, content)
-	if err != nil {
-		return errors.Wrapf(err, "writing to local external tmp file %q", tmpP)
-	}
-	if err := f.Sync(); err != nil {
-		return errors.Wrapf(err, "syncing to local external tmp file %q", tmpP)
-	}
-	return err
+	return l.blobClient.WriteFile(ctx, joinRelativePath(l.base, basename), content)
 }
 
-func (l *localFileStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	return os.Open(filepath.Join(l.base, basename))
+func (l *localFileStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+	return l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename))
 }
 
-func (l *localFileStorage) ListFiles(_ context.Context) ([]string, error) {
+func (l *localFileStorage) ListFiles(ctx context.Context) ([]string, error) {
 	var fileList []string
-	matches, err := filepath.Glob(l.base)
+	matches, err := l.blobClient.List(ctx, l.base)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to match pattern provided")
 	}
 
 	for _, fileName := range matches {
-		uri, err := MakeLocalStorageURI(strings.TrimPrefix(fileName, l.externalIODir))
-		if err != nil {
-			continue
-		}
-		fileList = append(fileList, uri)
+		fileList = append(fileList, makeNodeLocalURIWithNodeID(l.cfg.NodeID, fileName))
 	}
 
 	return fileList, nil
 }
 
-func (l *localFileStorage) Delete(_ context.Context, basename string) error {
-	return os.Remove(filepath.Join(l.base, basename))
+func (l *localFileStorage) Delete(ctx context.Context, basename string) error {
+	return l.blobClient.Delete(ctx, joinRelativePath(l.base, basename))
 }
 
-func (l *localFileStorage) Size(_ context.Context, basename string) (int64, error) {
-	fi, err := os.Stat(filepath.Join(l.base, basename))
+func (l *localFileStorage) Size(ctx context.Context, basename string) (int64, error) {
+	stat, err := l.blobClient.Stat(ctx, joinRelativePath(l.base, basename))
 	if err != nil {
-		return 0, err
+		return 0, nil
 	}
-	return fi.Size(), nil
+	return stat.Filesize, nil
 }
 
 func (*localFileStorage) Close() error {
