@@ -124,10 +124,9 @@ func TestBlobServiceList(t *testing.T) {
 	defer cleanupFn()
 
 	fileContent := []byte("a")
-	dir := filepath.Join(tmpDir, "file/dir")
-	files := []string{"a.csv", "b.csv", "c.csv"}
+	files := []string{"file/dir/a.csv", "file/dir/b.csv", "file/dir/c.csv"}
 	for _, file := range files {
-		writeTestFile(t, filepath.Join(dir, file), fileContent)
+		writeTestFile(t, filepath.Join(tmpDir, file), fileContent)
 	}
 
 	service, err := NewBlobService(tmpDir)
@@ -148,7 +147,7 @@ func TestBlobServiceList(t *testing.T) {
 			t.Fatal("result list does not have the correct number of files")
 		}
 		for i, f := range resultList {
-			if f != filepath.Join(dir, files[i]) {
+			if f != files[i] {
 				t.Fatalf("result list is incorrect %s", resultList)
 			}
 		}
