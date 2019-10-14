@@ -9,6 +9,7 @@
 package importccl
 
 import (
+	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
@@ -26,7 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type readFileFunc func(context.Context, *fileReader, int32, string) error
+type readFileFunc func(context.Context, *fileReader, int32, string, chan string) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -98,8 +99,59 @@ func readInputFiles(
 			defer decompressed.Close()
 			src.Reader = decompressed
 
-			if err := fileFunc(ctx, src, dataFileIndex, dataFile); err != nil {
-				return errors.Wrap(err, dataFile)
+			var rejected chan string
+			if format.Format == roachpb.IOFileFormat_MysqlOutfile && format.MysqlOut.SaveRejected {
+				rejected = make(chan string)
+			}
+			if rejected != nil {
+				grp := ctxgroup.WithContext(ctx)
+				grp.GoCtx(func(ctx context.Context) error {
+					var buf []byte
+					atFirstLine := true
+					for s := range rejected {
+						buf = append(buf, s...)
+						atFirstLine = false
+					}
+					if atFirstLine {
+						// no rejected rows
+						return nil
+					}
+					rejectedFile := dataFile
+					parsedURI, err := url.Parse(rejectedFile)
+					if err != nil {
+						return err
+					}
+					parsedURI.Path = parsedURI.Path + ".rejected"
+					conf, err := cloud.ExternalStorageConfFromURI(rejectedFile)
+					if err != nil {
+						return err
+					}
+					rejectedStorage, err := makeExternalStorage(ctx, conf)
+					if err != nil {
+						return err
+					}
+					defer rejectedStorage.Close()
+					if err := rejectedStorage.WriteFile(ctx, "", bytes.NewReader(buf)); err != nil {
+						return err
+					}
+					return nil
+				})
+
+				grp.GoCtx(func(ctx context.Context) error {
+					defer close(rejected)
+					if err := fileFunc(ctx, src, dataFileIndex, dataFile, rejected); err != nil {
+						return errors.Wrap(err, dataFile)
+					}
+					return nil
+				})
+
+				if err := grp.Wait(); err != nil {
+					return errors.Wrap(err, dataFile)
+				}
+			} else {
+				if err := fileFunc(ctx, src, dataFileIndex, dataFile, rejected); err != nil {
+					return errors.Wrap(err, dataFile)
+				}
 			}
 			return nil
 		}(); err != nil {
