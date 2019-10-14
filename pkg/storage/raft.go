@@ -21,6 +21,15 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
+// numRaftMsgTypes is the cardinality of the raft.MessageType enum.
+const numRaftMsgTypes = 19
+
+func init() {
+	if numRaftMsgTypes != len(raftpb.MessageType_name) {
+		panic("numRaftMsgType out of sync with raft.MessageType enum")
+	}
+}
+
 // init installs an adapter to use clog for log messages from raft which
 // don't belong to any range.
 func init() {
