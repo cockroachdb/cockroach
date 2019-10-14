@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -26,6 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+)
+
+var (
+	tooSmallSSTSize = settings.RegisterByteSizeSetting(
+		"kv.bulk_io_write.small_write_size",
+		"size below which a 'bulk' write will be performed as a normal write instead",
+		1<<18,
+	)
 )
 
 type sz int64
@@ -43,6 +53,7 @@ func (b sz) String() string {
 type SSTBatcher struct {
 	db         sender
 	rc         *kv.RangeDescriptorCache
+	settings   *cluster.Settings
 	maxSize    uint64
 	splitAfter uint64
 
@@ -275,7 +286,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms)
+	files, err := AddSSTable(ctx, b.db, start, end, sstBytes, b.disallowShadowing, b.ms, b.settings)
 	if err != nil {
 		return err
 	}
@@ -329,7 +340,7 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 
 type sender interface {
 	AddSSTable(
-		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats,
+		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats, ingestAsWrites bool,
 	) error
 	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
 }
@@ -351,6 +362,7 @@ func AddSSTable(
 	sstBytes []byte,
 	disallowShadowing bool,
 	ms enginepb.MVCCStats,
+	settings *cluster.Settings,
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
@@ -382,8 +394,23 @@ func AddSSTable(
 			for i := 0; i < maxAddSSTableRetries; i++ {
 				log.VEventf(ctx, 2, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), item.start, item.end)
 				before := timeutil.Now()
+				// If this SST is "too small", the fixed costs associated with adding an
+				// SST – in terms of triggering flushes, extra compactions, etc – would
+				// exceed the savings we get from skipping regular, key-by-key writes,
+				// and we're better off just putting its contents in a regular batch.
+				// This isn't perfect: We're still incurring extra overhead constructing
+				// SSTables just for use as a wire-format, but the rest of the
+				// implementation of bulk-ingestion assumes certainly semantics of the
+				// AddSSTable API - like ingest at arbitrary timestamps or collision
+				// detection - making it is simpler to just always use the same API
+				// and just switch how it writes its result.
+				ingestAsWriteBatch := false
+				if settings != nil && int64(len(item.sstBytes)) < tooSmallSSTSize.Get(&settings.SV) {
+					log.VEventf(ctx, 2, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
+					ingestAsWriteBatch = true
+				}
 				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats)
+				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
