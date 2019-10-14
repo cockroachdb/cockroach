@@ -741,7 +741,11 @@ func (b *Batch) writeBatch(s, e interface{}, data []byte) {
 
 // addSSTable is only exported on DB.
 func (b *Batch) addSSTable(
-	s, e interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats,
+	s, e interface{},
+	data []byte,
+	disallowShadowing bool,
+	stats *enginepb.MVCCStats,
+	ingestAsWrites bool,
 ) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -761,6 +765,7 @@ func (b *Batch) addSSTable(
 		Data:              data,
 		DisallowShadowing: disallowShadowing,
 		MVCCStats:         stats,
+		IngestAsWrites:    ingestAsWrites,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

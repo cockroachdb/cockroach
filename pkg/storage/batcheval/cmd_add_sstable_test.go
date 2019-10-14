@@ -87,13 +87,13 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 
 		// Key is before the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "d", "e", data, false /* disallowShadowing */, nil, /* stats */
+			ctx, "d", "e", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "a", "b", data, false /* disallowShadowing */, nil, /* stats */
+			ctx, "a", "b", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
@@ -101,7 +101,9 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 		// Do an initial ingest.
 		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 		defer cancel()
-		if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
+		if err := db.AddSSTable(
+			ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+		); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		formatted := tracing.FormatRecordedSpans(collect())
@@ -142,7 +144,9 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
+		if err := db.AddSSTable(
+			ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+		); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		if r, err := db.Get(ctx, "bb"); err != nil {
@@ -177,7 +181,9 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 			defer cancel()
 
-			if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); err != nil {
+			if err := db.AddSSTable(
+				ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+			); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
@@ -212,6 +218,54 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 		}
 	}
 
+	// ... and doing the same thing but via write-batch works the same.
+	{
+		key := engine.MVCCKey{Key: []byte("bd"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("3").RawBytes)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+
+		var metrics *storage.StoreMetrics
+		var before int64
+		if store != nil {
+			metrics = store.Metrics()
+			before = metrics.AddSSTableApplications.Count()
+		}
+		for i := 0; i < 2; i++ {
+			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+			defer cancel()
+
+			if err := db.AddSSTable(
+				ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, true, /* ingestAsWrites */
+			); err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
+				"evaluating AddSSTable",
+				"via regular write batch",
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if r, err := db.Get(ctx, "bb"); err != nil {
+				t.Fatalf("%+v", err)
+			} else if expected := []byte("1"); !bytes.Equal(expected, r.ValueBytes()) {
+				t.Errorf("expected %q, got %q", expected, r.ValueBytes())
+			}
+			if r, err := db.Get(ctx, "bd"); err != nil {
+				t.Fatalf("%+v", err)
+			} else if expected := []byte("3"); !bytes.Equal(expected, r.ValueBytes()) {
+				t.Errorf("expected %q, got %q", expected, r.ValueBytes())
+			}
+		}
+		if store != nil {
+			if expected, got := before, metrics.AddSSTableApplications.Count(); expected != got {
+				t.Fatalf("expected %d sst ingestions, got %d", expected, got)
+			}
+		}
+	}
+
 	// Invalid key/value entry checksum.
 	{
 		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
@@ -222,7 +276,9 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */); !testutils.IsError(err, "invalid checksum") {
+		if err := db.AddSSTable(
+			ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+		); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
 		}
 	}

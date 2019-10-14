@@ -27424,6 +27424,7 @@ const int AddSSTableRequest::kHeaderFieldNumber;
 const int AddSSTableRequest::kDataFieldNumber;
 const int AddSSTableRequest::kDisallowShadowingFieldNumber;
 const int AddSSTableRequest::kMvccStatsFieldNumber;
+const int AddSSTableRequest::kIngestAsWritesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AddSSTableRequest::AddSSTableRequest()
@@ -27451,15 +27452,17 @@ AddSSTableRequest::AddSSTableRequest(const AddSSTableRequest& from)
   } else {
     mvcc_stats_ = NULL;
   }
-  disallow_shadowing_ = from.disallow_shadowing_;
+  ::memcpy(&disallow_shadowing_, &from.disallow_shadowing_,
+    static_cast<size_t>(reinterpret_cast<char*>(&ingest_as_writes_) -
+    reinterpret_cast<char*>(&disallow_shadowing_)) + sizeof(ingest_as_writes_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AddSSTableRequest)
 }
 
 void AddSSTableRequest::SharedCtor() {
   data_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&disallow_shadowing_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(disallow_shadowing_));
+      reinterpret_cast<char*>(&ingest_as_writes_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(ingest_as_writes_));
 }
 
 AddSSTableRequest::~AddSSTableRequest() {
@@ -27497,7 +27500,9 @@ void AddSSTableRequest::Clear() {
     delete mvcc_stats_;
   }
   mvcc_stats_ = NULL;
-  disallow_shadowing_ = false;
+  ::memset(&disallow_shadowing_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&ingest_as_writes_) -
+      reinterpret_cast<char*>(&disallow_shadowing_)) + sizeof(ingest_as_writes_));
   _internal_metadata_.Clear();
 }
 
@@ -27565,6 +27570,20 @@ bool AddSSTableRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // bool ingest_as_writes = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(40u /* 40 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &ingest_as_writes_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -27612,6 +27631,11 @@ void AddSSTableRequest::SerializeWithCachedSizes(
       4, this->_internal_mvcc_stats(), output);
   }
 
+  // bool ingest_as_writes = 5;
+  if (this->ingest_as_writes() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->ingest_as_writes(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AddSSTableRequest)
@@ -27647,6 +27671,11 @@ size_t AddSSTableRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // bool ingest_as_writes = 5;
+  if (this->ingest_as_writes() != 0) {
+    total_size += 1 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -27677,6 +27706,9 @@ void AddSSTableRequest::MergeFrom(const AddSSTableRequest& from) {
   if (from.disallow_shadowing() != 0) {
     set_disallow_shadowing(from.disallow_shadowing());
   }
+  if (from.ingest_as_writes() != 0) {
+    set_ingest_as_writes(from.ingest_as_writes());
+  }
 }
 
 void AddSSTableRequest::CopyFrom(const AddSSTableRequest& from) {
@@ -27701,6 +27733,7 @@ void AddSSTableRequest::InternalSwap(AddSSTableRequest* other) {
   swap(header_, other->header_);
   swap(mvcc_stats_, other->mvcc_stats_);
   swap(disallow_shadowing_, other->disallow_shadowing_);
+  swap(ingest_as_writes_, other->ingest_as_writes_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
