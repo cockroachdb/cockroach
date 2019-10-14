@@ -1,0 +1,53 @@
+@startuml
+skinparam BoxPadding 10
+
+box "On the gateway node"
+  participant SQL
+  participant RootTxn
+end box
+box "On another node"
+  participant dSQLServer
+  participant LeafTxn
+end box
+participant cluster
+
+create RootTxn
+SQL -> RootTxn : client.NewTxn(RootTxn)
+...
+note left of SQL
+   forking RootTxn
+   into LeafTxn meta
+end note
+SQL -> RootTxn : txn.GetTxnCoordMeta()
+RootTxn --> SQL : TxnCoordMeta
+SQL -> SQL : leafmeta.StripRootToLeaf()
+SQL -> dSQLServer : SetupFlow(proc spec, leafmeta)
+note over dSQLServer,LeafTxn: (dSQL proc starts exec)
+note left of SQL: actually instantiating LeafTxn
+create LeafTxn
+dSQLServer -> LeafTxn : client.NewTxnWithCoordMeta()
+...
+note left of SQL
+   LeafTxn issuing reads
+   on behalf of RootTxn
+end note
+dSQLServer -> LeafTxn : txn.Run(client.Batch)
+LeafTxn -> cluster : txn.sender.Send(roachpb.BatchRequest)
+...
+cluster --> LeafTxn : BatchResponse
+LeafTxn --> dSQLServer : Batch modified in-place
+dSQLServer --> SQL : some results
+...
+note over dSQLServer,LeafTxn: (dSQL proc finishes exec)
+note left of SQL
+   updates to LeafTxn
+   repatriated into RootTxn
+end note
+dSQLServer -> LeafTxn : GetTxnCoordMeta()
+LeafTxn --> dSQLServer : TxnCoordMeta
+dSQLServer -> dSQLServer : leafmeta.StripLeafToRoot()
+dSQLServer --> SQL : final results + leafmeta
+SQL -> RootTxn : txn.AugmentTxnCoordMeta(leafmeta)
+...
+SQL -> RootTxn : Commit/Rollback/CleanupOnError
+@enduml
