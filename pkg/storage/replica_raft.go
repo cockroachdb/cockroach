@@ -416,7 +416,7 @@ type handleRaftReadyStats struct {
 var noSnap IncomingSnapshot
 
 // handleRaftReady processes a raft.Ready containing entries and messages that
-// are ready to read, be saved to stable storage, committed or sent to other
+// are ready to read, be saved to stable storage, committed, or sent to other
 // peers. It takes a non-empty IncomingSnapshot to indicate that it is
 // about to process a snapshot.
 //
@@ -1167,13 +1167,16 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
-	if !r.sendRaftMessageRequest(ctx, &RaftMessageRequest{
+	req := newRaftMessageRequest()
+	*req = RaftMessageRequest{
 		RangeID:       r.RangeID,
 		ToReplica:     toReplica,
 		FromReplica:   fromReplica,
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
-	}) {
+	}
+	if !r.sendRaftMessageRequest(ctx, req) {
+		req.release()
 		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
