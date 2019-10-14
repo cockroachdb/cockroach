@@ -1080,11 +1080,11 @@ type StoreMetrics struct {
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
 
-	// A map for conveniently finding the appropriate metric. The individual
+	// An array for conveniently finding the appropriate metric. The individual
 	// metric references must exist as AddMetricStruct adds them by reflection
-	// on this struct and does not process map types.
+	// on this struct and does not process array types.
 	// TODO(arjun): eliminate this duplication.
-	raftRcvdMessages map[raftpb.MessageType]*metric.Counter
+	raftRcvdMessages [maxRaftMsgType + 1]*metric.Counter
 
 	RaftEnqueuedPending            *metric.Gauge
 	RaftCoalescedHeartbeatsPending *metric.Gauge
@@ -1279,7 +1279,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftRcvdMsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
 		RaftRcvdMsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
 		RaftRcvdMsgDropped:        metric.NewCounter(metaRaftRcvdDropped),
-		raftRcvdMessages:          make(map[raftpb.MessageType]*metric.Counter, len(raftpb.MessageType_name)),
 
 		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
 
