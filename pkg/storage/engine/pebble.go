@@ -278,35 +278,14 @@ func (p *Pebble) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 		panic("write operation called on read-only pebble instance")
 	}
 
-	pebbleIter, ok := iter.(*pebbleIterator)
-	if !ok {
-		return errors.Errorf("%T is not a pebble iterator", iter)
+	// Write all the tombstones in one batch.
+	batch := p.NewWriteOnlyBatch()
+	defer batch.Close()
+
+	if err := batch.ClearIterRange(iter, start, end); err != nil {
+		return err
 	}
-	// Note that this method has the side effect of modifying iter's bounds.
-	// Since all calls to `ClearIterRange` are on new throwaway iterators, this
-	// should be fine.
-	pebbleIter.lowerBoundBuf = EncodeKeyToBuf(pebbleIter.lowerBoundBuf[:0], start)
-	pebbleIter.options.LowerBound = pebbleIter.lowerBoundBuf
-	pebbleIter.upperBoundBuf = EncodeKeyToBuf(pebbleIter.upperBoundBuf[:0], end)
-	pebbleIter.options.UpperBound = pebbleIter.upperBoundBuf
-	pebbleIter.iter.SetBounds(pebbleIter.lowerBoundBuf, pebbleIter.upperBoundBuf)
-
-	pebbleIter.Seek(start)
-	for ; ; pebbleIter.Next() {
-		ok, err := pebbleIter.Valid()
-		if err != nil {
-			return err
-		} else if !ok || !pebbleIter.UnsafeKey().Less(end) {
-			break
-		}
-
-		err = p.db.Delete(pebbleIter.iter.Key(), pebble.Sync)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return batch.Commit(true)
 }
 
 // Merge implements the Engine interface.
