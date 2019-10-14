@@ -215,7 +215,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 				info := md.RenderToString([]byte(fn.Info))
 				extra = fmt.Sprintf("<span class=\"funcdesc\">%s</span>", info)
 			}
-			s := fmt.Sprintf("<tr><td><code>%s(%s) &rarr; %s</code></td><td>%s</td></tr>", name, linkArguments(args), linkArguments(ret), extra)
+			s := fmt.Sprintf("<tr><td><a name=\"%s\"></a><code>%s(%s) &rarr; %s</code></td><td>%s</td></tr>", name, name, linkArguments(args), linkArguments(ret), extra)
 			functions[cat] = append(functions[cat], s)
 		}
 	}
