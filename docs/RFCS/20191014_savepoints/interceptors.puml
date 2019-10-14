@@ -1,0 +1,35 @@
+@startuml
+participant "client.Txn" as Txn
+participant TxnCoordSender
+participant interceptor1
+participant interceptor2
+participant txnSeqNumAllocator
+participant interceptor3
+participant txnSpanRefresher
+participant interceptor4
+participant DistSender
+
+Txn -> TxnCoordSender : Send(ba)
+TxnCoordSender -> TxnCoordSender : (some txn logic)
+TxnCoordSender -> interceptor1 : Send(ba)
+interceptor1 -> interceptor2 : Send(ba)
+interceptor2 -> txnSeqNumAllocator : Send(ba)
+txnSeqNumAllocator -> txnSeqNumAllocator : assign seqnums in batch
+txnSeqNumAllocator -> interceptor3 : Send(ba)
+interceptor3 -> txnSpanRefresher : Send(ba)
+txnSpanRefresher -> interceptor4 : Send(ba)
+interceptor4 -> DistSender : Send(ba)
+DistSender -> cluster : (distribute requests)
+...
+cluster --> DistSender : (merge responses)
+DistSender --> interceptor4 : BatchResponse
+interceptor4 --> txnSpanRefresher : BatchResponse
+txnSpanRefresher --> txnSpanRefresher : (collect spans)
+txnSpanRefresher --> interceptor3 : BatchResponse
+interceptor3 --> txnSeqNumAllocator : BatchResponse
+txnSeqNumAllocator --> interceptor2 : BatchResponse
+interceptor2 --> interceptor1 : BatchResponse
+interceptor1 --> TxnCoordSender : BatchResponse
+TxnCoordSender -> TxnCoordSender : (some txn logic)
+TxnCoordSender --> Txn : BatchResponse
+@enduml
