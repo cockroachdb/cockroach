@@ -41,9 +41,7 @@ import (
 `
 
 func genLikeOps(wr io.Writer) error {
-	tmpl := template.New("like_sel_ops").Funcs(template.FuncMap{"buildDict": buildDict})
-	var err error
-	tmpl, err = tmpl.Parse(selTemplate)
+	tmpl, err := getSelectionOpsTmpl()
 	if err != nil {
 		return err
 	}

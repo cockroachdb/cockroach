@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -205,6 +206,21 @@ func raftEntryFormatter(data []byte) string {
 	}
 	commandID, _ := DecodeRaftCommand(data)
 	return fmt.Sprintf("[%x] [%d]", commandID, len(data))
+}
+
+var raftMessageRequestPool = sync.Pool{
+	New: func() interface{} {
+		return &RaftMessageRequest{}
+	},
+}
+
+func newRaftMessageRequest() *RaftMessageRequest {
+	return raftMessageRequestPool.Get().(*RaftMessageRequest)
+}
+
+func (m *RaftMessageRequest) release() {
+	*m = RaftMessageRequest{}
+	raftMessageRequestPool.Put(m)
 }
 
 // IsPreemptive returns whether this is a preemptive snapshot or a Raft
