@@ -89,7 +89,16 @@ func (l *localStorage) List(pattern string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return filepath.Glob(fullPath)
+	matches, err := filepath.Glob(fullPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var fileList []string
+	for _, file := range matches {
+		fileList = append(fileList, strings.TrimPrefix(file, l.externalIODir+"/"))
+	}
+	return fileList, nil
 }
 
 // Delete prepends IO dir to filename and deletes that local file.

@@ -32,24 +32,24 @@ type BlobClient interface {
 	// read the contents.
 	// TODO(georgiah): this currently sends the entire file over
 	// 	over the wire. Still need to implement streaming.
-	ReadFile(ctx context.Context, from roachpb.NodeID, file string) (io.ReadCloser, error)
+	ReadFile(ctx context.Context, file string) (io.ReadCloser, error)
 
 	// WriteFile sends the named payload to the requested node.
 	// This method will read entire content of file and send
 	// it over to another node, based on the nodeID.
 	// TODO(georgiah): this currently sends the entire file over
 	// 	over the wire. Still need to implement streaming.
-	WriteFile(ctx context.Context, to roachpb.NodeID, file string, content io.ReadSeeker) error
+	WriteFile(ctx context.Context, file string, content io.ReadSeeker) error
 
 	// List lists the corresponding filenames from the requested node.
 	// The requested node can be the current node.
-	List(ctx context.Context, from roachpb.NodeID, pattern string) ([]string, error)
+	List(ctx context.Context, pattern string) ([]string, error)
 
 	// Delete deletes the specified file or empty directory from a remote node.
-	Delete(ctx context.Context, from roachpb.NodeID, file string) error
+	Delete(ctx context.Context, file string) error
 
 	// Stat gets the size (in bytes) of a specified file from a remote node.
-	Stat(ctx context.Context, from roachpb.NodeID, file string) (*blobspb.BlobStat, error)
+	Stat(ctx context.Context, file string) (*blobspb.BlobStat, error)
 }
 
 var _ BlobClient = &remoteClient{}
@@ -57,32 +57,16 @@ var _ BlobClient = &remoteClient{}
 // remoteClient uses the node dialer and blob service clients
 // to Read or Write bulk files from/to other nodes.
 type remoteClient struct {
-	dialer *nodedialer.Dialer
+	blobClient blobspb.BlobClient
 }
 
 // newRemoteClient instantiates a remote blob service client.
-func newRemoteClient(dialer *nodedialer.Dialer) BlobClient {
-	return &remoteClient{dialer: dialer}
+func newRemoteClient(blobClient blobspb.BlobClient) BlobClient {
+	return &remoteClient{blobClient: blobClient}
 }
 
-func (c *remoteClient) getBlobClient(
-	ctx context.Context, nodeID roachpb.NodeID,
-) (blobspb.BlobClient, error) {
-	conn, err := c.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
-	if err != nil {
-		return nil, errors.Wrap(err, "connecting to node")
-	}
-	return blobspb.NewBlobClient(conn), nil
-}
-
-func (c *remoteClient) ReadFile(
-	ctx context.Context, from roachpb.NodeID, file string,
-) (io.ReadCloser, error) {
-	client, err := c.getBlobClient(ctx, from)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.GetBlob(ctx, &blobspb.GetRequest{
+func (c *remoteClient) ReadFile(ctx context.Context, file string) (io.ReadCloser, error) {
+	resp, err := c.blobClient.GetBlob(ctx, &blobspb.GetRequest{
 		Filename: file,
 	})
 	if err != nil {
@@ -91,20 +75,12 @@ func (c *remoteClient) ReadFile(
 	return ioutil.NopCloser(bytes.NewReader(resp.Payload)), err
 }
 
-func (c *remoteClient) WriteFile(
-	ctx context.Context, to roachpb.NodeID, file string, content io.ReadSeeker,
-) error {
+func (c *remoteClient) WriteFile(ctx context.Context, file string, content io.ReadSeeker) error {
 	payload, err := ioutil.ReadAll(content)
 	if err != nil {
 		return errors.Wrap(err, "reading file contents")
 	}
-
-	blobClient, err := c.getBlobClient(ctx, to)
-	if err != nil {
-		return err
-	}
-
-	b, err := blobClient.PutBlob(ctx, &blobspb.PutRequest{
+	b, err := c.blobClient.PutBlob(ctx, &blobspb.PutRequest{
 		Filename: file,
 		Payload:  payload,
 	})
@@ -112,15 +88,8 @@ func (c *remoteClient) WriteFile(
 	return err
 }
 
-func (c *remoteClient) List(
-	ctx context.Context, from roachpb.NodeID, pattern string,
-) ([]string, error) {
-	blobClient, err := c.getBlobClient(ctx, from)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := blobClient.List(ctx, &blobspb.GlobRequest{
+func (c *remoteClient) List(ctx context.Context, pattern string) ([]string, error) {
+	resp, err := c.blobClient.List(ctx, &blobspb.GlobRequest{
 		Pattern: pattern,
 	})
 	if err != nil {
@@ -129,27 +98,15 @@ func (c *remoteClient) List(
 	return resp.Files, nil
 }
 
-func (c *remoteClient) Delete(ctx context.Context, from roachpb.NodeID, file string) error {
-	blobClient, err := c.getBlobClient(ctx, from)
-	if err != nil {
-		return err
-	}
-
-	_, err = blobClient.Delete(ctx, &blobspb.DeleteRequest{
+func (c *remoteClient) Delete(ctx context.Context, file string) error {
+	_, err := c.blobClient.Delete(ctx, &blobspb.DeleteRequest{
 		Filename: file,
 	})
 	return err
 }
 
-func (c *remoteClient) Stat(
-	ctx context.Context, from roachpb.NodeID, file string,
-) (*blobspb.BlobStat, error) {
-	blobClient, err := c.getBlobClient(ctx, from)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := blobClient.Stat(ctx, &blobspb.StatRequest{
+func (c *remoteClient) Stat(ctx context.Context, file string) (*blobspb.BlobStat, error) {
+	resp, err := c.blobClient.Stat(ctx, &blobspb.StatRequest{
 		Filename: file,
 	})
 	if err != nil {
@@ -175,95 +132,41 @@ func newLocalClient(externalIODir string) (BlobClient, error) {
 	return &localClient{localStorage: storage}, nil
 }
 
-func (c *localClient) ReadFile(
-	ctx context.Context, _ roachpb.NodeID, file string,
-) (io.ReadCloser, error) {
+func (c *localClient) ReadFile(ctx context.Context, file string) (io.ReadCloser, error) {
 	return c.localStorage.ReadFile(file)
 }
 
-func (c *localClient) WriteFile(
-	ctx context.Context, _ roachpb.NodeID, file string, content io.ReadSeeker,
-) error {
+func (c *localClient) WriteFile(ctx context.Context, file string, content io.ReadSeeker) error {
 	return c.localStorage.WriteFile(file, content)
 }
 
-func (c *localClient) List(
-	ctx context.Context, _ roachpb.NodeID, pattern string,
-) ([]string, error) {
+func (c *localClient) List(ctx context.Context, pattern string) ([]string, error) {
 	return c.localStorage.List(pattern)
 }
 
-func (c *localClient) Delete(ctx context.Context, _ roachpb.NodeID, file string) error {
+func (c *localClient) Delete(ctx context.Context, file string) error {
 	return c.localStorage.Delete(file)
 }
 
-func (c *localClient) Stat(
-	ctx context.Context, _ roachpb.NodeID, file string,
-) (*blobspb.BlobStat, error) {
+func (c *localClient) Stat(ctx context.Context, file string) (*blobspb.BlobStat, error) {
 	return c.localStorage.Stat(file)
 }
 
-var _ BlobClient = &wrapperClient{}
+// BlobClientFactory creates a blob client based on the nodeID we are dialing.
+type BlobClientFactory func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error)
 
-// wrapperClient decides between using localClient
-// or remoteClient, based on the node ID.
-type wrapperClient struct {
-	self         roachpb.NodeID
-	remoteClient BlobClient
-	localClient  BlobClient
-}
-
-// NewBlobClient instantiates a wrapper blob service client.
-func NewBlobClient(
-	self roachpb.NodeID, dialer *nodedialer.Dialer, localExternalIODir string,
-) (BlobClient, error) {
-	localClient, err := newLocalClient(localExternalIODir)
-	if err != nil {
-		return nil, err
+// NewBlobClientFactory returns a BlobClientFactory
+func NewBlobClientFactory(
+	localNodeID roachpb.NodeID, dialer *nodedialer.Dialer, externalIODir string,
+) BlobClientFactory {
+	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
+		if dialing == 0 || localNodeID == dialing {
+			return newLocalClient(externalIODir)
+		}
+		conn, err := dialer.Dial(ctx, dialing, rpc.DefaultClass)
+		if err != nil {
+			return nil, errors.Wrapf(err, "connecting to node %d", dialing)
+		}
+		return newRemoteClient(blobspb.NewBlobClient(conn)), nil
 	}
-	return &wrapperClient{
-		self:         self,
-		remoteClient: newRemoteClient(dialer),
-		localClient:  localClient,
-	}, nil
-}
-
-func (c *wrapperClient) getClient(nodeID roachpb.NodeID) BlobClient {
-	if nodeID == c.self {
-		return c.localClient
-	}
-	return c.remoteClient
-}
-
-func (c *wrapperClient) ReadFile(
-	ctx context.Context, from roachpb.NodeID, file string,
-) (io.ReadCloser, error) {
-	client := c.getClient(from)
-	return client.ReadFile(ctx, from, file)
-}
-
-func (c *wrapperClient) WriteFile(
-	ctx context.Context, to roachpb.NodeID, file string, content io.ReadSeeker,
-) error {
-	client := c.getClient(to)
-	return client.WriteFile(ctx, to, file, content)
-}
-
-func (c *wrapperClient) List(
-	ctx context.Context, from roachpb.NodeID, pattern string,
-) ([]string, error) {
-	client := c.getClient(from)
-	return client.List(ctx, from, pattern)
-}
-
-func (c *wrapperClient) Delete(ctx context.Context, from roachpb.NodeID, file string) error {
-	client := c.getClient(from)
-	return client.Delete(ctx, from, file)
-}
-
-func (c *wrapperClient) Stat(
-	ctx context.Context, from roachpb.NodeID, file string,
-) (*blobspb.BlobStat, error) {
-	client := c.getClient(from)
-	return client.Stat(ctx, from, file)
 }
