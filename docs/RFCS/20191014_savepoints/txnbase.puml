@@ -1,0 +1,21 @@
+@startuml
+box "On the gateway node"
+  participant SQL
+  participant RootTxn
+end box
+participant cluster
+
+note over SQL: SQL transaction starts
+create RootTxn
+SQL -> RootTxn : client.NewTxn(RootTxnn)
+...
+note over SQL: during query execution
+SQL -> RootTxn : txn.Run(client.Batch)
+RootTxn -> cluster : txn.sender.Send(roachpb.BatchRequest)
+...
+cluster --> RootTxn : BatchResponse
+RootTxn --> SQL : Batch modified in-place
+...
+note over SQL: when SQL txn completes
+SQL -> RootTxn : Commit/Rollback/CleanupOnError
+@enduml
