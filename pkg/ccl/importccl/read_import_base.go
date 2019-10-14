@@ -114,7 +114,7 @@ func readInputFiles(
 		es.Close()
 		if sz <= 0 {
 			// Don't log dataFile here because it could leak auth information.
-			log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
+			log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", dataFile)
 			break
 		}
 		fileSizes[id] = sz

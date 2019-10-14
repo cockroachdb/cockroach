@@ -53,7 +53,7 @@ func setUpService(
 	remoteNodeID roachpb.NodeID,
 	localExternalDir string,
 	remoteExternalDir string,
-) BlobClient {
+) BlobClientFactory {
 	s := rpc.NewServer(rpcContext)
 	remoteBlobServer, err := NewBlobService(remoteExternalDir)
 	if err != nil {
@@ -86,11 +86,12 @@ func setUpService(
 			return nil, errors.Errorf("node %d not found", nodeID)
 		},
 	)
-	client, err := NewBlobClient(localNodeID, localDialer, localExternalDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return client
+	return NewBlobClientFactory(
+		context.TODO(),
+		localNodeID,
+		localDialer,
+		localExternalDir,
+	)
 }
 
 func writeTestFile(t *testing.T, file string, content []byte) {
@@ -114,7 +115,7 @@ func TestBlobClientReadFile(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	blobClient := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
+	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
 
 	localFileContent := []byte("local_file")
 	remoteFileContent := []byte("remote_file")
@@ -166,8 +167,12 @@ func TestBlobClientReadFile(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			blobClient, err := blobClientFactory(tc.nodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			ctx := context.TODO()
-			reader, err := blobClient.ReadFile(ctx, tc.nodeID, tc.filename)
+			reader, err := blobClient.ReadFile(ctx, tc.filename)
 			if err != nil {
 				if tc.err != "" && testutils.IsError(err, tc.err) {
 					// correct error was returned
@@ -197,7 +202,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	blobClient := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
+	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
 
 	for _, tc := range []struct {
 		name               string
@@ -222,9 +227,13 @@ func TestBlobClientWriteFile(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			blobClient, err := blobClientFactory(tc.nodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			ctx := context.TODO()
 			byteContent := []byte(tc.fileContent)
-			err := blobClient.WriteFile(ctx, tc.nodeID, tc.filename, bytes.NewReader(byteContent))
+			err = blobClient.WriteFile(ctx, tc.filename, bytes.NewReader(byteContent))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -250,7 +259,7 @@ func TestBlobClientList(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	blobClient := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
+	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
 
 	localFileNames := []string{"file/local/dataA.csv", "file/local/dataB.csv", "file/local/dataC.csv"}
 	remoteFileNames := []string{"file/remote/A.csv", "file/remote/B.csv", "file/remote/C.csv"}
@@ -332,8 +341,12 @@ func TestBlobClientList(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			blobClient, err := blobClientFactory(tc.nodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			ctx := context.TODO()
-			list, err := blobClient.List(ctx, tc.nodeID, tc.dirName)
+			list, err := blobClient.List(ctx, tc.dirName)
 			if err != nil {
 				if tc.err != "" && testutils.IsError(err, tc.err) {
 					// correct error returned
@@ -364,7 +377,7 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	blobClient := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
+	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
 
 	localFileContent := []byte("local_file")
 	remoteFileContent := []byte("remote_file")
@@ -410,8 +423,12 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			blobClient, err := blobClientFactory(tc.nodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			ctx := context.TODO()
-			err := blobClient.Delete(ctx, tc.nodeID, tc.filename)
+			err = blobClient.Delete(ctx, tc.filename)
 			if err != nil {
 				if tc.err != "" && testutils.IsError(err, tc.err) {
 					// the correct error was returned
@@ -438,7 +455,7 @@ func TestBlobClientStat(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	blobClient := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
+	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
 
 	localFileContent := []byte("local_file")
 	remoteFileContent := []byte("remote_file")
@@ -482,8 +499,12 @@ func TestBlobClientStat(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			blobClient, err := blobClientFactory(tc.nodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			ctx := context.TODO()
-			resp, err := blobClient.Stat(ctx, tc.nodeID, tc.filename)
+			resp, err := blobClient.Stat(ctx, tc.filename)
 			if err != nil {
 				if testutils.IsError(err, tc.err) {
 					// the correct error was returned
