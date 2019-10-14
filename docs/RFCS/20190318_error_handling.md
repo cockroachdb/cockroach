@@ -303,7 +303,7 @@ When an error becomes serious enough, we find it useful to find out
 where in the code it was generated, and with which call stack.
 
 For this purpose, the package `github.com/pkg/errors` helpfully embeds
-the caller stack trace every time a leaf error is instantiated,
+the caller stack trace every time a root error is instantiated,
 and every time an error is wrapped.
 
 This stack trace is printed out upon formatting the error with `%+v`,
@@ -474,8 +474,8 @@ Several error packages and struct types are currently in use in CockroachDB.
 
 | Error package/struct                           | Used in CockroachDB? | Structure         | Wire format | Safe telemetry details | Stack traces | Barrier with details | pg code |
 |------------------------------------------------|----------------------|-------------------|-------------|------------------------|--------------|----------------------|---------|
-| `golang.org/pkg/errors`, `errorString`         | Yes                  | (leaf)            | No          | No                     | No           | No                   | No      |
-| `github.com/pkg/errors`, `fundamental`         | Yes                  | (leaf)            | No          | No                     | Yes          | No                   | No      |
+| `golang.org/pkg/errors`, `errorString`         | Yes                  | (standalone)      | No          | No                     | No           | No                   | No      |
+| `github.com/pkg/errors`, `fundamental`         | Yes                  | (standalone)      | No          | No                     | Yes          | No                   | No      |
 | `github.com/pkg/errors`, `withMessage`         | Yes                  | linked list       | No          | No                     | No           | No                   | No      |
 | `github.com/pkg/errors`, `withStack`           | Yes                  | linked list       | No          | No                     | Yes          | No                   | No      |
 | `github.com/hashicorp/errwrap`, `wrappedError` | No                   | binary tree       | No          | No                     | No           | Yes                  | No      |
@@ -483,7 +483,7 @@ Several error packages and struct types are currently in use in CockroachDB.
 | Go 2 (presumably new types)                    | No                   | linked list       | No          | ?                      | ?            | No                   | No      |
 | (CRDB) `roachpb.Error`                         | Yes                  | single leaf cause | Yes         | No                     | No           | No                   | No      |
 | (CRDB) `distsqlpb.Error`                       | Yes                  | single leaf cause | Yes         | No                     | No           | No                   | Yes     |
-| (CRDB) `pgerror.Error` (2.1/previous)          | Yes                  | (leaf)            | Yes         | Yes                    | Yes          | Yes                  | Yes     |
+| (CRDB) `pgerror.Error` (2.1/previous)          | Yes                  | (standalone)      | Yes         | Yes                    | Yes          | Yes                  | Yes     |
 | (CRDB) proposed new `Error` object             | Not yet              | tree              | Yes         | Yes                    | Yes          | Yes                  | Yes     |
 
 The table above can be further simplified as follows:
@@ -512,6 +512,7 @@ See the included user documentation: https://github.com/cockroachdb/errors/blob/
 
 Table of contents:
 
+- [Vocabulary](#Vocabulary)
 - [Instantiating new errors](#Instantiating-new-errors)
 - [Decorating existing errors](#Decorating-existing-errors)
 - [Utility features](#Utility-features)
@@ -532,6 +533,18 @@ Table of contents:
   - [Example: HTTP error codes](#Example-HTTP-error-codes)
   - [Example: adding `context`](#Example-adding-context)
   - [Discussion: how to best name new leaf/wrapper error types](#Discussion-how-to-best-name-new-leafwrapper-error-types)
+
+## Vocabulary
+
+The library separates the following two kinds of errors:
+
+- *root* error types, also called *leaf types*, which implement the
+  `error` interface but do not refer to another error as “cause”̛ via
+  `Unwrap()` or `Cause()`.
+
+- *wrapper* error types, which implement the `error` interface and
+  also refer to another error as “cause” via `Unwrap()` (preferred) or
+  `Cause()` (compat with `pkg/errors`).
 
 ## Instantiating new errors
 
