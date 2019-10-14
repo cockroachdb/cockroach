@@ -1526,12 +1526,12 @@ NULL
 query T
 SELECT COLLATION FOR ('foo')
 ----
-default
+"default"
 
 query T
 SELECT COLLATION FOR ('foo' COLLATE "de_DE");
 ----
-de_DE
+"de_DE"
 
 statement error pq: pg_collation_for\(\): collations are not supported by type: int
 SELECT COLLATION FOR (1);
@@ -1539,12 +1539,12 @@ SELECT COLLATION FOR (1);
 query T
 SELECT pg_collation_for ('foo')
 ----
-default
+"default"
 
 query T
 SELECT pg_collation_for ('foo' COLLATE "de_DE");
 ----
-de_DE
+"de_DE"
 
 statement error pq: pg_collation_for\(\): collations are not supported by type: int
 SELECT pg_collation_for(1);
