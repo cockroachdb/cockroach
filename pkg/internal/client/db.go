@@ -650,9 +650,10 @@ func (db *DB) AddSSTable(
 	data []byte,
 	disallowShadowing bool,
 	stats *enginepb.MVCCStats,
+	ingestAsWrites bool,
 ) error {
 	b := &Batch{}
-	b.addSSTable(begin, end, data, disallowShadowing, stats)
+	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

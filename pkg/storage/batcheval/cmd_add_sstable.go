@@ -164,7 +164,7 @@ func EvalAddSSTable(
 	// value), we do not consider this a collision. While the KV would just
 	// overwrite the existing data, the stats would be added to the cumulative
 	// stats of the AddSSTable command, causing a double count for such KVs.
-	// Therfore, we compute the stats for these "skipped" KVs on-the-fly while
+	// Therefore, we compute the stats for these "skipped" KVs on-the-fly while
 	// checking for the collision condition in C++ and subtract them from the
 	// stats of the SST being ingested before adding them to the running
 	// cumulative for this command. These stats can then be marked as accurate.
@@ -173,6 +173,27 @@ func EvalAddSSTable(
 	}
 	stats.ContainsEstimates = !args.DisallowShadowing
 	ms.Add(stats)
+
+	if args.IngestAsWrites {
+		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
+		dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
+		for {
+			ok, err := dataIter.Valid()
+			if err != nil {
+				return result.Result{}, err
+			} else if !ok {
+				break
+			}
+			// NB: This is *not* a general transformation of any arbitrary SST to a
+			// WriteBatch: it assumes every key in the SST is a simple Set. This is
+			// already assumed elsewhere in this RPC though, so that's OK here.
+			if err := batch.Put(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+				return result.Result{}, err
+			}
+			dataIter.Next()
+		}
+		return result.Result{}, nil
+	}
 
 	return result.Result{
 		Replicated: storagepb.ReplicatedEvalResult{
