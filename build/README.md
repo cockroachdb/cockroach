@@ -67,6 +67,16 @@ A snapshot of CockroachDB's dependencies is maintained at
 https://github.com/cockroachdb/vendored and checked out as a submodule at
 `./vendor`.
 
+## Updating the golang version
+
+Please copy this checklist ino the relevant commit message, with a link
+back to this document:
+
+* [ ] Adjust version in Docker image ([source](./builder/Dockerfile#L199-L200)).
+* [ ] Rebuild the Docker image and bump the version in builder.sh accordingly ([source](./builder.sh#L6)).
+* [ ] Bump the version in go-version-check.sh ([source](./go-version-check.sh)), unless bumping to a new patch release.
+* [ ] Bump the default installed version of Go in bootstrap-debian.sh ([source](./bootstrap/bootstrap-debian.sh#L40-42)).
+
 ## Updating Dependencies
 
 This snapshot was built and is managed using `dep` and we manage `vendor` as a
