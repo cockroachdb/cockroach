@@ -1165,24 +1165,33 @@ sort
 opt
 SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z LIMIT 2 RETURNING *] ORDER BY b
 ----
-insert abc
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- ├── insert-mapping:
- │    ├──  x:4 => a:1
- │    ├──  y:5 => b:2
- │    └──  z:6 => c:3
- ├── ordering: +2
- └── limit
-      ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-      ├── internal-ordering: +5,+6
-      ├── ordering: +5
-      ├── sort
-      │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-      │    ├── ordering: +5,+6
-      │    ├── limit hint: 2.00
-      │    └── scan xyz
-      │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-      └── const: 2 [type=int]
+sort
+ ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
+ ├── ordering: +8
+ └── with &1
+      ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
+      ├── insert abc
+      │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+      │    ├── insert-mapping:
+      │    │    ├──  x:4 => abc.a:1
+      │    │    ├──  y:5 => abc.b:2
+      │    │    └──  z:6 => abc.c:3
+      │    └── limit
+      │         ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         ├── internal-ordering: +5,+6
+      │         ├── sort
+      │         │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    ├── ordering: +5,+6
+      │         │    ├── limit hint: 2.00
+      │         │    └── scan xyz
+      │         │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         └── const: 2 [type=int]
+      └── with-scan &1
+           ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
+           └── mapping:
+                ├──  abc.a:1(int) => a:7(int)
+                ├──  abc.b:2(int) => b:8(int)
+                └──  abc.c:3(int) => c:9(int)
 
 # Verify that provided orderings are derived correctly.
 opt format=(hide-qual,hide-cost,hide-stats,hide-constraints,hide-scalars)
@@ -1190,21 +1199,38 @@ SELECT *
 FROM [INSERT INTO xyz SELECT b, c, d FROM abcd ORDER BY c, d LIMIT 2 RETURNING *]
 ORDER BY y
 ----
-insert xyz
- ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
- ├── insert-mapping:
- │    ├──  b:5 => x:1
- │    ├──  c:6 => y:2
- │    └──  d:7 => z:3
+sort
+ ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
  ├── cardinality: [0 - 2]
  ├── side-effects, mutations
- ├── ordering: +2
- └── scan abcd@cd
-      ├── columns: b:5(int) c:6(int) d:7(int)
-      ├── limit: 2
-      ├── ordering: +6
-      ├── prune: (5)
-      └── interesting orderings: (+6,+7)
+ ├── ordering: +10
+ ├── prune: (9-11)
+ └── with &1
+      ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
+      ├── cardinality: [0 - 2]
+      ├── side-effects, mutations
+      ├── prune: (9-11)
+      ├── insert xyz
+      │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int!null)
+      │    ├── insert-mapping:
+      │    │    ├──  b:5 => xyz.x:1
+      │    │    ├──  c:6 => xyz.y:2
+      │    │    └──  d:7 => xyz.z:3
+      │    ├── cardinality: [0 - 2]
+      │    ├── side-effects, mutations
+      │    └── scan abcd@cd
+      │         ├── columns: b:5(int) c:6(int) d:7(int)
+      │         ├── limit: 2
+      │         ├── prune: (5)
+      │         └── interesting orderings: (+6,+7)
+      └── with-scan &1
+           ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
+           ├── mapping:
+           │    ├──  xyz.x:1(int) => x:9(int)
+           │    ├──  xyz.y:2(int) => y:10(int)
+           │    └──  xyz.z:3(int) => z:11(int)
+           ├── cardinality: [0 - 2]
+           └── prune: (9-11)
 
 # Verify that provided orderings are derived correctly with equivalence FD.
 # TODO(radu): Use interesting orderings to get rid of top-level sort.
@@ -1215,22 +1241,24 @@ WHERE x=y
 ORDER BY y
 ----
 sort
- ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+ ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
  ├── cardinality: [0 - 2]
  ├── side-effects, mutations
- ├── fd: (1)==(2), (2)==(1)
- ├── ordering: +(1|2) [actual: +1]
- └── select
-      ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+ ├── fd: (9)==(10), (10)==(9)
+ ├── ordering: +(9|10) [actual: +9]
+ ├── prune: (11)
+ └── with &1
+      ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
       ├── cardinality: [0 - 2]
       ├── side-effects, mutations
-      ├── fd: (1)==(2), (2)==(1)
+      ├── fd: (9)==(10), (10)==(9)
+      ├── prune: (11)
       ├── insert xyz
-      │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+      │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) xyz.z:3(int!null)
       │    ├── insert-mapping:
-      │    │    ├──  b:5 => x:1
-      │    │    ├──  c:6 => y:2
-      │    │    └──  d:7 => z:3
+      │    │    ├──  b:5 => xyz.x:1
+      │    │    ├──  c:6 => xyz.y:2
+      │    │    └──  d:7 => xyz.z:3
       │    ├── cardinality: [0 - 2]
       │    ├── side-effects, mutations
       │    └── scan abcd@cd
@@ -1238,21 +1266,42 @@ sort
       │         ├── limit: 2
       │         ├── prune: (5)
       │         └── interesting orderings: (+6,+7)
-      └── filters
-           └── x = y [type=bool, outer=(1,2), fd=(1)==(2), (2)==(1)]
+      └── select
+           ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
+           ├── cardinality: [0 - 2]
+           ├── fd: (9)==(10), (10)==(9)
+           ├── prune: (11)
+           ├── with-scan &1
+           │    ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
+           │    ├── mapping:
+           │    │    ├──  xyz.x:1(int) => x:9(int)
+           │    │    ├──  xyz.y:2(int) => y:10(int)
+           │    │    └──  xyz.z:3(int) => z:11(int)
+           │    ├── cardinality: [0 - 2]
+           │    └── prune: (9-11)
+           └── filters
+                └── x = y [type=bool, outer=(9,10), fd=(9)==(10), (10)==(9)]
 
 # Ignore internal ordering.
 opt
 SELECT * FROM [INSERT INTO abc SELECT * FROM xyz ORDER BY y, z RETURNING *]
 ----
-insert abc
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- ├── insert-mapping:
- │    ├──  x:4 => a:1
- │    ├──  y:5 => b:2
- │    └──  z:6 => c:3
- └── scan xyz
-      └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+with &1
+ ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
+ ├── insert abc
+ │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+ │    ├── insert-mapping:
+ │    │    ├──  x:4 => abc.a:1
+ │    │    ├──  y:5 => abc.b:2
+ │    │    └──  z:6 => abc.c:3
+ │    └── scan xyz
+ │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ └── with-scan &1
+      ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
+      └── mapping:
+           ├──  abc.a:1(int) => a:7(int)
+           ├──  abc.b:2(int) => b:8(int)
+           └──  abc.c:3(int) => c:9(int)
 
 # --------------------------------------------------
 # Update operator.
@@ -1262,25 +1311,33 @@ insert abc
 opt
 SELECT * FROM [UPDATE abcd SET (a, b)=(1, 2) RETURNING *] ORDER BY c
 ----
-project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
- ├── ordering: +3 opt(1,2)
- └── update abcd
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int)
-      ├── update-mapping:
-      │    ├──  column11:11 => a:1
-      │    └──  column12:12 => b:2
-      ├── ordering: +3 opt(1,2)
-      └── project
-           ├── columns: column11:11(int!null) column12:12(int!null) a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           ├── ordering: +8 opt(11,12)
-           ├── scan abcd@cd
-           │    ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           │    └── ordering: +8
-           └── projections
-                ├── const: 1 [type=int]
-                └── const: 2 [type=int]
+sort
+ ├── columns: a:13(int!null) b:14(int!null) c:15(int) d:16(int)
+ ├── ordering: +15 opt(13,14)
+ └── with &1
+      ├── columns: a:13(int!null) b:14(int!null) c:15(int) d:16(int)
+      ├── project
+      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int)
+      │    └── update abcd
+      │         ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) rowid:5(int!null)
+      │         ├── fetch columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int)
+      │         ├── update-mapping:
+      │         │    ├──  column11:11 => abcd.a:1
+      │         │    └──  column12:12 => abcd.b:2
+      │         └── project
+      │              ├── columns: column11:11(int!null) column12:12(int!null) abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              ├── scan abcd
+      │              │    └── columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              └── projections
+      │                   ├── const: 1 [type=int]
+      │                   └── const: 2 [type=int]
+      └── with-scan &1
+           ├── columns: a:13(int!null) b:14(int!null) c:15(int) d:16(int)
+           └── mapping:
+                ├──  abcd.a:1(int) => a:13(int)
+                ├──  abcd.b:2(int) => b:14(int)
+                ├──  abcd.c:3(int) => c:15(int)
+                └──  abcd.d:4(int) => d:16(int)
 
 # Verify that provided orderings are derived correctly.
 opt format=(hide-qual,hide-cost,hide-stats,hide-constraints,hide-scalars)
@@ -1288,40 +1345,56 @@ SELECT *
 FROM [UPDATE abcd SET b=b+1 ORDER BY c LIMIT 10 RETURNING *]
 ORDER BY c, d
 ----
-project
- ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
+sort
+ ├── columns: a:12(int) b:13(int) c:14(int) d:15(int)
  ├── cardinality: [0 - 10]
  ├── side-effects, mutations
- ├── ordering: +3,+4
- ├── prune: (1-4)
- └── update abcd
-      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) rowid:5(int!null)
-      ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int)
-      ├── update-mapping:
-      │    └──  column11:11 => b:2
+ ├── ordering: +14,+15
+ ├── prune: (12-15)
+ └── with &1
+      ├── columns: a:12(int) b:13(int) c:14(int) d:15(int)
       ├── cardinality: [0 - 10]
       ├── side-effects, mutations
-      ├── key: (5)
-      ├── fd: (5)-->(1-4)
-      ├── ordering: +3,+4
-      └── project
-           ├── columns: column11:11(int) a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
+      ├── prune: (12-15)
+      ├── project
+      │    ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      │    ├── cardinality: [0 - 10]
+      │    ├── side-effects, mutations
+      │    ├── prune: (1-4)
+      │    └── update abcd
+      │         ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) rowid:5(int!null)
+      │         ├── fetch columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int)
+      │         ├── update-mapping:
+      │         │    └──  column11:11 => abcd.b:2
+      │         ├── cardinality: [0 - 10]
+      │         ├── side-effects, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── project
+      │              ├── columns: column11:11(int) abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              ├── cardinality: [0 - 10]
+      │              ├── key: (10)
+      │              ├── fd: (10)-->(6-9), (7)-->(11)
+      │              ├── prune: (6-11)
+      │              ├── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
+      │              ├── scan abcd@cd
+      │              │    ├── columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              │    ├── limit: 10
+      │              │    ├── key: (10)
+      │              │    ├── fd: (10)-->(6-9)
+      │              │    ├── prune: (6-10)
+      │              │    └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
+      │              └── projections
+      │                   └── abcd.b + 1 [type=int, outer=(7)]
+      └── with-scan &1
+           ├── columns: a:12(int) b:13(int) c:14(int) d:15(int)
+           ├── mapping:
+           │    ├──  abcd.a:1(int) => a:12(int)
+           │    ├──  abcd.b:2(int) => b:13(int)
+           │    ├──  abcd.c:3(int) => c:14(int)
+           │    └──  abcd.d:4(int) => d:15(int)
            ├── cardinality: [0 - 10]
-           ├── key: (10)
-           ├── fd: (10)-->(6-9), (7)-->(11)
-           ├── ordering: +8,+9
-           ├── prune: (6-11)
-           ├── interesting orderings: (+8,+9,+10)
-           ├── scan abcd@cd
-           │    ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           │    ├── limit: 10
-           │    ├── key: (10)
-           │    ├── fd: (10)-->(6-9)
-           │    ├── ordering: +8,+9
-           │    ├── prune: (6-10)
-           │    └── interesting orderings: (+8,+9,+10)
-           └── projections
-                └── b + 1 [type=int, outer=(7)]
+           └── prune: (12-15)
 
 # Verify that provided orderings are derived correctly with equivalence FD.
 # TODO(radu): Use interesting orderings to get rid of top-level sort.
@@ -1332,51 +1405,64 @@ WHERE b=c
 ORDER BY b, d
 ----
 sort
- ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int)
+ ├── columns: a:12(int) b:13(int!null) c:14(int!null) d:15(int)
  ├── cardinality: [0 - 10]
  ├── side-effects, mutations
- ├── fd: (2)==(3), (3)==(2)
- ├── ordering: +(2|3),+4 [actual: +2,+4]
- ├── prune: (1-4)
- └── project
-      ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int)
+ ├── fd: (13)==(14), (14)==(13)
+ ├── ordering: +(13|14),+15 [actual: +13,+15]
+ ├── prune: (12,15)
+ └── with &1
+      ├── columns: a:12(int) b:13(int!null) c:14(int!null) d:15(int)
       ├── cardinality: [0 - 10]
       ├── side-effects, mutations
-      ├── fd: (2)==(3), (3)==(2)
-      ├── prune: (1-4)
+      ├── fd: (13)==(14), (14)==(13)
+      ├── prune: (12,15)
+      ├── project
+      │    ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      │    ├── cardinality: [0 - 10]
+      │    ├── side-effects, mutations
+      │    ├── prune: (1-4)
+      │    └── update abcd
+      │         ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) rowid:5(int!null)
+      │         ├── fetch columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int)
+      │         ├── update-mapping:
+      │         │    └──  column11:11 => abcd.b:2
+      │         ├── cardinality: [0 - 10]
+      │         ├── side-effects, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── project
+      │              ├── columns: column11:11(int) abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              ├── cardinality: [0 - 10]
+      │              ├── key: (10)
+      │              ├── fd: (10)-->(6-9), (7)-->(11)
+      │              ├── prune: (6-11)
+      │              ├── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
+      │              ├── scan abcd@cd
+      │              │    ├── columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              │    ├── limit: 10
+      │              │    ├── key: (10)
+      │              │    ├── fd: (10)-->(6-9)
+      │              │    ├── prune: (6-10)
+      │              │    └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
+      │              └── projections
+      │                   └── abcd.b + 1 [type=int, outer=(7)]
       └── select
-           ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+           ├── columns: a:12(int) b:13(int!null) c:14(int!null) d:15(int)
            ├── cardinality: [0 - 10]
-           ├── side-effects, mutations
-           ├── key: (5)
-           ├── fd: (5)-->(1-4), (2)==(3), (3)==(2)
-           ├── update abcd
-           │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) rowid:5(int!null)
-           │    ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int)
-           │    ├── update-mapping:
-           │    │    └──  column11:11 => b:2
+           ├── fd: (13)==(14), (14)==(13)
+           ├── prune: (12,15)
+           ├── with-scan &1
+           │    ├── columns: a:12(int) b:13(int) c:14(int) d:15(int)
+           │    ├── mapping:
+           │    │    ├──  abcd.a:1(int) => a:12(int)
+           │    │    ├──  abcd.b:2(int) => b:13(int)
+           │    │    ├──  abcd.c:3(int) => c:14(int)
+           │    │    └──  abcd.d:4(int) => d:15(int)
            │    ├── cardinality: [0 - 10]
-           │    ├── side-effects, mutations
-           │    ├── key: (5)
-           │    ├── fd: (5)-->(1-4)
-           │    └── project
-           │         ├── columns: column11:11(int) a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           │         ├── cardinality: [0 - 10]
-           │         ├── key: (10)
-           │         ├── fd: (10)-->(6-9), (7)-->(11)
-           │         ├── prune: (6-11)
-           │         ├── interesting orderings: (+8,+9,+10)
-           │         ├── scan abcd@cd
-           │         │    ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           │         │    ├── limit: 10
-           │         │    ├── key: (10)
-           │         │    ├── fd: (10)-->(6-9)
-           │         │    ├── prune: (6-10)
-           │         │    └── interesting orderings: (+8,+9,+10)
-           │         └── projections
-           │              └── b + 1 [type=int, outer=(7)]
+           │    └── prune: (12-15)
            └── filters
-                └── b = c [type=bool, outer=(2,3), fd=(2)==(3), (3)==(2)]
+                └── b = c [type=bool, outer=(13,14), fd=(13)==(14), (14)==(13)]
 
 # --------------------------------------------------
 # Upsert operator.
@@ -1396,42 +1482,50 @@ FROM
 ORDER BY b
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- ├── ordering: +2
- └── upsert abc
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      ├── canary column: 7
-      ├── fetch columns: a:7(int) b:8(int) c:9(int)
-      ├── insert-mapping:
-      │    ├──  x:4 => a:1
-      │    ├──  y:5 => b:2
-      │    └──  z:6 => c:3
-      ├── update-mapping:
-      │    └──  upsert_a:11 => a:1
-      ├── return-mapping:
-      │    ├──  upsert_a:11 => a:1
-      │    ├──  upsert_b:12 => b:2
-      │    └──  upsert_c:13 => c:3
-      └── project
-           ├── columns: upsert_a:11(int) upsert_b:12(int) upsert_c:13(int) x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
-           ├── left-join (lookup abc)
-           │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null) a:7(int) b:8(int) c:9(int)
-           │    ├── key columns: [4 5 6] = [7 8 9]
-           │    ├── limit
-           │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-           │    │    ├── internal-ordering: +5,+6
-           │    │    ├── sort
-           │    │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-           │    │    │    ├── ordering: +5,+6
-           │    │    │    ├── limit hint: 2.00
-           │    │    │    └── scan xyz
-           │    │    │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
-           │    │    └── const: 2 [type=int]
-           │    └── filters (true)
-           └── projections
-                ├── CASE WHEN a IS NULL THEN x ELSE 10 END [type=int]
-                ├── CASE WHEN a IS NULL THEN y ELSE b END [type=int]
-                └── CASE WHEN a IS NULL THEN z ELSE c END [type=int]
+ ├── columns: a:14(int!null) b:15(int!null) c:16(int!null)
+ ├── ordering: +15
+ └── with &1
+      ├── columns: a:14(int!null) b:15(int!null) c:16(int!null)
+      ├── upsert abc
+      │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+      │    ├── canary column: 7
+      │    ├── fetch columns: abc.a:7(int) abc.b:8(int) abc.c:9(int)
+      │    ├── insert-mapping:
+      │    │    ├──  x:4 => abc.a:1
+      │    │    ├──  y:5 => abc.b:2
+      │    │    └──  z:6 => abc.c:3
+      │    ├── update-mapping:
+      │    │    └──  upsert_a:11 => abc.a:1
+      │    ├── return-mapping:
+      │    │    ├──  upsert_a:11 => abc.a:1
+      │    │    ├──  upsert_b:12 => abc.b:2
+      │    │    └──  upsert_c:13 => abc.c:3
+      │    └── project
+      │         ├── columns: upsert_a:11(int) upsert_b:12(int) upsert_c:13(int) x:4(int!null) y:5(int!null) z:6(int!null) abc.a:7(int) abc.b:8(int) abc.c:9(int)
+      │         ├── left-join (lookup abc)
+      │         │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null) abc.a:7(int) abc.b:8(int) abc.c:9(int)
+      │         │    ├── key columns: [4 5 6] = [7 8 9]
+      │         │    ├── limit
+      │         │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    │    ├── internal-ordering: +5,+6
+      │         │    │    ├── sort
+      │         │    │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    │    │    ├── ordering: +5,+6
+      │         │    │    │    ├── limit hint: 2.00
+      │         │    │    │    └── scan xyz
+      │         │    │    │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │         │    │    └── const: 2 [type=int]
+      │         │    └── filters (true)
+      │         └── projections
+      │              ├── CASE WHEN abc.a IS NULL THEN x ELSE 10 END [type=int]
+      │              ├── CASE WHEN abc.a IS NULL THEN y ELSE abc.b END [type=int]
+      │              └── CASE WHEN abc.a IS NULL THEN z ELSE abc.c END [type=int]
+      └── with-scan &1
+           ├── columns: a:14(int!null) b:15(int!null) c:16(int!null)
+           └── mapping:
+                ├──  abc.a:1(int) => a:14(int)
+                ├──  abc.b:2(int) => b:15(int)
+                └──  abc.c:3(int) => c:16(int)
 
 # --------------------------------------------------
 # Delete operator.
@@ -1441,16 +1535,25 @@ sort
 opt
 SELECT * FROM [DELETE FROM abcd RETURNING *] ORDER BY c
 ----
-project
- ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
- ├── ordering: +3
- └── delete abcd
-      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) rowid:5(int!null)
-      ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int)
-      ├── ordering: +3
-      └── scan abcd@cd
-           ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           └── ordering: +8
+sort
+ ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
+ ├── ordering: +13
+ └── with &1
+      ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
+      ├── project
+      │    ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      │    └── delete abcd
+      │         ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) rowid:5(int!null)
+      │         ├── fetch columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int)
+      │         └── scan abcd
+      │              └── columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      └── with-scan &1
+           ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
+           └── mapping:
+                ├──  abcd.a:1(int) => a:11(int)
+                ├──  abcd.b:2(int) => b:12(int)
+                ├──  abcd.c:3(int) => c:13(int)
+                └──  abcd.d:4(int) => d:14(int)
 
 # Verify that provided orderings are derived correctly.
 opt format=(hide-qual,hide-cost,hide-stats,hide-constraints,hide-scalars)
@@ -1458,28 +1561,45 @@ SELECT *
 FROM [DELETE FROM abcd ORDER BY c LIMIT 10 RETURNING *]
 ORDER BY c, d
 ----
-project
- ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
+sort
+ ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
  ├── cardinality: [0 - 10]
  ├── side-effects, mutations
- ├── ordering: +3,+4
- ├── prune: (1-4)
- └── delete abcd
-      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) rowid:5(int!null)
-      ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int)
+ ├── ordering: +13,+14
+ ├── prune: (11-14)
+ └── with &1
+      ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
       ├── cardinality: [0 - 10]
       ├── side-effects, mutations
-      ├── key: (5)
-      ├── fd: (5)-->(1-4)
-      ├── ordering: +3,+4
-      └── scan abcd@cd
-           ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           ├── limit: 10
-           ├── key: (10)
-           ├── fd: (10)-->(6-9)
-           ├── ordering: +8,+9
-           ├── prune: (6,7,9,10)
-           └── interesting orderings: (+8,+9,+10)
+      ├── prune: (11-14)
+      ├── project
+      │    ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      │    ├── cardinality: [0 - 10]
+      │    ├── side-effects, mutations
+      │    ├── prune: (1-4)
+      │    └── delete abcd
+      │         ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) rowid:5(int!null)
+      │         ├── fetch columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int)
+      │         ├── cardinality: [0 - 10]
+      │         ├── side-effects, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── scan abcd@cd
+      │              ├── columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              ├── limit: 10
+      │              ├── key: (10)
+      │              ├── fd: (10)-->(6-9)
+      │              ├── prune: (6,7,9,10)
+      │              └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
+      └── with-scan &1
+           ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
+           ├── mapping:
+           │    ├──  abcd.a:1(int) => a:11(int)
+           │    ├──  abcd.b:2(int) => b:12(int)
+           │    ├──  abcd.c:3(int) => c:13(int)
+           │    └──  abcd.d:4(int) => d:14(int)
+           ├── cardinality: [0 - 10]
+           └── prune: (11-14)
 
 # Verify that provided orderings are derived correctly with equivalence FD.
 # TODO(radu): Use interesting orderings to get rid of top-level sort.
@@ -1490,40 +1610,53 @@ WHERE b=c
 ORDER BY b, d
 ----
 sort
- ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int)
+ ├── columns: a:11(int) b:12(int!null) c:13(int!null) d:14(int)
  ├── cardinality: [0 - 10]
  ├── side-effects, mutations
- ├── fd: (2)==(3), (3)==(2)
- ├── ordering: +(2|3),+4 [actual: +2,+4]
- ├── prune: (1-4)
- └── project
-      ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int)
+ ├── fd: (12)==(13), (13)==(12)
+ ├── ordering: +(12|13),+14 [actual: +12,+14]
+ ├── prune: (11,14)
+ └── with &1
+      ├── columns: a:11(int) b:12(int!null) c:13(int!null) d:14(int)
       ├── cardinality: [0 - 10]
       ├── side-effects, mutations
-      ├── fd: (2)==(3), (3)==(2)
-      ├── prune: (1-4)
+      ├── fd: (12)==(13), (13)==(12)
+      ├── prune: (11,14)
+      ├── project
+      │    ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      │    ├── cardinality: [0 - 10]
+      │    ├── side-effects, mutations
+      │    ├── prune: (1-4)
+      │    └── delete abcd
+      │         ├── columns: abcd.a:1(int) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) rowid:5(int!null)
+      │         ├── fetch columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int)
+      │         ├── cardinality: [0 - 10]
+      │         ├── side-effects, mutations
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(1-4)
+      │         └── scan abcd@cd
+      │              ├── columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
+      │              ├── limit: 10
+      │              ├── key: (10)
+      │              ├── fd: (10)-->(6-9)
+      │              ├── prune: (6,7,10)
+      │              └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
       └── select
-           ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+           ├── columns: a:11(int) b:12(int!null) c:13(int!null) d:14(int)
            ├── cardinality: [0 - 10]
-           ├── side-effects, mutations
-           ├── key: (5)
-           ├── fd: (5)-->(1-4), (2)==(3), (3)==(2)
-           ├── delete abcd
-           │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) rowid:5(int!null)
-           │    ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int)
+           ├── fd: (12)==(13), (13)==(12)
+           ├── prune: (11,14)
+           ├── with-scan &1
+           │    ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
+           │    ├── mapping:
+           │    │    ├──  abcd.a:1(int) => a:11(int)
+           │    │    ├──  abcd.b:2(int) => b:12(int)
+           │    │    ├──  abcd.c:3(int) => c:13(int)
+           │    │    └──  abcd.d:4(int) => d:14(int)
            │    ├── cardinality: [0 - 10]
-           │    ├── side-effects, mutations
-           │    ├── key: (5)
-           │    ├── fd: (5)-->(1-4)
-           │    └── scan abcd@cd
-           │         ├── columns: a:6(int) b:7(int) c:8(int) d:9(int) rowid:10(int!null)
-           │         ├── limit: 10
-           │         ├── key: (10)
-           │         ├── fd: (10)-->(6-9)
-           │         ├── prune: (6,7,10)
-           │         └── interesting orderings: (+8,+9,+10)
+           │    └── prune: (11-14)
            └── filters
-                └── b = c [type=bool, outer=(2,3), fd=(2)==(3), (3)==(2)]
+                └── b = c [type=bool, outer=(12,13), fd=(12)==(13), (13)==(12)]
 
 
 # Regression test for #36219: lookup join with ON condition that imposes an

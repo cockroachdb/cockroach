@@ -26,13 +26,13 @@ import (
 func (b *Builder) buildUnionClause(
 	clause *tree.UnionClause, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
-	leftScope := b.buildSelect(clause.Left, desiredTypes, inScope)
+	leftScope := b.buildStmt(clause.Left, desiredTypes, inScope)
 	// Try to propagate types left-to-right, if we didn't already have desired
 	// types.
 	if len(desiredTypes) == 0 {
 		desiredTypes = leftScope.makeColumnTypes()
 	}
-	rightScope := b.buildSelect(clause.Right, desiredTypes, inScope)
+	rightScope := b.buildStmt(clause.Right, desiredTypes, inScope)
 	return b.buildSetOp(clause.Type, clause.All, inScope, leftScope, rightScope)
 }
 

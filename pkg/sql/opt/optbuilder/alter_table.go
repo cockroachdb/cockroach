@@ -47,7 +47,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
-	inputScope := b.buildSelect(split.Rows, colTypes, emptyScope)
+	inputScope := b.buildStmt(split.Rows, colTypes, emptyScope)
 	checkInputColumns("SPLIT AT", inputScope, colNames, colTypes, 1)
 
 	// Build the expiration scalar.

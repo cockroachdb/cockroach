@@ -332,25 +332,36 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
-·                         distributed  false          ·                         ·
-·                         vectorized   false          ·                         ·
-render                    ·            ·              (a)                       +a
- │                        render 0     a              ·                         ·
- └── run                  ·            ·              (a, rowid[hidden])        ·
-      └── update          ·            ·              (a, rowid[hidden])        ·
-           │              table        abc            ·                         ·
-           │              set          a              ·                         ·
-           │              strategy     updater        ·                         ·
-           │              auto commit  ·              ·                         ·
-           └── render     ·            ·              (a, b, c, rowid, c)       +c
-                │         render 0     a              ·                         ·
-                │         render 1     b              ·                         ·
-                │         render 2     c              ·                         ·
-                │         render 3     rowid          ·                         ·
-                │         render 4     c              ·                         ·
-                └── scan  ·            ·              (a, b, c, rowid[hidden])  +c
-·                         table        abc@abc_c_idx  ·                         ·
-·                         spans        ALL            ·                         ·
+·                                             distributed   false                             ·                         ·
+·                                             vectorized    false                             ·                         ·
+root                                          ·             ·                                 (a)                       +a
+ ├── sort                                     ·             ·                                 (a)                       +a
+ │    │                                       order         +a                                ·                         ·
+ │    └── scan buffer node                    ·             ·                                 (a)                       ·
+ │                                            label         buffer 1                          ·                         ·
+ └── subquery                                 ·             ·                                 (a)                       +a
+      │                                       id            @S1                               ·                         ·
+      │                                       original sql  UPDATE abc SET a = c RETURNING a  ·                         ·
+      │                                       exec mode     all rows                          ·                         ·
+      └── buffer node                         ·             ·                                 (a)                       ·
+           │                                  label         buffer 1                          ·                         ·
+           └── spool                          ·             ·                                 (a)                       ·
+                └── render                    ·             ·                                 (a)                       ·
+                     │                        render 0      a                                 ·                         ·
+                     └── run                  ·             ·                                 (a, rowid[hidden])        ·
+                          └── update          ·             ·                                 (a, rowid[hidden])        ·
+                               │              table         abc                               ·                         ·
+                               │              set           a                                 ·                         ·
+                               │              strategy      updater                           ·                         ·
+                               └── render     ·             ·                                 (a, b, c, rowid, c)       ·
+                                    │         render 0      a                                 ·                         ·
+                                    │         render 1      b                                 ·                         ·
+                                    │         render 2      c                                 ·                         ·
+                                    │         render 3      rowid                             ·                         ·
+                                    │         render 4      c                                 ·                         ·
+                                    └── scan  ·             ·                                 (a, b, c, rowid[hidden])  ·
+·                                             table         abc@primary                       ·                         ·
+·                                             spans         ALL                               ·                         ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO
