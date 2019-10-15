@@ -11,6 +11,7 @@
 package xform
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -787,6 +788,8 @@ func (o *Optimizer) optimizeRootWithProps() {
 	// or presentation properties.
 	neededCols := rootProps.ColSet()
 	if !neededCols.SubsetOf(root.Relational().OutputCols) {
+		fmt.Println("yeet")
+		fmt.Println(root)
 		panic(errors.AssertionFailedf(
 			"columns required of root %s must be subset of output columns %s",
 			neededCols,
