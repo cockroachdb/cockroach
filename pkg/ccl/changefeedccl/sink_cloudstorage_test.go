@@ -401,4 +401,51 @@ func TestCloudStorageSink(t *testing.T) {
 			`{"resolved":"4.0000000000"}`,
 		}, slurpDir(t, dir))
 	})
+
+	t.Run(`ordering-among-schema-versions`, func(t *testing.T) {
+		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+		sf := makeSpanFrontier(testSpan)
+		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+		dir := `ordering-among-schema-versions`
+		var targetMaxFileSize int64 = 10
+		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, targetMaxFileSize, settings,
+			opts, timestampOracle)
+		require.NoError(t, err)
+
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
+		t1.Version = 1
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(1)))
+		// Make the first file exceed its file size threshold. This should trigger a flush
+		// for the first file but not the second one.
+		t1.Version = 0
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v1`), ts(1)))
+		require.Equal(t, []string{
+			"v1\ntrigger-flush-v1\n",
+		}, slurpDir(t, dir))
+
+		// Now make the file with the newer schema exceed its file size threshold and ensure
+		// that the file with the older schema is flushed (and ordered) before.
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(1)))
+		t1.Version = 1
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v3`), ts(1)))
+		require.Equal(t, []string{
+			"v1\ntrigger-flush-v1\n",
+			"v2\n",
+			"v3\ntrigger-flush-v3\n",
+		}, slurpDir(t, dir))
+
+		// Calling `Flush()` on the sink should emit files in the order of their schema IDs.
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1)))
+		t1.Version = 0
+		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`x1`), ts(1)))
+		require.NoError(t, s.Flush(ctx))
+		require.Equal(t, []string{
+			"v1\ntrigger-flush-v1\n",
+			"v2\n",
+			"v3\ntrigger-flush-v3\n",
+			"x1\n",
+			"w1\n",
+		}, slurpDir(t, dir))
+	})
 }
