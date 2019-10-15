@@ -34,6 +34,9 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+var enableTempTablesError = pgerror.New(pgcode.Syntax,
+	"enable_temp_tables is an experimental feature which must be explicitly turned on")
+
 type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
@@ -62,6 +65,13 @@ type createTableRun struct {
 }
 
 func (n *createTableNode) startExec(params runParams) error {
+	isTempTable := false
+	if n.n.PersistenceStatus == tree.Temporary {
+		if !params.SessionData().TempTablesEnabled {
+			return enableTempTablesError
+		}
+		isTempTable = true
+	}
 	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Table.Table())
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
@@ -112,9 +122,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		desc, err = makeTableDescIfAs(params,
-			n.n, n.dbDesc.ID, id, creationTime, asCols,
-			privs, params.p.EvalContext())
-
+			n.n, n.dbDesc.ID, id, creationTime, asCols, privs, params.p.EvalContext(), isTempTable)
 		if err != nil {
 			return err
 		}
@@ -126,7 +134,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected, isTempTable)
 		if err != nil {
 			return err
 		}
@@ -405,6 +413,18 @@ func ResolveFK(
 	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return err
+	}
+	if tbl.IsTempTable != target.IsTempTable {
+		tablePersistenceType := "permanent"
+		if tbl.IsTempTable {
+			tablePersistenceType = "temporary"
+		}
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"constraints on %s tables may reference only %s tables",
+			tablePersistenceType,
+			tablePersistenceType,
+		)
 	}
 	if target.ID == tbl.ID {
 		// When adding a self-ref FK to an _existing_ table, we want to make sure
@@ -843,6 +863,7 @@ func InitTableDescriptor(
 	name string,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
+	isTempTable bool,
 ) sqlbase.MutableTableDescriptor {
 	return *sqlbase.NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
 		ID:               id,
@@ -853,6 +874,7 @@ func InitTableDescriptor(
 		ModificationTime: creationTime,
 		Privileges:       privileges,
 		CreateAsOfTime:   creationTime,
+		IsTempTable:      isTempTable,
 	})
 }
 
@@ -905,6 +927,7 @@ func makeTableDescIfAs(
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
+	isTempTable bool,
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	colResIndex := 0
 	// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
@@ -941,6 +964,7 @@ func makeTableDescIfAs(
 		creationTime,
 		privileges,
 		nil, /* affected */
+		isTempTable,
 	)
 	desc.CreateQuery = getFinalSourceQuery(p.AsSource, evalContext)
 	return desc, err
@@ -1007,8 +1031,9 @@ func MakeTableDesc(
 	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	isTempTable bool,
 ) (sqlbase.MutableTableDescriptor, error) {
-	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges)
+	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges, isTempTable)
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
@@ -1254,6 +1279,7 @@ func makeTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
+	isTempTable bool,
 ) (ret sqlbase.MutableTableDescriptor, err error) {
 	// Process any SERIAL columns to remove the SERIAL type,
 	// as required by MakeTableDesc.
@@ -1303,6 +1329,7 @@ func makeTableDesc(
 			affected,
 			&params.p.semaCtx,
 			params.EvalContext(),
+			isTempTable,
 		)
 	})
 	return ret, err

@@ -156,6 +156,7 @@ func MakeSimpleTableDescriptor(
 		affected,
 		&semaCtx,
 		&evalCtx,
+		false, /* isTempTable */
 	)
 	if err != nil {
 		return nil, err

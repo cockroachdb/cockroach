@@ -30,6 +30,8 @@ import (
 // See the comment for Metadata for more details on identifiers.
 type SchemaID int32
 
+type PersistenceStatus bool
+
 // privilegeBitmap stores a union of zero or more privileges. Each privilege
 // that is present in the bitmap is represented by a bit that is shifted by
 // 1 << privilege.Kind, so that multiple privileges can be stored.

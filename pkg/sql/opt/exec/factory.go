@@ -445,6 +445,7 @@ type Factory interface {
 	ConstructCreateView(
 		schema cat.Schema,
 		viewName string,
+		persistenceStatus tree.PersistenceStatus,
 		viewQuery string,
 		columns sqlbase.ResultColumns,
 		deps opt.ViewDeps,

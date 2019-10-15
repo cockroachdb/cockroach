@@ -1153,12 +1153,16 @@ func (node *UpdateExpr) doc(p *PrettyCfg) pretty.Doc {
 func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// CREATE TABLE [IF NOT EXISTS] name ( .... ) [AS]
+	// CREATE [TEMP] TABLE [IF NOT EXISTS] name ( .... ) [AS]
 	//     [SELECT ...] - for CREATE TABLE AS
 	//     [INTERLEAVE ...]
 	//     [PARTITION BY ...]
 	//
-	title := pretty.Keyword("CREATE TABLE")
+	title := pretty.Keyword("CREATE")
+	if node.PersistenceStatus == Temporary {
+		title = pretty.ConcatSpace(title, pretty.Keyword(node.PersistenceStatus.String()))
+	}
+	title = pretty.ConcatSpace(title, pretty.Keyword("TABLE"))
 	if node.IfNotExists {
 		title = pretty.ConcatSpace(title, pretty.Keyword("IF NOT EXISTS"))
 	}
@@ -1195,11 +1199,16 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// CREATE VIEW name ( ... ) AS
+	// CREATE [TEMP] VIEW name ( ... ) AS
 	//     SELECT ...
 	//
+	title := pretty.Keyword("CREATE")
+	if node.PersistenceStatus == Temporary {
+		title = pretty.ConcatSpace(title, pretty.Keyword(node.PersistenceStatus.String()))
+	}
+	title = pretty.ConcatSpace(title, pretty.Keyword("VIEW"))
 	d := pretty.ConcatSpace(
-		pretty.Keyword("CREATE VIEW"),
+		title,
 		p.Doc(&node.Name),
 	)
 	if len(node.ColumnNames) > 0 {
