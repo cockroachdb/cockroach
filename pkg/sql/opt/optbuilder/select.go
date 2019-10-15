@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -76,18 +75,16 @@ func (b *Builder) buildDataSource(
 		// CTEs take precedence over other data sources.
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			outScope = inScope.push()
-
 			inCols := make(opt.ColList, len(cte.cols))
 			outCols := make(opt.ColList, len(cte.cols))
 			outScope.cols = nil
-			i := 0
-			for _, col := range cte.cols {
-				c := b.factory.Metadata().ColumnMeta(col.ID)
+			for i, col := range cte.cols {
+				id := col.ID
+				c := b.factory.Metadata().ColumnMeta(id)
 				newCol := b.synthesizeColumn(outScope, col.Alias, c.Type, nil, nil)
 				newCol.table = *tn
-				inCols[i] = col.ID
+				inCols[i] = id
 				outCols[i] = newCol.id
-				i++
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
@@ -97,6 +94,7 @@ func (b *Builder) buildDataSource(
 				OutCols:      outCols,
 				BindingProps: cte.bindingProps,
 			})
+
 			return outScope
 		}
 
@@ -142,9 +140,43 @@ func (b *Builder) buildDataSource(
 			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"statement source \"%v\" does not return any columns", source.Statement))
 		}
+
+		id := b.factory.Memo().NextWithID()
+		cte := cteSource{
+			name:         tree.AliasClause{},
+			cols:         innerScope.makePresentationWithHiddenCols(),
+			originalExpr: source.Statement,
+			expr:         innerScope.expr,
+			id:           id,
+			bindingProps: innerScope.expr.Relational(),
+		}
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
+
+		inCols := make(opt.ColList, len(cte.cols))
+		outCols := make(opt.ColList, len(cte.cols))
+		for i, col := range cte.cols {
+			id := col.ID
+			c := b.factory.Metadata().ColumnMeta(id)
+			inCols[i] = id
+			outCols[i] = b.factory.Metadata().AddColumn(col.Alias, c.Type)
+		}
+
 		outScope = inScope.push()
-		outScope.appendColumnsFromScope(innerScope)
-		outScope.expr = innerScope.expr
+		// Similar to appendColumnsFromScope, but with re-numbering the column IDs.
+		for i, col := range innerScope.cols {
+			col.scalar = nil
+			col.id = outCols[i]
+			outScope.cols = append(outScope.cols, col)
+		}
+
+		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
+			ID:           cte.id,
+			Name:         string(cte.name.Alias),
+			InCols:       inCols,
+			OutCols:      outCols,
+			BindingProps: cte.bindingProps,
+		})
+
 		return outScope
 
 	case *tree.TableRef:
@@ -222,7 +254,7 @@ func (b *Builder) buildView(
 		defer func() { b.trackViewDeps = true }()
 	}
 
-	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b})
+	outScope = b.buildStmt(sel, nil /* desiredTypes */, &scope{builder: b})
 
 	// Update data source name to be the name of the view. And if view columns
 	// are specified, then update names of output columns.
@@ -578,9 +610,14 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 	outScope = inScope.push()
 
+	if with == nil {
+		return outScope
+	}
+
 	addedCTEs := make([]cteSource, len(with.CTEList))
 
 	// Make a fake subquery to ensure that no CTEs are correlated.
+	// TODO(justin): relax this restriction.
 	outer := b.subquery
 	defer func() { b.subquery = outer }()
 	b.subquery = &subquery{}
@@ -612,7 +649,8 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 			id:           id,
 		}
 		cte := &addedCTEs[i]
-		outScope.ctes[addedCTEs[i].name.Alias.String()] = cte
+		outScope.ctes[cte.name.Alias.String()] = cte
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 
 		if cteExpr.Relational().CanMutate && !inScope.atRoot {
 			panic(
@@ -623,7 +661,6 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 			)
 		}
 
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
@@ -631,8 +668,8 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 	return outScope
 }
 
-// constructed within an EXPLAIN should not be hoisted above it, and so we need
-// to denote a boundary which blocks them.
+// A WITH constructed within an EXPLAIN should not be hoisted above it, and so
+// we need to denote a boundary which blocks them.
 func (b *Builder) pushWithFrame() {
 	b.cteStack = append(b.cteStack, []cteSource{})
 }
@@ -645,8 +682,8 @@ func (b *Builder) popWithFrame(s *scope) {
 
 // flushCTEs adds With expressions on top of an expression.
 func (b *Builder) flushCTEs(expr memo.RelExpr) memo.RelExpr {
-	var ctes []cteSource
-	b.cteStack, ctes = b.cteStack[:len(b.cteStack)-1], b.cteStack[len(b.cteStack)-1]
+	ctes := b.cteStack[len(b.cteStack)-1]
+	b.cteStack = b.cteStack[:len(b.cteStack)-1]
 
 	if len(ctes) == 0 {
 		return expr
@@ -679,7 +716,7 @@ func (b *Builder) buildSelectStmt(
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, desiredTypes, inScope)
+		return b.buildStmt(stmt.Select, desiredTypes, inScope)
 
 	case *tree.SelectClause:
 		return b.buildSelectClause(stmt, nil /* orderBy */, desiredTypes, inScope)
@@ -695,28 +732,15 @@ func (b *Builder) buildSelectStmt(
 	}
 }
 
-// processWith builds a WITH expression and adds its tables to the scope. It
-// then returns the modified scope along with a closure that wraps a provided
-// scope with the built WITH.
-func (b *Builder) processWith(
-	with *tree.With, inScope *scope,
-) (outScope *scope, wrapWiths func(*scope)) {
-	if with == nil {
-		return inScope, func(*scope) {}
-	}
-
+func (b *Builder) processWiths(
+	with *tree.With, inScope *scope, buildStmt func(inScope *scope) *scope,
+) *scope {
 	inScope = b.buildCTEs(with, inScope)
 	prevAtRoot := inScope.atRoot
 	inScope.atRoot = false
-
-	return inScope, func(outScope *scope) {
-		// This can happen sometimes if we are panicking due to an error (which will
-		// be caught higher up in the stack).
-		if outScope == nil {
-			return
-		}
-		inScope.atRoot = prevAtRoot
-	}
+	outScope := buildStmt(inScope)
+	inScope.atRoot = prevAtRoot
+	return outScope
 }
 
 // buildSelect builds a set of memo groups that represent the given select
@@ -730,7 +754,6 @@ func (b *Builder) buildSelect(
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
-	with := stmt.With
 	forLocked := stmt.ForLocked.Strength
 
 	switch forLocked {
@@ -748,15 +771,6 @@ func (b *Builder) buildSelect(
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
-		if stmt.With != nil {
-			if with != nil {
-				// (WITH ... (WITH ...))
-				// Currently we are unable to nest the scopes inside ParenSelect so we
-				// must refuse the syntax so that the query does not get invalid results.
-				panic(unimplemented.NewWithIssue(24303, "multiple WITH clauses in parentheses"))
-			}
-			with = s.Select.With
-		}
 		wrapped = stmt.Select
 		if stmt.OrderBy != nil {
 			if orderBy != nil {
@@ -775,10 +789,6 @@ func (b *Builder) buildSelect(
 			limit = stmt.Limit
 		}
 	}
-
-	var wrapWiths func(*scope)
-	inScope, wrapWiths = b.processWith(with, inScope)
-	defer func() { wrapWiths(outScope) }()
 
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {

@@ -159,10 +159,6 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// that's what RETURNING will use.
 	tn, alias := getAliasedTableName(ins.Table)
 
-	var wrapWiths func(*scope)
-	inScope, wrapWiths = b.processWith(ins.With, inScope)
-	defer func() { wrapWiths(outScope) }()
-
 	// Find which table we're working on, check the permissions.
 	tab, resName := b.resolveTable(tn, privilege.INSERT)
 	if alias == nil {

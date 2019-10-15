@@ -44,38 +44,38 @@ FROM
 ]
 WHERE y=10
 ----
-select
- ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+with &1
+ ├── columns: x:16(string!null) y:17(int!null) z:18(float)
  ├── side-effects, mutations
- ├── stats: [rows=1, distinct(2)=1, null(2)=0]
- ├── fd: ()-->(2)
+ ├── stats: [rows=10, distinct(17)=1, null(17)=0]
+ ├── fd: ()-->(17)
  ├── upsert xyz
- │    ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+ │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
  │    ├── canary column: 9
- │    ├── fetch columns: x:9(string) y:10(int) z:11(float)
+ │    ├── fetch columns: xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
  │    ├── insert-mapping:
- │    │    ├──  b:5 => x:1
- │    │    ├──  a:4 => y:2
- │    │    └──  column8:8 => z:3
+ │    │    ├──  b:5 => xyz.x:1
+ │    │    ├──  a:4 => xyz.y:2
+ │    │    └──  column8:8 => xyz.z:3
  │    ├── update-mapping:
- │    │    └──  upsert_y:14 => y:2
+ │    │    └──  upsert_y:14 => xyz.y:2
  │    ├── return-mapping:
- │    │    ├──  upsert_x:13 => x:1
- │    │    ├──  upsert_y:14 => y:2
- │    │    └──  upsert_z:15 => z:3
+ │    │    ├──  upsert_x:13 => xyz.x:1
+ │    │    ├──  upsert_y:14 => xyz.y:2
+ │    │    └──  upsert_z:15 => xyz.z:3
  │    ├── side-effects, mutations
- │    ├── stats: [rows=200, distinct(1)=181.351171, null(1)=0, distinct(2)=200, null(2)=0]
+ │    ├── stats: [rows=200, distinct(1)=20, null(1)=0, distinct(2)=20, null(2)=0]
  │    └── project
- │         ├── columns: upsert_x:13(string) upsert_y:14(int) upsert_z:15(float) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float) column12:12(int!null)
- │         ├── stats: [rows=200, distinct(13)=181.351171, null(13)=0, distinct(14)=200, null(14)=0]
+ │         ├── columns: upsert_x:13(string) upsert_y:14(int) upsert_z:15(float) a:4(int!null) b:5(string!null) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float) column12:12(int!null)
+ │         ├── stats: [rows=200]
  │         ├── fd: ()-->(5,8,12), (9)-->(10,11), (9)-->(13), (4,9)-->(14)
  │         ├── project
- │         │    ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
- │         │    ├── stats: [rows=200, distinct(5,9)=181.351171, null(5,9)=0, distinct(4,9,12)=200, null(4,9,12)=0]
+ │         │    ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
+ │         │    ├── stats: [rows=200]
  │         │    ├── fd: ()-->(5,8,12), (9)-->(10,11)
  │         │    ├── left-join (hash)
- │         │    │    ├── columns: a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
- │         │    │    ├── stats: [rows=200, distinct(9)=1, null(9)=0, distinct(4,9)=200, null(4,9)=0, distinct(5,9)=181.351171, null(5,9)=0]
+ │         │    │    ├── columns: a:4(int!null) b:5(string!null) column8:8(float) xyz.x:9(string) xyz.y:10(int) xyz.z:11(float)
+ │         │    │    ├── stats: [rows=200, distinct(9)=1, null(9)=0]
  │         │    │    ├── fd: ()-->(5,8), (9)-->(10,11)
  │         │    │    ├── project
  │         │    │    │    ├── columns: column8:8(float) a:4(int!null) b:5(string!null)
@@ -100,20 +100,31 @@ select
  │         │    │    │    └── projections
  │         │    │    │         └── NULL::FLOAT8 [type=float]
  │         │    │    ├── scan xyz
- │         │    │    │    ├── columns: x:9(string!null) y:10(int!null) z:11(float)
+ │         │    │    │    ├── columns: xyz.x:9(string!null) xyz.y:10(int!null) xyz.z:11(float)
  │         │    │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
  │         │    │    │    ├── key: (9)
  │         │    │    │    └── fd: (9)-->(10,11)
  │         │    │    └── filters
- │         │    │         └── b = x [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+ │         │    │         └── b = xyz.x [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
  │         │    └── projections
  │         │         └── const: 5 [type=int]
  │         └── projections
- │              ├── CASE WHEN x IS NULL THEN b ELSE x END [type=string, outer=(5,9)]
- │              ├── CASE WHEN x IS NULL THEN a ELSE column12 END [type=int, outer=(4,9,12)]
- │              └── CASE WHEN x IS NULL THEN column8 ELSE z END [type=float, outer=(8,9,11)]
- └── filters
-      └── y = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+ │              ├── CASE WHEN xyz.x IS NULL THEN b ELSE xyz.x END [type=string, outer=(5,9)]
+ │              ├── CASE WHEN xyz.x IS NULL THEN a ELSE column12 END [type=int, outer=(4,9,12)]
+ │              └── CASE WHEN xyz.x IS NULL THEN column8 ELSE xyz.z END [type=float, outer=(8,9,11)]
+ └── select
+      ├── columns: x:16(string!null) y:17(int!null) z:18(float)
+      ├── stats: [rows=10, distinct(17)=1, null(17)=0]
+      ├── fd: ()-->(17)
+      ├── with-scan &1
+      │    ├── columns: x:16(string!null) y:17(int!null) z:18(float)
+      │    ├── mapping:
+      │    │    ├──  xyz.x:1(string) => x:16(string)
+      │    │    ├──  xyz.y:2(int) => y:17(int)
+      │    │    └──  xyz.z:3(float) => z:18(float)
+      │    └── stats: [rows=200, distinct(16)=20, null(16)=0, distinct(17)=20, null(17)=0]
+      └── filters
+           └── y = 10 [type=bool, outer=(17), constraints=(/17: [/10 - /10]; tight), fd=()-->(17)]
 
 # Cardinality is zero.
 build

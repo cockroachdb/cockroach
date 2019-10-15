@@ -39,10 +39,6 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 			"DELETE statement requires LIMIT when ORDER BY is used"))
 	}
 
-	var wrapWiths func(*scope)
-	inScope, wrapWiths = b.processWith(del.With, inScope)
-	defer func() { wrapWiths(outScope) }()
-
 	// DELETE FROM xx AS yy - we want to know about xx (tn) because
 	// that's what we get the descriptor with, and yy (alias) because
 	// that's what RETURNING will use.

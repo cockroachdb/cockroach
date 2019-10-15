@@ -283,6 +283,23 @@ func (s *scope) makePresentation() physical.Presentation {
 	return presentation
 }
 
+// makePresentationWithHiddenCols is only used when constructing the
+// presentation for a [ ... ]-style data source.
+func (s *scope) makePresentationWithHiddenCols() physical.Presentation {
+	if len(s.cols) == 0 {
+		return nil
+	}
+	presentation := make(physical.Presentation, 0, len(s.cols))
+	for i := range s.cols {
+		col := &s.cols[i]
+		presentation = append(presentation, opt.AliasedColumn{
+			Alias: string(col.name),
+			ID:    col.id,
+		})
+	}
+	return presentation
+}
+
 // walkExprTree walks the given expression and performs name resolution,
 // replaces unresolved column names with columnProps, and replaces subqueries
 // with typed subquery structs.
