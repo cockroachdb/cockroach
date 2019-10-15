@@ -344,9 +344,7 @@ func (rq *replicateQueue) processOneChange(
 		// Let the scanner requeue it again later.
 		return false, nil
 	case AllocatorAdd:
-		// only include live replicas, since dead replicas should soon be removed
-		existingReplicas := liveVoterReplicas
-		return rq.addOrReplace(ctx, repl, existingReplicas, -1 /* removeIdx */, dryRun)
+		return rq.addOrReplace(ctx, repl, voterReplicas, -1 /* removeIdx */, dryRun)
 	case AllocatorRemove:
 		return rq.remove(ctx, repl, voterReplicas, dryRun)
 	case AllocatorReplaceDead:
