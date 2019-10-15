@@ -1008,19 +1008,19 @@ create_index_stmt ::=
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
 
 create_table_stmt ::=
-	'CREATE' 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+	'CREATE' opt_temp 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+	| 'CREATE' opt_temp 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
 
 create_table_as_stmt ::=
-	'CREATE' 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
+	'CREATE' opt_temp 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
+	| 'CREATE' opt_temp 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
 
 create_view_stmt ::=
-	'CREATE' 'VIEW' view_name opt_column_list 'AS' select_stmt
+	'CREATE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
 
 create_sequence_stmt ::=
-	'CREATE' 'SEQUENCE' sequence_name opt_sequence_option_list
-	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
+	'CREATE' opt_temp 'SEQUENCE' sequence_name opt_sequence_option_list
+	| 'CREATE' opt_temp 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
 
 statistics_name ::=
 	name
@@ -1390,6 +1390,15 @@ opt_partition_by ::=
 
 index_name ::=
 	unrestricted_name
+
+opt_temp ::=
+	'TEMPORARY'
+	| 'TEMP'
+	| 'LOCAL' 'TEMPORARY'
+	| 'LOCAL' 'TEMP'
+	| 'GLOBAL' 'TEMPORARY'
+	| 'GLOBAL' 'TEMP'
+	| 
 
 opt_table_elem_list ::=
 	table_elem_list

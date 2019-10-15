@@ -218,6 +218,9 @@ func (u *sqlSymUnion) colQualElem() tree.ColumnQualification {
 func (u *sqlSymUnion) colQuals() []tree.NamedColumnQualification {
     return u.val.([]tree.NamedColumnQualification)
 }
+func (u *sqlSymUnion) persistenceType() bool {
+  return u.val.(bool)
+}
 func (u *sqlSymUnion) colType() *types.T {
     if colType, ok := u.val.(*types.T); ok && colType != nil {
         return colType
@@ -1012,6 +1015,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.SetZoneConfig> set_zone_config
 
 %type <tree.Expr> opt_alter_column_using
+
+%type <bool> opt_temp
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -4208,6 +4213,7 @@ create_table_stmt:
       Defs: $6.tblDefs(),
       AsSource: nil,
       PartitionBy: $9.partitionBy(),
+      Temporary: $2.persistenceType(),
     }
   }
 | CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
@@ -4220,6 +4226,7 @@ create_table_stmt:
       Defs: $9.tblDefs(),
       AsSource: nil,
       PartitionBy: $12.partitionBy(),
+      Temporary: $2.persistenceType(),
     }
   }
 
@@ -4269,14 +4276,14 @@ opt_create_as_data:
  * so we'll probably continue to treat LOCAL as a noise word.
  */
 opt_temp:
-  TEMPORARY         { return unimplementedWithIssue(sqllex, 5807) }
-| TEMP              { return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMPORARY   { return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMP        { return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMPORARY  { return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMP       { return unimplementedWithIssue(sqllex, 5807) }
+  TEMPORARY         { $$.val = true }
+| TEMP              { $$.val = true }
+| LOCAL TEMPORARY   { $$.val = true }
+| LOCAL TEMP        { $$.val = true }
+| GLOBAL TEMPORARY  { $$.val = true }
+| GLOBAL TEMP       { $$.val = true }
 | UNLOGGED          { return unimplemented(sqllex, "create unlogged") }
-| /*EMPTY*/         { /* no error */ }
+| /*EMPTY*/         { $$.val = false }
 
 opt_table_elem_list:
   table_elem_list
@@ -4900,12 +4907,20 @@ create_sequence_stmt:
   CREATE opt_temp SEQUENCE sequence_name opt_sequence_option_list
   {
     name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateSequence{Name: name, Options: $5.seqOpts()}
+    $$.val = &tree.CreateSequence {
+      Name: name,
+      Temporary: $2.persistenceType(),
+      Options: $5.seqOpts(),
+    }
   }
 | CREATE opt_temp SEQUENCE IF NOT EXISTS sequence_name opt_sequence_option_list
   {
     name := $7.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateSequence{Name: name, Options: $8.seqOpts(), IfNotExists: true}
+    $$.val = &tree.CreateSequence {
+      Name: name, Options: $8.seqOpts(),
+      Temporary: $2.persistenceType(),
+      IfNotExists: true,
+    }
   }
 | CREATE opt_temp SEQUENCE error // SHOW HELP: CREATE SEQUENCE
 
@@ -5011,6 +5026,7 @@ create_view_stmt:
       Name: name,
       ColumnNames: $6.nameList(),
       AsSource: $8.slct(),
+      Temporary: $2.persistenceType(),
     }
   }
 | CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }

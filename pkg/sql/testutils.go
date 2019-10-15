@@ -48,6 +48,7 @@ func CreateTestTableDescriptor(
 		nil, /* affected */
 		&semaCtx,
 		&evalCtx,
+		false, /* temporary */
 	)
 	return desc.TableDescriptor, err
 }
