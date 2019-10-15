@@ -73,27 +73,8 @@ func (b *Builder) buildDataSource(
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			outScope = inScope.push()
 
-			inCols := make(opt.ColList, len(cte.cols))
-			outCols := make(opt.ColList, len(cte.cols))
-			outScope.cols = nil
-			i := 0
-			for _, col := range cte.cols {
-				id := col.id
-				c := b.factory.Metadata().ColumnMeta(id)
-				newCol := b.synthesizeColumn(outScope, string(col.name), c.Type, nil, nil)
-				newCol.table = *tn
-				inCols[i] = id
-				outCols[i] = newCol.id
-				i++
-			}
+			outScope.expr = b.makeCTERef(outScope, tn, *cte)
 
-			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				ID:           cte.id,
-				Name:         string(cte.name.Alias),
-				InCols:       inCols,
-				OutCols:      outCols,
-				BindingProps: cte.expr.Relational(),
-			})
 			return outScope
 		}
 
@@ -141,7 +122,18 @@ func (b *Builder) buildDataSource(
 		}
 		outScope = inScope.push()
 		outScope.appendColumnsFromScope(innerScope)
-		outScope.expr = innerScope.expr
+
+		id := b.factory.Memo().NextWithID()
+		cte := cteSource{
+			name:         tree.AliasClause{},
+			cols:         innerScope.cols,
+			originalExpr: source.Statement,
+			expr:         innerScope.expr,
+			id:           id,
+		}
+		b.ctes = append(b.ctes, cte)
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
+		outScope.expr = b.makeCTERef(outScope, &tree.TableName{}, cte)
 		return outScope
 
 	case *tree.TableRef:
@@ -170,6 +162,29 @@ func (b *Builder) buildDataSource(
 	default:
 		panic(errors.AssertionFailedf("unknown table expr: %T", texpr))
 	}
+}
+
+// makeCTERef builds a scan over the given cteSource.
+func (b *Builder) makeCTERef(inScope *scope, tn *tree.TableName, cte cteSource) memo.RelExpr {
+	inCols := make(opt.ColList, len(cte.cols))
+	outCols := make(opt.ColList, len(cte.cols))
+	inScope.cols = nil
+	for i, col := range cte.cols {
+		id := col.id
+		c := b.factory.Metadata().ColumnMeta(id)
+		newCol := b.synthesizeColumn(inScope, string(col.name), c.Type, nil, nil)
+		newCol.table = *tn
+		inCols[i] = id
+		outCols[i] = newCol.id
+	}
+
+	return b.factory.ConstructWithScan(&memo.WithScanPrivate{
+		ID:           cte.id,
+		Name:         string(cte.name.Alias),
+		InCols:       inCols,
+		OutCols:      outCols,
+		BindingProps: cte.expr.Relational(),
+	})
 }
 
 // buildView parses the view query text and builds it as a Select expression.
@@ -642,6 +657,7 @@ func (b *Builder) buildCTE(
 		})
 		cte := &b.ctes[len(b.ctes)-1]
 		outScope.ctes[ctes[i].Name.Alias.String()] = cte
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 
 		if cteScope.expr.Relational().CanMutate && !ctx.atRoot {
 			panic(
@@ -652,7 +668,6 @@ func (b *Builder) buildCTE(
 			)
 		}
 
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)

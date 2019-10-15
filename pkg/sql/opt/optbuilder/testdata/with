@@ -941,3 +941,30 @@ FROM
     LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
 ----
 error (0A000): CTEs may not be correlated
+
+# Subquery as a whole is correlated, but the WITH is not.
+build
+SELECT (WITH foo as (VALUES (1)) SELECT x) FROM (VALUES (1)) AS v(x)
+----
+with &1 (foo)
+ ├── columns: x:4(int)
+ ├── values
+ │    ├── columns: column1:2(int!null)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── project
+      ├── columns: x:4(int)
+      ├── values
+      │    ├── columns: column1:1(int!null)
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 1 [type=int]
+      └── projections
+           └── subquery [type=int]
+                └── max1-row
+                     ├── columns: x:3(int)
+                     └── project
+                          ├── columns: x:3(int)
+                          ├── values
+                          │    └── tuple [type=tuple]
+                          └── projections
+                               └── variable: column1 [type=int]
