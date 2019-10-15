@@ -344,9 +344,7 @@ func (rq *replicateQueue) processOneChange(
 		// Let the scanner requeue it again later.
 		return false, nil
 	case AllocatorAdd:
-		// only include live replicas, since dead replicas should soon be removed
-		existingReplicas := liveVoterReplicas
-		return rq.addOrReplace(ctx, repl, existingReplicas, -1 /* removeIdx */, dryRun)
+		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, -1 /* removeIdx */, dryRun)
 	case AllocatorRemove:
 		return rq.remove(ctx, repl, voterReplicas, dryRun)
 	case AllocatorReplaceDead:
@@ -366,7 +364,7 @@ func (rq *replicateQueue) processOneChange(
 				"dead voter %v unexpectedly not found in %v",
 				deadVoterReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplace(ctx, repl, voterReplicas, removeIdx, dryRun)
+		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, removeIdx, dryRun)
 	case AllocatorReplaceDecommissioning:
 		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(
 			desc.RangeID, voterReplicas)
@@ -386,7 +384,7 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning voter %v unexpectedly not found in %v",
 				decommissioningReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplace(ctx, repl, voterReplicas, removeIdx, dryRun)
+		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, removeIdx, dryRun)
 	case AllocatorRemoveDecommissioning:
 		// NB: this path will only be hit when the range is over-replicated and
 		// has decommissioning replicas; in the common case we'll hit
@@ -424,6 +422,7 @@ func (rq *replicateQueue) addOrReplace(
 	ctx context.Context,
 	repl *Replica,
 	existingReplicas []roachpb.ReplicaDescriptor,
+	liveVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int, // -1 for no removal
 	dryRun bool,
 ) (requeue bool, _ error) {
@@ -438,9 +437,15 @@ func (rq *replicateQueue) addOrReplace(
 		removeIdx = -1
 	}
 
-	var remainingReplicas []roachpb.ReplicaDescriptor
+	remainingLiveReplicas := liveVoterReplicas
 	if removeIdx >= 0 {
-		remainingReplicas = append(existingReplicas[:removeIdx:removeIdx], existingReplicas[removeIdx+1:]...)
+		replToRemove := existingReplicas[removeIdx]
+		for i, r := range liveVoterReplicas {
+			if r.ReplicaID == replToRemove.ReplicaID {
+				remainingLiveReplicas = append(liveVoterReplicas[:i:i], liveVoterReplicas[i+1:]...)
+				break
+			}
+		}
 		// See about transferring the lease away if we're about to remove the
 		// leaseholder.
 		done, err := rq.maybeTransferLeaseAway(ctx, repl, existingReplicas[removeIdx].StoreID, dryRun)
@@ -451,8 +456,6 @@ func (rq *replicateQueue) addOrReplace(
 			// Lease was transferred away. Next leaseholder is going to take over.
 			return false, nil
 		}
-	} else {
-		remainingReplicas = existingReplicas
 	}
 
 	desc, zone := repl.DescAndZone()
@@ -465,7 +468,7 @@ func (rq *replicateQueue) addOrReplace(
 		ctx,
 		zone,
 		desc.RangeID,
-		remainingReplicas,
+		remainingLiveReplicas,
 	)
 	if err != nil {
 		return false, err
