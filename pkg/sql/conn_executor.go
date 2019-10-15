@@ -1850,6 +1850,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			InternalExecutor: ie,
 			DB:               ex.server.cfg.DB,
 		},
+		sessionID:         &ex.sessionID,
 		SessionMutator:    ex.dataMutator,
 		VirtualSchemas:    ex.server.cfg.VirtualSchemas,
 		Tracing:           &ex.sessionTracing,

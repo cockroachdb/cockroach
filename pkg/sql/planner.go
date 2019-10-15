@@ -38,6 +38,8 @@ import (
 type extendedEvalContext struct {
 	tree.EvalContext
 
+	sessionID *ClusterWideID
+
 	SessionMutator *sessionDataMutator
 
 	// VirtualSchemas can be used to access virtual tables.

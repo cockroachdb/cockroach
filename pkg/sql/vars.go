@@ -654,6 +654,11 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`crdb_version`: makeReadOnlyVar(build.GetInfo().Short()),
 
+	// CockroachDB extension
+	`session_id`: {
+		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.sessionID.String() },
+	},
+
 	// CockroachDB extension.
 	// In PG this is a pseudo-function used with SELECT, not SHOW.
 	// See https://www.postgresql.org/docs/10/static/functions-info.html
