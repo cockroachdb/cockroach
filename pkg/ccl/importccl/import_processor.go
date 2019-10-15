@@ -131,7 +131,9 @@ func makeInputConverter(
 		if isWorkload {
 			return newWorkloadReader(kvCh, singleTable, evalCtx), nil
 		}
-		return newCSVInputReader(kvCh, spec.Format.Csv, spec.WalltimeNanos, singleTable, singleTableTargetCols, evalCtx), nil
+		return newCSVInputReader(
+			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
+			singleTable, singleTableTargetCols, evalCtx), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(kvCh, spec.Format.MysqlOut, singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:

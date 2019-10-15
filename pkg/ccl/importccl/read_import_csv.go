@@ -37,6 +37,7 @@ type csvInputReader struct {
 	tableDesc    *sqlbase.TableDescriptor
 	targetCols   tree.NameList
 	expectedCols int
+	parallelism  int
 }
 
 var _ inputConverter = &csvInputReader{}
@@ -45,10 +46,15 @@ func newCSVInputReader(
 	kvCh chan row.KVBatch,
 	opts roachpb.CSVOptions,
 	walltime int64,
+	parallelism int,
 	tableDesc *sqlbase.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {
+	if parallelism <= 0 {
+		parallelism = runtime.NumCPU()
+	}
+
 	return &csvInputReader{
 		evalCtx:      evalCtx,
 		opts:         opts,
@@ -59,6 +65,7 @@ func newCSVInputReader(
 		targetCols:   targetCols,
 		recordCh:     make(chan csvRecord),
 		batchSize:    500,
+		parallelism:  parallelism,
 	}
 }
 
@@ -68,7 +75,8 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 		defer tracing.FinishSpan(span)
 
 		defer close(c.kvCh)
-		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
+
+		return ctxgroup.GroupWorkers(ctx, c.parallelism, func(ctx context.Context) error {
 			return c.convertRecordWorker(ctx)
 		})
 	})
