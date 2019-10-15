@@ -366,6 +366,7 @@ func (f *stubFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (e
 func (f *stubFactory) ConstructCreateView(
 	schema cat.Schema,
 	viewName string,
+	temporary bool,
 	viewQuery string,
 	columns sqlbase.ResultColumns,
 	deps opt.ViewDeps,
