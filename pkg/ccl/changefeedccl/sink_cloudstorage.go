@@ -13,8 +13,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -50,7 +52,6 @@ type cloudStorageSinkKey struct {
 	Topic    string
 	SchemaID sqlbase.DescriptorVersion
 }
-
 type cloudStorageSinkFile struct {
 	buf bytes.Buffer
 }
@@ -123,7 +124,10 @@ type cloudStorageSink struct {
 
 	// These are fields to track information needed to output files based on the naming
 	// convention described above. See comment on cloudStorageSink above for more details.
-	fileID          int64
+	fileID int64
+	// TODO(aayush): Store these files in a btree (see:
+	// https://godoc.org/github.com/google/btree) to avoid having to scan the whole files
+	// map and do sorting on each call of `flushKeyUptoSchemaVersion()`.
 	files           map[cloudStorageSinkKey]*cloudStorageSinkFile
 	timestampOracle timestampLowerBoundOracle
 	// We keep track of the successor of the least resolved timestamp in the local
@@ -204,10 +208,7 @@ func (s *cloudStorageSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
-	key := cloudStorageSinkKey{
-		Topic:    table.Name,
-		SchemaID: table.Version,
-	}
+	key := cloudStorageSinkKey{Topic: table.Name, SchemaID: table.Version}
 	file := s.files[key]
 	if file == nil {
 		// We could pool the bytes.Buffers if necessary, but we'd need to be
@@ -225,10 +226,9 @@ func (s *cloudStorageSink) EmitRow(
 	}
 
 	if int64(file.buf.Len()) > s.targetMaxFileSize {
-		if err := s.flushFile(ctx, key, file); err != nil {
+		if err := s.flushKeyUptoSchemaVersion(ctx, key); err != nil {
 			return err
 		}
-		delete(s.files, key)
 	}
 	return nil
 }
@@ -251,10 +251,46 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Info(ctx, "writing ", filename)
+		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(payload))
 }
+
+// flushKeyUptoSchemaVersion collects all file objects that correspond to the given key,
+// upto the key's schema version, and flushes them out in schema version order.
+// To understand why we need to do this, consider the following example in case
+// we didn't have this logic:
+// 1. The sink starts buffering a file for schema 1.
+// 2. It then starts buffering a file for schema 2.
+// 3. The newer, schema 2 file exceeds the file size threshold and thus gets flushed
+// at timestamp x. This would lead to it being assigned a fileid of 0.
+// 4. The older, schema 1 file is also flushed at timestamp x and thus is assigned
+// a fileid greater than 0.
+// This would lead to the older file being lexically ordered after the newer, schema 2
+// file, leading to a violation of our ordering guarantees (see comment on
+// cloudStorageSink)
+func (s *cloudStorageSink) flushKeyUptoSchemaVersion(
+	ctx context.Context, key cloudStorageSinkKey,
+) error {
+	keysToFlush := make([]cloudStorageSinkKey, 0, len(s.files))
+	for i := range s.files {
+		if i.Topic == key.Topic && i.SchemaID <= key.SchemaID {
+			keysToFlush = append(keysToFlush, i)
+		}
+	}
+	sort.Slice(keysToFlush, func(i, j int) bool {
+		return keysToFlush[i].SchemaID < keysToFlush[j].SchemaID
+	})
+	for _, i := range keysToFlush {
+		if err := s.flushFile(ctx, i, s.files[i]); err != nil {
+			return err
+		}
+		delete(s.files, i)
+	}
+	return nil
+}
+
+const maxSchemaVersion sqlbase.DescriptorVersion = math.MaxUint32
 
 // Flush implements the Sink interface.
 func (s *cloudStorageSink) Flush(ctx context.Context) error {
@@ -262,13 +298,11 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
 
-	for key, file := range s.files {
-		if err := s.flushFile(ctx, key, file); err != nil {
+	for key := range s.files {
+		maxSchemaKey := cloudStorageSinkKey{Topic: key.Topic, SchemaID: maxSchemaVersion}
+		if err := s.flushKeyUptoSchemaVersion(ctx, maxSchemaKey); err != nil {
 			return err
 		}
-	}
-	for key := range s.files {
-		delete(s.files, key)
 	}
 	// Record the least resolved timestamp being tracked in the frontier as of this point,
 	// to use for naming files until the next `Flush()`. See comment on cloudStorageSink
