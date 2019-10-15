@@ -75,19 +75,17 @@ func (b *Builder) buildDataSource(
 
 		// CTEs take precedence over other data sources.
 		if cte := inScope.resolveCTE(tn); cte != nil {
-			outScope = inScope.push()
-
+			outScope := inScope.push()
 			inCols := make(opt.ColList, len(cte.cols))
 			outCols := make(opt.ColList, len(cte.cols))
 			outScope.cols = nil
-			i := 0
-			for _, col := range cte.cols {
-				c := b.factory.Metadata().ColumnMeta(col.ID)
+			for i, col := range cte.cols {
+				id := col.ID
+				c := b.factory.Metadata().ColumnMeta(id)
 				newCol := b.synthesizeColumn(outScope, col.Alias, c.Type, nil, nil)
 				newCol.table = *tn
-				inCols[i] = col.ID
+				inCols[i] = id
 				outCols[i] = newCol.id
-				i++
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
@@ -97,6 +95,7 @@ func (b *Builder) buildDataSource(
 				OutCols:      outCols,
 				BindingProps: cte.bindingProps,
 			})
+
 			return outScope
 		}
 
@@ -142,9 +141,43 @@ func (b *Builder) buildDataSource(
 			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"statement source \"%v\" does not return any columns", source.Statement))
 		}
+
+		id := b.factory.Memo().NextWithID()
+		cte := cteSource{
+			name:         tree.AliasClause{},
+			cols:         innerScope.makePresentationWithHiddenCols(),
+			originalExpr: source.Statement,
+			expr:         innerScope.expr,
+			id:           id,
+			bindingProps: innerScope.expr.Relational(),
+		}
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
+
+		inCols := make(opt.ColList, len(cte.cols))
+		outCols := make(opt.ColList, len(cte.cols))
+		for i, col := range cte.cols {
+			id := col.ID
+			c := b.factory.Metadata().ColumnMeta(id)
+			inCols[i] = id
+			outCols[i] = b.factory.Metadata().AddColumn(col.Alias, c.Type)
+		}
+
 		outScope = inScope.push()
-		outScope.appendColumnsFromScope(innerScope)
-		outScope.expr = innerScope.expr
+		// Similar to appendColumnsFromScope, but with re-numbering the column IDs.
+		for i, col := range innerScope.cols {
+			col.scalar = nil
+			col.id = outCols[i]
+			outScope.cols = append(outScope.cols, col)
+		}
+
+		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
+			ID:           cte.id,
+			Name:         string(cte.name.Alias),
+			InCols:       inCols,
+			OutCols:      outCols,
+			BindingProps: cte.bindingProps,
+		})
+
 		return outScope
 
 	case *tree.TableRef:
@@ -612,7 +645,8 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 			id:           id,
 		}
 		cte := &addedCTEs[i]
-		outScope.ctes[addedCTEs[i].name.Alias.String()] = cte
+		outScope.ctes[cte.name.Alias.String()] = cte
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 
 		if cteExpr.Relational().CanMutate && !inScope.atRoot {
 			panic(
@@ -623,7 +657,6 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 			)
 		}
 
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
