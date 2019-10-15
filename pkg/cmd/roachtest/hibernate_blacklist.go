@@ -44,7 +44,6 @@ var hibernateBlackList19_2 = blacklist{
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementOverall":                                                                                             "40474",
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementSpecific":                                                                                            "40474",
 	"org.hibernate.jpa.test.lock.StatementIsClosedAfterALockExceptionTest.testStatementIsClosed":                                                                                     "40476",
-	"org.hibernate.jpa.test.query.NativeQueryOrdinalParametersTest.testCteNativeQueryOrdinalParameter":                                                                               "21085",
 	"org.hibernate.test.annotations.entity.BasicHibernateAnnotationsTest.testSerialized":                                                                                             "26725",
 	"org.hibernate.test.annotations.filter.subclass.joined.JoinedSubClassTest.testClub":                                                                                              "5807",
 	"org.hibernate.test.annotations.filter.subclass.joined.JoinedSubClassTest.testIqFilter":                                                                                          "5807",
