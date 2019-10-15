@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,13 +47,9 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 	return fmt.Sprintf(`%s%09d%010d`, t.Format(f), t.Nanosecond(), ts.Logical)
 }
 
-type cloudStorageSinkKey struct {
-	Topic    string
-	SchemaID sqlbase.DescriptorVersion
-}
-
 type cloudStorageSinkFile struct {
-	buf bytes.Buffer
+	schemaID sqlbase.DescriptorVersion
+	buf      bytes.Buffer
 }
 
 // cloudStorageSink writes changefeed output to files in a cloud storage bucket
@@ -273,7 +270,7 @@ type cloudStorageSink struct {
 	// These are fields to track information needed to output files based on the naming
 	// convention described above. See comment on cloudStorageSink above for more details.
 	fileID          int64
-	files           map[cloudStorageSinkKey]*cloudStorageSinkFile
+	files           map[string]map[sqlbase.DescriptorVersion]*cloudStorageSinkFile
 	timestampOracle timestampLowerBoundOracle
 	jobSessionID    string
 	// We keep track of the successor of the least resolved timestamp in the local
@@ -304,7 +301,7 @@ func makeCloudStorageSink(
 		sinkID:            sinkID,
 		settings:          settings,
 		targetMaxFileSize: targetMaxFileSize,
-		files:             make(map[cloudStorageSinkKey]*cloudStorageSinkFile),
+		files:             make(map[string]map[sqlbase.DescriptorVersion]*cloudStorageSinkFile),
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
 		// TODO(aayush): Use the jobs framework's session ID once that's available.
@@ -357,16 +354,18 @@ func (s *cloudStorageSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
-	key := cloudStorageSinkKey{
-		Topic:    table.Name,
-		SchemaID: table.Version,
+	key := table.Name
+	var file *cloudStorageSinkFile
+	_, ok := s.files[key]
+	if !ok {
+		s.files[key] = make(map[sqlbase.DescriptorVersion]*cloudStorageSinkFile)
 	}
-	file := s.files[key]
-	if file == nil {
+	file, ok = s.files[key][table.Version]
+	if !ok {
 		// We could pool the bytes.Buffers if necessary, but we'd need to be
 		// careful to bound the size of the memory held by the pool.
-		file = &cloudStorageSinkFile{}
-		s.files[key] = file
+		file = &cloudStorageSinkFile{schemaID: table.Version}
+		s.files[key][table.Version] = file
 	}
 
 	// TODO(dan): Memory monitoring for this
@@ -378,10 +377,24 @@ func (s *cloudStorageSink) EmitRow(
 	}
 
 	if int64(file.buf.Len()) > s.targetMaxFileSize {
-		if err := s.flushFile(ctx, key, file); err != nil {
-			return err
+		// Collect all file objects that correspond to schema versions less
+		// than or equal to the current row's schema version, in sorted order,
+		// and flush them one by one.
+		schemas := make([]sqlbase.DescriptorVersion, 0, len(s.files[key]))
+		for schemaID := range s.files[key] {
+			if schemaID <= table.Version {
+				schemas = append(schemas, schemaID)
+			}
 		}
-		delete(s.files, key)
+		sort.Slice(schemas, func(i, j int) bool {
+			return schemas[i] < schemas[j]
+		})
+		for _, schemaID := range schemas {
+			if err := s.flushFile(ctx, key, s.files[key][schemaID]); err != nil {
+				return err
+			}
+			delete(s.files[key], schemaID)
+		}
 	}
 	return nil
 }
@@ -404,7 +417,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Info(ctx, "writing ", filename)
+		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(payload))
 }
@@ -415,9 +428,20 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
 
-	for key, file := range s.files {
-		if err := s.flushFile(ctx, key, file); err != nil {
-			return err
+	for name, schemaToFile := range s.files {
+		// Iterate through the map in sorted order of keys to emit files with lower schema
+		// versions first.
+		schemas := make([]sqlbase.DescriptorVersion, 0, len(s.files))
+		for s := range schemaToFile {
+			schemas = append(schemas, s)
+		}
+		sort.Slice(schemas, func(i, j int) bool {
+			return schemas[i] < schemas[j]
+		})
+		for _, schema := range schemas {
+			if err := s.flushFile(ctx, name, schemaToFile[schema]); err != nil {
+				return err
+			}
 		}
 	}
 	for key := range s.files {
@@ -432,7 +456,7 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 }
 
 func (s *cloudStorageSink) flushFile(
-	ctx context.Context, key cloudStorageSinkKey, file *cloudStorageSinkFile,
+	ctx context.Context, key string, file *cloudStorageSinkFile,
 ) error {
 	if file.buf.Len() == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
@@ -449,7 +473,7 @@ func (s *cloudStorageSink) flushFile(
 	// `%d.RESOLVED` files to lexicographically succeed data files that have the
 	// same timestamp. This works because ascii `-` < ascii '.'.
 	filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
-		s.jobSessionID, s.nodeID, s.sinkID, fileID, key.Topic, key.SchemaID, s.ext)
+		s.jobSessionID, s.nodeID, s.sinkID, fileID, key, file.schemaID, s.ext)
 	if s.prevFilename != "" && filename < s.prevFilename {
 		return errors.AssertionFailedf("error: detected a filename %s that lexically "+
 			"precedes a file emitted before: %s", filename, s.prevFilename)
