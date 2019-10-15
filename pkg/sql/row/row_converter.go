@@ -211,7 +211,14 @@ type DatumRowConverter struct {
 	FractionFn     func() float32
 }
 
-const kvDatumRowConverterBatchSize = 5000
+var kvDatumRowConverterBatchSize = 5000
+
+// TestingSetDatumRowConverterBatchSize sets kvDatumRowConverterBatchSize and returns old value.
+func TestingSetDatumRowConverterBatchSize(newSize int) int {
+	oldValue := kvDatumRowConverterBatchSize
+	kvDatumRowConverterBatchSize = newSize
+	return oldValue
+}
 
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(

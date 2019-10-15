@@ -79,11 +79,9 @@ message JobProgress {
 }
 
 message ReadImportDataSpec {
-  reserved 1;
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.
   optional int32 sample_size = 2 [(gogoproto.nullable) = false];
-  reserved 3;
 
   message ImportTable {
     optional sqlbase.TableDescriptor desc = 1 [(gogoproto.nullable) = true];
@@ -113,15 +111,16 @@ message ReadImportDataSpec {
 
   optional JobProgress progress = 6 [(gogoproto.nullable) = false];
 
-  reserved 4;
-  reserved 5;
-
   optional bool skip_missing_foreign_keys = 10 [(gogoproto.nullable) = false];
 
   // walltimeNanos is the MVCC time at which the created KVs will be written.
   optional int64 walltimeNanos = 11 [(gogoproto.nullable) = false];
 
-  reserved 12;
+  // If set, specifies reader parallelism; 0 implies "use default".
+  optional int32 readerParallelism = 13 [(gogoproto.nullable) = false];
+
+  reserved 1, 3, 4, 5, 12;
+  // NEXTID: 14
 }
 
 // CSVWriterSpec is the specification for a processor that consumes rows and
