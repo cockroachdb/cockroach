@@ -245,33 +245,6 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	)
 }
 
-func TestTranslateColSet(t *testing.T) {
-	test := func(t *testing.T, colSetIn opt.ColSet, from opt.ColList, to opt.ColList, expected opt.ColSet) {
-		t.Helper()
-
-		actual := translateColSet(colSetIn, from, to)
-		if !actual.Equals(expected) {
-			t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
-		}
-	}
-
-	colSetIn, from, to := opt.MakeColSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(4, 5, 6))
-
-	colSetIn, from, to = opt.MakeColSet(2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(5, 6))
-
-	// colSetIn and colSetOut might not be the same length.
-	colSetIn, from, to = opt.MakeColSet(1, 2), opt.ColList{1, 1, 2}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(4, 5, 6))
-
-	colSetIn, from, to = opt.MakeColSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 4}
-	test(t, colSetIn, from, to, opt.MakeColSet(4, 5))
-
-	colSetIn, from, to = opt.MakeColSet(2), opt.ColList{1, 2, 2}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(5, 6))
-}
-
 func testStats(
 	t *testing.T, s *props.Statistics, expectedStats string, expectedSelectivity float64,
 ) {

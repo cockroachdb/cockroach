@@ -227,6 +227,14 @@ d
 			create: `s string`,
 			typ:    "CSV",
 			data:   `abc"de`,
+			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
+		},
+		{
+			name:   "strict quotes: bare quote in the middle of a field that is not quoted",
+			create: `s string`,
+			typ:    "CSV",
+			with:   `WITH strict_quotes`,
+			data:   `abc"de`,
 			err:    `row 1: reading CSV record: parse error on line 1, column 3: bare " in non-quoted-field`,
 		},
 		{
@@ -234,6 +242,14 @@ d
 			create: `s string`,
 			typ:    "CSV",
 			data:   `"abc"de`,
+			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
+		},
+		{
+			name:   "strict quotes: bare quote in the middle of a quoted field is not ok",
+			create: `s string`,
+			typ:    "CSV",
+			with:   `WITH strict_quotes`,
+			data:   `"abc"de"`,
 			err:    `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
 		},
 
