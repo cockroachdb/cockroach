@@ -111,7 +111,6 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 
 	outputCol := c.buffer.batch.Batch.ColVec(c.outputIdx)
 	for i := range c.caseOps {
-		c.buffer.rewind()
 		// Run the next case operator chain. It will project its THEN expression
 		// for all tuples that matched its WHEN expression and that were not
 		// already matched.
@@ -208,7 +207,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	batch.SetLength(origLen)
 	batch.SetSelection(origHasSel)
 	if origHasSel {
-		copy(batch.Selection(), c.origSel)
+		copy(batch.Selection()[:origLen], c.origSel[:origLen])
 	}
 	return batch
 }
