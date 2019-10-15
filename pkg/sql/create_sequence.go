@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -45,6 +46,14 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 }
 
 func (n *createSequenceNode) startExec(params runParams) error {
+	if n.n.PersistenceStatus == tree.Temporary && !params.SessionData().TempTablesEnabled {
+		return enableTempTablesError
+	}
+	// TODO(arul): Allow temporary sequences once temp tables work for regular tables.
+	if n.n.PersistenceStatus == tree.Temporary {
+		return unimplemented.NewWithIssuef(5807,
+			"Can not create temporary sequences at this time")
+	}
 	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Name.Table())
 	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
 		if n.n.IfNotExists {
@@ -137,7 +146,7 @@ func MakeSequenceTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 	settings *cluster.Settings,
 ) (sqlbase.MutableTableDescriptor, error) {
-	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges)
+	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges, false /* isTempTable */)
 
 	// Mimic a table with one column, "value".
 	desc.Columns = []sqlbase.ColumnDescriptor{

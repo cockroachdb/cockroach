@@ -37,6 +37,7 @@ default_tablespace                   ·
 default_transaction_isolation        serializable
 default_transaction_read_only        off
 distsql                              off
+enable_temp_tables                   off
 enable_zigzag_join                   on
 experimental_force_split_at          off
 experimental_optimizer_foreign_keys  off

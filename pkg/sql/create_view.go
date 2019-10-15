@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -24,9 +25,10 @@ type createViewNode struct {
 	viewName tree.Name
 	// viewQuery contains the view definition, with all table names fully
 	// qualified.
-	viewQuery string
-	dbDesc    *sqlbase.DatabaseDescriptor
-	columns   sqlbase.ResultColumns
+	persistenceStatus tree.PersistenceStatus
+	viewQuery         string
+	dbDesc            *sqlbase.DatabaseDescriptor
+	columns           sqlbase.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
@@ -35,6 +37,15 @@ type createViewNode struct {
 }
 
 func (n *createViewNode) startExec(params runParams) error {
+	if n.persistenceStatus == tree.Temporary {
+		return enableTempTablesError
+	}
+	// TODO(arul): Allow temporary views once temp tables work for regular tables.
+	if n.persistenceStatus == tree.Temporary {
+		return unimplemented.NewWithIssuef(5807,
+			"Can not create temporary views at this time")
+	}
+
 	viewName := string(n.viewName)
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
@@ -146,7 +157,7 @@ func makeViewTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 ) (sqlbase.MutableTableDescriptor, error) {
-	desc := InitTableDescriptor(id, parentID, viewName, creationTime, privileges)
+	desc := InitTableDescriptor(id, parentID, viewName, creationTime, privileges, false /* isTempTable */)
 	desc.ViewQuery = viewQuery
 	for _, colRes := range resultColumns {
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}

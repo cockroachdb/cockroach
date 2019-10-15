@@ -41,6 +41,8 @@ define CreateViewPrivate {
 
     ViewName string
 
+    PersistenceStatus PersistenceStatus
+
     # ViewQuery contains the query for the view; data sources are always fully
     # qualified.
     ViewQuery string

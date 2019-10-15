@@ -895,12 +895,30 @@ func (node *RangePartition) Format(ctx *FmtCtx) {
 	}
 }
 
+// PersistenceStatus represents the persistence type of a table.
+type PersistenceStatus int
+
+const (
+	Persistent PersistenceStatus = iota
+	Temporary
+)
+
+var persistenceStatusName = [...]string{
+	Persistent: "",
+	Temporary:  "TEMP",
+}
+
+func (d PersistenceStatus) String() string {
+	return persistenceStatusName[d]
+}
+
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists bool
-	Table       TableName
-	Interleave  *InterleaveDef
-	PartitionBy *PartitionBy
+	IfNotExists       bool
+	Table             TableName
+	Interleave        *InterleaveDef
+	PartitionBy       *PartitionBy
+	PersistenceStatus PersistenceStatus
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
@@ -931,7 +949,12 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTable) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE TABLE ")
+	ctx.WriteString("CREATE ")
+	if node.PersistenceStatus == Temporary {
+		ctx.WriteString(node.PersistenceStatus.String())
+		ctx.WriteByte(' ')
+	}
+	ctx.WriteString("TABLE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -1024,14 +1047,23 @@ func (node *CreateTable) HoistConstraints() {
 
 // CreateSequence represents a CREATE SEQUENCE statement.
 type CreateSequence struct {
-	IfNotExists bool
-	Name        TableName
-	Options     SequenceOptions
+	IfNotExists       bool
+	Name              TableName
+	PersistenceStatus PersistenceStatus
+	Options           SequenceOptions
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateSequence) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE SEQUENCE ")
+	ctx.WriteString("CREATE ")
+
+	if node.PersistenceStatus == Temporary {
+		ctx.WriteString(node.PersistenceStatus.String())
+		ctx.WriteByte(' ')
+	}
+
+	ctx.WriteString("SEQUENCE ")
+
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -1180,14 +1212,22 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
-	Name        TableName
-	ColumnNames NameList
-	AsSource    *Select
+	Name              TableName
+	ColumnNames       NameList
+	AsSource          *Select
+	PersistenceStatus PersistenceStatus
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateView) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE VIEW ")
+	ctx.WriteString("CREATE ")
+
+	if node.PersistenceStatus == Temporary {
+		ctx.WriteString(node.PersistenceStatus.String())
+		ctx.WriteByte(' ')
+	}
+
+	ctx.WriteString("VIEW ")
 	ctx.FormatNode(&node.Name)
 
 	if len(node.ColumnNames) > 0 {

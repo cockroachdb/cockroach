@@ -453,6 +453,10 @@ func (h *hasher) HashSchemaID(val opt.SchemaID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashPersistenceStatus(val tree.PersistenceStatus) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashTableID(val opt.TableID) {
 	h.HashUint64(uint64(val))
 }
@@ -778,6 +782,10 @@ func (h *hasher) IsOrderingChoiceEqual(l, r physical.OrderingChoice) bool {
 }
 
 func (h *hasher) IsSchemaIDEqual(l, r opt.SchemaID) bool {
+	return l == r
+}
+
+func (h *hasher) IsPersistenceStatusEqual(l, r tree.PersistenceStatus) bool {
 	return l == r
 }
 

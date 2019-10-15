@@ -2660,3 +2660,38 @@ pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
 
 statement ok
 DROP TABLE person, pet
+
+
+statement ok
+SET enable_temp_tables = true
+
+statement ok
+CREATE TEMP TABLE a_temp(a INT PRIMARY KEY)
+
+statement ok
+CREATE TEMP TABLE b_temp(b INT, FOREIGN KEY(b) REFERENCES a_temp(a))
+
+statement error pq: constraints on permanent tables may reference only permanent tables
+CREATE TABLE a_persistent(a INT, FOREIGN KEY (a) REFERENCES a_temp(a))
+
+statement ok
+DROP TABLE a_temp, b_temp
+
+statement ok
+SET enable_temp_tables = false
+
+
+statement ok
+SET enable_temp_tables = true
+
+statement ok
+CREATE TABLE a_persistent(a INT PRIMARY KEY)
+
+statement error pq: constraints on temporary tables may reference only temporary tables
+CREATE TEMP TABLE a_temp(a INT, FOREIGN KEY (a) REFERENCES a_persistent(a))
+
+statement ok
+DROP TABLE a_persistent
+
+statement ok
+SET enable_temp_tables = false
