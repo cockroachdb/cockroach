@@ -1828,6 +1828,10 @@ func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 	m.data.SaveTablesPrefix = prefix
 }
 
+func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
+	m.data.TempTablesEnabled = val
+}
+
 // RecordLatestSequenceValue records that value to which the session incremented
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
