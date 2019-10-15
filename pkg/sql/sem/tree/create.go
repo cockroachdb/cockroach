@@ -906,6 +906,7 @@ type CreateTable struct {
 	Table       TableName
 	Interleave  *InterleaveDef
 	PartitionBy *PartitionBy
+	Temporary   bool
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
@@ -936,7 +937,11 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTable) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE TABLE ")
+	ctx.WriteString("CREATE ")
+	if node.Temporary {
+		ctx.WriteString("TEMPORARY ")
+	}
+	ctx.WriteString("TABLE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -1031,12 +1036,20 @@ func (node *CreateTable) HoistConstraints() {
 type CreateSequence struct {
 	IfNotExists bool
 	Name        TableName
+	Temporary   bool
 	Options     SequenceOptions
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateSequence) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE SEQUENCE ")
+	ctx.WriteString("CREATE ")
+
+	if node.Temporary {
+		ctx.WriteString("TEMPORARY ")
+	}
+
+	ctx.WriteString("SEQUENCE ")
+
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -1188,11 +1201,18 @@ type CreateView struct {
 	Name        TableName
 	ColumnNames NameList
 	AsSource    *Select
+	Temporary   bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateView) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE VIEW ")
+	ctx.WriteString("CREATE ")
+
+	if node.Temporary {
+		ctx.WriteString("TEMPORARY ")
+	}
+
+	ctx.WriteString("VIEW ")
 	ctx.FormatNode(&node.Name)
 
 	if len(node.ColumnNames) > 0 {

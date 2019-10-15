@@ -156,6 +156,7 @@ func MakeSimpleTableDescriptor(
 		affected,
 		&semaCtx,
 		&evalCtx,
+		false, /* temporary */
 	)
 	if err != nil {
 		return nil, err

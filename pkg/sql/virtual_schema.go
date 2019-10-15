@@ -117,9 +117,10 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		id,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
-		nil, /* affected */
-		nil, /* semaCtx */
-		nil, /* evalCtx */
+		nil,   /* affected */
+		nil,   /* semaCtx */
+		nil,   /* evalCtx */
+		false, /* temporary */
 	)
 	return mutDesc.TableDescriptor, err
 }

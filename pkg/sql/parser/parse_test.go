@@ -97,6 +97,7 @@ func TestParse(t *testing.T) {
 		{`CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)`},
 
 		{`CREATE TABLE a ()`},
+		{`CREATE TEMPORARY TABLE a (b INT8)`},
 		{`EXPLAIN CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT8, c INT8)`},
@@ -276,6 +277,7 @@ func TestParse(t *testing.T) {
 		{`CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')`},
 		{`CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')`},
 		{`CREATE VIEW a AS TABLE b`},
+		{`CREATE TEMPORARY VIEW a AS SELECT b`},
 
 		{`CREATE SEQUENCE a`},
 		{`EXPLAIN CREATE SEQUENCE a`},
@@ -296,6 +298,7 @@ func TestParse(t *testing.T) {
 		{`CREATE SEQUENCE a INCREMENT 5 NO MAXVALUE MINVALUE 1 START 3`},
 		{`CREATE SEQUENCE a INCREMENT 5 NO CYCLE NO MAXVALUE MINVALUE 1 START 3 CACHE 1`},
 		{`CREATE SEQUENCE a VIRTUAL`},
+		{`CREATE TEMPORARY SEQUENCE a`},
 
 		{`CREATE STATISTICS a ON col1 FROM t`},
 		{`EXPLAIN CREATE STATISTICS a ON col1 FROM t`},
@@ -3037,10 +3040,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SET LOCAL foo = bar`, 32562, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`},
 
-		{`CREATE TEMP TABLE a(b INT8)`, 5807, ``},
 		{`CREATE UNLOGGED TABLE a(b INT8)`, 0, `create unlogged`},
-		{`CREATE TEMP VIEW a AS SELECT b`, 5807, ``},
-		{`CREATE TEMP SEQUENCE a`, 5807, ``},
 
 		{`CREATE TABLE a(x INT[][])`, 32552, ``},
 		{`CREATE TABLE a(x INT[1][2])`, 32552, ``},

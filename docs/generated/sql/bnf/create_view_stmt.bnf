@@ -1,3 +1,3 @@
 create_view_stmt ::=
-	'CREATE' 'VIEW' view_name '(' name_list ')' 'AS' select_stmt
-	| 'CREATE' 'VIEW' view_name  'AS' select_stmt
+	'CREATE' opt_temp 'VIEW' view_name '(' name_list ')' 'AS' select_stmt
+	| 'CREATE' opt_temp 'VIEW' view_name  'AS' select_stmt

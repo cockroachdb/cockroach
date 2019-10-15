@@ -218,6 +218,9 @@ func (u *sqlSymUnion) colQualElem() tree.ColumnQualification {
 func (u *sqlSymUnion) colQuals() []tree.NamedColumnQualification {
     return u.val.([]tree.NamedColumnQualification)
 }
+func (u *sqlSymUnion) persistenceType() bool {
+  return u.val.(bool)
+}
 func (u *sqlSymUnion) colType() *types.T {
     if colType, ok := u.val.(*types.T); ok && colType != nil {
         return colType
@@ -1012,6 +1015,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.SetZoneConfig> set_zone_config
 
 %type <tree.Expr> opt_alter_column_using
+
+%type <bool> opt_temp
+%type <bool> opt_temp_create_table
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -2273,7 +2279,7 @@ create_ddl_stmt:
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
-| CREATE opt_temp TABLE error   // SHOW HELP: CREATE TABLE
+| CREATE opt_temp_create_table TABLE error   // SHOW HELP: CREATE TABLE
 | create_type_stmt     { /* SKIP DOC */ }
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
@@ -4172,8 +4178,8 @@ pause_stmt:
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL
 // %Text:
-// CREATE TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
-// CREATE TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
 //
 // Table elements:
 //    <name> <type> [<qualifiers...>]
@@ -4202,7 +4208,7 @@ pause_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
+  CREATE opt_temp_create_table TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4212,9 +4218,10 @@ create_table_stmt:
       Defs: $6.tblDefs(),
       AsSource: nil,
       PartitionBy: $9.partitionBy(),
+      Temporary: $2.persistenceType(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
+| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4224,6 +4231,7 @@ create_table_stmt:
       Defs: $9.tblDefs(),
       AsSource: nil,
       PartitionBy: $12.partitionBy(),
+      Temporary: $2.persistenceType(),
     }
   }
 
@@ -4233,7 +4241,7 @@ opt_table_with:
 | WITH name error { return unimplemented(sqllex, "create table with " + $2) }
 
 create_table_as_stmt:
-  CREATE opt_temp TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
+  CREATE opt_temp_create_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4244,7 +4252,7 @@ create_table_as_stmt:
       AsSource: $8.slct(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
+| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4267,20 +4275,27 @@ opt_create_as_data:
  *
  * NOTE: we accept both GLOBAL and LOCAL options.  They currently do nothing,
  * but future versions might consider GLOBAL to request SQL-spec-compliant
- * temp table behavior, so warn about that.  Since we have no modules the
+ * temp table behavior.  Since we have no modules the
  * LOCAL keyword is really meaningless; furthermore, some other products
  * implement LOCAL as meaning the same as our default temp table behavior,
  * so we'll probably continue to treat LOCAL as a noise word.
+ *
+ * NOTE: PG only accepts GLOBAL/LOCAL keywords for temp tables -- not sequences
+ * and views. These keywords are no-ops in PG. This behavior is replicated by
+ * making the distinction between opt_temp and opt_temp_create_table.
  */
-opt_temp:
-  TEMPORARY         { return unimplementedWithIssue(sqllex, 5807) }
-| TEMP              { return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMPORARY   { return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMP        { return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMPORARY  { return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMP       { return unimplementedWithIssue(sqllex, 5807) }
+ opt_temp:
+  TEMPORARY         { $$.val = true }
+| TEMP              { $$.val = true }
+| /*EMPTY*/         { $$.val = false }
+
+opt_temp_create_table:
+   opt_temp
+|  LOCAL TEMPORARY   { $$.val = true }
+| LOCAL TEMP        { $$.val = true }
+| GLOBAL TEMPORARY  { $$.val = true }
+| GLOBAL TEMP       { $$.val = true }
 | UNLOGGED          { return unimplemented(sqllex, "create unlogged") }
-| /*EMPTY*/         { /* no error */ }
 
 opt_table_elem_list:
   table_elem_list
@@ -4890,7 +4905,7 @@ numeric_only:
 // %Help: CREATE SEQUENCE - create a new sequence
 // %Category: DDL
 // %Text:
-// CREATE SEQUENCE <seqname>
+// CREATE [TEMPORARY | TEMP] SEQUENCE <seqname>
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
@@ -4904,12 +4919,20 @@ create_sequence_stmt:
   CREATE opt_temp SEQUENCE sequence_name opt_sequence_option_list
   {
     name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateSequence{Name: name, Options: $5.seqOpts()}
+    $$.val = &tree.CreateSequence {
+      Name: name,
+      Temporary: $2.persistenceType(),
+      Options: $5.seqOpts(),
+    }
   }
 | CREATE opt_temp SEQUENCE IF NOT EXISTS sequence_name opt_sequence_option_list
   {
     name := $7.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateSequence{Name: name, Options: $8.seqOpts(), IfNotExists: true}
+    $$.val = &tree.CreateSequence {
+      Name: name, Options: $8.seqOpts(),
+      Temporary: $2.persistenceType(),
+      IfNotExists: true,
+    }
   }
 | CREATE opt_temp SEQUENCE error // SHOW HELP: CREATE SEQUENCE
 
@@ -5005,7 +5028,7 @@ role_or_group:
 
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL
-// %Text: CREATE VIEW <viewname> [( <colnames...> )] AS <source>
+// %Text: CREATE [TEMPORARY | TEMP] VIEW <viewname> [( <colnames...> )] AS <source>
 // %SeeAlso: CREATE TABLE, SHOW CREATE, WEBDOCS/create-view.html
 create_view_stmt:
   CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
@@ -5015,6 +5038,7 @@ create_view_stmt:
       Name: name,
       ColumnNames: $6.nameList(),
       AsSource: $8.slct(),
+      Temporary: $2.persistenceType(),
     }
   }
 | CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }

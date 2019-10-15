@@ -40,6 +40,9 @@ type extendedEvalContext struct {
 
 	SessionMutator *sessionDataMutator
 
+	// SessionID for this connection.
+	SessionID ClusterWideID
+
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
 
@@ -166,6 +169,10 @@ type planner struct {
 	optPlanningCtx optPlanningCtx
 
 	queryCacheSession querycache.Session
+}
+
+func (ctx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
+	ctx.SessionID = sessionID
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each

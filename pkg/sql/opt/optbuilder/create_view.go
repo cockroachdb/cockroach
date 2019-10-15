@@ -60,6 +60,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		&memo.CreateViewPrivate{
 			Schema:    schID,
 			ViewName:  cv.Name.Table(),
+			Temporary: cv.Temporary,
 			ViewQuery: tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:   p,
 			Deps:      b.viewDeps,
