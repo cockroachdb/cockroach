@@ -51,6 +51,9 @@ message CSVOptions {
   optional string null_encoding = 3 [(gogoproto.nullable) = true];
   // skip the first N lines of the input (e.g. to ignore column headers) when reading.
   optional uint32 skip = 4 [(gogoproto.nullable) = false];
+  // If strict_quotes is true, a quote may NOT appear in an unquoted field and a
+  // non-doubled quote may NOT appear in a quoted field.
+  optional bool strict_quotes = 5 [(gogoproto.nullable) = false];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
