@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type zone struct {
@@ -237,57 +237,62 @@ func (n node) toDescriptors() (roachpb.NodeDescriptor, []roachpb.StoreDescriptor
 }
 
 type conformanceConstraintTestCase struct {
+	baseReportTestCase
+	exp []constraintEntry
+}
+
+type baseReportTestCase struct {
 	name        string
 	schema      []database
 	splits      []split
 	nodes       []node
 	deadStores  []int
 	defaultZone zone
-
-	exp []constraintEntry
 }
 
 func TestConformanceReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tests := []conformanceConstraintTestCase{
 		{
-			name:        "simple no violations",
-			defaultZone: zone{replicas: 3},
-			schema: []database{
-				{
-					name:   "db1",
-					tables: []table{{name: "t1"}, {name: "t2"}},
-					// The database has a zone requesting everything to be on SSDs.
-					zone: &zone{
-						replicas:    3,
-						constraints: "[+ssd]",
+			baseReportTestCase: baseReportTestCase{
+				name:        "simple no violations",
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name:   "db1",
+						tables: []table{{name: "t1"}, {name: "t2"}},
+						// The database has a zone requesting everything to be on SSDs.
+						zone: &zone{
+							replicas:    3,
+							constraints: "[+ssd]",
+						},
+					},
+					{
+						name:   "db2",
+						tables: []table{{name: "sentinel"}},
 					},
 				},
-				{
-					name:   "db2",
-					tables: []table{{name: "sentinel"}},
+				splits: []split{
+					{key: "/Table/t1", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
+					{key: "/Table/t2", stores: []int{1, 2, 3}},
+					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
+					{
+						// This range is not covered by the db1's zone config and so it won't
+						// be counted.
+						key: "/Table/sentinel", stores: []int{1, 2, 3},
+					},
 				},
-			},
-			splits: []split{
-				{key: "/Table/t1", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-				{key: "/Table/t2", stores: []int{1, 2, 3}},
-				{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
-				{
-					// This range is not covered by the db1's zone config and so it won't
-					// be counted.
-					key: "/Table/sentinel", stores: []int{1, 2, 3},
+				nodes: []node{
+					{id: 1, locality: "", stores: []store{{id: 1, attrs: "ssd"}}},
+					{id: 2, locality: "", stores: []store{{id: 2, attrs: "ssd"}}},
+					{id: 3, locality: "", stores: []store{{id: 3, attrs: "ssd"}}},
 				},
+				deadStores: nil,
 			},
-			nodes: []node{
-				{id: 1, locality: "", stores: []store{{id: 1, attrs: "ssd"}}},
-				{id: 2, locality: "", stores: []store{{id: 2, attrs: "ssd"}}},
-				{id: 3, locality: "", stores: []store{{id: 3, attrs: "ssd"}}},
-			},
-			deadStores: nil,
 			exp: []constraintEntry{{
 				object:         "db1",
 				constraint:     "+ssd",
@@ -297,77 +302,79 @@ func TestConformanceReport(t *testing.T) {
 		},
 		{
 			// Test zone constraints inheritance at all levels.
-			name:        "violations at multiple levels",
-			defaultZone: zone{replicas: 3, constraints: "[+default]"},
-			schema: []database{
-				{
-					name: "db1",
-					// All the objects will have zones asking for different tags.
-					zone: &zone{
-						replicas:    3,
-						constraints: "[+db1]",
-					},
-					tables: []table{
-						{
-							name: "t1",
-							zone: &zone{
-								replicas:    3,
-								constraints: "[+t1]",
-							},
+			baseReportTestCase: baseReportTestCase{
+				name:        "violations at multiple levels",
+				defaultZone: zone{replicas: 3, constraints: "[+default]"},
+				schema: []database{
+					{
+						name: "db1",
+						// All the objects will have zones asking for different tags.
+						zone: &zone{
+							replicas:    3,
+							constraints: "[+db1]",
 						},
-						{
-							name: "t2",
-							zone: &zone{
-								replicas:    3,
-								constraints: "[+t2]",
+						tables: []table{
+							{
+								name: "t1",
+								zone: &zone{
+									replicas:    3,
+									constraints: "[+t1]",
+								},
 							},
+							{
+								name: "t2",
+								zone: &zone{
+									replicas:    3,
+									constraints: "[+t2]",
+								},
+							},
+							// Violations for this one will count towards db1.
+							{name: "sentinel"},
 						},
-						// Violations for this one will count towards db1.
-						{name: "sentinel"},
-					},
-				}, {
-					name: "db2",
-					zone: &zone{constraints: "[+db2]"},
-					// Violations for this one will count towards db2, except for the
-					// partition part.
-					tables: []table{{
-						name: "t3",
-						partitions: []partition{{
-							name:  "p1",
-							start: []int{100},
-							end:   []int{200},
-							zone:  &zone{constraints: "[+p1]"},
+					}, {
+						name: "db2",
+						zone: &zone{constraints: "[+db2]"},
+						// Violations for this one will count towards db2, except for the
+						// partition part.
+						tables: []table{{
+							name: "t3",
+							partitions: []partition{{
+								name:  "p1",
+								start: []int{100},
+								end:   []int{200},
+								zone:  &zone{constraints: "[+p1]"},
+							}},
 						}},
-					}},
-				}, {
-					name: "db3",
-					// Violations for this one will count towards the default zone.
-					tables: []table{{name: "t4"}},
+					}, {
+						name: "db3",
+						// Violations for this one will count towards the default zone.
+						tables: []table{{name: "t4"}},
+					},
 				},
+				splits: []split{
+					{key: "/Table/t1", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
+					{key: "/Table/t2", stores: []int{1, 2, 3}},
+					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/sentinel", stores: []int{1, 2, 3}},
+					{key: "/Table/t3", stores: []int{1, 2, 3}},
+					{key: "/Table/t3/pk/100", stores: []int{1, 2, 3}},
+					{key: "/Table/t3/pk/101", stores: []int{1, 2, 3}},
+					{key: "/Table/t3/pk/199", stores: []int{1, 2, 3}},
+					{key: "/Table/t3/pk/200", stores: []int{1, 2, 3}},
+					{key: "/Table/t4", stores: []int{1, 2, 3}},
+				},
+				// None of the stores have any attributes.
+				nodes: []node{
+					{id: 1, locality: "", stores: []store{{id: 1}}},
+					{id: 2, locality: "", stores: []store{{id: 2}}},
+					{id: 3, locality: "", stores: []store{{id: 3}}},
+				},
+				deadStores: nil,
 			},
-			splits: []split{
-				{key: "/Table/t1", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-				{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-				{key: "/Table/t2", stores: []int{1, 2, 3}},
-				{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
-				{key: "/Table/sentinel", stores: []int{1, 2, 3}},
-				{key: "/Table/t3", stores: []int{1, 2, 3}},
-				{key: "/Table/t3/pk/100", stores: []int{1, 2, 3}},
-				{key: "/Table/t3/pk/101", stores: []int{1, 2, 3}},
-				{key: "/Table/t3/pk/199", stores: []int{1, 2, 3}},
-				{key: "/Table/t3/pk/200", stores: []int{1, 2, 3}},
-				{key: "/Table/t4", stores: []int{1, 2, 3}},
-			},
-			// None of the stores have any attributes.
-			nodes: []node{
-				{id: 1, locality: "", stores: []store{{id: 1}}},
-				{id: 2, locality: "", stores: []store{{id: 2}}},
-				{id: 3, locality: "", stores: []store{{id: 3}}},
-			},
-			deadStores: nil,
 			exp: []constraintEntry{
 				{
 					object:         "default",
@@ -438,7 +445,7 @@ func (r rows) String() string {
 // runConformanceReportTest runs one test case. It processes the input schema,
 // runs the reports, and verifies that the report looks as expected.
 func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
-	rangeStore, sysCfg, storeResolver, objects, err := processTestCase(tc)
+	rangeStore, sysCfg, storeResolver, objects, err := processTestCase(tc.baseReportTestCase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,7 +508,7 @@ func (t *testRangeIter) Close(context.Context) {
 // - a map from "object names" to ZoneKeys; each table/index/partition with a zone is mapped to
 // the id that the report will use for it. See constraintEntry.object for the key format.
 func processTestCase(
-	tc conformanceConstraintTestCase,
+	tc baseReportTestCase,
 ) (testRangeIter, *config.SystemConfig, StoreResolver, map[string]ZoneKey, error) {
 	tableToID := make(map[string]int)
 	idxToID := make(map[string]int)
