@@ -552,6 +552,7 @@ func (ss *spanGroup) getSpans() []RecordedSpan {
 		if s.mu.stats != nil {
 			stats, err := types.MarshalAny(s.mu.stats)
 			if err != nil {
+				s.mu.Unlock()
 				panic(err)
 			}
 			rs.Stats = stats
