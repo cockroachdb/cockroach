@@ -659,10 +659,7 @@ func processTestCase(
 	// And we're going to use keys in user space, otherwise there's special cases
 	// in the zone config lookup that we bump into.
 	objectCounter := keys.MinUserDescID
-	sysCfgBuilder := systemConfigBuilder{
-		// Use a non-zero timestamp for descriptor creation/modification time.
-		ts: hlc.Timestamp{WallTime: 1},
-	}
+	sysCfgBuilder := systemConfigBuilder{}
 	sysCfgBuilder.setDefaultZoneConfig(tc.defaultZone.toZoneConfig())
 	objects["default"] = MakeZoneKey(keys.RootNamespaceID, NoSubzone)
 	// Assign ids to databases, table, indexes; create descriptors and populate
@@ -880,9 +877,6 @@ func addIndexSubzones(
 type systemConfigBuilder struct {
 	kv                []roachpb.KeyValue
 	defaultZoneConfig *config.ZoneConfig
-
-	// ts is used for the creation time of synthesized descriptors
-	ts hlc.Timestamp
 }
 
 func (b *systemConfigBuilder) setDefaultZoneConfig(cfg config.ZoneConfig) {
@@ -926,7 +920,9 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc sqlbase.TableDescri
 			Table: &tableDesc,
 		},
 	}
-	desc.Table(b.ts)
+	// Use a bogus timestamp for the descriptor modification time.
+	ts := hlc.Timestamp{WallTime: 123}
+	desc.Table(ts)
 	var v roachpb.Value
 	if err := v.SetProto(desc); err != nil {
 		panic(err)
