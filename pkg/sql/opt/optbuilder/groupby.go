@@ -590,6 +590,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructArrayAgg(args[0])
 	case "avg":
 		return b.factory.ConstructAvg(args[0])
+	case "bit_and":
+		return b.factory.ConstructBitAndAgg(args[0])
+	case "bit_or":
+		return b.factory.ConstructBitOrAgg(args[0])
 	case "bool_and":
 		return b.factory.ConstructBoolAnd(args[0])
 	case "bool_or":

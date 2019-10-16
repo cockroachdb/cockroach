@@ -173,6 +173,8 @@ var UnaryOpReverseMap = map[Operator]tree.UnaryOperator{
 var AggregateOpReverseMap = map[Operator]string{
 	ArrayAggOp:        "array_agg",
 	AvgOp:             "avg",
+	BitAndAggOp:       "bit_and",
+	BitOrAggOp:        "bit_or",
 	BoolAndOp:         "bool_and",
 	BoolOrOp:          "bool_or",
 	ConcatAggOp:       "concat_agg",
@@ -254,8 +256,8 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 // how many NULL values are included in that input, in any order.
 func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
-	case AvgOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp, SumIntOp, SumOp,
-		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
+	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp,
+		SumIntOp, SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
 		AnyNotNullAggOp, StringAggOp:
 		return true
 	}
@@ -269,8 +271,8 @@ func AggregateIgnoresNulls(op Operator) bool {
 // NULL when its input is empty.
 func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
-	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp, SqrDiffOp,
-		VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
+	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp,
+		SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
 		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp, StringAggOp:
 		return true
 	}
