@@ -169,12 +169,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── side-effects
- ├── stats: [rows=95.617925, distinct(1)=95.617925, null(1)=0]
+ ├── stats: [rows=9.85601173, distinct(1)=9.85601173, null(1)=0]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:10(string!null) unnest:11(string) generate_series:12(int) lower:13(string)
       ├── side-effects
-      ├── stats: [rows=100, distinct(1)=95.617925, null(1)=0, distinct(4)=100, null(4)=0, distinct(10)=100, null(10)=0]
+      ├── stats: [rows=9.9, distinct(1)=9.85601173, null(1)=0, distinct(4)=9.9, null(4)=0, distinct(10)=9.9, null(10)=0]
       ├── fd: (1)-->(4,6), (4)==(10), (10)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
@@ -207,12 +207,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── side-effects
- ├── stats: [rows=14.1942265, distinct(1)=14.1942265, null(1)=0]
+ ├── stats: [rows=13.9135391, distinct(1)=13.9135391, null(1)=0]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:10(string) unnest:11(string!null) generate_series:12(int) lower:13(string)
       ├── side-effects
-      ├── stats: [rows=14.2857143, distinct(1)=14.1942265, null(1)=0, distinct(4)=14.2857143, null(4)=0, distinct(11)=14.2857143, null(11)=0]
+      ├── stats: [rows=14.0014286, distinct(1)=13.9135391, null(1)=0, distinct(4)=14.0014286, null(4)=0, distinct(11)=14.0014286, null(11)=0]
       ├── fd: (1)-->(4,6), (4)==(11), (11)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
@@ -245,12 +245,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── side-effects
- ├── stats: [rows=7, distinct(1)=7, null(1)=0]
+ ├── stats: [rows=6, distinct(1)=6, null(1)=0]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int!null) lower:13(string)
       ├── side-effects
-      ├── stats: [rows=10, distinct(1)=7, null(1)=0, distinct(12)=7, null(12)=0]
+      ├── stats: [rows=9.9, distinct(1)=6, null(1)=0, distinct(12)=6, null(12)=0]
       ├── fd: (1)-->(4,6), (1)==(12), (12)==(1)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
@@ -283,12 +283,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── side-effects
- ├── stats: [rows=95.617925, distinct(1)=95.617925, null(1)=0]
+ ├── stats: [rows=9.85601173, distinct(1)=9.85601173, null(1)=0]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string!null)
       ├── side-effects
-      ├── stats: [rows=100, distinct(1)=95.617925, null(1)=0, distinct(4)=1, null(4)=0, distinct(13)=1, null(13)=0]
+      ├── stats: [rows=9.9, distinct(1)=9.85601173, null(1)=0, distinct(4)=1e-10, null(4)=0, distinct(13)=1e-10, null(13)=0]
       ├── fd: (1)-->(4,6), (4)==(13), (13)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
