@@ -11,12 +11,14 @@
 package bench
 
 import (
-	gosql "database/sql"
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
 	"net/url"
 	"os/exec"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 // This is the TPC-B(ish) query that pgbench runs.
@@ -31,14 +33,15 @@ INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (%[3]d, %[4]d, 
 END;` // vars: 1 delta, 2 aid, 3 tid, 4 bid
 
 // RunOne executes one iteration of the query batch that `pgbench` executes.
-func RunOne(db *gosql.DB, r *rand.Rand, accounts int) error {
+// Calls b.Fatalf if it encounters an error.
+func RunOne(db sqlutils.DBHandle, r *rand.Rand, accounts int) error {
 	account := r.Intn(accounts)
 	delta := r.Intn(5000)
 	teller := r.Intn(tellers)
 	branch := 1
 
 	q := fmt.Sprintf(tpcbQuery, delta, account, teller, branch)
-	_, err := db.Exec(q)
+	_, err := db.ExecContext(context.TODO(), q)
 	return err
 }
 
