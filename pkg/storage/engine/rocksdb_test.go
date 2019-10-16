@@ -1359,7 +1359,7 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 		t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
 	} else {
 		// Write data to file so we can read it later.
-		if err := f.Append([]byte(data)); err != nil {
+		if _, err := f.Write([]byte(data)); err != nil {
 			t.Fatalf("error writing data: '%s' to file %s, got err %v", data, fname, err)
 		}
 		if err := f.Sync(); err != nil {
