@@ -33,12 +33,6 @@ Here’s a quick explainer video:
 
 <a href='https://www.youtube.com/watch?v=VgXiMcbGwzQ'> <img src='docs/media/explainer-video-preview.png' width='50%'> </a>
 
-
-## Status
-
-CockroachDB is production-ready. See our
-[Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) for a list of features planned or in development.
-
 ## Docs
 
 For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/stable/).
@@ -89,7 +83,8 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 ## Contributing
 
-We're an open source project and welcome contributions. See our [Contributing Guide](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html) for more details.
+We're an open source project and welcome contributions. See our
+[Contributor Wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB) for more details.
 
 Engineering discussion takes place on our public mailing list,
 [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db).
