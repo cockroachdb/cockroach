@@ -5,16 +5,8 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "dependencies": {
-<<<<<<< HEAD
     "analytics-node": "^3.4.0-beta.1",
-=======
-    "analytics-node": "^3.3.0",
-<<<<<<< HEAD
-    "antd": "^3.23.5",
->>>>>>> ui: new range selector
-=======
     "antd": "^3.23.6",
->>>>>>> resolve conflicts
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "combokeys": "^2.4.6",
