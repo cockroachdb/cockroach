@@ -40,15 +40,11 @@ func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 	return newRocksDBMap(r.db, true /* allowDuplicates */)
 }
 
-// NewTempEngine creates a new engine for DistSQL processors to use when the
-// working set is larger than can be stored in memory.
+// NewTempEngine creates a new RocksDB engine for DistSQL processors to use when
+// the working set is larger than can be stored in memory.
 func NewTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
-	if tempStorage.Engine == base.EngineTypePebble {
-		return NewPebbleTempEngine(tempStorage, storeSpec)
-	}
-
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
@@ -97,8 +93,8 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 	return newPebbleMap(r.db, true /* allowDuplicates */)
 }
 
-// NewPebbleTempEngine creates a new engine for DistSQL processors to use when the
-// working set is larger than can be stored in memory.
+// NewPebbleTempEngine creates a new Pebble engine for DistSQL processors to use
+// when the working set is larger than can be stored in memory.
 func NewPebbleTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
