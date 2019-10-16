@@ -16,6 +16,10 @@ give_up() {
   exit 0  # exit with successful status to allow the commit to proceed
 }
 
+if ! test -e "$1" -o -z "$1"; then
+	give_up "$1: commit message file does not exist or is empty"
+fi
+
 # Git can be configured to use any character as the comment indicator. See the
 # core.commentChar Git option. We can deduce what comment character is in effect
 # by looking for text that we know will be preceded by the comment character.
@@ -28,33 +32,86 @@ if ! tempfile=$(mktemp); then
 fi
 trap "rm -f $tempfile" EXIT
 
+sed_script=''
+
+# If the setting 'cockroachdb.disable-commit-template' is set and
+# true, all the template recommendations will be commented out as
+# opposed to be filled in.
+tchar=''
+tdisable=$(git config --bool --default false --get cockroachdb.disable-commit-template)
+if test x"$tdisable" != xfalse; then
+	tchar="$cchar "
+fi
+
+if [ "$require_justification" = 1 ]; then
+  # Add an explicit "Release justification: None" if no release justification was specified.
+  if ! grep -q '^Release justification' "$1"; then
+  	sed_script+="/$cchar Please enter the commit message for your changes./i\\
+\\
+${tchar}Release justification:
+;
+"
+  fi
+fi
+
+# Add a commit message template if the commit message is empty.
+if ! grep -q -E -v "^$cchar|^$" "$1"; then
+	sed_script+="/^$/i\\
+${tchar}<pkg>: <short description - lowercase, no final period>\\
+\\
+${tchar}<what was there before: Previously, ...>\\
+${tchar}<why it needed to change: This was inadequate because ...>\\
+${tchar}<what you did about it: To address this, this patch ...>
+;
+"
+	if test x"$tchar" = x; then
+		sed_script+="/^$/i\\
+$cchar Note: to disable this commit template, run: git config --global --add cockroachdb.disable-commit-template true
+;
+"
+	fi
+fi
+
+# Add an explicit "Release note: None" if no release note was specified.
+if ! grep -q '^Release note' "$1"; then
+	sed_script+="/$cchar Please enter the commit message for your changes./i\\
+$cchar Use 'Release note: None' if there is no user-visible change.\\
+${tchar}Release note (<category, see below>): <what> <show> <why>\\
+
+;
+"
+fi
+
 # Inject commit message recommendations into the commit message help text.
-sed_script="/$cchar.*an empty message aborts the commit./a\\
+sed_script+="/$cchar.*an empty message aborts the commit./a\\
 $cchar\\
 $cchar Commit message recommendation:\\
 $cchar\\
 $cchar     ---\\
 $cchar     <pkg>: <short description>\\
-$cchar\\
-$cchar     <long description>\\
-$cchar\\
 "
 
 if [ "$require_justification" = 1 ]; then
-  sed_script+="$cchar     Release justification (category): <release justification>\\
-$cchar\\
+  sed_script+="$cchar\\
+$cchar     Release justification (category): <release justification>\\
 "
 fi
-
-sed_script+="$cchar     Release note (category): <release note description>\\
+sed_script+="$cchar\\
+$cchar     <what was there before: Previously, ...>\\
+$cchar     <why it needed to change: This was inadequate because ...>\\
+$cchar     <what you did about it: To address this, this patch ...>\\
+$cchar\\
+$cchar     Release note (<category>): <what> <show> <why>\\
 $cchar     ---\\
 $cchar\\
 $cchar Wrap long lines! 72 columns is best.\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Git+Commit+Messages\\
 $cchar\\
 "
 
 if [ "$require_justification" = 1 ]; then
-  sed_script+="$cchar Categories for release justification:\\
+  sed_script+="$cchar\\
+$cchar Categories for release justification:\\
 $cchar     - non-production code changes\\
 $cchar     - bug fixes and low-risk updates to new functionality\\
 $cchar     - fixes for high-priority or high-severity bugs in existing functionality\\
@@ -64,39 +121,38 @@ $cchar\\
 fi
 
 sed_script+="$cchar The release note must be present if your commit has user-facing\\
-$cchar changes. Leave the default above if not.\\
+$cchar or backward-incompatible changes. Use 'Release note: None' otherwise.\\
+$cchar\\
+$cchar Things to keep in mind for release notes:\\
+$cchar   - past tense (this was changed...) or present tense (now possible to...)\\
+$cchar   - what has changed: narrow down the product area / feature\\
+$cchar   - show what changed: how a user can see the change for themselves\\
+$cchar     Note: for bug fixes, show the symptom(s) to recognize the bug\\
+$cchar   - why the change: who does this impact, how and why should they care\\
+$cchar\\
+$cchar Example release notes:\\
+$cchar\\
+$cchar   Release note (sql change): The IMPLEMENT statement was extended\\
+$cchar   to support the new STEP clause. This can be used to\\
+$cchar   implement more gradually, as often required by teams of two\\
+$cchar   or more.\\
+$cchar\\
+$cchar   Release note (bug fix): The system.replication_stats report no longer\\
+$cchar   erroneously considers some ranges belonging to table partitions to be\\
+$cchar   over-replicated.\\
 $cchar\\
 $cchar Categories for release notes:\\
-$cchar     - cli change\\
-$cchar     - sql change\\
-$cchar     - admin ui change\\
-$cchar     - general change (e.g., change of required Go version)\\
-$cchar     - build change (e.g., compatibility with older CPUs)\\
-$cchar     - enterprise change (e.g., change to backup/restore)\\
-$cchar     - backwards-incompatible change\\
-$cchar     - performance improvement\\
-$cchar     - bug fix\\
+$cchar   - cli change\\
+$cchar   - sql change\\
+$cchar   - admin ui change\\
+$cchar   - general change (e.g., change of required Go version)\\
+$cchar   - build change (e.g., compatibility with older CPUs)\\
+$cchar   - enterprise change (e.g., change to backup/restore)\\
+$cchar   - backwards-incompatible change\\
+$cchar   - performance improvement\\
+$cchar   - bug fix
+;
 "
-
-if [ "$require_justification" = 1 ]; then
-  # Add an explicit "Release justification: None" if no release justification was specified.
-  if ! grep -q '^Release justification' "$1"; then
-  	sed_script+="
-;/$cchar Please enter the commit message for your changes./i\\
-\\
-$cchar Release justification:\\
-"
-  fi
-fi
-
-# Add an explicit "Release note: None" if no release note was specified.
-if ! grep -q '^Release note' "$1"; then
-	sed_script+="
-;/$cchar Please enter the commit message for your changes./i\\
-\\
-Release note: None\\
-"
-fi
 
 if ! sed "$sed_script" "$1" > "$tempfile"; then
   give_up "unable to inject commit message recommendations"
