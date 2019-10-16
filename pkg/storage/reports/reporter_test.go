@@ -464,3 +464,14 @@ func computeConstraintConformanceReport(
 	err := visitRanges(ctx, rangeStore, cfg, &v)
 	return v.report, err
 }
+
+// computeReplicationStatsReport iterates through all the ranges and generates
+// the replication stats report.
+func computeReplicationStatsReport(
+	ctx context.Context, rangeStore RangeIterator, checker nodeChecker, cfg *config.SystemConfig,
+) (*replicationStatsReportSaver, error) {
+	saver := makeReplicationStatsReportSaver()
+	v := makeReplicationStatsVisitor(ctx, cfg, checker, &saver)
+	err := visitRanges(ctx, rangeStore, cfg, &v)
+	return v.report, err
+}
