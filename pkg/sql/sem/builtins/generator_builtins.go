@@ -994,6 +994,8 @@ func (c *checkConsistencyGenerator) Start() error {
 		// so request one only if a full check is run.
 		WithDiff: c.mode == roachpb.ChecksumMode_CHECK_FULL,
 	})
+	// NB: DistSender has special code to avoid parallelizing the request if
+	// we're requesting CHECK_FULL.
 	if err := c.db.Run(c.ctx, &b); err != nil {
 		return err
 	}
