@@ -238,66 +238,76 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	anyNonSQLShell := []string{"dump", "quit"}
 
 	testData := []struct {
-		cmds    []string
-		flags   []string
-		refargs []string
-		expErr  string
+		cmds       []string
+		flags      []string
+		refargs    []string
+		expErr     string
+		reparseErr string
 	}{
 		// Check individual URL components.
-		{anyCmd, []string{"--url=http://foo"}, nil, `URL scheme must be "postgresql"`},
-		{anyCmd, []string{"--url=postgresql:foo/bar"}, nil, `unknown URL format`},
+		{anyCmd, []string{"--url=http://foo"}, nil, `URL scheme must be "postgresql"`, ""},
+		{anyCmd, []string{"--url=postgresql:foo/bar"}, nil, `unknown URL format`, ""},
 
-		{anyCmd, []string{"--url=postgresql://foo"}, []string{"--host=foo"}, ""},
-		{anyCmd, []string{"--url=postgresql://:foo"}, []string{"--port=foo"}, ""},
+		{anyCmd, []string{"--url=postgresql://foo"}, []string{"--host=foo"}, "", ""},
+		{anyCmd, []string{"--url=postgresql://:foo"}, []string{"--port=foo"}, "invalid port \":foo\" after host", ""},
+		{anyCmd, []string{"--url=postgresql://:12345"}, []string{"--port=12345"}, "", ""},
 
-		{sqlShell, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, ""},
-		{anyNonSQLShell, []string{"--url=postgresql://foo/bar"}, []string{"--host=foo" /*db ignored*/}, ""},
+		{sqlShell, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, "", ""},
+		{anyNonSQLShell, []string{"--url=postgresql://foo/bar"}, []string{"--host=foo" /*db ignored*/}, "", ""},
 
-		{anySQL, []string{"--url=postgresql://foo@"}, []string{"--user=foo"}, ""},
-		{anyNonSQL, []string{"--url=postgresql://foo@bar"}, []string{"--host=bar" /*user ignored*/}, ""},
+		{anySQL, []string{"--url=postgresql://foo@"}, []string{"--user=foo"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo@bar"}, []string{"--host=bar" /*user ignored*/}, "", ""},
 
-		{sqlShell, []string{"--url=postgresql://a@b:c/d"}, []string{"--user=a", "--host=b", "--port=c", "--database=d"}, ""},
-		{anySQL, []string{"--url=postgresql://a@b:c"}, []string{"--user=a", "--host=b", "--port=c"}, ""},
-		{anyNonSQL, []string{"--url=postgresql://b:c"}, []string{"--host=b", "--port=c"}, ""},
+		{sqlShell, []string{"--url=postgresql://a@b:12345/d"}, []string{"--user=a", "--host=b", "--port=12345", "--database=d"}, "", ""},
+		{sqlShell, []string{"--url=postgresql://a@b:c/d"}, nil, `invalid port ":c" after host`, ""},
+		{anySQL, []string{"--url=postgresql://a@b:12345"}, []string{"--user=a", "--host=b", "--port=12345"}, "", ""},
+		{anySQL, []string{"--url=postgresql://a@b:c"}, nil, `invalid port ":c" after host`, ""},
+		{anyNonSQL, []string{"--url=postgresql://b:12345"}, []string{"--host=b", "--port=12345"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://b:c"}, nil, `invalid port ":c" after host`, ""},
 
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, ""},
-		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo", "--insecure=false"}, ""},
-		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=require"}, nil, "command .* only supports sslmode=disable or sslmode=verify-full"},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, ""},
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo", "--insecure=false"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=require"}, nil, "command .* only supports sslmode=disable or sslmode=verify-full", ""},
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, "", ""},
 
 		// URL picks up previous flags if component not specified.
-		{anyCmd, []string{"--host=baz", "--url=postgresql://:foo"}, []string{"--host=baz", "--port=foo"}, ""},
-		{anyCmd, []string{"--port=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--port=baz"}, ""},
-		{sqlShell, []string{"--database=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--database=baz"}, ""},
-		{anySQL, []string{"--user=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--user=baz"}, ""},
-		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure=false"}, ""},
-		{anyCmd, []string{"--insecure", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure"}, ""},
+		{anyCmd, []string{"--host=baz", "--url=postgresql://:12345"}, []string{"--host=baz", "--port=12345"}, "", ""},
+		{anyCmd, []string{"--host=baz", "--url=postgresql://:foo"}, nil, `invalid port ":foo" after host`, ""},
+		{anyCmd, []string{"--port=12345", "--url=postgresql://foo"}, []string{"--host=foo", "--port=12345"}, "", ""},
+		{anyCmd, []string{"--port=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--port=baz"}, "", `invalid port ":baz" after host`},
+		{sqlShell, []string{"--database=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--database=baz"}, "", ""},
+		{anySQL, []string{"--user=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--user=baz"}, "", ""},
+		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure=false"}, "", ""},
+		{anyCmd, []string{"--insecure", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure"}, "", ""},
 
 		// URL overrides previous flags if component specified.
-		{anyCmd, []string{"--host=baz", "--url=postgresql://bar"}, []string{"--host=bar"}, ""},
-		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:bar"}, []string{"--host=foo", "--port=bar"}, ""},
-		{sqlShell, []string{"--database=baz", "--url=postgresql://foo/bar"}, []string{"--host=foo", "--database=bar"}, ""},
-		{anySQL, []string{"--user=baz", "--url=postgresql://bar@foo"}, []string{"--host=foo", "--user=bar"}, ""},
-		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, ""},
-		{anyCmd, []string{"--insecure", "--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, ""},
+		{anyCmd, []string{"--host=baz", "--url=postgresql://bar"}, []string{"--host=bar"}, "", ""},
+		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:12345"}, []string{"--host=foo", "--port=12345"}, "", ""},
+		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:bar"}, nil, `invalid port ":bar" after host`, ""},
+		{sqlShell, []string{"--database=baz", "--url=postgresql://foo/bar"}, []string{"--host=foo", "--database=bar"}, "", ""},
+		{anySQL, []string{"--user=baz", "--url=postgresql://bar@foo"}, []string{"--host=foo", "--user=bar"}, "", ""},
+		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anyCmd, []string{"--insecure", "--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, "", ""},
 
 		// Discrete flag overrides URL if specified afterwards.
-		{anyCmd, []string{"--url=postgresql://bar", "--host=baz"}, []string{"--host=baz"}, ""},
-		{anyCmd, []string{"--url=postgresql://foo:bar", "--port=baz"}, []string{"--host=foo", "--port=baz"}, ""},
-		{sqlShell, []string{"--url=postgresql://foo/bar", "--database=baz"}, []string{"--host=foo", "--database=baz"}, ""},
-		{anySQL, []string{"--url=postgresql://bar@foo", "--user=baz"}, []string{"--host=foo", "--user=baz"}, ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable", "--insecure=false"}, []string{"--host=foo", "--insecure=false"}, ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full", "--insecure"}, []string{"--host=foo", "--insecure"}, ""},
+		{anyCmd, []string{"--url=postgresql://bar", "--host=baz"}, []string{"--host=baz"}, "", ""},
+		{anyCmd, []string{"--url=postgresql://foo:12345", "--port=5678"}, []string{"--host=foo", "--port=5678"}, "", ""},
+		{anyCmd, []string{"--url=postgresql://foo:12345", "--port=baz"}, []string{"--host=foo", "--port=baz"}, "", `invalid port ":baz" after host`},
+		{anyCmd, []string{"--url=postgresql://foo:bar", "--port=baz"}, nil, `invalid port ":bar" after host`, ""},
+		{sqlShell, []string{"--url=postgresql://foo/bar", "--database=baz"}, []string{"--host=foo", "--database=baz"}, "", ""},
+		{anySQL, []string{"--url=postgresql://bar@foo", "--user=baz"}, []string{"--host=foo", "--user=baz"}, "", ""},
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable", "--insecure=false"}, []string{"--host=foo", "--insecure=false"}, "", ""},
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full", "--insecure"}, []string{"--host=foo", "--insecure"}, "", ""},
 
 		// Check that the certs dir is extracted properly.
-		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=" + testCertsDirPath + "/ca.crt"}, []string{"--host=foo", "--certs-dir=" + testCertsDirPath}, ""},
-		{anyNonSQL, []string{"--certs-dir=blah", "--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/ca.crt"}, nil, "non-homogeneous certificate directory"},
-		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/ca.crt&sslcert=blah/client.root.crt"}, nil, "non-homogeneous certificate directory"},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=" + testCertsDirPath + "/ca.crt"}, []string{"--host=foo", "--certs-dir=" + testCertsDirPath}, "", ""},
+		{anyNonSQL, []string{"--certs-dir=blah", "--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/ca.crt"}, nil, "non-homogeneous certificate directory", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/ca.crt&sslcert=blah/client.root.crt"}, nil, "non-homogeneous certificate directory", ""},
 
 		// Check the cert component file names are checked.
-		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/loh.crt"}, nil, `invalid file name for "sslrootcert": expected .* got .*`},
-		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslcert=blih/loh.crt"}, nil, `invalid file name for "sslcert": expected .* got .*`},
-		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslkey=blih/loh.crt"}, nil, `invalid file name for "sslkey": expected .* got .*`},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/loh.crt"}, nil, `invalid file name for "sslrootcert": expected .* got .*`, ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslcert=blih/loh.crt"}, nil, `invalid file name for "sslcert": expected .* got .*`, ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslkey=blih/loh.crt"}, nil, `invalid file name for "sslkey": expected .* got .*`, ""},
 	}
 
 	type capturedFlags struct {
@@ -374,7 +384,10 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 				initCLIDefaults()
 				cliCtx.SSLCertsDir = defCertsDirPath
 				if err := cmd.ParseFlags([]string{"--url=" + resultURL}); err != nil {
-					t.Fatal(err)
+					if !testutils.IsError(err, test.reparseErr) {
+						t.Fatal(err)
+					}
+					return
 				}
 				urlParams2 := capture(cmd)
 
