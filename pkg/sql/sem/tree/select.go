@@ -662,6 +662,29 @@ func (d Direction) String() string {
 	return directionName[d]
 }
 
+// NullsOrder for specifying ordering of NULLs.
+type NullsOrder int8
+
+// Null order values.
+const (
+	DefaultNullsOrder NullsOrder = iota
+	NullsFirst
+	NullsLast
+)
+
+var nullsOrderName = [...]string{
+	DefaultNullsOrder: "",
+	NullsFirst:        "NULLS FIRST",
+	NullsLast:         "NULLS LAST",
+}
+
+func (n NullsOrder) String() string {
+	if n < 0 || n > NullsOrder(len(nullsOrderName)-1) {
+		return fmt.Sprintf("NullsOrder(%d)", n)
+	}
+	return nullsOrderName[n]
+}
+
 // OrderType indicates which type of expression is used in ORDER BY.
 type OrderType int
 
@@ -674,9 +697,10 @@ const (
 
 // Order represents an ordering expression.
 type Order struct {
-	OrderType OrderType
-	Expr      Expr
-	Direction Direction
+	OrderType  OrderType
+	Expr       Expr
+	Direction  Direction
+	NullsOrder NullsOrder
 	// Table/Index replaces Expr when OrderType = OrderByIndex.
 	Table TableName
 	// If Index is empty, then the order should use the primary key.
@@ -702,12 +726,17 @@ func (node *Order) Format(ctx *FmtCtx) {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.Direction.String())
 	}
+	if node.NullsOrder != DefaultNullsOrder {
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.NullsOrder.String())
+	}
 }
 
 // Equal checks if the node ordering is equivalent to other.
 func (node *Order) Equal(other *Order) bool {
 	return node.Expr.String() == other.Expr.String() && node.Direction == other.Direction &&
-		node.Table == other.Table && node.OrderType == other.OrderType
+		node.Table == other.Table && node.OrderType == other.OrderType &&
+		node.NullsOrder == other.NullsOrder
 }
 
 // Limit represents a LIMIT clause.
