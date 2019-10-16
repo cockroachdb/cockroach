@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var changefeedPollInterval = func() *settings.DurationSetting {
@@ -165,15 +166,13 @@ func emitEntries(
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
 	emitRowFn := func(ctx context.Context, row encodeRow) error {
-		// Skip rows with a timestamp less than the local span frontier because they must
-		// have been emitted before. TODO(aayush): Note that this should technically also
-		// filter out rows with timestamps equal to the local frontier but there is
-		// currently a bug in the poller which can cause it to emit row updates at a
-		// timestamp that is equal to a previously resolved timestamp in case of a schema
-		// change with backfill. See issue #41415 for more details. This if-condition
-		// should be updated and turned into an assertion once this is fixed. Fixme.
-		if row.updated.Less(sf.Frontier()) {
-			return nil
+		// Ensure that row updates are strictly newer than the least resolved timestamp being
+		// tracked by the local span frontier. The poller should not be forwarding row updates
+		// that have timestamps less than or equal to any resolved timestamp its forwarded before.
+		if !sf.Frontier().Less(row.updated) {
+			return errors.AssertionFailedf("error: detected timestamp %s that is less than "+
+				"or equal to the local frontier %s.", cloudStorageFormatTime(row.updated),
+				cloudStorageFormatTime(sf.Frontier()))
 		}
 		var keyCopy, valueCopy []byte
 		encodedKey, err := encoder.EncodeKey(row)
