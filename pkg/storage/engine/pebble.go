@@ -426,15 +426,7 @@ func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) erro
 
 // OpenFile implements the Engine interface.
 func (p *Pebble) OpenFile(filename string) (DBFile, error) {
-	file, err := p.fs.Open(p.fs.PathJoin(p.path, filename))
-	if err != nil {
-		return nil, err
-	}
-
-	pebbleFile := &pebbleFile{
-		file: file,
-	}
-	return pebbleFile, nil
+	return p.fs.Open(p.fs.PathJoin(p.path, filename))
 }
 
 // ReadFile implements the Engine interface.
@@ -510,29 +502,6 @@ func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
 		}
 	}
 	return sstables
-}
-
-// pebbleFile wraps a pebble File and implements the DBFile interface.
-type pebbleFile struct {
-	file vfs.File
-}
-
-var _ DBFile = &pebbleFile{}
-
-// Append implements the DBFile interface.
-func (p *pebbleFile) Append(data []byte) error {
-	_, err := p.file.Write(data)
-	return err
-}
-
-// Close implements the DBFile interface.
-func (p *pebbleFile) Close() error {
-	return p.file.Close()
-}
-
-// Close implements the DBFile interface.
-func (p *pebbleFile) Sync() error {
-	return p.file.Sync()
 }
 
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
