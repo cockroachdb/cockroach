@@ -85,6 +85,7 @@ func TestParse(t *testing.T) {
 		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d)`},
 		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e)`},
 		{`CREATE INDEX ON a (b ASC, c DESC)`},
+		{`CREATE INDEX ON a (b NULLS FIRST, c ASC NULLS FIRST, d DESC NULLS LAST)`},
 		{`CREATE UNIQUE INDEX a ON b (c)`},
 		{`CREATE UNIQUE INDEX a ON b (c) STORING (d)`},
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f)`},
@@ -856,6 +857,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t ORDER BY INDEX t@foo DESC`},
 		{`SELECT a FROM t ORDER BY INDEX t@primary`},
 		{`SELECT a FROM t ORDER BY INDEX t@like`},
+		{`SELECT a FROM t ORDER BY a NULLS FIRST`},
+		{`SELECT a FROM t ORDER BY a ASC NULLS FIRST`},
+		{`SELECT a FROM t ORDER BY a DESC NULLS LAST`},
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
@@ -3077,6 +3081,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(c + d)`, 9682, ``},
 		{`CREATE INDEX a ON b(c[d])`, 9682, ``},
 		{`CREATE INDEX a ON b(foo(c))`, 9682, ``},
+		{`CREATE INDEX a ON b(a NULLS LAST)`, 6224, ``},
+		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``},
+		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``},
 
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``},
@@ -3112,6 +3119,10 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT CURRENT_TIME()`, 26097, `current_time`},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`},
 		{`SELECT a(b) WITHIN GROUP (ORDER BY c)`, 0, `within group`},
+
+		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``},
+		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``},
+		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``},
 
 		{`CREATE TABLE a(b BOX)`, 21286, `box`},
 		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`},
