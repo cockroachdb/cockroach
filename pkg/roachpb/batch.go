@@ -225,6 +225,16 @@ func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
 	return false
 }
 
+// IsSingleCheckConsistencyRequest returns true iff the batch contains a single
+// request, and that request is a CheckConsistencyRequest.
+func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*CheckConsistencyRequest)
+		return ok
+	}
+	return false
+}
+
 // IsSingleAddSSTableRequest returns true iff the batch contains a single
 // request, and that request is an AddSSTableRequest.
 func (ba *BatchRequest) IsSingleAddSSTableRequest() bool {
