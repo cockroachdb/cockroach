@@ -249,6 +249,9 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[i], c.Tag) +
 			"GOTRACEBACK=crash " +
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
+			// Turn stats mismatch into panic, see:
+			// https://github.com/cockroachdb/cockroach/issues/38720#issuecomment-539136246
+			"COCKROACH_FATAL_ON_STATS_MISMATCH=true " +
 			c.Env + " " + binary + " start " + strings.Join(args, " ") +
 			" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
 			" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
