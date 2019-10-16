@@ -2316,11 +2316,17 @@ func makeEvalTupleIn(typ *types.T) *CmpOp {
 			} else {
 				// The left-hand side is a tuple, e.g. `(1, 2) IN ((1, 2), (3, 4))`.
 				for _, val := range vtuple.D {
-					// Use the EQ function which properly handles NULLs.
-					if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ); res == DNull {
+					if val == DNull {
+						// We allow for a null value to be in the list of tuples, so we
+						// need to check that upfront.
 						sawNull = true
-					} else if res == DBoolTrue {
-						return DBoolTrue, nil
+					} else {
+						// Use the EQ function which properly handles NULLs.
+						if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ); res == DNull {
+							sawNull = true
+						} else if res == DBoolTrue {
+							return DBoolTrue, nil
+						}
 					}
 				}
 			}
