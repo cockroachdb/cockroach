@@ -220,7 +220,7 @@ func makeAggregateFuncs(
 		case execinfrapb.AggregatorSpec_MAX:
 			funcs[i], err = newMaxAgg(aggTyps[i][0])
 		default:
-			return nil, nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
+			return nil, nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}
 
 		// Set the output type of the aggregate.
