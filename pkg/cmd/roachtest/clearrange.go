@@ -55,7 +55,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
 		c.Start(ctx, t, startArgs(
-			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_FATAL_ON_STATS_MISMATCH=true",
+			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_ENFORCE_CONSISTENT_STATS=true",
 		))
 	} else {
 		c.Start(ctx, t)
