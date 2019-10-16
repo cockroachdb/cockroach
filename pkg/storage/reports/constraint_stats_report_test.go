@@ -81,7 +81,6 @@ func TestConformanceReport(t *testing.T) {
 					{id: 2, locality: "", stores: []store{{id: 2, attrs: "ssd"}}},
 					{id: 3, locality: "", stores: []store{{id: 3, attrs: "ssd"}}},
 				},
-				deadStores: nil,
 			},
 			exp: []constraintEntry{{
 				object:         "db1",
@@ -163,7 +162,6 @@ func TestConformanceReport(t *testing.T) {
 					{id: 2, locality: "", stores: []store{{id: 2}}},
 					{id: 3, locality: "", stores: []store{{id: 3}}},
 				},
-				deadStores: nil,
 			},
 			exp: []constraintEntry{
 				{
@@ -215,12 +213,12 @@ func TestConformanceReport(t *testing.T) {
 // runConformanceReportTest runs one test case. It processes the input schema,
 // runs the reports, and verifies that the report looks as expected.
 func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
-	rangeStore, sysCfg, storeResolver, objects, err := processTestCase(tc.baseReportTestCase)
+	ctc, err := compileTestCase(tc.baseReportTestCase)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rep, err := computeConstraintConformanceReport(
-		context.Background(), &rangeStore, sysCfg, storeResolver)
+		context.Background(), &ctc.iter, ctc.cfg, ctc.resolver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +236,7 @@ func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
 
 	expRows := make(rows, len(tc.exp))
 	for i, exp := range tc.exp {
-		k, v, err := exp.toReportEntry(objects)
+		k, v, err := exp.toReportEntry(ctc.objectToZone)
 		if err != nil {
 			t.Fatalf("failed to process expected entry %d: %s", i, err)
 		}
@@ -359,6 +357,9 @@ type table struct {
 }
 
 func (t table) validate() error {
+	if len(t.indexes) == 0 || t.indexes[0].name != "PK" {
+		return errors.Errorf("missing PK index from table: %q", t.name)
+	}
 	return t.partitions.validate()
 }
 
@@ -427,6 +428,9 @@ type node struct {
 	// flag. "" for not setting a locality.
 	locality string
 	stores   []store
+	// dead, if set, indicates that the node is to be considered dead for the
+	// purposes of reports generation.
+	dead bool
 }
 
 func (n node) toDescriptors() (roachpb.NodeDescriptor, []roachpb.StoreDescriptor, error) {
@@ -455,7 +459,6 @@ type baseReportTestCase struct {
 	schema      []database
 	splits      []split
 	nodes       []node
-	deadStores  []int
 	defaultZone zone
 }
 
@@ -643,33 +646,47 @@ func (t *testRangeIter) Close(context.Context) {
 	t.ranges = nil
 }
 
-// processTestCase takes the input schema and turns it into:
-// - a collection of ranges represented as an implementation of RangeStore
-// - a SystemConfig populated with descriptors and zone configs.
-// - a collection of stores represented as an implementation of StoreResolver.
-// - a map from "object names" to ZoneKeys; each table/index/partition with a zone is mapped to
-// the id that the report will use for it. See constraintEntry.object for the key format.
-func processTestCase(
-	tc baseReportTestCase,
-) (testRangeIter, *config.SystemConfig, StoreResolver, map[string]ZoneKey, error) {
+// compiledTestCase represents the result of calling compileTestCase(). It
+// contains everything needed to generate replication reports for a test case.
+type compiledTestCase struct {
+	// A collection of ranges represented as an implementation of RangeStore.
+	iter testRangeIter
+	// The SystemConfig populated with descriptors and zone configs.
+	cfg *config.SystemConfig
+	// A collection of stores represented as an implementation of StoreResolver.
+	resolver StoreResolver
+	// A function that dictates whether a node is to be considered live or dead.
+	checker nodeChecker
+
+	// A map from "object names" to ZoneKeys; each table/index/partition with a
+	// zone is mapped to the id that the report will use for it. See
+	// constraintEntry.object for the key format.
+	objectToZone map[string]ZoneKey
+	// The inverse of objectToZone.
+	zoneToObject map[ZoneKey]string
+}
+
+// compileTestCase takes the input schema and turns it into a compiledTestCase.
+func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 	tableToID := make(map[string]int)
 	idxToID := make(map[string]int)
-	objects := make(map[string]ZoneKey)
 	// Databases and tables share the id space, so we'll use a common counter for them.
 	// And we're going to use keys in user space, otherwise there's special cases
 	// in the zone config lookup that we bump into.
 	objectCounter := keys.MinUserDescID
-	sysCfgBuilder := systemConfigBuilder{}
-	sysCfgBuilder.setDefaultZoneConfig(tc.defaultZone.toZoneConfig())
-	objects["default"] = MakeZoneKey(keys.RootNamespaceID, NoSubzone)
+	sysCfgBuilder := makeSystemConfigBuilder()
+	if err := sysCfgBuilder.setDefaultZoneConfig(tc.defaultZone.toZoneConfig()); err != nil {
+		return compiledTestCase{}, err
+	}
 	// Assign ids to databases, table, indexes; create descriptors and populate
 	// the SystemConfig.
 	for _, db := range tc.schema {
 		dbID := objectCounter
 		objectCounter++
-		objects[db.name] = MakeZoneKey(uint32(dbID), NoSubzone)
 		if db.zone != nil {
-			sysCfgBuilder.addZone(dbID, db.zone.toZoneConfig())
+			if err := sysCfgBuilder.addDatabaseZone(db.name, dbID, db.zone.toZoneConfig()); err != nil {
+				return compiledTestCase{}, err
+			}
 		}
 		sysCfgBuilder.addDBDesc(dbID, sqlbase.DatabaseDescriptor{
 			Name: db.name,
@@ -680,11 +697,18 @@ func processTestCase(
 			tableID := objectCounter
 			objectCounter++
 			tableToID[table.name] = tableID
-			objects[table.name] = MakeZoneKey(uint32(tableID), NoSubzone)
+
+			pkIdx := index{
+				name:       "PK",
+				zone:       nil,
+				partitions: table.partitions,
+			}
+			table.indexes = append(append([]index(nil), pkIdx), table.indexes...)
+
 			// Create a table descriptor to be used for creating the zone config.
 			tableDesc, err := makeTableDesc(table, tableID, dbID)
 			if err != nil {
-				return testRangeIter{}, nil, nil, nil, errors.Wrap(err, "error creating table descriptor")
+				return compiledTestCase{}, errors.Wrap(err, "error creating table descriptor")
 			}
 			sysCfgBuilder.addTableDesc(tableID, tableDesc)
 
@@ -695,19 +719,13 @@ func processTestCase(
 				*tableZone = table.zone.toZoneConfig()
 			}
 			// Add subzones for the PK partitions.
-			if len(table.partitions) > 0 {
-				pk := index{
-					name:       "PK",
-					zone:       nil, // PK's never have zones; the table might have a zone.
-					partitions: table.partitions,
-				}
-				tableZone = addIndexSubzones(pk, tableZone, tableDesc, 1 /* id of PK */, objects)
-			}
+			tableZone = addIndexSubzones(
+				table.indexes[0], tableZone, tableDesc, 1 /* id of PK */)
 			// Add subzones for all the indexes.
 			for i, idx := range table.indexes {
-				idxID := i + 2 // index 1 is the PK
+				idxID := i + 1 // index 1 is the PK
 				idxToID[fmt.Sprintf("%s.%s", table.name, idx.name)] = idxID
-				tableZone = addIndexSubzones(idx, tableZone, tableDesc, idxID, objects)
+				tableZone = addIndexSubzones(idx, tableZone, tableDesc, idxID)
 			}
 			// Fill in the SubzoneSpans.
 			if tableZone != nil {
@@ -716,9 +734,11 @@ func processTestCase(
 					nil, uuid.UUID{} /* clusterID */, &tableDesc, tableZone.Subzones,
 					false /* hasNewSubzones */)
 				if err != nil {
-					return testRangeIter{}, nil, nil, nil, errors.Wrap(err, "error generating subzone spans")
+					return compiledTestCase{}, errors.Wrap(err, "error generating subzone spans")
 				}
-				sysCfgBuilder.addZone(tableID, *tableZone)
+				if err := sysCfgBuilder.addTableZone(tableDesc, tableID, *tableZone); err != nil {
+					return compiledTestCase{}, err
+				}
 			}
 		}
 	}
@@ -729,14 +749,14 @@ func processTestCase(
 		prettyKey := tc.splits[i].key
 		startKey, err := keyScanner.Scan(split.key)
 		if err != nil {
-			return testRangeIter{}, nil, nil, nil, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
+			return compiledTestCase{}, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
 		}
 		var endKey roachpb.Key
 		if i < len(tc.splits)-1 {
 			prettyKey := tc.splits[i+1].key
 			endKey, err = keyScanner.Scan(prettyKey)
 			if err != nil {
-				return testRangeIter{}, nil, nil, nil, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
+				return compiledTestCase{}, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
 			}
 		} else {
 			endKey = roachpb.KeyMax
@@ -757,7 +777,7 @@ func processTestCase(
 	for _, n := range tc.nodes {
 		_ /* nodeDesc */, sds, err := n.toDescriptors()
 		if err != nil {
-			return testRangeIter{}, nil, nil, nil, err
+			return compiledTestCase{}, err
 		}
 		storeDescs = append(storeDescs, sds...)
 	}
@@ -773,7 +793,28 @@ func processTestCase(
 		}
 		return stores
 	}
-	return testRangeIter{ranges: ranges}, sysCfgBuilder.build(), storeResolver, objects, nil
+	nodeChecker := func(nodeID roachpb.NodeID) bool {
+		for _, n := range tc.nodes {
+			if n.id != int(nodeID) {
+				continue
+			}
+			return !n.dead
+		}
+		panic(fmt.Sprintf("node %d not found", nodeID))
+	}
+	cfg, zoneToObject := sysCfgBuilder.build()
+	objectToZone := make(map[string]ZoneKey)
+	for k, v := range zoneToObject {
+		objectToZone[v] = k
+	}
+	return compiledTestCase{
+		iter:         testRangeIter{ranges: ranges},
+		cfg:          cfg,
+		resolver:     storeResolver,
+		checker:      nodeChecker,
+		zoneToObject: zoneToObject,
+		objectToZone: objectToZone,
+	}, nil
 }
 
 func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, error) {
@@ -786,15 +827,9 @@ func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, err
 		Name:     t.name,
 		ParentID: sqlbase.ID(dbID),
 	}
-	pkIdx := index{
-		name:       "PK",
-		zone:       nil,
-		partitions: t.partitions,
-	}
-	desc.Indexes = append(desc.Indexes, pkIdx.toIndexDescriptor(1))
 
 	for i, idx := range t.indexes {
-		idxID := i + 2 // index 1 is the PK
+		idxID := i + 1
 		desc.Indexes = append(desc.Indexes, idx.toIndexDescriptor(idxID))
 	}
 	numCols := 0
@@ -822,14 +857,8 @@ func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, err
 //
 // parent: Can be nil if the parent table doesn't have a zone of its own. In that
 //   case, if any subzones are created, a placeholder zone will also be created and returned.
-// subzone: The index's ZoneConfig. Can be nil if the index doesn't have a zone config.
-// objects: A mapping from object name to ZoneKey that gets populated with all the new subzones.
 func addIndexSubzones(
-	idx index,
-	parent *config.ZoneConfig,
-	tableDesc sql.TableDescriptor,
-	idxID int,
-	objects map[string]ZoneKey,
+	idx index, parent *config.ZoneConfig, tableDesc sql.TableDescriptor, idxID int,
 ) *config.ZoneConfig {
 	res := parent
 
@@ -849,26 +878,18 @@ func addIndexSubzones(
 			PartitionName: "",
 			Config:        idx.zone.toZoneConfig(),
 		})
-		objects[fmt.Sprintf("%s.%s", tableDesc.Name, idx.name)] =
-			MakeZoneKey(uint32(tableDesc.ID), base.SubzoneID(len(res.Subzones)))
 	}
 
 	for _, p := range idx.partitions {
-		if p.zone != nil {
-			ensureParent()
-			res.SetSubzone(config.Subzone{
-				IndexID:       uint32(idxID),
-				PartitionName: p.name,
-				Config:        p.zone.toZoneConfig(),
-			})
-			var objectName string
-			if idxID == 1 {
-				objectName = fmt.Sprintf("%s.%s", tableDesc.Name, p.name)
-			} else {
-				objectName = fmt.Sprintf("%s.%s.%s", tableDesc.Name, idx.name, p.name)
-			}
-			objects[objectName] = MakeZoneKey(uint32(tableDesc.ID), base.SubzoneID(len(res.Subzones)))
+		if p.zone == nil {
+			continue
 		}
+		ensureParent()
+		res.SetSubzone(config.Subzone{
+			IndexID:       uint32(idxID),
+			PartitionName: p.name,
+			Config:        p.zone.toZoneConfig(),
+		})
 	}
 	return res
 }
@@ -877,24 +898,77 @@ func addIndexSubzones(
 type systemConfigBuilder struct {
 	kv                []roachpb.KeyValue
 	defaultZoneConfig *config.ZoneConfig
+	zoneToObject      map[ZoneKey]string
 }
 
-func (b *systemConfigBuilder) setDefaultZoneConfig(cfg config.ZoneConfig) {
+func makeSystemConfigBuilder() systemConfigBuilder {
+	return systemConfigBuilder{zoneToObject: make(map[ZoneKey]string)}
+}
+
+func (b *systemConfigBuilder) addZoneToObjectMapping(k ZoneKey, object string) error {
+	if s, ok := b.zoneToObject[k]; ok {
+		return errors.Errorf("zone %s already mapped to object %s", k, s)
+	}
+	for k, v := range b.zoneToObject {
+		if v == object {
+			return errors.Errorf("object %s already mapped to key %s", object, k)
+		}
+	}
+	b.zoneToObject[k] = object
+	return nil
+}
+
+func (b *systemConfigBuilder) setDefaultZoneConfig(cfg config.ZoneConfig) error {
 	b.defaultZoneConfig = &cfg
-	b.addZone(keys.RootNamespaceID, cfg)
+	return b.addZoneInner("default", keys.RootNamespaceID, cfg)
 }
 
-func (b *systemConfigBuilder) addZone(id int, cfg config.ZoneConfig) {
+func (b *systemConfigBuilder) addZoneInner(objectName string, id int, cfg config.ZoneConfig) error {
 	k := config.MakeZoneKey(uint32(id))
 	var v roachpb.Value
 	if err := v.SetProto(&cfg); err != nil {
 		panic(err)
 	}
 	b.kv = append(b.kv, roachpb.KeyValue{Key: k, Value: v})
+	return b.addZoneToObjectMapping(MakeZoneKey(uint32(id), NoSubzone), objectName)
+}
+
+func (b *systemConfigBuilder) addDatabaseZone(name string, id int, cfg config.ZoneConfig) error {
+	return b.addZoneInner(name, id, cfg)
+}
+
+func (b *systemConfigBuilder) addTableZone(
+	t sqlbase.TableDescriptor, id int, cfg config.ZoneConfig,
+) error {
+	if err := b.addZoneInner(t.Name, id, cfg); err != nil {
+		return err
+	}
+	// Figure out the mapping from all the partition names to zone keys.
+	for i, subzone := range cfg.Subzones {
+		var idx string
+		if subzone.IndexID == 1 {
+			// Index 1 is the PK.
+			idx = t.Name
+		} else {
+			idx = fmt.Sprintf("%s.%s", t.Name, t.Indexes[subzone.IndexID-1].Name)
+		}
+		var object string
+		if subzone.PartitionName == "" {
+			object = idx
+		} else {
+			object = fmt.Sprintf("%s.%s", idx, subzone.PartitionName)
+		}
+		if err := b.addZoneToObjectMapping(
+			MakeZoneKey(uint32(id), base.SubzoneIDFromIndex(i)), object,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // build constructs a SystemConfig containing all the information accumulated in the builder.
-func (b *systemConfigBuilder) build() *config.SystemConfig {
+func (b *systemConfigBuilder) build() (*config.SystemConfig, map[ZoneKey]string) {
 	if b.defaultZoneConfig == nil {
 		panic("default zone config not set")
 	}
@@ -905,7 +979,7 @@ func (b *systemConfigBuilder) build() *config.SystemConfig {
 
 	cfg := config.NewSystemConfig(b.defaultZoneConfig)
 	cfg.SystemConfigEntries.Values = b.kv
-	return cfg
+	return cfg, b.zoneToObject
 }
 
 // addTableDesc adds a table descriptor to the SystemConfig.
