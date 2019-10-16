@@ -38,6 +38,12 @@ func buildOpaque(
 ) (opt.OpaqueMetadata, sqlbase.ResultColumns, error) {
 	p := evalCtx.Planner.(*planner)
 
+	// Opaque statements handle their own scalar arguments, with no help from the
+	// optimizer. As such, they cannot contain subqueries.
+	scalarProps := &semaCtx.Properties
+	defer scalarProps.Restore(*scalarProps)
+	scalarProps.Require(stmt.StatementTag(), tree.RejectSubqueries)
+
 	var plan planNode
 	var err error
 	switch n := stmt.(type) {
