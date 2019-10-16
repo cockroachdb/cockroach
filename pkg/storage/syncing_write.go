@@ -101,7 +101,7 @@ func writeFileSyncing(
 
 		// rate limit
 		limitBulkIOWrite(ctx, limiter, len(chunk))
-		err = f.Append(chunk)
+		_, err = f.Write(chunk)
 		if err == nil && sync {
 			err = f.Sync()
 		}

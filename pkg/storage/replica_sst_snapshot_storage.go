@@ -173,7 +173,7 @@ func (sssf *SSTSnapshotStorageFile) Write(ctx context.Context, contents []byte) 
 		return err
 	}
 	limitBulkIOWrite(ctx, sssf.ssss.sss.limiter, len(contents))
-	if err := sssf.file.Append(contents); err != nil {
+	if _, err := sssf.file.Write(contents); err != nil {
 		return err
 	}
 	return sssf.file.Sync()
