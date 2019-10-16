@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
 )
 
@@ -65,6 +66,12 @@ func PhysicalTypeColElemToDatum(
 		return da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
 	case types.OidFamily:
 		return da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
+	case types.UuidFamily:
+		id, err := uuid.FromBytes(col.Bytes().Get(int(rowIdx)))
+		if err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		return da.NewDUuid(tree.DUuid{UUID: id})
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 		// This code is unreachable, but the compiler cannot infer that.
