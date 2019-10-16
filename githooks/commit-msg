@@ -19,7 +19,14 @@ reset=$([ -t 2 ] && { tput sgr0 || tput me; } 2>/dev/null)
 warn() {
     echo >&2
     echo "${red}$*${reset}" >&2
+    echo >&2
 }
+
+if ! test -s "$1"; then
+	warn "commit message is empty!"
+	# nothing to check further.
+	exit 0
+fi
 
 # First lint test: give a friendly reminder on long lines.
 
