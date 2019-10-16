@@ -75,8 +75,6 @@ type cloudStorageSinkFile struct {
 // `changeAggregator`, as of the time the last `Flush()` call was made (or `StatementTime`
 // if `Flush()` hasn't been called yet). Intuitively, this can be thought of as an
 // inclusive lower bound on the timestamps of updates that can be seen in a given file.
-// NOTE: Due to a bug in the poller, this is not always true when there's a schema change
-// that causes a backfill. See issue #41415 for more details.
 //
 // `<topic>` corresponds to one SQL table.
 //

@@ -181,14 +181,16 @@ func emitEntries(
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
 	emitRowFn := func(ctx context.Context, row encodeRow) error {
-		// Skip rows with a timestamp less than the local span frontier because they must
-		// have been emitted before. TODO(aayush): Note that this should technically also
-		// filter out rows with timestamps equal to the local frontier but there is
-		// currently a bug in the poller which can cause it to emit row updates at a
-		// timestamp that is equal to a previously resolved timestamp in case of a schema
-		// change with backfill. See issue #41415 for more details. This if-condition
-		// should be updated and turned into an assertion once this is fixed. Fixme.
-		if row.updated.Less(sf.Frontier()) {
+		// Ensure that row updates are strictly newer than the least resolved timestamp
+		// being tracked by the local span frontier. The poller should not be forwarding
+		// row updates that have timestamps less than or equal to any resolved timestamp
+		// it's forwarded before.
+		// TODO(aayush): This should be an assertion once we're confident this can never
+		// happen under any circumstance.
+		if !sf.Frontier().Less(row.updated) {
+			log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
+				"or equal to the local frontier %s.", cloudStorageFormatTime(row.updated),
+				cloudStorageFormatTime(sf.Frontier()))
 			return nil
 		}
 		var keyCopy, valueCopy []byte
