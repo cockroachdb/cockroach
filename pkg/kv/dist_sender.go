@@ -1216,6 +1216,12 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	var numResults int64
 	stopAtRangeBoundary := ba.Header.ScanOptions != nil && ba.Header.ScanOptions.StopAtRangeBoundary
 	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
+	if ba.IsSingleCheckConsistencyRequest() {
+		// Don't parallelize full checksum requests as they have to touch the
+		// entirety of each replica of each range they touch.
+		isExpensive := ba.Requests[0].GetCheckConsistency().Mode == roachpb.ChecksumMode_CHECK_FULL
+		canParallelize = canParallelize && !isExpensive
+	}
 
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		responseCh := make(chan response, 1)
