@@ -53,11 +53,8 @@ type Txn struct {
 	// mu holds fields that need to be synchronized for concurrent request execution.
 	mu struct {
 		syncutil.Mutex
-		ID        uuid.UUID
-		debugName string
-
-		// userPriority is the transaction's priority. If not set,
-		// NormalUserPriority will be used.
+		ID           uuid.UUID
+		debugName    string
 		userPriority roachpb.UserPriority
 
 		// previousIDs holds the set of all previous IDs that the Txn's Proto has
@@ -139,7 +136,8 @@ func NewTxnWithCoordMeta(
 	meta.Txn.AssertInitialized(ctx)
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
 	txn.mu.ID = meta.Txn.ID
-	txn.mu.sender = db.factory.TransactionalSender(typ, meta)
+	txn.mu.userPriority = roachpb.NormalUserPriority
+	txn.mu.sender = db.factory.TransactionalSender(typ, meta, txn.mu.userPriority)
 	return txn
 }
 
@@ -927,7 +925,7 @@ func (txn *Txn) replaceSenderIfTxnAbortedLocked(
 	txn.mu.ID = newTxn.ID
 	// Create a new txn sender.
 	meta := roachpb.MakeTxnCoordMeta(*newTxn)
-	txn.mu.sender = txn.db.factory.TransactionalSender(txn.typ, meta)
+	txn.mu.sender = txn.db.factory.TransactionalSender(txn.typ, meta, txn.mu.userPriority)
 }
 
 func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
