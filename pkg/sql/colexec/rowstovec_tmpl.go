@@ -47,7 +47,7 @@ type _GOTYPE interface{}
 func _ROWS_TO_COL_VEC(
 	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *sqlbase.DatumAlloc,
 ) error { // */}}
-	// {{define "rowsToColVec"}}
+	// {{define "rowsToColVec" -}}
 	col := vec._TemplateType()
 	datumToPhysicalFn := typeconv.GetDatumToPhysicalFn(columnType)
 	for i := range rows {
@@ -89,7 +89,6 @@ func EncDatumRowsToColVec(
 	columnType *types.T,
 	alloc *sqlbase.DatumAlloc,
 ) error {
-
 	switch columnType.Family() {
 	// {{range .}}
 	case _FAMILY:
