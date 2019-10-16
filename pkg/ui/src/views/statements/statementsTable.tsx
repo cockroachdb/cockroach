@@ -22,6 +22,7 @@ import { countBarChart, retryBarChart, rowsBarChart, latencyBarChart } from "./b
 
 import "./statements.styl";
 import * as docsURL from "oss/src/util/docs";
+import { Tooltip } from "antd";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -34,24 +35,25 @@ export interface AggregateStatistics {
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-function StatementLink(props: { statement: string, app: string, implicitTxn: boolean }) {
+function StatementLink(props: { statement: string, app: string, implicitTxn: boolean, search: string }) {
   const summary = summarize(props.statement);
   const base = props.app ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
-
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="statement__tooltip">
-        <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statement }</pre> }>
+        <Tooltip overlayClassName="preset-black" placement="bottom" title={
+          <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
+        }>
           <div className="statement__tooltip-hover-area">
-            { shortStatement(summary, props.statement) }
+            { getHighlightedText(shortStatement(summary, props.statement), props.search) }
           </div>
-        </ToolTipWrapper>
+        </Tooltip>
       </div>
     </Link>
   );
 }
 
-function shortStatement(summary: StatementSummary, original: string) {
+export function shortStatement(summary: StatementSummary, original: string) {
   switch (summary.statement) {
     case "update": return "UPDATE " + summary.table;
     case "insert": return "INSERT INTO " + summary.table;
@@ -70,7 +72,27 @@ function calculateCumulativeTime(stats: StatementStatistics) {
   return count * latency;
 }
 
-export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
+function getHighlightedText(text: string, highlight: string) {
+  if (highlight.length === 0) {
+    return text;
+  }
+  highlight = highlight.replace(/[°§%()\[\]{}\\?´`'#|;:+-]+/g, "highlightNotDefined");
+  const search = highlight.split(" ").map(val => val.toLowerCase()).join("|");
+  const parts = text.split(new RegExp(`(${search})`, "gi"));
+  return parts.map((part, i) => {
+    if (search.includes(part.toLowerCase())) {
+      return (
+        <span key={i} className="_text-bold">
+          {`${part}`}
+        </span>
+      );
+    } else {
+      return `${part}`;
+    }
+  });
+}
+
+export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string, search?: string)
     : ColumnDescriptor<AggregateStatistics>[] {
   const transactionTypeText = (
     <React.Fragment>
@@ -91,6 +113,7 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
         <StatementLink
           statement={ stmt.label }
           implicitTxn={ stmt.implicitTxn }
+          search={search}
           app={ selectedApp }
         />
       ),

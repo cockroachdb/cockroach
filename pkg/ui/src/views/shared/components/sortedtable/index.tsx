@@ -72,6 +72,7 @@ interface SortedTableProps<T> {
     // purposes of tracking whether it's expanded or not.
     expansionKey: (obj: T) => string;
   };
+  search?: string;
 }
 
 interface SortedTableState {
@@ -200,7 +201,6 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         onChangeExpansion: this.onChangeExpansion,
       };
     }
-
     if (data) {
       return (
         <SortableTable
