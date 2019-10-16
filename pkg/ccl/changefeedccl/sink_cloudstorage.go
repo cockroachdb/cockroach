@@ -119,14 +119,11 @@ type cloudStorageSinkFile struct {
 // timestamp, a data file can't even be emitted at the same timestamp, it must be emitted
 // at a timestamp that is strictly greater than the last globally resolved timestamp. Note
 // that the local frontier is a guarantee that the sink will never get an EmitRow with
-// that timestamp or lower. (NOTE: there is a known bug in the poller which can cause row
-// updates to be emitted with a timestamp that is equal to the local frontier, during a
-// schema change with backfill. See #41415 for more details) (a2) is that whenever Flush
-// is called, all files written by the sink must be named using timestamps less than or
-// equal to the one for the local frontier at the time Flush is called. This is again
-// because our local progress update could cause the global progress to be updated and we
-// need everything written so far to lexically compare as less than the new resolved
-// timestamp.
+// that timestamp or lower. (a2) is that whenever Flush is called, all files written by
+// the sink must be named using timestamps less than or equal to the one for the local
+// frontier at the time Flush is called. This is again because our local progress update
+// could cause the global progress to be updated and we need everything written so far to
+// lexically compare as less than the new resolved timestamp.
 //
 // The data files written by this sink are named according to the pattern
 // `<timestamp>-<uniquer>-<topic_id>-<schema_id>.<ext>`, each component of which is as
@@ -136,8 +133,6 @@ type cloudStorageSinkFile struct {
 // `changeAggregator`, as of the time the last `Flush()` call was made (or `StatementTime`
 // if `Flush()` hasn't been called yet). Intuitively, this can be thought of as an
 // inclusive lower bound on the timestamps of updates that can be seen in a given file.
-// NOTE: Due to a bug in the poller, this is not always true when there's a schema change
-// that causes a backfill. See issue #41415 for more details.
 //
 // `<topic>` corresponds to one SQL table.
 //
@@ -208,9 +203,7 @@ type cloudStorageSinkFile struct {
 // time the last `Flush()` call was made (or StatementTime in case `Flush()` hasn't been
 // called yet). Since all EmitRow calls are guaranteed to be for rows that equal or
 // succeed this timestamp, ts(Xi) is an inclusive lower bound for the rows contained
-// inside Xi. NOTE: There is a known bug in the poller which causes this guarantee to be
-// violated in case of a schema change that causes a backfill. See issue #41415 for more
-// details.
+// inside Xi.
 // 4. When a job restarts, the new job session starts with a catch-up scan
 // from the last globally resolved timestamp of the changefeed. This catch-up
 // scan replays all rows since this resolved timestamp preserving invariant 1.
