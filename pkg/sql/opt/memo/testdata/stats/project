@@ -131,7 +131,7 @@ SELECT * FROM (SELECT y + 3 AS v FROM a) WHERE v >= 1 AND v <= 100
 ----
 select
  ├── columns: v:5(int!null)
- ├── stats: [rows=990, distinct(5)=100, null(5)=0]
+ ├── stats: [rows=994.974874, distinct(5)=100, null(5)=0]
  ├── project
  │    ├── columns: v:5(int)
  │    ├── stats: [rows=2000, distinct(5)=200, null(5)=20]
@@ -172,7 +172,7 @@ SELECT * FROM a WHERE EXISTS (SELECT s < v FROM kuv GROUP BY s < v)
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(4)=196.531694, null(4)=0]
+ ├── stats: [rows=666.666667]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan a
@@ -244,7 +244,7 @@ SELECT * FROM (SELECT concat(s, y::string) FROM a) AS q(v) WHERE v = 'foo'
 ----
 select
  ├── columns: v:5(string!null)
- ├── stats: [rows=0.375, distinct(5)=0.375, null(5)=0]
+ ├── stats: [rows=0.375187594, distinct(5)=0.375187594, null(5)=0]
  ├── fd: ()-->(5)
  ├── project
  │    ├── columns: concat:5(string)

@@ -7,7 +7,7 @@ SELECT k, s FROM a WHERE s >= 'foo'
 ----
 select
  ├── columns: k:1(int!null) s:3(string!null)
- ├── stats: [rows=330, distinct(1)=330, null(1)=0, distinct(3)=33.3333333, null(3)=0]
+ ├── stats: [rows=333.333333, distinct(3)=33.3333333, null(3)=0]
  ├── cost: 1070.03
  ├── key: (1)
  ├── fd: (1)-->(3)

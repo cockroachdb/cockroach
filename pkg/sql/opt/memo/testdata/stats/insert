@@ -41,7 +41,7 @@ WHERE z > 1.0
 select
  ├── columns: x:1(string!null) y:2(int!null) z:3(float!null)
  ├── side-effects, mutations
- ├── stats: [rows=66, distinct(1)=1, null(1)=0, distinct(2)=66, null(2)=0, distinct(3)=43.4214373, null(3)=0]
+ ├── stats: [rows=66.5105818, distinct(3)=43.4214373, null(3)=0]
  ├── fd: ()-->(1)
  ├── insert xyz
  │    ├── columns: x:1(string!null) y:2(int!null) z:3(float)
@@ -58,7 +58,7 @@ select
  │         ├── fd: ()-->(5)
  │         └── select
  │              ├── columns: a:4(int!null) b:5(string!null) c:6(float) rowid:7(int!null)
- │              ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=130.264312, null(6)=2, distinct(7)=200, null(7)=0]
+ │              ├── stats: [rows=200, distinct(4)=200, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=130.264312, null(6)=2]
  │              ├── key: (7)
  │              ├── fd: ()-->(5), (7)-->(4,6)
  │              ├── scan abc
