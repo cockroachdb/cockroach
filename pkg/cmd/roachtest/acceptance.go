@@ -21,6 +21,7 @@ func registerAcceptance(r *testRegistry) {
 		fn         func(ctx context.Context, t *test, c *cluster)
 		skip       string
 		minVersion string
+		timeout    time.Duration
 	}{
 		// Sorted. Please keep it that way.
 		{name: "bank/cluster-recovery", fn: runBankClusterRecovery},
@@ -43,7 +44,7 @@ func registerAcceptance(r *testRegistry) {
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{name: "status-server", fn: runStatusServer},
-		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.1.0"},
+		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.1.0", timeout: 30 * time.Minute},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4
@@ -65,6 +66,9 @@ func registerAcceptance(r *testRegistry) {
 		spec := specTemplate
 		spec.Name = specTemplate.Name + "/" + tc.name
 		spec.MinVersion = tc.minVersion
+		if tc.timeout != 0 {
+			spec.Timeout = tc.timeout
+		}
 		spec.Run = func(ctx context.Context, t *test, c *cluster) {
 			tc.fn(ctx, t, c)
 		}
