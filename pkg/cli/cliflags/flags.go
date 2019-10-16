@@ -693,6 +693,14 @@ Also, if you use equal signs in the file path to a store, you must use the
 "path" field label.`,
 	}
 
+	StorageEngine = FlagInfo{
+		Name: "storage-engine",
+		Description: `
+Storage engine to use for all stores on this cockroach node. Options are rocksdb
+(default), or pebble.
+`,
+	}
+
 	Size = FlagInfo{
 		Name:      "size",
 		Shorthand: "z",
@@ -735,14 +743,6 @@ For example, the following will generate an arbitrary, temporary subdirectory
 </PRE>
 If this flag is unspecified, the temporary subdirectory will be located under
 the root of the first store.`,
-	}
-
-	TempEngine = FlagInfo{
-		Name: "temp-engine",
-		Description: `
-Storage engine to use for temporary storage. Options are rocksdb (default), or
-experiemental-pebble.
-`,
 	}
 
 	ExternalIODir = FlagInfo{

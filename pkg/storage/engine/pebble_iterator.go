@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
 
@@ -307,16 +308,164 @@ func (p *pebbleIterator) FindSplitKey(
 func (p *pebbleIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (value *roachpb.Value, intent *roachpb.Intent, err error) {
-	// TODO(itsbilal): Implement in a separate PR. See #39674.
-	panic("unimplemented for now, see #39674")
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(key) == 0 {
+		return nil, nil, emptyKeyError()
+	}
+	if p.iter == nil {
+		panic("uninitialized iterator")
+	}
+
+	// MVCCGet is implemented as an MVCCScan with an end key that sorts after the
+	// start key.
+	keyEnd := make([]byte, 0, len(key)+1)
+	keyEnd = append(keyEnd, key...)
+	keyEnd = append(keyEnd, 0x00)
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       p.iter,
+		start:        key,
+		end:          keyEnd,
+		ts:           timestamp,
+		maxKeys:      1,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+		ignoreSeq:    opts.IgnoreSequence,
+	}
+
+	if opts.Txn != nil {
+		mvccScanner.txn = opts.Txn
+		mvccScanner.checkUncertainty = timestamp.Less(opts.Txn.MaxTimestamp)
+	}
+
+	mvccScanner.init()
+	mvccScanner.get()
+
+	// Init calls SetBounds. Reset it to what this iterator had at the start.
+	defer func() {
+		if p.iter != nil {
+			p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
+		}
+	}()
+
+	if mvccScanner.err != nil {
+		return nil, nil, mvccScanner.err
+	}
+	intents, err := buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	if len(intents) > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+	} else if len(intents) == 1 {
+		intent = &intents[0]
+	}
+
+	if len(mvccScanner.results.repr) == 0 {
+		return nil, intent, nil
+	}
+
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	value = &roachpb.Value{
+		RawBytes:  rawValue,
+		Timestamp: mvccKey.Timestamp,
+	}
+	return
 }
 
 // MVCCScan implements the Iterator interface.
 func (p *pebbleIterator) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 ) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
-	// TODO(itsbilal): Implement in a separate PR. See #39674.
-	panic("unimplemented for now, see #39674")
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(end) == 0 {
+		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if max == 0 {
+		resumeSpan = &roachpb.Span{Key: start, EndKey: end}
+		return nil, 0, resumeSpan, nil, nil
+	}
+	if p.iter == nil {
+		panic("uninitialized iterator")
+	}
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       p.iter,
+		reverse:      opts.Reverse,
+		start:        start,
+		end:          end,
+		ts:           timestamp,
+		maxKeys:      max,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+		ignoreSeq:    opts.IgnoreSequence,
+	}
+
+	if opts.Txn != nil {
+		mvccScanner.txn = opts.Txn
+		mvccScanner.checkUncertainty = timestamp.Less(opts.Txn.MaxTimestamp)
+	}
+
+	mvccScanner.init()
+	mvccScanner.scan()
+
+	// Init calls SetBounds. Reset it to what this iterator had at the start.
+	defer func() {
+		if p.iter != nil {
+			p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
+		}
+	}()
+
+	if mvccScanner.err != nil {
+		return nil, 0, nil, nil, mvccScanner.err
+	}
+
+	kvData = mvccScanner.results.repr
+	numKVs = mvccScanner.results.count
+
+	if mvccScanner.curKey != nil {
+		if opts.Reverse {
+			resumeSpan = &roachpb.Span{
+				Key:    mvccScanner.start,
+				EndKey: mvccScanner.curKey,
+			}
+			// curKey was not added to results, so it needs to be included in the
+			// resume span.
+			resumeSpan.EndKey = resumeSpan.EndKey.Next()
+		} else {
+			resumeSpan = &roachpb.Span{
+				Key:    mvccScanner.curKey,
+				EndKey: mvccScanner.end,
+			}
+		}
+	}
+	intents, err = buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	return
 }
 
 // SetUpperBound implements the Iterator interface.
