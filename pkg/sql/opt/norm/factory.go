@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -101,6 +102,7 @@ func (f *Factory) Init(evalCtx *tree.EvalContext) {
 // factory so that its reuse will not impact the detached memo. This method is
 // used to extract a read-only memo during the PREPARE phase.
 func (f *Factory) DetachMemo() *memo.Memo {
+	f.clearStats()
 	detach := f.mem
 	f.mem = nil
 	f.Init(f.evalCtx)
@@ -263,6 +265,26 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 // replacement code can be run.
 func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 	return scalar
+}
+
+// clearStats clears all column statistics from every relational expression in
+// the memo. This is used to free up the potentially large amount of memory
+// used by histograms.
+func (f *Factory) clearStats() {
+	root := f.mem.RootExpr()
+	f.clearStatsImpl(root)
+}
+
+func (f *Factory) clearStatsImpl(parent opt.Expr) {
+	for i, n := 0, parent.ChildCount(); i < n; i++ {
+		child := parent.Child(i)
+		f.clearStatsImpl(child)
+	}
+
+	switch t := parent.(type) {
+	case memo.RelExpr:
+		t.Relational().Stats.ColStats = props.ColStatsMap{}
+	}
 }
 
 // ----------------------------------------------------------------------
