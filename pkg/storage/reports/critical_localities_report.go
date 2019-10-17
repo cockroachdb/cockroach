@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -270,7 +269,8 @@ type criticalLocalitiesVisitor struct {
 	storeResolver       StoreResolver
 	nodeChecker         nodeChecker
 
-	report *replicationCriticalLocalitiesReportSaver
+	report   *replicationCriticalLocalitiesReportSaver
+	visitErr bool
 }
 
 var _ rangeVisitor = &criticalLocalitiesVisitor{}
@@ -293,17 +293,37 @@ func makeLocalityStatsVisitor(
 	return v
 }
 
+// failed is part of the rangeVisitor interface.
+func (v *criticalLocalitiesVisitor) failed() bool {
+	return v.visitErr
+}
+
 // reset is part of the rangeVisitor interface.
 func (v *criticalLocalitiesVisitor) reset(ctx context.Context) {
+	v.visitErr = false
 	v.report.resetReport()
 }
 
 // visit is part of the rangeVisitor interface.
-func (v *criticalLocalitiesVisitor) visit(ctx context.Context, r roachpb.RangeDescriptor) {
+func (v *criticalLocalitiesVisitor) visit(
+	ctx context.Context, r roachpb.RangeDescriptor,
+) (retErr error) {
+
+	defer func() {
+		if retErr != nil {
+			v.visitErr = true
+		}
+	}()
+
 	stores := v.storeResolver(r)
 	for _, c := range v.localityConstraints {
-		processLocalityForRange(ctx, r, v.report, &c, v.cfg, v.nodeChecker, stores)
+		if err := processLocalityForRange(
+			ctx, r, v.report, &c, v.cfg, v.nodeChecker, stores,
+		); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // processLocalityForRange checks a single locality constraint against a
@@ -316,7 +336,7 @@ func processLocalityForRange(
 	cfg *config.SystemConfig,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
-) {
+) error {
 	// Get the zone.
 	var zKey ZoneKey
 	found, err := visitZones(ctx, r, cfg,
@@ -328,11 +348,10 @@ func processLocalityForRange(
 			return true
 		})
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
+		return errors.AssertionFailedf("unexpected error visiting zones: %s", err)
 	}
 	if !found {
-		log.Errorf(ctx, "no suitable zone config found for range: %s", &r)
-		return
+		return errors.AssertionFailedf("no suitable zone config found for range: %s", r)
 	}
 
 	// Compute the required quorum and the number of live nodes. If the number of live nodes gets lower
@@ -378,4 +397,5 @@ func processLocalityForRange(
 	if quorumCount > liveNodeCount-passCount {
 		rep.AddCriticalLocality(zKey, loc)
 	}
+	return nil
 }
