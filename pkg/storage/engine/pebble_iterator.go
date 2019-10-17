@@ -333,14 +333,10 @@ func (p *pebbleIterator) MVCCGet(
 		end:          keyEnd,
 		ts:           timestamp,
 		maxKeys:      1,
+		txn:          opts.Txn,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
 		ignoreSeq:    opts.IgnoreSequence,
-	}
-
-	if opts.Txn != nil {
-		mvccScanner.txn = opts.Txn
-		mvccScanner.checkUncertainty = timestamp.Less(opts.Txn.MaxTimestamp)
 	}
 
 	mvccScanner.init()
@@ -348,9 +344,7 @@ func (p *pebbleIterator) MVCCGet(
 
 	// Init calls SetBounds. Reset it to what this iterator had at the start.
 	defer func() {
-		if p.iter != nil {
-			p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
-		}
+		p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
 	}()
 
 	if mvccScanner.err != nil {
@@ -414,14 +408,10 @@ func (p *pebbleIterator) MVCCScan(
 		end:          end,
 		ts:           timestamp,
 		maxKeys:      max,
+		txn:          opts.Txn,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
 		ignoreSeq:    opts.IgnoreSequence,
-	}
-
-	if opts.Txn != nil {
-		mvccScanner.txn = opts.Txn
-		mvccScanner.checkUncertainty = timestamp.Less(opts.Txn.MaxTimestamp)
 	}
 
 	mvccScanner.init()
@@ -429,9 +419,7 @@ func (p *pebbleIterator) MVCCScan(
 
 	// Init calls SetBounds. Reset it to what this iterator had at the start.
 	defer func() {
-		if p.iter != nil {
-			p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
-		}
+		p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
 	}()
 
 	if mvccScanner.err != nil {
