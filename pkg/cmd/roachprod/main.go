@@ -93,6 +93,7 @@ var (
 	stageOS           string
 	logsDir           string
 	logsFilter        string
+	logsProgramFilter string
 	logsFrom          time.Time
 	logsTo            time.Time
 	logsInterval      time.Duration
@@ -1068,7 +1069,7 @@ into a single stream.
 		} else {
 			dest = c.Name + ".logs"
 		}
-		return c.Logs(logsDir, dest, username, logsFilter, logsInterval, logsFrom, logsTo, cmd.OutOrStdout())
+		return c.Logs(logsDir, dest, username, logsFilter, logsProgramFilter, logsInterval, logsFrom, logsTo, cmd.OutOrStdout())
 	}),
 }
 
@@ -1682,6 +1683,8 @@ func main() {
 		&logsInterval, "interval", 200*time.Millisecond, "interval to poll logs from host")
 	logsCmd.Flags().StringVar(
 		&logsDir, "logs-dir", "logs", "path to the logs dir, if remote, relative to username's home dir, ignored if local")
+	logsCmd.Flags().StringVar(
+		&logsProgramFilter, "logs-program", "^cockroach$", "regular expression of the name of program in log files to search")
 
 	monitorCmd.Flags().BoolVar(
 		&monitorIgnoreEmptyNodes,
