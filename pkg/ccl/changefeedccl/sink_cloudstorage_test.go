@@ -417,7 +417,7 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `ordering-among-schema-versions`
 		var targetMaxFileSize int64 = 10
 		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, targetMaxFileSize, settings,
-			opts, timestampOracle, externalStorageFromURI)
+			opts, timestampOracle)
 		require.NoError(t, err)
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
