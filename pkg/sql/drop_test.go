@@ -133,7 +133,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
+	dbNameKey := sqlbase.NewDatabaseKey("t").Key()
 	r, err := kvDB.Get(ctx, dbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +148,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 	dbDesc := desc.GetDatabase()
 
-	tbNameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv")
+	tbNameKey := sqlbase.NewTableKey(dbDesc.ID, "kv").Key()
 	gr, err := kvDB.Get(ctx, tbNameKey)
 	if err != nil {
 		t.Fatal(err)
@@ -253,8 +253,8 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
-	r, err := kvDB.Get(ctx, dbNameKey)
+	dKey := sqlbase.NewDatabaseKey("t")
+	r, err := kvDB.Get(ctx, dKey.Key())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,8 +307,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
-	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
-	r, err := kvDB.Get(ctx, dbNameKey)
+	dKey := sqlbase.NewDatabaseKey("t")
+	r, err := kvDB.Get(ctx, dKey.Key())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,8 +322,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 	dbDesc := desc.GetDatabase()
 
-	tbNameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv")
-	gr, err := kvDB.Get(ctx, tbNameKey)
+	tKey := sqlbase.NewTableKey(dbDesc.ID, "kv")
+	gr, err := kvDB.Get(ctx, tKey.Key())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,8 +337,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 	tbDesc := desc.Table(ts)
 
-	tb2NameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv2")
-	gr2, err := kvDB.Get(ctx, tb2NameKey)
+	t2Key := sqlbase.NewTableKey(dbDesc.ID, "kv2")
+	gr2, err := kvDB.Get(ctx, t2Key.Key())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +703,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MinNonPredefinedUserDescID, "kv")
+	nameKey := sqlbase.NewTableKey(keys.MinNonPredefinedUserDescID, "kv").Key()
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -800,7 +800,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		descs = append(descs, sqlbase.GetTableDescriptor(kvDB, "t", tableName))
 
-		nameKey := sqlbase.MakeNameMetadataKey(keys.MinNonPredefinedUserDescID, tableName)
+		nameKey := sqlbase.NewTableKey(keys.MinNonPredefinedUserDescID, tableName).Key()
 		gr, err := kvDB.Get(ctx, nameKey)
 		if err != nil {
 			t.Fatal(err)
