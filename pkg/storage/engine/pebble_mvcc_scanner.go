@@ -129,6 +129,10 @@ func (p *pebbleMVCCScanner) init() {
 	p.startBuf = EncodeKeyToBuf(p.startBuf[:0], mvccStartKey)
 	p.endBuf = EncodeKeyToBuf(p.endBuf[:0], mvccEndKey)
 	p.parent.SetBounds(p.startBuf, p.endBuf)
+
+	if p.txn != nil {
+		p.checkUncertainty = p.ts.Less(p.txn.MaxTimestamp)
+	}
 }
 
 // seekReverse seeks to the latest revision of the key before the specified key.
