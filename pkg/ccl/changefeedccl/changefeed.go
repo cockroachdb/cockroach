@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var changefeedPollInterval = func() *settings.DurationSetting {
@@ -172,8 +173,10 @@ func emitEntries(
 		// timestamp that is equal to a previously resolved timestamp in case of a schema
 		// change with backfill. See issue #41415 for more details. This if-condition
 		// should be updated and turned into an assertion once this is fixed. Fixme.
-		if row.updated.Less(sf.Frontier()) {
-			return nil
+		if !sf.Frontier().Less(row.updated) {
+			return errors.AssertionFailedf("error: detected timestamp %s that is less than "+
+				"or equal to the local frontier %s.", cloudStorageFormatTime(row.updated),
+				cloudStorageFormatTime(sf.Frontier()))
 		}
 		var keyCopy, valueCopy []byte
 		encodedKey, err := encoder.EncodeKey(row)

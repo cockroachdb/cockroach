@@ -264,21 +264,40 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 				} else if e.resolved != nil {
 					resolvedTS := e.resolved.Timestamp
 					boundaryBreak := false
+					// Make sure scan boundaries less than or equal to `resolvedTS` were
+					// added to the `scanBoundaries` list before proceeding.
+					if err := p.tableHist.WaitForTS(ctx, resolvedTS); err != nil {
+						return err
+					}
 					p.mu.Lock()
-					if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(resolvedTS) {
+					log.Infof(ctx, "current scan boundaries: %v", func() []string {
+						l := make([]string, 0)
+						for i := range p.mu.scanBoundaries {
+							l = append(l, p.mu.scanBoundaries[i].AsOfSystemTime())
+						}
+						return l
+					}())
+					if len(p.mu.scanBoundaries) > 0 && !resolvedTS.Less(p.mu.scanBoundaries[0]) {
 						boundaryBreak = true
+						log.Infof(ctx, "waiting for scan boundary %v to get triggered", p.mu.scanBoundaries[0].AsOfSystemTime())
 						resolvedTS = p.mu.scanBoundaries[0]
 					}
 					p.mu.Unlock()
-					if err := p.buf.AddResolved(ctx, e.resolved.Span, resolvedTS); err != nil {
-						return err
-					}
 					if boundaryBreak {
+						// This case means `resolvedTS` is equal to the next scan
+						// boundary. Skip emitting this resolved timestamp because we want
+						// to trigger the scan first before resolving its scan boundary
+						// timestamp.
 						frontier.Forward(e.resolved.Span, resolvedTS)
 						if frontier.Frontier() == resolvedTS {
 							// All component rangefeeds are now at the boundary.
 							// Break out of the ctxgroup by returning a sentinel error.
 							return errBoundaryReached
+						}
+					} else {
+						log.Infof(ctx, "emitting resolved: %s", resolvedTS.AsOfSystemTime())
+						if err := p.buf.AddResolved(ctx, e.resolved.Span, resolvedTS); err != nil {
+							return err
 						}
 					}
 				}
@@ -374,7 +393,7 @@ func (p *poller) exportSpansParallel(
 			err := p.exportSpan(ctx, span, ts)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if log.V(2) {
-				log.Infof(ctx, `exported %d of %d`, finished, len(spans))
+				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
 			if err != nil {
 				return err
@@ -388,7 +407,7 @@ func (p *poller) exportSpansParallel(
 func (p *poller) exportSpan(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
 	sender := p.db.NonTransactionalSender()
 	if log.V(2) {
-		log.Infof(ctx, `sending ExportRequest %s at %s`, span, ts)
+		log.Infof(ctx, `sending ExportRequest %s at %s`, span, ts.AsOfSystemTime())
 	}
 
 	header := roachpb.Header{Timestamp: ts}
@@ -404,12 +423,12 @@ func (p *poller) exportSpan(ctx context.Context, span roachpb.Span, ts hlc.Times
 	exportDuration := timeutil.Since(stopwatchStart)
 	if log.V(2) {
 		log.Infof(ctx, `finished ExportRequest %s at %s took %s`,
-			span, ts, exportDuration)
+			span, ts.AsOfSystemTime(), exportDuration)
 	}
 	slowExportThreshold := 10 * changefeedPollInterval.Get(&p.settings.SV)
 	if exportDuration > slowExportThreshold {
 		log.Infof(ctx, "finished ExportRequest %s at %s took %s behind by %s",
-			span, ts, exportDuration, timeutil.Since(ts.GoTime()))
+			span, ts.AsOfSystemTime(), exportDuration, timeutil.Since(ts.GoTime()))
 	}
 
 	if pErr != nil {
@@ -427,6 +446,7 @@ func (p *poller) exportSpan(ctx context.Context, span roachpb.Span, ts hlc.Times
 			return err
 		}
 	}
+	log.Infof(ctx, "exported for span %v at %v", span.String(), ts.AsOfSystemTime())
 	if err := p.buf.AddResolved(ctx, span, ts); err != nil {
 		return err
 	}
@@ -554,6 +574,8 @@ func clusterNodeCount(g *gossip.Gossip) int {
 }
 
 func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescriptor) error {
+	log.Infof(ctx, "validate table called for table %v descriptor %v", desc.Name, desc.Version)
+	log.Infof(ctx, "%v desc modified time %v", desc.Name, desc.ModificationTime.AsOfSystemTime())
 	if err := validateChangefeedTable(p.details.Targets, desc); err != nil {
 		return err
 	}
@@ -577,6 +599,7 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 						errors.Safe(p.mu.highWater),
 					)
 				}
+				log.Infof(ctx, "detected table mutation. adding boundary: %v", boundaryTime.AsOfSystemTime())
 				p.mu.scanBoundaries = append(p.mu.scanBoundaries, boundaryTime)
 				sort.Slice(p.mu.scanBoundaries, func(i, j int) bool {
 					return p.mu.scanBoundaries[i].Less(p.mu.scanBoundaries[j])

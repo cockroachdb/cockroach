@@ -371,6 +371,7 @@ func (s *cloudStorageSink) EmitRow(
 		s.files[key] = file
 	}
 
+	log.Infof(ctx, "emitting row: %v", string(value))
 	// TODO(dan): Memory monitoring for this
 	if _, err := file.buf.Write(value); err != nil {
 		return err

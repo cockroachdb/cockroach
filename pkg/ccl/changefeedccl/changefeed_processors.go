@@ -35,6 +35,7 @@ import (
 type changeAggregator struct {
 	execinfra.ProcessorBase
 
+	log.AmbientContext
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeAggregatorSpec
 	memAcc  mon.BoundAccount
@@ -131,7 +132,7 @@ func newChangeAggregatorProcessor(
 	); err != nil {
 		return nil, err
 	}
-
+	ca.AddLogTag("pr", generateChangefeedSessionID())
 	var err error
 	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts); err != nil {
 		return nil, err
@@ -147,6 +148,7 @@ func (ca *changeAggregator) OutputTypes() []types.T {
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ctx, ca.cancel = context.WithCancel(ctx)
+	ctx = ca.AnnotateCtx(ctx)
 	// StartInternal called at the beginning of the function because there are
 	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)

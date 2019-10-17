@@ -13,9 +13,11 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"log"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -129,7 +131,8 @@ type fingerprintValidator struct {
 
 	buffer []validatorRow
 
-	failures []string
+	failures   []string
+	numColumns int
 }
 
 // NewFingerprintValidator returns a new FingerprintValidator that uses
@@ -200,6 +203,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		return nil
 	}
 	v.partitionResolved[partition] = resolved
+	log.Printf("noteresolved called for %s", resolved.AsOfSystemTime())
 
 	// Check if this partition's resolved timestamp advancing has advanced the
 	// overall topic resolved timestamp. This is O(n^2) but could be better with
@@ -213,7 +217,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 	if !v.resolved.Less(newResolved) {
 		return nil
 	}
-	initialScanComplete := v.resolved != (hlc.Timestamp{})
+	// initialScanComplete := v.resolved != (hlc.Timestamp{})
 	v.resolved = newResolved
 
 	// NB: Intentionally not stable sort because it shouldn't matter.
@@ -221,7 +225,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		return v.buffer[i].updated.Less(v.buffer[j].updated)
 	})
 
-	var lastUpdated hlc.Timestamp
+	// var lastUpdated hlc.Timestamp
 	for len(v.buffer) > 0 {
 		if v.resolved.Less(v.buffer[0].updated) {
 			break
@@ -229,23 +233,8 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		row := v.buffer[0]
 		v.buffer = v.buffer[1:]
 
-		// If we have already completed the initial scan, verify the fingerprint at
-		// every point in time. Before the initial scan is complete, the fingerprint
-		// table might not have the earliest version of every row present in the
-		// table.
-		if initialScanComplete {
-			if row.updated != lastUpdated {
-				if lastUpdated != (hlc.Timestamp{}) {
-					if err := v.fingerprint(lastUpdated); err != nil {
-						return err
-					}
-				}
-				if err := v.fingerprint(row.updated.Prev()); err != nil {
-					return err
-				}
-			}
-			lastUpdated = row.updated
-		}
+		// Note that we can only validate at resolved timestamps if the addOrRemoveColumn
+		// nemeses is enabled.
 
 		type wrapper struct {
 			After map[string]interface{} `json:"after"`
@@ -256,9 +245,38 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		}
 
 		var stmtBuf bytes.Buffer
+		txn, err := v.sqlDB.Begin()
+		if err != nil {
+			return err
+		}
 		var args []interface{}
+		// DELETE
+
+		log.Printf("deleting row %v, updated: %v", row.key, row.updated.AsOfSystemTime())
+		var primaryKeyDatums []interface{}
+		if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
+			return err
+		}
+		if len(primaryKeyDatums) != len(v.primaryKeyCols) {
+			return errors.Errorf(
+				`expected primary key columns %s got datums %s`, v.primaryKeyCols, primaryKeyDatums)
+		}
+		fmt.Fprintf(&stmtBuf, `DELETE FROM %s WHERE `, v.fprintTable)
+		for i, datum := range primaryKeyDatums {
+			if len(args) != 0 {
+				stmtBuf.WriteString(`,`)
+			}
+			fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
+			args = append(args, datum)
+		}
+		if _, err := txn.Exec(stmtBuf.String(), args...); err != nil {
+			return err
+		}
+		args = nil
+		stmtBuf.Reset()
 		if value.After != nil {
 			// UPDATE or INSERT
+			log.Printf("upserting row %v; updated: %v", row.key, row.updated.AsOfSystemTime())
 			fmt.Fprintf(&stmtBuf, `UPSERT INTO %s (`, v.fprintTable)
 			for col, colValue := range value.After {
 				if len(args) != 0 {
@@ -289,29 +307,13 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 				v.failures = append(v.failures, fmt.Sprintf(
 					`key %s did not match expected key %s for value %s`, row.key, primaryKeyJSON, row.value))
 			}
-		} else {
-			// DELETE
-			var primaryKeyDatums []interface{}
-			if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
+			log.Printf("%v", args)
+			if _, err := txn.Exec(stmtBuf.String(), args...); err != nil {
 				return err
 			}
-			if len(primaryKeyDatums) != len(v.primaryKeyCols) {
-				return errors.Errorf(
-					`expected primary key columns %s got datums %s`, v.primaryKeyCols, primaryKeyDatums)
-			}
-			fmt.Fprintf(&stmtBuf, `DELETE FROM %s WHERE `, v.fprintTable)
-			for i, datum := range primaryKeyDatums {
-				if len(args) != 0 {
-					stmtBuf.WriteString(`,`)
-				}
-				fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
-				args = append(args, datum)
-			}
 		}
-		if len(args) > 0 {
-			if _, err := v.sqlDB.Exec(stmtBuf.String(), args...); err != nil {
-				return errors.Wrap(err, stmtBuf.String())
-			}
+		if err := txn.Commit(); err != nil {
+			return err
 		}
 	}
 
@@ -334,12 +336,39 @@ func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 	]`).Scan(&check); err != nil {
 		return err
 	}
+	log.Print("fingerprinting at: " + ts.AsOfSystemTime())
+	log.Print("Foo")
+	rows, _ := v.sqlDB.Query("SELECT * from foo AS OF SYSTEM TIME " + ts.AsOfSystemTime())
+	sm, _ := sqlutils.RowsToStrMatrix(rows)
+	for _, row := range sm {
+		log.Printf("%v", row)
+	}
+	rows, _ = v.sqlDB.Query("SELECT * from fprint")
+	sm, _ = sqlutils.RowsToStrMatrix(rows)
+	log.Print("fprint")
+	for _, row := range sm {
+		log.Printf("%v", row)
+	}
 	if orig != check {
-		v.failures = append(v.failures, fmt.Sprintf(
-			`fingerprints did not match at %s: %s vs %s`, ts.AsOfSystemTime(), orig, check))
+		log.Print("mismatch")
+		var pendingJobs int
+		v.sqlDB.QueryRow("SELECT count(*) from [show jobs] AS OF SYSTEM TIME '" + ts.AsOfSystemTime() + "'where job_type = 'SCHEMA CHANGE' and status = 'running' or status = 'pending'").Scan(&pendingJobs)
+		jobs, _ := v.sqlDB.Query("SELECT * from [show jobs] AS OF SYSTEM TIME '" + ts.AsOfSystemTime() + "' where job_type = 'SCHEMA CHANGE'")
+		js, _ := sqlutils.RowsToStrMatrix(jobs)
+		for _, job := range js {
+			log.Printf("%v", job)
+		}
+		if pendingJobs == 0 {
+			v.failures = append(v.failures, fmt.Sprintf(
+				`fingerprints did not match at %s: %s vs %s`, ts.AsOfSystemTime(), orig, check))
+		}
 	}
 	return nil
 }
+
+// mutationsPending checks whether `table` has any pending mutations.
+// This method is used to detect when a table has undergone a schema change
+// and is waiting for the corresponding backfill to complete.
 
 // Failures implements the Validator interface.
 func (v *fingerprintValidator) Failures() []string {

@@ -673,6 +673,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return nil
 	}
 
+	for _, table := range ex.extraTxnState.tables.leasedTables {
+		log.Infof(ctx, "table %v, id %v, version %v, modified time: %v", table.Name, table.ID, table.Version, table.ModificationTime.AsOfSystemTime())
+	}
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := false
 	planner.prepareForDistSQLSupportCheck()

@@ -9,8 +9,10 @@
 package cdctest
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"strings"
 
@@ -52,8 +54,9 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 		eventPauseCount = 0
 	}
 	ns := &nemeses{
-		rowCount: 4,
-		db:       db,
+		maxTestColumnCount: 10,
+		rowCount:           4,
+		db:                 db,
 		// eventMix does not have to add to 100
 		eventMix: map[fsm.Event]int{
 			// eventTransact opens an UPSERT transaction is there is not one open. If
@@ -80,6 +83,10 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 			// eventSplit splits between two random rows (the split is a no-op if it
 			// already exists).
 			eventSplit{}: 5,
+
+			// addOrRemoveColumn performs a schema change by adding or removing a column randomly.
+			// The new columns are added with a default value to trigger a backfill.
+			eventAddOrRemoveColumn{}: 10,
 		},
 	}
 
@@ -111,10 +118,20 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 	ns.f = foo
 	defer func() { _ = foo.Close() }()
 
-	if _, err := db.Exec(`CREATE TABLE fprint (id INT PRIMARY KEY, ts STRING)`); err != nil {
+	// Create scratch table with a pre-specified set of test columns to avoid having to
+	// accomodate schema changes on-the-fly.
+	scratchTableName := `fprint`
+	var createFprintStmtBuf bytes.Buffer
+	fmt.Fprintf(&createFprintStmtBuf, `CREATE TABLE %s (id INT PRIMARY KEY, ts STRING`, scratchTableName)
+	for i := 0; i < ns.maxTestColumnCount; i++ {
+		testCol := fmt.Sprintf(", test%d STRING DEFAULT NULL", i)
+		createFprintStmtBuf.WriteString(testCol)
+	}
+	createFprintStmtBuf.WriteString(`)`)
+	if _, err := db.Exec(createFprintStmtBuf.String()); err != nil {
 		return nil, err
 	}
-	fprintV, err := NewFingerprintValidator(db, `foo`, `fprint`, foo.Partitions())
+	fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions())
 	if err != nil {
 		return nil, err
 	}
@@ -172,19 +189,21 @@ const (
 )
 
 type nemeses struct {
-	rowCount int
-	eventMix map[fsm.Event]int
-	mixTotal int
+	rowCount           int
+	maxTestColumnCount int
+	eventMix           map[fsm.Event]int
+	mixTotal           int
 
 	v  *CountValidator
 	db *gosql.DB
 	f  TestFeed
 
-	availableRows int
-	txn           *gosql.Tx
-	openTxnType   openTxnType
-	openTxnID     int
-	openTxnTs     string
+	availableRows        int
+	availableTestColumns int
+	txn                  *gosql.Tx
+	openTxnType          openTxnType
+	openTxnID            int
+	openTxnTs            string
 }
 
 // nextEvent selects the next state transition.
@@ -240,16 +259,18 @@ type eventResume struct{}
 type eventPush struct{}
 type eventAbort struct{}
 type eventSplit struct{}
+type eventAddOrRemoveColumn struct{}
 type eventFinished struct{}
 
-func (eventTransact) Event()    {}
-func (eventFeedMessage) Event() {}
-func (eventPause) Event()       {}
-func (eventResume) Event()      {}
-func (eventPush) Event()        {}
-func (eventAbort) Event()       {}
-func (eventSplit) Event()       {}
-func (eventFinished) Event()    {}
+func (eventTransact) Event()          {}
+func (eventFeedMessage) Event()       {}
+func (eventPause) Event()             {}
+func (eventResume) Event()            {}
+func (eventPush) Event()              {}
+func (eventAbort) Event()             {}
+func (eventSplit) Event()             {}
+func (eventAddOrRemoveColumn) Event() {}
+func (eventFinished) Event()          {}
 
 var txnStateTransitions = fsm.Compile(fsm.Pattern{
 	stateRunning{Paused: fsm.Any}: {
@@ -282,6 +303,10 @@ var txnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventSplit{}: {
 			Next:   stateRunning{Paused: fsm.False},
 			Action: logEvent(split),
+		},
+		eventAddOrRemoveColumn{}: {
+			Next:   stateRunning{Paused: fsm.False},
+			Action: logEvent(addOrRemoveColumn),
 		},
 	},
 	stateRunning{Paused: fsm.True}: {
@@ -334,7 +359,7 @@ func transact(a fsm.Args) error {
 		}
 		if deleteID == noDeleteSentinel {
 			if err := txn.QueryRow(
-				`UPSERT INTO foo VALUES ((random() * $1)::int, cluster_logical_timestamp()::string) RETURNING *`,
+				`UPSERT INTO foo VALUES ((random() * $1)::int, cluster_logical_timestamp()::string) RETURNING id, ts`,
 				ns.rowCount,
 			).Scan(&ns.openTxnID, &ns.openTxnTs); err != nil {
 				return err
@@ -342,7 +367,7 @@ func transact(a fsm.Args) error {
 			ns.openTxnType = openTxnTypeUpsert
 		} else {
 			if err := txn.QueryRow(
-				`DELETE FROM foo WHERE id = $1 RETURNING *`, deleteID,
+				`DELETE FROM foo WHERE id = $1 RETURNING id, ts`, deleteID,
 			).Scan(&ns.openTxnID, &ns.openTxnTs); err != nil {
 				return err
 			}
@@ -373,6 +398,40 @@ func transact(a fsm.Args) error {
 	return nil
 }
 
+func addOrRemoveColumn(a fsm.Args) error {
+	ns := a.Extended.(*nemeses)
+
+	if ns.txn != nil {
+		// Do nothing if there is an open transaction since we can't start a schema
+		// change in this state.
+		return nil
+	}
+
+	var alterStmt string
+	// TODO(aayush): This currently always drops the test column if its present, this is
+	// just for easier debugging. I intend for this to only sometimes drop the a last
+	// columns, and other times add another column.
+	if (ns.availableTestColumns > 0) ||
+		ns.availableTestColumns == ns.maxTestColumnCount {
+		// Attempt to drop the last column.
+		ns.availableTestColumns--
+		alterStmt = fmt.Sprintf(`ALTER TABLE foo DROP COLUMN test%d`, ns.availableTestColumns)
+		log.Infof(context.TODO(), "Dropped column test%d", ns.availableTestColumns)
+	} else {
+		// Add a new column with a default value to trigger a backfill
+		alterStmt = fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d STRING DEFAULT 'x'`, ns.availableTestColumns)
+		log.Infof(context.TODO(), "Added column test%d", ns.availableTestColumns)
+		ns.availableTestColumns++
+	}
+
+	ns.db.Exec(alterStmt)
+	// Both of the actions above should cause a full scan of the table.
+	var rows int
+	ns.db.QueryRow(`SELECT count(*) FROM foo`).Scan(&rows)
+	ns.availableRows += rows
+	return nil
+}
+
 func noteFeedMessage(a fsm.Args) error {
 	ns := a.Extended.(*nemeses)
 
@@ -382,6 +441,7 @@ func noteFeedMessage(a fsm.Args) error {
 	} else if m == nil {
 		return errors.Errorf(`expected another message`)
 	}
+	log.Infof(a.Ctx, "message: %v", m.String())
 
 	if len(m.Resolved) > 0 {
 		_, ts, err := ParseJSONValueTimestamps(m.Resolved)

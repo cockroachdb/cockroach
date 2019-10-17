@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -239,7 +240,7 @@ func fetchTableDescriptorVersions(
 	}
 	res, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if log.V(2) {
-		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
+		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS.AsOfSystemTime(), endTS.AsOfSystemTime(), timeutil.Since(start))
 	}
 	if pErr != nil {
 		err := pErr.GoError()
@@ -258,6 +259,14 @@ func fetchTableDescriptorVersions(
 				if ok, err := it.Valid(); err != nil {
 					return err
 				} else if !ok {
+					log.Infof(ctx, "tabledescs: %v", func() []string {
+						l := make([]string, 0)
+						for i := range tableDescs {
+							l = append(l, fmt.Sprintf("name: %s, v: %v, mtime: %v",
+								tableDescs[i].Name, tableDescs[i].Version, tableDescs[i].ModificationTime.AsOfSystemTime()))
+						}
+						return l
+					}())
 					return nil
 				}
 				k := it.UnsafeKey()
@@ -284,12 +293,34 @@ func fetchTableDescriptorVersions(
 					return err
 				}
 				if tableDesc := desc.Table(k.Timestamp); tableDesc != nil {
+					log.Infof(ctx, "appending to tdesc -- ktimestamp: %s, tdesc: %s, ver: %v, mtime: %v",
+						k.Timestamp.AsOfSystemTime(), tableDesc.Name, tableDesc.Version, tableDesc.ModificationTime.AsOfSystemTime())
 					tableDescs = append(tableDescs, tableDesc)
 				}
 			}
 		}(); err != nil {
 			return nil, err
 		}
+	}
+	if startTS == (hlc.Timestamp{}) {
+		return tableDescs, nil
+	}
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txn.SetFixedTimestamp(ctx, startTS)
+		for tableID := range targets {
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			if err != nil {
+				return err
+			}
+			_, ok := targets[sqlbase.ID(tableID)]
+			if ok {
+				tableDescs = append(tableDescs, tableDesc)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return tableDescs, nil
 }
