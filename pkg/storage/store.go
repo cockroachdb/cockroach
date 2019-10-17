@@ -2434,9 +2434,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 // AllocatorDryRun runs the given replica through the allocator without actually
 // carrying out any changes, returning all trace messages collected along the way.
 // Intended to help power a debug endpoint.
-func (s *Store) AllocatorDryRun(
-	ctx context.Context, repl *Replica,
-) ([]tracing.RecordedSpan, error) {
+func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "allocator dry run")
 	defer cancel()
 	canTransferLease := func() bool { return true }
@@ -2454,7 +2452,7 @@ func (s *Store) AllocatorDryRun(
 // power an admin debug endpoint.
 func (s *Store) ManuallyEnqueue(
 	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool,
-) ([]tracing.RecordedSpan, string, error) {
+) (tracing.Recording, string, error) {
 	ctx = repl.AnnotateCtx(ctx)
 
 	var queue queueImpl

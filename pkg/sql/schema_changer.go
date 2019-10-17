@@ -219,10 +219,10 @@ func isPermanentSchemaChangeError(err error) bool {
 	}
 
 	switch pgerror.GetPGCode(err) {
-	case pgcode.SerializationFailure, pgcode.ConnectionFailure:
+	case pgcode.SerializationFailure, pgcode.InternalConnectionFailure, pgcode.DeprecatedInternalConnectionFailure:
 		return false
 
-	case pgcode.Internal, pgcode.RangeUnavailable:
+	case pgcode.Internal, pgcode.RangeUnavailable, pgcode.DeprecatedRangeUnavailable:
 		if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
 			return false
 		}
