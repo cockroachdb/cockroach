@@ -29,7 +29,7 @@ func TestGC(t *testing.T) {
 
 	setFlags()
 
-	testLogGC(t, &logging, Infof)
+	testLogGC(t, &mainLog, Infof)
 }
 
 func TestSecondaryGC(t *testing.T) {
@@ -38,7 +38,7 @@ func TestSecondaryGC(t *testing.T) {
 
 	setFlags()
 
-	tmpDir, err := ioutil.TempDir(logging.logDir.String(), "gctest")
+	tmpDir, err := ioutil.TempDir(mainLog.logDir.String(), "gctest")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,23 +60,23 @@ func TestSecondaryGC(t *testing.T) {
 
 func testLogGC(
 	t *testing.T,
-	logger *loggingT,
+	logger *loggerT,
 	logFn func(ctx context.Context, format string, args ...interface{}),
 ) {
 	logging.mu.Lock()
-	logging.disableDaemons = true
+	logging.mu.disableDaemons = true
 	defer func(previous bool) {
 		logging.mu.Lock()
-		logging.disableDaemons = previous
+		logging.mu.disableDaemons = previous
 		logging.mu.Unlock()
-	}(logging.disableDaemons)
+	}(logging.mu.disableDaemons)
 	logging.mu.Unlock()
 
 	const newLogFiles = 20
 
 	// Prevent writes to stderr from being sent to log files which would screw up
 	// the expected number of log file calculation below.
-	logging.noStderrRedirect = true
+	mainLog.noStderrRedirect = true
 
 	// Ensure the main log has at least one entry. This serves two
 	// purposes. One is to serve as baseline for the file size. The
@@ -140,9 +140,9 @@ func testLogGC(
 	}
 
 	// Re-enable GC, so that the GC daemon can pick up the files.
-	logger.mu.Lock()
-	logger.disableDaemons = false
-	logger.mu.Unlock()
+	logging.mu.Lock()
+	logging.mu.disableDaemons = false
+	logging.mu.Unlock()
 	// Start the GC daemon, using a context that will terminate it
 	// at the end of the test.
 	ctx, cancel := context.WithCancel(context.Background())
