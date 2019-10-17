@@ -2992,7 +2992,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE FUNCTION a`, 17511, `create`},
 		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`},
 		{`CREATE LANGUAGE a`, 17511, `create language a`},
-		{`CREATE MATERIALIZED VIEW a`, 24747, ``},
+		{`CREATE MATERIALIZED VIEW a`, 41649, ``},
 		{`CREATE OPERATOR a`, 0, `create operator`},
 		{`CREATE PUBLICATION a`, 0, `create publication`},
 		{`CREATE RULE a`, 0, `create rule`},
