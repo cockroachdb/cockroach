@@ -275,7 +275,8 @@ type replicationStatsVisitor struct {
 	cfg         *config.SystemConfig
 	nodeChecker nodeChecker
 
-	report *replicationStatsReportSaver
+	report   *replicationStatsReportSaver
+	visitErr bool
 }
 
 var _ rangeVisitor = &replicationStatsVisitor{}
@@ -295,8 +296,14 @@ func makeReplicationStatsVisitor(
 	return v
 }
 
+// failed is part of the rangeVisitor interface.
+func (v *replicationStatsVisitor) failed() bool {
+	return v.visitErr
+}
+
 // reset is part of the rangeVisitor interface.
 func (v *replicationStatsVisitor) reset(ctx context.Context) {
+	v.visitErr = false
 	v.report.resetReport()
 
 	// Iterate through all the zone configs to create report entries for all the
@@ -328,7 +335,16 @@ func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneCo
 }
 
 // visit is part of the rangeVisitor interface.
-func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDescriptor) {
+func (v *replicationStatsVisitor) visit(
+	ctx context.Context, r roachpb.RangeDescriptor,
+) (retErr error) {
+
+	defer func() {
+		if retErr != nil {
+			v.visitErr = true
+		}
+	}()
+
 	// Get the zone
 	var zKey ZoneKey
 	var zConfig *config.ZoneConfig
@@ -357,11 +373,11 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 			return false
 		})
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error visiting zones for range %s: %s", r, err)
+		return errors.AssertionFailedf("unexpected error visiting zones for range %s: %s", r, err)
 	}
 	if !found {
-		log.Errorf(ctx, "no zone config with replication attributes found for range: %s", r)
-		return
+		return errors.AssertionFailedf(
+			"no zone config with replication attributes found for range: %s", r)
 	}
 
 	voters := len(r.Replicas().Voters())
@@ -376,6 +392,7 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 	unavailable := liveNodeCount < (len(r.Replicas().Voters())/2 + 1)
 
 	v.report.AddZoneRangeStatus(zKey, unavailable, underReplicated, overReplicated)
+	return nil
 }
 
 // zoneChangesReplication determines whether a given zone config changes
