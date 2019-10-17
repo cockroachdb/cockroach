@@ -1248,28 +1248,20 @@ project
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
- ├── cost: 5.27
+ ├── cost: 1.15
  ├── key: ()
  ├── fd: ()-->(1,5,6)
  ├── prune: (1,5,6)
- └── index-join order
+ └── scan "order"@order_idx
       ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
-      ├── cardinality: [0 - 1]
+      ├── constraint: /3/2/4/-1: [/10/100/50 - /10/100/50]
+      ├── limit: 1
       ├── stats: [rows=1]
-      ├── cost: 5.25
+      ├── cost: 1.13
       ├── key: ()
       ├── fd: ()-->(1-6)
-      ├── interesting orderings: (+3,+2,-1) (+3,+2,+4,-1)
-      └── scan "order"@order_idx
-           ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null)
-           ├── constraint: /3/2/4/-1: [/10/100/50 - /10/100/50]
-           ├── limit: 1
-           ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
-           ├── cost: 1.09
-           ├── key: ()
-           ├── fd: ()-->(1-4)
-           ├── prune: (1-4)
-           └── interesting orderings: (+3,+2,-1) (+3,+2,+4,-1)
+      ├── prune: (1-6)
+      └── interesting orderings: (+3,+2,-1) (+3,+2,+4,-1)
 
 opt format=hide-qual
 SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
@@ -1795,7 +1787,7 @@ group-by
  ├── columns: max:9(int)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
- ├── cost: 72165182
+ ├── cost: 73477276.2
  ├── key: (2,3)
  ├── fd: (2,3)-->(9)
  ├── ordering: +3,+2
@@ -1804,7 +1796,7 @@ group-by
  ├── scan "order"@order_idx
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
  │    ├── stats: [rows=65604710, distinct(2,3)=100, null(2,3)=0]
- │    ├── cost: 70197039.7
+ │    ├── cost: 71509133.9
  │    ├── key: (1-3)
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
@@ -1943,7 +1935,7 @@ except-all
  ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
  ├── right columns: o_w_id:6(int) o_d_id:5(int) o_id:4(int)
  ├── stats: [rows=11322]
- ├── cost: 74145776.6
+ ├── cost: 72833682.4
  ├── scan new_order
  │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
  │    ├── stats: [rows=11322]
@@ -1954,22 +1946,22 @@ except-all
  └── project
       ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
       ├── stats: [rows=11322]
-      ├── cost: 74133435.6
+      ├── cost: 72821341.4
       ├── key: (4-6)
       ├── prune: (4-6)
       ├── interesting orderings: (+6,+5,-4)
       └── select
            ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
            ├── stats: [rows=11322, distinct(9)=1, null(9)=11322]
-           ├── cost: 74133322.3
+           ├── cost: 72821228.1
            ├── key: (4-6)
            ├── fd: ()-->(9)
            ├── prune: (4-6)
            ├── interesting orderings: (+6,+5,-4)
-           ├── scan "order"
+           ├── scan "order"@order_idx
            │    ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
            │    ├── stats: [rows=65604710, distinct(4)=659249, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=10, null(9)=11322]
-           │    ├── cost: 73477275.2
+           │    ├── cost: 72165181
            │    ├── key: (4-6)
            │    ├── fd: (4-6)-->(9)
            │    ├── prune: (4-6,9)
@@ -1989,26 +1981,26 @@ except-all
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── right columns: no_w_id:11(int) no_d_id:10(int) no_o_id:9(int)
  ├── stats: [rows=11322]
- ├── cost: 74145776.6
+ ├── cost: 72833682.4
  ├── project
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
  │    ├── stats: [rows=11322]
- │    ├── cost: 74133435.6
+ │    ├── cost: 72821341.4
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    └── select
  │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
  │         ├── stats: [rows=11322, distinct(6)=1, null(6)=11322]
- │         ├── cost: 74133322.3
+ │         ├── cost: 72821228.1
  │         ├── key: (1-3)
  │         ├── fd: ()-->(6)
  │         ├── prune: (1-3)
  │         ├── interesting orderings: (+3,+2,-1)
- │         ├── scan "order"
+ │         ├── scan "order"@order_idx
  │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
  │         │    ├── stats: [rows=65604710, distinct(1)=659249, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=10, null(6)=11322]
- │         │    ├── cost: 73477275.2
+ │         │    ├── cost: 72165181
  │         │    ├── key: (1-3)
  │         │    ├── fd: (1-3)-->(6)
  │         │    ├── prune: (1-3,6)
@@ -2138,55 +2130,25 @@ scalar-group-by
  ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 818077920
+ ├── cost: 816766176
  ├── key: ()
  ├── fd: ()-->(19)
  ├── prune: (19)
  ├── select
  │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
  │    ├── stats: [rows=39097.1049]
- │    ├── cost: 818077529
- │    ├── full-join (merge)
+ │    ├── cost: 816765785
+ │    ├── interesting orderings: (+11,+10,-9) (+3,+2,-1)
+ │    ├── full-join (hash)
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    │    ├── left ordering: +3,+2,-1
- │    │    ├── right ordering: +11,+10,-9
  │    │    ├── stats: [rows=117291.315]
- │    │    ├── cost: 818076356
- │    │    ├── project
- │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    │    │    ├── stats: [rows=11322, distinct(1)=11226.2921, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
- │    │    │    ├── cost: 74133435.6
- │    │    │    ├── key: (1-3)
- │    │    │    ├── ordering: +3,+2,-1
- │    │    │    ├── prune: (1-3)
- │    │    │    ├── interesting orderings: (+3,+2,-1)
- │    │    │    └── select
- │    │    │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │    │    │         ├── stats: [rows=11322, distinct(1)=11226.2921, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=11322]
- │    │    │         ├── cost: 74133322.3
- │    │    │         ├── key: (1-3)
- │    │    │         ├── fd: ()-->(6)
- │    │    │         ├── ordering: +3,+2,-1 opt(6) [actual: +3,+2,-1]
- │    │    │         ├── prune: (1-3)
- │    │    │         ├── interesting orderings: (+3,+2,-1)
- │    │    │         ├── scan "order"
- │    │    │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │    │    │         │    ├── stats: [rows=65604710, distinct(1)=659249, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=10, null(6)=11322]
- │    │    │         │    ├── cost: 73477275.2
- │    │    │         │    ├── key: (1-3)
- │    │    │         │    ├── fd: (1-3)-->(6)
- │    │    │         │    ├── ordering: +3,+2,-1 opt(6) [actual: +3,+2,-1]
- │    │    │         │    ├── prune: (1-3,6)
- │    │    │         │    └── interesting orderings: (+3,+2,-1)
- │    │    │         └── filters
- │    │    │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
- │    │    │                   ├── variable: o_carrier_id [type=int]
- │    │    │                   └── null [type=unknown]
+ │    │    ├── cost: 816764612
+ │    │    ├── reject-nulls: (1-3,9-11)
+ │    │    ├── interesting orderings: (+11,+10,-9) (+3,+2,-1)
  │    │    ├── project
  │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
  │    │    │    ├── stats: [rows=106092, distinct(9)=97907.0099, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
  │    │    │    ├── cost: 743940574
- │    │    │    ├── ordering: +11,+10,-9
  │    │    │    ├── prune: (9-11)
  │    │    │    ├── interesting orderings: (+11,+10,-9)
  │    │    │    └── select
@@ -2194,21 +2156,55 @@ scalar-group-by
  │    │    │         ├── stats: [rows=106092, distinct(9)=97907.0099, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=106092]
  │    │    │         ├── cost: 743939513
  │    │    │         ├── fd: ()-->(15)
- │    │    │         ├── ordering: +11,+10,-9 opt(15) [actual: +11,+10,-9]
  │    │    │         ├── prune: (9-11)
  │    │    │         ├── interesting orderings: (+11,+10,-9)
  │    │    │         ├── scan order_line
  │    │    │         │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
  │    │    │         │    ├── stats: [rows=646903924, distinct(9)=651111, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=2351500, null(15)=106092]
  │    │    │         │    ├── cost: 737470473
- │    │    │         │    ├── ordering: +11,+10,-9 opt(15) [actual: +11,+10,-9]
  │    │    │         │    ├── prune: (9-11,15)
  │    │    │         │    └── interesting orderings: (+11,+10,-9)
  │    │    │         └── filters
  │    │    │              └── is [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
  │    │    │                   ├── variable: ol_delivery_d [type=timestamp]
  │    │    │                   └── null [type=unknown]
- │    │    └── filters (true)
+ │    │    ├── project
+ │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=11322, distinct(1)=11226.2921, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ │    │    │    ├── cost: 72821341.4
+ │    │    │    ├── key: (1-3)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    ├── interesting orderings: (+3,+2,-1)
+ │    │    │    └── select
+ │    │    │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │    │    │         ├── stats: [rows=11322, distinct(1)=11226.2921, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=11322]
+ │    │    │         ├── cost: 72821228.1
+ │    │    │         ├── key: (1-3)
+ │    │    │         ├── fd: ()-->(6)
+ │    │    │         ├── prune: (1-3)
+ │    │    │         ├── interesting orderings: (+3,+2,-1)
+ │    │    │         ├── scan "order"@order_idx
+ │    │    │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │    │    │         │    ├── stats: [rows=65604710, distinct(1)=659249, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=10, null(6)=11322]
+ │    │    │         │    ├── cost: 72165181
+ │    │    │         │    ├── key: (1-3)
+ │    │    │         │    ├── fd: (1-3)-->(6)
+ │    │    │         │    ├── prune: (1-3,6)
+ │    │    │         │    └── interesting orderings: (+3,+2,-1)
+ │    │    │         └── filters
+ │    │    │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │    │    │                   ├── variable: o_carrier_id [type=int]
+ │    │    │                   └── null [type=unknown]
+ │    │    └── filters
+ │    │         ├── eq [type=bool, outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ]), fd=(3)==(11), (11)==(3)]
+ │    │         │    ├── variable: ol_w_id [type=int]
+ │    │         │    └── variable: o_w_id [type=int]
+ │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ │    │         │    ├── variable: ol_d_id [type=int]
+ │    │         │    └── variable: o_d_id [type=int]
+ │    │         └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │              ├── variable: ol_o_id [type=int]
+ │    │              └── variable: o_id [type=int]
  │    └── filters
  │         └── or [type=bool, outer=(1,9)]
  │              ├── is [type=bool]
