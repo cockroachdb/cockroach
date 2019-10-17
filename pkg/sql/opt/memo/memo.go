@@ -374,3 +374,18 @@ func (m *Memo) NextWithID() opt.WithID {
 	m.curWithID++
 	return m.curWithID
 }
+
+// ClearColStats clears all column statistics from every relational expression
+// in the memo. This is used to free up the potentially large amount of memory
+// used by histograms.
+func (m *Memo) ClearColStats(parent opt.Expr) {
+	for i, n := 0, parent.ChildCount(); i < n; i++ {
+		child := parent.Child(i)
+		m.ClearColStats(child)
+	}
+
+	switch t := parent.(type) {
+	case RelExpr:
+		t.Relational().Stats.ColStats = props.ColStatsMap{}
+	}
+}
