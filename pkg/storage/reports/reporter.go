@@ -183,7 +183,9 @@ func (stats *Reporter) update(
 	}
 
 	allStores := stats.storePool.GetStores()
-	var getStoresFromGossip StoreResolver = func(r roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
+	var getStoresFromGossip StoreResolver = func(
+		r *roachpb.RangeDescriptor,
+	) []roachpb.StoreDescriptor {
 		storeDescs := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
 		// We'll return empty descriptors for stores that gossip doesn't have a
 		// descriptor for. These stores will be considered to satisfy all
@@ -308,6 +310,47 @@ func (stats *Reporter) isNodeLive(nodeID roachpb.NodeID) bool {
 	}
 }
 
+// zoneChecker is a utility that lets a client check if a range falls in a
+// previously-configured zone. It is used by the reporter to inform visitors
+// that a range falls inside the same zone as the previous range.
+type zoneChecker struct {
+	init        bool
+	lastZoneKey ZoneKey
+	lastZone    *config.ZoneConfig
+}
+
+func (r *zoneChecker) reset() {
+	r.init = false
+}
+
+// setZone remembers the passed-in zone as the reference for further
+// checkSameZone() calls.
+func (r *zoneChecker) setZone(zoneKey ZoneKey, zone *config.ZoneConfig) {
+	r.init = true
+	r.lastZoneKey = zoneKey
+	r.lastZone = zone
+}
+
+// checkSameZone returns true if the most specific zone that contains rng is the
+// one previously passed to setZone().
+func (r *zoneChecker) checkSameZone(ctx context.Context, rng *roachpb.RangeDescriptor) bool {
+	if !r.init {
+		return false
+	}
+	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
+	if id != r.lastZoneKey.ZoneID {
+		return false
+	}
+	// Check that the subzone, if any, is the same.
+	if r.lastZone == nil {
+		// No subzones.
+		return true
+	}
+	_, subzoneIdx := r.lastZone.GetSubzoneForKeySuffix(keySuffix)
+	subzoneID := base.SubzoneIDFromIndex(int(subzoneIdx))
+	return r.lastZoneKey.SubzoneID == subzoneID
+}
+
 // visitZones applies a visitor to the hierarchy of zone configs that apply to
 // the given range, starting from the most specific to the default zone config.
 //
@@ -319,11 +362,11 @@ func (stats *Reporter) isNodeLive(nodeID roachpb.NodeID) bool {
 // zone hierarchy was exhausted.
 func visitZones(
 	ctx context.Context,
-	r roachpb.RangeDescriptor,
+	rng *roachpb.RangeDescriptor,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
-	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(r.StartKey)
+	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
 	zone, err := getZoneByID(id, cfg)
 	if err != nil {
 		return false, err
@@ -477,21 +520,32 @@ func constraintSatisfied(
 // StoreResolver is a function resolving a range to a store descriptor for each
 // of the replicas. Empty store descriptors are to be returned when there's no
 // information available for the store.
-type StoreResolver func(roachpb.RangeDescriptor) []roachpb.StoreDescriptor
+type StoreResolver func(*roachpb.RangeDescriptor) []roachpb.StoreDescriptor
 
 // rangeVisitor abstracts the interface for range iteration implemented by all
 // report generators.
 type rangeVisitor interface {
-	// visit is called by visitRanges() for each range, in order. The visitor will
-	// update its report with the range's info. If an error is returned, visit()
-	// will not be called anymore before reset().
-	// If an error() is returned, failed() needs to return true until reset() is called.
-	visit(context.Context, roachpb.RangeDescriptor) error
+	// visitNewZone/visitSameZone is called by visitRanges() for each range, in
+	// order. The visitor will update its report with the range's info. If an
+	// error is returned, visit() will not be called anymore before reset().
+	// If an error() is returned, failed() needs to return true until reset() is
+	// called.
+	//
+	// Once visitNewZone() has been called once, visitSameZone() is called for
+	// further ranges as long as these ranges are covered by the same zone config.
+	// As soon as the range is not covered by it, visitNewZone() is called again.
+	// The idea is that visitors can maintain state about that zone that applies
+	// to multiple ranges, and so visitSameZone() allows them to efficiently reuse
+	// that state (in particular, not unmarshall ZoneConfigs again).
+	visitNewZone(context.Context, *roachpb.RangeDescriptor) error
+	visitSameZone(context.Context, *roachpb.RangeDescriptor) error
+
 	// failed returns true if an error was encountered by the last visit() call
 	// (and reset( ) wasn't called since).
 	// The idea is that, if failed() returns true, the report that the visitor
 	// produces will be considered incomplete and not persisted.
 	failed() bool
+
 	// reset resets the visitor's state, preparing it for visit() calls starting
 	// at the first range. This is called on retriable errors during range iteration.
 	reset(ctx context.Context)
@@ -523,6 +577,7 @@ func visitRanges(
 	origVisitors := make([]rangeVisitor, len(visitors))
 	copy(origVisitors, visitors)
 	var visitorErrs []error
+	var cache zoneChecker
 	// Iterate over all the ranges.
 	for {
 		rd, err := rangeStore.Next(ctx)
@@ -532,6 +587,7 @@ func visitRanges(
 				for _, v := range visitors {
 					v.reset(ctx)
 				}
+				cache.reset()
 				// The iterator has been positioned to the beginning.
 				continue
 			} else {
@@ -542,8 +598,38 @@ func visitRanges(
 			// We're done.
 			break
 		}
+
+		// Figure out if the current range falls in the same zone as the previous
+		// one. If it does, the visitors can be more efficient.
+		sameZoneAsPrevRange := false
+		if cache.checkSameZone(ctx, &rd) {
+			sameZoneAsPrevRange = true
+		} else {
+			// This range does not belong to the same zone as the previous. Set the
+			// cache to the zone that it does belong to.
+			found, err := visitZones(
+				ctx, &rd, cfg, func(_ context.Context, zone *config.ZoneConfig, key ZoneKey,
+				) bool {
+					cache.setZone(key, zone)
+					return true
+				})
+			if err != nil {
+				return err
+			}
+			if !found {
+				return errors.AssertionFailedf("failed to find any zone for range: %s", rd)
+			}
+		}
+
 		for i, v := range visitors {
-			if err := v.visit(ctx, rd); err != nil {
+			var err error
+			if sameZoneAsPrevRange {
+				err = v.visitSameZone(ctx, &rd)
+			} else {
+				err = v.visitNewZone(ctx, &rd)
+			}
+
+			if err != nil {
 				// Sanity check - v.failed() should return an error now (the same as err above).
 				if !v.failed() {
 					return errors.Errorf("expected visitor %T to have failed() after error: %s", v, err)
