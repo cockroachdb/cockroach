@@ -141,7 +141,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
 		ret = append(ret, roachpb.KeyValue{
-			Key:   MakeNameMetadataKey(parentID, desc.GetName()),
+			Key:   NewTableKey(parentID, desc.GetName()).Key(),
 			Value: value,
 		})
 

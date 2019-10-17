@@ -21,7 +21,6 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,9 +43,9 @@ import (
 // GetTableDescriptor retrieves a table descriptor directly from the KV layer.
 func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDescriptor {
 	// log.VEventf(context.TODO(), 2, "GetTableDescriptor %q %q", database, table)
-	dbNameKey := MakeNameMetadataKey(keys.RootNamespaceID, database)
+	dKey := NewDatabaseKey(database)
 	ctx := context.TODO()
-	gr, err := kvDB.Get(ctx, dbNameKey)
+	gr, err := kvDB.Get(ctx, dKey.Key())
 	if err != nil {
 		panic(err)
 	}
@@ -55,8 +54,8 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 	}
 	dbDescID := ID(gr.ValueInt())
 
-	tableNameKey := MakeNameMetadataKey(dbDescID, table)
-	gr, err = kvDB.Get(ctx, tableNameKey)
+	tKey := NewTableKey(dbDescID, table)
+	gr, err = kvDB.Get(ctx, tKey.Key())
 	if err != nil {
 		panic(err)
 	}

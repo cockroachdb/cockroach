@@ -23,10 +23,10 @@ func TestKeyAddress(t *testing.T) {
 	testCases := []struct {
 		key roachpb.Key
 	}{
-		{MakeNameMetadataKey(0, "BAR")},
-		{MakeNameMetadataKey(1, "BAR")},
-		{MakeNameMetadataKey(1, "foo")},
-		{MakeNameMetadataKey(2, "foo")},
+		{NewTableKey(0, "BAR").Key()},
+		{NewTableKey(1, "BAR").Key()},
+		{NewTableKey(1, "foo").Key()},
+		{NewTableKey(2, "foo").Key()},
 		{MakeDescMetadataKey(123)},
 		{MakeDescMetadataKey(124)},
 	}

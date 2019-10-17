@@ -234,7 +234,7 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 // descriptor IDs.
 func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbase.ID, error) {
 	log.Eventf(ctx, "fetching all database descriptor IDs")
-	nameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "" /* name */)
+	nameKey := sqlbase.NewDatabaseKey("" /* name */).Key()
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /*maxRows */)
 	if err != nil {
 		return nil, err

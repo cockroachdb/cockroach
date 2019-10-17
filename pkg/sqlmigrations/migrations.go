@@ -243,7 +243,7 @@ func databaseIDs(names ...string) func(ctx context.Context, db db) ([]sqlbase.ID
 	return func(ctx context.Context, db db) ([]sqlbase.ID, error) {
 		var ids []sqlbase.ID
 		for _, name := range names {
-			kv, err := db.Get(ctx, sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, name))
+			kv, err := db.Get(ctx, sqlbase.NewTableKey(keys.RootNamespaceID, name).Key())
 			if err != nil {
 				return nil, err
 			}
@@ -560,7 +560,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.CPut(sqlbase.MakeNameMetadataKey(desc.GetParentID(), desc.GetName()), desc.GetID(), nil)
+		b.CPut(sqlbase.NewTableKey(desc.GetParentID(), desc.GetName()).Key(), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
