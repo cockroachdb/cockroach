@@ -452,6 +452,11 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	needed, output := b.getColumns(scan.Cols, scan.Table)
 	res := execPlan{outputCols: output}
 
+	// Get the estimated row count from the statistics.
+	// Note: if this memo was originally created as part of a PREPARE
+	// statement or was stored in the query cache, the column stats would have
+	// been removed by DetachMemo. Update that function if the column stats are
+	// needed here in the future.
 	rowCount := scan.Relational().Stats.RowCount
 	if !scan.Relational().Stats.Available {
 		// When there are no statistics available, we construct a scan node with
