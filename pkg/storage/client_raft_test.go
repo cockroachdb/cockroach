@@ -2160,6 +2160,10 @@ func TestQuotaPool(t *testing.T) {
 // as active for the purpose of proposal throttling.
 func TestWedgedReplicaDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		// Takes 10s to run - #33654.
+		t.Skip("short flag")
+	}
 
 	const numReplicas = 3
 	const rangeID = 1
