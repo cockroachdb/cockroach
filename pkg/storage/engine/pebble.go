@@ -363,7 +363,7 @@ func (p *Pebble) NewBatch() Batch {
 	if p.readOnly {
 		panic("write operation called on read-only pebble instance")
 	}
-	return newPebbleBatch(p.db.NewIndexedBatch())
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch())
 }
 
 // NewReadOnly implements the Engine interface.
@@ -382,7 +382,7 @@ func (p *Pebble) NewWriteOnlyBatch() Batch {
 	if p.readOnly {
 		panic("write operation called on read-only pebble instance")
 	}
-	return newPebbleBatch(p.db.NewBatch())
+	return newPebbleBatch(p.db, p.db.NewBatch())
 }
 
 // NewSnapshot implements the Engine interface.
