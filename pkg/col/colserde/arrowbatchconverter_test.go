@@ -143,10 +143,10 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	assertEqualBatches(t, expected, actual)
 }
 
-// roundTripAndAssertEquality is a helper function that round trips a batch
-// through the ArrowBatchConverter and RecordBatchSerializer and asserts that
-// the output batch is equal to the input batch. Make sure to copy the input
-// batch before passing it to this function to assert equality.
+// roundTripBatch is a helper function that round trips a batch through the
+// ArrowBatchConverter and RecordBatchSerializer and asserts that the output
+// batch is equal to the input batch. Make sure to copy the input batch before
+// passing it to this function to assert equality.
 func roundTripBatch(
 	b coldata.Batch, c *ArrowBatchConverter, r *RecordBatchSerializer,
 ) (coldata.Batch, error) {
