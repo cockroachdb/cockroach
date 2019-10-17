@@ -19,15 +19,31 @@ import (
 func (d *delegator) delegateShowDatabaseIndexes(
 	n *tree.ShowDatabaseIndexes,
 ) (tree.Statement, error) {
-	const getAllIndexesQuery = `
-    SELECT table_name,
-           index_name,
-           non_unique::BOOL,
-           seq_in_index,
-           column_name,
-           direction,
-           storing::BOOL,
-           implicit::BOOL
-      FROM %s.information_schema.statistics`
+	getAllIndexesQuery := `
+SELECT
+	table_name,
+	index_name,
+	non_unique::BOOL,
+	seq_in_index,
+	column_name,
+	direction,
+	storing::BOOL,
+	implicit::BOOL`
+
+	if n.WithComment {
+		getAllIndexesQuery += `,
+	obj_description(pg_class.oid) AS comment`
+	}
+
+	getAllIndexesQuery += `
+FROM
+	%s.information_schema.statistics`
+
+	if n.WithComment {
+		getAllIndexesQuery += `
+	LEFT JOIN pg_class ON
+		statistics.index_name = pg_class.relname`
+	}
+
 	return parse(fmt.Sprintf(getAllIndexesQuery, n.Database.String()))
 }

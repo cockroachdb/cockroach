@@ -221,7 +221,7 @@ CREATE TABLE system.role_members (
 CREATE TABLE system.comments (
    type      INT NOT NULL,    -- type of object, to distinguish between db, table, column and others
    object_id INT NOT NULL,    -- object ID, this will be usually db/table desc ID
-   sub_id    INT NOT NULL,    -- sub ID for columns inside table, 0 for pure table
+   sub_id    INT NOT NULL,    -- sub ID for column or indexes inside table, 0 for pure table
    comment   STRING NOT NULL, -- the comment
    PRIMARY KEY (type, object_id, sub_id)
 );`

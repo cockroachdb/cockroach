@@ -274,7 +274,7 @@ func (p *planner) truncateTable(
 	}
 
 	// Reassign comment.
-	if err := reassignComment(ctx, p, tableDesc, newID); err != nil {
+	if err := reassignComment(ctx, p, tableDesc, newTableDesc); err != nil {
 		return err
 	}
 
@@ -380,9 +380,9 @@ func reassignReferencedTables(
 	return changed, nil
 }
 
-// reassignComment reassign comment on table
+// reassignComment reassign comment on table.
 func reassignComment(
-	ctx context.Context, p *planner, oldTableDesc *sqlbase.MutableTableDescriptor, newID sqlbase.ID,
+	ctx context.Context, p *planner, oldTableDesc, newTableDesc *sqlbase.MutableTableDescriptor,
 ) error {
 	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 		ctx,
@@ -402,7 +402,7 @@ func reassignComment(
 			p.txn,
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.TableCommentType,
-			newID,
+			newTableDesc.ID,
 			comment[0])
 		if err != nil {
 			return err
@@ -422,7 +422,14 @@ func reassignComment(
 
 	for i := range oldTableDesc.Columns {
 		id := oldTableDesc.Columns[i].ID
-		err = reassignColumnComment(ctx, p, oldTableDesc.ID, newID, id)
+		err = reassignColumnComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, id)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, indexDesc := range oldTableDesc.Indexes {
+		err = reassignIndexComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, indexDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -431,7 +438,7 @@ func reassignComment(
 	return nil
 }
 
-// reassignComment reassign comment on column
+// reassignColumnComment reassign comment on column.
 func reassignColumnComment(
 	ctx context.Context, p *planner, oldID sqlbase.ID, newID sqlbase.ID, columnID sqlbase.ColumnID,
 ) error {
@@ -469,6 +476,41 @@ func reassignColumnComment(
 			keys.ColumnCommentType,
 			oldID,
 			columnID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// reassignIndexComment reassigns a comment on an index.
+func reassignIndexComment(
+	ctx context.Context, p *planner, oldTableID, newTableID sqlbase.ID, indexID sqlbase.IndexID,
+) error {
+	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+		ctx,
+		"select-index-comment",
+		p.txn,
+		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
+		keys.IndexCommentType,
+		oldTableID,
+		indexID)
+	if err != nil {
+		return err
+	}
+
+	if comment != nil {
+		err = p.upsertIndexComment(
+			ctx,
+			newTableID,
+			indexID,
+			string(tree.MustBeDString(comment[0])))
+		if err != nil {
+			return err
+		}
+
+		err = p.removeIndexComment(ctx, oldTableID, indexID)
 		if err != nil {
 			return err
 		}
