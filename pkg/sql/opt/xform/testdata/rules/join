@@ -1467,6 +1467,67 @@ inner-join (lookup bool_col)
  │    └── filters (true)
  └── filters (true)
 
+exec-ddl
+CREATE TABLE t(pk INT PRIMARY KEY, col0 INT, col1 INT, col2 INT, col4 INT, UNIQUE INDEX (col2))
+----
+
+# Make sure we don't generate a lookup join with no key columns (#41676).
+opt
+SELECT pk FROM t WHERE col4 = 1 AND col0 = 1 AND col2 IN (SELECT col0 FROM t WHERE col0 = 1 AND col2 IS NULL);
+----
+project
+ ├── columns: pk:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── project
+      ├── columns: pk:1(int!null) col0:2(int!null) col2:4(int!null) col4:5(int!null)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2,4,5)
+      └── project
+           ├── columns: pk:1(int!null) col0:2(int!null) col2:4(int!null) col4:5(int!null) col0:7(int!null)
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(1,2,4,5,7)
+           └── inner-join (lookup t)
+                ├── columns: pk:1(int!null) col0:2(int!null) col2:4(int!null) col4:5(int!null) col0:7(int!null) col2:9(int)
+                ├── key columns: [1] = [1]
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(1,2,4,5,7,9)
+                ├── inner-join (lookup t@secondary)
+                │    ├── columns: pk:1(int!null) col2:4(int!null) col0:7(int!null) col2:9(int)
+                │    ├── key columns: [7] = [4]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(1,4,7,9)
+                │    ├── select
+                │    │    ├── columns: col0:7(int!null) col2:9(int)
+                │    │    ├── cardinality: [0 - 1]
+                │    │    ├── key: ()
+                │    │    ├── fd: ()-->(7,9)
+                │    │    ├── index-join t
+                │    │    │    ├── columns: col0:7(int) col2:9(int)
+                │    │    │    ├── lax-key: (7)
+                │    │    │    ├── fd: ()-->(9), (9)~~>(7)
+                │    │    │    └── scan t@secondary
+                │    │    │         ├── columns: pk:6(int!null) col2:9(int)
+                │    │    │         ├── constraint: /9: [/NULL - /NULL]
+                │    │    │         ├── key: (6)
+                │    │    │         └── fd: ()-->(9), (9)~~>(6)
+                │    │    └── filters
+                │    │         └── col0 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+                │    └── filters
+                │         └── col2 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+                └── filters
+                     ├── col4 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+                     └── col0 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# --------------------------------------------------
+# GenerateZigZagJoins
+# --------------------------------------------------
+
 # Simple zigzag case - where all requested columns are in the indexes being
 # joined.
 opt
