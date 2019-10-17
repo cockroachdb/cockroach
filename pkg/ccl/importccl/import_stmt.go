@@ -126,6 +126,10 @@ func importJobDescription(
 func importPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+	if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionPartitionedBackup) {
+		return nil, nil, nil, false, errors.Errorf("INSERT requires a cluster fully upgraded to version >= 19.2")
+	}
+
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
 		return nil, nil, nil, false, nil
