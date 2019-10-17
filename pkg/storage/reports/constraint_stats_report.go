@@ -377,7 +377,8 @@ type constraintConformanceVisitor struct {
 	cfg           *config.SystemConfig
 	storeResolver StoreResolver
 
-	report *replicationConstraintStatsReportSaver
+	report   *replicationConstraintStatsReportSaver
+	visitErr bool
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
@@ -397,8 +398,14 @@ func makeConstraintConformanceVisitor(
 	return v
 }
 
+// failed is part of the rangeVisitor interface.
+func (v *constraintConformanceVisitor) failed() bool {
+	return v.visitErr
+}
+
 // reset is part of the rangeVisitor interface.
 func (v *constraintConformanceVisitor) reset(ctx context.Context) {
+	v.visitErr = false
 	v.report.resetReport()
 
 	// Iterate through all the zone configs to create report entries for all the
@@ -422,7 +429,16 @@ func (v *constraintConformanceVisitor) reset(ctx context.Context) {
 }
 
 // constraintConformanceVisitor is part of the rangeVisitor interface.
-func (v *constraintConformanceVisitor) visit(ctx context.Context, r roachpb.RangeDescriptor) {
+func (v *constraintConformanceVisitor) visit(
+	ctx context.Context, r roachpb.RangeDescriptor,
+) (retErr error) {
+
+	defer func() {
+		if retErr != nil {
+			v.visitErr = true
+		}
+	}()
+
 	storeDescs := v.storeResolver(r)
 
 	// Find the applicable constraints, which may be inherited.
@@ -438,11 +454,12 @@ func (v *constraintConformanceVisitor) visit(ctx context.Context, r roachpb.Rang
 			return true
 		})
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
+		return errors.Errorf("unexpected error visiting zones: %s", err)
 	}
 
 	violated := processRange(ctx, storeDescs, constraints)
 	for _, c := range violated {
 		v.report.AddViolation(zKey, Constraint, c)
 	}
+	return nil
 }

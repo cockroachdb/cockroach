@@ -12,6 +12,8 @@ package reports
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -210,23 +212,33 @@ func (stats *Reporter) update(
 		ctx, &rangeIter, stats.latestConfig,
 		&constraintConfVisitor, &localityStatsVisitor, &statusVisitor,
 	); err != nil {
-		return errors.Wrap(err, "failed to compute constraint conformance report")
+		if _, ok := err.(visitorError); ok {
+			log.Errorf(ctx, "some reports have not been generated: %s", err)
+		} else {
+			return errors.Wrap(err, "failed to compute constraint conformance report")
+		}
 	}
 
-	if err := constraintConfVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
-	); err != nil {
-		return errors.Wrap(err, "failed to save constraint report")
+	if !constraintConfVisitor.failed() {
+		if err := constraintConfVisitor.report.Save(
+			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		); err != nil {
+			return errors.Wrap(err, "failed to save constraint report")
+		}
 	}
-	if err := localityStatsVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
-	); err != nil {
-		return errors.Wrap(err, "failed to save locality report")
+	if !localityStatsVisitor.failed() {
+		if err := localityStatsVisitor.report.Save(
+			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		); err != nil {
+			return errors.Wrap(err, "failed to save locality report")
+		}
 	}
-	if err := statusVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
-	); err != nil {
-		return errors.Wrap(err, "failed to save range status report")
+	if !localityStatsVisitor.failed() {
+		if err := statusVisitor.report.Save(
+			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		); err != nil {
+			return errors.Wrap(err, "failed to save range status report")
+		}
 	}
 	return nil
 }
@@ -467,24 +479,57 @@ func constraintSatisfied(
 // information available for the store.
 type StoreResolver func(roachpb.RangeDescriptor) []roachpb.StoreDescriptor
 
+// rangeVisitor abstracts the interface for range iteration implemented by all
+// report generators.
 type rangeVisitor interface {
-	visit(context.Context, roachpb.RangeDescriptor)
+	// visit is called by visitRanges() for each range, in order. The visitor will
+	// update its report with the range's info. If an error is returned, visit()
+	// will not be called anymore before reset().
+	// If an error() is returned, failed() needs to return true until reset() is called.
+	visit(context.Context, roachpb.RangeDescriptor) error
+	// failed returns true if an error was encountered by the last visit() call
+	// (and reset( ) wasn't called since).
+	// The idea is that, if failed() returns true, the report that the visitor
+	// produces will be considered incomplete and not persisted.
+	failed() bool
+	// reset resets the visitor's state, preparing it for visit() calls starting
+	// at the first range. This is called on retriable errors during range iteration.
 	reset(ctx context.Context)
+}
+
+// visitorError is returned by visitRanges when one or more visitors failed.
+type visitorError struct {
+	errs []error
+}
+
+func (e visitorError) Error() string {
+	s := make([]string, len(e.errs))
+	for i, err := range e.errs {
+		s[i] = fmt.Sprintf("%d: %s", i, err)
+	}
+	return fmt.Sprintf("%d visitors encountered errors:\n%s", len(e.errs), strings.Join(s, "\n"))
 }
 
 // visitRanges iterates through all the range descriptors in Meta2 and calls the
 // supplied visitors.
 //
-// An error is returned if some descriptors could not be read.
+// An error is returned if some descriptors could not be read. Additionally,
+// visitorError is returned if some visitors failed during the iteration. In
+// that case, it is expected that the reports produced by those specific
+// visitors will not be persisted, but the other reports will.
 func visitRanges(
-	ctx context.Context, rangeStore RangeIterator, cfg *config.SystemConfig, visitor ...rangeVisitor,
+	ctx context.Context, rangeStore RangeIterator, cfg *config.SystemConfig, visitors ...rangeVisitor,
 ) error {
+	origVisitors := make([]rangeVisitor, len(visitors))
+	copy(origVisitors, visitors)
+	var visitorErrs []error
 	// Iterate over all the ranges.
 	for {
 		rd, err := rangeStore.Next(ctx)
 		if err != nil {
 			if errIsRetriable(err) {
-				for _, v := range visitor {
+				visitors = origVisitors
+				for _, v := range visitors {
 					v.reset(ctx)
 				}
 				// The iterator has been positioned to the beginning.
@@ -495,12 +540,24 @@ func visitRanges(
 		}
 		if rd.RangeID == 0 {
 			// We're done.
-			return nil
+			break
 		}
-		for _, v := range visitor {
-			v.visit(ctx, rd)
+		for i, v := range visitors {
+			if err := v.visit(ctx, rd); err != nil {
+				// Sanity check - v.failed() should return an error now (the same as err above).
+				if !v.failed() {
+					return errors.Errorf("expected visitor %T to have failed() after error: %s", v, err)
+				}
+				// Remove this visitor; it shouldn't be called any more.
+				visitors = append(visitors[:i], visitors[i+1:]...)
+				visitorErrs = append(visitorErrs, err)
+			}
 		}
 	}
+	if len(visitorErrs) > 0 {
+		return visitorError{errs: visitorErrs}
+	}
+	return nil
 }
 
 // RangeIterator abstracts the interface for reading range descriptors.
