@@ -2178,6 +2178,10 @@ comment_stmt:
 
     $$.val = &tree.CommentOnColumn{ColumnItem: columnItem, Comment: $6.strPtr()}
   }
+| COMMENT ON INDEX table_index_name IS comment_text
+  {
+    $$.val = &tree.CommentOnIndex{Index: $4.tableIndexName(), Comment: $6.strPtr()}
+  }
 
 comment_text:
   SCONST
@@ -3535,34 +3539,34 @@ show_grants_stmt:
 
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
-// %Text: SHOW INDEXES FROM { <tablename> | DATABASE <database_name> }
+// %Text: SHOW INDEXES FROM { <tablename> | DATABASE <database_name> } [WITH COMMENT]
 // %SeeAlso: WEBDOCS/show-index.html
 show_indexes_stmt:
-  SHOW INDEX FROM table_name
+  SHOW INDEX FROM table_name with_comment
   {
-    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
-| SHOW INDEX FROM DATABASE database_name
+| SHOW INDEX FROM DATABASE database_name with_comment
   {
-    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5), WithComment: $6.bool()}
   }
-| SHOW INDEXES FROM table_name
+| SHOW INDEXES FROM table_name with_comment
   {
-    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
-| SHOW INDEXES FROM DATABASE database_name
+| SHOW INDEXES FROM DATABASE database_name with_comment
   {
-    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5), WithComment: $6.bool()}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
-| SHOW KEYS FROM table_name
+| SHOW KEYS FROM table_name with_comment
   {
-    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
-| SHOW KEYS FROM DATABASE database_name
+| SHOW KEYS FROM DATABASE database_name with_comment
   {
-    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5), WithComment: $6.bool()}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 

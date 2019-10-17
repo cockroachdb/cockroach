@@ -335,6 +335,7 @@ const (
 	DatabaseCommentType = 0
 	TableCommentType    = 1
 	ColumnCommentType   = 2
+	IndexCommentType    = 3
 )
 
 // PseudoTableIDs is the list of ids from above that are not real tables (i.e.
