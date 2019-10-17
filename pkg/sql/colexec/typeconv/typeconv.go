@@ -22,7 +22,25 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AllSupportedSQLTypes is a slice of all SQL types that the vectorized engine
+// currently supports. It should be kept in sync with FromColumnType().
+var AllSupportedSQLTypes = []types.T{
+	*types.Bool,
+	*types.Bytes,
+	*types.Date,
+	*types.Decimal,
+	*types.Int2,
+	*types.Int4,
+	*types.Int,
+	*types.Oid,
+	*types.Float,
+	*types.String,
+	*types.Uuid,
+}
+
 // FromColumnType returns the T that corresponds to the input ColumnType.
+// Note: if you're adding a new type here, add it to AllSupportedSQLTypes as
+// well.
 func FromColumnType(ct *types.T) coltypes.T {
 	switch ct.Family() {
 	case types.BoolFamily:
