@@ -1669,6 +1669,7 @@ search_path                          NULL    NULL     NULL     NULL        NULL
 server_encoding                      NULL    NULL     NULL     NULL        NULL
 server_version                       NULL    NULL     NULL     NULL        NULL
 server_version_num                   NULL    NULL     NULL     NULL        NULL
+session_id                           NULL    NULL     NULL     NULL        NULL
 session_user                         NULL    NULL     NULL     NULL        NULL
 sql_safe_updates                     NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings          NULL    NULL     NULL     NULL        NULL
