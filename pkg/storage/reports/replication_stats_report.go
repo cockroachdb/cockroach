@@ -357,10 +357,10 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 			return false
 		})
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
+		log.Fatalf(ctx, "unexpected error visiting zones for range %s: %s", r, err)
 	}
 	if !found {
-		log.Errorf(ctx, "no zone config with replication attributes found for range: %s", &r)
+		log.Errorf(ctx, "no zone config with replication attributes found for range: %s", r)
 		return
 	}
 
