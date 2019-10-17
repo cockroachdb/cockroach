@@ -317,6 +317,9 @@ type Engine interface {
 	// this engine. A write-only batch accumulates all mutations and applies them
 	// atomically on a call to Commit(). Read operations return an error.
 	//
+	// Note that a distinct write-only batch allows reads. Distinct batches are a
+	// means of indicating that the user does not need to read its own writes.
+	//
 	// TODO(peter): This should return a WriteBatch interface, but there are mild
 	// complications in both defining that interface and implementing it. In
 	// particular, Batch.Close would no longer come from Reader and we'd need to

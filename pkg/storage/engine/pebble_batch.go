@@ -19,6 +19,7 @@ import (
 
 // Wrapper struct around a pebble.Batch.
 type pebbleBatch struct {
+	db           *pebble.DB
 	batch        *pebble.Batch
 	buf          []byte
 	iter         pebbleBatchIterator
@@ -37,9 +38,10 @@ var pebbleBatchPool = sync.Pool{
 }
 
 // Instantiates a new pebbleBatch.
-func newPebbleBatch(batch *pebble.Batch) *pebbleBatch {
+func newPebbleBatch(db *pebble.DB, batch *pebble.Batch) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
+		db:    db,
 		batch: batch,
 		buf:   pb.buf,
 		iter: pebbleBatchIterator{
@@ -77,6 +79,12 @@ func (p *pebbleBatch) Closed() bool {
 
 // Get implements the Batch interface.
 func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
+	if !p.batch.Indexed() {
+		panic("write-only batch")
+	}
+	if p.distinctOpen {
+		panic("distinct batch open")
+	}
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -92,6 +100,12 @@ func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
 func (p *pebbleBatch) GetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
+	if !p.batch.Indexed() {
+		panic("write-only batch")
+	}
+	if p.distinctOpen {
+		panic("distinct batch open")
+	}
 	if len(key.Key) == 0 {
 		return false, 0, 0, emptyKeyError()
 	}
@@ -120,6 +134,13 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
+	if !p.batch.Indexed() && !p.isDistinct {
+		panic("write-only batch")
+	}
+	if p.distinctOpen {
+		panic("distinct batch open")
+	}
+
 	// Use the cached iterator.
 	//
 	// TODO(itsbilal): Investigate if it's equally or more efficient to just call
@@ -134,7 +155,11 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 		_ = p.iter.iter.Close()
 	}
 
-	p.iter.init(p.batch, opts)
+	if p.batch.Indexed() {
+		p.iter.init(p.batch, opts)
+	} else {
+		p.iter.init(p.db, opts)
+	}
 	p.iter.batch = p
 	return &p.iter
 }
@@ -274,20 +299,26 @@ func (p *pebbleBatch) Commit(sync bool) error {
 
 // Distinct implements the Batch interface.
 func (p *pebbleBatch) Distinct() ReadWriter {
-	// Distinct batches are regular batches with isDistinct set to true.
-	// The parent batch is stored in parentBatch, and all writes on it are
-	// disallowed while the distinct batch is open. Both the distinct batch and
-	// the parent batch share the same underlying pebble.Batch instance.
+	if p.distinctOpen {
+		panic("distinct batch already open")
+	}
+	// Distinct batches are regular batches with isDistinct set to true. The
+	// parent batch is stored in parentBatch, and all writes on it are disallowed
+	// while the distinct batch is open. Both the distinct batch and the parent
+	// batch share the same underlying pebble.Batch instance.
 	//
-	// TODO(itsbilal): Investigate if we need to distinguish between distinct
-	// and non-distinct batches.
-	batch := &pebbleBatch{}
-	batch.batch = p.batch
-	batch.isDistinct = true
+	// The need for distinct batches is distinctly less in Pebble than
+	// RocksDB. In RocksDB, a distinct batch allows reading from a batch without
+	// flushing the buffered writes which is a significant performance
+	// optimization. In Pebble we're still using the same underlying batch and if
+	// it is indexed we'll still be indexing it as we Go.
 	p.distinctOpen = true
-	batch.parentBatch = p
-
-	return batch
+	return &pebbleBatch{
+		db:          p.db,
+		batch:       p.batch,
+		parentBatch: p,
+		isDistinct:  true,
+	}
 }
 
 // Empty implements the Batch interface.
