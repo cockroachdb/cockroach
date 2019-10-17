@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"math"
 	"math/rand"
 	"strings"
 	"sync/atomic"
@@ -196,9 +197,9 @@ func (g *ycsb) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			g.splits,
 			func(splitIdx int) []interface{} {
-				w := ycsbWorker{config: g, hashFunc: fnv.New64()}
+				step := math.MaxUint64 / uint64(g.splits+1)
 				return []interface{}{
-					w.buildKeyName(uint64(splitIdx)),
+					keyNameFromHash(step * uint64(splitIdx+1)),
 				}
 			},
 		),
@@ -452,7 +453,10 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 }
 
 func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
-	hashedKey := yw.hashKey(keynum)
+	return keyNameFromHash(yw.hashKey(keynum))
+}
+
+func keyNameFromHash(hashedKey uint64) string {
 	// NB: A 64-bit uint will take at most 20 decimal digits
 	// as log_10(2^64) ~= 19.2. We pad with zeroes so that all
 	// keys are the same length.
