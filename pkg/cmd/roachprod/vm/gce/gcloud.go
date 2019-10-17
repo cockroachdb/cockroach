@@ -179,6 +179,7 @@ type providerOpts struct {
 	ServiceAccount string
 	MachineType    string
 	Zones          []string
+	Image          string
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -255,6 +256,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringSliceVar(&o.Zones, ProviderName+"-zones",
 		[]string{"us-east1-b", "us-west1-b", "europe-west2-b"}, "Zones for cluster")
+	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20190122a",
+		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
@@ -346,7 +349,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		"--subnet", "default",
 		"--maintenance-policy", "MIGRATE",
 		"--scopes", "default,storage-rw",
-		"--image", "ubuntu-1604-xenial-v20190122a",
+		"--image", p.opts.Image,
 		"--image-project", "ubuntu-os-cloud",
 		"--boot-disk-size", "10",
 		"--boot-disk-type", "pd-ssd",
