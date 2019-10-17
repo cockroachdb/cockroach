@@ -142,7 +142,8 @@ type replicationStatsEntry struct {
 
 type replicationStatsTestCase struct {
 	baseReportTestCase
-	exp []replicationStatsEntry
+	name string
+	exp  []replicationStatsEntry
 }
 
 // runReplicationStatsTest runs one test case. It processes the input schema,
@@ -182,8 +183,8 @@ func TestReplicationStatsReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tests := []replicationStatsTestCase{
 		{
+			name: "simple no violations",
 			baseReportTestCase: baseReportTestCase{
-				name:        "simple no violations",
 				defaultZone: zone{replicas: 3},
 				schema: []database{
 					{
@@ -263,8 +264,8 @@ func TestReplicationStatsReport(t *testing.T) {
 			},
 		},
 		{
+			name: "simple violations",
 			baseReportTestCase: baseReportTestCase{
-				name:        "simple violations",
 				defaultZone: zone{replicas: 3},
 				schema: []database{
 					{
