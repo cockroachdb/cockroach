@@ -53,6 +53,9 @@ metadata:
   labels:
     app: cockroachdb
 spec:
+  selector:
+    matchLabels:
+      app: cockroachdb
   template:
     metadata:
       labels:

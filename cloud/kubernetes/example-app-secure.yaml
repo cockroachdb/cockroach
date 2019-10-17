@@ -4,6 +4,9 @@ metadata:
   name: example-secure
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
   template:
     metadata:
       labels:
