@@ -453,7 +453,10 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 
 func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
 	hashedKey := yw.hashKey(keynum)
-	return fmt.Sprintf("user%d", hashedKey)
+	// NB: A 64-bit uint will take at most 20 decimal digits
+	// as log_10(2^64) ~= 19.2. We pad with zeroes so that all
+	// keys are the same length.
+	return fmt.Sprintf("user%020d", hashedKey)
 }
 
 // Keys are chosen by first drawing from a Zipf distribution, hashing the drawn
