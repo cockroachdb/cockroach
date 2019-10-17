@@ -129,6 +129,9 @@ metadata:
 spec:
   serviceName: "cockroachdb"
   replicas: 3
+  selector:
+    matchLabels:
+      app: cockroachdb
   template:
     metadata:
       labels:
