@@ -110,8 +110,10 @@ type Iterator interface {
 	// returned raw, as a buffer of varint-prefixed slices, alternating from key
 	// to value, where numKVs specifies the number of pairs in the buffer.
 	//
-	// There is little reason to use this function directly. Use the package-level
-	// MVCCScan, or one of its variants, instead.
+	// DO NOT CALL directly. Use the package-level MVCCScan, or one of its
+	// variants, instead.
+	//
+	// TODO(peter): unexport this method.
 	MVCCScan(
 		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 	) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
