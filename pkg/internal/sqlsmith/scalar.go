@@ -377,6 +377,15 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if s.vectorizable && !vecBinOps[op.Operator] {
 		return nil, false
 	}
+	if s.postgres {
+		if ignorePostgresBinOps[binOpTriple{
+			op.LeftType.Family(),
+			op.Operator,
+			op.RightType.Family(),
+		}] {
+			return nil, false
+		}
+	}
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return castType(
@@ -386,6 +395,21 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		),
 		typ,
 	), true
+}
+
+type binOpTriple struct {
+	left  types.Family
+	op    tree.BinaryOperator
+	right types.Family
+}
+
+var ignorePostgresBinOps = map[binOpTriple]bool{
+	// Integer division in cockroach returns a different type.
+	{types.IntFamily, tree.Div, types.IntFamily}: true,
+	// Float * date isn't exact.
+	{types.FloatFamily, tree.Mult, types.DateFamily}: true,
+	{types.DateFamily, tree.Mult, types.FloatFamily}: true,
+	{types.DateFamily, tree.Div, types.FloatFamily}:  true,
 }
 
 func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
