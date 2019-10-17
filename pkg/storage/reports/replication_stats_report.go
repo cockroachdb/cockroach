@@ -364,8 +364,9 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 		return
 	}
 
-	underReplicated := numReplicas > len(r.Replicas().Voters())
-	overReplicated := numReplicas < len(r.Replicas().Voters())
+	voters := len(r.Replicas().Voters())
+	underReplicated := numReplicas > voters
+	overReplicated := numReplicas < voters
 	var liveNodeCount int
 	for _, rep := range r.Replicas().Voters() {
 		if v.nodeChecker(rep.NodeID) {
