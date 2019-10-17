@@ -163,6 +163,12 @@ func (stats *Reporter) update(
 	replStatsSaver *replicationStatsReportSaver,
 	locSaver *replicationCriticalLocalitiesReportSaver,
 ) error {
+	start := timeutil.Now()
+	log.VEventf(ctx, 2, "updating replication reports...")
+	defer func() {
+		log.VEventf(ctx, 2, "updating replication reports... done. Generation took: %s.",
+			timeutil.Now().Sub(start))
+	}()
 	stats.updateLatestConfig()
 	if stats.latestConfig == nil {
 		return nil
@@ -290,7 +296,7 @@ func (stats *Reporter) isNodeLive(nodeID roachpb.NodeID) bool {
 	}
 }
 
-// visitZones applies a visitor to the hierarchy of zone zonfigs that apply to
+// visitZones applies a visitor to the hierarchy of zone configs that apply to
 // the given range, starting from the most specific to the default zone config.
 //
 // visitor is called for each zone config until it returns true, or until the
@@ -326,8 +332,10 @@ func visitZones(
 			}
 		}
 		// Try the zone for our object.
-		if visitor(ctx, zone, MakeZoneKey(id, 0)) {
-			return true, nil
+		if !zone.IsSubzonePlaceholder() {
+			if visitor(ctx, zone, MakeZoneKey(id, 0)) {
+				return true, nil
+			}
 		}
 	}
 

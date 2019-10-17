@@ -17,13 +17,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
-
-// TODO(yuzefovich): add unit tests for cases with ON expression.
 
 type mjTestCase struct {
 	description           string
@@ -41,6 +43,7 @@ type mjTestCase struct {
 	expected              []tuple
 	outputBatchSize       uint16
 	skipAllNullsInjection bool
+	onExpr                execinfrapb.Expression
 }
 
 func (tc *mjTestCase) Init() {
@@ -63,8 +66,65 @@ func (tc *mjTestCase) Init() {
 	}
 }
 
+func createSpecForMergeJoiner(tc mjTestCase) *execinfrapb.ProcessorSpec {
+	leftOrdering := execinfrapb.Ordering{}
+	for i, eqCol := range tc.leftEqCols {
+		leftOrdering.Columns = append(
+			leftOrdering.Columns,
+			execinfrapb.Ordering_Column{
+				ColIdx:    eqCol,
+				Direction: tc.leftDirections[i],
+			},
+		)
+	}
+	rightOrdering := execinfrapb.Ordering{}
+	for i, eqCol := range tc.rightEqCols {
+		rightOrdering.Columns = append(
+			rightOrdering.Columns,
+			execinfrapb.Ordering_Column{
+				ColIdx:    eqCol,
+				Direction: tc.rightDirections[i],
+			},
+		)
+	}
+	mjSpec := &execinfrapb.MergeJoinerSpec{
+		LeftOrdering:  leftOrdering,
+		RightOrdering: rightOrdering,
+		OnExpr:        tc.onExpr,
+		Type:          tc.joinType,
+	}
+	projection := make([]uint32, 0, len(tc.leftOutCols)+len(tc.rightOutCols))
+	projection = append(projection, tc.leftOutCols...)
+	rColOffset := uint32(len(tc.leftTypes))
+	for _, outCol := range tc.rightOutCols {
+		projection = append(projection, rColOffset+outCol)
+	}
+	return &execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{
+			{ColumnTypes: typeconv.ToColumnTypes(tc.leftTypes)},
+			{ColumnTypes: typeconv.ToColumnTypes(tc.rightTypes)},
+		},
+		Core: execinfrapb.ProcessorCoreUnion{
+			MergeJoiner: mjSpec,
+		},
+		Post: execinfrapb.PostProcessSpec{
+			Projection:    true,
+			OutputColumns: projection,
+		},
+	}
+}
+
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg:     &execinfra.ServerConfig{Settings: st},
+	}
+
 	tcs := []mjTestCase{
 		{
 			description:  "basic test",
@@ -1409,25 +1469,136 @@ func TestMergeJoiner(t *testing.T) {
 			rightEqCols:     []uint32{0},
 			expected:        tuples{{nil}, {nil}, {nil}},
 		},
+		{
+			description:  "INNER JOIN test with ON expression (filter only on left)",
+			joinType:     sqlbase.JoinType_INNER,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@1 < 4"},
+			expected:     tuples{{1, 10}, {3, nil}},
+		},
+		{
+			description:  "INNER JOIN test with ON expression (filter only on right)",
+			joinType:     sqlbase.JoinType_INNER,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@4 < 14"},
+			expected:     tuples{{3, nil}},
+		},
+		{
+			description:  "INNER JOIN test with ON expression (filter on both)",
+			joinType:     sqlbase.JoinType_INNER,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@2 + @3 < 50"},
+			expected:     tuples{{1, 10}, {4, 40}},
+		},
+		{
+			description:  "LEFT SEMI JOIN test with ON expression (filter only on left)",
+			joinType:     sqlbase.JoinType_LEFT_SEMI,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@1 < 4"},
+			expected:     tuples{{1, 10}, {3, nil}},
+		},
+		{
+			description:  "LEFT SEMI JOIN test with ON expression (filter only on right)",
+			joinType:     sqlbase.JoinType_LEFT_SEMI,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@4 < 14"},
+			expected:     tuples{{3, nil}},
+		},
+		{
+			description:  "LEFT SEMI JOIN test with ON expression (filter on both)",
+			joinType:     sqlbase.JoinType_LEFT_SEMI,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@2 + @3 < 50"},
+			expected:     tuples{{1, 10}, {4, 40}},
+		},
+		{
+			description:  "LEFT ANTI JOIN test with ON expression (filter only on left)",
+			joinType:     sqlbase.JoinType_LEFT_ANTI,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@1 < 4"},
+			expected:     tuples{{nil, 0}, {2, 20}, {4, 40}},
+		},
+		{
+			description:  "LEFT ANTI JOIN test with ON expression (filter only on right)",
+			joinType:     sqlbase.JoinType_LEFT_ANTI,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@4 < 14"},
+			expected:     tuples{{nil, 0}, {1, 10}, {2, 20}, {4, 40}},
+		},
+		{
+			description:  "LEFT ANTI JOIN test with ON expression (filter on both)",
+			joinType:     sqlbase.JoinType_LEFT_ANTI,
+			leftTypes:    []coltypes.T{coltypes.Int64, coltypes.Int64},
+			rightTypes:   []coltypes.T{coltypes.Int64, coltypes.Int64},
+			leftTuples:   tuples{{nil, 0}, {1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:  tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			onExpr:       execinfrapb.Expression{Expr: "@2 + @3 < 50"},
+			expected:     tuples{{nil, 0}, {2, 20}, {3, nil}},
+		},
 	}
 
 	for _, tc := range tcs {
 		tc.Init()
-		lOrderings := make([]execinfrapb.Ordering_Column, len(tc.leftEqCols))
-		for i := range tc.leftEqCols {
-			lOrderings[i] = execinfrapb.Ordering_Column{
-				ColIdx:    tc.leftEqCols[i],
-				Direction: tc.leftDirections[i],
-			}
-		}
-
-		rOrderings := make([]execinfrapb.Ordering_Column, len(tc.rightEqCols))
-		for i := range tc.rightEqCols {
-			rOrderings[i] = execinfrapb.Ordering_Column{
-				ColIdx:    tc.rightEqCols[i],
-				Direction: tc.rightDirections[i],
-			}
-		}
 
 		// We use a custom verifier function so that we can get the merge join op
 		// to use a custom output batch size per test, to exercise more cases.
@@ -1435,7 +1606,10 @@ func TestMergeJoiner(t *testing.T) {
 			if mj, ok := output.input.(variableOutputBatchSizeInitializer); ok {
 				mj.initWithOutputBatchSize(tc.outputBatchSize)
 			} else {
-				t.Fatalf("unexpectedly merge joiner doesn't implement mjTestInitializer")
+				// When we have an inner join with ON expression, a filter operator
+				// will be put on top of the merge join, so to make life easier, we'll
+				// just ignore the requested output batch size.
+				output.input.Init()
 			}
 			verify := output.Verify
 			if _, isFullOuter := output.input.(*mergeJoinFullOuterOp); isFullOuter {
@@ -1455,15 +1629,14 @@ func TestMergeJoiner(t *testing.T) {
 		} else {
 			runner = runTestsWithTyps
 		}
-		cols := make([]int, len(tc.leftOutCols)+len(tc.rightOutCols))
-		for i := range cols {
-			cols[i] = i
-		}
 		runner(t, []tuples{tc.leftTuples, tc.rightTuples}, nil /* typs */, tc.expected, mergeJoinVerifier,
 			func(input []Operator) (Operator, error) {
-				return NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
-					tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings,
-					nil /* filterConstructor */, false /* filterOnlyOnLeft */)
+				spec := createSpecForMergeJoiner(tc)
+				result, err := NewColOperator(ctx, flowCtx, spec, input)
+				if err != nil {
+					return nil, err
+				}
+				return result.Op, nil
 			})
 	}
 }
