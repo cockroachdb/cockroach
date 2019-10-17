@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -44,8 +45,8 @@ func TestConformanceReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tests := []conformanceConstraintTestCase{
 		{
+			name: "simple no violations",
 			baseReportTestCase: baseReportTestCase{
-				name:        "simple no violations",
 				defaultZone: zone{replicas: 3},
 				schema: []database{
 					{
@@ -90,9 +91,9 @@ func TestConformanceReport(t *testing.T) {
 			}},
 		},
 		{
+			name: "violations at multiple levels",
 			// Test zone constraints inheritance at all levels.
 			baseReportTestCase: baseReportTestCase{
-				name:        "violations at multiple levels",
 				defaultZone: zone{replicas: 3, constraints: "[+default]"},
 				schema: []database{
 					{
@@ -363,6 +364,19 @@ func (t table) validate() error {
 	return t.partitions.validate()
 }
 
+func (t *table) addPKIdx() {
+	if len(t.indexes) > 0 && t.indexes[0].name == "PK" {
+		return
+	}
+	// Add the PK index if missing.
+	pkIdx := index{
+		name:       "PK",
+		zone:       nil,
+		partitions: t.partitions,
+	}
+	t.indexes = append(append([]index{pkIdx}), t.indexes...)
+}
+
 type database struct {
 	name   string
 	tables []table
@@ -451,11 +465,11 @@ func (n node) toDescriptors() (roachpb.NodeDescriptor, []roachpb.StoreDescriptor
 
 type conformanceConstraintTestCase struct {
 	baseReportTestCase
-	exp []constraintEntry
+	name string
+	exp  []constraintEntry
 }
 
 type baseReportTestCase struct {
-	name        string
 	schema      []database
 	splits      []split
 	nodes       []node
@@ -698,79 +712,35 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			objectCounter++
 			tableToID[table.name] = tableID
 
-			pkIdx := index{
-				name:       "PK",
-				zone:       nil,
-				partitions: table.partitions,
-			}
-			table.indexes = append(append([]index(nil), pkIdx), table.indexes...)
-
 			// Create a table descriptor to be used for creating the zone config.
+			table.addPKIdx()
 			tableDesc, err := makeTableDesc(table, tableID, dbID)
 			if err != nil {
 				return compiledTestCase{}, errors.Wrap(err, "error creating table descriptor")
 			}
 			sysCfgBuilder.addTableDesc(tableID, tableDesc)
 
-			// Create the table's zone config.
-			var tableZone *config.ZoneConfig
-			if table.zone != nil {
-				tableZone = new(config.ZoneConfig)
-				*tableZone = table.zone.toZoneConfig()
+			tableZone, err := generateTableZone(table, tableDesc)
+			if err != nil {
+				return compiledTestCase{}, err
 			}
-			// Add subzones for the PK partitions.
-			tableZone = addIndexSubzones(
-				table.indexes[0], tableZone, tableDesc, 1 /* id of PK */)
-			// Add subzones for all the indexes.
+			if tableZone != nil {
+				if err := sysCfgBuilder.addTableZone(tableDesc, *tableZone); err != nil {
+					return compiledTestCase{}, err
+				}
+			}
+			// Add the indexes to idxToID.
 			for i, idx := range table.indexes {
 				idxID := i + 1 // index 1 is the PK
 				idxToID[fmt.Sprintf("%s.%s", table.name, idx.name)] = idxID
-				tableZone = addIndexSubzones(idx, tableZone, tableDesc, idxID)
-			}
-			// Fill in the SubzoneSpans.
-			if tableZone != nil {
-				var err error
-				tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
-					nil, uuid.UUID{} /* clusterID */, &tableDesc, tableZone.Subzones,
-					false /* hasNewSubzones */)
-				if err != nil {
-					return compiledTestCase{}, errors.Wrap(err, "error generating subzone spans")
-				}
-				if err := sysCfgBuilder.addTableZone(tableDesc, tableID, *tableZone); err != nil {
-					return compiledTestCase{}, err
-				}
 			}
 		}
 	}
 
 	keyScanner := keysutils.MakePrettyScannerForNamedTables(tableToID, idxToID)
-	ranges := make([]roachpb.RangeDescriptor, len(tc.splits))
-	for i, split := range tc.splits {
-		prettyKey := tc.splits[i].key
-		startKey, err := keyScanner.Scan(split.key)
-		if err != nil {
-			return compiledTestCase{}, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
-		}
-		var endKey roachpb.Key
-		if i < len(tc.splits)-1 {
-			prettyKey := tc.splits[i+1].key
-			endKey, err = keyScanner.Scan(prettyKey)
-			if err != nil {
-				return compiledTestCase{}, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
-			}
-		} else {
-			endKey = roachpb.KeyMax
-		}
-
-		rd := roachpb.RangeDescriptor{
-			RangeID:  roachpb.RangeID(i + 1), // IDs start at 1
-			StartKey: keys.MustAddr(startKey),
-			EndKey:   keys.MustAddr(endKey),
-		}
-		for _, storeID := range split.stores {
-			rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
-		}
-		ranges[i] = rd
+	ranges, err := processSplits(keyScanner, tc.splits)
+	if err != nil {
+		return compiledTestCase{}, err
 	}
 
 	var storeDescs []roachpb.StoreDescriptor
@@ -781,7 +751,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		}
 		storeDescs = append(storeDescs, sds...)
 	}
-	storeResolver := func(r roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
+	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
 		stores := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
 		for i, rep := range r.Replicas().Voters() {
 			for _, desc := range storeDescs {
@@ -815,6 +785,67 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		zoneToObject: zoneToObject,
 		objectToZone: objectToZone,
 	}, nil
+}
+
+func generateTableZone(t table, tableDesc sqlbase.TableDescriptor) (*config.ZoneConfig, error) {
+	// Create the table's zone config.
+	var tableZone *config.ZoneConfig
+	if t.zone != nil {
+		tableZone = new(config.ZoneConfig)
+		*tableZone = t.zone.toZoneConfig()
+	}
+	// Add subzones for the PK partitions.
+	tableZone = addIndexSubzones(t.indexes[0], tableZone, 1 /* id of PK */)
+	// Add subzones for all the indexes.
+	for i, idx := range t.indexes {
+		idxID := i + 1 // index 1 is the PK
+		tableZone = addIndexSubzones(idx, tableZone, idxID)
+	}
+	// Fill in the SubzoneSpans.
+	if tableZone != nil {
+		var err error
+		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
+			nil, uuid.UUID{} /* clusterID */, &tableDesc, tableZone.Subzones,
+			false /* hasNewSubzones */)
+		if err != nil {
+			return nil, errors.Wrap(err, "error generating subzone spans")
+		}
+	}
+	return tableZone, nil
+}
+
+func processSplits(
+	keyScanner keysutil.PrettyScanner, splits []split,
+) ([]roachpb.RangeDescriptor, error) {
+	ranges := make([]roachpb.RangeDescriptor, len(splits))
+	for i, split := range splits {
+		prettyKey := splits[i].key
+		startKey, err := keyScanner.Scan(split.key)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
+		}
+		var endKey roachpb.Key
+		if i < len(splits)-1 {
+			prettyKey := splits[i+1].key
+			endKey, err = keyScanner.Scan(prettyKey)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
+			}
+		} else {
+			endKey = roachpb.KeyMax
+		}
+
+		rd := roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(i + 1), // IDs start at 1
+			StartKey: keys.MustAddr(startKey),
+			EndKey:   keys.MustAddr(endKey),
+		}
+		for _, storeID := range split.stores {
+			rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
+		}
+		ranges[i] = rd
+	}
+	return ranges, nil
 }
 
 func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, error) {
@@ -857,9 +888,7 @@ func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, err
 //
 // parent: Can be nil if the parent table doesn't have a zone of its own. In that
 //   case, if any subzones are created, a placeholder zone will also be created and returned.
-func addIndexSubzones(
-	idx index, parent *config.ZoneConfig, tableDesc sql.TableDescriptor, idxID int,
-) *config.ZoneConfig {
+func addIndexSubzones(idx index, parent *config.ZoneConfig, idxID int) *config.ZoneConfig {
 	res := parent
 
 	ensureParent := func() {
@@ -937,10 +966,8 @@ func (b *systemConfigBuilder) addDatabaseZone(name string, id int, cfg config.Zo
 	return b.addZoneInner(name, id, cfg)
 }
 
-func (b *systemConfigBuilder) addTableZone(
-	t sqlbase.TableDescriptor, id int, cfg config.ZoneConfig,
-) error {
-	if err := b.addZoneInner(t.Name, id, cfg); err != nil {
+func (b *systemConfigBuilder) addTableZone(t sqlbase.TableDescriptor, cfg config.ZoneConfig) error {
+	if err := b.addZoneInner(t.Name, int(t.ID), cfg); err != nil {
 		return err
 	}
 	// Figure out the mapping from all the partition names to zone keys.
@@ -959,7 +986,7 @@ func (b *systemConfigBuilder) addTableZone(
 			object = fmt.Sprintf("%s.%s", idx, subzone.PartitionName)
 		}
 		if err := b.addZoneToObjectMapping(
-			MakeZoneKey(uint32(id), base.SubzoneIDFromIndex(i)), object,
+			MakeZoneKey(uint32(t.ID), base.SubzoneIDFromIndex(i)), object,
 		); err != nil {
 			return err
 		}

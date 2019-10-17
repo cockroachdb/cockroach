@@ -379,6 +379,12 @@ type constraintConformanceVisitor struct {
 
 	report   *replicationConstraintStatsReportSaver
 	visitErr bool
+
+	// prevZoneKey and prevConstraints maintain state from one range to the next.
+	// This state can be reused when a range is covered by the same zone config as
+	// the previous one. Reusing it speeds up the report generation.
+	prevZoneKey     ZoneKey
+	prevConstraints []config.Constraints
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
@@ -406,6 +412,8 @@ func (v *constraintConformanceVisitor) failed() bool {
 // reset is part of the rangeVisitor interface.
 func (v *constraintConformanceVisitor) reset(ctx context.Context) {
 	v.visitErr = false
+	v.prevZoneKey = ZoneKey{}
+	v.prevConstraints = nil
 	v.report.resetReport()
 
 	// Iterate through all the zone configs to create report entries for all the
@@ -428,23 +436,19 @@ func (v *constraintConformanceVisitor) reset(ctx context.Context) {
 	}
 }
 
-// constraintConformanceVisitor is part of the rangeVisitor interface.
-func (v *constraintConformanceVisitor) visit(
-	ctx context.Context, r roachpb.RangeDescriptor,
+// visitNewZone is part of the rangeVisitor interface.
+func (v *constraintConformanceVisitor) visitNewZone(
+	ctx context.Context, r *roachpb.RangeDescriptor,
 ) (retErr error) {
 
 	defer func() {
-		if retErr != nil {
-			v.visitErr = true
-		}
+		v.visitErr = retErr != nil
 	}()
-
-	storeDescs := v.storeResolver(r)
 
 	// Find the applicable constraints, which may be inherited.
 	var constraints []config.Constraints
 	var zKey ZoneKey
-	_, err := visitZones(ctx, r, v.cfg,
+	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
 		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
 			if zone.Constraints == nil {
 				return false
@@ -456,10 +460,26 @@ func (v *constraintConformanceVisitor) visit(
 	if err != nil {
 		return errors.Errorf("unexpected error visiting zones: %s", err)
 	}
+	v.prevZoneKey = zKey
+	v.prevConstraints = constraints
+	v.countRange(ctx, r, zKey, constraints)
+	return nil
+}
 
+// visitSameZone is part of the rangeVisitor interface.
+func (v *constraintConformanceVisitor) visitSameZone(
+	ctx context.Context, r *roachpb.RangeDescriptor,
+) (retErr error) {
+	v.countRange(ctx, r, v.prevZoneKey, v.prevConstraints)
+	return nil
+}
+
+func (v *constraintConformanceVisitor) countRange(
+	ctx context.Context, r *roachpb.RangeDescriptor, key ZoneKey, constraints []config.Constraints,
+) {
+	storeDescs := v.storeResolver(r)
 	violated := processRange(ctx, storeDescs, constraints)
 	for _, c := range violated {
-		v.report.AddViolation(zKey, Constraint, c)
+		v.report.AddViolation(key, Constraint, c)
 	}
-	return nil
 }
