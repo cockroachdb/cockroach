@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -426,12 +427,22 @@ func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) erro
 
 // OpenFile implements the Engine interface.
 func (p *Pebble) OpenFile(filename string) (DBFile, error) {
-	return p.fs.Open(p.fs.PathJoin(p.path, filename))
+	pathDir := p.fs.PathDir(filename)
+	if _, err := p.fs.Stat(pathDir); os.IsNotExist(err) {
+		err = p.fs.MkdirAll(pathDir, 0755)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if _, err := p.fs.Stat(filename); os.IsNotExist(err) {
+		return p.fs.Create(filename)
+	}
+	return p.fs.Open(filename)
 }
 
 // ReadFile implements the Engine interface.
 func (p *Pebble) ReadFile(filename string) ([]byte, error) {
-	file, err := p.fs.Open(p.fs.PathJoin(p.path, filename))
+	file, err := p.fs.Open(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -476,9 +487,7 @@ func (p *Pebble) DeleteDirAndFiles(dir string) error {
 
 // LinkFile implements the Engine interface.
 func (p *Pebble) LinkFile(oldname, newname string) error {
-	oldPath := p.fs.PathJoin(p.path, oldname)
-	newPath := p.fs.PathJoin(p.path, newname)
-	return p.fs.Link(oldPath, newPath)
+	return p.fs.Link(oldname, newname)
 }
 
 // CreateCheckpoint implements the Engine interface.

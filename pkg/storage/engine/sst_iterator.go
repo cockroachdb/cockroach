@@ -20,12 +20,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-var readerOpts = func() *sstable.Options {
-	opts := &sstable.Options{
-		Comparer: MVCCComparer,
-	}
-	return opts.EnsureDefaults()
-}()
+var readerOpts = sstable.ReaderOptions{
+	Comparer: MVCCComparer,
+}
 
 type sstIterator struct {
 	sst  *sstable.Reader

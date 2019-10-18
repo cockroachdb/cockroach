@@ -89,15 +89,14 @@ func (dummyDeleteRangeCollector) Name() string {
 	return "DeleteRangeTblPropCollectorFactory"
 }
 
-var pebbleOpts = func() *pebble.Options {
-	merger := *pebble.DefaultMerger
-	merger.Name = "nullptr"
-	opts := &pebble.Options{
-		TableFormat: pebble.TableFormatLevelDB,
-		Comparer:    engine.MVCCComparer,
-		Merger:      &merger,
+var pebbleOpts = func() sstable.WriterOptions {
+	opts := sstable.WriterOptions{
+		TableFormat:    pebble.TableFormatLevelDB,
+		Comparer:       engine.MVCCComparer,
+		MergerName:     "nullptr",
+		BlockSize:      64 * 1024,
+		IndexBlockSize: math.MaxInt32,
 	}
-	opts.EnsureDefaults()
 	opts.TablePropertyCollectors = append(
 		opts.TablePropertyCollectors,
 		func() pebble.TablePropertyCollector { return &timeboundPropCollector{} },
@@ -111,7 +110,7 @@ func MakeSSTWriter() SSTWriter {
 	f := &memFile{}
 	// Setting the IndexBlockSize to MaxInt disables twoLevelIndexes in Pebble.
 	// TODO(pbardea): Remove the IndexBlockSize option when https://github.com/cockroachdb/pebble/issues/285 is resolved.
-	sst := sstable.NewWriter(f, pebbleOpts, pebble.LevelOptions{BlockSize: 64 * 1024, IndexBlockSize: math.MaxInt32})
+	sst := sstable.NewWriter(f, pebbleOpts)
 	return SSTWriter{fw: sst, f: f}
 }
 
