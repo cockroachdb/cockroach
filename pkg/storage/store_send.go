@@ -75,6 +75,15 @@ func (s *Store) Send(
 		}
 	}
 
+	// Limit the number of concurrent Export requests, since they're
+	// expensive and block all other writes to the same span.
+	if ba.IsSingleExportRequest() {
+		if err := s.limiters.ConcurrentExportRequests.Begin(ctx); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		defer s.limiters.ConcurrentExportRequests.Finish()
+	}
+
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
 		return nil, roachpb.NewError(err)
 	}

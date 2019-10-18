@@ -245,6 +245,16 @@ func (ba *BatchRequest) IsSingleAddSSTableRequest() bool {
 	return false
 }
 
+// IsSingleExportRequest returns true iff the batch contains a single
+// request, and that request is an ExportRequest.
+func (ba *BatchRequest) IsSingleExportRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*ExportRequest)
+		return ok
+	}
+	return false
+}
+
 // IsCompleteTransaction determines whether a batch contains every write in a
 // transactions.
 func (ba *BatchRequest) IsCompleteTransaction() bool {
