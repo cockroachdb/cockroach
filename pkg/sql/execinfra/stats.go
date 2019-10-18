@@ -83,7 +83,7 @@ const (
 func (is InputStats) Stats(prefix string) map[string]string {
 	return map[string]string{
 		prefix + rowsReadTagSuffix:  fmt.Sprintf("%d", is.NumRows),
-		prefix + stallTimeTagSuffix: fmt.Sprintf("%v", is.RoundStallTime()),
+		prefix + stallTimeTagSuffix: is.RoundStallTime().String(),
 	}
 }
 
