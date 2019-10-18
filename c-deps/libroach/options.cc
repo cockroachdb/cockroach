@@ -253,22 +253,26 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // slowdowns to writes.
   // TODO(dt): if/when we dynamically tune for bulk-ingestion, we
   // could leave this at 20 and only raise it during ingest jobs.
-  options.level0_slowdown_writes_trigger = 200;
+  options.level0_slowdown_writes_trigger = 950;
   // Maximum number of L0 files. Writes are stopped at this
   // point. This is set significantly higher than
   // level0_slowdown_writes_trigger to avoid completely blocking
   // writes.
   // TODO(dt): if/when we dynamically tune for bulk-ingestion, we
   // could leave this at 30 and only raise it during ingest.
-  options.level0_stop_writes_trigger = 400;
+  options.level0_stop_writes_trigger = 1000;
   // Maximum estimated pending compaction bytes before slowing writes.
-  // Default is 64gb but that can be hit during bulk-ingestion since it
-  // is based on assumptions about relative level sizes that do not hold
-  // during bulk-ingestion.
-  // TODO(dt): if/when we dynamically tune for bulk-ingestion, we
-  // could leave these as-is and only raise / disable them during ingest.
-  options.soft_pending_compaction_bytes_limit = 256 * 1073741824ull;
-  options.hard_pending_compaction_bytes_limit = 512 * 1073741824ull;
+  // Default is 64gb but that can be hit easily during bulk-ingestion since it
+  // is based on assumptions about relative level sizes that do not hold when
+  // adding data directly. Additionally some system-critical writes in
+  // cockroach (node-liveness), just can not be slow or they will fail and cause
+  // unavilability, so back-pressuring may *cause* unavailability, instead of
+  // gracefully slowing to some stable equilibrium to avoid it. As such, we want
+  // these set very high so are very unlikely to hit them.
+  // TODO(dt): if/when we dynamically tune for bulk-ingestion, we could leave
+  // these as-is and only raise / disable them during ingest.
+  options.soft_pending_compaction_bytes_limit = 2048ull << 30;
+  options.hard_pending_compaction_bytes_limit = 4098ull << 30;
   // Flush write buffers to L0 as soon as they are full. A higher
   // value could be beneficial if there are duplicate records in each
   // of the individual write buffers, but perf testing hasn't shown
