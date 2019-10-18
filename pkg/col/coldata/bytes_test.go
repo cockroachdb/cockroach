@@ -56,11 +56,11 @@ var bytesMethods = []bytesMethod{set, slice, copySlice, appendSlice, appendVal}
 // [][]byte implementation and checks if the results are equal. If
 // selfReferencingSources is true, this is an indication by the caller that we
 // are testing an edge case where the source for copies/appends refers to the
-// destination. In cases where *flatBytes updates itself under the hood, we also
+// destination. In cases where *Bytes updates itself under the hood, we also
 // update the corresponding b2Source to mirror the behavior.
 func applyMethodsAndVerify(
 	rng *rand.Rand,
-	b1, b1Source *flatBytes,
+	b1, b1Source *Bytes,
 	b2, b2Source [][]byte,
 	methods []bytesMethod,
 	selfReferencingSources bool,
@@ -158,7 +158,7 @@ func applyMethodsAndVerify(
 	return nil
 }
 
-func verifyEqual(flat *flatBytes, b [][]byte) error {
+func verifyEqual(flat *Bytes, b [][]byte) error {
 	if flat.Len() != len(b) {
 		return errors.Errorf("mismatched lengths %d != %d", flat.Len(), len(b))
 	}
@@ -180,7 +180,7 @@ func prettyByteSlice(b [][]byte) string {
 	return builder.String()
 }
 
-func TestFlatBytesRefImpl(t *testing.T) {
+func TestBytesRefImpl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	rng, _ := randutil.NewPseudoRand()
@@ -192,7 +192,7 @@ func TestFlatBytesRefImpl(t *testing.T) {
 
 	n := 1 + rng.Intn(maxLength)
 
-	flat := newFlatBytes(n)
+	flat := NewBytes(n)
 	reference := make([][]byte, n)
 	for i := 0; i < n; i++ {
 		v := make([]byte, rng.Intn(16))
@@ -210,7 +210,7 @@ func TestFlatBytesRefImpl(t *testing.T) {
 	if rng.Float64() < 0.5 {
 		selfReferencingSources = false
 		sourceN = 1 + rng.Intn(maxLength)
-		flatSource = newFlatBytes(sourceN)
+		flatSource = NewBytes(sourceN)
 		referenceSource = make([][]byte, sourceN)
 		for i := 0; i < sourceN; i++ {
 			v := make([]byte, rng.Intn(16))
@@ -238,11 +238,11 @@ func TestFlatBytesRefImpl(t *testing.T) {
 	}
 }
 
-func TestFlatBytes(t *testing.T) {
+func TestBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("Simple", func(t *testing.T) {
-		b1 := newFlatBytes(0)
+		b1 := NewBytes(0)
 		b1.AppendVal([]byte("hello"))
 		require.Equal(t, "hello", string(b1.Get(0)))
 		b1.AppendVal(nil)
@@ -258,7 +258,7 @@ func TestFlatBytes(t *testing.T) {
 		// However, it is legal to overwrite the last value.
 		b1.Set(1, []byte("ok"))
 
-		// If we Zero the flatBytes, we can Set any index.
+		// If we Zero the Bytes, we can Set any index.
 		b1.Zero()
 		b1.Set(1, []byte("new usage"))
 		// But not an index before that.
@@ -274,8 +274,8 @@ func TestFlatBytes(t *testing.T) {
 	})
 
 	t.Run("Append", func(t *testing.T) {
-		b1 := newFlatBytes(0)
-		b2 := newFlatBytes(0)
+		b1 := NewBytes(0)
+		b2 := NewBytes(0)
 		b2.AppendVal([]byte("source bytes value"))
 		b1.AppendVal([]byte("one"))
 		b1.AppendVal([]byte("two"))
@@ -296,7 +296,7 @@ func TestFlatBytes(t *testing.T) {
 			}
 		}
 
-		b2 = newFlatBytes(0)
+		b2 = NewBytes(0)
 		b2.AppendVal([]byte("hello again"))
 		b2.AppendVal([]byte("hello again"))
 		b2.AppendVal([]byte("hello again"))
@@ -309,8 +309,8 @@ func TestFlatBytes(t *testing.T) {
 	})
 
 	t.Run("Copy", func(t *testing.T) {
-		b1 := newFlatBytes(0)
-		b2 := newFlatBytes(0)
+		b1 := NewBytes(0)
+		b2 := NewBytes(0)
 		b1.AppendVal([]byte("one"))
 		b1.AppendVal([]byte("two"))
 		b1.AppendVal([]byte("three"))
