@@ -60,16 +60,27 @@ var bytesMethods = []bytesMethod{set, slice, copySlice, appendSlice, appendVal}
 // destination. In cases where *Bytes updates itself under the hood, we also
 // update the corresponding b2Source to mirror the behavior.
 func applyMethodsAndVerify(
-	rng *rand.Rand, b1 *Bytes, b2 [][]byte, methods []bytesMethod, maxLength int,
+	rng *rand.Rand,
+	b1, b1Source *Bytes,
+	b2, b2Source [][]byte,
+	methods []bytesMethod,
+	selfReferencingSources bool,
 ) error {
 	if err := verifyEqual(b1, b2); err != nil {
 		return errors.Wrap(err, "arguments should start as equal")
+	}
+	if err := verifyEqual(b1Source, b2Source); err != nil {
+		return errors.Wrap(err, "argument sources should start as equal")
 	}
 	debugString := fmt.Sprintf("\ninitial:\n%s\n", b1)
 	for _, m := range methods {
 		n := b1.Len()
 		if n != len(b2) {
 			return errors.Errorf("length mismatch between flat and reference: %d != %d", n, len(b2))
+		}
+		sourceN := b1Source.Len()
+		if sourceN != len(b2Source) {
+			return errors.Errorf("length mismatch between flat and reference sources: %d != %d", sourceN, len(b2Source))
 		}
 		debugString += m.String()
 		switch m {
@@ -95,19 +106,13 @@ func applyMethodsAndVerify(
 			debugString += fmt.Sprintf("(%d, %d)", start, end)
 			b1 = b1.Slice(start, end)
 			b2 = b2[start:end]
+			if selfReferencingSources {
+				b1Source = b1
+				b2Source = b2
+			}
 		case copySlice, appendSlice:
 			// Generate a length-inclusive destIdx.
 			destIdx := rng.Intn(n + 1)
-			// Make a pair of sources to copy/append from.
-			sourceN := 1 + rng.Intn(maxLength)
-			flatSource := NewBytes(sourceN)
-			referenceSource := make([][]byte, sourceN)
-			for i := 0; i < sourceN; i++ {
-				v := make([]byte, rng.Intn(16))
-				rng.Read(v)
-				flatSource.Set(i, append([]byte(nil), v...))
-				referenceSource[i] = append([]byte(nil), v...)
-			}
 			srcStartIdx := rng.Intn(sourceN)
 			srcEndIdx := rng.Intn(sourceN)
 			if srcStartIdx > srcEndIdx {
@@ -118,12 +123,23 @@ func applyMethodsAndVerify(
 				srcEndIdx = sourceN
 			}
 			debugString += fmt.Sprintf("(%d, %d, %d)", destIdx, srcStartIdx, srcEndIdx)
+			var numNewVals int
 			if m == copySlice {
-				b1.CopySlice(flatSource, destIdx, srcStartIdx, srcEndIdx)
-				copy(b2[destIdx:], referenceSource[srcStartIdx:srcEndIdx])
+				b1.CopySlice(b1Source, destIdx, srcStartIdx, srcEndIdx)
+				numNewVals = copy(b2[destIdx:], b2Source[srcStartIdx:srcEndIdx])
 			} else {
-				b1.AppendSlice(flatSource, destIdx, srcStartIdx, srcEndIdx)
-				b2 = append(b2[:destIdx], referenceSource[srcStartIdx:srcEndIdx]...)
+				b1.AppendSlice(b1Source, destIdx, srcStartIdx, srcEndIdx)
+				b2 = append(b2[:destIdx], b2Source[srcStartIdx:srcEndIdx]...)
+				if selfReferencingSources {
+					b1Source = b1
+					b2Source = b2
+				}
+				numNewVals = srcEndIdx - srcStartIdx
+			}
+			// Deep copy the copied/appended byte slices.
+			b2Slice := b2[destIdx : destIdx+numNewVals]
+			for i := range b2Slice {
+				b2Slice[i] = append([]byte(nil), b2Slice[i]...)
 			}
 		case appendVal:
 			v := make([]byte, 16)
@@ -131,6 +147,10 @@ func applyMethodsAndVerify(
 			debugString += fmt.Sprintf("(%v)", v)
 			b1.AppendVal(v)
 			b2 = append(b2, v)
+			if selfReferencingSources {
+				b1Source = b1
+				b2Source = b2
+			}
 		default:
 			return errors.Errorf("unknown method name: %s", m)
 		}
@@ -187,6 +207,25 @@ func TestBytesRefImpl(t *testing.T) {
 			reference[i] = append([]byte(nil), v...)
 		}
 
+		// Make a pair of sources to copy/append from. Use the destination variables
+		// with a certain probability.
+		sourceN := n
+		flatSource := flat
+		referenceSource := reference
+		selfReferencingSources := true
+		if rng.Float64() < 0.5 {
+			selfReferencingSources = false
+			sourceN = 1 + rng.Intn(maxLength)
+			flatSource = NewBytes(sourceN)
+			referenceSource = make([][]byte, sourceN)
+			for i := 0; i < sourceN; i++ {
+				v := make([]byte, rng.Intn(16))
+				rng.Read(v)
+				flatSource.Set(i, append([]byte(nil), v...))
+				referenceSource[i] = append([]byte(nil), v...)
+			}
+		}
+
 		if err := verifyEqual(flat, reference); err != nil {
 			t.Fatalf("not equal: %v\nflat:\n%sreference:\n%s", err, flat, prettyByteSlice(reference))
 		}
@@ -196,7 +235,7 @@ func TestBytesRefImpl(t *testing.T) {
 		for i := 0; i < numCalls; i++ {
 			methods = append(methods, bytesMethods[rng.Intn(len(bytesMethods))])
 		}
-		if err := applyMethodsAndVerify(rng, flat, reference, methods, maxLength); err != nil {
+		if err := applyMethodsAndVerify(rng, flat, flatSource, reference, referenceSource, methods, selfReferencingSources); err != nil {
 			t.Logf("nRun = %d\n", nRun)
 			t.Fatal(err)
 		}
