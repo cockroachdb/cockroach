@@ -44,6 +44,8 @@ const (
 	EventLogCommentOnDatabase EventLogType = "comment_on_database"
 	// EventLogCommentOnTable is recorded when a table is commented.
 	EventLogCommentOnTable EventLogType = "comment_on_table"
+	// EventLogCommentOnIndex is recorded when a index is commented.
+	EventLogCommentOnIndex EventLogType = "comment_on_index"
 
 	// EventLogCreateIndex is recorded when an index is created.
 	EventLogCreateIndex EventLogType = "create_index"

@@ -60,6 +60,9 @@ CREATE TABLE c (
   UNIQUE (bar)
 )
 
+statement ok
+COMMENT ON INDEX c_foo_idx IS 'index_comment'
+
 query TTBITTBB colnames
 SHOW INDEXES FROM c
 ----
@@ -74,6 +77,23 @@ c           c_foo_bar_idx  true        2             bar          DESC       fal
 c           c_foo_bar_idx  true        3             id           ASC        false    true
 c           c_bar_key      false       1             bar          ASC        false    false
 c           c_bar_key      false       2             id           ASC        false    true
+
+query TTBITTBBT colnames
+SHOW INDEXES FROM c WITH COMMENT
+----
+table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  comment
+c           primary        false       1             id           ASC        false    false     NULL
+c           primary        false       1             id           ASC        false    false     NULL
+c           primary        false       1             id           ASC        false    false     NULL
+c           c_foo_idx      true        1             foo          ASC        false    false     index_comment
+c           c_foo_idx      true        2             id           ASC        false    true      index_comment
+c           c_foo_idx1     true        1             foo          ASC        false    false     NULL
+c           c_foo_idx1     true        2             id           ASC        false    true      NULL
+c           c_foo_bar_idx  true        1             foo          ASC        false    false     NULL
+c           c_foo_bar_idx  true        2             bar          DESC       false    false     NULL
+c           c_foo_bar_idx  true        3             id           ASC        false    true      NULL
+c           c_bar_key      false       1             bar          ASC        false    false     NULL
+c           c_bar_key      false       2             id           ASC        false    true      NULL
 
 # primary keys can never be null
 

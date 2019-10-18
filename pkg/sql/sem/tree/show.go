@@ -152,24 +152,34 @@ func (node *ShowTraceForSession) Format(ctx *FmtCtx) {
 
 // ShowIndexes represents a SHOW INDEX statement.
 type ShowIndexes struct {
-	Table *UnresolvedObjectName
+	Table       *UnresolvedObjectName
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowIndexes) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW INDEXES FROM ")
 	ctx.FormatNode(node.Table)
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowDatabaseIndexes represents a SHOW INDEXES FROM DATABASE statement.
 type ShowDatabaseIndexes struct {
-	Database Name
+	Database    Name
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowDatabaseIndexes) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW INDEXES FROM DATABASE ")
 	ctx.FormatNode(&node.Database)
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowQueries represents a SHOW QUERIES statement
