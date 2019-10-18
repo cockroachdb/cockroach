@@ -24,10 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -460,7 +461,7 @@ const outboxTagPrefix = "outbox."
 // Stats implements the SpanStats interface.
 func (os *OutboxStats) Stats() map[string]string {
 	statsMap := make(map[string]string)
-	statsMap[outboxTagPrefix+"bytes_sent"] = string(os.BytesSent)
+	statsMap[outboxTagPrefix+"bytes_sent"] = humanizeutil.IBytes(os.BytesSent)
 	return statsMap
 }
 
