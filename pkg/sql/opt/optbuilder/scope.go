@@ -39,7 +39,17 @@ type scope struct {
 	builder *Builder
 	parent  *scope
 	cols    []scopeColumn
-	groupby groupby
+
+	// groupby is the structure that keeps the grouping metadata when this scope
+	// includes aggregate functions or GROUP BY.
+	groupby *groupby
+
+	// inAgg is true within the body of an aggregate function. inAgg is used
+	// to ensure that nested aggregates are disallowed.
+	// TODO(radu): this, together with some other fields below, belongs in a
+	// context that is threaded through the calls instead of setting and resetting
+	// it in the scope.
+	inAgg bool
 
 	// windows contains the set of window functions encountered while building
 	// the current SELECT statement.
@@ -101,32 +111,25 @@ type cteSource struct {
 	id           opt.WithID
 }
 
-// groupByStrSet is a set of stringified GROUP BY expressions that map to the
-// grouping column in an aggOutScope scope that projects that expression. It
-// is used to enforce scoping rules, since any non-aggregate, variable
-// expression in the SELECT list must be a GROUP BY expression or be composed
-// of GROUP BY expressions. For example, this query is legal:
-//
-//   SELECT COUNT(*), k + v FROM kv GROUP by k, v
-//
-// but this query is not:
-//
-//   SELECT COUNT(*), k + v FROM kv GROUP BY k - v
-//
-type groupByStrSet map[string]*scopeColumn
+// initGrouping initializes the groupby information for this scope.
+func (s *scope) initGrouping() {
+	if s.groupby != nil {
+		panic(errors.AssertionFailedf("grouping initialized twice"))
+	}
+	s.groupby = &groupby{
+		aggInScope:  s.replace(),
+		aggOutScope: s.replace(),
+	}
+}
 
-// exists is a 0-byte dummy value used in a map that's being used to track
-// whether keys exist (i.e. where only the key matters).
-var exists = struct{}{}
-
-// inGroupingContext returns true when the aggInScope is not nil. This is the
+// inGroupingContext returns true if initGrouping was called. This is the
 // case when the builder is building expressions in a SELECT list, and
 // aggregates, GROUP BY, or HAVING are present. This is also true when the
 // builder is building expressions inside the HAVING clause. When
 // inGroupingContext returns true, groupByStrSet will be utilized to enforce
 // scoping rules. See the comment above groupByStrSet for more details.
 func (s *scope) inGroupingContext() bool {
-	return s.groupby.aggInScope != nil
+	return s.groupby != nil
 }
 
 // push creates a new scope with this scope as its parent.
@@ -450,82 +453,6 @@ func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
 	return s.findExistingColInList(expr, s.cols)
 }
 
-// getAggregateCols returns the columns in this scope corresponding
-// to aggregate functions. This call is only valid on an aggOutScope.
-func (s *scope) getAggregateCols() []scopeColumn {
-	// Aggregates are always clustered at the beginning of the column list, in
-	// the same order as s.groupby.aggs.
-	return s.cols[:len(s.groupby.aggs)]
-}
-
-// getAggregateArgCols returns the columns in this scope corresponding
-// to arguments to aggregate functions. This call is only valid on an
-// aggInScope. If the aggregate has a filter, the column corresponding
-// to its input will immediately follow its inputs.
-func (s *scope) getAggregateArgCols(groupingsLen int) []scopeColumn {
-	// Aggregate args are always clustered at the beginning of the column list.
-	return s.cols[:len(s.cols)-groupingsLen]
-}
-
-// getGroupingCols returns the columns in this scope corresponding
-// to grouping columns. This call is valid on an aggInScope or aggOutScope.
-func (s *scope) getGroupingCols(groupingsLen int) []scopeColumn {
-	// Grouping cols are always clustered at the end of the column list.
-	return s.cols[len(s.cols)-groupingsLen:]
-}
-
-// hasAggregates returns true if this scope contains aggregate functions.
-func (s *scope) hasAggregates() bool {
-	aggOutScope := s.groupby.aggOutScope
-	return aggOutScope != nil && len(aggOutScope.groupby.aggs) > 0
-}
-
-// findAggregate finds the given aggregate among the bound variables
-// in this scope. Returns nil if the aggregate is not found.
-func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
-	if s.groupby.aggs == nil {
-		return nil
-	}
-
-	for i, a := range s.groupby.aggs {
-		// Find an existing aggregate that uses the same function overload.
-		if a.def.Overload == agg.def.Overload && a.distinct == agg.distinct && a.filter == agg.filter {
-			// Now check that the arguments are identical.
-			if len(a.args) == len(agg.args) {
-				match := true
-				for j, arg := range a.args {
-					if arg != agg.args[j] {
-						match = false
-						break
-					}
-				}
-
-				// If agg is ordering sensitive, check if the orders match as well.
-				if match && !agg.isCommutative() {
-					if len(a.OrderBy) != len(agg.OrderBy) {
-						match = false
-					} else {
-						for j := range a.OrderBy {
-							if !a.OrderBy[j].Equal(agg.OrderBy[j]) {
-								match = false
-								break
-							}
-						}
-					}
-				}
-
-				if match {
-					// Aggregate already exists, so return information about the
-					// existing column that computes it.
-					return &s.getAggregateCols()[i]
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // startAggFunc is called when the builder starts building an aggregate
 // function. It is used to disallow nested aggregates and ensure that a
 // grouping error is not called on the aggregate arguments. For example:
@@ -539,12 +466,12 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 // If endAggFunc returns a different scope than startAggFunc, the columns
 // will be transferred to the correct scope by buildAggregateFunction.
 func (s *scope) startAggFunc() *scope {
-	if s.groupby.inAgg {
+	if s.inAgg {
 		panic(sqlbase.NewAggInAggError())
 	}
-	s.groupby.inAgg = true
+	s.inAgg = true
 
-	if s.groupby.aggInScope == nil {
+	if s.groupby == nil {
 		return s.builder.allocScope()
 	}
 	return s.groupby.aggInScope
@@ -554,54 +481,28 @@ func (s *scope) startAggFunc() *scope {
 // function. It is used in combination with startAggFunc to disallow nested
 // aggregates and prevent grouping errors while building aggregate arguments.
 //
-// In addition, endAggFunc finds the correct aggInScope and aggOutScope, given
+// In addition, endAggFunc finds the correct groupby structure, given
 // that the aggregate references the columns in cols. The reference scope
 // is the one closest to the current scope which contains at least one of the
 // variables referenced by the aggregate (or the current scope if the aggregate
 // references no variables). endAggFunc also ensures that aggregate functions
 // are only used in a groupings scope.
-func (s *scope) endAggFunc(cols opt.ColSet) (aggInScope, aggOutScope *scope) {
-	if !s.groupby.inAgg {
+func (s *scope) endAggFunc(cols opt.ColSet) (g *groupby) {
+	if !s.inAgg {
 		panic(errors.AssertionFailedf("mismatched calls to start/end aggFunc"))
 	}
-	s.groupby.inAgg = false
+	s.inAgg = false
 
 	for curr := s; curr != nil; curr = curr.parent {
 		if cols.Len() == 0 || cols.Intersects(curr.colSet()) {
-			if curr.groupby.aggInScope == nil {
-				curr.groupby.aggInScope = curr.replace()
+			if curr.groupby == nil {
+				curr.initGrouping()
 			}
-			if curr.groupby.aggOutScope == nil {
-				curr.groupby.aggOutScope = curr.replace()
-			}
-			return curr.groupby.aggInScope, curr.groupby.aggOutScope
+			return curr.groupby
 		}
 	}
 
 	panic(errors.AssertionFailedf("aggregate function is not allowed in this context"))
-}
-
-// startBuildingGroupingCols is called when the builder starts building the
-// grouping columns. It is used to ensure that a grouping error is not called
-// prematurely. For example:
-//   SELECT count(*), k FROM kv GROUP BY k
-// is legal, but
-//   SELECT count(*), v FROM kv GROUP BY k
-// will throw the error, `column "v" must appear in the GROUP BY clause or be
-// used in an aggregate function`. The builder cannot know whether there is
-// a grouping error until the grouping columns are fully built.
-func (s *scope) startBuildingGroupingCols() {
-	s.groupby.buildingGroupingCols = true
-}
-
-// endBuildingGroupingCols is called when the builder finishes building the
-// grouping columns. It is used in combination with startBuildingGroupingCols
-// to ensure that a grouping error is not called prematurely.
-func (s *scope) endBuildingGroupingCols() {
-	if !s.groupby.buildingGroupingCols {
-		panic(errors.AssertionFailedf("mismatched calls to start/end groupings"))
-	}
-	s.groupby.buildingGroupingCols = false
 }
 
 // scope implements the tree.Visitor interface so that it can walk through
@@ -730,7 +631,7 @@ func (s *scope) FindSourceMatchingName(
 	for ; s != nil; s = s.parent {
 		sources := make(map[tree.TableName]struct{})
 		for i := range s.cols {
-			sources[s.cols[i].table] = exists
+			sources[s.cols[i].table] = struct{}{}
 		}
 
 		found := false
