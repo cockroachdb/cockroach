@@ -72,7 +72,28 @@ func (b *Builder) buildScalar(
 			// Non-grouping column was referenced. Note that a column that is part
 			// of a larger grouping expression would have been detected by the
 			// groupStrs checking code above.
-			panic(newGroupingError(&t.name))
+			// Normally this would be a "column must appear in the GROUP BY clause"
+			// error. The only case where we allow this (for compatibility with
+			// Postgres) is when this column is part of a table and we are already
+			// grouping on the entire PK of that table.
+			g := inScope.groupby
+			if !b.allowImplicitGroupingColumn(t.id, g) {
+				panic(newGroupingError(&t.name))
+			}
+
+			// We add a new grouping column; these show up both in aggInScope and
+			// aggOutScope.
+			//
+			// Note that normalization rules will trim down the list of grouping
+			// columns based on FDs, so this is only for the purposes of building a
+			// valid operator.
+			aggInCol := b.addColumn(g.aggInScope, "" /* alias */, t)
+			b.finishBuildScalarRef(t, inScope, g.aggInScope, aggInCol, nil)
+			g.groupStrs[symbolicExprStr(t)] = aggInCol
+
+			g.aggOutScope.appendColumn(aggInCol)
+
+			return b.finishBuildScalarRef(t, g.aggOutScope, outScope, outCol, colRefs)
 		}
 
 		return b.finishBuildScalarRef(t, inScope, outScope, outCol, colRefs)
