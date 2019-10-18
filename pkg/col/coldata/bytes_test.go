@@ -54,11 +54,7 @@ func (m bytesMethod) String() string {
 var bytesMethods = []bytesMethod{set, slice, copySlice, appendSlice, appendVal}
 
 // applyMethodsAndVerify applies the given methods on b1 and a reference
-// [][]byte implementation and checks if the results are equal. If
-// selfReferencingSources is true, this is an indication by the caller that we
-// are testing an edge case where the source for copies/appends refers to the
-// destination. In cases where *Bytes updates itself under the hood, we also
-// update the corresponding b2Source to mirror the behavior.
+// [][]byte implementation and checks if the results are equal.
 func applyMethodsAndVerify(
 	rng *rand.Rand, b1 *Bytes, b2 [][]byte, methods []bytesMethod, maxLength int,
 ) error {
