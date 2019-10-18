@@ -31,6 +31,7 @@ func columnByteSize(col coldata.Vec) int64 {
 	case coltypes.Bytes:
 		var bytes int64
 		colBytes := col.Bytes()
+		colBytes.EnforceNonDecreasingOffsets(uint64(colBytes.Len()))
 		for i := 0; i < colBytes.Len(); i++ {
 			bytes += int64(len(colBytes.Get(i)))
 		}
