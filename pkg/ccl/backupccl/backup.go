@@ -744,7 +744,7 @@ func backup(
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentExports := clusterNodeCount(gossip) * int(storage.ExportRequestsLimit.Get(&settings.SV))
+	maxConcurrentExports := clusterNodeCount(gossip) * int(storage.ExportRequestsLimit.Get(&settings.SV)) * 10
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
 	g := ctxgroup.WithContext(ctx)
