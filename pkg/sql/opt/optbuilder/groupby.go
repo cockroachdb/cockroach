@@ -37,6 +37,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -729,4 +730,29 @@ func newGroupingError(name *tree.Name) error {
 		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
 		tree.ErrString(name),
 	)
+}
+
+// allowImplicitGroupingColumn returns true if col is part of a table and the
+// the groupby metadata indicates that we are grouping on the entire PK of that
+// table. In that case, we can allow col as an "implicit" grouping column, even
+// if it is not specified in the query.
+func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bool {
+	md := b.factory.Metadata()
+	colMeta := md.ColumnMeta(colID)
+	if colMeta.Table == 0 {
+		return false
+	}
+	// Get all the PK columns.
+	tab := md.Table(colMeta.Table)
+	var pkCols opt.ColSet
+	primaryIndex := tab.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
+		pkCols.Add(colMeta.Table.ColumnID(primaryIndex.Column(i).Ordinal))
+	}
+	// Remove PK columns that are grouping cols and see if there's anything left.
+	groupingCols := g.groupingCols()
+	for i := range groupingCols {
+		pkCols.Remove(groupingCols[i].id)
+	}
+	return pkCols.Empty()
 }

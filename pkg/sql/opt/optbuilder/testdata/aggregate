@@ -9,6 +9,16 @@ CREATE TABLE kv (
 )
 ----
 
+exec-ddl
+CREATE TABLE abxy (
+  a INT,
+  b INT,
+  x INT,
+  y INT,
+  PRIMARY KEY(a,b)
+)
+----
+
 build
 SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1),
   variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
@@ -540,11 +550,6 @@ project
       └── plus [type=int]
            ├── variable: k [type=int]
            └── variable: v [type=int]
-
-build
-SELECT count(*), k+v FROM kv GROUP BY k
-----
-error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT count(*), k+v FROM kv GROUP BY v
@@ -3476,3 +3481,249 @@ build
 SELECT * FROM ROWS FROM (count(json_each('[]')))
 ----
 error (0A000): count(): json_each(): generator functions are not allowed in aggregate
+
+# Tests for projecting non-grouping columns when we group by a PK.
+build
+SELECT v FROM kv GROUP BY k
+----
+project
+ ├── columns: v:2(int)
+ └── group-by
+      ├── columns: k:1(int!null) v:2(int)
+      ├── grouping columns: k:1(int!null) v:2(int)
+      └── project
+           ├── columns: k:1(int!null) v:2(int)
+           └── scan kv
+                └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+
+# This should be equivalent to the query above.
+build
+SELECT v FROM kv GROUP BY k, v
+----
+project
+ ├── columns: v:2(int)
+ └── group-by
+      ├── columns: k:1(int!null) v:2(int)
+      ├── grouping columns: k:1(int!null) v:2(int)
+      └── project
+           ├── columns: k:1(int!null) v:2(int)
+           └── scan kv
+                └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+
+build
+SELECT count(*), k+v FROM kv GROUP BY k
+----
+project
+ ├── columns: count:5(int) "?column?":6(int)
+ ├── group-by
+ │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int)
+ │    ├── grouping columns: k:1(int!null) v:2(int)
+ │    ├── project
+ │    │    ├── columns: k:1(int!null) v:2(int)
+ │    │    └── scan kv
+ │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── aggregations
+ │         └── count-rows [type=int]
+ └── projections
+      └── plus [type=int]
+           ├── variable: k [type=int]
+           └── variable: v [type=int]
+
+build
+SELECT count(*) FROM kv GROUP BY k HAVING v=1
+----
+project
+ ├── columns: count:5(int)
+ └── select
+      ├── columns: k:1(int!null) v:2(int!null) count_rows:5(int)
+      ├── group-by
+      │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int)
+      │    ├── grouping columns: k:1(int!null) v:2(int)
+      │    ├── project
+      │    │    ├── columns: k:1(int!null) v:2(int)
+      │    │    └── scan kv
+      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    └── aggregations
+      │         └── count-rows [type=int]
+      └── filters
+           └── eq [type=bool]
+                ├── variable: v [type=int]
+                └── const: 1 [type=int]
+
+build
+SELECT k, v, count(*) FROM kv JOIN ab ON a=k GROUP BY k
+----
+group-by
+ ├── columns: k:1(int!null) v:2(int) count:7(int)
+ ├── grouping columns: k:1(int!null) v:2(int)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── inner-join (hash)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(int!null) b:6(int)
+ │         ├── scan kv
+ │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │         ├── scan ab
+ │         │    └── columns: a:5(int!null) b:6(int)
+ │         └── filters
+ │              └── eq [type=bool]
+ │                   ├── variable: a [type=int]
+ │                   └── variable: k [type=int]
+ └── aggregations
+      └── count-rows [type=int]
+
+# Not allowed when grouping on a subset of the PK.
+build
+SELECT x, y FROM abxy GROUP BY a
+----
+error (42803): column "x" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT x, y FROM abxy GROUP BY a, b
+----
+project
+ ├── columns: x:3(int) y:4(int)
+ └── group-by
+      ├── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      ├── grouping columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      └── scan abxy
+           └── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+
+# The following two should be equivalent to the one above.
+build
+SELECT x, y FROM abxy GROUP BY x, a, b
+----
+project
+ ├── columns: x:3(int) y:4(int)
+ └── group-by
+      ├── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      ├── grouping columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      └── scan abxy
+           └── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+
+build
+SELECT x, y FROM abxy GROUP BY x, y, a, b
+----
+project
+ ├── columns: x:3(int) y:4(int)
+ └── group-by
+      ├── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      ├── grouping columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      └── scan abxy
+           └── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+
+build
+SELECT x, y FROM abxy NATURAL JOIN ab GROUP BY a, b
+----
+project
+ ├── columns: x:3(int) y:4(int)
+ └── group-by
+      ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+      ├── grouping columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+      └── project
+           ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+           └── inner-join (hash)
+                ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int) ab.a:5(int!null) ab.b:6(int!null)
+                ├── scan abxy
+                │    └── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+                ├── scan ab
+                │    └── columns: ab.a:5(int!null) ab.b:6(int)
+                └── filters
+                     ├── eq [type=bool]
+                     │    ├── variable: abxy.a [type=int]
+                     │    └── variable: ab.a [type=int]
+                     └── eq [type=bool]
+                          ├── variable: abxy.b [type=int]
+                          └── variable: ab.b [type=int]
+
+# Should be equivalent to the one above.
+build
+SELECT x, y FROM abxy NATURAL JOIN ab GROUP BY a, b, x
+----
+project
+ ├── columns: x:3(int) y:4(int)
+ └── group-by
+      ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+      ├── grouping columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+      └── project
+           ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+           └── inner-join (hash)
+                ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int) ab.a:5(int!null) ab.b:6(int!null)
+                ├── scan abxy
+                │    └── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+                ├── scan ab
+                │    └── columns: ab.a:5(int!null) ab.b:6(int)
+                └── filters
+                     ├── eq [type=bool]
+                     │    ├── variable: abxy.a [type=int]
+                     │    └── variable: ab.a [type=int]
+                     └── eq [type=bool]
+                          ├── variable: abxy.b [type=int]
+                          └── variable: ab.b [type=int]
+
+build
+SELECT abxy.*, ab.* FROM abxy, ab GROUP BY abxy.a, abxy.b, ab.a
+----
+group-by
+ ├── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int) a:5(int!null) b:6(int)
+ ├── grouping columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int) ab.a:5(int!null) ab.b:6(int)
+ └── inner-join (hash)
+      ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int) ab.a:5(int!null) ab.b:6(int)
+      ├── scan abxy
+      │    └── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+      ├── scan ab
+      │    └── columns: ab.a:5(int!null) ab.b:6(int)
+      └── filters (true)
+
+# Not allowed with UNION.
+build
+SELECT x FROM (SELECT a, b, x FROM abxy UNION SELECT a, b, 1 FROM ab) GROUP BY a,b
+----
+error (42803): column "x" must appear in the GROUP BY clause or be used in an aggregate function
+
+# Allowed with EXCEPT.
+build
+SELECT x FROM (SELECT a, b, x FROM abxy EXCEPT SELECT a, b, 1 FROM ab) GROUP BY a,b
+----
+project
+ ├── columns: x:3(int)
+ └── group-by
+      ├── columns: abxy.a:1(int!null) abxy.b:2(int) x:3(int)
+      ├── grouping columns: abxy.a:1(int!null) abxy.b:2(int) x:3(int)
+      └── except
+           ├── columns: abxy.a:1(int!null) abxy.b:2(int) x:3(int)
+           ├── left columns: abxy.a:1(int!null) abxy.b:2(int) x:3(int)
+           ├── right columns: ab.a:5(int) ab.b:6(int) "?column?":7(int)
+           ├── project
+           │    ├── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int)
+           │    └── scan abxy
+           │         └── columns: abxy.a:1(int!null) abxy.b:2(int!null) x:3(int) y:4(int)
+           └── project
+                ├── columns: "?column?":7(int!null) ab.a:5(int!null) ab.b:6(int)
+                ├── scan ab
+                │    └── columns: ab.a:5(int!null) ab.b:6(int)
+                └── projections
+                     └── const: 1 [type=int]
+
+# Allowed even with outer joins. It's a little subtle why this is correct: the
+# PK columns are also non-nullable so any "outer" rows are never in the same
+# group with "non-outer" rows.
+build
+SELECT v, w FROM kv FULL JOIN ab ON k=a GROUP BY k
+----
+project
+ ├── columns: v:2(int) w:3(int)
+ └── group-by
+      ├── columns: k:1(int) v:2(int) w:3(int)
+      ├── grouping columns: k:1(int) v:2(int) w:3(int)
+      └── project
+           ├── columns: k:1(int) v:2(int) w:3(int)
+           └── full-join (hash)
+                ├── columns: k:1(int) v:2(int) w:3(int) s:4(string) a:5(int) b:6(int)
+                ├── scan kv
+                │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+                ├── scan ab
+                │    └── columns: a:5(int!null) b:6(int)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: k [type=int]
+                          └── variable: a [type=int]
