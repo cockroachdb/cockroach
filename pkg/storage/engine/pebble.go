@@ -93,6 +93,7 @@ type Pebble struct {
 
 	closed bool
 	path   string
+	attrs  roachpb.Attributes
 
 	// Relevant options copied over from pebble.Options.
 	fs       vfs.FS
@@ -322,10 +323,15 @@ func (p *Pebble) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails
 	// No-op. Logical logging disabled.
 }
 
+// SetAttrs sets the attributes returned by Atts(). This method is not safe for
+// concurrent use.
+func (p *Pebble) SetAttrs(attrs roachpb.Attributes) {
+	p.attrs = attrs
+}
+
 // Attrs implements the Engine interface.
 func (p *Pebble) Attrs() roachpb.Attributes {
-	// TODO(itsbilal): Implement this.
-	return roachpb.Attributes{}
+	return p.attrs
 }
 
 // Capacity implements the Engine interface.

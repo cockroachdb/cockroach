@@ -511,6 +511,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					}},
 				}
 				eng, err = engine.NewPebble(spec.Path, pebbleOpts)
+				eng.(*engine.Pebble).SetAttrs(spec.Attributes)
 			} else {
 				rocksDBConfig := engine.RocksDBConfig{
 					Attrs:                   spec.Attributes,
