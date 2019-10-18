@@ -15,82 +15,8 @@ import (
 	"strings"
 )
 
-// Bytes is a wrapper type for a two-dimensional byte slice.
+// Bytes is a wrapper type for a two-dimensional byte slice ([][]byte).
 type Bytes struct {
-	data [][]byte
-}
-
-// NewBytes returns a Bytes struct with enough capacity for n elements.
-func NewBytes(n int) *Bytes {
-	return &Bytes{
-		data: make([][]byte, n),
-	}
-}
-
-// Get returns the ith []byte in Bytes.
-func (b *Bytes) Get(i int) []byte {
-	return b.data[i]
-}
-
-// Set sets the ith []byte in Bytes.
-func (b *Bytes) Set(i int, v []byte) {
-	b.data[i] = v
-}
-
-// Slice returns a new Bytes struct with its internal data sliced according to
-// start and end.
-func (b *Bytes) Slice(start, end int) *Bytes {
-	return &Bytes{data: b.data[start:end]}
-}
-
-// CopySlice copies srcStartIdx inclusive and srcEndIdx inclusive []byte values
-// from src into the receiver starting at destIdx.
-func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
-	copy(b.data[destIdx:], src.data[srcStartIdx:srcEndIdx])
-}
-
-// AppendSlice appends srcStartIdx inclusive and srcEndIdx inclusive []byte
-// values from src into the receiver starting at destIdx.
-func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
-	b.data = append(b.data[:destIdx], src.data[srcStartIdx:srcEndIdx]...)
-}
-
-// AppendVal appends the given []byte value to the end of the receiver.
-func (b *Bytes) AppendVal(v []byte) {
-	b.data = append(b.data, v)
-}
-
-// Len returns how many []byte values the receiver contains.
-func (b *Bytes) Len() int {
-	return len(b.data)
-}
-
-var zeroBytesColumn = make([][]byte, BatchSize())
-
-// Zero zeroes out the underlying bytes.
-func (b *Bytes) Zero() {
-	for n := 0; n < len(b.data); n += copy(b.data[n:], zeroBytesColumn) {
-	}
-}
-
-// PrimitiveRepr is a temprorary migration tool.
-// TODO(asubiotto): Remove this.
-func (b *Bytes) PrimitiveRepr() [][]byte {
-	return b.data
-}
-
-// Reset here is a stub that is added so that the calls that used to be to
-// flatBytes.Reset() don't need to be removed.
-func (b *Bytes) Reset() {}
-
-// TODO(yuzefovich): fix flatBytes implementation and use that instead of
-// Bytes.
-
-// Remove the unused warnings.
-var _ *flatBytes = newFlatBytes(0)
-
-// flatBytes is a wrapper type for a two-dimensional byte slice ([][]byte).
-type flatBytes struct {
 	// data is the slice of all bytes.
 	data []byte
 	// offsets contains the offsets for each []byte slice in data.
@@ -106,11 +32,11 @@ type flatBytes struct {
 	maxSetIndex int
 }
 
-// newFlatBytes returns a flatBytes struct with enough capacity for n zero-length
-// []byte values. It is legal to call Set on the returned flatBytes at this point,
+// NewBytes returns a Bytes struct with enough capacity for n zero-length
+// []byte values. It is legal to call Set on the returned Bytes at this point,
 // but Get is undefined until at least one element is Set.
-func newFlatBytes(n int) *flatBytes {
-	return &flatBytes{
+func NewBytes(n int) *Bytes {
+	return &Bytes{
 		// Given that the []byte slices are of variable length, we multiply the
 		// number of elements by some constant factor.
 		// TODO(asubiotto): Make this tunable.
@@ -120,17 +46,17 @@ func newFlatBytes(n int) *flatBytes {
 	}
 }
 
-// Get returns the ith []byte in flatBytes. Note that the returned byte slice is
+// Get returns the ith []byte in Bytes. Note that the returned byte slice is
 // unsafe for reuse if any write operation happens.
-func (b *flatBytes) Get(i int) []byte {
+func (b *Bytes) Get(i int) []byte {
 	return b.data[b.offsets[i] : b.offsets[i]+b.lengths[i]]
 }
 
-// Set sets the ith []byte in flatBytes. Overwriting a value that is not at the end
-// of the flatBytes is not allowed since it complicates memory movement to make/take
+// Set sets the ith []byte in Bytes. Overwriting a value that is not at the end
+// of the Bytes is not allowed since it complicates memory movement to make/take
 // away necessary space in the flat buffer. Note that a nil value will be
 // "converted" into an empty byte slice.
-func (b *flatBytes) Set(i int, v []byte) {
+func (b *Bytes) Set(i int, v []byte) {
 	if i < b.maxSetIndex {
 		panic(
 			fmt.Sprintf(
@@ -151,12 +77,12 @@ func (b *flatBytes) Set(i int, v []byte) {
 	b.maxSetIndex = i
 }
 
-// Slice modifies and returns the receiver flatBytes struct sliced according to
+// Slice modifies and returns the receiver Bytes struct sliced according to
 // start and end. Returning the result is not necessary but is done for
 // compatibility with the usage of other data representations in vectorized
 // execution. Note that Slicing can be expensive since it incurs a step to
 // translate offsets.
-func (b *flatBytes) Slice(start, end int) *flatBytes {
+func (b *Bytes) Slice(start, end int) *Bytes {
 	if start == 0 && end == len(b.offsets) {
 		return b
 	}
@@ -183,14 +109,14 @@ func (b *flatBytes) Slice(start, end int) *flatBytes {
 // min(dest.Len(), src.Len()) values will be copied. Note that if the length of
 // the receiver is greater than the length of the source, bytes will have to be
 // physically moved. Consider the following example:
-// dest flatBytes: "helloworld", offsets: []int32{0, 5}, lengths: []int32{5, 5}
-// src flatBytes: "a", offsets: []int32{0}, lengths: []int32{1}
+// dest Bytes: "helloworld", offsets: []int32{0, 5}, lengths: []int32{5, 5}
+// src Bytes: "a", offsets: []int32{0}, lengths: []int32{1}
 // If we copy src into the beginning of dest, we will have to move "world" so
 // that the result is:
-// result flatBytes: "aworld", offsets: []int32{0, 1}, lengths: []int32{1, 5}
+// result Bytes: "aworld", offsets: []int32{0, 1}, lengths: []int32{1, 5}
 // Similarly, if "a", is instead "alongerstring", "world" would have to be
 // shifted right.
-func (b *flatBytes) CopySlice(src *flatBytes, destIdx, srcStartIdx, srcEndIdx int) {
+func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if destIdx < 0 || destIdx > b.Len() {
 		panic(fmt.Sprintf("dest index %d out of range (len=%d)", destIdx, b.Len()))
 	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() || srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
@@ -270,7 +196,7 @@ func (b *flatBytes) CopySlice(src *flatBytes, destIdx, srcStartIdx, srcEndIdx in
 
 // AppendSlice appends srcStartIdx inclusive and srcEndIdx exclusive []byte
 // values from src into the receiver starting at destIdx.
-func (b *flatBytes) AppendSlice(src *flatBytes, destIdx, srcStartIdx, srcEndIdx int) {
+func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if destIdx < 0 || destIdx > b.Len() {
 		panic(fmt.Sprintf("dest index %d out of range (len=%d)", destIdx, b.Len()))
 	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() || srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
@@ -298,7 +224,7 @@ func (b *flatBytes) AppendSlice(src *flatBytes, destIdx, srcStartIdx, srcEndIdx 
 	}
 
 	// Calculate the amount to translate offsets by before modifying any
-	// destination offsets since we might be appending from the same flatBytes (and
+	// destination offsets since we might be appending from the same Bytes (and
 	// might be overwriting information).
 	translateBy := destDataIdx - src.offsets[srcStartIdx]
 	b.data = append(b.data[:destDataIdx], srcDataToAppend...)
@@ -318,7 +244,7 @@ func (b *flatBytes) AppendSlice(src *flatBytes, destIdx, srcStartIdx, srcEndIdx 
 
 // AppendVal appends the given []byte value to the end of the receiver. A nil
 // value will be "converted" into an empty byte slice.
-func (b *flatBytes) AppendVal(v []byte) {
+func (b *Bytes) AppendVal(v []byte) {
 	b.maxSetIndex = len(b.offsets)
 	b.offsets = append(b.offsets, int32(len(b.data)))
 	b.lengths = append(b.lengths, int32(len(v)))
@@ -326,7 +252,7 @@ func (b *flatBytes) AppendVal(v []byte) {
 }
 
 // Len returns how many []byte values the receiver contains.
-func (b *flatBytes) Len() int {
+func (b *Bytes) Len() int {
 	return len(b.offsets)
 }
 
@@ -335,7 +261,7 @@ var zeroInt32Slice = make([]int32, BatchSize())
 // Zero zeroes out the underlying bytes. Note that this doesn't change the
 // length. Use this instead of Reset if you need to be able to Get zeroed byte
 // slices.
-func (b *flatBytes) Zero() {
+func (b *Bytes) Zero() {
 	b.data = b.data[:0]
 	for n := 0; n < len(b.offsets); n += copy(b.offsets[n:], zeroInt32Slice) {
 	}
@@ -344,18 +270,18 @@ func (b *flatBytes) Zero() {
 	b.maxSetIndex = 0
 }
 
-// Reset resets the underlying flatBytes for reuse.
+// Reset resets the underlying Bytes for reuse.
 // This is useful when the caller is going to overwrite the underlying bytes and
 // needs a quick way to Reset. Note that this doesn't change the length either.
 // TODO(asubiotto): Move towards removing Set in favor of AppendVal. At that
 //  point we can reset the length to 0.
-func (b *flatBytes) Reset() {
+func (b *Bytes) Reset() {
 	b.data = b.data[:0]
 	b.maxSetIndex = 0
 }
 
 // String is used for debugging purposes.
-func (b *flatBytes) String() string {
+func (b *Bytes) String() string {
 	var builder strings.Builder
 	for i := range b.offsets {
 		builder.WriteString(
@@ -365,7 +291,6 @@ func (b *flatBytes) String() string {
 	return builder.String()
 }
 
-/*
 // BytesFromArrowSerializationFormat takes an Arrow byte slice and accompanying
 // offsets and populates b.
 func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
@@ -386,7 +311,6 @@ func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
 	b.maxSetIndex = len(offsets) - 1
 }
 
-
 // ToArrowSerializationFormat returns a bytes slice and offsets that are
 // Arrow-compatible. n is the number of elements to serialize.
 func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
@@ -398,4 +322,3 @@ func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
 	offsets := append(b.offsets[:n], serializeLength)
 	return data, offsets
 }
-*/

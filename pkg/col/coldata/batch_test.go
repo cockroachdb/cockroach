@@ -61,7 +61,6 @@ func TestBatchReset(t *testing.T) {
 			case coltypes.Bytes:
 				x := vec.Bytes()
 				assert.True(t, x.Len() >= n)
-				assert.True(t, cap(x.PrimitiveRepr()) >= selCap)
 				x.Set(0, []byte{1})
 			default:
 				panic(vec.Type())
