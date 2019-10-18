@@ -432,12 +432,15 @@ func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) erro
 
 // OpenFile implements the Engine interface.
 func (p *Pebble) OpenFile(filename string) (DBFile, error) {
-	return p.fs.Open(p.fs.PathJoin(p.path, filename))
+	// TODO(itsbilal): Create does not currently truncate the file if it already
+	// exists. OpenFile in RocksDB truncates a file if it already exists. Unify
+	// behavior by adding a CreateWithTruncate functionality to pebble's vfs.FS.
+	return p.fs.Create(filename)
 }
 
 // ReadFile implements the Engine interface.
 func (p *Pebble) ReadFile(filename string) ([]byte, error) {
-	file, err := p.fs.Open(p.fs.PathJoin(p.path, filename))
+	file, err := p.fs.Open(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -482,9 +485,7 @@ func (p *Pebble) DeleteDirAndFiles(dir string) error {
 
 // LinkFile implements the Engine interface.
 func (p *Pebble) LinkFile(oldname, newname string) error {
-	oldPath := p.fs.PathJoin(p.path, oldname)
-	newPath := p.fs.PathJoin(p.path, newname)
-	return p.fs.Link(oldPath, newPath)
+	return p.fs.Link(oldname, newname)
 }
 
 // CreateCheckpoint implements the Engine interface.
