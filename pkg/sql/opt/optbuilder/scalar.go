@@ -49,7 +49,7 @@ func (b *Builder) buildScalar(
 	// Note that GROUP BY columns cannot be reused inside an aggregate input
 	// expression (when inAgg=true) because the aggregate input expressions and
 	// grouping expressions are built as part of the same projection.
-	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg &&
+	inGroupingContext := inScope.inGroupingContext() && !inScope.inAgg &&
 		!inScope.groupby.buildingGroupingCols
 	if inGroupingContext {
 		// TODO(rytaft): This currently regenerates a string for each subexpression.
@@ -78,7 +78,11 @@ func (b *Builder) buildScalar(
 		return b.finishBuildScalarRef(t, inScope, outScope, outCol, colRefs)
 
 	case *aggregateInfo:
-		return b.finishBuildScalarRef(t.col, inScope.groupby.aggOutScope, outScope, outCol, colRefs)
+		var aggOutScope *scope
+		if inScope.groupby != nil {
+			aggOutScope = inScope.groupby.aggOutScope
+		}
+		return b.finishBuildScalarRef(t.col, aggOutScope, outScope, outCol, colRefs)
 
 	case *windowInfo:
 		return b.finishBuildScalarRef(t.col, inScope, outScope, outCol, colRefs)
@@ -422,7 +426,7 @@ func (b *Builder) buildFunction(
 	f *tree.FuncExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	if f.WindowDef != nil {
-		if inScope.groupby.inAgg {
+		if inScope.inAgg {
 			panic(sqlbase.NewWindowInAggError())
 		}
 	}
@@ -533,8 +537,8 @@ func (b *Builder) checkSubqueryOuterCols(
 	}
 
 	// Check 1 (see function comment).
-	if b.semaCtx.Properties.IsSet(tree.RejectAggregates) && inScope.groupby.aggOutScope != nil {
-		aggCols := inScope.groupby.aggOutScope.getAggregateCols()
+	if b.semaCtx.Properties.IsSet(tree.RejectAggregates) && inScope.groupby != nil {
+		aggCols := inScope.groupby.aggregateResultCols()
 		for i := range aggCols {
 			if subqueryOuterCols.Contains(aggCols[i].id) {
 				panic(tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context))
