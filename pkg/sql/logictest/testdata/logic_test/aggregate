@@ -355,8 +355,15 @@ SELECT count(*), k+v FROM kv GROUP BY k, v
 1 9
 1 NULL
 
-query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+query II rowsort
 SELECT count(*), k+v FROM kv GROUP BY k
+----
+1  3
+1  7
+1  NULL
+1  8
+1  9
+1  12
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT count(*), k+v FROM kv GROUP BY v
@@ -410,10 +417,12 @@ SELECT max(k), min(v) FROM kv HAVING k
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT 3 FROM kv GROUP BY v HAVING k > 5
 
-# pg has a special case for grouping on primary key, which would allow this, but we do not.
-# See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
-query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+# Special case for grouping on primary key.
+query I
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
+----
+3
+3
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT k FROM kv HAVING k > 7

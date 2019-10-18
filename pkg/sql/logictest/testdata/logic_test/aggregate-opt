@@ -128,3 +128,46 @@ ORDER BY
 count_1  count_lower  count_upper  concat
 3        3            3            aaa
 3        3            3            bbb
+
+# Tests for selecting any columns when grouping by the PK.
+statement ok
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+INSERT INTO ab VALUES (1,1), (2,1), (3,3), (4, 7)
+
+query I rowsort
+SELECT b FROM ab GROUP BY a
+----
+1
+1
+3
+7
+
+query II rowsort
+SELECT a+b, count(*) FROM ab JOIN tab ON b=col2 GROUP BY a
+----
+11 2
+
+query IIII rowsort
+SELECT a, col1, b+col2, count(*) FROM ab JOIN tab ON b=col2 GROUP BY a, col1
+----
+4  -3  14  1
+4  0   14  1
+
+query IIII rowsort
+SELECT a, b, count(*), count(col2) FROM ab LEFT JOIN tab ON b=col2 GROUP BY a
+----
+1  1  1  0
+2  1  1  0
+3  3  1  0
+4  7  2  2
+
+query III rowsort
+SELECT a, b, count(*) FROM ab RIGHT JOIN tab ON b=col2 GROUP BY a
+----
+NULL  NULL  4
+4     7     2
