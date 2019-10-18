@@ -227,50 +227,48 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 func (b *Builder) buildAggregationAsWindow(
 	groupingColSet opt.ColSet, having opt.ScalarExpr, fromScope *scope,
 ) *scope {
-	aggInScope := fromScope.groupby.aggInScope
-	aggOutScope := fromScope.groupby.aggOutScope
-	aggInfos := aggOutScope.groupby.aggs
+	g := fromScope.groupby
 
 	// Create the window frames based on the orderings and groupings specified.
-	argLists := make([][]opt.ScalarExpr, len(aggInfos))
-	partitions := make([]opt.ColSet, len(aggInfos))
-	orderings := make([]physical.OrderingChoice, len(aggInfos))
-	filterCols := make([]opt.ColumnID, len(aggInfos))
+	argLists := make([][]opt.ScalarExpr, len(g.aggs))
+	partitions := make([]opt.ColSet, len(g.aggs))
+	orderings := make([]physical.OrderingChoice, len(g.aggs))
+	filterCols := make([]opt.ColumnID, len(g.aggs))
 
 	// Construct the pre-projection, which renders the grouping columns and the
 	// aggregate arguments, as well as any additional order by columns.
-	aggInScope.appendColumnsFromScope(fromScope)
-	b.constructProjectForScope(fromScope, aggInScope)
+	g.aggInScope.appendColumnsFromScope(fromScope)
+	b.constructProjectForScope(fromScope, g.aggInScope)
 
 	// Build the arguments, partitions and orderings for each aggregate.
-	for i, agg := range aggInfos {
+	for i, agg := range g.aggs {
 		argExprs := getTypedExprs(agg.Exprs)
 
 		// Build the appropriate arguments.
-		argLists[i] = b.buildWindowArgs(argExprs, i, agg.def.Name, fromScope, aggInScope)
+		argLists[i] = b.buildWindowArgs(argExprs, i, agg.def.Name, fromScope, g.aggInScope)
 
 		// Build appropriate partitions.
 		partitions[i] = groupingColSet.Copy()
 
 		// Build appropriate orderings.
 		if !agg.isCommutative() {
-			ord := b.buildWindowOrdering(agg.OrderBy, i, agg.def.Name, fromScope, aggInScope)
+			ord := b.buildWindowOrdering(agg.OrderBy, i, agg.def.Name, fromScope, g.aggInScope)
 			orderings[i].FromOrdering(ord)
 		}
 
 		if agg.Filter != nil {
-			col := b.buildFilterCol(agg.Filter, i, agg.def.Name, fromScope, aggInScope)
+			col := b.buildFilterCol(agg.Filter, i, agg.def.Name, fromScope, g.aggInScope)
 			filterCols[i] = col.id
 		}
 	}
 
 	// Initialize the aggregate expression.
-	aggregateExpr := aggInScope.expr
+	aggregateExpr := g.aggInScope.expr
 
 	// frames accumulates the set of distinct window frames we're computing over
 	// so that we can group functions over the same partition and ordering.
-	frames := make([]memo.WindowExpr, 0, len(aggInfos))
-	for i, agg := range aggInfos {
+	frames := make([]memo.WindowExpr, 0, len(g.aggs))
+	for i, agg := range g.aggs {
 		// Using this instead of constructAggregate so we can have non-constant second
 		// arguments for string_agg.
 		fn := b.constructWindowFn(agg.def.Name, argLists[i])
@@ -302,15 +300,15 @@ func (b *Builder) buildAggregationAsWindow(
 	// aggregations built as window functions emit an aggregated value for each row
 	// instead of each group. To rectify this, we must 'squash' the values down by
 	// wrapping it with a GroupBy or ScalarGroupBy.
-	aggOutScope.expr = b.constructWindowGroup(aggregateExpr, groupingColSet, aggInfos, aggOutScope)
+	g.aggOutScope.expr = b.constructWindowGroup(aggregateExpr, groupingColSet, g.aggs, g.aggOutScope)
 
 	// Wrap with having filter if it exists.
 	if having != nil {
-		input := aggOutScope.expr.(memo.RelExpr)
+		input := g.aggOutScope.expr.(memo.RelExpr)
 		filters := memo.FiltersExpr{{Condition: having}}
-		aggOutScope.expr = b.factory.ConstructSelect(input, filters)
+		g.aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}
-	return aggOutScope
+	return g.aggOutScope
 }
 
 // getTypedWindowArgs returns the arguments to the window function as
