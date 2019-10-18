@@ -592,7 +592,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 		s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
 		s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), scan, s))
 		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-		s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps))
+		s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps, constrainedCols))
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -674,6 +674,11 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	// ----------------------------------------------------------------
 	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilter(sel.Filters, sel, relProps)
 
+	// Try to reduce the number of columns used for selectivity
+	// calculation based on functional dependencies.
+	inputFD := &sel.Input.Relational().FuncDeps
+	constrainedCols = sb.tryReduceCols(constrainedCols, s, inputFD)
+
 	// Set null counts to 0 for non-nullable columns
 	// -------------------------------------------
 	sb.updateNullCountsFromProps(sel, relProps)
@@ -686,7 +691,7 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), sel, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, sel, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(sel, relProps))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(sel, relProps, constrainedCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
@@ -893,6 +898,17 @@ func (sb *statisticsBuilder) buildJoin(
 	// TODO(rytaft): use histogram for joins.
 	numUnappliedConjuncts, constrainedCols, _ := sb.applyFilter(h.filters, join, relProps)
 
+	// Try to reduce the number of columns used for selectivity
+	// calculation based on functional dependencies.
+	constrainedCols = sb.tryReduceJoinCols(
+		constrainedCols,
+		s,
+		h.leftProps.OutputCols,
+		h.rightProps.OutputCols,
+		&h.leftProps.FuncDeps,
+		&h.rightProps.FuncDeps,
+	)
+
 	// Set null counts to 0 for non-nullable columns
 	// ---------------------------------------------
 	sb.updateNullCountsFromProps(join, relProps)
@@ -927,7 +943,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, join, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps, constrainedCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
@@ -1418,6 +1434,13 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) * 2)
 	}
 
+	// Try to reduce the number of columns used for selectivity
+	// calculation based on functional dependencies. Note that
+	// these functional dependencies already include equalities
+	// inferred by zigzag.{Left,Right}EqCols.
+	inputFD := &zigzag.Relational().FuncDeps
+	constrainedCols = sb.tryReduceCols(constrainedCols, s, inputFD)
+
 	// Set null counts to 0 for non-nullable columns
 	// ---------------------------------------------
 	sb.updateNullCountsFromProps(zigzag, relProps)
@@ -1427,7 +1450,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps, constrainedCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
@@ -2986,21 +3009,15 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 
 // selectivityFromNullsRemoved calculates the selectivity from null-rejecting
 // filters that were not already accounted for in selectivityFromDistinctCounts
-// or selectivityFromHistograms.
+// or selectivityFromHistograms. The columns for filters already accounted for
+// should be designated by ignoreCols.
 func (sb *statisticsBuilder) selectivityFromNullsRemoved(
-	e RelExpr, relProps *props.Relational,
+	e RelExpr, relProps *props.Relational, ignoreCols opt.ColSet,
 ) (selectivity float64) {
-	s := &relProps.Stats
 	selectivity = 1.0
 	relProps.NotNullCols.ForEach(func(col opt.ColumnID) {
-		colSet := opt.MakeColSet(col)
-		_, ok := s.ColStats.Lookup(colSet)
-		if !ok {
-			// We only need to be concerned about null counts from columns that
-			// aren't in the ColStatsMap, since null counts from columns in the map
-			// would have already been accounted for in selectivityFromDistinctCounts
-			// or selectivityFromHistograms.
-			inputColStat, inputStats := sb.colStatFromInput(colSet, e)
+		if !ignoreCols.Contains(col) {
+			inputColStat, inputStats := sb.colStatFromInput(opt.MakeColSet(col), e)
 			selectivity *= sb.predicateSelectivity(
 				1, /* nonNullSelectivity */
 				0, /* nullSelectivity */
@@ -3129,6 +3146,57 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 	numUnappliedConjuncts float64,
 ) (selectivity float64) {
 	return math.Pow(unknownFilterSelectivity, numUnappliedConjuncts)
+}
+
+// tryReduceCols is used to determine which columns to use for selectivity
+// calculation.
+//
+// When columns in the colStats are functionally determined by other columns,
+// and the determinant columns each have distinctCount = 1, we should consider
+// the implied correlations for selectivity calculation. Consider the query:
+//
+//   SELECT * FROM customer WHERE id = 123 and name = 'John Smith'
+//
+// If id is the primary key of customer, then name is functionally determined
+// by id. We only need to consider the selectivity of id, not name, since id
+// and name are fully correlated. To determine if we have a case such as this
+// one, we functionally reduce the set of columns which have column statistics,
+// eliminating columns that can be functionally determined by other columns.
+// If the distinct count on all of these reduced columns is one, then we return
+// this reduced column set to be used for selectivity calculation.
+//
+func (sb *statisticsBuilder) tryReduceCols(
+	cols opt.ColSet, s *props.Statistics, fd *props.FuncDepSet,
+) opt.ColSet {
+	reducedCols := fd.ReduceCols(cols)
+	if reducedCols.Empty() {
+		// There are no reduced columns so we return the original column set.
+		return cols
+	}
+
+	for i, ok := reducedCols.Next(0); ok; i, ok = reducedCols.Next(i + 1) {
+		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(i))
+		if !ok || colStat.DistinctCount != 1 {
+			// The reduced columns are not all constant, so return the original
+			// column set.
+			return cols
+		}
+	}
+
+	return reducedCols
+}
+
+// tryReduceJoinCols is used to determine which columns to use for join ON
+// condition selectivity calculation. See tryReduceCols.
+func (sb *statisticsBuilder) tryReduceJoinCols(
+	cols opt.ColSet,
+	s *props.Statistics,
+	leftCols, rightCols opt.ColSet,
+	leftFD, rightFD *props.FuncDepSet,
+) opt.ColSet {
+	leftCols = sb.tryReduceCols(leftCols.Intersection(cols), s, leftFD)
+	rightCols = sb.tryReduceCols(rightCols.Intersection(cols), s, rightFD)
+	return leftCols.Union(rightCols)
 }
 
 func isEqualityWithTwoVars(cond opt.ScalarExpr) bool {

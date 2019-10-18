@@ -37,7 +37,7 @@ sort
       │    │    ├── interesting orderings: (+3)
       │    │    ├── scan t.public.t
       │    │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
-      │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
+      │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
       │    │    │    ├── cost: 1060.02
       │    │    │    ├── key: (3)
       │    │    │    ├── fd: (3)-->(1,2)
@@ -80,7 +80,7 @@ sort
       │    │    ├── cost: 1070.03
       │    │    ├── scan t.public.t
       │    │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
-      │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
+      │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
       │    │    │    └── cost: 1060.02
       │    │    └── filters
       │    │         └── lt [type=bool]
@@ -202,7 +202,7 @@ sort
       │    │    ├── fd: (3)-->(1,2)
       │    │    ├── interesting orderings: (+3)
       │    │    ├── scan t.public.t
-      │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
+      │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
       │    │    │    ├── cost: 1060.02
       │    │    │    ├── key: (3)
       │    │    │    ├── fd: (3)-->(1,2)
