@@ -64,6 +64,7 @@ func registerAcceptance(r *testRegistry) {
 	for _, tc := range testCases {
 		tc := tc // copy for closure
 		spec := specTemplate
+		spec.Skip = tc.skip
 		spec.Name = specTemplate.Name + "/" + tc.name
 		spec.MinVersion = tc.minVersion
 		if tc.timeout != 0 {
