@@ -453,7 +453,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 				return forEachColumnInIndex(table, index,
 					func(column *sqlbase.ColumnDescriptor) error {
-						idxID := h.IndexOid(db, scName, table, index)
+						idxID := h.IndexOid(table.ID, index.ID)
 						return addColumn(column, idxID, column.ID)
 					},
 				)
@@ -621,24 +621,24 @@ CREATE TABLE pg_catalog.pg_class (
 				// Indexes.
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 					return addRow(
-						h.IndexOid(db, scName, table, index), // oid
-						tree.NewDName(index.Name),            // relname
-						namespaceOid,                         // relnamespace
-						oidZero,                              // reltype
-						oidZero,                              // reloftype
-						tree.DNull,                           // relowner
-						cockroachIndexEncodingOid,            // relam
-						oidZero,                              // relfilenode
-						oidZero,                              // reltablespace
-						tree.DNull,                           // relpages
-						tree.DNull,                           // reltuples
-						zeroVal,                              // relallvisible
-						oidZero,                              // reltoastrelid
-						tree.DBoolFalse,                      // relhasindex
-						tree.DBoolFalse,                      // relisshared
-						relPersistencePermanent,              // relPersistence
-						tree.DBoolFalse,                      // relistemp
-						relKindIndex,                         // relkind
+						h.IndexOid(table.ID, index.ID), // oid
+						tree.NewDName(index.Name),      // relname
+						namespaceOid,                   // relnamespace
+						oidZero,                        // reltype
+						oidZero,                        // reloftype
+						tree.DNull,                     // relowner
+						cockroachIndexEncodingOid,      // relam
+						oidZero,                        // relfilenode
+						oidZero,                        // reltablespace
+						tree.DNull,                     // relpages
+						tree.DNull,                     // reltuples
+						zeroVal,                        // relallvisible
+						oidZero,                        // reltoastrelid
+						tree.DBoolFalse,                // relhasindex
+						tree.DBoolFalse,                // relisshared
+						relPersistencePermanent,        // relPersistence
+						tree.DBoolFalse,                // relistemp
+						relKindIndex,                   // relkind
 						tree.NewDInt(tree.DInt(len(index.ColumnNames))), // relnatts
 						zeroVal,         // relchecks
 						tree.DBoolFalse, // relhasoids
@@ -798,7 +798,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 				case sqlbase.ConstraintTypePK:
 					oid = h.PrimaryKeyConstraintOid(db, scName, table, con.Index)
 					contype = conTypePKey
-					conindid = h.IndexOid(db, scName, table, con.Index)
+					conindid = h.IndexOid(table.ID, con.Index.ID)
 
 					var err error
 					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
@@ -807,11 +807,6 @@ CREATE TABLE pg_catalog.pg_constraint (
 					condef = tree.NewDString(table.PrimaryKeyString())
 
 				case sqlbase.ConstraintTypeFK:
-					referencedDB, err := tableLookup.getDatabaseByID(con.ReferencedTable.ParentID)
-					if err != nil {
-						return err
-					}
-
 					oid = h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
 					contype = conTypeFK
 					// Foreign keys don't have a single linked index. Pick the first one
@@ -824,7 +819,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 						// We couldn't find an index that matched. This shouldn't happen.
 						log.Warningf(ctx, "broken fk reference: %v", err)
 					} else {
-						conindid = h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, idx)
+						conindid = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 					}
 					confrelid = defaultOid(con.ReferencedTable.ID)
 					if r, ok := fkActionMap[con.FK.OnUpdate]; ok {
@@ -851,7 +846,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 				case sqlbase.ConstraintTypeUnique:
 					oid = h.UniqueConstraintOid(db, scName, table, con.Index)
 					contype = conTypeUnique
-					conindid = h.IndexOid(db, scName, table, con.Index)
+					conindid = h.IndexOid(table.ID, con.Index.ID)
 					var err error
 					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
 						return err
@@ -1082,10 +1077,6 @@ CREATE TABLE pg_catalog.pg_depend (
 				if con.Kind != sqlbase.ConstraintTypeFK {
 					continue
 				}
-				referencedDB, err := tableLookup.getDatabaseByID(con.ReferencedTable.ParentID)
-				if err != nil {
-					return err
-				}
 
 				// Foreign keys don't have a single linked index. Pick the first one
 				// that matches on the referenced table.
@@ -1098,7 +1089,7 @@ CREATE TABLE pg_catalog.pg_depend (
 					// We couldn't find an index that matched. This shouldn't happen.
 					log.Warningf(ctx, "broken fk reference: %v", err)
 				} else {
-					refObjID = h.IndexOid(referencedDB, tree.PublicSchema, con.ReferencedTable, idx)
+					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
 				constraintOid := h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
 
@@ -1160,21 +1151,32 @@ CREATE TABLE pg_catalog.pg_description (
 			return err
 		}
 		for _, comment := range comments {
+			objID := comment[0]
+			objSubID := comment[1]
+			description := comment[2]
 			commentType := tree.MustBeDInt(comment[3])
+
 			classOid := oidZero
+
 			switch commentType {
 			case keys.DatabaseCommentType:
 				// Database comments are exported in pg_shdescription.
 				continue
-			case keys.TableCommentType, keys.ColumnCommentType:
+			case keys.ColumnCommentType, keys.TableCommentType:
+				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				classOid = tree.NewDOid(sqlbase.PgCatalogClassTableID)
+			case keys.IndexCommentType:
+				objID = makeOidHasher().IndexOid(
+					sqlbase.ID(tree.MustBeDInt(objID)),
+					sqlbase.IndexID(tree.MustBeDInt(objSubID)))
+				objSubID = tree.DZero
 				classOid = tree.NewDOid(sqlbase.PgCatalogClassTableID)
 			}
-			objID := sqlbase.ID(tree.MustBeDInt(comment[0]))
 			if err := addRow(
-				defaultOid(objID),
+				objID,
 				classOid,
-				comment[1],
-				comment[2]); err != nil {
+				objSubID,
+				description); err != nil {
 				return err
 			}
 		}
@@ -1388,8 +1390,8 @@ CREATE TABLE pg_catalog.pg_index (
 						return err
 					}
 					return addRow(
-						h.IndexOid(db, scName, table, index), // indexrelid
-						tableOid,                             // indrelid
+						h.IndexOid(table.ID, index.ID), // indexrelid
+						tableOid,                       // indrelid
 						tree.NewDInt(tree.DInt(len(index.ColumnNames))),                                          // indnatts
 						tree.MakeDBool(tree.DBool(index.Unique)),                                                 // indisunique
 						tree.MakeDBool(tree.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
@@ -1439,12 +1441,12 @@ CREATE TABLE pg_catalog.pg_indexes (
 						return err
 					}
 					return addRow(
-						h.IndexOid(db, scName, table, index), // oid
-						scNameName,                           // schemaname
-						tblName,                              // tablename
-						tree.NewDName(index.Name),            // indexname
-						tree.DNull,                           // tablespace
-						tree.NewDString(def),                 // indexdef
+						h.IndexOid(table.ID, index.ID), // oid
+						scNameName,                     // schemaname
+						tblName,                        // tablename
+						tree.NewDName(index.Name),      // indexname
+						tree.DNull,                     // tablespace
+						tree.NewDString(def),           // indexdef
 					)
 				})
 			})
@@ -2722,12 +2724,12 @@ func (h oidHasher) writeSchema(scName string) {
 	h.writeStr(scName)
 }
 
-func (h oidHasher) writeTable(table *sqlbase.TableDescriptor) {
-	h.writeUInt32(uint32(table.ID))
+func (h oidHasher) writeTable(tableID sqlbase.ID) {
+	h.writeUInt32(uint32(tableID))
 }
 
-func (h oidHasher) writeIndex(index *sqlbase.IndexDescriptor) {
-	h.writeUInt32(uint32(index.ID))
+func (h oidHasher) writeIndex(indexID sqlbase.IndexID) {
+	h.writeUInt32(uint32(indexID))
 }
 
 func (h oidHasher) writeCheckConstraint(check *sqlbase.TableDescriptor_CheckConstraint) {
@@ -2747,15 +2749,10 @@ func (h oidHasher) NamespaceOid(db *sqlbase.DatabaseDescriptor, scName string) *
 	return h.getOid()
 }
 
-func (h oidHasher) IndexOid(
-	db *sqlbase.DatabaseDescriptor,
-	scName string,
-	table *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-) *tree.DOid {
+func (h oidHasher) IndexOid(tableID sqlbase.ID, indexID sqlbase.IndexID) *tree.DOid {
 	h.writeTypeTag(indexTypeTag)
-	h.writeTable(table)
-	h.writeIndex(index)
+	h.writeTable(tableID)
+	h.writeIndex(indexID)
 	return h.getOid()
 }
 
@@ -2775,7 +2772,7 @@ func (h oidHasher) CheckConstraintOid(
 	h.writeTypeTag(checkConstraintTypeTag)
 	h.writeDB(db)
 	h.writeSchema(scName)
-	h.writeTable(table)
+	h.writeTable(table.ID)
 	h.writeCheckConstraint(check)
 	return h.getOid()
 }
@@ -2789,8 +2786,8 @@ func (h oidHasher) PrimaryKeyConstraintOid(
 	h.writeTypeTag(pKeyConstraintTypeTag)
 	h.writeDB(db)
 	h.writeSchema(scName)
-	h.writeTable(table)
-	h.writeIndex(pkey)
+	h.writeTable(table.ID)
+	h.writeIndex(pkey.ID)
 	return h.getOid()
 }
 
@@ -2803,7 +2800,7 @@ func (h oidHasher) ForeignKeyConstraintOid(
 	h.writeTypeTag(fkConstraintTypeTag)
 	h.writeDB(db)
 	h.writeSchema(scName)
-	h.writeTable(table)
+	h.writeTable(table.ID)
 	h.writeForeignKeyConstraint(fk)
 	return h.getOid()
 }
@@ -2817,8 +2814,8 @@ func (h oidHasher) UniqueConstraintOid(
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(db)
 	h.writeSchema(scName)
-	h.writeTable(table)
-	h.writeIndex(index)
+	h.writeTable(table.ID)
+	h.writeIndex(index.ID)
 	return h.getOid()
 }
 

@@ -48,6 +48,7 @@ comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
+	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text
 
 execute_stmt ::=
 	'EXECUTE' table_alias_name execute_param_clause
@@ -218,6 +219,10 @@ comment_text ::=
 column_path ::=
 	name
 	| prefixed_column_path
+
+table_index_name ::=
+	table_name '@' index_name
+	| standalone_index_name
 
 table_alias_name ::=
 	name
@@ -485,12 +490,12 @@ show_grants_stmt ::=
 	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
 
 show_indexes_stmt ::=
-	'SHOW' 'INDEX' 'FROM' table_name
-	| 'SHOW' 'INDEX' 'FROM' 'DATABASE' database_name
-	| 'SHOW' 'INDEXES' 'FROM' table_name
-	| 'SHOW' 'INDEXES' 'FROM' 'DATABASE' database_name
-	| 'SHOW' 'KEYS' 'FROM' table_name
-	| 'SHOW' 'KEYS' 'FROM' 'DATABASE' database_name
+	'SHOW' 'INDEX' 'FROM' table_name with_comment
+	| 'SHOW' 'INDEX' 'FROM' 'DATABASE' database_name with_comment
+	| 'SHOW' 'INDEXES' 'FROM' table_name with_comment
+	| 'SHOW' 'INDEXES' 'FROM' 'DATABASE' database_name with_comment
+	| 'SHOW' 'KEYS' 'FROM' table_name with_comment
+	| 'SHOW' 'KEYS' 'FROM' 'DATABASE' database_name with_comment
 
 show_partitions_stmt ::=
 	'SHOW' 'PARTITIONS' 'FROM' 'TABLE' table_name
@@ -590,6 +595,12 @@ prefixed_column_path ::=
 	db_object_name_component '.' unrestricted_name
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
+
+index_name ::=
+	unrestricted_name
+
+standalone_index_name ::=
+	db_object_name
 
 expr_list ::=
 	( a_expr ) ( ( ',' a_expr ) )*
@@ -1194,10 +1205,6 @@ for_grantee_clause ::=
 	'FOR' name_list
 	| 
 
-table_index_name ::=
-	table_name '@' index_name
-	| standalone_index_name
-
 opt_cluster ::=
 	'CLUSTER'
 	| 'LOCAL'
@@ -1388,9 +1395,6 @@ opt_partition_by ::=
 	partition_by
 	| 
 
-index_name ::=
-	unrestricted_name
-
 opt_table_elem_list ::=
 	table_elem_list
 	| 
@@ -1578,9 +1582,6 @@ extra_var_value ::=
 targets_roles ::=
 	'ROLE' name_list
 	| targets
-
-standalone_index_name ::=
-	db_object_name
 
 partition ::=
 	'PARTITION' partition_name
