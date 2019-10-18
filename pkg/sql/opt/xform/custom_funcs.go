@@ -1136,7 +1136,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols)
 		}
 
-		// Check if the first column in the index has an equality constraint.
+		// Check if the first column in the index has an equality constraint, or if
+		// it is constrained to a constant value. This check doesn't guarantee that
+		// we will find lookup join key columns, but it avoids the unnecessary work
+		// in most cases.
 		firstIdxCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
 			if _, ok := constValMap[firstIdxCol]; !ok {
@@ -1186,6 +1189,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
 			constFilters = append(constFilters, filter)
+		}
+
+		if len(lookupJoin.KeyCols) == 0 {
+			// We couldn't find equality columns which we can lookup.
+			continue
 		}
 
 		// Construct the projections for the constant columns.
