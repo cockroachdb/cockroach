@@ -92,7 +92,7 @@ select
  ├── prune: (2)
  ├── scan t
  │    ├── columns: k:1 str:2
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── stats: [rows=1000]
  │    ├── cost: 1040.02
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
