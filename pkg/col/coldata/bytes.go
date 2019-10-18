@@ -77,31 +77,40 @@ func (b *Bytes) Set(i int, v []byte) {
 	b.maxSetIndex = i
 }
 
-// Slice modifies and returns the receiver Bytes struct sliced according to
-// start and end. Returning the result is not necessary but is done for
-// compatibility with the usage of other data representations in vectorized
-// execution. Note that Slicing can be expensive since it incurs a step to
-// translate offsets.
+// Slice returns a shallow copy of the receiver Bytes struct sliced according
+// to start and end. Note that slicing is a lightweight operation, so the
+// underlying memory will be shared between the receiver and a newly created
+// Bytes struct.
 func (b *Bytes) Slice(start, end int) *Bytes {
-	if start == 0 && end == len(b.offsets) {
-		return b
+	if start < 0 || start > end || end > b.Len() {
+		panic(
+			fmt.Sprintf(
+				"invalid slice arguments: start=%d end=%d when Bytes.Len()=%d",
+				start, end, b.Len(),
+			),
+		)
 	}
+	maxSetIndex := end - start - 1
 	if start == end {
-		b.offsets = b.offsets[:0]
-		b.lengths = b.lengths[:0]
-		b.data = b.data[:0]
-		b.maxSetIndex = 0
-		return b
+		maxSetIndex = 0
 	}
-	translateBy := b.offsets[start]
-	b.data = b.data[b.offsets[start] : b.offsets[end-1]+b.lengths[end-1]]
-	b.offsets = b.offsets[start:end]
-	for i := range b.offsets {
-		b.offsets[i] -= translateBy
+	if maxSetIndex > b.maxSetIndex-start {
+		maxSetIndex = b.maxSetIndex - start
 	}
-	b.lengths = b.lengths[start:end]
-	b.maxSetIndex = end - start - 1
-	return b
+	var data []byte
+	if end == 0 {
+		data = b.data[:0]
+	} else {
+		// Note that during slicing we don't use an offset for a start index so
+		// that we don't need to translate the offsets.
+		data = b.data[:b.offsets[end-1]+b.lengths[end-1]]
+	}
+	return &Bytes{
+		data:        data,
+		offsets:     b.offsets[start:end],
+		lengths:     b.lengths[start:end],
+		maxSetIndex: maxSetIndex,
+	}
 }
 
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive []byte values
@@ -118,32 +127,40 @@ func (b *Bytes) Slice(start, end int) *Bytes {
 // shifted right.
 func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if destIdx < 0 || destIdx > b.Len() {
-		panic(fmt.Sprintf("dest index %d out of range (len=%d)", destIdx, b.Len()))
-	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() || srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
 		panic(
-			fmt.Sprintf("source index start %d or end %d invalid (len=%d)", srcStartIdx, srcEndIdx, src.Len()),
+			fmt.Sprintf(
+				"dest index %d out of range (len=%d)", destIdx, b.Len(),
+			),
+		)
+	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() ||
+		srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
+		panic(
+			fmt.Sprintf(
+				"source index start %d or end %d invalid (len=%d)",
+				srcStartIdx, srcEndIdx, src.Len(),
+			),
 		)
 	}
 	toCopy := srcEndIdx - srcStartIdx
-	if toCopy == 0 || len(b.offsets) == 0 || destIdx == len(b.offsets) {
+	if toCopy == 0 || b.Len() == 0 || destIdx == b.Len() {
 		return
 	}
 
-	srcDataToCopy := src.data[src.offsets[srcStartIdx] : src.offsets[srcEndIdx-1]+src.lengths[srcEndIdx-1]]
-	if destIdx+toCopy > len(b.offsets) {
+	if destIdx+toCopy > b.Len() {
 		// Reduce the number of elements to copy to what can fit into the
 		// destination.
-		toCopy = len(b.offsets) - destIdx
-		srcDataToCopy = src.data[src.offsets[srcStartIdx]:src.offsets[srcStartIdx+toCopy]]
+		toCopy = b.Len() - destIdx
+		srcEndIdx = srcStartIdx + toCopy
 	}
 
+	srcDataToCopy := src.data[src.offsets[srcStartIdx] : src.offsets[srcEndIdx-1]+src.lengths[srcEndIdx-1]]
 	newMaxIdx := destIdx + (toCopy - 1)
 	if newMaxIdx > b.maxSetIndex {
 		b.maxSetIndex = newMaxIdx
 	}
 
 	var leftoverDestBytes []byte
-	if destIdx+toCopy < len(b.offsets) {
+	if destIdx+toCopy < b.Len() {
 		// There will still be elements left over after the last element to copy. We
 		// copy those elements into leftoverDestBytes to append after all elements
 		// have been copied.
@@ -162,7 +179,11 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	// b.data has enough capacity. Note that the "capacity" was checked
 	// beforehand, but the number of elements to copy does not correlate with the
 	// number of bytes.
-	b.data = append(b.data[:b.offsets[destIdx]], srcDataToCopy...)
+	if destIdx != 0 {
+		b.data = append(b.data[:b.offsets[destIdx-1]+b.lengths[destIdx-1]], srcDataToCopy...)
+	} else {
+		b.data = append(b.data[:0], srcDataToCopy...)
+	}
 	copy(b.lengths[destIdx:], src.lengths[srcStartIdx:srcEndIdx])
 	copy(b.offsets[destIdx:], src.offsets[srcStartIdx:srcEndIdx])
 
@@ -190,7 +211,7 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	// "Trim" unnecessary bytes. It's important we do this because we don't want
 	// to have unreferenced bytes. This could lead to issues since we assume that
 	// all bytes are "live" in order to use the builtin copy/append functions.
-	dataLen := len(b.offsets)
+	dataLen := b.Len()
 	b.data = b.data[:b.offsets[dataLen-1]+b.lengths[dataLen-1]]
 }
 
@@ -198,16 +219,24 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 // values from src into the receiver starting at destIdx.
 func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if destIdx < 0 || destIdx > b.Len() {
-		panic(fmt.Sprintf("dest index %d out of range (len=%d)", destIdx, b.Len()))
-	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() || srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
 		panic(
-			fmt.Sprintf("source index start %d or end %d invalid (len=%d)", srcStartIdx, srcEndIdx, src.Len()),
+			fmt.Sprintf(
+				"dest index %d out of range (len=%d)", destIdx, b.Len(),
+			),
+		)
+	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() ||
+		srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
+		panic(
+			fmt.Sprintf(
+				"source index start %d or end %d invalid (len=%d)",
+				srcStartIdx, srcEndIdx, src.Len(),
+			),
 		)
 	}
 	toAppend := srcEndIdx - srcStartIdx
 	b.maxSetIndex = destIdx + (toAppend - 1)
 	if toAppend == 0 {
-		if destIdx == len(b.offsets) {
+		if destIdx == b.Len() {
 			return
 		}
 		b.data = b.data[:b.offsets[destIdx]]
@@ -237,6 +266,7 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	// destOffsets is used to avoid having to recompute the target index on every
 	// iteration.
 	destOffsets := b.offsets[destIdx:]
+	// The lengths for these elements are correct, but the offsets need updating.
 	for i := range destOffsets {
 		destOffsets[i] += translateBy
 	}
@@ -245,7 +275,7 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 // AppendVal appends the given []byte value to the end of the receiver. A nil
 // value will be "converted" into an empty byte slice.
 func (b *Bytes) AppendVal(v []byte) {
-	b.maxSetIndex = len(b.offsets)
+	b.maxSetIndex = b.Len()
 	b.offsets = append(b.offsets, int32(len(b.data)))
 	b.lengths = append(b.lengths, int32(len(v)))
 	b.data = append(b.data, v...)
