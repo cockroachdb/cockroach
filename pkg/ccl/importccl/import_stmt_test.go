@@ -225,6 +225,14 @@ d
 			create: `s string`,
 			typ:    "CSV",
 			data:   `abc"de`,
+			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
+		},
+		{
+			name:   "strict quotes: bare quote in the middle of a field that is not quoted",
+			create: `s string`,
+			typ:    "CSV",
+			with:   `WITH strict_quotes`,
+			data:   `abc"de`,
 			err:    `row 1: reading CSV record: parse error on line 1, column 3: bare " in non-quoted-field`,
 		},
 		{
@@ -232,6 +240,14 @@ d
 			create: `s string`,
 			typ:    "CSV",
 			data:   `"abc"de`,
+			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
+		},
+		{
+			name:   "strict quotes: bare quote in the middle of a quoted field is not ok",
+			create: `s string`,
+			typ:    "CSV",
+			with:   `WITH strict_quotes`,
+			data:   `"abc"de"`,
 			err:    `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
 		},
 
@@ -397,6 +413,94 @@ d
 			data:   `\x`,
 			query: map[string][][]string{
 				`SELECT * from t`: {{`\x`}},
+			},
+		},
+		{
+			name:   "skip 0 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '0'`,
+			typ:    "DELIMITED",
+			data:   "foo,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"foo", "normal"}},
+			},
+		},
+		{
+			name:   "skip 1 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '1'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"foo", "normal"}},
+			},
+		},
+		{
+			name:   "skip 2 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '2'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"bar", "baz"}},
+			},
+		},
+		{
+			name:   "skip all lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '3'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {},
+			},
+		},
+		{
+			name:   "skip > all lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '4'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal\nbar,baz",
+			query: map[string][][]string{
+				`SELECT * from t`: {},
+			},
+		},
+		{
+			name:   "skip -1 lines",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', skip = '-1'`,
+			typ:    "DELIMITED",
+			data:   "a string, b string\nfoo,normal",
+			err:    "pq: skip must be >= 0",
+		},
+		{
+			name:   "nullif empty string",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', nullif = ''`,
+			typ:    "DELIMITED",
+			data:   ",normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"NULL", "normal"}},
+			},
+		},
+		{
+			name:   "nullif single char string",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', nullif = 'f'`,
+			typ:    "DELIMITED",
+			data:   "f,normal",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"NULL", "normal"}},
+			},
+		},
+		{
+			name:   "nullif multiple char string",
+			create: `a string, b string`,
+			with:   `WITH fields_terminated_by = ',', nullif = 'foo'`,
+			typ:    "DELIMITED",
+			data:   "foo,foop",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"NULL", "foop"}},
 			},
 		},
 

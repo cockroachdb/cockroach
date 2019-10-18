@@ -51,6 +51,9 @@ message CSVOptions {
   optional string null_encoding = 3 [(gogoproto.nullable) = true];
   // skip the first N lines of the input (e.g. to ignore column headers) when reading.
   optional uint32 skip = 4 [(gogoproto.nullable) = false];
+  // If strict_quotes is true, a quote may NOT appear in an unquoted field and a
+  // non-doubled quote may NOT appear in a quoted field.
+  optional bool strict_quotes = 5 [(gogoproto.nullable) = false];
 }
 
 // MySQLOutfileOptions describe the format of mysql's outfile.
@@ -73,6 +76,10 @@ message MySQLOutfileOptions {
   optional bool has_escape = 5 [(gogoproto.nullable) = false];
   // escape is the character used to prefix the other delimiters (--fields-escaped-by)
   optional int32 escape = 6 [(gogoproto.nullable) = false];
+  // skip the first N lines of the input (e.g. to ignore column headers) when reading.
+  optional uint32 skip = 7 [(gogoproto.nullable) = false];
+  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+  optional string null_encoding = 8 [(gogoproto.nullable) = true];
 }
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.

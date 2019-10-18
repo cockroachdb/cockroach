@@ -47,10 +47,11 @@ import (
 )
 
 const (
-	csvDelimiter = "delimiter"
-	csvComment   = "comment"
-	csvNullIf    = "nullif"
-	csvSkip      = "skip"
+	csvDelimiter    = "delimiter"
+	csvComment      = "comment"
+	csvNullIf       = "nullif"
+	csvSkip         = "skip"
+	csvStrictQuotes = "strict_quotes"
 
 	mysqlOutfileRowSep   = "rows_terminated_by"
 	mysqlOutfileFieldSep = "fields_terminated_by"
@@ -72,10 +73,11 @@ const (
 )
 
 var importOptionExpectValues = map[string]sql.KVStringOptValidate{
-	csvDelimiter: sql.KVStringOptRequireValue,
-	csvComment:   sql.KVStringOptRequireValue,
-	csvNullIf:    sql.KVStringOptRequireValue,
-	csvSkip:      sql.KVStringOptRequireValue,
+	csvDelimiter:    sql.KVStringOptRequireValue,
+	csvComment:      sql.KVStringOptRequireValue,
+	csvNullIf:       sql.KVStringOptRequireValue,
+	csvSkip:         sql.KVStringOptRequireValue,
+	csvStrictQuotes: sql.KVStringOptRequireNoValue,
 
 	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
 	mysqlOutfileFieldSep: sql.KVStringOptRequireValue,
@@ -243,6 +245,9 @@ func importPlanHook(
 				}
 				format.Csv.Skip = uint32(skip)
 			}
+			if _, ok := opts[csvStrictQuotes]; ok {
+				format.Csv.StrictQuotes = true
+			}
 		case "DELIMITED":
 			telemetry.Count("import.format.mysqlout")
 			format.Format = roachpb.IOFileFormat_MysqlOutfile
@@ -283,6 +288,19 @@ func importPlanHook(
 				}
 				format.MysqlOut.HasEscape = true
 				format.MysqlOut.Escape = c
+			}
+			if override, ok := opts[csvSkip]; ok {
+				skip, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %s value", csvSkip)
+				}
+				if skip < 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be >= 0", csvSkip)
+				}
+				format.MysqlOut.Skip = uint32(skip)
+			}
+			if override, ok := opts[csvNullIf]; ok {
+				format.MysqlOut.NullEncoding = &override
 			}
 		case "MYSQLDUMP":
 			telemetry.Count("import.format.mysqldump")
