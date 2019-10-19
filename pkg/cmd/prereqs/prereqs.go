@@ -48,10 +48,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 )
 
 var buildCtx = func() build.Context {
-	bc := build.Default
+	bc := buildutil.Default
 	bc.CgoEnabled = true
 	return bc
 }()

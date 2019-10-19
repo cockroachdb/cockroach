@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
@@ -195,7 +196,8 @@ func main() {
 	const org = "cockroachdb"
 	const repo = "cockroach"
 
-	crdb, err := build.Import(fmt.Sprintf("github.com/%s/%s", org, repo), "", build.FindOnly)
+	crdb, err := buildutil.Default.Import(
+		fmt.Sprintf("github.com/%s/%s", org, repo), "", build.FindOnly)
 	if err != nil {
 		log.Fatal(err)
 	}
