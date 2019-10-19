@@ -747,6 +747,7 @@ func runMVCCGarbageCollect(
 	// NB: a real invocation of MVCCGarbageCollect typically has most of the keys
 	// in sorted order. Here they will be ordered randomly.
 	setup := func() (gcKeys []roachpb.GCRequest_GCKey) {
+		batch := eng.NewBatch()
 		for i := 0; i < opts.numKeys; i++ {
 			key := randutil.RandBytes(rng, opts.keyBytes)
 			if opts.deleteVersions > 0 {
@@ -756,22 +757,29 @@ func runMVCCGarbageCollect(
 				})
 			}
 			for j := 0; j < opts.numVersions; j++ {
-				if err := MVCCPut(ctx, eng, nil /* ms */, key, ts.Add(0, int32(j)), val, nil); err != nil {
+				if err := MVCCPut(ctx, batch, nil /* ms */, key, ts.Add(0, int32(j)), val, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
 		}
+		if err := batch.Commit(false); err != nil {
+			b.Fatal(err)
+		}
+		batch.Close()
 		return gcKeys
 	}
 
+	gcKeys := setup()
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		gcKeys := setup()
-		b.StartTimer()
-		if err := MVCCGarbageCollect(ctx, eng, nil /* ms */, gcKeys, now); err != nil {
+		batch := eng.NewWriteOnlyBatch()
+		distinct := batch.Distinct()
+		if err := MVCCGarbageCollect(ctx, distinct, nil /* ms */, gcKeys, now); err != nil {
 			b.Fatal(err)
 		}
+		distinct.Close()
+		batch.Close()
 	}
 }
 
