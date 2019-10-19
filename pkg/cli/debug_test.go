@@ -135,8 +135,6 @@ func TestOpenReadOnlyStore(t *testing.T) {
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/41586")
-
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -307,6 +305,18 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					// WaitForFullReplication before we've decommissioned the nodes.
 					clusterArgs.ReplicationMode = base.ReplicationManual
 					clusterArgs.ParallelStart = true
+
+					// Sleep before restarting to allow all previous leases to expire.
+					// Without this sleep, the 2/4 case is flaky because sometimes
+					// node 1 will be left with an unexpired lease, which tricks
+					// some heuristics on node 2 into never campaigning even though it
+					// is the only surviving replica.
+					//
+					// TODO(bdarnell): This is really a bug in Replica.leaseStatus.
+					// It should not return VALID for a lease held by a node that
+					// has been removed from the configuration.
+					time.Sleep(10 * time.Second)
+
 					tc := testcluster.StartTestCluster(t, testCase.totalNodes, clusterArgs)
 					defer tc.Stopper().Stop(ctx)
 
