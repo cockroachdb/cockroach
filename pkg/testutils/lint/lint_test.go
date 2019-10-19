@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/ghemawat/stream"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/buildutil"
