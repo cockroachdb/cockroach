@@ -12,6 +12,7 @@ package buildutil
 
 import (
 	"go/build"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -22,6 +23,17 @@ import (
 func short(in string) string {
 	return strings.Replace(in, "github.com/cockroachdb/cockroach/pkg/", "./pkg/", -1)
 }
+
+// Default is the default build context, configured so as to disable go
+// modules.
+var Default = func() build.Context {
+	c := build.Default
+	// NB: This is a hack to disable the use of go modules with build.Import. It
+	// is equivalent to setting GO111MODULE=off. This will probably break with a
+	// future version of Go, but suffices until we move to using go modules.
+	c.JoinPath = filepath.Join
+	return c
+}()
 
 // VerifyNoImports verifies that a package doesn't depend (directly or
 // indirectly) on forbidden packages. The forbidden packages are specified as
@@ -43,7 +55,7 @@ func VerifyNoImports(
 		t.Skip("GOPATH isn't set")
 	}
 
-	buildContext := build.Default
+	buildContext := Default
 	buildContext.CgoEnabled = cgo
 
 	checked := make(map[string]struct{})
@@ -140,7 +152,7 @@ func VerifyTransitiveWhitelist(t testing.TB, pkg string, allowedPkgs []string) {
 			return
 		}
 
-		pkg, err := build.Default.Import(path, "", 0)
+		pkg, err := Default.Import(path, "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -160,7 +172,7 @@ func VerifyTransitiveWhitelist(t testing.TB, pkg string, allowedPkgs []string) {
 				continue // "C" is fake
 			}
 
-			importPkg, err := build.Default.Import(imp, pkg.Dir, build.FindOnly)
+			importPkg, err := Default.Import(imp, pkg.Dir, build.FindOnly)
 			if err != nil {
 				t.Fatal(err)
 			}

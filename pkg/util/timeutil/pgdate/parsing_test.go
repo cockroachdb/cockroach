@@ -37,7 +37,6 @@ func init() {
 		`a postgresql connect string suitable for sql.Open(), `+
 			`to enable cross-checking during development; for example: `+
 			`-pgdate.db="database=bob sslmode=disable"`)
-	flag.Parse()
 }
 
 type timeData struct {
