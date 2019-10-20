@@ -944,6 +944,12 @@ var (
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAddSSTableEvalDelay = metric.Metadata{
+		Name:        "addsstable.delay",
+		Help:        "Latency histogram of delays prior to evaluting AddSSTable requests",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Encryption-at-rest metrics.
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
@@ -1159,6 +1165,7 @@ type StoreMetrics struct {
 	AddSSTableProposals         *metric.Counter
 	AddSSTableApplications      *metric.Counter
 	AddSSTableApplicationCopies *metric.Counter
+	AddSSTableProposalDelay     *metric.Histogram
 
 	// Encryption-at-rest stats.
 	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
@@ -1359,6 +1366,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AddSSTableProposals:         metric.NewCounter(metaAddSSTableProposals),
 		AddSSTableApplications:      metric.NewCounter(metaAddSSTableApplications),
 		AddSSTableApplicationCopies: metric.NewCounter(metaAddSSTableApplicationCopies),
+		AddSSTableProposalDelay:     metric.NewLatency(metaAddSSTableEvalDelay, histogramWindow),
 
 		// Encryption-at-rest.
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
