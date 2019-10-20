@@ -944,6 +944,18 @@ var (
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAddSSTableEvalTotalDelay = metric.Metadata{
+		Name:        "addsstable.delay.total",
+		Help:        "Amount by which evaluation of AddSSTable requests was delayed",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaAddSSTableEvalEngineDelay = metric.Metadata{
+		Name:        "addsstable.delay.enginebackpressure",
+		Help:        "Amount by which evaluation of AddSSTable requests was delayed by storage-engine backpressure",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Encryption-at-rest metrics.
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
@@ -1156,9 +1168,11 @@ type StoreMetrics struct {
 
 	// AddSSTable stats: how many AddSSTable commands were proposed and how many
 	// were applied? How many applications required writing a copy?
-	AddSSTableProposals         *metric.Counter
-	AddSSTableApplications      *metric.Counter
-	AddSSTableApplicationCopies *metric.Counter
+	AddSSTableProposals           *metric.Counter
+	AddSSTableApplications        *metric.Counter
+	AddSSTableApplicationCopies   *metric.Counter
+	AddSSTableProposalTotalDelay  *metric.Counter
+	AddSSTableProposalEngineDelay *metric.Counter
 
 	// Encryption-at-rest stats.
 	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
@@ -1356,9 +1370,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BackpressuredOnSplitRequests: metric.NewGauge(metaBackpressuredOnSplitRequests),
 
 		// AddSSTable proposal + applications counters.
-		AddSSTableProposals:         metric.NewCounter(metaAddSSTableProposals),
-		AddSSTableApplications:      metric.NewCounter(metaAddSSTableApplications),
-		AddSSTableApplicationCopies: metric.NewCounter(metaAddSSTableApplicationCopies),
+		AddSSTableProposals:           metric.NewCounter(metaAddSSTableProposals),
+		AddSSTableApplications:        metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableApplicationCopies:   metric.NewCounter(metaAddSSTableApplicationCopies),
+		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),
+		AddSSTableProposalEngineDelay: metric.NewCounter(metaAddSSTableEvalEngineDelay),
 
 		// Encryption-at-rest.
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),

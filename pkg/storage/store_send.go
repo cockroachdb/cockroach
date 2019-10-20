@@ -69,9 +69,14 @@ func (s *Store) Send(
 		}
 		beforeEngineDelay := timeutil.Now()
 		s.engine.PreIngestDelay(ctx)
-		if waited := timeutil.Since(before); waited > time.Second {
+		after := timeutil.Now()
+
+		waited, waitedEngine := after.Sub(before), after.Sub(beforeEngineDelay)
+		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
+		s.metrics.AddSSTableProposalEngineDelay.Inc(waitedEngine.Nanoseconds())
+		if waited > time.Second {
 			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
-				waited, timeutil.Since(beforeEngineDelay))
+				waited, waitedEngine)
 		}
 	}
 
