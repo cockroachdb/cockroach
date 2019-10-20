@@ -64,9 +64,6 @@ func (s *Store) Send(
 		}
 		defer s.limiters.ConcurrentAddSSTableRequests.Finish()
 
-		if err := s.limiters.AddSSTableRequestRate.Wait(ctx); err != nil {
-			return nil, roachpb.NewError(err)
-		}
 		beforeEngineDelay := timeutil.Now()
 		s.engine.PreIngestDelay(ctx)
 		if waited := timeutil.Since(before); waited > time.Second {
