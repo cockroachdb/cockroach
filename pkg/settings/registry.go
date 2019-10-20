@@ -46,6 +46,7 @@ var retiredSettings = map[string]struct{}{
 	"timeseries.storage.10s_resolution_ttl":                {},
 	"changefeed.push.enabled":                              {},
 	"sql.defaults.optimizer":                               {},
+	"kv.bulk_io_write.addsstable_max_rate":                 {},
 }
 
 // Register adds a setting to the registry.
