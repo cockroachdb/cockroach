@@ -64,7 +64,7 @@ func TestValidateAddrs(t *testing.T) {
 	// For the host name resolution error we can reliably expect "no such host"
 	// below, but before we test anything we need to ensure we indeed have
 	// a reliably non-resolvable host name.
-	_, err = net.DefaultResolver.LookupIPAddr(context.Background(), "nonexistent.example.com")
+	_, err = net.DefaultResolver.LookupIPAddr(context.Background(), "some.nonexistent")
 	if err == nil {
 		t.Fatal("expected host resolution failure, got no error")
 	}
@@ -142,7 +142,7 @@ func TestValidateAddrs(t *testing.T) {
 		{addrs{"localhost:-1231", "", "", "", "", ""}, "invalid port", addrs{}},
 		{addrs{"localhost:nonexistent", "", "", "", "", ""}, portExpectedErr, addrs{}},
 		// Invalid address.
-		{addrs{"nonexistent.example.com:26257", "", "", "", "", ""}, "no such host", addrs{}},
+		{addrs{"some.nonexistent:26257", "", "", "", "", ""}, "no such host", addrs{}},
 		{addrs{"333.333.333.333:26257", "", "", "", "", ""}, "no such host", addrs{}},
 	}
 
