@@ -26,6 +26,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	cbuildutil "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+
 	"github.com/ghemawat/stream"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/buildutil"
@@ -112,7 +114,7 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 // subset of the packages at a time, although this comes at the
 // expense of increased running time.
 func TestLint(t *testing.T) {
-	crdb, err := buildutil.Default.Import(cockroachDB, "", build.FindOnly)
+	crdb, err := cbuildutil.Default.Import(cockroachDB, "", build.FindOnly)
 	if err != nil {
 		t.Skip(err)
 	}
@@ -1148,7 +1150,7 @@ func TestLint(t *testing.T) {
 
 		filter := stream.FilterFunc(func(arg stream.Arg) error {
 			for _, useAllFiles := range []bool{false, true} {
-				buildContext := buildutil.Default
+				buildContext := cbuildutil.Default
 				buildContext.CgoEnabled = true
 				buildContext.UseAllFiles = useAllFiles
 			outer:
