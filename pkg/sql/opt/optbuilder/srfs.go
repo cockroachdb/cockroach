@@ -101,7 +101,8 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
-		if def == nil || def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
+		if def == nil || def.Class != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
+
 			if def != nil && len(def.ReturnLabels) > 0 {
 				// Override the computed alias with the one defined in the ReturnLabels. This
 				// satisfies a Postgres quirk where some json functions use different labels
@@ -133,10 +134,10 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, fn opt.ScalarExpr, columns int, inScope, outScope *scope, outCol *scopeColumn,
+	f *tree.FuncExpr, fn opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
 	// Add scope columns.
-	if columns == 1 {
+	if outCol != nil {
 		// Single-column return type.
 		b.populateSynthesizedColumn(outCol, fn)
 	} else {
