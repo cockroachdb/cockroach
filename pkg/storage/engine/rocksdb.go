@@ -1923,7 +1923,7 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 }
 
 func (r *rocksDBBatch) Empty() bool {
-	return r.flushes == 0 && r.builder.Empty()
+	return r.flushes == 0 && r.builder.Empty() && !r.builder.logData
 }
 
 func (r *rocksDBBatch) Repr() []byte {

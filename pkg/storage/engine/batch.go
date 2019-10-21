@@ -89,8 +89,9 @@ const (
 // Note that the encoding of these keys needs to match up with the encoding in
 // rocksdb/db.cc:EncodeKey().
 type RocksDBBatchBuilder struct {
-	repr  []byte
-	count int
+	repr    []byte
+	count   int
+	logData bool
 }
 
 func (b *RocksDBBatchBuilder) maybeInit() {
@@ -106,6 +107,7 @@ func (b *RocksDBBatchBuilder) Finish() []byte {
 	repr := b.getRepr()
 	b.repr = b.repr[:headerSize]
 	b.count = 0
+	b.logData = false
 	return repr
 }
 
@@ -250,6 +252,7 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 // but otherwise uninterpreted by RocksDB.
 func (b *RocksDBBatchBuilder) LogData(data []byte) {
 	b.maybeInit()
+	b.logData = true
 	pos := len(b.repr)
 	b.grow(1 + maxVarintLen32 + len(data))
 	b.repr[pos] = byte(BatchTypeLogData)
