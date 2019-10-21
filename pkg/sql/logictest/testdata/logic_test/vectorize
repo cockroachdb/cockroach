@@ -397,7 +397,7 @@ statement ok
 CREATE TABLE e (x TEXT)
 
 statement ok
-INSERT INTO e VALUES ('abc'), ('xyz')
+INSERT INTO e VALUES ('abc'), ('xyz'), (NULL)
 
 statement ok
 SET vectorize = experimental_always
@@ -455,8 +455,9 @@ xyz
 query TBBBBBBBB
 SELECT x, x LIKE '%', x NOT LIKE '%', x LIKE 'ab%', x NOT LIKE 'ab%', x LIKE '%bc', x NOT LIKE '%bc', x LIKE 'a%c', x NOT LIKE 'a%c' FROM e ORDER BY x
 ----
-abc  true  false  true   false  true   false  true   false
-xyz  true  false  false  true   false  true   false  true
+NULL  NULL  NULL   NULL   NULL   NULL   NULL   NULL   NULL
+abc   true  false  true   false  true   false  true   false
+xyz   true  false  false  true   false  true   false  true
 
 # Test that vectorized stats are collected correctly.
 statement ok
