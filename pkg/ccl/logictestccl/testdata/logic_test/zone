@@ -309,6 +309,39 @@ SHOW ZONE CONFIGURATION FOR PARTITION x1 OF TABLE t35756
           constraints = '[]',
           lease_preferences = '[]'
 
+# regression for #38074
+statement ok
+CREATE TABLE t38074 (x INT, index i(x));
+
+statement ok
+ALTER INDEX t38074@i CONFIGURE ZONE USING gc.ttlseconds = 80000
+
+statement ok
+ALTER TABLE t38074 CONFIGURE ZONE USING gc.ttlseconds = 70000
+
+# Ensure that the table-level zone configuration is no longer a placeholder.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t38074
+----
+test.t38074 ALTER TABLE t38074 CONFIGURE ZONE USING
+                               range_min_bytes = 16777216,
+                               range_max_bytes = 67108864,
+                               gc.ttlseconds = 70000,
+                               num_replicas = 3,
+                               constraints = '[]',
+                               lease_preferences = '[]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX t38074@i
+----
+test.t38074@i ALTER INDEX t38074@i CONFIGURE ZONE USING
+                                   range_min_bytes = 16777216,
+                                   range_max_bytes = 67108864,
+                                   gc.ttlseconds = 80000,
+                                   num_replicas = 3,
+                                   constraints = '[]',
+                                   lease_preferences = '[]'
+
 # ------------------------------------------------------------------------------
 # Regression test for #36348; place this at the bottom of this file.
 # ------------------------------------------------------------------------------

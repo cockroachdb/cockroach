@@ -168,7 +168,6 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	var yamlConfig string
 	var setters []func(c *config.ZoneConfig)
 	deleteZone := false
-	subzonePlaceholder := false
 
 	// Evaluate the configuration input.
 	if n.yamlConfig != nil {
@@ -244,6 +243,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
+	subzonePlaceholder := false
 	// resolveZone determines the ID of the target object of the zone
 	// specifier. This ought to succeed regardless of whether there is
 	// already a zone config for the target object.
@@ -419,6 +419,14 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			// No: the final zone config is the one we just processed.
 			completeZone = &newZone
 			partialZone = &finalZone
+			// Since we are writing to a zone that is not a subzone, we need to
+			// make sure that the zone config is not considered a placeholder
+			// anymore. If the settings applied to this zone don't touch the
+			// NumReplicas field, set it to nil so that the zone isn't considered a
+			// placeholder anymore.
+			if partialZone.IsSubzonePlaceholder() {
+				partialZone.NumReplicas = nil
+			}
 		} else {
 			// If the zone config for targetID was a subzone placeholder, it'll have
 			// been skipped over by GetZoneConfigInTxn. We need to load it regardless
