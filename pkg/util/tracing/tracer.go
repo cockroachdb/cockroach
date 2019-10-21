@@ -55,11 +55,7 @@ const (
 var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen in the /debug page",
-	// This setting defaults to true, but there is a sql migration that sets it
-	// to false. The effect is that we have tracing when the server starts and
-	// gets stuck there, without paying the overhead of having it on all the
-	// time (unless that's how the operator explicitly configures the cluster).
-	true,
+	false,
 )
 
 var lightstepToken = settings.RegisterStringSetting(
