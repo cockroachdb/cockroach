@@ -1778,7 +1778,8 @@ may increase either contention or retry errors, or both.`,
 				return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Overload{
@@ -1794,7 +1795,8 @@ may increase either contention or retry errors, or both.`,
 				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Overload{
@@ -1806,7 +1808,8 @@ may increase either contention or retry errors, or both.`,
 				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
+				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Overload{
@@ -1909,8 +1912,8 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
-				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
-				"millisecond, microsecond.",
+				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
+				"week, day, hour, minute, second, millisecond, microsecond.",
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
@@ -1926,8 +1929,8 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
-				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
-				"millisecond, microsecond.",
+				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
+				"week, day, hour, minute, second, millisecond, microsecond.",
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
@@ -1955,8 +1958,8 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
-				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
-				"millisecond, microsecond.",
+				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
+				"week, day, hour, minute, second, millisecond, microsecond.",
 		},
 	),
 
@@ -4521,12 +4524,55 @@ func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, e
 	}
 }
 
+// dateToJulianDay is based on the date2j function in PostgreSQL 10.5.
+func dateToJulianDay(year int, month int, day int) int {
+	if month > 2 {
+		month++
+		year += 4800
+	} else {
+		month += 13
+		year += 4799
+	}
+
+	century := year / 100
+	jd := year*365 - 32167
+	jd += year/4 - century + century/4
+	jd += 7834*month/256 + day
+
+	return jd
+}
+
 func extractStringFromTimestamp(
 	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
 ) (tree.Datum, error) {
 	switch timeSpan {
+	case "millennia", "millennium", "millenniums":
+		year := fromTime.Year()
+		if year > 0 {
+			return tree.NewDInt(tree.DInt((year + 999) / 1000)), nil
+		}
+		return tree.NewDInt(tree.DInt(-((999 - (year - 1)) / 1000))), nil
+
+	case "centuries", "century":
+		year := fromTime.Year()
+		if year > 0 {
+			return tree.NewDInt(tree.DInt((year + 99) / 100)), nil
+		}
+		return tree.NewDInt(tree.DInt(-((99 - (year - 1)) / 100))), nil
+
+	case "decade", "decades":
+		year := fromTime.Year()
+		if year >= 0 {
+			return tree.NewDInt(tree.DInt(year / 10)), nil
+		}
+		return tree.NewDInt(tree.DInt(-((8 - (year - 1)) / 10))), nil
+
 	case "year", "years":
 		return tree.NewDInt(tree.DInt(fromTime.Year())), nil
+
+	case "isoyear":
+		year, _ := fromTime.ISOWeek()
+		return tree.NewDInt(tree.DInt(year)), nil
 
 	case "quarter":
 		return tree.NewDInt(tree.DInt((fromTime.Month()-1)/3 + 1)), nil
@@ -4544,8 +4590,19 @@ func extractStringFromTimestamp(
 	case "dayofweek", "dow":
 		return tree.NewDInt(tree.DInt(fromTime.Weekday())), nil
 
+	case "isodow":
+		day := fromTime.Weekday()
+		if day == 0 {
+			return tree.NewDInt(tree.DInt(7)), nil
+		}
+		return tree.NewDInt(tree.DInt(day)), nil
+
 	case "dayofyear", "doy":
 		return tree.NewDInt(tree.DInt(fromTime.YearDay())), nil
+
+	case "julian":
+		julianDay := dateToJulianDay(fromTime.Year(), int(fromTime.Month()), fromTime.Day())
+		return tree.NewDInt(tree.DInt(julianDay)), nil
 
 	case "hour", "hours":
 		return tree.NewDInt(tree.DInt(fromTime.Hour())), nil
@@ -4742,6 +4799,30 @@ func truncateTimestamp(
 	nsecTrunc := 0
 
 	switch timeSpan {
+	case "millennia", "millennium", "millenniums":
+		if year > 0 {
+			year = ((year+999)/1000)*1000 - 999
+		} else {
+			year = -((999-(year-1))/1000)*1000 + 1
+		}
+		month, day, hour, min, sec, nsec = monthTrunc, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
+
+	case "centuries", "century":
+		if year > 0 {
+			year = ((year+99)/100)*100 - 99
+		} else {
+			year = -((99-(year-1))/100)*100 + 1
+		}
+		month, day, hour, min, sec, nsec = monthTrunc, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
+
+	case "decade", "decades":
+		if year >= 0 {
+			year = (year / 10) * 10
+		} else {
+			year = -((8 - (year - 1)) / 10) * 10
+		}
+		month, day, hour, min, sec, nsec = monthTrunc, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
+
 	case "year", "years":
 		month, day, hour, min, sec, nsec = monthTrunc, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
 

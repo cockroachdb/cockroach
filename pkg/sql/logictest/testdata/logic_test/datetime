@@ -482,7 +482,19 @@ INSERT INTO ex VALUES
   (37, 'milliseconds', '2016-02-10 19:46:33.306157519',    306,       '2016-02-10 19:46:33.306'),
   (38, 'microsecond',  '2001-04-10 12:04:59.34565423',     345654,    '2001-04-10 12:04:59.345654'),
   (39, 'microsecond',  '2016-02-10 19:46:33.306157519',    306158,    '2016-02-10 19:46:33.306158'),
-  (40, 'microseconds', '2016-02-10 19:46:33.306157519',    306158,    '2016-02-10 19:46:33.306158')
+  (40, 'microseconds', '2016-02-10 19:46:33.306157519',    306158,    '2016-02-10 19:46:33.306158'),
+  (41, 'isodow',       '2001-04-10 12:04:59',              2,         null),
+  (42, 'isodow',       '2001-04-08 12:04:59',              7,         null),
+  (43, 'isoyear',      '2007-12-31 12:04:59',              2008,      null),
+  (44, 'isoyear',      '2008-01-01 12:04:59',              2008,      null),
+  (45, 'decade',       '2001-04-10 12:04:59',              200,       '2000-01-01 00:00:00'),
+  (46, 'decade',       '2016-02-10 19:46:33.306157519 BC', -202,      '2021-01-01 00:00:00 BC'),
+  (47, 'century',      '2016-02-10 19:46:33.306157519',    21,        '2001-01-01 00:00:00'),
+  (48, 'century',      '0004-02-10 19:46:33.306157519 BC', -1,        '0100-01-01 00:00:00 BC'),
+  (49, 'millennium',   '2016-02-10 19:46:33.306157519',    3,         '2001-01-01 00:00:00'),
+  (50, 'millennium',   '1004-02-10 19:46:33.306157519 BC', -2,        '2000-01-01 00:00:00 BC'),
+  (51, 'julian',       '4714-11-24 BC',                     0,        null),
+  (52, 'julian',       '2016-02-10 19:46:33.306157519',    2457429,   null)
 
 query IBI
 SELECT k, extract(element, input::timestamp) = extract_result, extract(element, input::timestamp) FROM ex ORDER BY k
@@ -527,6 +539,18 @@ SELECT k, extract(element, input::timestamp) = extract_result, extract(element, 
 38 true 345654
 39 true 306158
 40 true 306158
+41 true 2
+42 true 7
+43 true 2008
+44 true 2008
+45 true 200
+46 true -202
+47 true 21
+48 true -1
+49 true 3
+50 true -2
+51 true 0
+52 true 2457429
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
@@ -540,46 +564,58 @@ SELECT INTERVAL '1 ns';
 query IBI
 SELECT k, extract(element, input::timestamptz) = extract_result, extract(element, input::timestamptz) FROM ex ORDER BY k
 ----
-1  true 2001
-2  true 2016
-3  true 2016
-4  true 2
-5  true 1
-6  true 2
-7  true 3
-8  true 4
-9  true 4
-10 true 2
-11 true 2
-12 true 15
-13 true 1
-14 true 10
-15 true 10
-16 true 10
-17 true 2
-18 true 4
-19 true 100
-20 true 102
-21 true 86401
-22 true 100801
-23 true 986904299
-24 true 12
-25 true 19
-26 true 23
-27 true 19
-28 true 23
-29 true 4
-30 true 46
-31 true 46
-32 true 59
-33 true 33
-34 true 33
-35 true 234
-36 true 306
-37 true 306
-38 true 345654
-39 true 306158
-40 true 306158
+1   true  2001
+2   true  2016
+3   true  2016
+4   true  2
+5   true  1
+6   true  2
+7   true  3
+8   true  4
+9   true  4
+10  true  2
+11  true  2
+12  true  15
+13  true  1
+14  true  10
+15  true  10
+16  true  10
+17  true  2
+18  true  4
+19  true  100
+20  true  102
+21  true  86401
+22  true  100801
+23  true  986904299
+24  true  12
+25  true  19
+26  true  23
+27  true  19
+28  true  23
+29  true  4
+30  true  46
+31  true  46
+32  true  59
+33  true  33
+34  true  33
+35  true  234
+36  true  306
+37  true  306
+38  true  345654
+39  true  306158
+40  true  306158
+41  true  2
+42  true  7
+43  true  2008
+44  true  2008
+45  true  200
+46  true  -202
+47  true  21
+48  true  -1
+49  true  3
+50  true  -2
+51  true  0
+52  true  2457429
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
@@ -631,6 +667,12 @@ FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 38 true 2001-04-10 12:04:59.345654+00:00
 39 true 2016-02-10 19:46:33.306158+00:00
 40 true 2016-02-10 19:46:33.306158+00:00
+45 true 2000-01-01 00:00:00+00:00
+46 true -2020-01-01 00:00:00+00:00
+47 true 2001-01-01 00:00:00+00:00
+48 true -0099-01-01 00:00:00+00:00
+49 true 2001-01-01 00:00:00+00:00
+50 true -1999-01-01 00:00:00+00:00
 
 query IBT
 SELECT k, date_trunc(element, input::timestamptz) = date_trunc_result, date_trunc(element, input::timestamptz)::string
@@ -669,6 +711,27 @@ FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 38 true 2001-04-10 12:04:59.345654+00:00
 39 true 2016-02-10 19:46:33.306158+00:00
 40 true 2016-02-10 19:46:33.306158+00:00
+45 true 2000-01-01 00:00:00+00:00
+46 true -2020-01-01 00:00:00+00:00
+47 true 2001-01-01 00:00:00+00:00
+48 true -0099-01-01 00:00:00+00:00
+49 true 2001-01-01 00:00:00+00:00
+50 true -1999-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('millennia', '2000-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+1001-01-01 00:00:00-04:00
+
+query T
+SELECT date_trunc('centuries', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2001-01-01 00:00:00-04:00
+
+query T
+SELECT date_trunc('decades', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2010-01-01 00:00:00-04:00
 
 query T
 SELECT date_trunc('hour', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
@@ -717,6 +780,12 @@ FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 38  true  2001-04-10 00:00:00+00:00
 39  true  2016-02-10 00:00:00+00:00
 40  true  2016-02-10 00:00:00+00:00
+45  true  2000-01-01 00:00:00+00:00
+46  true  -2020-01-01 00:00:00+00:00
+47  true  2001-01-01 00:00:00+00:00
+48  true  -0099-01-01 00:00:00+00:00
+49  true  2001-01-01 00:00:00+00:00
+50  true  -1999-01-01 00:00:00+00:00
 
 query T
 SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
