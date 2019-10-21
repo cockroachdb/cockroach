@@ -13,7 +13,6 @@ package colexec
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -110,11 +109,17 @@ func GetLikeOperator(
 			constArg:       pat,
 		}, nil
 	case likeNeverMatch:
-		return NewZeroOp(input), nil
+		// Use an empty not-prefix operator to get correct NULL behavior.
+		return &selNotPrefixBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       []byte{},
+		}, nil
 	case likeAlwaysMatch:
-		// Matches everything.
-		// TODO(solon): Replace this with a NOT NULL operator.
-		return NewNoop(input), nil
+		// Use an empty prefix operator to get correct NULL behavior.
+		return &selPrefixBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       []byte{},
+		}, nil
 	case likeSuffix:
 		return &selSuffixBytesBytesConstOp{
 			selConstOpBase: base,
@@ -190,11 +195,17 @@ func GetLikeProjectionOperator(
 			constArg:        pat,
 		}, nil
 	case likeNeverMatch:
-		return NewConstOp(input, coltypes.Bool, false, resultIdx)
+		// Use an empty not-prefix operator to get correct NULL behavior.
+		return &projNotPrefixBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        []byte{},
+		}, nil
 	case likeAlwaysMatch:
-		// Matches everything.
-		// TODO(solon): Replace this with a NOT NULL operator.
-		return NewConstOp(input, coltypes.Bool, true, resultIdx)
+		// Use an empty prefix operator to get correct NULL behavior.
+		return &projPrefixBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        []byte{},
+		}, nil
 	case likeSuffix:
 		return &projSuffixBytesBytesConstOp{
 			projConstOpBase: base,
