@@ -1471,6 +1471,15 @@ message AddSSTableRequest {
   // MVCCStats, instead of computing the stats for the SSTable by iterating it.
   // Including these stats can make the evaluation of AddSSTable much cheaper.
   storage.engine.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
+
+  // IngestAsWrites causes the content of the provided SSTable to be ingested in
+  // a regular WriteBatch, instead of directly adding the provided SST to the
+  // storage engine. This is useful if the data size is so small that the fixed
+  // costs of adding an extra file (file IO, triggering a flush, compactions)
+  // would be higher than the marginal costs of the amount of data going though
+  // the usual write pipeline (on-disk raft log, WAL, etc).
+  // TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
+  bool ingest_as_writes = 5;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.

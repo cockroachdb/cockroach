@@ -569,7 +569,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
 			bulkMon := execinfra.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
-			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), ts, opts, bulkMon)
+			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), s.st, ts, opts, bulkMon)
 		},
 
 		Metrics: &distSQLMetrics,
