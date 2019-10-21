@@ -1802,6 +1802,10 @@ var charts = []sectionDescription{
 				Title:   "Read Amplification",
 				Metrics: []string{"rocksdb.read-amplification"},
 			},
+			{
+				Title:   "Pending Compaction",
+				Metrics: []string{"rocksdb.estimated-pending-compaction"},
+			},
 		},
 	},
 	{
