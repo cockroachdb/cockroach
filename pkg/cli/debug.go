@@ -905,6 +905,10 @@ used, data may be corrupted.
 
 This comand will prompt for confirmation before committing its changes.
 
+After this command is used, the node should not be restarted until at
+least 10 seconds have passed since it was stopped. Restarting it too
+early may lead to things getting stuck (if it happens, it can be fixed
+by restarting a second time).
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugUnsafeRemoveDeadReplicas),

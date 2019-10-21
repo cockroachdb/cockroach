@@ -311,6 +311,11 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				// some heuristics on node 2 into never campaigning even though it
 				// is the only surviving replica.
 				//
+				// The reason it never campaigns is incompletely understood.
+				// The result of shouldCampaignOnWake will correctly
+				// transition from false to true when the old lease expires,
+				// but nothing triggers a "wake" event after this point.
+				//
 				// TODO(bdarnell): This is really a bug in Replica.leaseStatus.
 				// It should not return VALID for a lease held by a node that
 				// has been removed from the configuration.
