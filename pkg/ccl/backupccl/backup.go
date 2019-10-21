@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -72,6 +73,12 @@ const (
 	backupOptRevisionHistory = "revision_history"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
+)
+
+var useTBI = settings.RegisterBoolSetting(
+	"kv.bulk_io_write.experimental_incremental_export_enabled",
+	"use experimental time-bound file filter when exporting in BACKUP",
+	false,
 )
 
 var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
@@ -778,11 +785,12 @@ func backup(
 				defer func() { <-exportsSem }()
 				header := roachpb.Header{Timestamp: span.end}
 				req := &roachpb.ExportRequest{
-					RequestHeader:       roachpb.RequestHeaderFromSpan(span.span),
-					Storage:             defaultStore.Conf(),
-					StorageByLocalityKV: storageByLocalityKV,
-					StartTime:           span.start,
-					MVCCFilter:          roachpb.MVCCFilter(backupDesc.MVCCFilter),
+					RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
+					Storage:                             defaultStore.Conf(),
+					StorageByLocalityKV:                 storageByLocalityKV,
+					StartTime:                           span.start,
+					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
+					MVCCFilter:                          roachpb.MVCCFilter(backupDesc.MVCCFilter),
 				}
 				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {
