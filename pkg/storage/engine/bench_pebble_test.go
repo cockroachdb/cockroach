@@ -51,6 +51,62 @@ func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
 	return peb
 }
 
+func BenchmarkMVCCScan_Pebble(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
+
+	ctx := context.Background()
+	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			for _, numVersions := range []int{1, 2, 10, 100} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, valueSize := range []int{8, 64, 512} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+								benchDataOptions: benchDataOptions{
+									numVersions: numVersions,
+									valueBytes:  valueSize,
+								},
+								numRows: numRows,
+								reverse: false,
+							})
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
+
+	ctx := context.Background()
+	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			for _, numVersions := range []int{1, 2, 10, 100} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, valueSize := range []int{8, 64, 512} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+								benchDataOptions: benchDataOptions{
+									numVersions: numVersions,
+									valueBytes:  valueSize,
+								},
+								numRows: numRows,
+								reverse: true,
+							})
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
