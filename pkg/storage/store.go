@@ -2360,6 +2360,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
 		readAmp := sstables.ReadAmplification()
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
+		s.metrics.RdbPendingCompaction.Update(stats.PendingCompactionBytesEstimate)
 		// Log this metric infrequently (with current configurations,
 		// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
 		// non-periodic callers of this method don't trigger expensive
