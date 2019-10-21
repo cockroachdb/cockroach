@@ -138,6 +138,10 @@ func importPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
+	if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionPartitionedBackup) {
+		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
+	}
+
 	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
 	if err != nil {
 		return nil, nil, nil, false, err
