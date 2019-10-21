@@ -215,6 +215,13 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 	dst.id = src.id
 }
 
+func (b *Builder) shouldUseDefaultColumnName(texpr tree.TypedExpr) bool {
+	if texpr.ResolvedType() == types.EmptyTuple {
+		return false
+	}
+	return len(texpr.ResolvedType().TupleLabels()) == 0
+}
+
 // addColumn adds a column to scope with the given alias, type, and
 // expression. It returns a pointer to the new column. The column ID and group
 // are left empty so they can be filled in later.
