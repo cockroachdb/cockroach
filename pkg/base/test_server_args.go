@@ -66,6 +66,10 @@ type TestServerArgs struct {
 	// Locality is optional and will set the server's locality.
 	Locality roachpb.Locality
 
+	// StorageEngine specifies the engine type (eg. rocksdb, pebble) to use to
+	// instantiate stores.
+	StorageEngine EngineType
+
 	// TempStorageConfig defines parameters for the temp storage used as
 	// working memory for distributed operations and CSV importing.
 	// If not initialized, will default to DefaultTestTempStorageConfig.

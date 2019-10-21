@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testenv"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -871,5 +872,8 @@ var TestClusterFactory serverutils.TestClusterFactory = testClusterFactoryImpl{}
 func (testClusterFactoryImpl) StartTestCluster(
 	t testing.TB, numNodes int, args base.TestClusterArgs,
 ) serverutils.TestClusterInterface {
+
+	args.ServerArgs.StorageEngine = testenv.TestStorageEngine
+
 	return StartTestCluster(t, numNodes, args)
 }

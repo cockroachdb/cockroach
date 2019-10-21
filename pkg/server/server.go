@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/reports"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -395,13 +394,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
-	var tempEngine diskmap.Factory
-	var err error
-	if cfg.StorageEngine == base.EngineTypePebble {
-		tempEngine, err = engine.NewPebbleTempEngine(s.cfg.TempStorageConfig, useStoreSpec)
-	} else {
-		tempEngine, err = engine.NewTempEngine(s.cfg.TempStorageConfig, useStoreSpec)
-	}
+	tempEngine, err := engine.NewTempEngine(cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create temp storage")
 	}

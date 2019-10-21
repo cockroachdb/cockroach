@@ -21,6 +21,18 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
+// NewTempEngine creates a new engine for DistSQL processors to use when
+// the working set is larger than can be stored in memory.
+func NewTempEngine(
+	engine base.EngineType, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+) (diskmap.Factory, error) {
+	if engine == base.EngineTypePebble {
+		return NewPebbleTempEngine(tempStorage, storeSpec)
+	} else {
+		return NewRocksDBTempEngine(tempStorage, storeSpec)
+	}
+}
+
 type rocksDBTempEngine struct {
 	db *RocksDB
 }
@@ -40,9 +52,9 @@ func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 	return newRocksDBMap(r.db, true /* allowDuplicates */)
 }
 
-// NewTempEngine creates a new RocksDB engine for DistSQL processors to use when
+// NewRocksDBTempEngine creates a new RocksDB engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.
-func NewTempEngine(
+func NewRocksDBTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
 	if tempStorage.InMemory {
