@@ -84,3 +84,9 @@ true
 # Regression test for #33659
 statement ok
 TABLE [SHOW ZONE CONFIGURATIONS] WITH ORDINALITY
+
+# Regression test for #41760
+query TI
+SELECT * FROM (SELECT * FROM foo LIMIT 1) WITH ORDINALITY
+----
+a 1
