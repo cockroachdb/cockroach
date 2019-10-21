@@ -110,13 +110,15 @@ type Processor struct {
 	reg registry
 	rts resolvedTimestamp
 
-	regC     chan registration
-	unregC   chan *registration
-	lenReqC  chan struct{}
-	lenResC  chan int
-	eventC   chan event
-	stopC    chan *roachpb.Error
-	stoppedC chan struct{}
+	regC       chan registration
+	unregC     chan *registration
+	lenReqC    chan struct{}
+	lenResC    chan int
+	filterReqC chan struct{}
+	filterResC chan *Filter
+	eventC     chan event
+	stopC      chan *roachpb.Error
+	stoppedC   chan struct{}
 }
 
 // event is a union of different event types that the Processor goroutine needs
@@ -144,13 +146,15 @@ func NewProcessor(cfg Config) *Processor {
 		reg:    makeRegistry(),
 		rts:    makeResolvedTimestamp(),
 
-		regC:     make(chan registration),
-		unregC:   make(chan *registration),
-		lenReqC:  make(chan struct{}),
-		lenResC:  make(chan int),
-		eventC:   make(chan event, cfg.EventChanCap),
-		stopC:    make(chan *roachpb.Error, 1),
-		stoppedC: make(chan struct{}),
+		regC:       make(chan registration),
+		unregC:     make(chan *registration),
+		lenReqC:    make(chan struct{}),
+		lenResC:    make(chan int),
+		filterReqC: make(chan struct{}),
+		filterResC: make(chan *Filter),
+		eventC:     make(chan event, cfg.EventChanCap),
+		stopC:      make(chan *roachpb.Error, 1),
+		stoppedC:   make(chan struct{}),
 	}
 }
 
@@ -235,6 +239,11 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 			// Respond to answers about the processor goroutine state.
 			case <-p.lenReqC:
 				p.lenResC <- p.reg.Len()
+
+			// Respond to answers about which operations can be filtered before
+			// reaching the Processor.
+			case <-p.filterReqC:
+				p.filterResC <- p.reg.NewFilter()
 
 			// Transform and route events.
 			case e := <-p.eventC:
@@ -377,6 +386,23 @@ func (p *Processor) Len() int {
 		return <-p.lenResC
 	case <-p.stoppedC:
 		return 0
+	}
+}
+
+// Filter returns a new operation filter based on the registrations attached to
+// the processor.
+func (p *Processor) Filter() *Filter {
+	if p == nil {
+		return nil
+	}
+
+	// Ask the processor goroutine.
+	select {
+	case p.filterReqC <- struct{}{}:
+		// Wait for response.
+		return <-p.filterResC
+	case <-p.stoppedC:
+		return nil
 	}
 }
 

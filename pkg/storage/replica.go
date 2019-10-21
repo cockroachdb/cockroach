@@ -473,6 +473,20 @@ type Replica struct {
 		//  informing the processor of closed timestamp updates. This properly
 		//  synchronizes updates that are linearized and driven by the Raft log.
 		proc *rangefeed.Processor
+		// opFilter is a best-effort filter that informs the raft processing
+		// goroutine of which logical operations the rangefeed processor is
+		// interested in based on the processor's current registrations.
+		//
+		// The filter is allowed to return false positives, but not false
+		// negatives. False negatives are avoided by updating (expanding) the
+		// filter while holding the Replica.raftMu when adding new registrations
+		// after flushing the rangefeed.Processor event channel. This ensures
+		// that no events that were filtered before the new registration was
+		// added will be observed by the new registration and all events after
+		// the new registration will respect the updated filter.
+		//
+		// Requires Replica.rangefeedMu be held when mutating the pointer.
+		opFilter *rangefeed.Filter
 	}
 
 	// Throttle how often we offer this Replica to the split and merge queues.
