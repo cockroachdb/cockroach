@@ -21,10 +21,10 @@ import (
 // during plan optimizations in order to avoid instantiating a fully
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
-	source     planDataSource
-	filter     tree.TypedExpr
-	ivarHelper tree.IndexedVarHelper
-	props      physicalProps
+	source      planDataSource
+	filter      tree.TypedExpr
+	ivarHelper  tree.IndexedVarHelper
+	reqOrdering ReqOrdering
 }
 
 // filterNode implements tree.IndexedVarContainer

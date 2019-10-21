@@ -285,7 +285,7 @@ func (p *planner) populateExplain(
 				// Columns metadata.
 				row[5] = tree.NewDString(formatColumns(cols, e.showTypes))
 				// Ordering metadata.
-				row[6] = tree.NewDString(planPhysicalProps(entry.plan).AsString(cols))
+				row[6] = tree.NewDString(formatOrdering(planReqOrdering(entry.plan), cols))
 			}
 		}
 		if _, err := v.rows.AddRow(ctx, row); err != nil {
@@ -455,7 +455,7 @@ func planToString(
 			fmt.Fprintf(
 				&buf, "%d %s%s %s %s %s\n", e.level, e.node, field, e.fieldVal,
 				formatColumns(cols, true),
-				planPhysicalProps(plan).AsString(cols),
+				formatOrdering(planReqOrdering(plan), cols),
 			)
 		}
 	}

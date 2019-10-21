@@ -230,7 +230,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		return PhysicalPlan{}, false, err
 	}
 
-	plan.SetMergeOrdering(dsp.convertOrdering(n.props, plan.PlanToStreamColMap))
+	plan.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap))
 	return plan, true, nil
 }
 

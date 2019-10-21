@@ -119,7 +119,7 @@ func (ef *execFactory) ConstructScan(
 			return nil, errors.Errorf("invalid reqOrdering: %v", reqOrdering)
 		}
 	}
-	scan.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+	scan.reqOrdering = ReqOrdering(reqOrdering)
 	scan.estimatedRowCount = uint64(rowCount)
 	scan.createdByOpt = true
 	return scan, nil
@@ -158,7 +158,7 @@ func (ef *execFactory) ConstructFilter(
 	// limit (it would make the limit apply AFTER the filter).
 	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
 		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
-		s.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+		s.reqOrdering = ReqOrdering(reqOrdering)
 		return s, nil
 	}
 	// Create a filterNode.
@@ -168,7 +168,7 @@ func (ef *execFactory) ConstructFilter(
 	}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.SourceColumns))
 	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
-	f.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+	f.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
 	if spool, ok := f.source.plan.(*spoolNode); ok {
@@ -198,7 +198,7 @@ func (ef *execFactory) ConstructSimpleProject(
 			}
 			r.render[i] = oldRenders[ord]
 		}
-		r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+		r.reqOrdering = ReqOrdering(reqOrdering)
 		return r, nil
 	}
 	var inputCols sqlbase.ResultColumns
@@ -376,7 +376,7 @@ func (ef *execFactory) ConstructMergeJoin(
 
 	// Set up node.props, which tells the distsql planner to maintain the
 	// resulting ordering (if needed).
-	node.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+	node.reqOrdering = ReqOrdering(reqOrdering)
 
 	return node, nil
 }
@@ -412,9 +412,7 @@ func (ef *execFactory) ConstructGroupBy(
 		groupCols:        make([]int, len(groupCols)),
 		groupColOrdering: groupColOrdering,
 		isScalar:         false,
-		props: physicalProps{
-			ordering: sqlbase.ColumnOrdering(reqOrdering),
-		},
+		reqOrdering:      ReqOrdering(reqOrdering),
 	}
 	inputCols := planColumns(n.plan)
 	for i := range groupCols {
@@ -502,9 +500,7 @@ func (ef *execFactory) ConstructDistinct(
 		plan:              input.(planNode),
 		distinctOnColIdxs: distinctCols,
 		columnsInOrder:    orderedCols,
-		props: physicalProps{
-			ordering: sqlbase.ColumnOrdering(reqOrdering),
-		},
+		reqOrdering:       ReqOrdering(reqOrdering),
 	}, nil
 }
 
@@ -574,9 +570,7 @@ func (ef *execFactory) ConstructIndexJoin(
 		table:         tableScan,
 		cols:          colDescs,
 		resultColumns: sqlbase.ResultColumnsFromColDescs(colDescs),
-		props: physicalProps{
-			ordering: sqlbase.ColumnOrdering(reqOrdering),
-		},
+		reqOrdering:   ReqOrdering(reqOrdering),
 	}
 
 	n.keyCols = make([]int, len(keyCols))
@@ -616,9 +610,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		table:        tableScan,
 		joinType:     joinType,
 		eqColsAreKey: eqColsAreKey,
-		props: physicalProps{
-			ordering: sqlbase.ColumnOrdering(reqOrdering),
-		},
+		reqOrdering:  ReqOrdering(reqOrdering),
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onCond = onCond
@@ -695,9 +687,7 @@ func (ef *execFactory) ConstructZigzagJoin(
 	}
 
 	n := &zigzagJoinNode{
-		props: physicalProps{
-			ordering: sqlbase.ColumnOrdering(reqOrdering),
-		},
+		reqOrdering: ReqOrdering(reqOrdering),
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onCond = onCond
@@ -2001,7 +1991,7 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap 
 		columns:    make([]sqlbase.ResultColumn, 0, cap),
 	}
 	rb.r.ivarHelper = tree.MakeIndexedVarHelper(rb.r, len(src.info.SourceColumns))
-	rb.r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
+	rb.r.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
 	if spool, ok := rb.r.source.plan.(*spoolNode); ok {
