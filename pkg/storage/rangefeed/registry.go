@@ -111,6 +111,26 @@ func newRegistration(
 // If overflowed is already set, events are ignored and not written to the
 // buffer.
 func (r *registration) publish(event *roachpb.RangeFeedEvent) {
+	// Check that the event contains enough information for the registation.
+	switch t := event.GetValue().(type) {
+	case *roachpb.RangeFeedValue:
+		if t.Key == nil {
+			panic(fmt.Sprintf("unexpected empty RangeFeedValue.Key: %v", t))
+		}
+		if t.Value.RawBytes == nil {
+			panic(fmt.Sprintf("unexpected empty RangeFeedValue.Value.RawBytes: %v", t))
+		}
+		if t.Value.Timestamp.IsEmpty() {
+			panic(fmt.Sprintf("unexpected empty RangeFeedValue.Value.Timestamp: %v", t))
+		}
+	case *roachpb.RangeFeedCheckpoint:
+		if t.Span.Key == nil {
+			panic(fmt.Sprintf("unexpected empty RangeFeedCheckpoint.Span.Key: %v", t))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", event))
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.overflowed {
@@ -335,6 +355,12 @@ func (reg *registry) Len() int {
 	return reg.tree.Len()
 }
 
+// NewFilter returns a operation filter reflecting the registrations
+// in the registry.
+func (reg *registry) NewFilter() *Filter {
+	return newFilterFromRegistry(reg)
+}
+
 // Register adds the provided registration to the registry.
 func (reg *registry) Register(r *registration) {
 	r.id = reg.nextID()
@@ -374,7 +400,6 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *roachpb.Error) {
 		// Don't publish events if they are equal to or less
 		// than the registration's starting timestamp.
-
 		if r.catchupTimestamp.Less(minTS) {
 			r.publish(event)
 		}
