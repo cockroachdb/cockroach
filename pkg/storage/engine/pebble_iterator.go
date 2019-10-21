@@ -318,40 +318,25 @@ func (p *pebbleIterator) MVCCGet(
 		panic("uninitialized iterator")
 	}
 
-	// MVCCGet is implemented as an MVCCScan with an end key that sorts after the
-	// start key.
-	keyEnd := make([]byte, 0, len(key)+1)
-	keyEnd = append(keyEnd, key...)
-	keyEnd = append(keyEnd, 0x00)
-
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer pebbleMVCCScannerPool.Put(mvccScanner)
 
+	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
+	// specify an empty key for the end key which will ensure we don't retrieve a
+	// key different than the start key. This is a bit of a hack.
 	*mvccScanner = pebbleMVCCScanner{
 		parent:       p.iter,
 		start:        key,
-		end:          keyEnd,
 		ts:           timestamp,
 		maxKeys:      1,
+		txn:          opts.Txn,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
 		ignoreSeq:    opts.IgnoreSequence,
 	}
 
-	if opts.Txn != nil {
-		mvccScanner.txn = opts.Txn
-		mvccScanner.checkUncertainty = timestamp.Less(opts.Txn.MaxTimestamp)
-	}
-
 	mvccScanner.init()
 	mvccScanner.get()
-
-	// Init calls SetBounds. Reset it to what this iterator had at the start.
-	defer func() {
-		if p.iter != nil {
-			p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
-		}
-	}()
 
 	if mvccScanner.err != nil {
 		return nil, nil, mvccScanner.err
@@ -414,25 +399,14 @@ func (p *pebbleIterator) MVCCScan(
 		end:          end,
 		ts:           timestamp,
 		maxKeys:      max,
+		txn:          opts.Txn,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
 		ignoreSeq:    opts.IgnoreSequence,
 	}
 
-	if opts.Txn != nil {
-		mvccScanner.txn = opts.Txn
-		mvccScanner.checkUncertainty = timestamp.Less(opts.Txn.MaxTimestamp)
-	}
-
 	mvccScanner.init()
 	mvccScanner.scan()
-
-	// Init calls SetBounds. Reset it to what this iterator had at the start.
-	defer func() {
-		if p.iter != nil {
-			p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
-		}
-	}()
 
 	if mvccScanner.err != nil {
 		return nil, 0, nil, nil, mvccScanner.err
