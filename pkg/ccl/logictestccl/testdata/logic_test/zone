@@ -342,6 +342,21 @@ test.t38074@i ALTER INDEX t38074@i CONFIGURE ZONE USING
                                    constraints = '[]',
                                    lease_preferences = '[]'
 
+# Test that index configurations don't infect partition configurations.
+# Specifically we are testing that values written to infect@primary's
+# zone configuration does not appear in partition p1 of infect@primary's zone config.
+statement ok
+CREATE TABLE infect (x INT PRIMARY KEY);
+ALTER TABLE infect PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1));
+ALTER INDEX infect@primary CONFIGURE ZONE USING num_replicas=5;
+ALTER PARTITION p1 OF TABLE infect CONFIGURE ZONE USING constraints='[+dc=dc1]'
+
+query T
+SELECT config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE zone_name = 'test.infect.p1'
+----
+ALTER PARTITION p1 OF INDEX test.public.infect@primary CONFIGURE ZONE USING
+  constraints = '[+dc=dc1]'
+
 # ------------------------------------------------------------------------------
 # Regression test for #36348; place this at the bottom of this file.
 # ------------------------------------------------------------------------------
