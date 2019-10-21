@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -474,4 +475,214 @@ func computeReplicationStatsReport(
 	v := makeReplicationStatsVisitor(ctx, cfg, checker, &saver)
 	err := visitRanges(ctx, rangeStore, cfg, &v)
 	return v.report, err
+}
+
+func TestZoneChecker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	type tc struct {
+		split          string
+		newZone        bool
+		newRootZoneCfg *config.ZoneConfig
+		newZoneKey     ZoneKey
+	}
+	// NB: IDs need to be beyond MaxSystemConfigDescID, otherwise special logic
+	// kicks in for mapping keys to zones.
+	dbID := 50
+	t1ID := 51
+	t1 := table{name: "t1",
+		partitions: []partition{
+			{
+				name:  "p1",
+				start: []int{100},
+				end:   []int{200},
+				zone:  &zone{constraints: "[+p1]"},
+			},
+			{
+				name:  "p2",
+				start: []int{300},
+				end:   []int{400},
+				zone:  &zone{constraints: "[+p2]"},
+			},
+		},
+	}
+	t1.addPKIdx()
+	// Create a table descriptor to be used for creating the zone config.
+	t1Desc, err := makeTableDesc(t1, t1ID, dbID)
+	require.NoError(t, err)
+	t1Zone, err := generateTableZone(t1, t1Desc)
+	require.NoError(t, err)
+	p1SubzoneIndex := 0
+	p2SubzoneIndex := 1
+	require.Equal(t, "p1", t1Zone.Subzones[p1SubzoneIndex].PartitionName)
+	require.Equal(t, "p2", t1Zone.Subzones[p2SubzoneIndex].PartitionName)
+	t1ZoneKey := MakeZoneKey(uint32(t1ID), NoSubzone)
+	p1ZoneKey := MakeZoneKey(uint32(t1ID), base.SubzoneIDFromIndex(p1SubzoneIndex))
+	p2ZoneKey := MakeZoneKey(uint32(t1ID), base.SubzoneIDFromIndex(p2SubzoneIndex))
+
+	ranges := []tc{
+		{
+			split:          "/Table/t1/pk/1",
+			newZone:        true,
+			newZoneKey:     t1ZoneKey,
+			newRootZoneCfg: t1Zone,
+		},
+		{
+			split:   "/Table/t1/pk/2",
+			newZone: false,
+		},
+		{
+			// p1's zone
+			split:          "/Table/t1/pk/100",
+			newZone:        true,
+			newZoneKey:     p1ZoneKey,
+			newRootZoneCfg: t1Zone,
+		},
+		{
+			split:   "/Table/t1/pk/101",
+			newZone: false,
+		},
+		{
+			// Back to t1's zone
+			split:          "/Table/t1/pk/200",
+			newZone:        true,
+			newZoneKey:     t1ZoneKey,
+			newRootZoneCfg: t1Zone,
+		},
+		{
+			// p2's zone
+			split:          "/Table/t1/pk/305",
+			newZone:        true,
+			newZoneKey:     p2ZoneKey,
+			newRootZoneCfg: t1Zone,
+		},
+	}
+
+	splits := make([]split, len(ranges))
+	for i := range ranges {
+		splits[i].key = ranges[i].split
+	}
+	keyScanner := keysutils.MakePrettyScannerForNamedTables(
+		map[string]int{"t1": t1ID} /* tableNameToID */, nil /* idxNameToID */)
+	rngs, err := processSplits(keyScanner, splits)
+	require.NoError(t, err)
+
+	var zc zoneResolver
+	for i, tc := range ranges {
+		sameZone := zc.checkSameZone(ctx, &rngs[i])
+		newZone := !sameZone
+		require.Equal(t, tc.newZone, newZone, "failed at: %d (%s)", i, tc.split)
+		if newZone {
+			objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(rngs[i].StartKey)
+			zc.setZone(objectID, tc.newZoneKey, tc.newRootZoneCfg)
+		}
+	}
+}
+
+// TestRangeIteration checks that visitRanges() correctly informs range
+// visitors whether ranges fall in the same zone vs a new zone.
+func TestRangeIteration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	schema := baseReportTestCase{
+		schema: []database{{
+			name: "db1",
+			zone: &zone{
+				replicas: 3,
+			},
+			tables: []table{
+				{
+					name: "t1",
+					partitions: []partition{
+						{
+							name:  "p1",
+							start: []int{100},
+							end:   []int{200},
+							zone:  &zone{},
+						},
+						{
+							name:  "p2",
+							start: []int{200},
+							end:   []int{300},
+							zone:  &zone{},
+						},
+					},
+				},
+				{
+					name: "t2",
+				},
+			},
+		},
+		},
+		splits: []split{
+			{key: "/Table/t1/pk/1"},
+			{key: "/Table/t1/pk/2"},
+			{key: "/Table/t1/pk/100"},
+			{key: "/Table/t1/pk/101"},
+			{key: "/Table/t1/pk/200"},
+			{key: "/Table/t1/pk/305"},
+			{key: "/Table/t2/pk/1"},
+		},
+		defaultZone: zone{},
+	}
+
+	compiled, err := compileTestCase(schema)
+	require.NoError(t, err)
+	v := recordingRangeVisitor{}
+	require.NoError(t, visitRanges(ctx, &compiled.iter, compiled.cfg, &v))
+
+	type entry struct {
+		newZone bool
+		key     string
+	}
+	exp := []entry{
+		{newZone: true, key: "/Table/51/1/1"},
+		{newZone: false, key: "/Table/51/1/2"},
+		{newZone: true, key: "/Table/51/1/100"},
+		{newZone: false, key: "/Table/51/1/101"},
+		{newZone: true, key: "/Table/51/1/200"},
+		{newZone: true, key: "/Table/51/1/305"},
+		{newZone: true, key: "/Table/52/1/1"},
+	}
+	got := make([]entry, len(v.rngs))
+	for i, r := range v.rngs {
+		got[i].newZone = r.newZone
+		got[i].key = r.rng.StartKey.String()
+	}
+	require.Equal(t, exp, got)
+}
+
+type recordingRangeVisitor struct {
+	rngs []visitorEntry
+}
+
+var _ rangeVisitor = &recordingRangeVisitor{}
+
+func (r *recordingRangeVisitor) visitNewZone(
+	_ context.Context, rng *roachpb.RangeDescriptor,
+) error {
+	r.rngs = append(r.rngs, visitorEntry{newZone: true, rng: *rng})
+	return nil
+}
+
+func (r *recordingRangeVisitor) visitSameZone(
+	_ context.Context, rng *roachpb.RangeDescriptor,
+) error {
+	r.rngs = append(r.rngs, visitorEntry{newZone: false, rng: *rng})
+	return nil
+}
+
+func (r *recordingRangeVisitor) failed() bool {
+	return false
+}
+
+func (r *recordingRangeVisitor) reset(ctx context.Context) {
+	r.rngs = nil
+}
+
+type visitorEntry struct {
+	newZone bool
+	rng     roachpb.RangeDescriptor
 }

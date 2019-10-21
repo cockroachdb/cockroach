@@ -15,6 +15,12 @@ package base
 // sentinel.
 type SubzoneID uint32
 
+// ToSubzoneIndex turns a SubzoneID into the index corresponding to the correct
+// Subzone within the parent zone's Subzones slice.
+func (id SubzoneID) ToSubzoneIndex() int32 {
+	return int32(id) - 1
+}
+
 // SubzoneIDFromIndex turns a subzone's index within its parent zone into its
 // SubzoneID.
 func SubzoneIDFromIndex(idx int) SubzoneID {
