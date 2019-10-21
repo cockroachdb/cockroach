@@ -55,12 +55,20 @@ func initGeneratorBuiltins() {
 	}
 }
 
-func genProps(labels []string) tree.FunctionProperties {
+func genProps() tree.FunctionProperties {
+	return tree.FunctionProperties{
+		Impure:   true,
+		Class:    tree.GeneratorClass,
+		Category: categoryGenerator,
+	}
+}
+
+func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
 		Impure:       true,
 		Class:        tree.GeneratorClass,
 		Category:     categoryGenerator,
-		ReturnLabels: labels,
+		ReturnLabels: returnLabels,
 	}
 }
 
@@ -85,7 +93,7 @@ func (aclexplodeGenerator) Values() tree.Datums                          { retur
 // The properties are reachable via tree.FunctionDefinition.
 var generators = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
-	"aclexplode": makeBuiltin(genProps(aclexplodeGeneratorType.TupleLabels()),
+	"aclexplode": makeBuiltin(genProps(),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"aclitems", types.StringArray}},
 			aclexplodeGeneratorType,
@@ -96,7 +104,7 @@ var generators = map[string]builtinDefinition{
 				"returns no rows as this feature is unsupported in CockroachDB)",
 		),
 	),
-	"generate_series": makeBuiltin(genProps(seriesValueGeneratorLabels),
+	"generate_series": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
 			tree.ArgTypes{{"start", types.Int}, {"end", types.Int}},
@@ -120,7 +128,7 @@ var generators = map[string]builtinDefinition{
 	// crdb_internal.testing_callback is a generator function intended for internal unit tests.
 	// You give it a name and it calls a callback that had to have been installed
 	// on a TestServer through its EvalContextTestingKnobs.CallbackGenerators.
-	"crdb_internal.testing_callback": makeBuiltin(genProps([]string{"testing_callback"}),
+	"crdb_internal.testing_callback": makeBuiltin(genProps(),
 		makeGeneratorOverload(
 			tree.ArgTypes{{"name", types.String}},
 			types.Int,
@@ -138,7 +146,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"pg_get_keywords": makeBuiltin(genProps(keywordsValueGeneratorType.TupleLabels()),
+	"pg_get_keywords": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/10/static/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 		makeGeneratorOverload(
 			tree.ArgTypes{},
@@ -148,7 +156,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"unnest": makeBuiltin(genProps(arrayValueGeneratorLabels),
+	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
@@ -163,7 +171,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"information_schema._pg_expandarray": makeBuiltin(genProps(expandArrayValueGeneratorLabels),
+	"information_schema._pg_expandarray": makeBuiltin(genProps(),
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
@@ -178,7 +186,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"crdb_internal.unary_table": makeBuiltin(genProps(nil /* no labels */),
+	"crdb_internal.unary_table": makeBuiltin(genProps(),
 		makeGeneratorOverload(
 			tree.ArgTypes{},
 			unaryValueGeneratorType,
@@ -188,7 +196,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"generate_subscripts": makeBuiltin(genProps(subscriptsValueGeneratorLabels),
+	"generate_subscripts": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SUBSCRIPTS
 		makeGeneratorOverload(
 			tree.ArgTypes{{"array", types.AnyArray}},
@@ -211,23 +219,22 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"json_array_elements":       makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"jsonb_array_elements":      makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"json_array_elements_text":  makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
-	"jsonb_array_elements_text": makeBuiltin(genProps(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
-	"json_object_keys":          makeBuiltin(genProps(jsonObjectKeysGeneratorLabels), jsonObjectKeysImpl),
-	"jsonb_object_keys":         makeBuiltin(genProps(jsonObjectKeysGeneratorLabels), jsonObjectKeysImpl),
-	"json_each":                 makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachImpl),
-	"jsonb_each":                makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachImpl),
-	"json_each_text":            makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
-	"jsonb_each_text":           makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"json_array_elements":       makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"jsonb_array_elements":      makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
+	"json_array_elements_text":  makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"jsonb_array_elements_text": makeBuiltin(genPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
+	"json_object_keys":          makeBuiltin(genProps(), jsonObjectKeysImpl),
+	"jsonb_object_keys":         makeBuiltin(genProps(), jsonObjectKeysImpl),
+	"json_each":                 makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
+	"jsonb_each":                makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
+	"json_each_text":            makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
+	"jsonb_each_text":           makeBuiltin(genPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
-			Impure:       true,
-			Class:        tree.GeneratorClass,
-			Category:     categorySystemInfo,
-			ReturnLabels: []string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
+			Impure:   true,
+			Class:    tree.GeneratorClass,
+			Category: categorySystemInfo,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
@@ -328,8 +335,6 @@ type seriesValueGenerator struct {
 	next                                func(*seriesValueGenerator) (bool, error)
 	genValue                            func(*seriesValueGenerator) tree.Datums
 }
-
-var seriesValueGeneratorLabels = []string{"generate_series"}
 
 var seriesValueGeneratorType = types.Int
 
@@ -467,8 +472,6 @@ type arrayValueGenerator struct {
 	nextIndex int
 }
 
-var arrayValueGeneratorLabels = []string{"unnest"}
-
 // ResolvedType implements the tree.ValueGenerator interface.
 func (s *arrayValueGenerator) ResolvedType() *types.T {
 	return s.array.ParamTyp
@@ -582,8 +585,6 @@ type subscriptsValueGenerator struct {
 	firstIndex int
 	reverse    bool
 }
-
-var subscriptsValueGeneratorLabels = []string{"generate_subscripts"}
 
 var subscriptsValueGeneratorType = types.Int
 
@@ -699,7 +700,6 @@ var jsonArrayElementsTextImpl = makeGeneratorOverload(
 )
 
 var jsonArrayGeneratorLabels = []string{"value"}
-
 var jsonArrayGeneratorType = types.Jsonb
 
 var jsonArrayTextGeneratorType = types.String
@@ -785,8 +785,6 @@ var jsonObjectKeysImpl = makeGeneratorOverload(
 	makeJSONObjectKeysGenerator,
 	"Returns sorted set of keys in the outermost JSON object.",
 )
-
-var jsonObjectKeysGeneratorLabels = []string{"json_object_keys"}
 
 var jsonObjectKeysGeneratorType = types.String
 

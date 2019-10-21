@@ -742,4 +742,3 @@ REVOKE public FROM testuser
 statement error user or role public does not exist
 REVOKE admin FROM public
 
-

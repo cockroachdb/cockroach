@@ -215,6 +215,21 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 	dst.id = src.id
 }
 
+// shouldCreateDefaultColumn decides if we need to create a default
+// column and default label for a function expression.
+// Returns true if the function's return type is not an empty tuple and
+// doesn't declare any tuple labels.
+func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
+	if texpr.ResolvedType() == types.EmptyTuple {
+		// This is only to support crdb_internal.unary_table().
+		return false
+	}
+
+	// We need to create a default column with a default name when
+	// the function return type doesn't declare any return labels.
+	return len(texpr.ResolvedType().TupleLabels()) == 0
+}
+
 // addColumn adds a column to scope with the given alias, type, and
 // expression. It returns a pointer to the new column. The column ID and group
 // are left empty so they can be filled in later.

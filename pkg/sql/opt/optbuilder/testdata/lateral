@@ -173,11 +173,11 @@ build
 SELECT * FROM j, jsonb_array_elements(j.j->'foo')
 ----
 inner-join-apply
- ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:3(jsonb)
+ ├── columns: id:1(int!null) j:2(jsonb) value:3(jsonb)
  ├── scan j
  │    └── columns: id:1(int!null) j:2(jsonb)
  ├── project-set
- │    ├── columns: jsonb_array_elements:3(jsonb)
+ │    ├── columns: value:3(jsonb)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── zip
@@ -193,11 +193,11 @@ build
 SELECT * FROM j, LATERAL jsonb_array_elements(j.j->'foo')
 ----
 inner-join-apply
- ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:3(jsonb)
+ ├── columns: id:1(int!null) j:2(jsonb) value:3(jsonb)
  ├── scan j
  │    └── columns: id:1(int!null) j:2(jsonb)
  ├── project-set
- │    ├── columns: jsonb_array_elements:3(jsonb)
+ │    ├── columns: value:3(jsonb)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── zip
@@ -213,13 +213,13 @@ build
 SELECT * FROM j, jsonb_array_elements(j.j->'foo') AS e, jsonb_array_elements(e.e->'bar')
 ----
 inner-join-apply
- ├── columns: id:1(int!null) j:2(jsonb) e:3(jsonb) jsonb_array_elements:4(jsonb)
+ ├── columns: id:1(int!null) j:2(jsonb) e:3(jsonb) value:4(jsonb)
  ├── inner-join-apply
- │    ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:3(jsonb)
+ │    ├── columns: id:1(int!null) j:2(jsonb) value:3(jsonb)
  │    ├── scan j
  │    │    └── columns: id:1(int!null) j:2(jsonb)
  │    ├── project-set
- │    │    ├── columns: jsonb_array_elements:3(jsonb)
+ │    │    ├── columns: value:3(jsonb)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    └── zip
@@ -229,13 +229,13 @@ inner-join-apply
  │    │                   └── const: 'foo' [type=string]
  │    └── filters (true)
  ├── project-set
- │    ├── columns: jsonb_array_elements:4(jsonb)
+ │    ├── columns: value:4(jsonb)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── zip
  │         └── function: jsonb_array_elements [type=jsonb]
  │              └── fetch-val [type=jsonb]
- │                   ├── variable: jsonb_array_elements [type=jsonb]
+ │                   ├── variable: value [type=jsonb]
  │                   └── const: 'bar' [type=string]
  └── filters (true)
 
@@ -256,11 +256,11 @@ FROM
     )
 ----
 inner-join-apply
- ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:6(jsonb)
+ ├── columns: id:1(int!null) j:2(jsonb) value:6(jsonb)
  ├── scan j
  │    └── columns: j.id:1(int!null) j.j:2(jsonb)
  ├── project-set
- │    ├── columns: jsonb_array_elements:6(jsonb)
+ │    ├── columns: value:6(jsonb)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── zip
