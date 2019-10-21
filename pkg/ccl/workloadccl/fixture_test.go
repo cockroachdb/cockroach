@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package workloadccl
+package workloadccl_test
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -115,16 +116,16 @@ func TestFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
-	config := FixtureConfig{
+	config := workloadccl.FixtureConfig{
 		GCSBucket: gcsBucket,
 		GCSPrefix: fmt.Sprintf(`TestFixture-%d`, timeutil.Now().UnixNano()),
 	}
 
-	if _, err := GetFixture(ctx, gcs, config, gen); !testutils.IsError(err, `fixture not found`) {
+	if _, err := workloadccl.GetFixture(ctx, gcs, config, gen); !testutils.IsError(err, `fixture not found`) {
 		t.Fatalf(`expected "fixture not found" error but got: %+v`, err)
 	}
 
-	fixtures, err := ListFixtures(ctx, gcs, config)
+	fixtures, err := workloadccl.ListFixtures(ctx, gcs, config)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
@@ -133,17 +134,17 @@ func TestFixture(t *testing.T) {
 	}
 
 	const filesPerNode = 1
-	fixture, err := MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
+	fixture, err := workloadccl.MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 
-	_, err = MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
+	_, err = workloadccl.MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
 	if !testutils.IsError(err, `already exists`) {
 		t.Fatalf(`expected 'already exists' error got: %+v`, err)
 	}
 
-	fixtures, err = ListFixtures(ctx, gcs, config)
+	fixtures, err = workloadccl.ListFixtures(ctx, gcs, config)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
@@ -152,7 +153,7 @@ func TestFixture(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
-	if _, err := RestoreFixture(ctx, db, fixture, `test`, false); err != nil {
+	if _, err := workloadccl.RestoreFixture(ctx, db, fixture, `test`, false); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 	sqlDB.CheckQueryResults(t,
@@ -185,7 +186,7 @@ func TestImportFixture(t *testing.T) {
 	const filesPerNode = 1
 
 	sqlDB.Exec(t, `CREATE DATABASE ingest`)
-	_, err := ImportFixture(
+	_, err := workloadccl.ImportFixture(
 		ctx, db, gen, `ingest`, filesPerNode, false, /* injectStats */
 		``, /* csvServer */
 	)
@@ -223,7 +224,7 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	const filesPerNode = 1
 	const noInjectStats = false
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	_, err := ImportFixture(
+	_, err := workloadccl.ImportFixture(
 		ctx, db, gen, `d`, filesPerNode, noInjectStats, ts.URL,
 	)
 	require.NoError(t, err)
