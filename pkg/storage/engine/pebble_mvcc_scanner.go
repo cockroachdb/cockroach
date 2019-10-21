@@ -83,8 +83,6 @@ type pebbleMVCCScanner struct {
 	reverse bool
 	// Iteration bounds. Does not contain MVCC timestamp.
 	start, end roachpb.Key
-	// Buffers for encoding iteration bounds.
-	startBuf, endBuf []byte
 	// Timestamp with which MVCCScan/MVCCGet was called.
 	ts hlc.Timestamp
 	// Max number of keys to return.
@@ -124,11 +122,9 @@ var pebbleMVCCScannerPool = sync.Pool{
 func (p *pebbleMVCCScanner) init() {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
 
-	mvccStartKey := MVCCKey{p.start, hlc.Timestamp{}}
-	mvccEndKey := MVCCKey{p.end, hlc.Timestamp{}}
-	p.startBuf = EncodeKeyToBuf(p.startBuf[:0], mvccStartKey)
-	p.endBuf = EncodeKeyToBuf(p.endBuf[:0], mvccEndKey)
-	p.parent.SetBounds(p.startBuf, p.endBuf)
+	if p.txn != nil {
+		p.checkUncertainty = p.ts.Less(p.txn.MaxTimestamp)
+	}
 }
 
 // seekReverse seeks to the latest revision of the key before the specified key.
@@ -184,7 +180,9 @@ func (p *pebbleMVCCScanner) scan() {
 
 // get iterates exactly once and adds one KV to the result set.
 func (p *pebbleMVCCScanner) get() {
-	p.seek(p.start)
+	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], MVCCKey{p.start, hlc.Timestamp{}})
+	p.parent.SeekPrefixGE(p.keyBuf)
+	p.updateCurrent()
 	p.getAndAdvance()
 }
 
