@@ -100,7 +100,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
-		if def == nil || def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
+		if def == nil || def.Class != tree.GeneratorClass || len(texpr.(*tree.FuncExpr).ResolvedType().TupleLabels()) == 0 {
 			outCol = b.addColumn(outScope, alias, texpr)
 		}
 		zip[i].Func = b.buildScalar(texpr, inScope, outScope, outCol, nil)
@@ -126,19 +126,19 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, fn opt.ScalarExpr, columns int, inScope, outScope *scope, outCol *scopeColumn,
+	f *tree.FuncExpr, fn opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
 	// Add scope columns.
-	if columns == 1 {
-		// Single-column return type.
-		b.populateSynthesizedColumn(outCol, fn)
-	} else {
+	if len(f.ResolvedType().TupleLabels()) > 0 {
 		// Multi-column return type. Use the tuple labels in the SRF's return type
 		// as column aliases.
 		typ := f.ResolvedType()
 		for i := range typ.TupleContents() {
 			b.synthesizeColumn(outScope, typ.TupleLabels()[i], &typ.TupleContents()[i], nil, fn)
 		}
+	} else {
+		// Single-column return type.
+		b.populateSynthesizedColumn(outCol, fn)
 	}
 
 	return fn
