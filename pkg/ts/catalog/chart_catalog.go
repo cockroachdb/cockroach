@@ -1823,6 +1823,13 @@ var charts = []sectionDescription{
 					"addsstable.proposals",
 				},
 			},
+			{
+				Title: "Ingestion Delays",
+				Metrics: []string{
+					"addsstable.delay.total",
+					"addsstable.delay.enginebackpressure",
+				},
+			},
 		},
 	},
 	{
