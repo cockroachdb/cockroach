@@ -969,32 +969,21 @@ func getOutputColumnsFromScanNode(n *scanNode, remap []int) []uint32 {
 // convertOrdering maps the columns in props.ordering to the output columns of a
 // processor.
 func (dsp *DistSQLPlanner) convertOrdering(
-	props physicalProps, planToStreamColMap []int,
+	reqOrdering ReqOrdering, planToStreamColMap []int,
 ) execinfrapb.Ordering {
-	if len(props.ordering) == 0 {
+	if len(reqOrdering) == 0 {
 		return execinfrapb.Ordering{}
 	}
 	result := execinfrapb.Ordering{
-		Columns: make([]execinfrapb.Ordering_Column, len(props.ordering)),
+		Columns: make([]execinfrapb.Ordering_Column, len(reqOrdering)),
 	}
-	for i, o := range props.ordering {
+	for i, o := range reqOrdering {
 		streamColIdx := o.ColIdx
 		if planToStreamColMap != nil {
 			streamColIdx = planToStreamColMap[o.ColIdx]
 		}
 		if streamColIdx == -1 {
-			// Find any column in the equivalency group that is part of the processor
-			// output.
-			group := props.eqGroups.Find(o.ColIdx)
-			for col, pos := range planToStreamColMap {
-				if pos != -1 && props.eqGroups.Find(col) == group {
-					streamColIdx = pos
-					break
-				}
-			}
-			if streamColIdx == -1 {
-				panic("column in ordering not part of processor output")
-			}
+			panic("column in ordering not part of processor output")
 		}
 		result.Columns[i].ColIdx = uint32(streamColIdx)
 		dir := execinfrapb.Ordering_Column_ASC
@@ -1138,14 +1127,14 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.ResultRouters[i] = pIdx
 	}
 
-	if len(p.ResultRouters) > 1 && len(n.props.ordering) > 0 {
+	if len(p.ResultRouters) > 1 && len(n.reqOrdering) > 0 {
 		// Make a note of the fact that we have to maintain a certain ordering
 		// between the parallel streams.
 		//
 		// This information is taken into account by the AddProjection call below:
 		// specifically, it will make sure these columns are kept even if they are
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
+		p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, scanNodeToTableOrdinalMap))
 	}
 
 	var typs []types.T
@@ -1369,7 +1358,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// We can't do local aggregation, but we can do local distinct processing
 		// to reduce streaming duplicates, and aggregate on the final node.
 
-		ordering := dsp.convertOrdering(planPhysicalProps(n.plan), p.PlanToStreamColMap).Columns
+		ordering := dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap).Columns
 		orderedColsMap := make(map[uint32]struct{})
 		for _, ord := range ordering {
 			orderedColsMap[ord.ColIdx] = struct{}{}
@@ -1806,7 +1795,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 
 		p.ResultTypes = finalOutTypes
-		p.SetMergeOrdering(dsp.convertOrdering(n.props, p.PlanToStreamColMap))
+		p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap))
 	}
 
 	return nil
@@ -1871,7 +1860,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			types,
-			dsp.convertOrdering(n.props, plan.PlanToStreamColMap),
+			dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
 		)
 	} else {
 		// Use a single join reader (if there is a single stream, on that node; if
@@ -1981,7 +1970,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 		post,
 		types,
-		dsp.convertOrdering(planPhysicalProps(n), planToStreamColMap),
+		dsp.convertOrdering(planReqOrdering(n), planToStreamColMap),
 	)
 	plan.PlanToStreamColMap = planToStreamColMap
 	return plan, nil
@@ -2285,7 +2274,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// We can propagate the ordering from either side, we use the left side here.
 	// Note that n.props only has a non-empty ordering for inner joins, where it
 	// uses the mergeJoinOrdering.
-	p.SetMergeOrdering(dsp.convertOrdering(n.props, p.PlanToStreamColMap))
+	p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap))
 	return p, nil
 }
 
@@ -2874,7 +2863,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		leftLogicalPlan, rightLogicalPlan = rightLogicalPlan, leftLogicalPlan
 	}
 	childPhysicalPlans := []*PhysicalPlan{&leftPlan, &rightPlan}
-	childLogicalPlans := []planNode{leftLogicalPlan, rightLogicalPlan}
 
 	// Check that the left and right side PlanToStreamColMaps are equivalent.
 	// TODO(solon): Are there any valid UNION/INTERSECT/EXCEPT cases where these
@@ -2887,29 +2875,23 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			rightPlan.PlanToStreamColMap)
 	}
 	planToStreamColMap := leftPlan.PlanToStreamColMap
-	planCols := make([]int, 0, len(planToStreamColMap))
 	streamCols := make([]uint32, 0, len(planToStreamColMap))
-	for planCol, streamCol := range planToStreamColMap {
+	for _, streamCol := range planToStreamColMap {
 		if streamCol < 0 {
 			continue
 		}
-		planCols = append(planCols, planCol)
 		streamCols = append(streamCols, uint32(streamCol))
 	}
 
-	leftProps, rightProps := planPhysicalProps(leftLogicalPlan), planPhysicalProps(rightLogicalPlan)
 	var distinctSpecs [2]execinfrapb.ProcessorCoreUnion
 
 	if !n.all {
-		leftProps = leftProps.project(planCols)
-		rightProps = rightProps.project(planCols)
-
 		var distinctOrds [2]execinfrapb.Ordering
 		distinctOrds[0] = execinfrapb.ConvertToMappedSpecOrdering(
-			leftProps.ordering, leftPlan.PlanToStreamColMap,
+			planReqOrdering(leftLogicalPlan), leftPlan.PlanToStreamColMap,
 		)
 		distinctOrds[1] = execinfrapb.ConvertToMappedSpecOrdering(
-			rightProps.ordering, rightPlan.PlanToStreamColMap,
+			planReqOrdering(rightLogicalPlan), rightPlan.PlanToStreamColMap,
 		)
 
 		// Build distinct processor specs for the left and right child plans.
@@ -2944,61 +2926,20 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	p.PlanToStreamColMap = planToStreamColMap
 
 	// Merge the plans' result types and merge ordering.
-	// TODO(abhimadan): This merge ordering can still contain columns from child
-	// ORDER BY clauses, which will neither be accessible nor used in ordering
-	// after the UNION. Since they aren't accessible and UNION/EXCEPT/INTERSECT
-	// are not required to propagate orderings from their subqueries, this doesn't
-	// affect correctness. However, it does force us to stream unnecessary data
-	// until the ordering is eventually updated and they are projected out. This
-	// projection happens for every set operation except for UNION ALL, which only
-	// uses the naive ordering propagation below. To fix this, use similar logic
-	// to the distinct case above to get the new ordering, and add a projection in
-	// a no-grouping no-op stage.
 	resultTypes, err := physicalplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
-	mergeOrdering := leftPlan.MergeOrdering
-	if n.unionType != tree.UnionOp {
-		// In INTERSECT and EXCEPT cases where the merge ordering contains columns
-		// that don't appear in the output (e.g. SELECT k FROM kv ORDER BY v), we
-		// cannot keep the ordering, since some ORDER BY columns are not also
-		// equality columns. As a result, create a new ordering that only contains
-		// columns in the result.
-		newOrdering := computeMergeJoinOrdering(leftProps, rightProps, planCols, planCols)
-		mergeOrdering = execinfrapb.ConvertToMappedSpecOrdering(newOrdering, p.PlanToStreamColMap)
-
-		var childResultTypes [2][]types.T
-		for side, plan := range childPhysicalPlans {
-			childResultTypes[side], err = getTypesForPlanResult(
-				childLogicalPlans[side], plan.PlanToStreamColMap,
-			)
-			if err != nil {
-				return PhysicalPlan{}, err
-			}
-		}
-		resultTypes, err = physicalplan.MergeResultTypes(childResultTypes[0], childResultTypes[1])
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
-	} else if err != nil || !mergeOrdering.Equal(rightPlan.MergeOrdering) {
-		// The result types or merge ordering can differ between the two sides in
-		// pathological cases, like if they have incompatible ORDER BY clauses.
-		// Resolve this by collecting results on a single node and adding a
-		// projection to the results that will be unioned.
-		for _, plan := range childPhysicalPlans {
-			plan.AddSingleGroupStage(
-				dsp.nodeDesc.NodeID,
-				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-				execinfrapb.PostProcessSpec{},
-				plan.ResultTypes)
-			plan.AddProjection(streamCols)
-		}
-
-		// Result types should now be mergeable.
-		resultTypes, err = physicalplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
-		mergeOrdering = execinfrapb.Ordering{}
+	if err != nil {
+		return PhysicalPlan{}, err
 	}
+
+	if len(leftPlan.MergeOrdering.Columns) != 0 || len(rightPlan.MergeOrdering.Columns) != 0 {
+		return PhysicalPlan{}, errors.AssertionFailedf("set op inputs should have no orderings")
+	}
+
+	// TODO(radu): for INTERSECT and EXCEPT, the mergeOrdering should be set when
+	// we can use merge joiners below. The optimizer needs to be modified to take
+	// advantage of this optimization and pass down merge orderings. Tracked by
+	// #40797.
+	var mergeOrdering execinfrapb.Ordering
 
 	// Merge processors, streams, result routers, and stage counter.
 	var leftRouters, rightRouters []physicalplan.ProcessorIdx

@@ -55,10 +55,7 @@ type renderNode struct {
 	// columns is the set of result columns.
 	columns sqlbase.ResultColumns
 
-	// ordering indicates the order of returned rows.
-	// initially suggested by the GROUP BY and ORDER BY clauses;
-	// modified by index selection.
-	props physicalProps
+	reqOrdering ReqOrdering
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
