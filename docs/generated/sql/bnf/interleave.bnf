@@ -1,5 +1,5 @@
 create_table_stmt ::=
-	'CREATE' 'TABLE' table_name '(' table_definition ')' 'INTERLEAVE' 'IN' 'PARENT' table_name '(' name_list ')' opt_partition_by
-	| 'CREATE' 'TABLE' table_name '(' table_definition ')'  opt_partition_by
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_definition ')' 'INTERLEAVE' 'IN' 'PARENT' table_name '(' name_list ')' opt_partition_by
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_definition ')'  opt_partition_by
+	'CREATE' opt_temp_create_table 'TABLE' table_name '(' table_definition ')' 'INTERLEAVE' 'IN' 'PARENT' table_name '(' name_list ')' opt_partition_by
+	| 'CREATE' opt_temp_create_table 'TABLE' table_name '(' table_definition ')'  opt_partition_by
+	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_definition ')' 'INTERLEAVE' 'IN' 'PARENT' table_name '(' name_list ')' opt_partition_by
+	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_definition ')'  opt_partition_by

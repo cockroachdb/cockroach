@@ -41,6 +41,8 @@ define CreateViewPrivate {
 
     ViewName string
 
+    Temporary bool
+
     # ViewQuery contains the query for the view; data sources are always fully
     # qualified.
     ViewQuery string
