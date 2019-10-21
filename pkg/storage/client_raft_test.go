@@ -1514,8 +1514,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 }
 
 // TestStoreRangeUpReplicate verifies that the replication queue will notice
-// under-replicated ranges and replicate them. Also tests that snapshots which
-// contain sideloaded proposals don't panic the receiving end.
+// under-replicated ranges and replicate them.
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer storage.SetMockAddSSTable()()
@@ -1528,14 +1527,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
-	mtc.stopStore(2)
-	if err := storage.ProposeAddSSTable(
-		context.Background(), "k", "v", mtc.clocks[0].Now(), mtc.stores[0],
-	); err != nil {
-		t.Fatal(err)
-	}
-	mtc.restartStore(2)
-
 	mtc.initGossipNetwork()
 
 	// Once we know our peers, trigger a scan.
