@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )

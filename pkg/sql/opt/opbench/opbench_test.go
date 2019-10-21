@@ -38,10 +38,6 @@ const rewriteActualFlag = "opbench-rewrite-actual"
 var rewriteEstimated = flag.Bool(rewriteEstimatedFlag, false, "re-calculate the estimated costs for each Plan")
 var rewriteActual = flag.Bool(rewriteActualFlag, false, "re-measure the runtime for each Plan")
 
-func init() {
-	flag.Parse()
-}
-
 // TODO(justin): we need a system to get consistent re-measurements of all the
 // "actual" results. We will probably want some ability to kick off a roachprod
 // cluster which will crunch through them all. It's still valuable to be

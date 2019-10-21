@@ -35,10 +35,6 @@ var (
 	flagCheckVec    = flag.Bool("check-vec", false, "fail if a generated statement cannot be vectorized")
 )
 
-func init() {
-	flag.Parse()
-}
-
 // TestGenerateParse verifies that statements produced by Generate can be
 // parsed. This is useful because since we make AST nodes directly we can
 // sometimes put them into bad states that the parser would never do.
