@@ -2660,3 +2660,28 @@ pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
 
 statement ok
 DROP TABLE person, pet
+
+# Ensure FK semantics for temporary and persistent tables work correctly.
+# Temporary tables can not create FK references to persistent tables, and
+# persistent tables can not create FK references to temporary tables.
+
+statement error unimplemented: temporary tables are unsupported
+CREATE TEMP TABLE a_temp(a INT PRIMARY KEY)
+
+statement ok
+SET experimental_enable_temp_tables = true
+
+statement ok
+CREATE TEMP TABLE a_temp(a INT PRIMARY KEY)
+
+statement ok
+CREATE TEMP TABLE b_temp(b INT, FOREIGN KEY(b) REFERENCES a_temp(a))
+
+statement error pq: constraints on permanent tables may reference only permanent tables
+CREATE TABLE a_persistent(a INT, FOREIGN KEY (a) REFERENCES a_temp(a))
+
+statement ok
+CREATE TABLE c_persistent(c INT PRIMARY KEY)
+
+statement error pq: constraints on temporary tables may reference only temporary tables
+CREATE TEMP TABLE c_temp(c INT, FOREIGN KEY (c) REFERENCES c_persistent(c))
