@@ -229,10 +229,15 @@ func (r *Replica) RangeFeed(
 	return <-errC
 }
 
-func (r *Replica) getRangefeedProcessor() *rangefeed.Processor {
+func (r *Replica) getRangefeedProcessorAndFilter() (*rangefeed.Processor, *rangefeed.Filter) {
 	r.rangefeedMu.RLock()
 	defer r.rangefeedMu.RUnlock()
-	return r.rangefeedMu.proc
+	return r.rangefeedMu.proc, r.rangefeedMu.opFilter
+}
+
+func (r *Replica) getRangefeedProcessor() *rangefeed.Processor {
+	p, _ := r.getRangefeedProcessorAndFilter()
+	return p
 }
 
 func (r *Replica) setRangefeedProcessor(p *rangefeed.Processor) {
@@ -248,6 +253,7 @@ func (r *Replica) unsetRangefeedProcessorLocked(p *rangefeed.Processor) {
 		return
 	}
 	r.rangefeedMu.proc = nil
+	r.rangefeedMu.opFilter = nil
 	r.store.removeReplicaWithRangefeed(r.RangeID)
 }
 
@@ -255,6 +261,10 @@ func (r *Replica) unsetRangefeedProcessor(p *rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.unsetRangefeedProcessorLocked(p)
+}
+
+func (r *Replica) updateRangefeedFilterLocked() {
+	r.rangefeedMu.opFilter = r.rangefeedMu.proc.Filter()
 }
 
 // The size of an event is 112 bytes, so this will result in an allocation on
@@ -281,23 +291,25 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
 	// of concurrent processor shutdowns (see maybeDisconnectEmptyRangefeed).
-	r.rangefeedMu.RLock()
+	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
 		reg := p.Register(span, startTS, catchupIter, stream, errC)
-		r.rangefeedMu.RUnlock()
 		if reg {
 			// Registered successfully with an existing processor.
+			// Update the rangefeed filter to avoid filtering ops
+			// that this new registration might be interested in.
+			r.updateRangefeedFilterLocked()
+			r.rangefeedMu.Unlock()
 			return p
 		}
 		// If the registration failed, the processor was already being shut
 		// down. Help unset it and then continue on with initializing a new
 		// processor.
-		r.unsetRangefeedProcessor(p)
+		r.unsetRangefeedProcessorLocked(p)
 		p = nil
-	} else {
-		r.rangefeedMu.RUnlock()
 	}
+	r.rangefeedMu.Unlock()
 
 	// Create a new rangefeed.
 	desc := r.Desc()
@@ -348,6 +360,9 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// requires raftMu to be exclusively locked.
 	r.setRangefeedProcessor(p)
 
+	// Set the rangefeed filter now that the processor is set.
+	r.updateRangefeedFilterLocked()
+
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
 	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
@@ -358,20 +373,19 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 // maybeDisconnectEmptyRangefeed tears down the provided Processor if it is
 // still active and if it no longer has any registrations.
 func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
-	if p == nil || p != r.getRangefeedProcessor() {
+	r.rangefeedMu.Lock()
+	defer r.rangefeedMu.Unlock()
+	if p == nil || p != r.rangefeedMu.proc {
 		// The processor has already been removed or replaced.
 		return
 	}
 	if p.Len() == 0 {
-		r.rangefeedMu.Lock()
-		defer r.rangefeedMu.Unlock()
-		// Check length again under lock to ensure that we're not shutting down
-		// a rangefeed processor that has new registrations. Registration on an
-		// existing rangefeed processor takes place under read lock.
-		if p.Len() == 0 {
-			p.Stop()
-			r.unsetRangefeedProcessorLocked(p)
-		}
+		// Stop the rangefeed processor.
+		p.Stop()
+		r.unsetRangefeedProcessorLocked(p)
+	} else {
+		// Update the rangefeed filter to filter more aggressively.
+		r.updateRangefeedFilterLocked()
 	}
 }
 
@@ -412,7 +426,7 @@ func (r *Replica) numRangefeedRegistrations() int {
 func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	ctx context.Context, ops *storagepb.LogicalOpLog, reader engine.Reader,
 ) {
-	p := r.getRangefeedProcessor()
+	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
 		return
 	}
@@ -451,6 +465,18 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			continue
 		default:
 			panic(fmt.Sprintf("unknown logical op %T", t))
+		}
+
+		// Don't read values from the reader for operations that are not needed
+		// by any rangefeed registration. We still need to inform the rangefeed
+		// processor of the changes to intents so that it can track unresolved
+		// intents, but we don't need to provide values.
+		//
+		// We could filter out MVCCWriteValueOp operations entirely at this
+		// point if they are not needed by any registration, but as long as we
+		// avoid the value lookup here, doing any more doesn't seem worth it.
+		if !filter.NeedVal(roachpb.Span{Key: key}) {
+			continue
 		}
 
 		// Read the value directly from the Reader. This is performed in the
