@@ -81,11 +81,6 @@ type FunctionProperties struct {
 	// Category is used to generate documentation strings.
 	Category string
 
-	// ReturnLabels is used by transformSRF until the transform
-	// is properly migrated to a point past type checking.
-	// TODO(knz): remove this field once it becomes unneeded.
-	ReturnLabels []string
-
 	// AmbiguousReturnType is true if the builtin's return type can't be
 	// determined without extra context. This is used for formatting builtins
 	// with the FmtParsable directive.

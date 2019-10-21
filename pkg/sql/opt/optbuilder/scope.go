@@ -974,12 +974,17 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 
 	srfScope := s.push()
 	var outCol *scopeColumn
-	if len(def.ReturnLabels) == 1 {
+
+	var typedFuncExpr = typedFunc.(*tree.FuncExpr)
+
+	if len(typedFuncExpr.ResolvedType().TupleLabels()) == 0 && typedFuncExpr.ResolvedType() != types.EmptyTuple {
+		// No return labels declared in the resolved type of the function overload.
+		// Create a column to add a default column, labeled with the function's name.
 		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc)
 	}
-	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), s, srfScope, outCol, nil)
+	out := s.builder.buildFunction(typedFuncExpr, s, srfScope, outCol, nil)
 	srf := &srf{
-		FuncExpr: typedFunc.(*tree.FuncExpr),
+		FuncExpr: typedFuncExpr,
 		cols:     srfScope.cols,
 		fn:       out,
 	}
