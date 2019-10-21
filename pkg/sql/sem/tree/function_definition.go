@@ -81,9 +81,10 @@ type FunctionProperties struct {
 	// Category is used to generate documentation strings.
 	Category string
 
-	// ReturnLabels is used by transformSRF until the transform
-	// is properly migrated to a point past type checking.
-	// TODO(knz): remove this field once it becomes unneeded.
+	// ReturnLabels can be used to override the return column name of a
+	// function in a FROM clause.
+	// This satisfies a Postgres quirk where some json functions have
+	// different return labels when used in SELECT or FROM clause.
 	ReturnLabels []string
 
 	// AmbiguousReturnType is true if the builtin's return type can't be

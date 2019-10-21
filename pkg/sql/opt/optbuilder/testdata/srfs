@@ -985,9 +985,9 @@ project
                                │         └── project
                                │              ├── columns: generate_series:17(int)
                                │              └── project-set
-                               │                   ├── columns: jsonb_array_elements_text:16(string) generate_series:17(int)
+                               │                   ├── columns: value:16(string) generate_series:17(int)
                                │                   ├── project-set
-                               │                   │    ├── columns: jsonb_array_elements_text:16(string)
+                               │                   │    ├── columns: value:16(string)
                                │                   │    ├── values
                                │                   │    │    └── tuple [type=tuple]
                                │                   │    └── zip

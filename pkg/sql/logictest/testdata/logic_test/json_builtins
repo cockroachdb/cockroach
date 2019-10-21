@@ -772,7 +772,7 @@ query error pq: cannot deconstruct a scalar
 SELECT json_each('null'::JSON)
 
 query TT
-SELECT * from json_each('{}') q
+SELECT * FROM json_each('{}') q
 ----
 
 query T colnames
@@ -802,7 +802,7 @@ query error pq: cannot deconstruct a scalar
 SELECT jsonb_each('null'::JSON)
 
 query TT
-SELECT * from jsonb_each('{}') q
+SELECT * FROM jsonb_each('{}') q
 ----
 
 query T colnames
@@ -816,7 +816,7 @@ jsonb_each
 (f6,"""stringy""")
 
 query TT colnames
-SELECT * from jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+SELECT * FROM jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
 f1   [1, 2, 3]
@@ -832,11 +832,7 @@ query error pq: cannot deconstruct a scalar
 SELECT jsonb_each_text('null'::JSON)
 
 query TT
-SELECT * from jsonb_each_text('{}') q
-----
-
-query TT
-SELECT * from jsonb_each_text('{}') q
+SELECT * FROM jsonb_each_text('{}') q
 ----
 
 query T colnames
@@ -860,7 +856,7 @@ q
 (f6,stringy)
 
 query TT colnames
-SELECT * from jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+SELECT * FROM jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
 f1   [1, 2, 3]
@@ -876,11 +872,11 @@ query error pq: cannot deconstruct a scalar
 SELECT json_each_text('null'::JSON)
 
 query TT
-SELECT * from json_each_text('{}') q
+SELECT * FROM json_each_text('{}') q
 ----
 
 query TT
-SELECT * from json_each_text('{}') q
+SELECT * FROM json_each_text('{}') q
 ----
 
 query T colnames
@@ -904,7 +900,7 @@ q
 (f6,stringy)
 
 query TT colnames
-SELECT * from json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+SELECT * FROM json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
 f1   [1, 2, 3]
