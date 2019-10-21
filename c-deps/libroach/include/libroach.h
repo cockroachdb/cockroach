@@ -307,7 +307,7 @@ MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64
 DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIter, MVCCStatsResult* skippedKVStats, DBString* write_intent);
 
 bool MVCCIsValidSplitKey(DBSlice key);
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split,
                           int64_t target_size, DBString* split_key);
 
 // DBTxn contains the fields from a roachpb.Transaction that are

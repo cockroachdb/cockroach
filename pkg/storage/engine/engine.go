@@ -96,6 +96,8 @@ type Iterator interface {
 	// the split is roughly targetSize bytes. The returned key will never be
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always
 	// sort equal to or after minSplitKey.
+	//
+	// DO NOT CALL directly. Use the package-level MVCCFindSplitKey instead.
 	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
