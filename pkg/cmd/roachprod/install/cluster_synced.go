@@ -1121,7 +1121,10 @@ func (c *SyncedCluster) Put(src, dest string) {
 // user and assumes that the current user used to create c has the ability to
 // sudo into <user>.
 func (c *SyncedCluster) Logs(
-	src, dest, user, filter string, interval time.Duration, from, to time.Time, out io.Writer,
+	src, dest, user, filter, programFilter string,
+	interval time.Duration,
+	from, to time.Time,
+	out io.Writer,
 ) error {
 	rsyncNodeLogs := func(ctx context.Context, idx int) error {
 		base := fmt.Sprintf("%d.logs", c.Nodes[idx-1])
@@ -1185,6 +1188,9 @@ func (c *SyncedCluster) Logs(
 			"--to", t.Format(time.RFC3339))
 		if filter != "" {
 			cmd.Args = append(cmd.Args, "--filter", filter)
+		}
+		if programFilter != "" {
+			cmd.Args = append(cmd.Args, "--program-filter", programFilter)
 		}
 		// For local clusters capture the cluster ID from the sync path because the
 		// host information is useless.
