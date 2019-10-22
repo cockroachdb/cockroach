@@ -124,8 +124,8 @@ type avroMetadata map[string]interface{}
 
 // avroEnvelopeOpts controls which fields in avroEnvelopeRecord are set.
 type avroEnvelopeOpts struct {
-	updatedField, resolvedField bool
 	beforeField, afterField     bool
+	updatedField, resolvedField bool
 }
 
 // avroEnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
@@ -523,6 +523,24 @@ func envelopeToAvroSchema(
 		opts: opts,
 	}
 
+	if opts.beforeField {
+		schema.before = before
+		beforeField := &avroSchemaField{
+			Name:       `before`,
+			SchemaType: []avroSchemaType{avroSchemaNull, before},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, beforeField)
+	}
+	if opts.afterField {
+		schema.after = after
+		afterField := &avroSchemaField{
+			Name:       `after`,
+			SchemaType: []avroSchemaType{avroSchemaNull, after},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, afterField)
+	}
 	if opts.updatedField {
 		updatedField := &avroSchemaField{
 			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
@@ -538,24 +556,6 @@ func envelopeToAvroSchema(
 			Default:    nil,
 		}
 		schema.Fields = append(schema.Fields, resolvedField)
-	}
-	if opts.afterField {
-		schema.after = after
-		afterField := &avroSchemaField{
-			Name:       `after`,
-			SchemaType: []avroSchemaType{avroSchemaNull, after},
-			Default:    nil,
-		}
-		schema.Fields = append(schema.Fields, afterField)
-	}
-	if opts.beforeField {
-		schema.before = before
-		beforeField := &avroSchemaField{
-			Name:       `before`,
-			SchemaType: []avroSchemaType{avroSchemaNull, before},
-			Default:    nil,
-		}
-		schema.Fields = append(schema.Fields, beforeField)
 	}
 
 	schemaJSON, err := json.Marshal(schema)
@@ -574,9 +574,28 @@ func envelopeToAvroSchema(
 func (r *avroEnvelopeRecord) BinaryFromRow(
 	buf []byte, meta avroMetadata, beforeRow, afterRow sqlbase.EncDatumRow,
 ) ([]byte, error) {
-	native := map[string]interface{}{
-		`before`: nil,
-		`after`:  nil,
+	native := map[string]interface{}{}
+	if r.opts.beforeField {
+		if beforeRow == nil {
+			native[`before`] = nil
+		} else {
+			beforeNative, err := r.before.nativeFromRow(beforeRow)
+			if err != nil {
+				return nil, err
+			}
+			native[`before`] = goavro.Union(avroUnionKey(&r.before.avroRecord), beforeNative)
+		}
+	}
+	if r.opts.afterField {
+		if afterRow == nil {
+			native[`after`] = nil
+		} else {
+			afterNative, err := r.after.nativeFromRow(afterRow)
+			if err != nil {
+				return nil, err
+			}
+			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
+		}
 	}
 	if r.opts.updatedField {
 		native[`updated`] = nil
@@ -601,28 +620,6 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 		}
 	}
 	// WIP verify that meta is now empty
-	if r.opts.afterField {
-		if afterRow == nil {
-			native[`after`] = nil
-		} else {
-			afterNative, err := r.after.nativeFromRow(afterRow)
-			if err != nil {
-				return nil, err
-			}
-			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
-		}
-	}
-	if r.opts.beforeField {
-		if beforeRow == nil {
-			native[`before`] = nil
-		} else {
-			beforeNative, err := r.before.nativeFromRow(beforeRow)
-			if err != nil {
-				return nil, err
-			}
-			native[`before`] = goavro.Union(avroUnionKey(&r.before.avroRecord), beforeNative)
-		}
-	}
 	return r.codec.BinaryFromNative(buf, native)
 }
 
