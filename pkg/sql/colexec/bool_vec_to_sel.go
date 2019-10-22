@@ -123,6 +123,10 @@ func (d selBoolOp) Init() {
 
 func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
 	batch := d.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return batch
+	}
 	inputCol := batch.ColVec(d.colIdx)
 	d.boolVecToSelOp.outputCol = inputCol.Bool()
 	if inputCol.MaybeHasNulls() {
@@ -134,7 +138,6 @@ func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
 		// so we need to adjust it.
 		// TODO(yuzefovich): think through this case more, possibly clean this up.
 		outputCol := d.boolVecToSelOp.outputCol
-		n := batch.Length()
 		sel := batch.Selection()
 		nulls := inputCol.Nulls()
 		if sel != nil {
