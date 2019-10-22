@@ -2185,14 +2185,18 @@ func mvccScanToKvs(
 	kvs := make([]roachpb.KeyValue, numKVs)
 	var k MVCCKey
 	var rawBytes []byte
-	for i := range kvs {
-		k, rawBytes, kvData, err = MVCCScanDecodeKeyValue(kvData)
-		if err != nil {
-			return nil, nil, nil, err
+	var i int
+	for _, data := range kvData {
+		for len(data) > 0 {
+			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			kvs[i].Key = k.Key
+			kvs[i].Value.RawBytes = rawBytes
+			kvs[i].Value.Timestamp = k.Timestamp
+			i++
 		}
-		kvs[i].Key = k.Key
-		kvs[i].Value.RawBytes = rawBytes
-		kvs[i].Value.Timestamp = k.Timestamp
 	}
 	return kvs, resumeSpan, intents, err
 }
@@ -2298,7 +2302,7 @@ func MVCCScanToBytes(
 	max int64,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
-) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
+) ([][]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
 	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return iter.MVCCScan(key, endKey, max, timestamp, opts)

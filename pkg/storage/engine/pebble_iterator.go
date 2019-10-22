@@ -392,7 +392,7 @@ func (p *pebbleIterator) MVCCGet(
 // MVCCScan implements the Iterator interface.
 func (p *pebbleIterator) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
-) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	if opts.Inconsistent && opts.Txn != nil {
 		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
@@ -430,7 +430,7 @@ func (p *pebbleIterator) MVCCScan(
 		return nil, 0, nil, nil, mvccScanner.err
 	}
 
-	kvData = mvccScanner.results.repr
+	kvData = mvccScanner.results.finish()
 	numKVs = mvccScanner.results.count
 
 	if mvccScanner.curKey != nil {

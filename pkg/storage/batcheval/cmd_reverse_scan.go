@@ -40,7 +40,7 @@ func ReverseScan(
 
 	switch args.ScanFormat {
 	case roachpb.BATCH_RESPONSE:
-		var kvData []byte
+		var kvData [][]byte
 		var numKvs int64
 		kvData, numKvs, resumeSpan, intents, err = engine.MVCCScanToBytes(
 			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
@@ -54,7 +54,7 @@ func ReverseScan(
 			return result.Result{}, err
 		}
 		reply.NumKeys = numKvs
-		reply.BatchResponses = [][]byte{kvData}
+		reply.BatchResponses = kvData
 	case roachpb.KEY_VALUES:
 		var rows []roachpb.KeyValue
 		rows, resumeSpan, intents, err = engine.MVCCScan(
