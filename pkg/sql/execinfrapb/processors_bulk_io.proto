@@ -122,6 +122,11 @@ message ReadImportDataSpec {
   optional int64 walltimeNanos = 11 [(gogoproto.nullable) = false];
 
   reserved 12;
+
+  // If set, specifies reader parallelism; 0 implies "use default".
+  optional int32 readerParallelism = 13 [(gogoproto.nullable) = false];
+
+  // NEXTID: 14
 }
 
 // CSVWriterSpec is the specification for a processor that consumes rows and
