@@ -1,0 +1,186 @@
+# Test that starts with no keys and tests data keys being generated when store key is set,
+# and periodic key rotation.
+init
+dir1
+5
+----
+
+load
+----
+
+get-active-data-key
+----
+none
+
+get-active-store-key
+----
+none
+
+set-active-store-key id=foo
+----
+
+get-active-data-key
+----
+encryption_type:AES128_CTR source:"data key manager" parent_key_id:"foo"
+
+record-active-data-key
+----
+
+wait
+2
+----
+
+compare-active-data-key
+----
+same
+
+wait
+4
+----
+
+compare-active-data-key
+----
+different
+
+get-active-data-key
+----
+encryption_type:AES128_CTR creation_time:6 source:"data key manager" parent_key_id:"foo"
+
+record-active-data-key
+----
+
+check-all-recorded-data-keys
+----
+
+# Test that starts with one active data and store key. Checks that data key is not rotated
+# until SetActiveStoreKeyInfo is called. Also tests key rotation and holding multiple store
+# and data keys.
+init
+dir2
+5
+active-store-key foo
+active-data-key data1
+----
+
+load
+----
+
+get-active-data-key
+----
+encryption_type:AES192_CTR
+
+get-active-store-key
+----
+foo
+
+record-active-data-key
+----
+
+wait
+10
+----
+
+compare-active-data-key
+----
+same
+
+set-active-store-key id=bar
+----
+
+get-store-key id=foo
+----
+encryption_type:AES128_CTR key_id:"foo"
+
+get-store-key id=bar
+----
+encryption_type:AES128_CTR key_id:"bar"
+
+get-store-key id=baz
+----
+none
+
+get-active-store-key
+----
+bar
+
+compare-active-data-key
+----
+different
+
+get-active-data-key
+----
+encryption_type:AES128_CTR creation_time:16 source:"data key manager" parent_key_id:"bar"
+
+check-exposed val=false
+----
+
+check-exposed val=true
+----
+WasExposed: actual: false, expected: true
+
+record-active-data-key
+----
+
+check-all-recorded-data-keys
+----
+
+# This call is not changing the active store key, so the data key will not be rotated.
+set-active-store-key id=bar
+----
+
+compare-active-data-key
+----
+same
+
+set-active-store-key id=baz
+----
+
+get-active-store-key
+----
+baz
+
+compare-active-data-key
+----
+different
+
+get-active-data-key
+----
+encryption_type:AES128_CTR creation_time:16 source:"data key manager" parent_key_id:"baz"
+
+record-active-data-key
+----
+
+check-all-recorded-data-keys
+----
+
+check-exposed val=false
+----
+
+# Test that keys transition to exposed.
+init
+dir3
+5
+active-store-key foo
+active-data-key data1
+----
+
+load
+----
+
+check-exposed val=false
+----
+
+get-active-data-key
+----
+encryption_type:AES192_CTR
+
+set-active-store-key-plain id=bar
+----
+
+check-exposed val=true
+----
+
+get-active-data-key
+----
+creation_time:16 source:"data key manager" was_exposed:true parent_key_id:"bar"
+
