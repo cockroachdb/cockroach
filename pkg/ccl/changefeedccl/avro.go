@@ -125,7 +125,7 @@ type avroMetadata map[string]interface{}
 // avroEnvelopeOpts controls which fields in avroEnvelopeRecord are set.
 type avroEnvelopeOpts struct {
 	updatedField, resolvedField bool
-	afterField                  bool
+	beforeField, afterField     bool
 }
 
 // avroEnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
@@ -133,8 +133,8 @@ type avroEnvelopeOpts struct {
 type avroEnvelopeRecord struct {
 	avroRecord
 
-	opts  avroEnvelopeOpts
-	after *avroDataRecord
+	opts          avroEnvelopeOpts
+	before, after *avroDataRecord
 }
 
 // columnDescToAvroSchema converts a column descriptor into its corresponding
@@ -377,10 +377,18 @@ func indexToAvroSchema(
 
 // tableToAvroSchema converts a column descriptor into its corresponding avro
 // record schema. The fields are kept in the same order as `tableDesc.Columns`.
-func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroDataRecord, error) {
+// If a name suffix is provided, it will be appended to the end of the avro
+// record's name.
+func tableToAvroSchema(
+	tableDesc *sqlbase.TableDescriptor, nameSuffix string,
+) (*avroDataRecord, error) {
+	name := SQLNameToAvroName(tableDesc.Name)
+	if nameSuffix != "" {
+		name = fmt.Sprintf("%s_%s", name, nameSuffix)
+	}
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
-			Name:       SQLNameToAvroName(tableDesc.Name),
+			Name:       name,
 			SchemaType: `record`,
 		},
 		fieldIdxByName:   make(map[string]int),
@@ -489,7 +497,7 @@ func (r *avroDataRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRow,
 // envelopeToAvroSchema creates an avro record schema for an envelope containing
 // before and after versions of a row change and metadata about that row change.
 func envelopeToAvroSchema(
-	topic string, opts avroEnvelopeOpts, after *avroDataRecord,
+	topic string, opts avroEnvelopeOpts, before, after *avroDataRecord,
 ) (*avroEnvelopeRecord, error) {
 	schema := &avroEnvelopeRecord{
 		avroRecord: avroRecord{
@@ -524,6 +532,15 @@ func envelopeToAvroSchema(
 		}
 		schema.Fields = append(schema.Fields, afterField)
 	}
+	if opts.beforeField {
+		schema.before = before
+		beforeField := &avroSchemaField{
+			Name:       `before`,
+			SchemaType: []avroSchemaType{avroSchemaNull, before},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, beforeField)
+	}
 
 	schemaJSON, err := json.Marshal(schema)
 	if err != nil {
@@ -539,10 +556,11 @@ func envelopeToAvroSchema(
 // BinaryFromRow encodes the given metadata and row data into avro's defined
 // binary format.
 func (r *avroEnvelopeRecord) BinaryFromRow(
-	buf []byte, meta avroMetadata, row sqlbase.EncDatumRow,
+	buf []byte, meta avroMetadata, beforeRow, afterRow sqlbase.EncDatumRow,
 ) ([]byte, error) {
 	native := map[string]interface{}{
-		`after`: nil,
+		`before`: nil,
+		`after`:  nil,
 	}
 	if r.opts.updatedField {
 		native[`updated`] = nil
@@ -568,14 +586,25 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 	}
 	// WIP verify that meta is now empty
 	if r.opts.afterField {
-		if row == nil {
+		if afterRow == nil {
 			native[`after`] = nil
 		} else {
-			afterNative, err := r.after.nativeFromRow(row)
+			afterNative, err := r.after.nativeFromRow(afterRow)
 			if err != nil {
 				return nil, err
 			}
 			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
+		}
+	}
+	if r.opts.beforeField {
+		if beforeRow == nil {
+			native[`before`] = nil
+		} else {
+			beforeNative, err := r.before.nativeFromRow(beforeRow)
+			if err != nil {
+				return nil, err
+			}
+			native[`before`] = goavro.Union(avroUnionKey(&r.before.avroRecord), beforeNative)
 		}
 	}
 	return r.codec.BinaryFromNative(buf, native)

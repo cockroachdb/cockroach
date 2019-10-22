@@ -16139,12 +16139,19 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
   ::cockroach::roachpb::Span* mutable_span();
   void set_allocated_span(::cockroach::roachpb::Span* span);
 
+  // bool with_diff = 3;
+  void clear_with_diff();
+  static const int kWithDiffFieldNumber = 3;
+  bool with_diff() const;
+  void set_with_diff(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeFeedRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::Header* header_;
   ::cockroach::roachpb::Span* span_;
+  bool with_diff_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -16259,12 +16266,25 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Value* mutable_value();
   void set_allocated_value(::cockroach::roachpb::Value* value);
 
+  // .cockroach.roachpb.Value prevValue = 3;
+  bool has_prevvalue() const;
+  void clear_prevvalue();
+  static const int kPrevValueFieldNumber = 3;
+  private:
+  const ::cockroach::roachpb::Value& _internal_prevvalue() const;
+  public:
+  const ::cockroach::roachpb::Value& prevvalue() const;
+  ::cockroach::roachpb::Value* release_prevvalue();
+  ::cockroach::roachpb::Value* mutable_prevvalue();
+  void set_allocated_prevvalue(::cockroach::roachpb::Value* prevvalue);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeFeedValue)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::roachpb::Value* value_;
+  ::cockroach::roachpb::Value* prevvalue_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -33345,6 +33365,20 @@ inline void RangeFeedRequest::set_allocated_span(::cockroach::roachpb::Span* spa
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeFeedRequest.span)
 }
 
+// bool with_diff = 3;
+inline void RangeFeedRequest::clear_with_diff() {
+  with_diff_ = false;
+}
+inline bool RangeFeedRequest::with_diff() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeFeedRequest.with_diff)
+  return with_diff_;
+}
+inline void RangeFeedRequest::set_with_diff(bool value) {
+  
+  with_diff_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeFeedRequest.with_diff)
+}
+
 // -------------------------------------------------------------------
 
 // RangeFeedValue
@@ -33446,6 +33480,54 @@ inline void RangeFeedValue::set_allocated_value(::cockroach::roachpb::Value* val
   }
   value_ = value;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeFeedValue.value)
+}
+
+// .cockroach.roachpb.Value prevValue = 3;
+inline bool RangeFeedValue::has_prevvalue() const {
+  return this != internal_default_instance() && prevvalue_ != NULL;
+}
+inline const ::cockroach::roachpb::Value& RangeFeedValue::_internal_prevvalue() const {
+  return *prevvalue_;
+}
+inline const ::cockroach::roachpb::Value& RangeFeedValue::prevvalue() const {
+  const ::cockroach::roachpb::Value* p = prevvalue_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeFeedValue.prevValue)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Value*>(
+      &::cockroach::roachpb::_Value_default_instance_);
+}
+inline ::cockroach::roachpb::Value* RangeFeedValue::release_prevvalue() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeFeedValue.prevValue)
+  
+  ::cockroach::roachpb::Value* temp = prevvalue_;
+  prevvalue_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::Value* RangeFeedValue::mutable_prevvalue() {
+  
+  if (prevvalue_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::Value>(GetArenaNoVirtual());
+    prevvalue_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeFeedValue.prevValue)
+  return prevvalue_;
+}
+inline void RangeFeedValue::set_allocated_prevvalue(::cockroach::roachpb::Value* prevvalue) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(prevvalue_);
+  }
+  if (prevvalue) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      prevvalue = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, prevvalue, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  prevvalue_ = prevvalue;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeFeedValue.prevValue)
 }
 
 // -------------------------------------------------------------------

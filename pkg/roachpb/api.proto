@@ -1862,13 +1862,23 @@ message BatchResponse {
 message RangeFeedRequest {
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Span   span   = 2 [(gogoproto.nullable) = false];
+  // with_diff specifies whether RangeFeedValue updates should contain the
+  // previous value that was overwritten.
+  bool with_diff = 3;
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to
 // the specified key with the provided value.
 message RangeFeedValue {
-  bytes key   = 1 [(gogoproto.casttype) = "Key"];
-  Value value = 2 [(gogoproto.nullable) = false];
+  bytes key       = 1 [(gogoproto.casttype) = "Key"];
+  Value value     = 2 [(gogoproto.nullable) = false];
+  // TODO DURING REVIEW: how should this be represented? Should this be:
+  // 1. nullable and non-nil when with_diff is requests and a prev val
+  //    exists (and otherwise nil)?
+  // 2. nullable and non-nil when with_diff is requests but with an
+  //    empty Value if the prev val doesn't exist?
+  // 3. non-nullable and not empty when a prev val exists?
+  Value prevValue = 3;
 }
 
 // RangeFeedCheckpoint is a variant of RangeFeedEvent that represents the
