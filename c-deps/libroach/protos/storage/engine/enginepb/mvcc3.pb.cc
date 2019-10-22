@@ -2118,6 +2118,7 @@ void MVCCWriteValueOp::clear_timestamp() {
 const int MVCCWriteValueOp::kKeyFieldNumber;
 const int MVCCWriteValueOp::kTimestampFieldNumber;
 const int MVCCWriteValueOp::kValueFieldNumber;
+const int MVCCWriteValueOp::kPrevValueFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCWriteValueOp::MVCCWriteValueOp()
@@ -2139,6 +2140,10 @@ MVCCWriteValueOp::MVCCWriteValueOp(const MVCCWriteValueOp& from)
   if (from.value().size() > 0) {
     value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
   }
+  prev_value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.prev_value().size() > 0) {
+    prev_value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.prev_value_);
+  }
   if (from.has_timestamp()) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.timestamp_);
   } else {
@@ -2150,6 +2155,7 @@ MVCCWriteValueOp::MVCCWriteValueOp(const MVCCWriteValueOp& from)
 void MVCCWriteValueOp::SharedCtor() {
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  prev_value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   timestamp_ = NULL;
 }
 
@@ -2161,6 +2167,7 @@ MVCCWriteValueOp::~MVCCWriteValueOp() {
 void MVCCWriteValueOp::SharedDtor() {
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   value_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  prev_value_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete timestamp_;
 }
 
@@ -2181,6 +2188,7 @@ void MVCCWriteValueOp::Clear() {
 
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  prev_value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
     delete timestamp_;
   }
@@ -2239,6 +2247,18 @@ bool MVCCWriteValueOp::MergePartialFromCodedStream(
         break;
       }
 
+      // bytes prev_value = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_prev_value()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2282,6 +2302,12 @@ void MVCCWriteValueOp::SerializeWithCachedSizes(
       3, this->value(), output);
   }
 
+  // bytes prev_value = 4;
+  if (this->prev_value().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      4, this->prev_value(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.MVCCWriteValueOp)
@@ -2305,6 +2331,13 @@ size_t MVCCWriteValueOp::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::BytesSize(
         this->value());
+  }
+
+  // bytes prev_value = 4;
+  if (this->prev_value().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::BytesSize(
+        this->prev_value());
   }
 
   if (this->has_timestamp()) {
@@ -2338,6 +2371,10 @@ void MVCCWriteValueOp::MergeFrom(const MVCCWriteValueOp& from) {
 
     value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
   }
+  if (from.prev_value().size() > 0) {
+
+    prev_value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.prev_value_);
+  }
   if (from.has_timestamp()) {
     mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
   }
@@ -2363,6 +2400,8 @@ void MVCCWriteValueOp::InternalSwap(MVCCWriteValueOp* other) {
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   value_.Swap(&other->value_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  prev_value_.Swap(&other->prev_value_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(timestamp_, other->timestamp_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -2934,6 +2973,7 @@ const int MVCCCommitIntentOp::kTxnIdFieldNumber;
 const int MVCCCommitIntentOp::kKeyFieldNumber;
 const int MVCCCommitIntentOp::kTimestampFieldNumber;
 const int MVCCCommitIntentOp::kValueFieldNumber;
+const int MVCCCommitIntentOp::kPrevValueFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCCommitIntentOp::MVCCCommitIntentOp()
@@ -2959,6 +2999,10 @@ MVCCCommitIntentOp::MVCCCommitIntentOp(const MVCCCommitIntentOp& from)
   if (from.value().size() > 0) {
     value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
   }
+  prev_value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.prev_value().size() > 0) {
+    prev_value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.prev_value_);
+  }
   if (from.has_timestamp()) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.timestamp_);
   } else {
@@ -2971,6 +3015,7 @@ void MVCCCommitIntentOp::SharedCtor() {
   txn_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  prev_value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   timestamp_ = NULL;
 }
 
@@ -2983,6 +3028,7 @@ void MVCCCommitIntentOp::SharedDtor() {
   txn_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   value_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  prev_value_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete timestamp_;
 }
 
@@ -3004,6 +3050,7 @@ void MVCCCommitIntentOp::Clear() {
   txn_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  prev_value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
     delete timestamp_;
   }
@@ -3073,6 +3120,18 @@ bool MVCCCommitIntentOp::MergePartialFromCodedStream(
         break;
       }
 
+      // bytes prev_value = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_prev_value()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -3121,6 +3180,12 @@ void MVCCCommitIntentOp::SerializeWithCachedSizes(
       4, this->value(), output);
   }
 
+  // bytes prev_value = 5;
+  if (this->prev_value().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      5, this->prev_value(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.MVCCCommitIntentOp)
@@ -3150,6 +3215,13 @@ size_t MVCCCommitIntentOp::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::BytesSize(
         this->value());
+  }
+
+  // bytes prev_value = 5;
+  if (this->prev_value().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::BytesSize(
+        this->prev_value());
   }
 
   if (this->has_timestamp()) {
@@ -3187,6 +3259,10 @@ void MVCCCommitIntentOp::MergeFrom(const MVCCCommitIntentOp& from) {
 
     value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
   }
+  if (from.prev_value().size() > 0) {
+
+    prev_value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.prev_value_);
+  }
   if (from.has_timestamp()) {
     mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
   }
@@ -3214,6 +3290,8 @@ void MVCCCommitIntentOp::InternalSwap(MVCCCommitIntentOp* other) {
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   value_.Swap(&other->value_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  prev_value_.Swap(&other->prev_value_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(timestamp_, other->timestamp_);
   _internal_metadata_.Swap(&other->_internal_metadata_);

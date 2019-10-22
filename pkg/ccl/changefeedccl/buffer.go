@@ -26,11 +26,19 @@ import (
 )
 
 type bufferEntry struct {
-	kv       roachpb.KeyValue
+	kv roachpb.KeyValue
+	// prevVal is set if the key had a non-tombstone value before the change
+	// and the before value of each change was requested (optDiff).
+	prevVal  roachpb.Value
 	resolved *jobspb.ResolvedSpan
 	// Timestamp of the schema that should be used to read this KV.
 	// If unset (zero-valued), the value's timestamp will be used instead.
 	schemaTimestamp hlc.Timestamp
+	// Timestamp of the schema that should be used to read the previous
+	// version of this KV.
+	// If unset (zero-valued), the previous value will be interpretted with
+	// the same timestamp as the current value.
+	prevSchemaTimestamp hlc.Timestamp
 	// bufferGetTimestamp is the time this entry came out of the buffer.
 	bufferGetTimestamp time.Time
 }
@@ -48,9 +56,18 @@ func makeBuffer() *buffer {
 // AddKV inserts a changed kv into the buffer. Individual keys must be added in
 // increasing mvcc order.
 func (b *buffer) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
+	ctx context.Context,
+	kv roachpb.KeyValue,
+	prevVal roachpb.Value,
+	schemaTimestamp hlc.Timestamp,
+	prevSchemaTimestamp hlc.Timestamp,
 ) error {
-	return b.addEntry(ctx, bufferEntry{kv: kv, schemaTimestamp: schemaTimestamp})
+	return b.addEntry(ctx, bufferEntry{
+		kv:                  kv,
+		prevVal:             prevVal,
+		schemaTimestamp:     schemaTimestamp,
+		prevSchemaTimestamp: prevSchemaTimestamp,
+	})
 }
 
 // AddResolved inserts a resolved timestamp notification in the buffer.
@@ -90,6 +107,7 @@ var memBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
 var memBufferColTypes = []types.T{
 	*types.Bytes, // kv.Key
 	*types.Bytes, // kv.Value
+	*types.Bytes, // kv.PrevValue
 	*types.Bytes, // span.Key
 	*types.Bytes, // span.EndKey
 	*types.Int,   // ts.WallTime
@@ -136,12 +154,17 @@ func (b *memBuffer) Close(ctx context.Context) {
 // AddKV inserts a changed kv into the buffer. Individual keys must be added in
 // increasing mvcc order.
 func (b *memBuffer) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
+	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, schemaTimestamp hlc.Timestamp,
 ) error {
 	b.allocMu.Lock()
+	prevValDatum := tree.DNull
+	if prevVal.IsPresent() {
+		prevValDatum = b.allocMu.a.NewDBytes(tree.DBytes(prevVal.RawBytes))
+	}
 	row := tree.Datums{
 		b.allocMu.a.NewDBytes(tree.DBytes(kv.Key)),
 		b.allocMu.a.NewDBytes(tree.DBytes(kv.Value.RawBytes)),
+		prevValDatum,
 		tree.DNull,
 		tree.DNull,
 		b.allocMu.a.NewDInt(tree.DInt(kv.Value.Timestamp.WallTime)),
@@ -157,6 +180,7 @@ func (b *memBuffer) AddKV(
 func (b *memBuffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
 	b.allocMu.Lock()
 	row := tree.Datums{
+		tree.DNull,
 		tree.DNull,
 		tree.DNull,
 		b.allocMu.a.NewDBytes(tree.DBytes(span.Key)),
@@ -179,8 +203,13 @@ func (b *memBuffer) Get(ctx context.Context) (bufferEntry, error) {
 	}
 	e := bufferEntry{bufferGetTimestamp: timeutil.Now()}
 	ts := hlc.Timestamp{
-		WallTime: int64(*row[4].(*tree.DInt)),
-		Logical:  int32(*row[5].(*tree.DInt)),
+		WallTime: int64(*row[5].(*tree.DInt)),
+		Logical:  int32(*row[6].(*tree.DInt)),
+	}
+	if row[2] != tree.DNull {
+		e.prevVal = roachpb.Value{
+			RawBytes: []byte(*row[2].(*tree.DBytes)),
+		}
 	}
 	if row[0] != tree.DNull {
 		e.kv = roachpb.KeyValue{
@@ -191,15 +220,15 @@ func (b *memBuffer) Get(ctx context.Context) (bufferEntry, error) {
 			},
 		}
 		e.schemaTimestamp = hlc.Timestamp{
-			WallTime: int64(*row[6].(*tree.DInt)),
-			Logical:  int32(*row[7].(*tree.DInt)),
+			WallTime: int64(*row[7].(*tree.DInt)),
+			Logical:  int32(*row[8].(*tree.DInt)),
 		}
 		return e, nil
 	}
 	e.resolved = &jobspb.ResolvedSpan{
 		Span: roachpb.Span{
-			Key:    []byte(*row[2].(*tree.DBytes)),
-			EndKey: []byte(*row[3].(*tree.DBytes)),
+			Key:    []byte(*row[3].(*tree.DBytes)),
+			EndKey: []byte(*row[4].(*tree.DBytes)),
 		},
 		Timestamp: ts,
 	}

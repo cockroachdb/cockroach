@@ -40,7 +40,11 @@ type singleRangeInfo struct {
 // Note that the timestamps in RangeFeedCheckpoint events that are streamed back
 // may be lower than the timestamp given here.
 func (ds *DistSender) RangeFeed(
-	ctx context.Context, span roachpb.Span, ts hlc.Timestamp, eventCh chan<- *roachpb.RangeFeedEvent,
+	ctx context.Context,
+	span roachpb.Span,
+	ts hlc.Timestamp,
+	withDiff bool,
+	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
@@ -66,7 +70,7 @@ func (ds *DistSender) RangeFeed(
 			case sri := <-rangeCh:
 				// Spawn a child goroutine to process this feed.
 				g.GoCtx(func(ctx context.Context) error {
-					return ds.partialRangeFeed(ctx, &sri, rangeCh, eventCh)
+					return ds.partialRangeFeed(ctx, &sri, withDiff, rangeCh, eventCh)
 				})
 			case <-ctx.Done():
 				return ctx.Err()
@@ -123,6 +127,7 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 func (ds *DistSender) partialRangeFeed(
 	ctx context.Context,
 	rangeInfo *singleRangeInfo,
+	withDiff bool,
 	rangeCh chan<- singleRangeInfo,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
@@ -143,7 +148,7 @@ func (ds *DistSender) partialRangeFeed(
 		}
 
 		// Establish a RangeFeed for a single Range.
-		maxTS, pErr := ds.singleRangeFeed(ctx, span, ts, rangeInfo.desc, eventCh)
+		maxTS, pErr := ds.singleRangeFeed(ctx, span, ts, withDiff, rangeInfo.desc, eventCh)
 
 		// Forward the timestamp in case we end up sending it again.
 		ts.Forward(maxTS)
@@ -208,6 +213,7 @@ func (ds *DistSender) singleRangeFeed(
 	ctx context.Context,
 	span roachpb.Span,
 	ts hlc.Timestamp,
+	withDiff bool,
 	desc *roachpb.RangeDescriptor,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) (hlc.Timestamp, *roachpb.Error) {
@@ -217,6 +223,7 @@ func (ds *DistSender) singleRangeFeed(
 			Timestamp: ts,
 			RangeID:   desc.RangeID,
 		},
+		WithDiff: withDiff,
 	}
 
 	var latencyFn LatencyFunc
