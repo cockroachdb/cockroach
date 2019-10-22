@@ -66,7 +66,7 @@ func assertEq(t *testing.T, engine ReadWriter, debug string, ms, expMS *enginepb
 func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -144,7 +144,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -223,7 +223,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -304,7 +304,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -416,7 +416,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -532,7 +532,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -671,7 +671,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -840,7 +840,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 func TestMVCCStatsDelDelGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -916,7 +916,7 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1007,7 +1007,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1094,7 +1094,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1184,7 +1184,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1255,7 +1255,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 func TestMVCCStatsSysPutPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1529,7 +1529,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	}
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, test := range []struct {
 				name string
 				key  roachpb.Key
@@ -1577,7 +1577,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 func TestMVCCComputeStatsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
