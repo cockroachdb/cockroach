@@ -2300,7 +2300,7 @@ func (r *rocksDBIterator) FindSplitKey(
 ) (MVCCKey, error) {
 	var splitKey C.DBString
 	r.clearState()
-	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end), goToCKey(minSplitKey),
+	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(minSplitKey),
 		C.int64_t(targetSize), &splitKey)
 	if err := statusToError(status); err != nil {
 		return MVCCKey{}, err

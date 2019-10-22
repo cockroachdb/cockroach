@@ -345,7 +345,7 @@ func TestMVCCEmptyKey(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -375,7 +375,7 @@ func TestMVCCGetNegativeTimestampError(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -397,7 +397,7 @@ func TestMVCCGetNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -424,7 +424,7 @@ func TestMVCCPutWithTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 			if err := MVCCPut(ctx, engine, nil, testKey1, txn1.OrigTimestamp, value1, txn1); err != nil {
@@ -451,7 +451,7 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -481,7 +481,7 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -540,7 +540,7 @@ func TestMVCCPutNewEpochLowerSequence(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -609,7 +609,7 @@ func TestMVCCIncrement(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -645,7 +645,7 @@ func TestMVCCIncrementTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -672,7 +672,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -711,7 +711,7 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -761,7 +761,7 @@ func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -785,7 +785,7 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -808,7 +808,7 @@ func TestMVCCUpdateExistingKeyDiffTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -829,7 +829,7 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -878,7 +878,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -1159,7 +1159,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -1224,7 +1224,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1277,7 +1277,7 @@ func TestMVCCInlineWithTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1317,7 +1317,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1338,7 +1338,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -1403,7 +1403,7 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -1441,7 +1441,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1561,7 +1561,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -1628,7 +1628,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1741,7 +1741,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 	for _, which := range []string{"get", "scan", "findSplitKey", "computeStats"} {
 		t.Run(which, func(t *testing.T) {
 			for _, engineImpl := range mvccEngineImpls {
-				t.Run(engineImpl.name, func(*testing.T) {
+				t.Run(engineImpl.name, func(t *testing.T) {
 					engine := engineImpl.create()
 					defer engine.Close()
 
@@ -1896,7 +1896,7 @@ func TestMVCCScan(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1910,7 +1910,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -1990,7 +1990,7 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2042,7 +2042,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2089,7 +2089,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2180,7 +2180,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2339,7 +2339,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2488,7 +2488,7 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2529,7 +2529,7 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2565,7 +2565,7 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2613,7 +2613,7 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -2723,7 +2723,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 
 			ts0 := hlc.Timestamp{WallTime: 0}
 			ts0Content := []roachpb.KeyValue{}
@@ -2958,7 +2958,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 	ctx := context.Background()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
@@ -3061,7 +3061,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3202,7 +3202,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3254,7 +3254,7 @@ func TestMVCCInitPut(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3347,7 +3347,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3414,7 +3414,7 @@ func TestMVCCConditionalPutWriteTooOld(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3458,7 +3458,7 @@ func TestMVCCIncrementWriteTooOld(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3497,7 +3497,7 @@ func TestMVCCReverseScan(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3623,7 +3623,7 @@ func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3667,7 +3667,7 @@ func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3719,7 +3719,7 @@ func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
 func TestMVCCReverseScanStopAtSmallestKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			run := func(numPuts int, ts int64) {
 				ctx := context.Background()
 				engine := engineImpl.create()
@@ -3762,7 +3762,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3813,7 +3813,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3853,7 +3853,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -3912,7 +3912,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 			err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil)
@@ -3963,7 +3963,7 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4016,7 +4016,7 @@ func TestMVCCPutNegativeTimestampError(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4041,7 +4041,7 @@ func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4084,7 +4084,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4124,7 +4124,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4175,7 +4175,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4277,7 +4277,7 @@ func TestMVCCGetWithDiffEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
@@ -4344,7 +4344,7 @@ func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -4419,7 +4419,7 @@ func TestMVCCGetWithOldEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for _, impl := range mvccGetImpls {
 				t.Run(impl.name, func(t *testing.T) {
 					mvccGet := impl.fn
@@ -4452,7 +4452,7 @@ func TestMVCCWriteWithSequence(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4523,7 +4523,7 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4598,7 +4598,7 @@ func TestMVCCGetWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 			for _, impl := range mvccGetImpls {
@@ -4640,7 +4640,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4687,7 +4687,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4742,7 +4742,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4799,7 +4799,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4847,7 +4847,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -4928,7 +4928,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -5006,7 +5006,7 @@ func TestFindSplitKey(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -5358,7 +5358,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 	}
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for i, test := range testCases {
 				t.Run("", func(t *testing.T) {
 					ctx := context.Background()
@@ -5458,7 +5458,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 	}
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			for i, test := range testCases {
 				t.Run("", func(t *testing.T) {
 					ctx := context.Background()
@@ -5499,7 +5499,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -5615,7 +5615,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -5662,7 +5662,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -5701,7 +5701,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -5739,7 +5739,7 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -5868,7 +5868,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
@@ -6134,7 +6134,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
