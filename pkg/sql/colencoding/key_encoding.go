@@ -248,7 +248,7 @@ func skipTableKey(
 	var rkey []byte
 	var err error
 	switch valType.Family() {
-	case types.BoolFamily, types.IntFamily, types.DateFamily:
+	case types.BoolFamily, types.IntFamily, types.DateFamily, types.OidFamily:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeVarintAscending(key)
 		} else {
@@ -322,7 +322,7 @@ func UnmarshalColumnValueToCol(
 		var v []byte
 		v, err = value.GetBytes()
 		vec.Bytes().Set(int(idx), v)
-	case types.DateFamily:
+	case types.DateFamily, types.OidFamily:
 		var v int64
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
