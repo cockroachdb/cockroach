@@ -7,12 +7,10 @@ PAUSE JOB 'foo'
 query error could not parse "foo" as type int
 CANCEL JOBS SELECT 'foo'
 
-# The heuristic planner and the optimizer give different errors for these
-# queries. Accept both.
-query error (CANCEL JOBS expects a single column source, got 2 columns|too many columns in CANCEL JOBS data)
+query error too many columns in CANCEL JOBS data
 CANCEL JOBS VALUES (1,2)
 
-query error (CANCEL JOBS requires int values, not type oid|pq: CANCEL JOBS data column 1 \(job_id\) must be of type int, not type oid)
+query error pq: CANCEL JOBS data column 1 \(job_id\) must be of type int, not type oid
 CANCEL JOB 1::OID
 
 statement ok count 0
@@ -24,7 +22,7 @@ PAUSE JOBS SELECT id FROM system.jobs LIMIT 0
 query error could not parse "foo" as type int
 PAUSE JOBS SELECT 'foo'
 
-query error (PAUSE JOBS expects a single column source, got 2 columns|too many columns in PAUSE JOBS data)
+query error too many columns in PAUSE JOBS data
 PAUSE JOBS VALUES (1,2)
 
 query error job with ID 1 does not exist
@@ -36,7 +34,7 @@ RESUME JOB 'foo'
 query error could not parse "foo" as type int
 RESUME JOBS SELECT 'foo'
 
-query error (RESUME JOBS expects a single column source, got 2 columns|too many columns in RESUME JOBS data)
+query error too many columns in RESUME JOBS data
 RESUME JOBS VALUES (1,2)
 
 statement ok count 0
@@ -57,10 +55,10 @@ CANCEL JOB (SELECT id FROM system.jobs LIMIT 0)
 statement ok count 0
 CANCEL JOBS SELECT id FROM system.jobs LIMIT 0
 
-query error (CANCEL QUERIES requires string values, not type int|CANCEL QUERIES data column 1 \(query_id\) must be of type string, not type int)
+query error CANCEL QUERIES data column 1 \(query_id\) must be of type string, not type int
 CANCEL QUERY 1
 
-query error (CANCEL QUERIES expects a single column source, got 2 columns|too many columns in CANCEL QUERIES data)
+query error too many columns in CANCEL QUERIES data
 CANCEL QUERIES VALUES (1,2)
 
 query error odd length hex string
@@ -72,10 +70,10 @@ CANCEL QUERY '14d2355b9cccbca50000000000000001'
 statement ok
 CANCEL QUERY IF EXISTS '14d2355b9cccbca50000000000000001'
 
-query error (CANCEL SESSIONS requires string values, not type int|CANCEL SESSIONS data column 1 \(session_id\) must be of type string, not type int)
+query error CANCEL SESSIONS data column 1 \(session_id\) must be of type string, not type int
 CANCEL SESSION 1
 
-query error (CANCEL SESSIONS expects a single column source, got 2 columns|too many columns in CANCEL SESSIONS data)
+query error too many columns in CANCEL SESSIONS data
 CANCEL SESSIONS VALUES (1,2)
 
 query error odd length hex string
