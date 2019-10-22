@@ -324,7 +324,11 @@ func (dsp *DistSQLPlanner) Run(
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
-		_, url, err := execinfrapb.GeneratePlanDiagramURL(planCtx.planner.stmt.String(), flows)
+		var stmtStr string
+		if planCtx.planner != nil {
+			stmtStr = planCtx.planner.stmt.String()
+		}
+		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows)
 		if err != nil {
 			log.Infof(ctx, "Error generating diagram: %s", err)
 		} else {

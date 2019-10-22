@@ -227,12 +227,10 @@ SELECT count(DISTINCT w) FROM kv GROUP BY 1
 query error aggregate functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v)
 
-# The HP and CBO have different errors.
-query error (aggregate functions are not allowed in LIMIT|column "v" does not exist)
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 
-# The HP and CBO have different errors.
-query error (aggregate functions are not allowed in OFFSET|column "v" does not exist)
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v)
 
 query error aggregate functions are not allowed in VALUES
@@ -1793,3 +1791,132 @@ SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 
 query error lpad
 SELECT count(*)::TEXT||lpad('foo', 23984729388383834723984) FROM (VALUES(1));
+
+statement ok
+CREATE TABLE tab (
+  col1 INT PRIMARY KEY,
+  col2 INT,
+  col3 STRING
+)
+
+# Ordered aggregations when there are no rows.
+query I
+SELECT array_agg(col1 ORDER BY col2) FROM TAB
+----
+NULL
+
+statement ok
+INSERT INTO tab VALUES (-3, 7, 'a'), (-2, 6, 'a'), (-1, 5, 'a'), (0, 7, 'b'), (1, 5, 'b'), (2, 6, 'b')
+
+query T colnames
+SELECT array_agg(col1 ORDER BY col1) FROM tab
+----
+array_agg
+{-3,-2,-1,0,1,2}
+
+query T colnames
+SELECT array_agg(col1 ORDER BY col2*100+col1) FROM tab
+----
+array_agg
+{-1,1,-2,2,-3,0}
+
+query T colnames
+SELECT json_agg(col1 ORDER BY col1) FROM tab
+----
+json_agg
+[-3, -2, -1, 0, 1, 2]
+
+query T colnames
+SELECT jsonb_agg(col1 ORDER BY col1) FROM tab
+----
+jsonb_agg
+[-3, -2, -1, 0, 1, 2]
+
+query T colnames
+SELECT jsonb_agg(col1 ORDER BY col2, col1) FROM tab
+----
+jsonb_agg
+[-1, 1, -2, 2, -3, 0]
+
+query T colnames
+SELECT concat_agg(col3 ORDER BY col1) FROM tab
+----
+concat_agg
+aaabbb
+
+query T colnames
+SELECT concat_agg(col3 ORDER BY col1 DESC) FROM tab
+----
+concat_agg
+bbbaaa
+
+query T colnames
+SELECT string_agg(col3, ', ' ORDER BY col3) FROM tab
+----
+string_agg
+a, a, a, b, b, b
+
+query T colnames
+SELECT string_agg(col3, ', ' ORDER BY col3 DESC) FROM tab
+----
+string_agg
+b, b, b, a, a, a
+
+query TTT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), array_agg(col1 ORDER BY col3, col1) FROM tab
+----
+array_agg         array_agg         array_agg
+{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  {-3,-2,-1,0,1,2}
+
+query TTT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), col3 FROM tab GROUP BY col3 ORDER BY col3
+----
+array_agg   array_agg   col3
+{-3,-2,-1}  {-1,-2,-3}  a
+{0,1,2}     {1,2,0}     b
+
+query TTII colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), count(col3), count(*) FROM tab
+----
+array_agg         array_agg         count  count
+{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  6      6
+
+query TT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col1) FILTER (WHERE col1 < 0) FROM tab
+----
+array_agg         array_agg
+{-3,-2,-1,0,1,2}  {-3,-2,-1}
+
+query TT colnames
+SELECT array_agg(col1 ORDER BY col3, col1) FILTER (WHERE col1 < 0), array_agg(col1 ORDER BY col3, col1) FROM tab
+----
+array_agg   array_agg
+{-3,-2,-1}  {-3,-2,-1,0,1,2}
+
+query IT
+SELECT count(1), concat_agg(col3 ORDER BY col1) from tab
+----
+6  aaabbb
+
+# Testing pre-projections. Tests when the GroupBy clause has a projection.
+query IIIT colnames
+SELECT
+    *
+FROM
+    (
+        SELECT
+            count(1) AS count_1,
+            count(lower(col3)) AS count_lower,
+            count(upper(col3)) AS count_upper,
+            concat_agg(col3 ORDER BY col1) AS concat
+        FROM
+            tab
+        GROUP BY
+            upper(col3)
+    )
+ORDER BY
+    concat
+----
+count_1  count_lower  count_upper  concat
+3        3            3            aaa
+3        3            3            bbb

@@ -640,8 +640,7 @@ CREATE TABLE t32759 (
 )
 
 # Check that values cannot be inserted into the dropped column.
-# HP and CBO return different errors, so accept both.
-statement error [column "y" does not exist | column "y" is being backfilled]
+statement error column "y" does not exist
 INSERT INTO t32759(x, y, z) VALUES (2, 'c', 2)
 
 statement ok

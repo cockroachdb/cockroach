@@ -292,3 +292,7 @@ SELECT 1 FROM (SELECT a FROM a WHERE a > 3 UNION ALL SELECT a FROM c)
 ----
 1
 1
+
+query R
+SELECT * from ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
+----

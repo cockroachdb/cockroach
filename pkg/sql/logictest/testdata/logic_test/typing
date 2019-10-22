@@ -167,9 +167,7 @@ SELECT 1 in (SELECT 1)
 ----
 true
 
-# The heuristic planner and the optimizer give different errors for this query.
-# Accept them both.
-statement error (unsupported comparison operator: <int> IN <tuple{string}>|could not parse "a" as type int)
+statement error could not parse "a" as type int
 SELECT 1 IN (SELECT 'a')
 
 statement error unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>

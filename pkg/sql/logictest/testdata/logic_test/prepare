@@ -646,9 +646,8 @@ DROP TABLE pg_type
 statement ok
 RESET search_path
 
-## Functions: Use function which depends on context, and which is constant-
-## folded by the heuristic planner. Ensure that it's not constant folded when
-## part of prepared plan.
+## Functions: Use function which depends on context; ensure that it's not
+## constant folded when part of prepared plan.
 query B
 SELECT has_column_privilege('testuser', 'othertable', 1, 'SELECT')
 ----
@@ -835,8 +834,7 @@ EXECUTE change_view
 statement ok
 ALTER VIEW otherview RENAME TO otherview2
 
-# HP and CBO return slightly different errors, so accept both.
-query error pq: relation "(otherdb.public.)?otherview" does not exist
+query error pq: relation "otherview" does not exist
 EXECUTE change_view
 
 statement ok
@@ -1056,3 +1054,133 @@ EXECUTE change_rename_2
 ----
 a  b
 1  10
+
+statement ok
+USE test
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY, str STRING)
+
+statement ok
+INSERT INTO t2 SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i)
+
+statement error PREPARE AS OPT PLAN is a testing facility that should not be used directly
+PREPARE a AS OPT PLAN 'xx'
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+statement ok
+PREPARE a AS OPT PLAN '
+(Root
+  (Scan [ (Table "t2") (Cols "k,str") ])
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT rowsort
+EXECUTE a
+----
+1  one
+2  two
+3  three
+4  four
+5  five
+
+statement ok
+PREPARE b AS OPT PLAN '
+(Root
+  (Sort
+    (Select
+      (Scan [ (Table "t2") (Cols "k,str") ])
+      [
+        (Eq
+          (Mod (Var "k") (Const 2))
+          (Const 1)
+        )
+      ]
+    )
+  )
+  (Presentation "k,str")
+  (OrderingChoice "+str")
+)'
+
+query IT
+EXECUTE b
+----
+5  five
+1  one
+3  three
+
+statement ok
+PREPARE e AS OPT PLAN '
+(Root
+  (Explain
+    (Select
+      (Scan [ (Table "t2") (Cols "k,str") ])
+      [
+        (Eq
+          (Mod (Var "k") (Const 2))
+          (Const 1)
+        )
+      ]
+    )
+    [
+      (Options "opt,verbose")
+      (ColList [ (NewColumn "text" "string") ])
+      (Props (MinPhysProps))
+    ]
+  )
+  (Presentation "text")
+  (NoOrdering)
+)'
+
+query T
+EXECUTE e
+----
+select
+ ├── columns: k:1 str:2
+ ├── stats: [rows=333.333333]
+ ├── cost: 1050.03
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (2)
+ ├── scan t2
+ │    ├── columns: k:1 str:2
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1040.02
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── prune: (1,2)
+ └── filters
+      └── (k % 2) = 1 [outer=(1)]
+
+# Only root may use PREPARE AS OPT PLAN.
+
+user testuser
+
+statement ok
+USE test
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+statement error user testuser does not have SELECT privilege on relation t2
+SELECT * FROM t2
+
+statement error PREPARE AS OPT PLAN may only be used by root
+PREPARE a AS OPT PLAN '
+(Root
+  (Scan [ (Table "t2") (Cols "k") ])
+  (Presentation "k")
+  (NoOrdering)
+)'
+
+# Ensure we error even when the string matches a previously prepared statement.
+statement error PREPARE AS OPT PLAN may only be used by root
+PREPARE b AS OPT PLAN '
+(Root
+  (Scan [ (Table "t2") (Cols "k,str") ])
+  (Presentation "k,str")
+  (NoOrdering)
+)'
