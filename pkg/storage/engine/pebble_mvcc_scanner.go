@@ -33,6 +33,7 @@ const (
 type pebbleResults struct {
 	count int64
 	repr  []byte
+	bufs  [][]byte
 }
 
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
@@ -42,7 +43,6 @@ func (p *pebbleResults) put(key []byte, value []byte) {
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	const kvLenSize = 8
 
-	startIdx := len(p.repr)
 	lenToAdd := kvLenSize + len(key) + len(value)
 
 	// We currently make a contiguous buffer for all key values, no matter how
@@ -52,28 +52,37 @@ func (p *pebbleResults) put(key []byte, value []byte) {
 	// growing slices, instead of having one contiguous slice. Would involve
 	// updating the Iterator interface as well as package level MVCCScan*
 	// functions to work with non-contiguous buffers.
-	if len(p.repr)+lenToAdd <= cap(p.repr) {
-		p.repr = p.repr[:len(p.repr)+lenToAdd]
-	} else {
+	if len(p.repr)+lenToAdd > cap(p.repr) {
 		// Exponentially grow the size of repr.
-		oldRepr := p.repr
-		newLen := len(oldRepr) + lenToAdd
-		newCap := 2 * cap(oldRepr)
-		if newCap == 0 {
-			newCap = 2 * newLen
+		newSize := 2 * cap(p.repr)
+		if newSize == 0 {
+			newSize = 16
 		}
-		for newCap < newLen {
-			newCap *= 2
+		const maxSize = 128 << 20 // 128 MB
+		for newSize < lenToAdd && newSize < maxSize {
+			newSize *= 2
 		}
-		p.repr = make([]byte, newLen, newCap)
-		copy(p.repr, oldRepr)
+		if len(p.repr) > 0 {
+			p.bufs = append(p.bufs, p.repr)
+		}
+		p.repr = nonZeroingMakeByteSlice(newSize)[:0]
 	}
 
+	startIdx := len(p.repr)
+	p.repr = p.repr[:startIdx+lenToAdd]
 	binary.LittleEndian.PutUint32(p.repr[startIdx:], uint32(len(value)))
 	binary.LittleEndian.PutUint32(p.repr[startIdx+4:], uint32(len(key)))
 	copy(p.repr[startIdx+kvLenSize:], key)
 	copy(p.repr[startIdx+kvLenSize+len(key):], value)
 	p.count++
+}
+
+func (p *pebbleResults) finish() [][]byte {
+	if len(p.repr) > 0 {
+		p.bufs = append(p.bufs, p.repr)
+		p.repr = nil
+	}
+	return p.bufs
 }
 
 // Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
