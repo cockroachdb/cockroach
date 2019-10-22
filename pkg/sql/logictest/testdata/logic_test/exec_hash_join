@@ -109,3 +109,18 @@ SELECT b.a, b.c, c.a FROM b JOIN c ON b.b = c.a AND b.c = c.b ORDER BY 2
 0  a  1
 2  b  1
 0  c  2
+
+# Test hash join with an empty build table.
+statement ok
+CREATE TABLE empty (x INT)
+
+statement ok
+CREATE TABLE onecolumn (x INT); INSERT INTO onecolumn(x) VALUES (44), (NULL), (42)
+
+query II colnames
+SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
+----
+x     y
+NULL  NULL
+NULL  42
+NULL  44

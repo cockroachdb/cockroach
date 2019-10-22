@@ -960,16 +960,23 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		valCol := prober.ht.vals[inColIdx]
 		colType := prober.ht.valTypes[inColIdx]
 
-		outCol.Copy(
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:   colType,
-					Src:       valCol,
-					SrcEndIdx: uint64(nResults),
+		// If the hash table is empty, then there is nothing to copy. The nulls
+		// will be set below.
+		if prober.ht.size > 0 {
+			// Note that if for some index i, probeRowUnmatched[i] is true, then
+			// prober.buildIdx[i] == 0 which will copy the garbage zeroth row of the
+			// hash table, but we will set the NULL value below.
+			outCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:   colType,
+						Src:       valCol,
+						SrcEndIdx: uint64(nResults),
+					},
+					Sel64: prober.buildIdx,
 				},
-				Sel64: prober.buildIdx,
-			},
-		)
+			)
+		}
 		if prober.spec.outer {
 			// Add in the nulls we needed to set for the outer join.
 			nulls := outCol.Nulls()
