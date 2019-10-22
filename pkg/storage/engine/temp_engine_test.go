@@ -18,16 +18,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestNewTempEngine(t *testing.T) {
+func TestNewRocksDBTempEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create the temporary directory for the RocksDB engine.
 	tempDir, tempDirCleanup := testutils.TempDir(t)
 	defer tempDirCleanup()
 
-	engine, err := NewTempEngine(base.TempStorageConfig{Path: tempDir}, base.StoreSpec{Path: tempDir})
+	engine, err := NewRocksDBTempEngine(base.TempStorageConfig{Path: tempDir}, base.StoreSpec{Path: tempDir})
 	if err != nil {
-		t.Fatalf("error encountered when invoking NewTempEngine: %+v", err)
+		t.Fatalf("error encountered when invoking NewRocksDBTempEngine: %+v", err)
 	}
 	defer engine.Close()
 
