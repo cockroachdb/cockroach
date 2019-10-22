@@ -100,7 +100,15 @@ func (f *Factory) Init(evalCtx *tree.EvalContext) {
 // DetachMemo extracts the memo from the optimizer, and then re-initializes the
 // factory so that its reuse will not impact the detached memo. This method is
 // used to extract a read-only memo during the PREPARE phase.
+//
+// Before extracting the memo, DetachMemo first clears all column statistics in
+// the memo. This is used to free up the potentially large amount of memory
+// used by histograms. This does not affect the quality of the plan used at
+// execution time, since the stats are just recalculated anyway when
+// placeholders are assigned. If there are no placeholders, there is no need
+// for column statistics, since the memo is already fully optimized.
 func (f *Factory) DetachMemo() *memo.Memo {
+	f.mem.ClearColStats(f.mem.RootExpr())
 	detach := f.mem
 	f.mem = nil
 	f.Init(f.evalCtx)
