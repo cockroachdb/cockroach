@@ -32,12 +32,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSupportedSQLTypesIntegration tests that all supported by the vectorized
-// engine SQL types can be safely "round-tripped through colserde package." It
-// creates a bunch of rows with a single column of the type in question, passes
-// it through the following chain:
-//   Columnarizer -> arrowTestOperator -> Materializer
-// and verifies that the output rows are equal to the input ones.
+// TestSupportedSQLTypesIntegration tests that all SQL types supported by the
+// vectorized engine are "actually supported." For each type, it creates a bunch
+// of rows consisting of a single datum (possibly null), converts them into
+// column batches, serializes and then deserializes these batches, and finally
+// converts the deserialized batches back to rows which are compared with the
+// original rows.
 func TestSupportedSQLTypesIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

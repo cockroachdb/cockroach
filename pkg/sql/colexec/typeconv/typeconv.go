@@ -224,8 +224,7 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 			if !ok {
 				return nil, errors.Errorf("expected *tree.DUuid, found %s", reflect.TypeOf(datum))
 			}
-			// TODO(yuzefovich): this maybe should be GetBytesMut().
-			return d.UUID.GetBytes(), nil
+			return d.UUID.GetBytesMut(), nil
 		}
 	}
 	// It would probably be more correct to return an error here, rather than a

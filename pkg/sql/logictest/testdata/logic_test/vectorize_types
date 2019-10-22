@@ -1,0 +1,51 @@
+# Check that all types supported by the vectorized engine can be read correctly.
+statement ok
+CREATE TABLE all_types (
+    _bool    BOOL,
+    _bytes   BYTES,
+    _date    DATE,
+    _decimal DECIMAL,
+    _int2    INT2,
+    _int4    INT4,
+    _int     INT8,
+    _oid     OID,
+    _float   FLOAT8,
+    _string  STRING,
+    _uuid    UUID
+)
+
+statement ok
+INSERT
+  INTO all_types
+VALUES (
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+       ),
+       (
+       false,
+       '123',
+       '2019-10-22',
+       1.23,
+       123,
+       123,
+       123,
+       123,
+       1.23,
+       '123',
+       '63616665-6630-3064-6465-616462656562'
+       )
+
+query BTTRIIIORTT
+SELECT * FROM all_types ORDER BY 1
+----
+NULL   NULL  NULL                             NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+false  123   2019-10-22 00:00:00 +0000 +0000  1.23  123   123   123   123   1.23  123   63616665-6630-3064-6465-616462656562
