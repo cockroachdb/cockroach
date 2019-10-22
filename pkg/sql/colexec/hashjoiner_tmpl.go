@@ -219,21 +219,21 @@ func _COLLECT_RIGHT_OUTER(
 	for i := uint16(0); i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 
-		if currentID == 0 {
-			prober.probeRowUnmatched[nResults] = true
-		}
-
 		for {
 			if nResults >= coldata.BatchSize() {
 				prober.prevBatch = batch
 				return nResults
 			}
 
+			prober.probeRowUnmatched[nResults] = currentID == 0
 			if currentID > 0 {
-				// If currentID == 0, nobody will look at this again since
-				// probeRowUnmatched will have been set - so don't populate this with
-				// a garbage value.
 				prober.buildIdx[nResults] = currentID - 1
+			} else {
+				// If currentID == 0, then probeRowUnmatched will have been set - and
+				// we set the corresponding buildIdx to zero so that (as long as the
+				// build hash table has at least one row) we can copy the values vector
+				// without paying attention to probeRowUnmatched.
+				prober.buildIdx[nResults] = 0
 			}
 			// {{if .UseSel}}
 			prober.probeIdx[nResults] = sel[i]

@@ -194,7 +194,7 @@ func TestAndOrOps(t *testing.T) {
 				runner(
 					t,
 					[]tuples{tc.tuples},
-					[]coltypes.T{coltypes.Bool, coltypes.Bool},
+					[][]coltypes.T{{coltypes.Bool, coltypes.Bool}},
 					tc.expected,
 					orderedVerifier,
 					func(input []Operator) (Operator, error) {

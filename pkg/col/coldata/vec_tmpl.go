@@ -78,7 +78,7 @@ func (m *memColumn) Append(args SliceArgs) {
 func _COPY_WITH_SEL(
 	m *memColumn, args CopySliceArgs, fromCol, toCol _GOTYPESLICE, sel interface{}, _SEL_ON_DEST bool,
 ) { // */}}
-	// {{define "copyWithSel"}}
+	// {{define "copyWithSel" -}}
 	if args.Src.MaybeHasNulls() {
 		nulls := args.Src.Nulls()
 		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
