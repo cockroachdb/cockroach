@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto2";
-package cockroach.config;
-option go_package = "config";
+package cockroach.config.zonepb;
+option go_package = "zonepb";
 
 import "gogoproto/gogo.proto";
 

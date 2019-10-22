@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -142,7 +142,7 @@ const (
 // can be retried quickly as soon as new stores come online, or additional
 // space frees up.
 type allocatorError struct {
-	constraints      []config.Constraints
+	constraints      []zonepb.Constraints
 	existingReplicas int
 	aliveStores      int
 	throttledStores  int
@@ -300,7 +300,7 @@ func GetNeededReplicas(zoneConfigReplicaCount int32, clusterNodes int) int {
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context, zone *config.ZoneConfig, desc *roachpb.RangeDescriptor,
+	ctx context.Context, zone *zonepb.ZoneConfig, desc *roachpb.RangeDescriptor,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -360,7 +360,7 @@ func (a *Allocator) ComputeAction(
 
 func (a *Allocator) computeAction(
 	ctx context.Context,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	rangeID roachpb.RangeID,
 	voterReplicas []roachpb.ReplicaDescriptor,
 ) (AllocatorAction, float64) {
@@ -470,7 +470,7 @@ type decisionDetails struct {
 // TODO(tbg): AllocateReplacement?
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	rangeID roachpb.RangeID,
 	existingReplicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.StoreDescriptor, string, error) {
@@ -501,7 +501,7 @@ func (a *Allocator) AllocateTarget(
 func (a *Allocator) allocateTargetFromList(
 	ctx context.Context,
 	sl StoreList,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	candidateReplicas []roachpb.ReplicaDescriptor,
 	options scorerOptions,
 ) (*roachpb.StoreDescriptor, string) {
@@ -528,7 +528,7 @@ func (a *Allocator) allocateTargetFromList(
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	targetStore roachpb.StoreID,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
@@ -553,7 +553,7 @@ func (a Allocator) simulateRemoveTarget(
 // replicas.
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	existingReplicas []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
@@ -623,7 +623,7 @@ func (a Allocator) RemoveTarget(
 //    opportunity was found).
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	raftStatus *raft.Status,
 	rangeID roachpb.RangeID,
 	existingReplicas []roachpb.ReplicaDescriptor,
@@ -775,7 +775,7 @@ func (a *Allocator) scorerOptions() scorerOptions {
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -922,7 +922,7 @@ func (a *Allocator) TransferLeaseTarget(
 // attributes.
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -1227,7 +1227,7 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 }
 
 func (a Allocator) preferredLeaseholders(
-	zone *config.ZoneConfig, existing []roachpb.ReplicaDescriptor,
+	zone *zonepb.ZoneConfig, existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	// Go one preference at a time. As soon as we've found replicas that match a
 	// preference, we don't need to look at the later preferences, because

@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
@@ -97,7 +97,7 @@ func TestGossipStorage(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	defaultZoneConfig := config.DefaultZoneConfigRef()
+	defaultZoneConfig := zonepb.DefaultZoneConfigRef()
 	network := simulation.NewNetwork(stopper, 3, true, defaultZoneConfig)
 
 	// Set storage for each of the nodes.
@@ -216,7 +216,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	const numNodes = 3
-	network := simulation.NewNetwork(stopper, numNodes, false, config.DefaultZoneConfigRef())
+	network := simulation.NewNetwork(stopper, numNodes, false, zonepb.DefaultZoneConfigRef())
 
 	const notReachableAddr = "localhost:0"
 	const invalidAddr = "10.0.0.1000:3333333"

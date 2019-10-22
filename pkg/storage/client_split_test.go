@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1005,7 +1006,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	const maxBytes = 1 << 16
 	// Set max bytes.
 	descID := uint32(keys.MinUserDescID)
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	config.TestingSetZoneConfig(descID, zoneConfig)
 
@@ -1067,7 +1068,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	// Set max bytes.
 	const maxBytes = 1 << 16
 	descID := uint32(keys.MinUserDescID)
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	config.TestingSetZoneConfig(descID, zoneConfig)
 
@@ -1268,7 +1269,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	userTableMax := keys.MinUserDescID + 4
 	var exceptions map[int]struct{}
-	schema := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
+	schema := sqlbase.MakeMetadataSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 	// Write table descriptors for the tables in the metadata schema as well as
 	// five dummy user tables. This does two things:
 	//   - descriptor IDs are used to determine split keys
@@ -1289,9 +1290,17 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			}
 		}
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
-			// We don't care about the value, just the key.
-			key := sqlbase.MakeDescMetadataKey(sqlbase.ID(i))
-			if err := txn.Put(ctx, key, &sqlbase.TableDescriptor{}); err != nil {
+			id := sqlbase.ID(i)
+			key := sqlbase.MakeDescMetadataKey(id)
+			if err := txn.Put(ctx, key,
+				&sqlbase.Descriptor{
+					Union: &sqlbase.Descriptor_Table{
+						Table: &sqlbase.TableDescriptor{
+							// Fill in the descriptor just enough for the test to work.
+							ID: id,
+						},
+					},
+				}); err != nil {
 				return err
 			}
 		}
@@ -1353,9 +1362,18 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			return err
 		}
 		// This time, only write the last table descriptor. Splits only occur for
-		// the descriptor we add. We don't care about the value, just the key.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(userTableMax))
-		return txn.Put(ctx, k, &sqlbase.TableDescriptor{})
+		// the descriptor we add.
+		id := sqlbase.ID(userTableMax)
+		k := sqlbase.MakeDescMetadataKey(id)
+		return txn.Put(ctx, k,
+			&sqlbase.Descriptor{
+				Union: &sqlbase.Descriptor_Table{
+					Table: &sqlbase.TableDescriptor{
+						// Fill in the descriptor just enough for the test to work.
+						ID: id,
+					},
+				},
+			})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2312,7 +2330,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 
 	// Avoid excessive logging on under-replicated ranges due to our many splits.
 	config.TestingSetupZoneConfigHook(stopper)
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.NumReplicas = proto.Int32(1)
 	config.TestingSetZoneConfig(0, zoneConfig)
 
@@ -2515,11 +2533,11 @@ func TestUnsplittableRange(t *testing.T) {
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
 	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.DefaultZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	cfg.DefaultZoneConfig.GC = &config.GCPolicy{
+	cfg.DefaultZoneConfig.GC = &zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
 	}
 	cfg.DefaultSystemZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	cfg.DefaultSystemZoneConfig.GC = &config.GCPolicy{
+	cfg.DefaultSystemZoneConfig.GC = &zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
 	}
 	cfg.TestingKnobs.SplitQueuePurgatoryChan = splitQueuePurgatoryChan

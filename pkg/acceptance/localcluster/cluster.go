@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -370,7 +370,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 
 // UpdateZoneConfig updates the default zone config for the cluster.
 func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
-	zone := config.DefaultZoneConfig()
+	zone := zonepb.DefaultZoneConfig()
 	zone.RangeMinBytes = proto.Int64(rangeMinBytes)
 	zone.RangeMaxBytes = proto.Int64(rangeMaxBytes)
 

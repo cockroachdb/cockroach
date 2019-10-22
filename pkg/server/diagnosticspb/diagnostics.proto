@@ -13,7 +13,7 @@ package cockroach.server.diagnosticspb;
 option go_package = "diagnosticspb";
 
 import "build/info.proto";
-import "config/zone.proto";
+import "config/zonepb/zone.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/app_stats.proto";
 import "sql/sqlbase/structured.proto";
@@ -25,7 +25,7 @@ message DiagnosticReport {
   repeated sql.sqlbase.TableDescriptor schema = 3 [(gogoproto.nullable) = false];
   repeated sql.CollectedStatementStatistics sql_stats = 4 [(gogoproto.nullable) = false];
   map<string, string> altered_settings = 6;
-  map<int64, config.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
+  map<int64, config.zonepb.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
   map<string, int32> feature_usage = 9 [(gogoproto.nullable) = false];
 
 
