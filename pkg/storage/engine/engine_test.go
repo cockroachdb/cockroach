@@ -416,13 +416,6 @@ func TestEnginePutGetDelete(t *testing.T) {
 func TestEngineMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		// TODO(itsbilal): Stop skipping this test for pebble when the timeseries
-		// merge operator has been ported to Go and/or the current merger passes.
-		switch engine.(type) {
-		case *Pebble:
-			return
-		default:
-		}
 		testcases := []struct {
 			testKey  MVCCKey
 			merges   [][]byte

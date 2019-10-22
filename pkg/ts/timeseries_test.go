@@ -181,6 +181,8 @@ func TestToInternal(t *testing.T) {
 // sample period; earlier samples are discarded.
 func TestDiscardEarlierSamples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// TODO(ajkr): this should also run on Pebble. Maybe combine it into the merge_test.go tests or prove
+	// it is redundant with the tests there.
 	ts := tsd("test.series", "",
 		tsdp(5*time.Hour+5*time.Minute, -1.0),
 		tsdp(5*time.Hour+5*time.Minute, -2.0),

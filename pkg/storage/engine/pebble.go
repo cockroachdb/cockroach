@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -75,15 +76,12 @@ var MVCCComparer = &pebble.Comparer{
 // by Cockroach.
 var MVCCMerger = &pebble.Merger{
 	Name: "cockroach_merge_operator",
-
 	Merge: func(key, oldValue, newValue, buf []byte) []byte {
-		// TODO(itsbilal): Port the merge operator from C++ to Go.
-		// Until then, call the C++ merge operator directly.
-		ret, err := goMerge(oldValue, newValue)
+		res, err := merge(key, oldValue, newValue, buf)
 		if err != nil {
-			return nil
+			log.Fatalf(context.Background(), "merge: %v", err)
 		}
-		return ret
+		return res
 	},
 }
 
