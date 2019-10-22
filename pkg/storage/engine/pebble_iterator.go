@@ -374,12 +374,19 @@ func (p *pebbleIterator) MVCCGet(
 	}
 
 	if len(mvccScanner.results.repr) == 0 {
-		return nil, intent, nil
+		if intent != nil && intent.Key.Equal(key) {
+			return nil, intent, nil
+		}
+		return nil, nil, nil
 	}
 
 	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if !mvccKey.Key.Equal(key) {
+		return nil, nil, nil
 	}
 
 	value = &roachpb.Value{
