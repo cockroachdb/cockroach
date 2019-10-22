@@ -130,11 +130,10 @@ func timeSeriesColumnAsValue(
 	return v
 }
 
-// TestGoMerge tests the function goMerge but not the integration with
-// the storage engines. For that, see the engine tests.
-func TestGoMerge(t *testing.T) {
+// TestGoMergeCorruption tests the function goMerge with error inputs but does not test the
+// integration with the storage engines. For that, see the engine tests.
+func TestGoMergeCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Let's start with stuff that should go wrong.
 	badCombinations := []struct {
 		existing, update []byte
 	}{
@@ -179,8 +178,18 @@ func TestGoMerge(t *testing.T) {
 		if err == nil {
 			t.Errorf("goMerge: %d: expected error", i)
 		}
+		_, err = merge(nil /* key */, c.existing, c.update, nil /* buf */)
+		if err == nil {
+			t.Fatalf("pebble merge: %d: expected error", i)
+		}
 	}
+}
 
+// TestGoMergeAppend tests the function goMerge with the default append operator
+// but does not test the integration with the storage engines. For that, see the
+// engine tests.
+func TestGoMergeAppend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	gibber1, gibber2 := gibberishString(100), gibberishString(200)
 
 	testCasesAppender := []struct {
@@ -211,7 +220,28 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: want %+v, got %+v", i, expectedV, resultV)
 		}
 	}
+}
 
+func MergeInternalTimeSeriesDataPebble(
+	sources ...roachpb.InternalTimeSeriesData,
+) (roachpb.InternalTimeSeriesData, error) {
+	srcBytes, err := serializeMergeInputs(sources...)
+	if err != nil {
+		return roachpb.InternalTimeSeriesData{}, nil
+	}
+	merger := MVCCMerger
+	var mergedBytes = srcBytes[0]
+	for _, bytes := range srcBytes[1:] {
+		mergedBytes = merger.Merge(nil /* key */, mergedBytes, bytes, nil /* buf */)
+	}
+	return deserializeMergeOutput(mergedBytes)
+}
+
+// TestGoMergeTimeSeries tests the function goMerge with the timeseries operator
+// but does not test the integration with the storage engines. For that, see
+// the engine tests.
+func TestGoMergeTimeSeries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// Each time series test case is a list of byte slice. The last byte slice
 	// is the expected result; all preceding slices will be merged together
 	// to generate the actual result.
@@ -508,6 +538,18 @@ func TestGoMerge(t *testing.T) {
 						)
 					}
 				}
+			}
+			if len(operands) < 2 {
+				// TODO(ajkr): Pebble merge operator isn't currently called with one operand,
+				// though maybe it should be to match RocksDB behavior.
+				return
+			}
+			resultTS, err := MergeInternalTimeSeriesDataPebble(operands...)
+			if err != nil {
+				t.Errorf("MergeInternalTimeSeriesDataPebble error: %s", err.Error())
+			}
+			if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
+				t.Errorf("MergeInternalTimeSeriesDataPebble returned wrong result got %v, wanted %v", a, e)
 			}
 		})
 	}
