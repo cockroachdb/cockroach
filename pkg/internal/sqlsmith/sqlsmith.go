@@ -77,6 +77,7 @@ type Smither struct {
 	avoidConsts        bool
 	vectorizable       bool
 	outputSort         bool
+	postgres           bool
 	ignoreFNs          []*regexp.Regexp
 	complexity         float64
 }
@@ -298,6 +299,12 @@ func CompareMode() SmitherOption {
 	}
 }
 
+type postgres struct{}
+
+func (d postgres) Apply(s *Smither) {
+	s.postgres = true
+}
+
 // PostgresMode causes the Smither to generate statements that work identically
 // in Postgres and Cockroach.
 func PostgresMode() SmitherOption {
@@ -308,6 +315,15 @@ func PostgresMode() SmitherOption {
 		SimpleDatums(),
 		IgnoreFNs("^current_"),
 		IgnoreFNs("^version"),
+		postgres{},
+
+		// Some func impls differ from postgres, so skip them here.
+		// #41709
+		IgnoreFNs("^sha"),
+		// #41707
+		IgnoreFNs("^to_hex"),
+		// #41708
+		IgnoreFNs("^quote_literal"),
 	}
 }
 

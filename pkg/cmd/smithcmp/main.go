@@ -362,6 +362,11 @@ var (
 					if t.Status == pgtype.Present && len(t.Elements) == 0 {
 						v = &pgtype.BoolArray{}
 					}
+				case *pgtype.Varbit:
+					if t.Status == pgtype.Present {
+						s, _ := t.EncodeText(nil, nil)
+						v = string(s)
+					}
 				case *pgtype.Bit:
 					vb := pgtype.Varbit(*t)
 					v = &vb
