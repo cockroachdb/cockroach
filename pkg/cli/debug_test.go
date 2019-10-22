@@ -162,7 +162,6 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					for i := 0; i < testCase.totalNodes; i++ {
 						args := base.TestServerArgs{}
 						args.ScanMaxIdleTime = time.Millisecond
-						args.ScanMaxIdleTime = time.Millisecond
 						storeID := roachpb.StoreID(i + 1)
 						if i < testCase.survivingNodes {
 							path := filepath.Join(baseDir, fmt.Sprintf("store%d", storeID))
