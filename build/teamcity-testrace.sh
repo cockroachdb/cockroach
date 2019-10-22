@@ -53,7 +53,7 @@ for pkg in $pkgspec; do
 		make testrace \
 		PKG="$pkg" \
 		TESTTIMEOUT=$TESTTIMEOUT \
-		TESTFLAGS='-v' \
+		TESTFLAGS="-v $TESTFLAGS" \
 		ENABLE_ROCKSDB_ASSERTIONS=1 2>&1 \
 		ENABLE_LIBROACH_ASSERTIONS=1 2>&1 \
 		| tee -a artifacts/testrace.log \
