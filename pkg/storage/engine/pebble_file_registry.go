@@ -1,3 +1,13 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package engine
 
 import (
@@ -11,13 +21,13 @@ import (
 	"sync"
 )
 
-// FileRegistry keeps track of files for the data-FS and store-FS for Pebble (see encrypted_fs.go
+// PebbleFileRegistry keeps track of files for the data-FS and store-FS for Pebble (see encrypted_fs.go
 // for high-level comment).
 //
 // It is created even when file registry is disabled, so that it can be used to ensure that
 // a registry file did not exist previously, since that would indicate that disabling the registry
 // can cause data loss.
-type FileRegistry struct {
+type PebbleFileRegistry struct {
 	// Initialize the following before calling Load().
 
 	// The FS to write the file registry file.
@@ -34,17 +44,23 @@ type FileRegistry struct {
 
 	// Implementation.
 	registryFilename string
-	mu               sync.Mutex
-	currProto        *enginepb.FileRegistry // guarded by mu
+
+	mu struct {
+		sync.Mutex
+		currProto *enginepb.FileRegistry
+	}
 }
 
 const (
-	kFileRegistryFilename = "COCKROACHDB_REGISTRY"
+	fileRegistryFilename = "COCKROACHDB_REGISTRY"
 )
 
-func (r *FileRegistry) Load() error {
-	r.currProto = &enginepb.FileRegistry{}
-	r.registryFilename = r.FS.PathJoin(r.DBDir, kFileRegistryFilename)
+// Must be called at most once, before the other functions.
+func (r *PebbleFileRegistry) Load() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.currProto = &enginepb.FileRegistry{}
+	r.registryFilename = r.FS.PathJoin(r.DBDir, fileRegistryFilename)
 	f, err := r.FS.Open(r.registryFilename)
 	if os.IsNotExist(err) {
 		return nil
@@ -57,27 +73,27 @@ func (r *FileRegistry) Load() error {
 	if b, err = ioutil.ReadAll(f); err != nil {
 		return err
 	}
-	if err = r.currProto.Unmarshal(b); err != nil {
+	if err = r.mu.currProto.Unmarshal(b); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *FileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
+func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 	filename = r.tryMakeRelativePath(filename)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.currProto.Files[filename]
+	return r.mu.currProto.Files[filename]
 }
 
 // Sets filename => entry and persists the registry.
-func (r *FileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
+func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
 	filename = r.tryMakeRelativePath(filename)
 	newProto := &enginepb.FileRegistry{}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	proto.Merge(newProto, r.currProto)
+	proto.Merge(newProto, r.mu.currProto)
 	if newProto.Files == nil {
 		newProto.Files = make(map[string]*enginepb.FileEntry)
 	}
@@ -86,33 +102,33 @@ func (r *FileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) 
 }
 
 // Deletes the entry for filename, if it exists, and persists the registry if changed.
-func (r *FileRegistry) EnsureDeleteEntry(filename string) error {
+func (r *PebbleFileRegistry) EnsureDeleteEntry(filename string) error {
 	filename = r.tryMakeRelativePath(filename)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.currProto.Files[filename] == nil {
+	if r.mu.currProto.Files[filename] == nil {
 		return nil
 	}
 	newProto := &enginepb.FileRegistry{}
-	proto.Merge(newProto, r.currProto)
+	proto.Merge(newProto, r.mu.currProto)
 	delete(newProto.Files, filename)
 	return r.writeRegistry(newProto)
 }
 
 // Moves the entry under src to dst, if src exists. If src does not exist, but dst exists,
 // dst is deleted. Persists the registry if changed.
-func (r *FileRegistry) EnsureRenameEntry(src, dst string) error {
+func (r *PebbleFileRegistry) EnsureRenameEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.currProto.Files[src] == nil && r.currProto.Files[dst] == nil {
+	if r.mu.currProto.Files[src] == nil && r.mu.currProto.Files[dst] == nil {
 		return nil
 	}
 	newProto := &enginepb.FileRegistry{}
-	proto.Merge(newProto, r.currProto)
+	proto.Merge(newProto, r.mu.currProto)
 	if newProto.Files[src] == nil {
 		delete(newProto.Files, dst)
 	} else {
@@ -124,17 +140,17 @@ func (r *FileRegistry) EnsureRenameEntry(src, dst string) error {
 
 // Copies the entry under src to dst, if src exists. If src does not exist, but dst exists,
 // dst is deleted. Persists the registry if changed.
-func (r *FileRegistry) EnsureLinkEntry(src, dst string) error {
+func (r *PebbleFileRegistry) EnsureLinkEntry(src, dst string) error {
 	src = r.tryMakeRelativePath(src)
 	dst = r.tryMakeRelativePath(dst)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.currProto.Files[src] == nil && r.currProto.Files[dst] == nil {
+	if r.mu.currProto.Files[src] == nil && r.mu.currProto.Files[dst] == nil {
 		return nil
 	}
 	newProto := &enginepb.FileRegistry{}
-	proto.Merge(newProto, r.currProto)
+	proto.Merge(newProto, r.mu.currProto)
 	if newProto.Files[src] == nil {
 		delete(newProto.Files, dst)
 	} else {
@@ -143,9 +159,18 @@ func (r *FileRegistry) EnsureLinkEntry(src, dst string) error {
 	return r.writeRegistry(newProto)
 }
 
-func (r *FileRegistry) tryMakeRelativePath(filename string) string {
+func (r *PebbleFileRegistry) tryMakeRelativePath(filename string) string {
 	// Logic copied from file_registry.cc.
+
 	dbDir := r.DBDir
+
+	// Unclear why this should ever happen, but there is a test case for this in file_registry_test.cc
+	// so we have duplicated this here.
+	//
+	// Check for the rare case when we're referring to the db directory itself (without slash).
+	if filename == dbDir {
+		return ""
+	}
 	if len(dbDir) > 0 && dbDir[len(dbDir)-1] != '/' {
 		dbDir = dbDir + "/"
 	}
@@ -159,7 +184,7 @@ func (r *FileRegistry) tryMakeRelativePath(filename string) string {
 	return filename
 }
 
-func (r *FileRegistry) writeRegistry(newProto *enginepb.FileRegistry) error {
+func (r *PebbleFileRegistry) writeRegistry(newProto *enginepb.FileRegistry) error {
 	if r.ReadOnly {
 		return fmt.Errorf("cannot write file registry since db is read-only")
 	}
@@ -170,6 +195,6 @@ func (r *FileRegistry) writeRegistry(newProto *enginepb.FileRegistry) error {
 	if err = SafeWriteToFile(r.FS, r.DBDir, r.registryFilename, b); err != nil {
 		return err
 	}
-	r.currProto = newProto
+	r.mu.currProto = newProto
 	return nil
 }

@@ -30,8 +30,5 @@ func SafeWriteToFile(fs vfs.FS, dir string, filename string, b []byte) error {
 		return err
 	}
 	defer fdir.Close()
-	if err := fdir.Sync(); err != nil {
-		return err
-	}
-	return nil
+	return fdir.Sync()
 }
