@@ -340,6 +340,10 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 	m.txn.MaxTimestamp = ts
 	m.txn.CommitTimestampFixed = true
 
+	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
+	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
+	m.txn.MinTimestamp.Backward(ts)
+
 	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too (although
 	// not really needed by this Mock sender).
 	m.txn.DeprecatedOrigTimestamp = ts
