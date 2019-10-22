@@ -89,6 +89,9 @@ CLUSTER :=
 ## Verbose allows turning on verbose output from the cmake builds.
 VERBOSE :=
 
+## Indicate the base root directory where to install
+DESTDIR :=
+
 DUPLFLAGS    := -t 100
 GOFLAGS      :=
 TAGS         :=
