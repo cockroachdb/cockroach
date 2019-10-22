@@ -96,6 +96,52 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestChangefeedDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}, "before": null}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"after": {"a": 2, "b": "c"}, "before": {"a": 2, "b": "b"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "d"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'new a')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "new a"}, "before": null}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+}
+
 func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1634,6 +1680,16 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `key_in_value is only usable with envelope=wrapped`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, envelope='row'`, `kafka://nope`,
 	)
+
+	// WITH diff requires envelope=wrapped
+	sqlDB.ExpectErr(
+		t, `diff is only usable with envelope=wrapped`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, envelope='key_only'`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `diff is only usable with envelope=wrapped`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, envelope='row'`, `kafka://nope`,
+	)
 }
 
 func TestChangefeedPermissions(t *testing.T) {
@@ -1758,26 +1814,26 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'init')`)
 
-		foo1 := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		foo1 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff`)
 		defer closeFeed(t, foo1)
-		foo2 := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		foo2 := feed(t, f, `CREATE CHANGEFEED FOR foo`) // without diff
 		defer closeFeed(t, foo2)
-		foo3 := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		foo3 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff`)
 		defer closeFeed(t, foo3)
 
 		// Make sure all the changefeeds are going.
-		assertPayloads(t, foo1, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}}`})
+		assertPayloads(t, foo1, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}, "before": null}`})
 		assertPayloads(t, foo2, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}}`})
-		assertPayloads(t, foo3, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}}`})
+		assertPayloads(t, foo3, []string{`foo: [0]->{"after": {"a": 0, "b": "init"}, "before": null}`})
 
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'v0')`)
 		assertPayloads(t, foo1, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "v0"}}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v0"}, "before": {"a": 0, "b": "init"}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'v1')`)
 		assertPayloads(t, foo1, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "v1"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "v1"}, "before": null}`,
 		})
 		assertPayloads(t, foo2, []string{
 			`foo: [0]->{"after": {"a": 0, "b": "v0"}}`,
@@ -1786,15 +1842,15 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'v2')`)
 		assertPayloads(t, foo1, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "v2"}}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v2"}, "before": {"a": 0, "b": "v0"}}`,
 		})
 		assertPayloads(t, foo2, []string{
 			`foo: [0]->{"after": {"a": 0, "b": "v2"}}`,
 		})
 		assertPayloads(t, foo3, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "v0"}}`,
-			`foo: [0]->{"after": {"a": 0, "b": "v2"}}`,
-			`foo: [1]->{"after": {"a": 1, "b": "v1"}}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v0"}, "before": {"a": 0, "b": "init"}}`,
+			`foo: [0]->{"after": {"a": 0, "b": "v2"}, "before": {"a": 0, "b": "v0"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "v1"}, "before": null}`,
 		})
 	}
 
@@ -1992,7 +2048,7 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
-// Regression test for #41694
+// Regression test for #41694.
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2017,7 +2073,7 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0), (1), (2), (3)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`).(*cdctest.TableFeed)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff`).(*cdctest.TableFeed)
 		defer closeFeed(t, foo)
 
 		// TODO(dan): At a high level, all we're doing is trying to restart a
@@ -2031,10 +2087,10 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 			beforeEmitRowCh <- nil
 		}
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0}}`,
-			`foo: [1]->{"after": {"a": 1}}`,
-			`foo: [2]->{"after": {"a": 2}}`,
-			`foo: [3]->{"after": {"a": 3}}`,
+			`foo: [0]->{"after": {"a": 0}, "before": null}`,
+			`foo: [1]->{"after": {"a": 1}, "before": null}`,
+			`foo: [2]->{"after": {"a": 2}, "before": null}`,
+			`foo: [3]->{"after": {"a": 3}, "before": null}`,
 		})
 
 		// Run a schema change that backfills kvs.
@@ -2057,7 +2113,11 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 			beforeEmitRowCh <- nil
 		}
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "backfill"}}`,
+			`foo: [0]->{"after": {"a": 0}, "before": {"a": 0}}`,
+			`foo: [1]->{"after": {"a": 1}, "before": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}, "before": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}, "before": {"a": 3}}`,
+			`foo: [0]->{"after": {"a": 0, "b": "backfill"}, "before": {"a": 0}}`,
 		})
 
 		// Restart the changefeed without allowing the second row to be backfilled.
@@ -2082,13 +2142,13 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 			// overaggressive duplicate detection in tableFeed.
 			// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
 			// `foo: [0]->{"after": {"a": 0, "b": "backfill"}}`,
-			`foo: [1]->{"after": {"a": 1, "b": "backfill"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "backfill"}}`,
-			`foo: [3]->{"after": {"a": 3, "b": "backfill"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "backfill"}, "before": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "backfill"}, "before": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "backfill"}, "before": {"a": 3}}`,
 		})
 
 		assertPayloads(t, foo, []string{
-			`foo: [6]->{"after": {"a": 6, "b": "bar"}}`,
+			`foo: [6]->{"after": {"a": 6, "b": "bar"}, "before": null}`,
 		})
 	}
 

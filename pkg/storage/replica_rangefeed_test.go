@@ -123,7 +123,8 @@ func TestReplicaRangefeed(t *testing.T) {
 					Timestamp: initTime,
 					RangeID:   rangeID,
 				},
-				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				Span:     roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				WithDiff: true,
 			}
 
 			pErr := mtc.Store(i).RangeFeed(&req, stream)
@@ -190,17 +191,58 @@ func TestReplicaRangefeed(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Read to force intent resolution.
+	if _, err := mtc.dbs[1].Get(ctx, roachpb.Key("m")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Update the originally incremented key non-transactionally.
+	mtc.manualClock.Increment(1)
+	ts4 := mtc.clock.Now()
+	_, pErr = client.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts4}, incArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Update the originally incremented key transactionally.
+	mtc.manualClock.Increment(1)
+	ts5 := mtc.clock.Now()
+	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txn.SetFixedTimestamp(ctx, ts5)
+		_, err := txn.Inc(ctx, incArgs.Key, 7)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Read to force intent resolution.
+	if _, err := mtc.dbs[1].Get(ctx, roachpb.Key("b")); err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait for all streams to observe the expected events.
-	val2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
-	val3 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), ts3)
-	val3.InitChecksum([]byte("m")) // client.Txn sets value checksum
+	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
+	expVal3 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), ts3)
+	expVal3.InitChecksum([]byte("m")) // client.Txn sets value checksum
+	expVal4 := roachpb.Value{Timestamp: ts4}
+	expVal4.SetInt(18)
+	expVal4.InitChecksum(roachpb.Key("b"))
+	expVal5 := roachpb.Value{Timestamp: ts5}
+	expVal5.SetInt(25)
+	expVal5.InitChecksum(roachpb.Key("b"))
+	expVal1NoTS, expVal4NoTS := expVal1, expVal4
+	expVal1NoTS.Timestamp, expVal4NoTS.Timestamp = hlc.Timestamp{}, hlc.Timestamp{}
 	expEvents = append(expEvents, []*roachpb.RangeFeedEvent{
 		{Val: &roachpb.RangeFeedValue{
-			Key: roachpb.Key("c"), Value: val2,
+			Key: roachpb.Key("c"), Value: expVal2,
 		}},
 		{Val: &roachpb.RangeFeedValue{
-			Key: roachpb.Key("m"), Value: val3,
+			Key: roachpb.Key("m"), Value: expVal3,
+		}},
+		{Val: &roachpb.RangeFeedValue{
+			Key: roachpb.Key("b"), Value: expVal4, PrevValue: expVal1NoTS,
+		}},
+		{Val: &roachpb.RangeFeedValue{
+			Key: roachpb.Key("b"), Value: expVal5, PrevValue: expVal4NoTS,
 		}},
 	}...)
 	checkForExpEvents(expEvents)
@@ -705,7 +747,7 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 			span := roachpb.Span{
 				Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
 			}
-			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, rangeFeedCh)
+			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, false /* withDiff */, rangeFeedCh)
 		}()
 	}
 

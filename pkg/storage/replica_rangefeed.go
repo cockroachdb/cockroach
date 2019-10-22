@@ -149,8 +149,18 @@ func (r *Replica) RangeFeed(
 		return err
 	}
 
+	// If the RangeFeed is performing a catch-up scan then it will observe all
+	// values above args.Timestamp. If the RangeFeed is requesting previous
+	// values for every update then it will also need to look for the version
+	// proceeding each value observed during the catch-up scan timestamp. This
+	// means that the earliest value observed by the catch-up scan will be
+	// args.Timestamp.Next and the earliest timestamp used to retrieve the
+	// previous version of a value will be args.Timestamp, so this is the
+	// timestamp we must check against the GCThreshold.
 	checkTS := args.Timestamp
 	if checkTS.IsEmpty() {
+		// If no timestamp was provided then we're not going to run a catch-up
+		// scan, so make sure the GCThreshold in requestCanProceed succeeds.
 		checkTS = r.Clock().Now()
 	}
 
@@ -217,7 +227,7 @@ func (r *Replica) RangeFeed(
 		iterSemRelease = nil
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rspan, args.Timestamp, catchUpIter, lockedStream, errC,
+		ctx, rspan, args.Timestamp, catchUpIter, args.WithDiff, lockedStream, errC,
 	)
 	r.raftMu.Unlock()
 
@@ -285,6 +295,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchupIter engine.SimpleIterator,
+	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
 ) *rangefeed.Processor {
@@ -294,7 +305,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg := p.Register(span, startTS, catchupIter, stream, errC)
+		reg := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -343,7 +354,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg := p.Register(span, startTS, catchupIter, stream, errC)
+	reg := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
 	if !reg {
 		catchupIter.Close() // clean up
 		select {
@@ -416,6 +427,63 @@ func (r *Replica) numRangefeedRegistrations() int {
 		return 0
 	}
 	return p.Len()
+}
+
+// populatePrevValsInLogicalOpLogRaftMuLocked updates the provided logical op
+// log with previous values read from the reader, which is expected to reflect
+// the state of the Replica before the operations in the logical op log are
+// applied. No-op if a rangefeed is not active. Requires raftMu to be locked.
+func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
+	ctx context.Context, ops *storagepb.LogicalOpLog, prevReader engine.Reader,
+) {
+	p, filter := r.getRangefeedProcessorAndFilter()
+	if p == nil {
+		return
+	}
+
+	// Read from the Reader to populate the PrevValue fields.
+	for _, op := range ops.Ops {
+		var key []byte
+		var ts hlc.Timestamp
+		var prevValPtr *[]byte
+		switch t := op.GetValue().(type) {
+		case *enginepb.MVCCWriteValueOp:
+			key, ts, prevValPtr = t.Key, t.Timestamp, &t.PrevValue
+		case *enginepb.MVCCCommitIntentOp:
+			key, ts, prevValPtr = t.Key, t.Timestamp, &t.PrevValue
+		case *enginepb.MVCCWriteIntentOp,
+			*enginepb.MVCCUpdateIntentOp,
+			*enginepb.MVCCAbortIntentOp,
+			*enginepb.MVCCAbortTxnOp:
+			// Nothing to do.
+			continue
+		default:
+			panic(fmt.Sprintf("unknown logical op %T", t))
+		}
+
+		// Don't read previous values from the reader for operations that are
+		// not needed by any rangefeed registration.
+		if !filter.NeedPrevVal(roachpb.Span{Key: key}) {
+			continue
+		}
+
+		// Read the previous value from the prev Reader. Unlike the new value
+		// (see handleLogicalOpLogRaftMuLocked), this one may be missing.
+		prevVal, _, err := engine.MVCCGet(
+			ctx, prevReader, key, ts, engine.MVCCGetOptions{Tombstones: true, Inconsistent: true},
+		)
+		if err != nil {
+			r.disconnectRangefeedWithErr(p, roachpb.NewErrorf(
+				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
+			))
+			return
+		}
+		if prevVal != nil {
+			*prevValPtr = prevVal.RawBytes
+		} else {
+			*prevValPtr = nil
+		}
+	}
 }
 
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active

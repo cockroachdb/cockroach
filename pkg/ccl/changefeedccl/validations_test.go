@@ -76,7 +76,10 @@ func TestCatchupScanOrdering(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
+					err = v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
+					if err != nil {
+						t.Fatal(err)
+					}
 					seenChanges++
 					if seenChanges >= 200 {
 						atomic.StoreInt64(&done, 1)

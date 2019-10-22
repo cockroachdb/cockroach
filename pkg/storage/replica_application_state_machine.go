@@ -460,13 +460,20 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// Normalize the command, accounting for past migrations.
 	b.migrateReplicatedResult(ctx, cmd)
 
+	// Run any triggers that should occur before the batch is applied
+	// and before the write batch is staged in the batch.
+	if err := b.runPreApplyTriggersBeforeStagingWriteBatch(ctx, cmd); err != nil {
+		return nil, err
+	}
+
 	// Stage the command's write batch in the application batch.
 	if err := b.stageWriteBatch(ctx, cmd); err != nil {
 		return nil, err
 	}
 
-	// Run any triggers that should occur before the batch is applied.
-	if err := b.runPreApplyTriggers(ctx, cmd); err != nil {
+	// Run any triggers that should occur before the batch is applied
+	// but after the write batch is staged in the batch.
+	if err := b.runPreApplyTriggersAfterStagingWriteBatch(ctx, cmd); err != nil {
 		return nil, err
 	}
 
@@ -544,9 +551,24 @@ func changeRemovesStore(
 	return !existsInChange
 }
 
-// runPreApplyTriggers runs any triggers that must fire before a command is
-// applied. It may modify the command's ReplicatedEvalResult.
-func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicatedCmd) error {
+// runPreApplyTriggersBeforeStagingWriteBatch runs any triggers that must fire
+// before a command is applied to the state machine but after the command is
+// staged in the replicaAppBatch's write batch. It may modify the command.
+func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
+	ctx context.Context, cmd *replicatedCmd,
+) error {
+	if ops := cmd.raftCmd.LogicalOpLog; ops != nil {
+		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
+	}
+	return nil
+}
+
+// runPreApplyTriggersAfterStagingWriteBatch runs any triggers that must fire
+// before a command is applied to the state machine but after the command is
+// staged in the replicaAppBatch's write batch. It may modify the command.
+func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
+	ctx context.Context, cmd *replicatedCmd,
+) error {
 	res := cmd.replicatedResult()
 
 	// AddSSTable ingestions run before the actual batch gets written to the
@@ -695,9 +717,9 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 	// the logical operation log to also be nil. We don't want to trigger a
 	// shutdown of the rangefeed in that situation, so we don't pass anything to
 	// the rangefed. If no rangefeed is running at all, this call will be a noop.
-	if cmd.raftCmd.WriteBatch != nil {
-		b.r.handleLogicalOpLogRaftMuLocked(ctx, cmd.raftCmd.LogicalOpLog, b.batch)
-	} else if cmd.raftCmd.LogicalOpLog != nil {
+	if ops := cmd.raftCmd.LogicalOpLog; cmd.raftCmd.WriteBatch != nil {
+		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
+	} else if ops != nil {
 		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.raftCmd)
 	}
 
