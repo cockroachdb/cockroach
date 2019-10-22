@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package config
+package zonepb
 
 import (
 	"bytes"
@@ -583,7 +583,8 @@ func (z *ZoneConfig) DeleteIndexSubzones(indexID uint32) {
 	z.Subzones = subzones
 }
 
-func (z ZoneConfig) subzoneSplits() []roachpb.RKey {
+// SubzoneSplits returns the split points determined by a ZoneConfig's subzones.
+func (z ZoneConfig) SubzoneSplits() []roachpb.RKey {
 	var out []roachpb.RKey
 	for _, span := range z.SubzoneSpans {
 		// TODO(benesch): avoid a split at the first partition's start key when it
