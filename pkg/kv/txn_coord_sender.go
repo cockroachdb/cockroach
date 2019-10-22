@@ -1195,6 +1195,7 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	tc.mu.Lock()
 	tc.mu.txn.Timestamp = ts
 	tc.mu.txn.OrigTimestamp = ts
+	tc.mu.txn.MinTimestamp = ts
 	tc.mu.txn.MaxTimestamp = ts
 	tc.mu.txn.OrigTimestampWasObserved = true
 	tc.mu.Unlock()
