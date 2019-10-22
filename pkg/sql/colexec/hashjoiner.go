@@ -250,29 +250,27 @@ func (hj *hashJoinEqOp) Init() {
 
 func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 	hj.prober.batch.ResetInternalBatch()
-	return hj.nextInternal(ctx)
-}
+	for {
+		switch hj.runningState {
+		case hjBuilding:
+			hj.build(ctx)
+			continue
+		case hjProbing:
+			hj.prober.exec(ctx)
 
-func (hj *hashJoinEqOp) nextInternal(ctx context.Context) coldata.Batch {
-	switch hj.runningState {
-	case hjBuilding:
-		hj.build(ctx)
-		return hj.nextInternal(ctx)
-	case hjProbing:
-		hj.prober.exec(ctx)
-
-		if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
-			hj.initEmitting()
-			return hj.nextInternal(ctx)
+			if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
+				hj.initEmittingUnmatched()
+				continue
+			}
+			return hj.prober.batch
+		case hjEmittingUnmatched:
+			hj.emitUnmatched()
+			return hj.prober.batch
+		default:
+			execerror.VectorizedInternalPanic("hash joiner in unhandled state")
+			// This code is unreachable, but the compiler cannot infer that.
+			return nil
 		}
-		return hj.prober.batch
-	case hjEmittingUnmatched:
-		hj.emitUnmatched()
-		return hj.prober.batch
-	default:
-		execerror.VectorizedInternalPanic("hash joiner in unhandled state")
-		// This code is unreachable, but the compiler cannot infer that.
-		return nil
 	}
 }
 
@@ -291,7 +289,7 @@ func (hj *hashJoinEqOp) build(ctx context.Context) {
 	hj.runningState = hjProbing
 }
 
-func (hj *hashJoinEqOp) initEmitting() {
+func (hj *hashJoinEqOp) initEmittingUnmatched() {
 	hj.runningState = hjEmittingUnmatched
 
 	// Set all elements in the probe columns of the output batch to null.
@@ -962,16 +960,23 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		valCol := prober.ht.vals[inColIdx]
 		colType := prober.ht.valTypes[inColIdx]
 
-		outCol.Copy(
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:   colType,
-					Src:       valCol,
-					SrcEndIdx: uint64(nResults),
+		// If the hash table is empty, then there is nothing to copy. The nulls
+		// will be set below.
+		if prober.ht.size > 0 {
+			// Note that if for some index i, probeRowUnmatched[i] is true, then
+			// prober.buildIdx[i] == 0 which will copy the garbage zeroth row of the
+			// hash table, but we will set the NULL value below.
+			outCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:   colType,
+						Src:       valCol,
+						SrcEndIdx: uint64(nResults),
+					},
+					Sel64: prober.buildIdx,
 				},
-				Sel64: prober.buildIdx,
-			},
-		)
+			)
+		}
 		if prober.spec.outer {
 			// Add in the nulls we needed to set for the outer join.
 			nulls := outCol.Nulls()
