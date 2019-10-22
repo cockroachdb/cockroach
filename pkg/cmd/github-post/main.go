@@ -44,7 +44,15 @@ func main() {
 
 	f := func(ctx context.Context, title, packageName, testName, testMessage, authorEmail string) error {
 		log.Printf("filing issue with title: %s", title)
-		return issues.Post(ctx, title, packageName, testName, testMessage, "" /* artifacts */, authorEmail, nil)
+		req := issues.PostRequest{
+			Title:       title,
+			PackageName: packageName,
+			TestName:    testName,
+			Message:     testMessage,
+			Artifacts:   "",
+			AuthorEmail: authorEmail,
+		}
+		return issues.Post(ctx, req)
 	}
 
 	if err := listFailures(ctx, os.Stdin, f); err != nil {

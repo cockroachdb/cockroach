@@ -251,11 +251,7 @@ func DefaultStressFailureTitle(packageName, testName string) string {
 	return fmt.Sprintf("%s: %s failed under stress", trimmedPkgName, testName)
 }
 
-func (p *poster) post(
-	ctx context.Context,
-	title, packageName, testName, message, artifacts, authorEmail string,
-	extraLabels []string,
-) error {
+func (p *poster) post(ctx context.Context, req PostRequest) error {
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
 Parameters:%[2]s
@@ -280,8 +276,8 @@ Failed test: %[3]s`
 		// If the test has artifacts, link straight to them.
 		// Otherwise, link to the build log in TeamCity.
 		var testURL *url.URL
-		if artifacts != "" {
-			testURL = p.teamcityArtifactsURL(artifacts)
+		if req.Artifacts != "" {
+			testURL = p.teamcityArtifactsURL(req.Artifacts)
 		} else {
 			testURL = p.teamcityBuildLogURL()
 		}
@@ -297,9 +293,9 @@ Failed test: %[3]s`
 	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
 		b := body(packageName, testName, message)
 
-		labels := append(issueLabels, extraLabels...)
+		labels := append(issueLabels, req.ExtraLabels...)
 		return &github.IssueRequest{
-			Title:     &title,
+			Title:     &req.Title,
 			Body:      &b,
 			Labels:    &labels,
 			Assignee:  &assignee,
@@ -312,12 +308,12 @@ Failed test: %[3]s`
 		return &github.IssueComment{Body: &b}
 	}
 
-	assignee, err := getAssignee(ctx, authorEmail, p.listCommits)
+	assignee, err := getAssignee(ctx, req.AuthorEmail, p.listCommits)
 	if err != nil {
-		message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
+		req.Message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
 
-	issueRequest := newIssueRequest(packageName, testName, message, assignee)
+	issueRequest := newIssueRequest(req.PackageName, req.TestName, req.Message, assignee)
 	searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`,
 		*issueRequest.Title, githubUser, githubRepo)
 	for _, label := range issueLabels {
@@ -344,7 +340,7 @@ Failed test: %[3]s`
 				github.Stringify(issueRequest))
 		}
 	} else {
-		comment := newIssueComment(packageName, testName, message)
+		comment := newIssueComment(req.PackageName, req.TestName, req.Message)
 		if _, _, err := p.createComment(
 			ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
@@ -418,22 +414,26 @@ var defaultP struct {
 	*poster
 }
 
+// A PostRequest contains the information needed to create an issue about a
+// test failure.
+type PostRequest struct {
+	Title, PackageName, TestName, Message, Artifacts, AuthorEmail string
+	ExtraLabels                                                   []string
+}
+
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue.
-func Post(
-	ctx context.Context,
-	title, packageName, testName, message, artifacts, authorEmail string,
-	extraLabels []string,
-) error {
+func Post(ctx context.Context, req PostRequest) error {
 	defaultP.Do(func() {
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	err := defaultP.post(ctx, title, packageName, testName, message, artifacts, authorEmail, extraLabels)
+	err := defaultP.post(ctx, req)
 	if !isInvalidAssignee(err) {
 		return err
 	}
-	return defaultP.post(ctx, title, packageName, testName, message, artifacts, "tobias.schottdorf@gmail.com", extraLabels)
+	req.AuthorEmail = "tobias.schottdorf@gmail.com"
+	return defaultP.post(ctx, req)
 }
 
 // CanPost returns true if the github API token environment variable is set.
