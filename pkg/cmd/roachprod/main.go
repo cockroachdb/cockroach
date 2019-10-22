@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
-	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
@@ -333,7 +332,6 @@ Local Clusters
 		if err != nil {
 			return err
 		}
-		createVMOpts.ClusterName = clusterName
 
 		defer func() {
 			if retErr == nil || clusterName == config.Local {
@@ -368,7 +366,7 @@ Local Clusters
 		}
 
 		fmt.Printf("Creating cluster %s with %d nodes\n", clusterName, numNodes)
-		if createErr := cld.CreateCluster(numNodes, createVMOpts); createErr != nil {
+		if createErr := cld.CreateCluster(clusterName, numNodes, createVMOpts); createErr != nil {
 			return createErr
 		}
 

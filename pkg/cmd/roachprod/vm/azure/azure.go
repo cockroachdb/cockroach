@@ -144,7 +144,8 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			location := p.opts.locations[locIdx]
 
 			// Create a resource group within the location.
-			group, err := p.getResourceGroup(ctx, opts.ClusterName, location, opts)
+			clusterName := "dummy-name"
+			group, err := p.getResourceGroup(ctx, clusterName, location, opts)
 			if err != nil {
 				return err
 			}
