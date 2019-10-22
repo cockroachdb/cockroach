@@ -106,8 +106,6 @@ func (w *workloadReader) readFiles(
 	_ roachpb.IOFileFormat,
 	_ cloud.ExternalStorageFactory,
 ) error {
-
-	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))
 	for fileID, fileName := range dataFiles {
 		file, err := url.Parse(fileName)
 		if err != nil {
@@ -144,15 +142,10 @@ func (w *workloadReader) readFiles(
 			return errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
-		wc := NewWorkloadKVConverter(
-			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
-		wcs = append(wcs, wc)
-	}
-
-	for _, wc := range wcs {
 		if err := ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
 			evalCtx := w.evalCtx.Copy()
-			return wc.Worker(ctx, evalCtx)
+			return NewWorkloadKVConverter(
+				fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh).Worker(ctx, evalCtx)
 		}); err != nil {
 			return err
 		}
