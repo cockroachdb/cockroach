@@ -65,11 +65,9 @@ func kvsToRows(
 
 	var kvs row.SpanKVFetcher
 	appendEmitEntryForKV := func(
-		ctx context.Context, output []emitEntry, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
+		ctx context.Context, output []emitEntry, kv roachpb.KeyValue, prevVal *roachpb.Value, schemaTimestamp hlc.Timestamp,
 		bufferGetTimestamp time.Time,
 	) ([]emitEntry, error) {
-		// Reuse kvs to save allocations.
-		kvs.KVs = kvs.KVs[:0]
 
 		desc, err := rfCache.TableDescForKey(ctx, kv.Key, schemaTimestamp)
 		if err != nil {
@@ -87,27 +85,71 @@ func kvsToRows(
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Handle tables with multiple column families.
-		kvs.KVs = append(kvs.KVs, kv)
-		if err := rf.StartScanFrom(ctx, &kvs); err != nil {
-			return nil, err
-		}
 
-		for {
-			var r emitEntry
-			r.bufferGetTimestamp = bufferGetTimestamp
+		// Get new value.
+		var r emitEntry
+		r.bufferGetTimestamp = bufferGetTimestamp
+		{
+			// TODO(dan): Handle tables with multiple column families.
+			// Reuse kvs to save allocations.
+			kvs.KVs = kvs.KVs[:0]
+			kvs.KVs = append(kvs.KVs, kv)
+			if err := rf.StartScanFrom(ctx, &kvs); err != nil {
+				return nil, err
+			}
+
 			r.row.datums, r.row.tableDesc, _, err = rf.NextRow(ctx)
 			if err != nil {
 				return nil, err
 			}
 			if r.row.datums == nil {
-				break
+				log.Fatalf(ctx, "TODO DURING REVIEW can this happen?")
 			}
 			r.row.datums = append(sqlbase.EncDatumRow(nil), r.row.datums...)
 			r.row.deleted = rf.RowIsDeleted()
 			r.row.updated = schemaTimestamp
-			output = append(output, r)
+
+			var nextRow emitEntry
+			nextRow.row.datums, nextRow.row.tableDesc, _, err = rf.NextRow(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if nextRow.row.datums != nil {
+				log.Fatalf(ctx, "TODO DURING REVIEW can this happen?")
+			}
 		}
+
+		// Get prev value.
+		if prevVal != nil {
+			// TODO(dan): Handle tables with multiple column families.
+			// Reuse kvs to save allocations.
+			kvs.KVs = kvs.KVs[:0]
+			kvs.KVs = append(kvs.KVs, roachpb.KeyValue{Key: kv.Key, Value: *prevVal})
+			if err := rf.StartScanFrom(ctx, &kvs); err != nil {
+				return nil, err
+			}
+
+			r.row.prevDatums, _, _, err = rf.NextRow(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if r.row.datums == nil {
+				log.Fatalf(ctx, "TODO DURING REVIEW can this happen?")
+			}
+			r.row.prevDatums = append(sqlbase.EncDatumRow(nil), r.row.prevDatums...)
+			r.row.prevDeleted = rf.RowIsDeleted()
+
+			var nextRow emitEntry
+			nextRow.row.datums, nextRow.row.tableDesc, _, err = rf.NextRow(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if nextRow.row.datums != nil {
+				log.Fatalf(ctx, "TODO DURING REVIEW can this happen?")
+			}
+		}
+
+		output = append(output, r)
 		return output, nil
 	}
 
@@ -129,7 +171,7 @@ func kvsToRows(
 					schemaTimestamp = input.schemaTimestamp
 				}
 				output, err = appendEmitEntryForKV(
-					ctx, output, input.kv, schemaTimestamp, input.bufferGetTimestamp)
+					ctx, output, input.kv, input.prevVal, schemaTimestamp, input.bufferGetTimestamp)
 				if err != nil {
 					return nil, err
 				}

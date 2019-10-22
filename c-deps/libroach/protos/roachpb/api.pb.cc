@@ -36071,6 +36071,7 @@ void RangeFeedRequest::clear_span() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeFeedRequest::kHeaderFieldNumber;
 const int RangeFeedRequest::kSpanFieldNumber;
+const int RangeFeedRequest::kWithDiffFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeFeedRequest::RangeFeedRequest()
@@ -36094,13 +36095,14 @@ RangeFeedRequest::RangeFeedRequest(const RangeFeedRequest& from)
   } else {
     span_ = NULL;
   }
+  with_diff_ = from.with_diff_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RangeFeedRequest)
 }
 
 void RangeFeedRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&span_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(span_));
+      reinterpret_cast<char*>(&with_diff_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(with_diff_));
 }
 
 RangeFeedRequest::~RangeFeedRequest() {
@@ -36136,6 +36138,7 @@ void RangeFeedRequest::Clear() {
     delete span_;
   }
   span_ = NULL;
+  with_diff_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -36171,6 +36174,20 @@ bool RangeFeedRequest::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_span()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool with_diff = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &with_diff_)));
         } else {
           goto handle_unusual;
         }
@@ -36213,6 +36230,11 @@ void RangeFeedRequest::SerializeWithCachedSizes(
       2, this->_internal_span(), output);
   }
 
+  // bool with_diff = 3;
+  if (this->with_diff() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->with_diff(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RangeFeedRequest)
@@ -36234,6 +36256,11 @@ size_t RangeFeedRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *span_);
+  }
+
+  // bool with_diff = 3;
+  if (this->with_diff() != 0) {
+    total_size += 1 + 1;
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -36259,6 +36286,9 @@ void RangeFeedRequest::MergeFrom(const RangeFeedRequest& from) {
   if (from.has_span()) {
     mutable_span()->::cockroach::roachpb::Span::MergeFrom(from.span());
   }
+  if (from.with_diff() != 0) {
+    set_with_diff(from.with_diff());
+  }
 }
 
 void RangeFeedRequest::CopyFrom(const RangeFeedRequest& from) {
@@ -36280,6 +36310,7 @@ void RangeFeedRequest::InternalSwap(RangeFeedRequest* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(span_, other->span_);
+  swap(with_diff_, other->with_diff_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -36293,6 +36324,8 @@ void RangeFeedRequest::InternalSwap(RangeFeedRequest* other) {
 void RangeFeedValue::InitAsDefaultInstance() {
   ::cockroach::roachpb::_RangeFeedValue_default_instance_._instance.get_mutable()->value_ = const_cast< ::cockroach::roachpb::Value*>(
       ::cockroach::roachpb::Value::internal_default_instance());
+  ::cockroach::roachpb::_RangeFeedValue_default_instance_._instance.get_mutable()->prevvalue_ = const_cast< ::cockroach::roachpb::Value*>(
+      ::cockroach::roachpb::Value::internal_default_instance());
 }
 void RangeFeedValue::clear_value() {
   if (GetArenaNoVirtual() == NULL && value_ != NULL) {
@@ -36300,9 +36333,16 @@ void RangeFeedValue::clear_value() {
   }
   value_ = NULL;
 }
+void RangeFeedValue::clear_prevvalue() {
+  if (GetArenaNoVirtual() == NULL && prevvalue_ != NULL) {
+    delete prevvalue_;
+  }
+  prevvalue_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeFeedValue::kKeyFieldNumber;
 const int RangeFeedValue::kValueFieldNumber;
+const int RangeFeedValue::kPrevValueFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeFeedValue::RangeFeedValue()
@@ -36325,12 +36365,19 @@ RangeFeedValue::RangeFeedValue(const RangeFeedValue& from)
   } else {
     value_ = NULL;
   }
+  if (from.has_prevvalue()) {
+    prevvalue_ = new ::cockroach::roachpb::Value(*from.prevvalue_);
+  } else {
+    prevvalue_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RangeFeedValue)
 }
 
 void RangeFeedValue::SharedCtor() {
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  value_ = NULL;
+  ::memset(&value_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&prevvalue_) -
+      reinterpret_cast<char*>(&value_)) + sizeof(prevvalue_));
 }
 
 RangeFeedValue::~RangeFeedValue() {
@@ -36341,6 +36388,7 @@ RangeFeedValue::~RangeFeedValue() {
 void RangeFeedValue::SharedDtor() {
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete value_;
+  if (this != internal_default_instance()) delete prevvalue_;
 }
 
 void RangeFeedValue::SetCachedSize(int size) const {
@@ -36363,6 +36411,10 @@ void RangeFeedValue::Clear() {
     delete value_;
   }
   value_ = NULL;
+  if (GetArenaNoVirtual() == NULL && prevvalue_ != NULL) {
+    delete prevvalue_;
+  }
+  prevvalue_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -36398,6 +36450,18 @@ bool RangeFeedValue::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_value()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // .cockroach.roachpb.Value prevValue = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_prevvalue()));
         } else {
           goto handle_unusual;
         }
@@ -36440,6 +36504,12 @@ void RangeFeedValue::SerializeWithCachedSizes(
       2, this->_internal_value(), output);
   }
 
+  // .cockroach.roachpb.Value prevValue = 3;
+  if (this->has_prevvalue()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_prevvalue(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RangeFeedValue)
@@ -36461,6 +36531,13 @@ size_t RangeFeedValue::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *value_);
+  }
+
+  // .cockroach.roachpb.Value prevValue = 3;
+  if (this->has_prevvalue()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *prevvalue_);
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -36487,6 +36564,9 @@ void RangeFeedValue::MergeFrom(const RangeFeedValue& from) {
   if (from.has_value()) {
     mutable_value()->::cockroach::roachpb::Value::MergeFrom(from.value());
   }
+  if (from.has_prevvalue()) {
+    mutable_prevvalue()->::cockroach::roachpb::Value::MergeFrom(from.prevvalue());
+  }
 }
 
 void RangeFeedValue::CopyFrom(const RangeFeedValue& from) {
@@ -36509,6 +36589,7 @@ void RangeFeedValue::InternalSwap(RangeFeedValue* other) {
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(value_, other->value_);
+  swap(prevvalue_, other->prevvalue_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

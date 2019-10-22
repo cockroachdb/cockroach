@@ -194,6 +194,10 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 			}
 		}
 
+		// Determine whether to request the previous value of each update from
+		// RangeFeed based on whether the `diff` option is specified.
+		_, withDiff := p.details.Opts[optDiff]
+
 		// Start rangefeeds, exit polling if we hit a resolved timestamp beyond
 		// the next scan boundary.
 
@@ -240,7 +244,7 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 			span := span
 			frontier.Forward(span, rangeFeedStartTS)
 			g.GoCtx(func(ctx context.Context) error {
-				return ds.RangeFeed(ctx, span, rangeFeedStartTS, eventC)
+				return ds.RangeFeed(ctx, span, rangeFeedStartTS, withDiff, eventC)
 			})
 		}
 		g.GoCtx(func(ctx context.Context) error {
@@ -250,7 +254,7 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 					switch t := e.GetValue().(type) {
 					case *roachpb.RangeFeedValue:
 						kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
-						if err := memBuf.AddKV(ctx, kv, hlc.Timestamp{}); err != nil {
+						if err := memBuf.AddKV(ctx, kv, t.PrevValue, hlc.Timestamp{}); err != nil {
 							return err
 						}
 					case *roachpb.RangeFeedCheckpoint:
@@ -292,7 +296,7 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 					if pastBoundary {
 						continue
 					}
-					if err := p.buf.AddKV(ctx, e.kv, e.schemaTimestamp); err != nil {
+					if err := p.buf.AddKV(ctx, e.kv, e.prevVal, e.schemaTimestamp); err != nil {
 						return err
 					}
 				} else if e.resolved != nil {
@@ -517,7 +521,7 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte, schemaTimestamp hlc.T
 	slurpKVs := func() error {
 		sort.Sort(byValueTimestamp(kvs))
 		for _, kv := range kvs {
-			if err := p.buf.AddKV(ctx, kv, schemaTimestamp); err != nil {
+			if err := p.buf.AddKV(ctx, kv, nil /* prevVal */, schemaTimestamp); err != nil {
 				return err
 			}
 		}

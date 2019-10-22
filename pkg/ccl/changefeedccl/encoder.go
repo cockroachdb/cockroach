@@ -44,6 +44,10 @@ type encodeRow struct {
 	// deleted is true if row is a deletion. In this case, only the primary
 	// key columns are guaranteed to be set in `datums`.
 	deleted bool
+	// prevDatums is the old value of a changed table row.
+	prevDatums sqlbase.EncDatumRow
+	// TODO DURING REVIEW: Do we need this?
+	prevDeleted bool
 	// tableDesc is a TableDescriptor for the table containing `datums`.
 	// It's valid for interpreting the row at `updated`.
 	tableDesc *sqlbase.TableDescriptor
@@ -84,7 +88,7 @@ func getEncoder(opts map[string]string) (Encoder, error) {
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, wrapped, keyOnly, keyInValue bool
+	updatedField, beforeField, wrapped, keyOnly, keyInValue bool
 
 	alloc sqlbase.DatumAlloc
 	buf   bytes.Buffer
@@ -98,6 +102,11 @@ func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
 		wrapped: envelopeType(opts[optEnvelope]) == optEnvelopeWrapped,
 	}
 	_, e.updatedField = opts[optUpdatedTimestamps]
+	_, e.beforeField = opts[optDiff]
+	if e.beforeField && !e.wrapped {
+		return nil, errors.Errorf(`%s is only usable with %s=%s`,
+			optDiff, optEnvelope, optEnvelopeWrapped)
+	}
 	_, e.keyInValue = opts[optKeyInValue]
 	if e.keyInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
@@ -166,12 +175,37 @@ func (e *jsonEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 		}
 	}
 
+	var before map[string]interface{}
+	if row.prevDatums != nil && !row.prevDeleted {
+		columns := row.tableDesc.Columns
+		before = make(map[string]interface{}, len(columns))
+		for i := range columns {
+			col := &columns[i]
+			datum := row.prevDatums[i]
+			if err := datum.EnsureDecoded(&col.Type, &e.alloc); err != nil {
+				return nil, err
+			}
+			var err error
+			before[col.Name], err = tree.AsJSON(datum.Datum)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	var jsonEntries map[string]interface{}
 	if e.wrapped {
 		if after != nil {
 			jsonEntries = map[string]interface{}{`after`: after}
 		} else {
 			jsonEntries = map[string]interface{}{`after`: nil}
+		}
+		if e.beforeField {
+			if before != nil {
+				jsonEntries[`before`] = before
+			} else {
+				jsonEntries[`before`] = nil
+			}
 		}
 		if e.keyInValue {
 			keyEntries, err := e.encodeKeyRaw(row)
@@ -224,8 +258,8 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(_ string, resolved hlc.Timestamp) 
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
 type confluentAvroEncoder struct {
-	registryURL           string
-	updatedField, keyOnly bool
+	registryURL                        string
+	updatedField, beforeField, keyOnly bool
 
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache    map[tableIDAndVersion]confluentRegisteredEnvelopeSchema
@@ -262,6 +296,7 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 			optEnvelope, opts[optEnvelope], optFormat, optFormatAvro)
 	}
 	_, e.updatedField = opts[optUpdatedTimestamps]
+	_, e.beforeField = opts[optDiff]
 
 	if _, ok := opts[optKeyInValue]; ok {
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
@@ -324,7 +359,7 @@ func (e *confluentAvroEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 			return nil, err
 		}
 
-		opts := avroEnvelopeOpts{afterField: true, updatedField: e.updatedField}
+		opts := avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField}
 		registered.schema, err = envelopeToAvroSchema(row.tableDesc.Name, opts, afterDataSchema)
 		if err != nil {
 			return nil, err
@@ -346,9 +381,12 @@ func (e *confluentAvroEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 			`updated`: row.updated,
 		}
 	}
-	var datums sqlbase.EncDatumRow
+	var datums, beforeDatums sqlbase.EncDatumRow
 	if !row.deleted {
 		datums = row.datums
+	}
+	if row.prevDatums != nil && !row.prevDeleted {
+		beforeDatums = row.prevDatums
 	}
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
@@ -356,7 +394,7 @@ func (e *confluentAvroEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
-	return registered.schema.BinaryFromRow(header, meta, datums)
+	return registered.schema.BinaryFromRow(header, meta, datums, beforeDatums)
 }
 
 // EncodeResolvedTimestamp implements the Encoder interface.
@@ -394,7 +432,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
-	return registered.schema.BinaryFromRow(header, meta, nil /* row */)
+	return registered.schema.BinaryFromRow(header, meta, nil /* row */, nil)
 }
 
 func (e *confluentAvroEncoder) register(schema *avroRecord, subject string) (int32, error) {

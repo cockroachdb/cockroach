@@ -54,8 +54,9 @@ type Stream interface {
 type registration struct {
 	// Input.
 	span             roachpb.Span
-	catchupIter      engine.SimpleIterator
 	catchupTimestamp hlc.Timestamp
+	catchupIter      engine.SimpleIterator
+	withDiff         bool
 	metrics          *Metrics
 
 	// Output.
@@ -86,6 +87,7 @@ func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchupIter engine.SimpleIterator,
+	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
 	stream Stream,
@@ -93,12 +95,13 @@ func newRegistration(
 ) registration {
 	r := registration{
 		span:             span,
+		catchupTimestamp: startTS,
 		catchupIter:      catchupIter,
+		withDiff:         withDiff,
 		metrics:          metrics,
 		stream:           stream,
 		errC:             errC,
 		buf:              make(chan *roachpb.RangeFeedEvent, bufferSz),
-		catchupTimestamp: startTS,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
