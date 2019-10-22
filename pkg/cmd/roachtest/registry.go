@@ -50,6 +50,7 @@ func registerTests(r *testRegistry) {
 	registerKVRangeLookups(r)
 	registerLargeRange(r)
 	registerLedger(r)
+	registerLibPQ(r)
 	registerNetwork(r)
 	registerPgjdbc(r)
 	registerPsycopg(r)
