@@ -357,7 +357,8 @@ type Engine interface {
 	// that the key range is compacted all the way to the bottommost level of
 	// SSTables, which is necessary to pick up changes to bloom filters.
 	CompactRange(start, end roachpb.Key, forceBottommost bool) error
-	// OpenFile opens a DBFile with the given filename.
+	// OpenFile opens a DBFile with the given filename. The file should be created
+	// if it doesn't exist already, and should be writable.
 	OpenFile(filename string) (DBFile, error)
 	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
 	ReadFile(filename string) ([]byte, error)

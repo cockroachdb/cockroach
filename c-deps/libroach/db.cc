@@ -925,7 +925,7 @@ DBSstFileWriter* DBSstFileWriterNew() {
   rocksdb::BlockBasedTableOptions table_options;
   // Larger block size (4kb default) means smaller file at the expense of more
   // scanning during lookups.
-  table_options.block_size = 64 * 1024;
+  table_options.block_size = 32 * 1024;
   // The original LevelDB compatible format. We explicitly set the checksum too
   // to guard against the silent version upconversion. See
   // https://github.com/facebook/rocksdb/blob/972f96b3fbae1a4675043bdf4279c9072ad69645/include/rocksdb/table.h#L198
