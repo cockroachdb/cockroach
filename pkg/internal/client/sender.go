@@ -337,6 +337,7 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
 	m.txn.Timestamp = ts
 	m.txn.OrigTimestamp = ts
+	m.txn.MinTimestamp = ts
 	m.txn.MaxTimestamp = ts
 	m.txn.OrigTimestampWasObserved = true
 }
