@@ -27,7 +27,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(*testing.T) {
+		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
