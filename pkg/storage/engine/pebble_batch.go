@@ -242,7 +242,7 @@ func (p *pebbleBatch) ClearRange(start, end MVCCKey) error {
 }
 
 // Clear implements the Batch interface.
-func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -253,8 +253,8 @@ func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	// lower bounds, calling SetUpperBound should be sufficient and safe.
 	// Furthermore, the start and end keys are always metadata keys (i.e.
 	// have zero timestamps), so we can ignore the bounds' MVCC timestamps.
-	iter.SetUpperBound(end.Key)
-	iter.Seek(start)
+	iter.SetUpperBound(end)
+	iter.Seek(MakeMVCCMetadataKey(start))
 
 	for ; ; iter.Next() {
 		valid, err := iter.Valid()
