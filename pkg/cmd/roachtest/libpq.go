@@ -42,25 +42,10 @@ func registerLibPQ(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest lib/pq release is %s.", latestTag)
-		if err := repeatRunE(
-			ctx, c, node, "add recent go version repository", "sudo add-apt-repository -y ppa:longsleep/golang-backports",
-		); err != nil {
-			t.Fatal(err)
-		}
-		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
-		); err != nil {
-			t.Fatal(err)
-		}
 
-		if err := repeatRunE(
-			ctx, c, node, "install go", "sudo apt-get install -y golang-go",
-		); err != nil {
-			t.Fatal(err)
-		}
+		installLatestGolang(ctx, t, c, node)
 
 		const (
-			goPath      = "/mnt/data1/go"
 			libPQRepo   = "github.com/lib/pq"
 			libPQPath   = goPath + "/src/" + libPQRepo
 			resultsDir  = "~/logs/report/libpq-results"
