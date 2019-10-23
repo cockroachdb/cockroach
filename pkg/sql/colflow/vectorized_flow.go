@@ -604,6 +604,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
+		if flowCtx.TestingKnobs().EnableVectorizedInvariantsChecker {
+			result.Op = colexec.NewInvariantChecker(result.Op)
+		}
 		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
 			!result.IsStreaming {
 			return nil, errors.Errorf("non-streaming operator encountered when vectorize=auto")
