@@ -130,7 +130,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 func getEngineKeySet(t *testing.T, e engine.Engine) map[string]struct{} {
 	t.Helper()
-	kvs, err := engine.Scan(e, engine.NilKey, engine.MVCCKeyMax, 0 /* max */)
+	kvs, err := engine.Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0 /* max */)
 	if err != nil {
 		t.Fatal(err)
 	}

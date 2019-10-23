@@ -223,9 +223,9 @@ func (s spanSetReader) GetProto(
 }
 
 func (s spanSetReader) Iterate(
-	start, end engine.MVCCKey, f func(engine.MVCCKeyValue) (bool, error),
+	start, end roachpb.Key, f func(engine.MVCCKeyValue) (bool, error),
 ) error {
-	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return err
 	}
 	return s.r.Iterate(start, end, f)

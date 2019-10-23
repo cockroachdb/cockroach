@@ -706,20 +706,20 @@ func TestEngineScan1(t *testing.T) {
 		}
 		sort.Strings(sortedKeys)
 
-		keyvals, err := Scan(engine, mvccKey("chinese"), mvccKey("german"), 0)
+		keyvals, err := Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %+v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
 		// Check an end of range which does not equal an existing key.
-		keyvals, err = Scan(engine, mvccKey("chinese"), mvccKey("german1"), 0)
+		keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german1"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %+v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
 
-		keyvals, err = Scan(engine, mvccKey("chinese"), mvccKey("german"), 2)
+		keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 2)
 		if err != nil {
 			t.Fatalf("could not run scan: %+v", err)
 		}
@@ -728,9 +728,9 @@ func TestEngineScan1(t *testing.T) {
 		// Should return all key/value pairs in lexicographic order. Note that ""
 		// is the lowest key possible and is a special case in engine.scan, that's
 		// why we test it here.
-		startKeys := []MVCCKey{mvccKey("cat"), mvccKey("")}
+		startKeys := []roachpb.Key{roachpb.Key("cat"), roachpb.Key("")}
 		for _, startKey := range startKeys {
-			keyvals, err = Scan(engine, startKey, mvccKey(roachpb.RKeyMax), 0)
+			keyvals, err = Scan(engine, startKey, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %+v", err)
 			}
@@ -739,7 +739,7 @@ func TestEngineScan1(t *testing.T) {
 	}, t)
 }
 
-func verifyScan(start, end MVCCKey, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
+func verifyScan(start, end roachpb.Key, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
 	kvs, err := Scan(engine, start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", start, end, err)
@@ -772,19 +772,19 @@ func TestEngineScan2(t *testing.T) {
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
-		verifyScan(mvccKey("a"), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
+		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
+		verifyScan(roachpb.Key("a"), roachpb.KeyMax, 10, keys[:5], engine, t)
 
 		// Scan sub range.
-		verifyScan(mvccKey("aab"), mvccKey("abcc"), 10, keys[3:5], engine, t)
-		verifyScan(mvccKey("aa0"), mvccKey("abcc"), 10, keys[2:5], engine, t)
+		verifyScan(roachpb.Key("aab"), roachpb.Key("abcc"), 10, keys[3:5], engine, t)
+		verifyScan(roachpb.Key("aa0"), roachpb.Key("abcc"), 10, keys[2:5], engine, t)
 
 		// Scan with max values.
-		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 3, keys[:3], engine, t)
-		verifyScan(mvccKey("a0"), mvccKey(roachpb.RKeyMax), 3, keys[1:4], engine, t)
+		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 3, keys[:3], engine, t)
+		verifyScan(roachpb.Key("a0"), roachpb.KeyMax, 3, keys[1:4], engine, t)
 
 		// Scan with max value 0 gets all values.
-		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0, keys[:5], engine, t)
+		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 0, keys[:5], engine, t)
 	}, t)
 }
 
@@ -802,14 +802,14 @@ func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, e
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10, keys[:5], engine, t)
+		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
 
 		// Delete a range of keys
 		if err := clearRange(engine, mvccKey("aa"), mvccKey("abc")); err != nil {
 			t.Fatal(err)
 		}
 		// Verify what's left
-		verifyScan(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 10,
+		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10,
 			[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
 	}, t)
 
@@ -883,8 +883,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := Scan(engine, key, mvccKey(roachpb.RKeyMax), 0)
-		keyvalsSnapshot, error := Scan(snap, key, mvccKey(roachpb.RKeyMax), 0)
+		keyvals, _ := Scan(engine, key.Key, roachpb.KeyMax, 0)
+		keyvalsSnapshot, error := Scan(snap, key.Key, roachpb.KeyMax, 0)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -942,8 +942,8 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify Scan.
-		keyvals, _ := Scan(engine, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
-		keyvalsSnapshot, err := Scan(snap, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+		keyvals, _ := Scan(engine, roachpb.KeyMin, roachpb.KeyMax, 0)
+		keyvalsSnapshot, err := Scan(snap, roachpb.KeyMin, roachpb.KeyMax, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -954,7 +954,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 		// Verify Iterate.
 		index := 0
-		if err := snap.Iterate(mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), func(kv MVCCKeyValue) (bool, error) {
+		if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) (bool, error) {
 			if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 					index, keys[index], vals[index], kv.Key, kv.Value)
