@@ -12,10 +12,14 @@ package engine
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -578,4 +582,73 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) erro
 		return err
 	}
 	return nil
+}
+
+var ingestDelayL0Threshold = settings.RegisterIntSetting(
+	"rocksdb.ingest_backpressure.l0_file_count_threshold",
+	"number of L0 files after which to backpressure SST ingestions",
+	20,
+)
+
+var ingestDelayPendingLimit = settings.RegisterByteSizeSetting(
+	"rocksdb.ingest_backpressure.pending_compaction_threshold",
+	"pending compaction estimate above which to backpressure SST ingestions",
+	2<<30, /* 2 GiB */
+)
+
+var ingestDelayTime = settings.RegisterDurationSetting(
+	"rocksdb.ingest_backpressure.max_delay",
+	"maximum amount of time to backpressure a single SST ingestion",
+	time.Second*5,
+)
+
+// PreIngestDelay may choose to block for some duration if L0 has an excessive
+// number of files in it or if PendingCompactionBytesEstimate is elevated. This
+// it is intended to be called before ingesting a new SST, since we'd rather
+// backpressure the bulk operation adding SSTs than slow down the whole RocksDB
+// instance and impact all forground traffic by adding too many files to it.
+// After the number of L0 files exceeds the configured limit, it gradually
+// begins delaying more for each additional file in L0 over the limit until
+// hitting its configured (via settings) maximum delay. If the pending
+// compaction limit is exceeded, it waits for the maximum delay.
+func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings) {
+	if settings == nil {
+		return
+	}
+	stats, err := eng.GetStats()
+	if err != nil {
+		log.Warningf(ctx, "failed to read stats: %+v", err)
+		return
+	}
+	targetDelay := calculatePreIngestDelay(settings, stats)
+
+	if targetDelay == 0 {
+		return
+	}
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %db pending compaction", targetDelay, stats.L0FileCount, stats.PendingCompactionBytesEstimate)
+
+	select {
+	case <-time.After(targetDelay):
+	case <-ctx.Done():
+	}
+}
+
+func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Duration {
+	maxDelay := ingestDelayTime.Get(&settings.SV)
+	l0Filelimit := ingestDelayL0Threshold.Get(&settings.SV)
+	compactionLimit := ingestDelayPendingLimit.Get(&settings.SV)
+
+	if stats.PendingCompactionBytesEstimate >= compactionLimit {
+		return maxDelay
+	}
+	const ramp = 10
+	if stats.L0FileCount > l0Filelimit {
+		delayPerFile := maxDelay / time.Duration(ramp)
+		targetDelay := time.Duration(stats.L0FileCount-l0Filelimit) * delayPerFile
+		if targetDelay > maxDelay {
+			return maxDelay
+		}
+		return targetDelay
+	}
+	return 0
 }
