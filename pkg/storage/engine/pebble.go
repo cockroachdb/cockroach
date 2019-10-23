@@ -346,8 +346,21 @@ func (p *Pebble) Flush() error {
 
 // GetStats implements the Engine interface.
 func (p *Pebble) GetStats() (*Stats, error) {
-	// TODO(itsbilal): Implement this.
-	return &Stats{}, nil
+	m := p.db.Metrics()
+	return &Stats{
+		BlockCacheHits:                 m.BlockCache.Hits,
+		BlockCacheMisses:               m.BlockCache.Misses,
+		BlockCacheUsage:                m.BlockCache.Size,
+		BlockCachePinnedUsage:          0,
+		BloomFilterPrefixChecked:       m.Filter.Hits + m.Filter.Misses,
+		BloomFilterPrefixUseful:        m.Filter.Hits,
+		MemtableTotalSize:              int64(m.MemTable.Size),
+		Flushes:                        m.Flush.Count,
+		Compactions:                    m.Compact.Count,
+		TableReadersMemEstimate:        m.TableCache.Size,
+		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
+		L0FileCount:                    m.Levels[0].NumFiles,
+	}, nil
 }
 
 // GetEnvStats implements the Engine interface.
