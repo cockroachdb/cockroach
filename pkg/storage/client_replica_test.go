@@ -1805,8 +1805,8 @@ func TestClearRange(t *testing.T) {
 
 	verifyKeysWithPrefix := func(prefix roachpb.Key, expectedKeys []roachpb.Key) {
 		t.Helper()
-		start := engine.MakeMVCCMetadataKey(prefix)
-		end := engine.MakeMVCCMetadataKey(prefix.PrefixEnd())
+		start := prefix
+		end := prefix.PrefixEnd()
 		kvs, err := engine.Scan(store.Engine(), start, end, 0 /* maxRows */)
 		if err != nil {
 			t.Fatal(err)

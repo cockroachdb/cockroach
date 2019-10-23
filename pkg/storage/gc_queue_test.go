@@ -558,8 +558,7 @@ func TestGCQueueProcess(t *testing.T) {
 	// However, because the GC processing pushes transactions and
 	// resolves intents asynchronously, we use a SucceedsSoon loop.
 	testutils.SucceedsSoon(t, func() error {
-		kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),
-			engine.MakeMVCCMetadataKey(keys.MaxKey), 0)
+		kvs, err := engine.Scan(tc.store.Engine(), key1, keys.MaxKey, 0)
 		if err != nil {
 			return err
 		}
@@ -890,8 +889,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	// is initiated asynchronously from the GC queue.
 	testutils.SucceedsSoon(t, func() error {
 		meta := &enginepb.MVCCMetadata{}
-		return tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
-			engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
+		return tc.store.Engine().Iterate(roachpb.KeyMin, roachpb.KeyMax,
+			func(kv engine.MVCCKeyValue) (bool, error) {
 				if !kv.Key.IsValue() {
 					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
 						return false, err

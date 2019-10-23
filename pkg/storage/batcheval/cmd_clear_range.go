@@ -79,7 +79,7 @@ func ClearRange(
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
 		if err := batch.Iterate(
-			from, to,
+			from.Key, to.Key,
 			func(kv engine.MVCCKeyValue) (bool, error) {
 				return false, batch.Clear(kv.Key)
 			},

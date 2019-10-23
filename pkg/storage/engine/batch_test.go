@@ -96,7 +96,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 				{Key: mvccKey("c"), Value: appender("foo")},
 				{Key: mvccKey("d"), Value: []byte("before")},
 			}
-			kvs, err := Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+			kvs, err := Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -112,7 +112,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			}
 			if !writeOnly {
 				// Scan values from batch directly.
-				kvs, err = Scan(b, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+				kvs, err = Scan(b, roachpb.KeyMin, roachpb.KeyMax, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -125,7 +125,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			if err := commit(e, b); err != nil {
 				t.Fatal(err)
 			}
-			kvs, err = Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+			kvs, err = Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -185,7 +185,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			successTestCases := []func(){
 				func() { _, _ = b.Get(a) },
 				func() { _, _, _, _ = b.GetProto(a, getVal) },
-				func() { _ = b.Iterate(a, a, func(MVCCKeyValue) (bool, error) { return true, nil }) },
+				func() { _ = b.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
 				func() { b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
 					b.NewIterator(IterOptions{
@@ -255,7 +255,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				{Key: mvccKey("c"), Value: appender("foobar")},
 			}
 
-			kvs, err := Scan(e, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+			kvs, err := Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -631,21 +631,21 @@ func TestBatchScan(t *testing.T) {
 			}
 
 			scans := []struct {
-				start, end MVCCKey
+				start, end roachpb.Key
 				max        int64
 			}{
 				// Full monty.
-				{start: mvccKey("a"), end: mvccKey("z"), max: 0},
+				{start: roachpb.Key("a"), end: roachpb.Key("z"), max: 0},
 				// Select ~half.
-				{start: mvccKey("a"), end: mvccKey("z"), max: 9},
+				{start: roachpb.Key("a"), end: roachpb.Key("z"), max: 9},
 				// Select one.
-				{start: mvccKey("a"), end: mvccKey("z"), max: 1},
+				{start: roachpb.Key("a"), end: roachpb.Key("z"), max: 1},
 				// Select half by end key.
-				{start: mvccKey("a"), end: mvccKey("f0"), max: 0},
+				{start: roachpb.Key("a"), end: roachpb.Key("f0"), max: 0},
 				// Start at half and select rest.
-				{start: mvccKey("f"), end: mvccKey("z"), max: 0},
+				{start: roachpb.Key("f"), end: roachpb.Key("z"), max: 0},
 				// Start at last and select max=10.
-				{start: mvccKey("m"), end: mvccKey("z"), max: 10},
+				{start: roachpb.Key("m"), end: roachpb.Key("z"), max: 10},
 			}
 
 			// Scan each case using the batch and store the results.
@@ -695,7 +695,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 			if err := b.Clear(mvccKey("a")); err != nil {
 				t.Fatal(err)
 			}
-			kvs, err := Scan(b, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 0)
+			kvs, err := Scan(b, roachpb.KeyMin, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -732,7 +732,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 				t.Fatal(err)
 			}
 			// A scan with max=1 should scan "b".
-			kvs, err := Scan(b, mvccKey(roachpb.RKeyMin), mvccKey(roachpb.RKeyMax), 1)
+			kvs, err := Scan(b, roachpb.KeyMin, roachpb.KeyMax, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1112,7 +1112,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 				func() { _ = batch.ApplyBatchRepr(nil, false) },
 				func() { _, _ = batch.Get(a) },
 				func() { _, _, _, _ = batch.GetProto(a, nil) },
-				func() { _ = batch.Iterate(a, a, nil) },
+				func() { _ = batch.Iterate(a.Key, a.Key, nil) },
 				func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}) },
 			}
 			for i, f := range testCases {

@@ -1451,8 +1451,7 @@ func getAllRevisions(
 		if err := sst.IngestExternalFile(file.SST); err != nil {
 			return nil, err
 		}
-		start, end := engine.MVCCKey{Key: startKey}, engine.MVCCKey{Key: endKey}
-		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+		if err := sst.Iterate(startKey, endKey, func(kv engine.MVCCKeyValue) (bool, error) {
 			if len(res) == 0 || !res[len(res)-1].Key.Equal(kv.Key.Key) {
 				res = append(res, versionedValues{Key: kv.Key.Key})
 			}

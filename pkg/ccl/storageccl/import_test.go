@@ -82,7 +82,7 @@ func slurpSSTablesLatestKey(
 		if err := sst.IngestExternalFile(fileContents); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+		if err := sst.Iterate(start.Key, end.Key, func(kv engine.MVCCKeyValue) (bool, error) {
 			var ok bool
 			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
 			if !ok {
