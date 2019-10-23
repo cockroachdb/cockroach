@@ -100,7 +100,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		}
 	}
 
-	if index.ID == n.tableDesc.PrimaryIndex.ID {
+	if index.ID == n.tableDesc.PrimaryIdx().ID {
 		for i := range n.tableDesc.Columns {
 			addColumn(&n.tableDesc.Columns[i])
 		}

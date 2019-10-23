@@ -78,7 +78,7 @@ func NewIndexJoiner(
 	ij := &IndexJoiner{
 		input:     input,
 		desc:      spec.Table,
-		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
+		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIdx().ID),
 		batchSize: indexJoinerBatchSize,
 	}
 	needMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
@@ -205,7 +205,7 @@ func (ij *IndexJoiner) ConsumerClosed() {
 }
 
 func (ij *IndexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
-	numKeyCols := len(ij.desc.PrimaryIndex.ColumnIDs)
+	numKeyCols := len(ij.desc.PrimaryIdx().ColumnIDs)
 	if len(row) < numKeyCols {
 		return roachpb.Span{}, errors.Errorf(
 			"index join input has %d columns, expected at least %d", len(row), numKeyCols)
@@ -216,8 +216,8 @@ func (ij *IndexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, erro
 	keyRow := row[:numKeyCols]
 	types := ij.input.OutputTypes()[:numKeyCols]
 	return sqlbase.MakeSpanFromEncDatums(
-		ij.keyPrefix, keyRow, types, ij.desc.PrimaryIndex.ColumnDirections, &ij.desc,
-		&ij.desc.PrimaryIndex, &ij.alloc)
+		ij.keyPrefix, keyRow, types, ij.desc.PrimaryIdx().ColumnDirections, &ij.desc,
+		ij.desc.PrimaryIdx(), &ij.alloc)
 }
 
 func (ij *IndexJoiner) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {

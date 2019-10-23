@@ -118,7 +118,7 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 		return err
 	}
 	indexName := ""
-	if n.index.ID != n.tableDesc.PrimaryIndex.ID {
+	if n.index.ID != n.tableDesc.PrimaryIdx().ID {
 		indexName = n.index.Name
 	}
 	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.Query(

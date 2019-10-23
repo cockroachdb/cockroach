@@ -304,12 +304,12 @@ func spanForPKValues(
 ) (roachpb.Span, error) {
 	return spanForIndexValues(
 		table,
-		&table.PrimaryIndex,
-		len(table.PrimaryIndex.ColumnIDs),
+		table.PrimaryIdx(),
+		len(table.PrimaryIdx().ColumnIDs),
 		sqlbase.ForeignKeyReference_SIMPLE, /* primary key lookup can always use MATCH SIMPLE */
 		fetchColIDtoRowIndex,
 		values,
-		sqlbase.MakeIndexKeyPrefix(table.TableDesc(), table.PrimaryIndex.ID),
+		sqlbase.MakeIndexKeyPrefix(table.TableDesc(), table.PrimaryIdx().ID),
 	)
 }
 
@@ -357,7 +357,7 @@ func (c *cascader) addIndexPKRowFetcher(
 
 	// Create a new row fetcher. Only the primary key columns are required.
 	var colDesc []sqlbase.ColumnDescriptor
-	for _, id := range table.PrimaryIndex.ColumnIDs {
+	for _, id := range table.PrimaryIdx().ColumnIDs {
 		cDesc, err := table.FindColumnByID(id)
 		if err != nil {
 			return Fetcher{}, err
@@ -366,7 +366,7 @@ func (c *cascader) addIndexPKRowFetcher(
 	}
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(colDesc)-1)
-	isSecondary := table.PrimaryIndex.ID != index.ID
+	isSecondary := table.PrimaryIdx().ID != index.ID
 	var rowFetcher Fetcher
 	if err := rowFetcher.Init(
 		false, /* reverse */
@@ -424,7 +424,7 @@ func (c *cascader) addRowDeleter(
 	valNeededForCol.AddRange(0, len(rowDeleter.FetchCols)-1)
 	tableArgs := FetcherTableArgs{
 		Desc:             table,
-		Index:            &table.PrimaryIndex,
+		Index:            table.PrimaryIdx(),
 		ColIdxMap:        rowDeleter.FetchColIDtoRowIndex,
 		IsSecondaryIndex: false,
 		Cols:             rowDeleter.FetchCols,
@@ -485,7 +485,7 @@ func (c *cascader) addRowUpdater(
 	valNeededForCol.AddRange(0, len(rowUpdater.FetchCols)-1)
 	tableArgs := FetcherTableArgs{
 		Desc:             table,
-		Index:            &table.PrimaryIndex,
+		Index:            table.PrimaryIdx(),
 		ColIdxMap:        rowUpdater.FetchColIDtoRowIndex,
 		IsSecondaryIndex: false,
 		Cols:             rowUpdater.FetchCols,

@@ -559,7 +559,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			v.observer.attr(name, "from", n.desc.Name)
 		}
 		if v.observer.spans != nil {
-			v.observer.spans(name, "spans", &n.desc.PrimaryIndex, n.spans)
+			v.observer.spans(name, "spans", n.desc.PrimaryIdx(), n.spans)
 		}
 
 	case *serializeNode:

@@ -1250,7 +1250,7 @@ CREATE TABLE crdb_internal.create_statements (
 					if err != nil {
 						return err
 					}
-					allIdx := append(table.Indexes, table.PrimaryIndex)
+					allIdx := append(table.Indexes, *table.PrimaryIdx())
 					if err := showAlterStatementWithInterleave(ctx, tn, contextName, lCtx, allIdx, table, alterStmts, validateStmts); err != nil {
 						return err
 					}
@@ -1276,7 +1276,7 @@ CREATE TABLE crdb_internal.create_statements (
 							break
 						}
 					}
-					hasPartitions = hasPartitions || table.PrimaryIndex.Partitioning.NumColumns != 0
+					hasPartitions = hasPartitions || table.PrimaryIdx().Partitioning.NumColumns != 0
 					if hasPartitions {
 						stmt += "\n-- Warning: Partitioned table with no zone configurations."
 					}
@@ -1480,10 +1480,10 @@ CREATE TABLE crdb_internal.table_indexes (
 				if err := addRow(
 					tableID,
 					tableName,
-					tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
-					tree.NewDString(table.PrimaryIndex.Name),
+					tree.NewDInt(tree.DInt(table.PrimaryIdx().ID)),
+					tree.NewDString(table.PrimaryIdx().Name),
 					primary,
-					tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
+					tree.MakeDBool(tree.DBool(table.PrimaryIdx().Unique)),
 				); err != nil {
 					return err
 				}
@@ -1605,7 +1605,7 @@ CREATE TABLE crdb_internal.index_columns (
 					return nil
 				}
 
-				if err := reportIndex(&table.PrimaryIndex); err != nil {
+				if err := reportIndex(table.PrimaryIdx()); err != nil {
 					return err
 				}
 				for i := range table.Indexes {
@@ -1684,7 +1684,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				}
 
 				// Record the backward references of the primary index.
-				if err := reportIdxDeps(&table.PrimaryIndex); err != nil {
+				if err := reportIdxDeps(table.PrimaryIdx()); err != nil {
 					return err
 				}
 
@@ -1822,7 +1822,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				}
 
 				// Record the backward references of the primary index.
-				if err := reportIdxDeps(&table.PrimaryIndex); err != nil {
+				if err := reportIdxDeps(table.PrimaryIdx()); err != nil {
 					return err
 				}
 

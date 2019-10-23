@@ -98,7 +98,7 @@ func (ef *execFactory) ConstructScan(
 		return newZeroNode(scan.resultColumns), nil
 	}
 	scan.index = indexDesc
-	scan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
+	scan.isSecondaryIndex = (indexDesc != tabDesc.PrimaryIdx())
 	scan.hardLimit = hardLimit
 	scan.reverse = reverse
 	scan.maxResults = maxResults
@@ -603,7 +603,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	tableScan.index = indexDesc
-	tableScan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
+	tableScan.isSecondaryIndex = (indexDesc != tabDesc.PrimaryIdx())
 
 	n := &lookupJoinNode{
 		input:        input.(planNode),
@@ -653,7 +653,7 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	scan.index = indexDesc
-	scan.isSecondaryIndex = (indexDesc.ID != tableDesc.PrimaryIndex.ID)
+	scan.isSecondaryIndex = (indexDesc.ID != tableDesc.PrimaryIdx().ID)
 
 	return scan, nil
 }
@@ -1776,7 +1776,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	allowAutoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	indexDesc := &tabDesc.PrimaryIndex
+	indexDesc := tabDesc.PrimaryIdx()
 
 	// Setting the "forDelete" flag includes all column families in case where a
 	// single record is deleted.

@@ -342,9 +342,9 @@ INSERT INTO t.test VALUES (10, 2);
 
 	// Create the primary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIdx().ID)
 	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, &tableDesc.PrimaryIdx(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -578,9 +578,9 @@ INSERT INTO t.test VALUES (217, 314);
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIdx().ID)
 	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, &tableDesc.PrimaryIdx(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -659,9 +659,9 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIdx().ID)
 	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, &tableDesc.PrimaryIdx(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -762,9 +762,9 @@ CREATE TABLE t.test (
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIdx().ID)
 	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, tableDesc.PrimaryIdx(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -865,9 +865,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIdx().ID)
 	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, tableDesc.PrimaryIdx(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

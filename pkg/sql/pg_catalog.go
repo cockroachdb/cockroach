@@ -1394,7 +1394,7 @@ CREATE TABLE pg_catalog.pg_index (
 						tableOid,                       // indrelid
 						tree.NewDInt(tree.DInt(len(index.ColumnNames))),                                          // indnatts
 						tree.MakeDBool(tree.DBool(index.Unique)),                                                 // indisunique
-						tree.MakeDBool(tree.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
+						tree.MakeDBool(tree.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIdx().ID)), // indisprimary
 						tree.DBoolFalse,                          // indisexclusion
 						tree.MakeDBool(tree.DBool(index.Unique)), // indimmediate
 						tree.DBoolFalse,                          // indisclustered

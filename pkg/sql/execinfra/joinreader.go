@@ -356,7 +356,7 @@ func (jr *JoinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roac
 	// - our table has more than the default family
 	// - we have all the columns of the index
 	if len(jr.neededFamilies) > 0 &&
-		jr.index.ID == jr.desc.PrimaryIndex.ID &&
+		jr.index.ID == jr.desc.PrimaryIdx().ID &&
 		len(jr.lookupCols) == len(jr.index.ColumnIDs) &&
 		len(jr.neededFamilies) < len(jr.desc.Families) {
 		return sqlbase.SplitSpanIntoSeparateFamilies(span, jr.neededFamilies)

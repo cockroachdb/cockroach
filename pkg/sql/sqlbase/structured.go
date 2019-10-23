@@ -623,7 +623,7 @@ func (desc *TableDescriptor) IsPhysicalTable() bool {
 // given index. For secondary indexes, we always only use one, but for primary
 // indexes, we can encode up to one kv per column family.
 func (desc *TableDescriptor) KeysPerRow(indexID IndexID) int {
-	if desc.PrimaryIndex.ID == indexID {
+	if desc.PrimaryIdx().ID == indexID {
 		return len(desc.Families)
 	}
 	return 1
@@ -649,7 +649,7 @@ func (desc *TableDescriptor) AllNonDropColumns() []ColumnDescriptor {
 func (desc *TableDescriptor) AllNonDropIndexes() []*IndexDescriptor {
 	indexes := make([]*IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
 	if desc.IsPhysicalTable() {
-		indexes = append(indexes, &desc.PrimaryIndex)
+		indexes = append(indexes, desc.PrimaryIdx())
 	}
 	for i := range desc.Indexes {
 		indexes = append(indexes, &desc.Indexes[i])
@@ -721,7 +721,7 @@ func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() []*ForeignKeyCons
 // added in the mutations.
 func (desc *TableDescriptor) ForeachNonDropIndex(f func(*IndexDescriptor) error) error {
 	if desc.IsPhysicalTable() {
-		if err := f(&desc.PrimaryIndex); err != nil {
+		if err := f(desc.PrimaryIdx()); err != nil {
 			return err
 		}
 	}
@@ -832,7 +832,7 @@ func (desc *TableDescriptor) MaybeUpgradeForeignKeyRepresentation(
 		changed = changed || newChanged
 	}
 	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-		ctx, protoGetter, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
+		ctx, protoGetter, otherUnupgradedTables, desc, desc.PrimaryIdx(), skipFKsWithNoMatchingTable,
 	)
 	if err != nil {
 		return false, err
@@ -1104,8 +1104,8 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 		return false
 	}
 
-	primaryIndexColumnIds := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+	primaryIndexColumnIds := make(map[ColumnID]struct{}, len(desc.PrimaryIdx().ColumnIDs))
+	for _, colID := range desc.PrimaryIdx().ColumnIDs {
 		primaryIndexColumnIds[colID] = struct{}{}
 	}
 
@@ -1208,7 +1208,7 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 }
 
 func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
-	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
+	if len(desc.PrimaryIdx().ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
@@ -1280,7 +1280,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 
 	// Create a slice of modifiable index descriptors.
 	indexes := make([]*IndexDescriptor, 0, 1+len(desc.Indexes)+len(desc.Mutations))
-	indexes = append(indexes, &desc.PrimaryIndex)
+	indexes = append(indexes, desc.PrimaryIdx())
 	collectIndexes := func(index *IndexDescriptor) {
 		if len(index.Name) == 0 {
 			anonymousIndexes = append(anonymousIndexes, index)
@@ -1326,14 +1326,14 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 			}
 		}
 
-		if index != &desc.PrimaryIndex {
+		if index != desc.PrimaryIdx() {
 			indexHasOldStoredColumns := index.HasOldStoredColumns()
 			// Need to clear ExtraColumnIDs and StoreColumnIDs because they are used
 			// by ContainsColumnID.
 			index.ExtraColumnIDs = nil
 			index.StoreColumnIDs = nil
 			var extraColumnIDs []ColumnID
-			for _, primaryColID := range desc.PrimaryIndex.ColumnIDs {
+			for _, primaryColID := range desc.PrimaryIdx().ColumnIDs {
 				if !index.ContainsColumnID(primaryColID) {
 					extraColumnIDs = append(extraColumnIDs, primaryColID)
 				}
@@ -1345,7 +1345,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 				if err != nil {
 					return err
 				}
-				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
+				if desc.PrimaryIdx().ContainsColumnID(col.ID) {
 					// If the primary index contains a stored column, we don't need to
 					// store it - it's already part of the index.
 					err = pgerror.Newf(
@@ -1412,8 +1412,8 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 		desc.Families[i] = *family
 	}
 
-	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIdx().ColumnIDs))
+	for _, colID := range desc.PrimaryIdx().ColumnIDs {
 		primaryIndexColIDs[colID] = struct{}{}
 	}
 
@@ -1890,7 +1890,7 @@ func (desc *TableDescriptor) validateColumnFamilies(
 func (desc *TableDescriptor) validateTableIndexes(
 	columnNames map[string]ColumnID, colIDToFamilyID map[ColumnID]FamilyID,
 ) error {
-	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
+	if len(desc.PrimaryIdx().ColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
 
@@ -1955,7 +1955,7 @@ func (desc *TableDescriptor) validateTableIndexes(
 		}
 	}
 
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+	for _, colID := range desc.PrimaryIdx().ColumnIDs {
 		famID, ok := colIDToFamilyID[colID]
 		if !ok || famID != FamilyID(0) {
 			return fmt.Errorf("primary key column %d is not in column family 0", colID)
@@ -1965,11 +1965,15 @@ func (desc *TableDescriptor) validateTableIndexes(
 	return nil
 }
 
+func (desc *TableDescriptor) PrimaryIdx() *IndexDescriptor {
+	return &desc.PrimaryIndex
+}
+
 // PrimaryKeyString returns the pretty-printed primary key declaration for a
 // table descriptor.
 func (desc *TableDescriptor) PrimaryKeyString() string {
 	return fmt.Sprintf("PRIMARY KEY (%s)",
-		desc.PrimaryIndex.ColNamesString(),
+		desc.PrimaryIdx().ColNamesString(),
 	)
 }
 
@@ -2265,7 +2269,7 @@ func (desc *MutableTableDescriptor) AddIndex(idx IndexDescriptor, primary bool) 
 
 		if primary {
 			// PrimaryIndex is unset.
-			if desc.PrimaryIndex.Name == "" {
+			if desc.PrimaryIdx().Name == "" {
 				if idx.Name == "" {
 					// Only override the index name if it hasn't been set by the user.
 					idx.Name = PrimaryKeyIndexName
@@ -2369,7 +2373,7 @@ func (desc *MutableTableDescriptor) RenameColumnDescriptor(
 			}
 		}
 	}
-	renameColumnInIndex(&desc.PrimaryIndex)
+	renameColumnInIndex(desc.PrimaryIdx())
 	for i := range desc.Indexes {
 		renameColumnInIndex(&desc.Indexes[i])
 	}
@@ -2515,8 +2519,8 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 // FindIndexByName finds the index with the specified name in the active
 // list or the mutations list. It returns true if the index is being dropped.
 func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, bool, error) {
-	if desc.IsPhysicalTable() && desc.PrimaryIndex.Name == name {
-		return &desc.PrimaryIndex, false, nil
+	if desc.IsPhysicalTable() && desc.PrimaryIdx().Name == name {
+		return desc.PrimaryIdx(), false, nil
 	}
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
@@ -2566,8 +2570,8 @@ func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 	index *IndexDescriptor, name string,
 ) error {
 	id := index.ID
-	if id == desc.PrimaryIndex.ID {
-		desc.PrimaryIndex.Name = name
+	if id == desc.PrimaryIdx().ID {
+		desc.PrimaryIdx().Name = name
 		return nil
 	}
 	for i := range desc.Indexes {
@@ -2726,8 +2730,8 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 // Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
 // callers can use returned values to modify the TableDesc.
 func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error) {
-	if desc.PrimaryIndex.ID == id {
-		return &desc.PrimaryIndex, nil
+	if desc.PrimaryIdx().ID == id {
+		return desc.PrimaryIdx(), nil
 	}
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
@@ -2766,7 +2770,7 @@ func (desc *TableDescriptor) FindIndexByIndexIdx(
 		return &desc.Indexes[indexIdx-1], true, nil
 	}
 
-	return &desc.PrimaryIndex, false, nil
+	return desc.PrimaryIdx(), false, nil
 }
 
 // GetIndexMutationCapabilities returns:
@@ -3374,7 +3378,7 @@ func (desc *TableDescriptor) AllIndexSpans() roachpb.Spans {
 // PrimaryIndexSpan returns the Span that corresponds to the entire primary
 // index; can be used for a full table scan.
 func (desc *TableDescriptor) PrimaryIndexSpan() roachpb.Span {
-	return desc.IndexSpan(desc.PrimaryIndex.ID)
+	return desc.IndexSpan(desc.PrimaryIdx().ID)
 }
 
 // IndexSpan returns the Span that corresponds to an entire index; can be used

@@ -86,8 +86,8 @@ func TestShowBackup(t *testing.T) {
 
 	details1Desc := sqlbase.GetTableDescriptor(tc.Server(0).DB(), "data", "details1")
 	details2Desc := sqlbase.GetTableDescriptor(tc.Server(0).DB(), "data", "details2")
-	details1Key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(details1Desc, details1Desc.PrimaryIndex.ID))
-	details2Key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(details2Desc, details2Desc.PrimaryIndex.ID))
+	details1Key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(details1Desc, details1Desc.PrimaryIdx().ID))
+	details2Key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(details2Desc, details2Desc.PrimaryIdx().ID))
 
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES '%s'`, details), [][]string{
 		{"/Table/54/1", "/Table/54/2", string(details1Key), string(details1Key.PrefixEnd())},

@@ -146,7 +146,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	details := make(map[string]interface{})
 	var index *sqlbase.IndexDescriptor
 	if tr.indexIdx == 0 {
-		index = &tr.tableDesc.PrimaryIndex
+		index = tr.tableDesc.PrimaryIdx()
 	} else {
 		index = &tr.tableDesc.Indexes[tr.indexIdx-1]
 	}
@@ -197,7 +197,7 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	}
 	var primaryKeyValues bytes.Buffer
 	primaryKeyValues.WriteByte('(')
-	for i, id := range table.PrimaryIndex.ColumnIDs {
+	for i, id := range table.PrimaryIdx().ColumnIDs {
 		if i > 0 {
 			primaryKeyValues.WriteByte(',')
 		}

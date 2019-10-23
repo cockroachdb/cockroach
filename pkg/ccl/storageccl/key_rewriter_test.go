@@ -76,7 +76,7 @@ func TestKeyRewriter(t *testing.T) {
 	}
 
 	t.Run("normal", func(t *testing.T) {
-		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
+		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIdx().ID)
 		newKey, ok, err := kr.RewriteKey(key, notSpan)
 		if err != nil {
 			t.Fatal(err)
@@ -94,7 +94,7 @@ func TestKeyRewriter(t *testing.T) {
 	})
 
 	t.Run("prefix end", func(t *testing.T) {
-		key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)).PrefixEnd()
+		key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIdx().ID)).PrefixEnd()
 		newKey, ok, err := kr.RewriteKey(key, notSpan)
 		if err != nil {
 			t.Fatal(err)
@@ -123,7 +123,7 @@ func TestKeyRewriter(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
+		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIdx().ID)
 		newKey, ok, err := newKr.RewriteKey(key, notSpan)
 		if err != nil {
 			t.Fatal(err)

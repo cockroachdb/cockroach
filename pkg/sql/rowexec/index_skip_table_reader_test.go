@@ -168,7 +168,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 
 	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
-		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.PrimaryIndex.ID))
+		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.PrimaryIdx().ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)

@@ -68,7 +68,7 @@ func ShowCreateTable(
 		}
 		f.WriteString("\n\t")
 		f.WriteString(col.SQLString())
-		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
+		if desc.IsPhysicalTable() && desc.PrimaryIdx().ColumnIDs[0] == col.ID {
 			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
 			// is on a visible column (not rowid).
 			primaryKeyIsOnVisibleColumn = true
@@ -76,7 +76,7 @@ func ShowCreateTable(
 	}
 	if primaryKeyIsOnVisibleColumn {
 		f.WriteString(",\n\tCONSTRAINT ")
-		formatQuoteNames(&f.Buffer, desc.PrimaryIndex.Name)
+		formatQuoteNames(&f.Buffer, desc.PrimaryIdx().Name)
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
@@ -99,7 +99,7 @@ func ShowCreateTable(
 			f.WriteString(fkCtx.String())
 		}
 	}
-	allIdx := append(desc.Indexes, desc.PrimaryIndex)
+	allIdx := append(desc.Indexes, *desc.PrimaryIdx())
 	for i := range allIdx {
 		idx := &allIdx[i]
 		// Only add indexes to the create_statement column, and not to the
@@ -115,7 +115,7 @@ func ShowCreateTable(
 			// clauses as well.
 			includeInterleaveClause = true
 		}
-		if idx.ID != desc.PrimaryIndex.ID && includeInterleaveClause {
+		if idx.ID != desc.PrimaryIdx().ID && includeInterleaveClause {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
 			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
@@ -141,11 +141,11 @@ func ShowCreateTable(
 	showFamilyClause(desc, f)
 	showConstraintClause(desc, f)
 
-	if err := showCreateInterleave(&desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(desc.PrimaryIdx(), &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, desc, desc.PrimaryIdx(), &desc.PrimaryIdx().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}

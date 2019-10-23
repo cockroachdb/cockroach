@@ -54,7 +54,7 @@ func TestFakeSpanResolver(t *testing.T) {
 	it := resolver.NewSpanResolverIterator(txn)
 
 	tableDesc := sqlbase.GetTableDescriptor(db, "test", "t")
-	primIdxValDirs := sqlbase.IndexKeyValDirs(&tableDesc.PrimaryIndex)
+	primIdxValDirs := sqlbase.IndexKeyValDirs(tableDesc.PrimaryIdx())
 
 	span := tableDesc.PrimaryIndexSpan()
 

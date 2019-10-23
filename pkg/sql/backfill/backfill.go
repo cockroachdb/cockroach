@@ -115,7 +115,7 @@ func (cb *ColumnBackfiller) Init(
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.PrimaryIdx(),
 		ColIdxMap:       desc.ColumnIdxMap(),
 		Cols:            desc.Columns,
 		ValNeededForCol: valNeededForCol,
@@ -351,7 +351,7 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.PrimaryIdx(),
 		ColIdxMap:       ib.colIdxMap,
 		Cols:            cols,
 		ValNeededForCol: valNeededForCol,

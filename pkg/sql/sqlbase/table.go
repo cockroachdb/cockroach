@@ -316,7 +316,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 	// Indexes provide PK, Unique and FK constraints.
 	indexes := desc.AllNonDropIndexes()
 	for _, index := range indexes {
-		if index.ID == desc.PrimaryIndex.ID {
+		if index.ID == desc.PrimaryIdx().ID {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
@@ -424,8 +424,8 @@ func FindFKReferencedIndex(
 ) (*IndexDescriptor, error) {
 	// Search for a unique index on the referenced table that matches our foreign
 	// key columns.
-	if ColumnIDs(referencedTable.PrimaryIndex.ColumnIDs).HasPrefix(referencedColIDs) {
-		return &referencedTable.PrimaryIndex, nil
+	if ColumnIDs(referencedTable.PrimaryIdx().ColumnIDs).HasPrefix(referencedColIDs) {
+		return referencedTable.PrimaryIdx(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
 	for _, idx := range referencedTable.Indexes {
@@ -447,8 +447,8 @@ func FindFKOriginIndex(
 ) (*IndexDescriptor, error) {
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
-	if ColumnIDs(originTable.PrimaryIndex.ColumnIDs).HasPrefix(originColIDs) {
-		return &originTable.PrimaryIndex, nil
+	if ColumnIDs(originTable.PrimaryIdx().ColumnIDs).HasPrefix(originColIDs) {
+		return originTable.PrimaryIdx(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
 	for _, idx := range originTable.Indexes {

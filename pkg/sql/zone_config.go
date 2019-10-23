@@ -296,7 +296,7 @@ func resolveSubzone(
 	indexName := string(zs.TableOrIndex.Index)
 	var index *sqlbase.IndexDescriptor
 	if indexName == "" {
-		index = &table.PrimaryIndex
+		index = table.PrimaryIdx()
 		indexName = index.Name
 	} else {
 		var err error

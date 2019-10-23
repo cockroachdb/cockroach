@@ -264,7 +264,7 @@ func (n *scrubNode) startScrubTable(
 func getPrimaryColIdxs(
 	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*sqlbase.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
-	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
+	for i, colID := range tableDesc.PrimaryIdx().ColumnIDs {
 		rowIdx := -1
 		for idx, col := range columns {
 			if col.ID == colID {
@@ -276,7 +276,7 @@ func getPrimaryColIdxs(
 			return nil, errors.Errorf(
 				"could not find primary index column in projection: columnID=%d columnName=%s",
 				colID,
-				tableDesc.PrimaryIndex.ColumnNames[i])
+				tableDesc.PrimaryIdx().ColumnNames[i])
 		}
 		primaryColIdxs = append(primaryColIdxs, rowIdx)
 	}
@@ -323,7 +323,7 @@ func pairwiseOp(left []string, right []string, op string) []string {
 func createPhysicalCheckOperations(
 	tableDesc *sqlbase.ImmutableTableDescriptor, tableName *tree.TableName,
 ) (checks []checkOperation) {
-	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
+	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, tableDesc.PrimaryIdx()))
 	for i := range tableDesc.Indexes {
 		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.Indexes[i]))
 	}

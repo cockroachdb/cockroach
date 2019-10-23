@@ -275,7 +275,7 @@ func TestAvroSchema(t *testing.T) {
 				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
-		indexSchema, err := indexToAvroSchema(tableDesc, &tableDesc.PrimaryIndex)
+		indexSchema, err := indexToAvroSchema(tableDesc, tableDesc.PrimaryIdx())
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+

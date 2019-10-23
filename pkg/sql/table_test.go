@@ -278,8 +278,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
-		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
-			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, schema.PrimaryIndex)
+		if !reflect.DeepEqual(d.primary, schema.PrimaryIdx()) {
+			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, schema.PrimaryIdx())
 		}
 		if !reflect.DeepEqual(d.indexes, append([]sqlbase.IndexDescriptor{}, schema.Indexes...)) {
 			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, schema.Indexes)

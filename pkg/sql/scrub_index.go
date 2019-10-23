@@ -81,7 +81,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 
 	var pkColumns, otherColumns []*sqlbase.ColumnDescriptor
 
-	for _, colID := range o.tableDesc.PrimaryIndex.ColumnIDs {
+	for _, colID := range o.tableDesc.PrimaryIdx().ColumnIDs {
 		col := &o.tableDesc.Columns[colToIdx[colID]]
 		pkColumns = append(pkColumns, col)
 		colToIdx[colID] = -1

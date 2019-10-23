@@ -3007,7 +3007,7 @@ may increase either contention or retry errors, or both.`,
 					colMap[tableDesc.Columns[i].ID] = i
 				}
 
-				if indexDesc.ID == tableDesc.PrimaryIndex.ID {
+				if indexDesc.ID == tableDesc.PrimaryIdx().ID {
 					keyPrefix := tableDesc.IndexSpan(indexDesc.ID).Key
 					res, _, err := sqlbase.EncodeIndexKey(tableDesc, indexDesc, colMap, datums, keyPrefix)
 					if err != nil {

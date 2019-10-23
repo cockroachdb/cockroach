@@ -257,7 +257,7 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 		for _, idx := range tableDesc.AllNonDropIndexes() {
 			// Don't allow any secondary indexes
 			// TODO(emmanuel): identify the cases where secondary indexes can still work with the fast path and allow them
-			if idx.ID != tableDesc.PrimaryIndex.ID {
+			if idx.ID != tableDesc.PrimaryIdx().ID {
 				return false
 			}
 

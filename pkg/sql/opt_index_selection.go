@@ -161,9 +161,9 @@ func appendSpansFromConstraintSpan(
 	// deletions to ensure that the entire row is deleted.
 	if !forDelete &&
 		needed.Len() > 0 &&
-		index.ID == tableDesc.PrimaryIndex.ID &&
+		index.ID == tableDesc.PrimaryIdx().ID &&
 		len(tableDesc.Families) > 1 &&
-		cs.StartKey().Length() == len(tableDesc.PrimaryIndex.ColumnIDs) &&
+		cs.StartKey().Length() == len(tableDesc.PrimaryIdx().ColumnIDs) &&
 		s.Key.Equal(s.EndKey) {
 		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(tableDesc.ColumnIdxMap(), tableDesc.Families, needed)
 		if len(neededFamilyIDs) < len(tableDesc.Families) {

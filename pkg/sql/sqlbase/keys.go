@@ -23,7 +23,7 @@ import (
 // specified parentID.
 func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIndex.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIdx().ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))

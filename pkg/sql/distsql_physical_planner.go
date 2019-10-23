@@ -850,7 +850,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 }
 
 func getIndexIdx(n *scanNode) (uint32, error) {
-	if n.index.ID == n.desc.PrimaryIndex.ID {
+	if n.index.ID == n.desc.PrimaryIdx().ID {
 		return 0, nil
 	}
 	for i := range n.desc.Indexes {

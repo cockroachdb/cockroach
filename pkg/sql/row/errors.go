@@ -104,7 +104,7 @@ func NewUniquenessConstraintViolationError(
 		Desc:             tableDesc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
+		IsSecondaryIndex: indexID != tableDesc.PrimaryIdx().ID,
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}

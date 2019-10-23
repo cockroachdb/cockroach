@@ -63,7 +63,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		}
 
 		// Skip over the column data.
-		for ; skippedCols < len(tableDesc.PrimaryIndex.ColumnIDs); skippedCols++ {
+		for ; skippedCols < len(tableDesc.PrimaryIdx().ColumnIDs); skippedCols++ {
 			l, err := encoding.PeekLength(remaining)
 			if err != nil {
 				return nil, err
@@ -102,7 +102,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		row.FetcherTableArgs{
 			Spans:            tableDesc.AllIndexSpans(),
 			Desc:             tableDesc,
-			Index:            &tableDesc.PrimaryIndex,
+			Index:            tableDesc.PrimaryIdx(),
 			ColIdxMap:        colIdxMap,
 			IsSecondaryIndex: false,
 			Cols:             tableDesc.Columns,

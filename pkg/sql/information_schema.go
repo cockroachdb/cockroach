@@ -1138,7 +1138,7 @@ CREATE TABLE information_schema.statistics (
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
-						for _, col := range table.PrimaryIndex.ColumnNames {
+						for _, col := range table.PrimaryIdx().ColumnNames {
 							implicitCols[col] = struct{}{}
 						}
 					}
@@ -1612,7 +1612,7 @@ func forEachIndexInTable(
 	table *sqlbase.TableDescriptor, fn func(*sqlbase.IndexDescriptor) error,
 ) error {
 	if table.IsPhysicalTable() {
-		if err := fn(&table.PrimaryIndex); err != nil {
+		if err := fn(table.PrimaryIdx()); err != nil {
 			return err
 		}
 	}

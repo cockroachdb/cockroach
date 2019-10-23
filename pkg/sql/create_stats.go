@@ -277,7 +277,7 @@ func createStatsDefaultColumns(
 	var requestedCols util.FastIntSet
 
 	// Add a column for the primary key.
-	pkCol := desc.PrimaryIndex.ColumnIDs[0]
+	pkCol := desc.PrimaryIdx().ColumnIDs[0]
 	colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 		ColumnIDs:    []sqlbase.ColumnID{pkCol},
 		HasHistogram: true,

@@ -118,8 +118,8 @@ func makeUpdaterWithoutCascader(
 ) (Updater, error) {
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
-	primaryIndexCols := make(map[sqlbase.ColumnID]struct{}, len(tableDesc.PrimaryIndex.ColumnIDs))
-	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
+	primaryIndexCols := make(map[sqlbase.ColumnID]struct{}, len(tableDesc.PrimaryIdx().ColumnIDs))
+	for _, colID := range tableDesc.PrimaryIdx().ColumnIDs {
 		primaryIndexCols[colID] = struct{}{}
 	}
 
@@ -223,7 +223,7 @@ func makeUpdaterWithoutCascader(
 
 		// Fetch all columns in the primary key so that we can construct the
 		// keys when writing out the new kvs to the primary index.
-		for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
+		for _, colID := range tableDesc.PrimaryIdx().ColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
 				return Updater{}, err
 			}
@@ -364,7 +364,7 @@ func (ru *Updater) UpdateRow(
 		}
 
 		if ru.Fks.checker != nil {
-			ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID, ru.Helper.TableDesc.PrimaryIndex.Type)
+			ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIdx().ID, ru.Helper.TableDesc.PrimaryIdx().Type)
 			for i := range ru.Helper.Indexes {
 				if !bytes.Equal(newSecondaryIndexEntries[i].Key, oldSecondaryIndexEntries[i].Key) {
 					ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)

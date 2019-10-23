@@ -43,7 +43,7 @@ func newRowHelper(
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
-	rh.primIndexValDirs = sqlbase.IndexKeyValDirs(&rh.TableDesc.PrimaryIndex)
+	rh.primIndexValDirs = sqlbase.IndexKeyValDirs(rh.TableDesc.PrimaryIdx())
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
 	for i := range rh.Indexes {
@@ -61,10 +61,10 @@ func (rh *rowHelper) encodeIndexes(
 ) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
 		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.TableDesc.TableDesc(),
-			rh.TableDesc.PrimaryIndex.ID)
+			rh.TableDesc.PrimaryIdx().ID)
 	}
 	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
-		rh.TableDesc.TableDesc(), &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+		rh.TableDesc.TableDesc(), rh.TableDesc.PrimaryIdx(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -102,7 +102,7 @@ func (rh *rowHelper) skipColumnInPK(
 ) (bool, error) {
 	if rh.primaryIndexCols == nil {
 		rh.primaryIndexCols = make(map[sqlbase.ColumnID]struct{})
-		for _, colID := range rh.TableDesc.PrimaryIndex.ColumnIDs {
+		for _, colID := range rh.TableDesc.PrimaryIdx().ColumnIDs {
 			rh.primaryIndexCols[colID] = struct{}{}
 		}
 	}

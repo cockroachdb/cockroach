@@ -144,7 +144,7 @@ func makeFkExistenceCheckBaseHelper(
 		Desc:             searchTable,
 		Index:            searchIdx,
 		ColIdxMap:        searchTable.ColumnIdxMap(),
-		IsSecondaryIndex: searchIdx.ID != searchTable.PrimaryIndex.ID,
+		IsSecondaryIndex: searchIdx.ID != searchTable.PrimaryIdx().ID,
 		Cols:             searchTable.Columns,
 	}
 	rf := &Fetcher{}

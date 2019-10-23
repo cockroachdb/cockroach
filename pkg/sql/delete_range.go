@@ -158,7 +158,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		false, false, false, &params.p.alloc,
 		row.FetcherTableArgs{
 			Desc:  d.desc,
-			Index: &d.desc.PrimaryIndex,
+			Index: d.desc.PrimaryIdx(),
 		}); err != nil {
 		return err
 	}

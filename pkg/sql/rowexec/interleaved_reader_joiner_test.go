@@ -35,7 +35,7 @@ import (
 // min and max are inclusive bounds on the root table's ID.
 // If min and/or max is -1, then no bound is used for that endpoint.
 func makeSpanWithRootBound(desc *sqlbase.TableDescriptor, min int, max int) roachpb.Span {
-	keyPrefix := sqlbase.MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID)
+	keyPrefix := sqlbase.MakeIndexKeyPrefix(desc, desc.PrimaryIdx().ID)
 
 	startKey := roachpb.Key(append([]byte(nil), keyPrefix...))
 	if min != -1 {

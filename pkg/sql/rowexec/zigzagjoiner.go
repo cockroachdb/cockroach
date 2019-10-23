@@ -398,7 +398,7 @@ func (z *zigzagJoiner) setupInfo(
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexID := spec.IndexIds[side]
 	if indexID == 0 {
-		info.index = &info.table.PrimaryIndex
+		info.index = info.table.PrimaryIdx()
 	} else {
 		info.index = &info.table.Indexes[indexID-1]
 	}
@@ -646,8 +646,8 @@ func (zi *zigzagJoinerInfo) eqOrdering() (sqlbase.ColumnOrdering, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else if idx := findColumnID(zi.table.PrimaryIndex.ColumnIDs, colID); idx != -1 {
-			direction, err = zi.table.PrimaryIndex.ColumnDirections[idx].ToEncodingDirection()
+		} else if idx := findColumnID(zi.table.PrimaryIdx().ColumnIDs, colID); idx != -1 {
+			direction, err = zi.table.PrimaryIdx().ColumnDirections[idx].ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}

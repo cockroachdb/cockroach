@@ -44,7 +44,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
-	tableDesc.PrimaryIndex.Partitioning = sqlbase.PartitioningDescriptor{
+	tableDesc.PrimaryIdx().Partitioning = sqlbase.PartitioningDescriptor{
 		NumColumns: 1,
 		Range: []sqlbase.PartitioningDescriptor_Range{{
 			Name:          "p1",
@@ -85,7 +85,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	zoneConfig := zonepb.ZoneConfig{
 		Subzones: []zonepb.Subzone{
 			{
-				IndexID:       uint32(tableDesc.PrimaryIndex.ID),
+				IndexID:       uint32(tableDesc.PrimaryIdx().ID),
 				PartitionName: "p1",
 				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
 			},

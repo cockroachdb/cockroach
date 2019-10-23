@@ -46,7 +46,7 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 	scan.reqOrdering = ordering
 
 	scan.spans, err = spansFromConstraint(
-		desc, &desc.PrimaryIndex, nil /* constraint */, exec.ColumnOrdinalSet{}, false /* forDelete */)
+		desc, desc.PrimaryIdx(), nil /* constraint */, exec.ColumnOrdinalSet{}, false /* forDelete */)
 	if err != nil {
 		return nil, err
 	}

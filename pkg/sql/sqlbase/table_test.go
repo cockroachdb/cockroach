@@ -200,9 +200,9 @@ func TestIndexKey(t *testing.T) {
 		tableDesc, colMap := makeTableDescForTest(test)
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
-		primaryKeyPrefix := MakeIndexKeyPrefix(&tableDesc, tableDesc.PrimaryIndex.ID)
+		primaryKeyPrefix := MakeIndexKeyPrefix(&tableDesc, tableDesc.PrimaryIdx().ID)
 		primaryKey, _, err := EncodeIndexKey(
-			&tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
+			&tableDesc, tableDesc.PrimaryIdx(), colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -253,7 +253,7 @@ func TestIndexKey(t *testing.T) {
 			}
 		}
 
-		checkEntry(&tableDesc.PrimaryIndex, primaryIndexKV)
+		checkEntry(&tableDesc.PrimaryIdx(), primaryIndexKV)
 		checkEntry(&tableDesc.Indexes[0], secondaryIndexKV)
 	}
 }
@@ -653,9 +653,9 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
-			primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
+			primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIdx().ID)
 			primaryKey, _, err := EncodeIndexKey(
-				&desc, &desc.PrimaryIndex, colMap, tc.table.values, primaryKeyPrefix)
+				&desc, desc.PrimaryIdx(), colMap, tc.table.values, primaryKeyPrefix)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -676,7 +676,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
-			colVals, null, err := EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, null, err := EncodeColumns(desc.PrimaryIdx().ColumnIDs, desc.PrimaryIdx().ColumnDirections, colMap, tc.table.values, nil /*key*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -711,7 +711,7 @@ func TestTableEquivSignatures(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := TableEquivSignatures(&desc, &desc.PrimaryIndex)
+			equivSigs, err := TableEquivSignatures(&desc, desc.PrimaryIdx())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -794,15 +794,15 @@ func TestEquivSignature(t *testing.T) {
 
 				// Setup descriptors and form an index key.
 				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
-				primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
+				primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIdx().ID)
 				primaryKey, _, err := EncodeIndexKey(
-					&desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
+					&desc, desc.PrimaryIdx(), colMap, table.values, primaryKeyPrefix)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := TableEquivSignatures(&desc, &desc.PrimaryIndex)
+				tempEquivSigs, err := TableEquivSignatures(&desc, desc.PrimaryIdx())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -888,29 +888,29 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 		// See encodeStartConstraintAscending.
 
 		{
-			index:    &parent.PrimaryIndex,
+			index:    parent.PrimaryIdx(),
 			input:    "/NOTNULLASC",
 			expected: "/NOTNULLASC",
 		},
 		{
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/NOTNULLASC",
 			expected: "/1/#/2/NOTNULLASC",
 		},
 		{
-			index:    &grandchild.PrimaryIndex,
+			index:    grandchild.PrimaryIdx(),
 			input:    "/1/#/2/3/#/NOTNULLASC",
 			expected: "/1/#/2/3/#/NOTNULLASC",
 		},
 
 		{
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/NOTNULLASC",
 			expected: "/1/#/NOTNULLASC",
 		},
 
 		{
-			index:    &grandchild.PrimaryIndex,
+			index:    grandchild.PrimaryIdx(),
 			input:    "/1/#/2/NOTNULLASC",
 			expected: "/1/#/2/NOTNULLASC",
 		},
@@ -945,19 +945,19 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 		// Keys that belong to the given index (neither parent nor
 		// children keys) do not need to be tightened.
 		{
-			index:    &parent.PrimaryIndex,
+			index:    parent.PrimaryIdx(),
 			input:    "/1",
 			expected: "/1",
 		},
 		{
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/3",
 			expected: "/1/#/2/3",
 		},
 
 		// Parent keys wrt child index is not tightened.
 		{
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1",
 			expected: "/1",
 		},
@@ -965,24 +965,24 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 		// Children keys wrt to parent index is tightened (pushed
 		// forwards) to the next parent key.
 		{
-			index:    &parent.PrimaryIndex,
+			index:    parent.PrimaryIdx(),
 			input:    "/1/#/2/3",
 			expected: "/2",
 		},
 		{
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/3/#/4",
 			expected: "/1/#/2/4",
 		},
 
 		// Key with len > 1 tokens.
 		{
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/12345678901234/#/1234/1234567890/#/123/1234567",
 			expected: "/12345678901234/#/1234/1234567891",
 		},
 		{
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/12345678901234/#/d1403.2594/shelloworld/#/123/1234567",
 			expected: "/12345678901234/#/d1403.2594/shelloworld/PrefixEnd",
 		},
@@ -1103,21 +1103,21 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    parent,
-			index:    &parent.PrimaryIndex,
+			index:    parent.PrimaryIdx(),
 			input:    "/NOTNULLASC",
 			expected: "/NULLASC/#",
 		},
 
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/NOTNULLASC",
 			expected: "/1/#/2/NULLASC/#",
 		},
 
 		{
 			table:    grandchild,
-			index:    &grandchild.PrimaryIndex,
+			index:    grandchild.PrimaryIdx(),
 			input:    "/1/#/2/3/#/NOTNULLASC",
 			expected: "/1/#/2/3/#/NULLASC/#",
 		},
@@ -1126,7 +1126,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 		// partial primary key columns.
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/NOTNULLASC",
 			expected: "/1/#/NOTNULLASC",
 		},
@@ -1134,7 +1134,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 		// No change since key belongs to an ancestor.
 		{
 			table:    grandchild,
-			index:    &grandchild.PrimaryIndex,
+			index:    grandchild.PrimaryIdx(),
 			input:    "/1/#/2/NOTNULLASC",
 			expected: "/1/#/2/NOTNULLASC",
 		},
@@ -1179,7 +1179,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:     parent,
-			index:     &parent.PrimaryIndex,
+			index:     parent.PrimaryIdx(),
 			input:     "/NULLASC",
 			inclusive: true,
 			expected:  "/NULLASC/#",
@@ -1187,7 +1187,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:     child,
-			index:     &child.PrimaryIndex,
+			index:     child.PrimaryIdx(),
 			input:     "/1/#/2/NULLASC",
 			inclusive: true,
 			expected:  "/1/#/2/NULLASC/#",
@@ -1199,13 +1199,13 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    parent,
-			index:    &parent.PrimaryIndex,
+			index:    parent.PrimaryIdx(),
 			input:    "/1",
 			expected: "/0/#",
 		},
 		{
 			table:     parent,
-			index:     &parent.PrimaryIndex,
+			index:     parent.PrimaryIdx(),
 			input:     "/1",
 			inclusive: true,
 			expected:  "/1/#",
@@ -1213,13 +1213,13 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/3",
 			expected: "/1/#/2/2/#",
 		},
 		{
 			table:     child,
-			index:     &child.PrimaryIndex,
+			index:     child.PrimaryIdx(),
 			input:     "/1/#/2/3",
 			inclusive: true,
 			expected:  "/1/#/2/3/#",
@@ -1229,19 +1229,19 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    parent,
-			index:    &parent.PrimaryIndex,
+			index:    parent.PrimaryIdx(),
 			input:    "/1/#",
 			expected: "/1/#",
 		},
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#",
 			expected: "/1/#",
 		},
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/2/#",
 			expected: "/1/#/2/2/#",
 		},
@@ -1251,13 +1251,13 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    parent,
-			index:    &parent.PrimaryIndex,
+			index:    parent.PrimaryIdx(),
 			input:    "/1/#/2/3",
 			expected: "/1/#",
 		},
 		{
 			table:     parent,
-			index:     &parent.PrimaryIndex,
+			index:     parent.PrimaryIdx(),
 			input:     "/1/#/2/3",
 			inclusive: true,
 			expected:  "/1/#",
@@ -1265,13 +1265,13 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/3/#/4",
 			expected: "/1/#/2/3/#",
 		},
 		{
 			table:     child,
-			index:     &child.PrimaryIndex,
+			index:     child.PrimaryIdx(),
 			input:     "/1/#/2/3/#/4",
 			inclusive: true,
 			expected:  "/1/#/2/3/#",
@@ -1281,13 +1281,13 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1",
 			expected: "/1",
 		},
 		{
 			table:     child,
-			index:     &child.PrimaryIndex,
+			index:     child.PrimaryIdx(),
 			input:     "/1",
 			inclusive: true,
 			expected:  "/2",
@@ -1298,13 +1298,13 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2",
 			expected: "/1/#/2",
 		},
 		{
 			table:     child,
-			index:     &child.PrimaryIndex,
+			index:     child.PrimaryIdx(),
 			input:     "/1/#/2",
 			inclusive: true,
 			expected:  "/1/#/3",
@@ -1343,7 +1343,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 		// Key with len > 1 tokens.
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/12345678901234/#/12345/12345678901234/#/123/1234567",
 			expected: "/12345678901234/#/12345/12345678901234/#",
 		},
@@ -1418,20 +1418,20 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 		// decimal value.
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/d3.4567",
 			expected: "/1/#/2/d3.4567",
 		},
 		{
 			table:     child,
-			index:     &child.PrimaryIndex,
+			index:     child.PrimaryIdx(),
 			input:     "/1/#/2/d3.4567",
 			inclusive: true,
 			expected:  "/1/#/2/d3.4567/#",
 		},
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/d3.4567/#/8",
 			expected: "/1/#/2/d3.4567/#",
 		},
@@ -1441,20 +1441,20 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 		// bytes value.
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/shelloworld",
 			expected: "/1/#/2/shelloworld",
 		},
 		{
 			table:     child,
-			index:     &child.PrimaryIndex,
+			index:     child.PrimaryIdx(),
 			input:     "/1/#/2/shelloworld",
 			inclusive: true,
 			expected:  "/1/#/2/shelloworld/#",
 		},
 		{
 			table:    child,
-			index:    &child.PrimaryIndex,
+			index:    child.PrimaryIdx(),
 			input:    "/1/#/2/shelloworld/#/3",
 			expected: "/1/#/2/shelloworld/#",
 		},

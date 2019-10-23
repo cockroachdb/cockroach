@@ -73,7 +73,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 
 	// Collect all of the columns being scanned.
-	if o.indexDesc.ID == o.tableDesc.PrimaryIndex.ID {
+	if o.indexDesc.ID == o.tableDesc.PrimaryIdx().ID {
 		for i := range o.tableDesc.Columns {
 			columnIDs = append(columnIDs, tree.ColumnID(o.tableDesc.Columns[i].ID))
 		}

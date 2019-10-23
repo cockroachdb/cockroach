@@ -624,7 +624,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// required" error.
 	zoneConfig := zonepb.ZoneConfig{
 		Subzones: []zonepb.Subzone{
-			{IndexID: uint32(tableDesc.PrimaryIndex.ID), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
+			{IndexID: uint32(tableDesc.PrimaryIdx().ID), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
 			{IndexID: uint32(indexDesc.ID), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
 		},
 	}

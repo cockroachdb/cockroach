@@ -434,7 +434,7 @@ func DecodeIndexKeyPrefix(
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
 
-	interleaves := append([]IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...)
+	interleaves := append([]IndexDescriptor{*desc.PrimaryIdx()}, desc.Indexes...)
 
 	for component := 0; ; component++ {
 		var tableID ID
@@ -611,7 +611,7 @@ func ExtractIndexKey(
 	if err != nil {
 		return nil, err
 	}
-	if indexID == tableDesc.PrimaryIndex.ID {
+	if indexID == tableDesc.PrimaryIdx().ID {
 		return entry.Key, nil
 	}
 
@@ -677,7 +677,7 @@ func ExtractIndexKey(
 	for i, columnID := range index.ExtraColumnIDs {
 		colMap[columnID] = i + len(index.ColumnIDs)
 	}
-	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIdx().ID)
 
 	decodedValues := make([]tree.Datum, len(values)+len(extraValues))
 	for i, value := range values {
@@ -695,7 +695,7 @@ func ExtractIndexKey(
 		decodedValues[len(values)+i] = value.Datum
 	}
 	indexKey, _, err := EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, colMap, decodedValues, indexKeyPrefix)
+		tableDesc, tableDesc.PrimaryIdx(), colMap, decodedValues, indexKeyPrefix)
 	return indexKey, err
 }
 
@@ -1168,7 +1168,7 @@ func AdjustEndKeyForInterleave(
 	// adjust the sibling key such that we add or remove child (the current
 	// index's) rows from our span.
 
-	if index.ID != table.PrimaryIndex.ID || len(keyTokens) < nIndexTokens {
+	if index.ID != table.PrimaryIdx().ID || len(keyTokens) < nIndexTokens {
 		// Case 1: secondary index, parent key or partial child key:
 		// Secondary indexes cannot have interleaved rows.
 		// We cannot adjust or tighten parent keys with respect to a

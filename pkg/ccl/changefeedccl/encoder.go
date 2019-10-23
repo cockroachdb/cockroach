@@ -123,8 +123,8 @@ func (e *jsonEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 
 func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 	colIdxByID := row.tableDesc.ColumnIdxMap()
-	jsonEntries := make([]interface{}, len(row.tableDesc.PrimaryIndex.ColumnIDs))
-	for i, colID := range row.tableDesc.PrimaryIndex.ColumnIDs {
+	jsonEntries := make([]interface{}, len(row.tableDesc.PrimaryIdx().ColumnIDs))
+	for i, colID := range row.tableDesc.PrimaryIdx().ColumnIDs {
 		idx, ok := colIdxByID[colID]
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
@@ -285,7 +285,7 @@ func (e *confluentAvroEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 	registered, ok := e.keyCache[cacheKey]
 	if !ok {
 		var err error
-		registered.schema, err = indexToAvroSchema(row.tableDesc, &row.tableDesc.PrimaryIndex)
+		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.PrimaryIdx())
 		if err != nil {
 			return nil, err
 		}

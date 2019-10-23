@@ -356,7 +356,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			if n.tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
+			if n.tableDesc.PrimaryIdx().ContainsColumnID(col.ID) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", col.Name)
 			}
@@ -391,7 +391,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				for _, id := range idx.ExtraColumnIDs {
-					if n.tableDesc.PrimaryIndex.ContainsColumnID(id) {
+					if n.tableDesc.PrimaryIdx().ContainsColumnID(id) {
 						// All secondary indices necessary contain the PK
 						// columns, too. (See the comments on the definition of
 						// IndexDescriptor). The presence of a PK column in the
@@ -589,23 +589,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
-				n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
+				n.tableDesc, n.tableDesc.PrimaryIdx(), t.PartitionBy)
 			if err != nil {
 				return err
 			}
 			descriptorChanged = !proto.Equal(
-				&n.tableDesc.PrimaryIndex.Partitioning,
+				&n.tableDesc.PrimaryIdx().Partitioning,
 				&partitioning,
 			)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc.TableDesc(), &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning,
+				n.tableDesc.TableDesc(), n.tableDesc.PrimaryIdx(), &n.tableDesc.PrimaryIdx().Partitioning,
 				&partitioning, params.extendedEvalCtx.ExecCfg,
 			)
 			if err != nil {
 				return err
 			}
-			n.tableDesc.PrimaryIndex.Partitioning = partitioning
+			n.tableDesc.PrimaryIdx().Partitioning = partitioning
 
 		case *tree.AlterTableSetAudit:
 			var err error

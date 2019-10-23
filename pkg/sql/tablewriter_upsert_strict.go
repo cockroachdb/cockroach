@@ -131,7 +131,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 
 		// Get the primary key of the insert row.
 		upsertRowPKBytes, _, err := sqlbase.EncodeIndexKey(
-			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
+			tableDesc.TableDesc(), tableDesc.PrimaryIdx(), tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
 		}

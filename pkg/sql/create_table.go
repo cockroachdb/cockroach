@@ -454,8 +454,8 @@ func ResolveFK(
 	targetColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(targetColNames) == 0 {
-		targetColNames = make(tree.NameList, len(target.PrimaryIndex.ColumnNames))
-		for i, n := range target.PrimaryIndex.ColumnNames {
+		targetColNames = make(tree.NameList, len(target.PrimaryIdx().ColumnNames))
+		for i, n := range target.PrimaryIdx().ColumnNames {
 			targetColNames[i] = tree.Name(n)
 		}
 	}
@@ -709,11 +709,11 @@ func addInterleave(
 	if err != nil {
 		return err
 	}
-	parentIndex := parentTable.PrimaryIndex
+	parentIndex := parentTable.PrimaryIdx()
 
 	// typeOfIndex is used to give more informative error messages.
 	var typeOfIndex string
-	if index.ID == desc.PrimaryIndex.ID {
+	if index.ID == desc.PrimaryIdx().ID {
 		typeOfIndex = "primary key"
 	} else {
 		typeOfIndex = "index"
@@ -1193,18 +1193,18 @@ func MakeTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, desc.PrimaryIdx(), n.Interleave); err != nil {
 			return desc, err
 		}
 	}
 
 	if n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
+			ctx, st, evalCtx, &desc, desc.PrimaryIdx(), n.PartitionBy)
 		if err != nil {
 			return desc, err
 		}
-		desc.PrimaryIndex.Partitioning = partitioning
+		desc.PrimaryIdx().Partitioning = partitioning
 	}
 
 	// With all structural elements in place and IDs allocated, we can resolve the

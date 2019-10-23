@@ -658,7 +658,7 @@ func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []types.T) EncDa
 //  - int (converts to DInt)
 //  - string (converts to DString)
 func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Key, error) {
-	index := &desc.PrimaryIndex
+	index := desc.PrimaryIdx()
 	if len(vals) > len(index.ColumnIDs) {
 		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), len(index.ColumnIDs))
 	}

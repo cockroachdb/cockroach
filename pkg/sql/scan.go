@@ -276,8 +276,8 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	if indexFlags.Index != "" {
 		// Search index by name.
 		indexName := string(indexFlags.Index)
-		if indexName == n.desc.PrimaryIndex.Name {
-			n.specifiedIndex = &n.desc.PrimaryIndex
+		if indexName == n.desc.PrimaryIdx().Name {
+			n.specifiedIndex = n.desc.PrimaryIdx()
 		} else {
 			for i := range n.desc.Indexes {
 				if indexName == n.desc.Indexes[i].Name {
@@ -291,8 +291,8 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		}
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexFlags.IndexID) {
-			n.specifiedIndex = &n.desc.PrimaryIndex
+		if n.desc.PrimaryIdx().ID == sqlbase.IndexID(indexFlags.IndexID) {
+			n.specifiedIndex = n.desc.PrimaryIdx()
 		} else {
 			for i := range n.desc.Indexes {
 				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexFlags.IndexID) {
@@ -370,7 +370,7 @@ func (n *scanNode) initCols() error {
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumnsConfig) error {
 	n.colCfg = colCfg
-	n.index = &n.desc.PrimaryIndex
+	n.index = n.desc.PrimaryIdx()
 
 	if err := n.initCols(); err != nil {
 		return err
