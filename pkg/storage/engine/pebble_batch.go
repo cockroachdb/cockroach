@@ -13,6 +13,7 @@ package engine
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
@@ -136,7 +137,7 @@ func (p *pebbleBatch) GetProto(
 
 // Iterate implements the Batch interface.
 func (p *pebbleBatch) Iterate(
-	start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error),
+	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
 ) error {
 	if p.distinctOpen {
 		panic("distinct batch open")

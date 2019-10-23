@@ -1917,12 +1917,7 @@ func ReadMaxHLCUpperBound(ctx context.Context, engines []engine.Engine) (int64, 
 }
 
 func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
-	kvs, err := engine.Scan(
-		eng,
-		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMin)),
-		engine.MakeMVCCMetadataKey(roachpb.Key(roachpb.RKeyMax)),
-		10,
-	)
+	kvs, err := engine.Scan(eng, roachpb.KeyMin, roachpb.KeyMax, 10)
 	if err != nil {
 		return err
 	}

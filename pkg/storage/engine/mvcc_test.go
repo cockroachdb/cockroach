@@ -5547,7 +5547,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				}
 			}
 			if log.V(1) {
-				kvsn, err := Scan(engine, mvccKey(keyMin), mvccKey(keyMax), 0)
+				kvsn, err := Scan(engine, keyMin, keyMax, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -5578,7 +5578,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				mvccVersionKey(roachpb.Key("b"), ts2),
 				mvccVersionKey(roachpb.Key("b-del"), ts3),
 			}
-			kvs, err := Scan(engine, mvccKey(keyMin), mvccKey(keyMax), 0)
+			kvs, err := Scan(engine, keyMin, keyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

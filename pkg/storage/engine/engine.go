@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 // SimpleIterator is an interface for iterating over key/value pairs in an
@@ -194,10 +195,7 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	//
-	// TODO(itsbilal): Change type of start and end to roachpb.Key instead of
-	// MVCCKey. All keys passed in have zero timestamps anyway.
-	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error
+	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error)) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
@@ -503,7 +501,7 @@ func PutProto(
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // Specify max=0 for unbounded scans.
-func Scan(engine Reader, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) {
+func Scan(engine Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
 	err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
@@ -576,6 +574,36 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) erro
 	}
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+// Helper function to implement Iterate() on Pebble, pebbleSnapshot,
+// and pebbleBatch.
+func iterateOnReader(
+	reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
+) error {
+	if reader.Closed() {
+		return errors.New("cannot call Iterate on a closed batch")
+	}
+	if start.Compare(end) >= 0 {
+		return nil
+	}
+
+	it := reader.NewIterator(IterOptions{UpperBound: end})
+	defer it.Close()
+
+	it.Seek(MakeMVCCMetadataKey(start))
+	for ; ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		if done, err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); done || err != nil {
+			return err
+		}
 	}
 	return nil
 }

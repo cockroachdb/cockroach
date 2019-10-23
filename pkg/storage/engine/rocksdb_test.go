@@ -911,7 +911,7 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		return false, nil
 	}
 	for {
-		if err := sst.Iterate(MVCCKey{Key: keys.MinKey}, MVCCKey{Key: keys.MaxKey}, iterateFn); err != nil {
+		if err := sst.Iterate(keys.MinKey, keys.MaxKey, iterateFn); err != nil {
 			b.Fatal(err)
 		}
 		if count >= b.N {

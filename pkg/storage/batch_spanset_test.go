@@ -107,7 +107,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if _, _, _, err := batch.GetProto(outsideKey, nil); !isReadSpanErr(err) {
 		t.Errorf("GetProto: unexpected error %v", err)
 	}
-	if err := batch.Iterate(outsideKey, outsideKey2,
+	if err := batch.Iterate(outsideKey.Key, outsideKey2.Key,
 		func(v engine.MVCCKeyValue) (bool, error) {
 			return false, errors.Errorf("unexpected callback: %v", v)
 		},
