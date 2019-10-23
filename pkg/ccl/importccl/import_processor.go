@@ -260,7 +260,7 @@ func ingestKvs(
 				return nil
 			case <-tick.C:
 				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-				prog.CompletedRow = make(map[int32]uint64)
+				prog.ResumePos = make(map[int32]uint64)
 				prog.CompletedFraction = make(map[int32]float32)
 				for file, offset := range offsets {
 					pk := atomic.LoadUint64(&pkFlushedRow[offset])
@@ -268,9 +268,9 @@ func ingestKvs(
 					// On resume we'll be able to skip up the last row for which both the
 					// PK and index adders have flushed KVs.
 					if idx > pk {
-						prog.CompletedRow[file] = pk
+						prog.ResumePos[file] = pk
 					} else {
-						prog.CompletedRow[file] = idx
+						prog.ResumePos[file] = idx
 					}
 					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
 				}
