@@ -860,7 +860,7 @@ func (r *RocksDB) ClearRange(start, end MVCCKey) error {
 //
 // It is safe to modify the contents of the arguments after ClearIterRange
 // returns.
-func (r *RocksDB) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *RocksDB) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	return dbClearIterRange(r.rdb, iter, start, end)
 }
 
@@ -1029,7 +1029,7 @@ func (r *rocksDBReadOnly) ClearRange(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *rocksDBReadOnly) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
@@ -1411,7 +1411,7 @@ func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
 	return dbClearRange(r.batch, start, end)
 }
 
-func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *distinctBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
 	r.ensureBatch()
@@ -1760,7 +1760,7 @@ func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
 	return dbClearRange(r.batch, start, end)
 }
 
-func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -2752,12 +2752,13 @@ func dbClearRange(rdb *C.DBEngine, start, end MVCCKey) error {
 	return nil
 }
 
-func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
+func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end roachpb.Key) error {
 	getter, ok := iter.(dbIteratorGetter)
 	if !ok {
 		return errors.Errorf("%T is not a RocksDB iterator", iter)
 	}
-	return statusToError(C.DBDeleteIterRange(rdb, getter.getIter(), goToCKey(start), goToCKey(end)))
+	return statusToError(C.DBDeleteIterRange(rdb, getter.getIter(),
+		goToCKey(MakeMVCCMetadataKey(start)), goToCKey(MakeMVCCMetadataKey(end))))
 }
 
 // TODO(dan): Rename this to RocksDBSSTFileReader and RocksDBSSTFileWriter.
@@ -2914,17 +2915,18 @@ func (fw *RocksDBSstFileWriter) ClearRange(start, end MVCCKey) error {
 //
 // NOTE: This method is fairly expensive as it performs a Cgo call for every
 // key deleted.
-func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearIterRange on a closed writer")
 	}
-	iter.Seek(start)
+	mvccEndKey := MakeMVCCMetadataKey(end)
+	iter.Seek(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {
 			return err
 		}
-		if !valid || !iter.Key().Less(end) {
+		if !valid || !iter.Key().Less(mvccEndKey) {
 			break
 		}
 		if err := fw.Clear(iter.Key()); err != nil {

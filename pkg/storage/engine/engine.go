@@ -252,11 +252,7 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
-	//
-	// TODO(itsbilal): All calls to ClearIterRange pass in metadata keys for
-	// start and end that have a zero timestamp. Change the type of those args
-	// to roachpb.Key to make this expectation explicit.
-	ClearIterRange(iter Iterator, start, end MVCCKey) error
+	ClearIterRange(iter Iterator, start, end roachpb.Key) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
@@ -535,8 +531,8 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
 // (exclusive). Depending on the number of keys, it will either use ClearRange
 // or ClearRangeIter.
-func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) error {
-	iter := eng.NewIterator(IterOptions{UpperBound: end.Key})
+func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end roachpb.Key) error {
+	iter := eng.NewIterator(IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same
@@ -555,13 +551,13 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) erro
 	// TODO(bdarnell): Move this into ClearIterRange so we don't have
 	// to do this scan twice.
 	count := 0
-	iter.Seek(start)
+	iter.Seek(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {
 			return err
 		}
-		if !valid || !iter.Key().Less(end) {
+		if !valid {
 			break
 		}
 		count++
@@ -572,7 +568,7 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) erro
 	}
 	var err error
 	if count > clearRangeMinKeys {
-		err = writer.ClearRange(start, end)
+		err = writer.ClearRange(MakeMVCCMetadataKey(start), MakeMVCCMetadataKey(end))
 	} else {
 		err = writer.ClearIterRange(iter, start, end)
 	}

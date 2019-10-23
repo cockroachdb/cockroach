@@ -80,8 +80,7 @@ func (sc *AbortSpan) ClearData(e engine.Engine) error {
 	defer iter.Close()
 	b := e.NewWriteOnlyBatch()
 	defer b.Close()
-	err := b.ClearIterRange(iter, engine.MakeMVCCMetadataKey(sc.min()),
-		engine.MakeMVCCMetadataKey(sc.max()))
+	err := b.ClearIterRange(iter, sc.min(), sc.max())
 	if err != nil {
 		return err
 	}
