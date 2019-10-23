@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strings"
 	"unsafe"
+
+	"github.com/cockroachdb/errors"
 )
 
 // Bytes is a wrapper type for a two-dimensional byte slice ([][]byte).
@@ -45,13 +47,23 @@ func NewBytes(n int) *Bytes {
 	}
 }
 
-// EnforceNonDecreasingOffsets makes sure that b.offsets[:n+1] are
+// AssertOffsetsAreNonDecreasing asserts that all b.offsets[:n+1] are
+// non-decreasing.
+func (b *Bytes) AssertOffsetsAreNonDecreasing(n uint64) {
+	for j := uint64(1); j <= n; j++ {
+		if b.offsets[j] < b.offsets[j-1] {
+			panic(errors.AssertionFailedf("unexpectedly found decreasing offsets: %v", b.offsets))
+		}
+	}
+}
+
+// UpdateOffsetsToBeNonDecreasing makes sure that b.offsets[:n+1] are
 // non-decreasing which is an invariant that we need to maintain. It must be
 // called by the colexec.Operator that is modifying this Bytes before
 // returning it as an output. A convenient place for this is Batch.SetLength()
 // method - we assume that *always*, before returning a batch, the length is
 // set on it.
-func (b *Bytes) EnforceNonDecreasingOffsets(n uint64) {
+func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
 	prev := b.offsets[0]
 	for j := uint64(1); j <= n; j++ {
 		if b.offsets[j] == 0 {
@@ -68,9 +80,10 @@ func (b *Bytes) EnforceNonDecreasingOffsets(n uint64) {
 	}
 }
 
-// maybeBackfillOffsets is an optimized version of EnforceNonDecreasingOffsets
-// that assumes that all offsets up to b.maxSetIndex+1 are non-decreasing. Note
-// that this method can be a noop when i <= b.maxSetIndex+1.
+// maybeBackfillOffsets is an optimized version of
+// UpdateOffsetsToBeNonDecreasing that assumes that all offsets up to
+// b.maxSetIndex+1 are non-decreasing. Note that this method can be a noop when
+// i <= b.maxSetIndex+1.
 func (b *Bytes) maybeBackfillOffsets(i int) {
 	for j := b.maxSetIndex + 2; j <= i; j++ {
 		b.offsets[j] = b.offsets[b.maxSetIndex+1]

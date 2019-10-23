@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type vectorizedFlow struct {
@@ -603,6 +603,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 		result, err := colexec.NewColOperator(ctx, flowCtx, pspec, inputs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
+		}
+		if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
+			result.Op = colexec.NewInvariantsChecker(result.Op, len(result.ColumnTypes))
 		}
 		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
 			!result.IsStreaming {
