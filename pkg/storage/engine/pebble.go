@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/pkg/errors"
 )
 
 // MVCCComparer is a pebble.Comparer object that implements MVCC-specific

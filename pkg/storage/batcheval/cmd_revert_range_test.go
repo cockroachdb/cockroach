@@ -45,7 +45,7 @@ func getStats(t *testing.T, batch engine.Reader) enginepb.MVCCStats {
 	t.Helper()
 	iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
-	s, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, 1100)
+	s, err := engine.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 1100)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

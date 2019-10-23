@@ -290,7 +290,7 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 
 // ComputeStats implements the Iterator interface.
 func (p *pebbleIterator) ComputeStats(
-	start, end MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	return ComputeStatsGo(p, start, end, nowNanos)
 }

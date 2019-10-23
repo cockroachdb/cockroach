@@ -46,10 +46,9 @@ func assertEq(t *testing.T, engine ReadWriter, debug string, ms, expMS *enginepb
 
 	it := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
-	from, to := MVCCKey{}, MVCCKey{Key: roachpb.KeyMax}
 
 	for _, mvccStatsTest := range mvccStatsTests {
-		compMS, err := mvccStatsTest.fn(it, from, to, ms.LastUpdateNanos)
+		compMS, err := mvccStatsTest.fn(it, roachpb.KeyMin, roachpb.KeyMax, ms.LastUpdateNanos)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1314,17 +1313,17 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 var mvccStatsTests = []struct {
 	name string
-	fn   func(Iterator, MVCCKey, MVCCKey, int64) (enginepb.MVCCStats, error)
+	fn   func(Iterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
 }{
 	{
 		name: "ComputeStats",
-		fn: func(iter Iterator, start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+		fn: func(iter Iterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 			return iter.ComputeStats(start, end, nowNanos)
 		},
 	},
 	{
 		name: "ComputeStatsGo",
-		fn: func(iter Iterator, start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+		fn: func(iter Iterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 			return ComputeStatsGo(iter, start, end, nowNanos)
 		},
 	},
@@ -1591,7 +1590,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					_, err := mvccStatsTest.fn(iter, mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 100)
+					_, err := mvccStatsTest.fn(iter, roachpb.KeyMin, roachpb.KeyMax, 100)
 					if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
 						t.Fatalf("expected %s, got %v", e, err)
 					}
