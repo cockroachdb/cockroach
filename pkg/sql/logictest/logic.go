@@ -1284,7 +1284,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	if *showSQL {
 		t.outf("--- queries start here (file: %s)", path)
 	}
-	defer t.printCompletion(path, config)
+	defer t.printCompletion(path, config, timeutil.Now())
 
 	for _, subtest := range subtests {
 		if *maxErrs > 0 && t.failures >= *maxErrs {
@@ -2616,11 +2616,11 @@ func (t *logicTest) finishOne(msg string) {
 
 // printCompletion reports on the completion of all tests in a given
 // input file.
-func (t *logicTest) printCompletion(path string, config testClusterConfig) {
+func (t *logicTest) printCompletion(path string, config testClusterConfig, start time.Time) {
 	unsupportedMsg := ""
 	if t.unsupported > 0 {
 		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", t.unsupported)
 	}
-	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.name,
-		t.progress, t.failures, unsupportedMsg)
+	t.outf("--- done: %s with config %s: %d tests, %d failures%s (%.1fs)", path, config.name,
+		t.progress, t.failures, unsupportedMsg, timeutil.Since(start).Seconds())
 }
