@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,14 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
 )
 
 type indexKeyTest struct {
@@ -1508,56 +1505,4 @@ func TestDecodeTableValue(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSplitKeysForTable(t *testing.T) {
-	var val roachpb.Value
-	err := val.SetProto(&Descriptor{
-		Union: &Descriptor_Table{
-			Table: &TableDescriptor{
-				// Fill in the descriptor just enough for the test to work.
-				ID: ID(50),
-			},
-		},
-	})
-	require.NoError(t, err)
-	// We need to set some timestamp on this proto, otherwise unwrapping the
-	// descriptor fatals.
-	val.Timestamp = hlc.Timestamp{WallTime: 123}
-
-	indexKey := encoding.EncodeUvarintAscending(nil, 1)
-	// Remove any excess capacity, assuring that all the following encodes will
-	// create new slices.
-	indexKey = indexKey[:len(indexKey):len(indexKey)]
-	k1 := encoding.EncodeUvarintAscending(indexKey, 10)
-	k2 := encoding.EncodeUvarintAscending(indexKey, 20)
-	k3 := encoding.EncodeUvarintAscending(indexKey, 30)
-	k4 := encoding.EncodeUvarintAscending(indexKey, 40)
-	zone := zonepb.ZoneConfig{
-		SubzoneSpans: []zonepb.SubzoneSpan{{
-			Key:          k1,
-			EndKey:       k2,
-			SubzoneIndex: 0,
-		}, {
-			Key:          k3,
-			EndKey:       k4,
-			SubzoneIndex: 1,
-		}},
-	}
-	splits, err := SplitKeysForTable(&val, &zone)
-	require.NoError(t, err)
-
-	tableKey := encoding.EncodeUvarintAscending(nil, 50)
-	tableAndIndexKey := EncodeTableIDIndexID(nil, 50, 1)
-	// Remove any excess capacity, assuring that all the following encodes will
-	// create new slices.
-	tableAndIndexKey = tableAndIndexKey[:len(tableAndIndexKey):len(tableAndIndexKey)]
-	exp := []roachpb.RKey{
-		tableKey,
-		encoding.EncodeUvarintAscending(tableAndIndexKey, 10),
-		encoding.EncodeUvarintAscending(tableAndIndexKey, 20),
-		encoding.EncodeUvarintAscending(tableAndIndexKey, 30),
-		encoding.EncodeUvarintAscending(tableAndIndexKey, 40),
-	}
-	require.Equal(t, exp, splits)
 }

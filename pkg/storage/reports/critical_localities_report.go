@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -265,7 +264,7 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 // criticalLocalitiesVisitor is a visitor that, when passed to visitRanges(), builds
 // a LocalityReport.
 type criticalLocalitiesVisitor struct {
-	localityConstraints []zonepb.Constraints
+	localityConstraints []config.Constraints
 	cfg                 *config.SystemConfig
 	storeResolver       StoreResolver
 	nodeChecker         nodeChecker
@@ -283,7 +282,7 @@ var _ rangeVisitor = &criticalLocalitiesVisitor{}
 
 func makeLocalityStatsVisitor(
 	ctx context.Context,
-	localityConstraints []zonepb.Constraints,
+	localityConstraints []config.Constraints,
 	cfg *config.SystemConfig,
 	storeResolver StoreResolver,
 	nodeChecker nodeChecker,
@@ -322,7 +321,7 @@ func (v *criticalLocalitiesVisitor) visitNewZone(
 	// Get the zone.
 	var zKey ZoneKey
 	found, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
-		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
+		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
 			if !zoneChangesReplication(zone) {
 				return false
 			}
@@ -373,7 +372,7 @@ func processLocalityForRange(
 	r *roachpb.RangeDescriptor,
 	zoneKey ZoneKey,
 	rep *replicationCriticalLocalitiesReportSaver,
-	c *zonepb.Constraints,
+	c *config.Constraints,
 	cfg *config.SystemConfig,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
@@ -406,7 +405,7 @@ func processLocalityForRange(
 		storeHasConstraint := true
 		for _, constraint := range c.Constraints {
 			// For required constraints - consider unavailable nodes as not matching.
-			if !zonepb.StoreMatchesConstraint(storeDesc, constraint) {
+			if !config.StoreMatchesConstraint(storeDesc, constraint) {
 				storeHasConstraint = false
 				break
 			}

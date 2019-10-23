@@ -569,7 +569,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		repl.maybeInitializeRaftGroup(ctx)
 	}
 
-	if cfg != nil && bq.requiresSplit(ctx, cfg, repl) {
+	if cfg != nil && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(1) {
@@ -602,14 +602,12 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 }
 
-func (bq *baseQueue) requiresSplit(
-	ctx context.Context, cfg *config.SystemConfig, repl replicaInQueue,
-) bool {
+func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl replicaInQueue) bool {
 	if bq.acceptsUnsplitRanges {
 		return false
 	}
 	desc := repl.Desc()
-	return cfg.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
+	return cfg.NeedsSplit(desc.StartKey, desc.EndKey)
 }
 
 // addInternal adds the replica the queue with specified priority. If
@@ -843,7 +841,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		}
 	}
 
-	if cfg != nil && bq.requiresSplit(ctx, cfg, repl) {
+	if cfg != nil && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		log.VEventf(ctx, 3, "split needed; skipping")

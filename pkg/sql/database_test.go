@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -59,7 +58,7 @@ func TestDatabaseAccessors(t *testing.T) {
 			return err
 		}
 
-		databaseCache := newDatabaseCache(config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
+		databaseCache := newDatabaseCache(config.NewSystemConfig(config.DefaultZoneConfigRef()))
 		_, err := databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err
 	}); err != nil {

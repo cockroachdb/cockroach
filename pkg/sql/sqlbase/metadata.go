@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,7 +81,7 @@ type metadataDescriptor struct {
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
 // the "system" database.
 func MakeMetadataSchema(
-	defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig, defaultSystemZoneConfig *config.ZoneConfig,
 ) MetadataSchema {
 	ms := MetadataSchema{}
 	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)

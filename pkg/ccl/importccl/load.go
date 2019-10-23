@@ -18,7 +18,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,7 +54,7 @@ func Load(
 	tempPrefix string,
 ) (backupccl.BackupDescriptor, error) {
 	if loadChunkBytes == 0 {
-		loadChunkBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes / 2
+		loadChunkBytes = *config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
 	var txCtx transform.ExprTransformContext

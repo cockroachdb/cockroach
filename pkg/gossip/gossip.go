@@ -62,7 +62,6 @@ import (
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -274,7 +273,7 @@ type Gossip struct {
 
 	lastConnectivity string
 
-	defaultZoneConfig *zonepb.ZoneConfig
+	defaultZoneConfig *config.ZoneConfig
 }
 
 // New creates an instance of a gossip node.
@@ -297,7 +296,7 @@ func New(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
-	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig,
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
@@ -358,7 +357,7 @@ func NewTest(
 	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
-	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig,
 ) *Gossip {
 	return NewTestWithLocality(nodeID, rpcContext, grpcServer, stopper, registry, roachpb.Locality{}, defaultZoneConfig)
 }
@@ -371,7 +370,7 @@ func NewTestWithLocality(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
-	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig,
 ) *Gossip {
 	c := &base.ClusterIDContainer{}
 	n := &base.NodeIDContainer{}

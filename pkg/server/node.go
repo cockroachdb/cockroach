@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -194,7 +193,7 @@ func allocateStoreIDs(
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
 func GetBootstrapSchema(
-	defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig, defaultSystemZoneConfig *config.ZoneConfig,
 ) sqlbase.MetadataSchema {
 	return sqlbase.MakeMetadataSchema(defaultZoneConfig, defaultSystemZoneConfig)
 }
@@ -211,8 +210,8 @@ func bootstrapCluster(
 	ctx context.Context,
 	engines []engine.Engine,
 	bootstrapVersion cluster.ClusterVersion,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig,
+	defaultSystemZoneConfig *config.ZoneConfig,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
@@ -311,8 +310,8 @@ func (n *Node) bootstrapCluster(
 	ctx context.Context,
 	engines []engine.Engine,
 	bootstrapVersion cluster.ClusterVersion,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig,
+	defaultSystemZoneConfig *config.ZoneConfig,
 ) error {
 	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
 		return fmt.Errorf("cluster has already been initialized with ID %s", n.clusterID.Get())

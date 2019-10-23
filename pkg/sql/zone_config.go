@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,8 +45,8 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 // ignored, and the default that would apply if it did not exist is returned instead.
 func getZoneConfig(
 	id uint32, getKey func(roachpb.Key) (*roachpb.Value, error), getInheritedDefault bool,
-) (uint32, *zonepb.ZoneConfig, uint32, *zonepb.ZoneConfig, error) {
-	var placeholder *zonepb.ZoneConfig
+) (uint32, *config.ZoneConfig, uint32, *config.ZoneConfig, error) {
+	var placeholder *config.ZoneConfig
 	var placeholderID uint32
 	if !getInheritedDefault {
 		// Look in the zones table.
@@ -55,7 +54,7 @@ func getZoneConfig(
 			return 0, nil, 0, nil, err
 		} else if zoneVal != nil {
 			// We found a matching entry.
-			var zone zonepb.ZoneConfig
+			var zone config.ZoneConfig
 			if err := zoneVal.GetProto(&zone); err != nil {
 				return 0, nil, 0, nil, err
 			}
@@ -109,7 +108,7 @@ func getZoneConfig(
 // NOTE: This will not work for subzones. To complete subzones, find a complete
 // parent zone (index or table) and apply InheritFromParent to it.
 func completeZoneConfig(
-	cfg *zonepb.ZoneConfig, id uint32, getKey func(roachpb.Key) (*roachpb.Value, error),
+	cfg *config.ZoneConfig, id uint32, getKey func(roachpb.Key) (*roachpb.Value, error),
 ) error {
 	if cfg.IsComplete() {
 		return nil
@@ -150,7 +149,7 @@ func completeZoneConfig(
 // cached.
 func ZoneConfigHook(
 	cfg *config.SystemConfig, id uint32,
-) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
+) (*config.ZoneConfig, *config.ZoneConfig, bool, error) {
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
 	}
@@ -176,7 +175,7 @@ func GetZoneConfigInTxn(
 	index *sqlbase.IndexDescriptor,
 	partition string,
 	getInheritedDefault bool,
-) (uint32, *zonepb.ZoneConfig, *zonepb.Subzone, error) {
+) (uint32, *config.ZoneConfig, *config.Subzone, error) {
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		kv, err := txn.Get(ctx, key)
 		if err != nil {
@@ -192,7 +191,7 @@ func GetZoneConfigInTxn(
 	if err = completeZoneConfig(zone, zoneID, getKey); err != nil {
 		return 0, nil, nil, err
 	}
-	var subzone *zonepb.Subzone
+	var subzone *config.Subzone
 	if index != nil {
 		if placeholder != nil {
 			if subzone = placeholder.GetSubzone(uint32(index.ID), partition); subzone != nil {
@@ -261,7 +260,7 @@ func (p *planner) resolveTableForZone(
 // responsibility to do this using e.g .resolveTableForZone().
 func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
-	id, err := zonepb.ResolveZoneSpecifier(zs,
+	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
 			kv, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(sqlbase.ID(parentID), name))
 			if err != nil {
@@ -342,7 +341,7 @@ func deleteRemovedPartitionZoneConfigs(
 	if err != nil {
 		return err
 	} else if zone == nil {
-		zone = zonepb.NewZoneConfig()
+		zone = config.NewZoneConfig()
 	}
 	for _, n := range removedNames {
 		zone.DeleteSubzone(uint32(idxDesc.ID), n)
