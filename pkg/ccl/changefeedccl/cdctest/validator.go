@@ -192,6 +192,93 @@ func (v *fingerprintValidator) NoteRow(
 	})
 }
 
+// applyRowUpdate applies the update represented by `row` to the scratch table.
+func (v *fingerprintValidator) applyRowUpdate(row validatorRow) error {
+	txn, err := v.sqlDB.Begin()
+	if err != nil {
+		return err
+	}
+	var args []interface{}
+
+	var primaryKeyDatums []interface{}
+	if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
+		return err
+	}
+	if len(primaryKeyDatums) != len(v.primaryKeyCols) {
+		return errors.Errorf(`expected primary key columns %s got datums %s`,
+			v.primaryKeyCols, primaryKeyDatums)
+	}
+
+	var stmtBuf bytes.Buffer
+	type wrapper struct {
+		After map[string]interface{} `json:"after"`
+	}
+	var value wrapper
+	if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
+		return err
+	}
+	if value.After != nil {
+		// UPDATE or INSERT
+		fmt.Fprintf(&stmtBuf, `UPSERT INTO %s (`, v.fprintTable)
+		for col, colValue := range value.After {
+			if len(args) != 0 {
+				stmtBuf.WriteString(`,`)
+			}
+			stmtBuf.WriteString(col)
+			args = append(args, colValue)
+		}
+		for i := len(value.After) - 2; i < 10; i++ {
+			fmt.Fprintf(&stmtBuf, `, test%d`, i)
+			args = append(args, nil)
+		}
+		stmtBuf.WriteString(`) VALUES (`)
+		for i := range args {
+			if i != 0 {
+				stmtBuf.WriteString(`,`)
+			}
+			fmt.Fprintf(&stmtBuf, `$%d`, i+1)
+		}
+		stmtBuf.WriteString(`)`)
+
+		// Also verify that the key matches the value.
+		primaryKeyDatums := make([]interface{}, len(v.primaryKeyCols))
+		for idx, primaryKeyCol := range v.primaryKeyCols {
+			primaryKeyDatums[idx] = value.After[primaryKeyCol]
+		}
+		primaryKeyJSON, err := gojson.Marshal(primaryKeyDatums)
+		if err != nil {
+			return err
+		}
+
+		if string(primaryKeyJSON) != row.key {
+			v.failures = append(v.failures,
+				fmt.Sprintf(`key %s did not match expected key %s for value %s`,
+					row.key, primaryKeyJSON, row.value))
+		}
+
+		if _, err := txn.Exec(stmtBuf.String(), args...); err != nil {
+			return err
+		}
+	} else {
+		// DELETE
+		fmt.Fprintf(&stmtBuf, `DELETE FROM %s WHERE `, v.fprintTable)
+		for i, datum := range primaryKeyDatums {
+			if len(args) != 0 {
+				stmtBuf.WriteString(`,`)
+			}
+			fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
+			args = append(args, datum)
+		}
+		if _, err := txn.Exec(stmtBuf.String(), args...); err != nil {
+			return err
+		}
+	}
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // NoteResolved implements the Validator interface.
 func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
 	if r, ok := v.partitionResolved[partition]; !ok {
@@ -213,7 +300,6 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 	if !v.resolved.Less(newResolved) {
 		return nil
 	}
-	initialScanComplete := v.resolved != (hlc.Timestamp{})
 	v.resolved = newResolved
 
 	// NB: Intentionally not stable sort because it shouldn't matter.
@@ -221,7 +307,11 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		return v.buffer[i].updated.Less(v.buffer[j].updated)
 	})
 
-	var lastUpdated hlc.Timestamp
+	var lastFingerprintedAt hlc.Timestamp
+	// We apply all the row updates we received in the time window between the last
+	// resolved timestamp and this one. We process all row updates belonging to a given
+	// timestamp and then `fingerprint` to ensure the scratch table and the original table
+	// match.
 	for len(v.buffer) > 0 {
 		if v.resolved.Less(v.buffer[0].updated) {
 			break
@@ -229,93 +319,22 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		row := v.buffer[0]
 		v.buffer = v.buffer[1:]
 
-		// If we have already completed the initial scan, verify the fingerprint at
-		// every point in time. Before the initial scan is complete, the fingerprint
-		// table might not have the earliest version of every row present in the
-		// table.
-		if initialScanComplete {
-			if row.updated != lastUpdated {
-				if lastUpdated != (hlc.Timestamp{}) {
-					if err := v.fingerprint(lastUpdated); err != nil {
-						return err
-					}
-				}
-				if err := v.fingerprint(row.updated.Prev()); err != nil {
-					return err
-				}
-			}
-			lastUpdated = row.updated
-		}
-
-		type wrapper struct {
-			After map[string]interface{} `json:"after"`
-		}
-		var value wrapper
-		if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
+		if err := v.applyRowUpdate(row); err != nil {
 			return err
 		}
 
-		var stmtBuf bytes.Buffer
-		var args []interface{}
-		if value.After != nil {
-			// UPDATE or INSERT
-			fmt.Fprintf(&stmtBuf, `UPSERT INTO %s (`, v.fprintTable)
-			for col, colValue := range value.After {
-				if len(args) != 0 {
-					stmtBuf.WriteString(`,`)
-				}
-				stmtBuf.WriteString(col)
-				args = append(args, colValue)
-			}
-			stmtBuf.WriteString(`) VALUES (`)
-			for i := range args {
-				if i != 0 {
-					stmtBuf.WriteString(`,`)
-				}
-				fmt.Fprintf(&stmtBuf, `$%d`, i+1)
-			}
-			stmtBuf.WriteString(`)`)
-
-			// Also verify that the key matches the value.
-			primaryKeyDatums := make([]interface{}, len(v.primaryKeyCols))
-			for idx, primaryKeyCol := range v.primaryKeyCols {
-				primaryKeyDatums[idx] = value.After[primaryKeyCol]
-			}
-			primaryKeyJSON, err := gojson.Marshal(primaryKeyDatums)
-			if err != nil {
+		// If we have processed all the row updates belonging to a certain timestamp,
+		// fingerprint.
+		if len(v.buffer) == 0 || v.buffer[0].updated != row.updated {
+			lastFingerprintedAt = row.updated
+			if err := v.fingerprint(row.updated); err != nil {
 				return err
-			}
-			if string(primaryKeyJSON) != row.key {
-				v.failures = append(v.failures, fmt.Sprintf(
-					`key %s did not match expected key %s for value %s`, row.key, primaryKeyJSON, row.value))
-			}
-		} else {
-			// DELETE
-			var primaryKeyDatums []interface{}
-			if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
-				return err
-			}
-			if len(primaryKeyDatums) != len(v.primaryKeyCols) {
-				return errors.Errorf(
-					`expected primary key columns %s got datums %s`, v.primaryKeyCols, primaryKeyDatums)
-			}
-			fmt.Fprintf(&stmtBuf, `DELETE FROM %s WHERE `, v.fprintTable)
-			for i, datum := range primaryKeyDatums {
-				if len(args) != 0 {
-					stmtBuf.WriteString(`,`)
-				}
-				fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
-				args = append(args, datum)
-			}
-		}
-		if len(args) > 0 {
-			if _, err := v.sqlDB.Exec(stmtBuf.String(), args...); err != nil {
-				return errors.Wrap(err, stmtBuf.String())
 			}
 		}
 	}
 
-	if !v.firstRowTimestamp.IsEmpty() && !resolved.Less(v.firstRowTimestamp) {
+	if !v.firstRowTimestamp.IsEmpty() && !resolved.Less(v.firstRowTimestamp) &&
+		lastFingerprintedAt != resolved {
 		return v.fingerprint(resolved)
 	}
 	return nil
@@ -335,8 +354,23 @@ func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 		return err
 	}
 	if orig != check {
-		v.failures = append(v.failures, fmt.Sprintf(
-			`fingerprints did not match at %s: %s vs %s`, ts.AsOfSystemTime(), orig, check))
+		// Ignore the fingerprint mismatch if there was an in-progress schema change job
+		// on the table.
+		// TODO(aayush): We currently need to have this hack here since we emit changefeed
+		// level backfill row updates at the wrong time in the `DROP COLUMN` case. See
+		// issue #41961 for more details.
+		var pendingJobs int
+		var countJobsStmt bytes.Buffer
+		fmt.Fprintf(&countJobsStmt, `SELECT count(*) from [show jobs] AS OF SYSTEM TIME '%s'`+
+			`where job_type = 'SCHEMA CHANGE' and status = 'running' or status = 'pending'`,
+			ts.AsOfSystemTime())
+		if err := v.sqlDB.QueryRow(countJobsStmt.String()).Scan(&pendingJobs); err != nil {
+			return err
+		}
+		if pendingJobs == 0 {
+			v.failures = append(v.failures, fmt.Sprintf(
+				`fingerprints did not match at %s: %s vs %s`, ts.AsOfSystemTime(), orig, check))
+		}
 	}
 	return nil
 }
