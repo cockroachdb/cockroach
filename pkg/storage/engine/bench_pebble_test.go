@@ -51,6 +51,22 @@ func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
 	return peb
 }
 
+func BenchmarkMVCCGet_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, numVersions := range []int{1, 10, 100} {
+		b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+			for _, valueSize := range []int{8} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
+						numVersions: numVersions,
+						valueBytes:  valueSize,
+					})
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
