@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -70,9 +69,7 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 
 	func() {
 		pebbleInMem, err := NewPebble(PebbleConfig{
-			Opts: &pebble.Options{
-				FS: vfs.NewMem(),
-			},
+			Opts: testPebbleOptions(vfs.NewMem()),
 		})
 		if err != nil {
 			t.Fatal(err)
