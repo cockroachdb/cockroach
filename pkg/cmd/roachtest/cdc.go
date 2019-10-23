@@ -298,7 +298,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		}
 
 		const requestedResolved = 100
-		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions)
+		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
 		if err != nil {
 			return err
 		}
