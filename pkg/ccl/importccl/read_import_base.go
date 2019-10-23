@@ -19,13 +19,42 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+func runImport(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	spec *execinfrapb.ReadImportDataSpec,
+	kvCh chan row.KVBatch,
+) error {
+	group := ctxgroup.WithContext(ctx)
+
+	conv, err := makeInputConverter(spec, flowCtx.NewEvalCtx(), kvCh)
+	if err != nil {
+		return err
+	}
+	conv.start(group)
+
+	// Read input files into kvs
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
+		defer tracing.FinishSpan(span)
+		defer conv.inputFinished(ctx)
+		return conv.readFiles(ctx, spec.Uri, spec.Format, flowCtx.Cfg.ExternalStorage)
+	})
+
+	return group.Wait()
+}
 
 type readFileFunc func(context.Context, *fileReader, int32, string, chan string) error
 
