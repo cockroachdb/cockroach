@@ -1745,9 +1745,7 @@ func ComputeRaftLogSize(
 		UpperBound: prefixEnd,
 	})
 	defer iter.Close()
-	from := engine.MakeMVCCMetadataKey(prefix)
-	to := engine.MakeMVCCMetadataKey(prefixEnd)
-	ms, err := iter.ComputeStats(from, to, 0 /* nowNanos */)
+	ms, err := iter.ComputeStats(prefix, prefixEnd, 0 /* nowNanos */)
 	if err != nil {
 		return 0, err
 	}

@@ -1074,10 +1074,7 @@ func mergeTrigger(
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
 		iter := batch.NewIterator(engine.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
 		defer iter.Close()
-		sysMS, err := iter.ComputeStats(
-			engine.MakeMVCCMetadataKey(ridPrefix),
-			engine.MakeMVCCMetadataKey(ridPrefix.PrefixEnd()),
-			0 /* nowNanos */)
+		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
 			return result.Result{}, err
 		}

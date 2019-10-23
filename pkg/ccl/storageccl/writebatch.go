@@ -105,8 +105,7 @@ func clearExistingData(
 		return enginepb.MVCCStats{}, nil
 	}
 
-	existingStats, err := iter.ComputeStats(
-		engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end), nowNanos)
+	existingStats, err := iter.ComputeStats(start, end, nowNanos)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
