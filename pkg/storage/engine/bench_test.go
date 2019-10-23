@@ -553,6 +553,7 @@ func runMVCCMerge(
 			}
 		}
 	})
+	b.StopTimer()
 
 	// Read values out to force merge.
 	for _, key := range keys {
@@ -563,7 +564,52 @@ func runMVCCMerge(
 			continue
 		}
 	}
+}
 
+// runMVCCGetMergedValue reads merged values for numKeys separate keys and mergesPerKey
+// operands per key.
+func runMVCCGetMergedValue(
+	ctx context.Context, b *testing.B, emk engineMaker, numKeys, mergesPerKey int,
+) {
+	eng := emk(b, fmt.Sprintf("get_merged_%d_%d", numKeys, mergesPerKey))
+	defer eng.Close()
+
+	// Precompute keys so we don't waste time formatting them at each iteration.
+	keys := make([]roachpb.Key, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = roachpb.Key(fmt.Sprintf("key-%d", i))
+	}
+
+	timestamp := hlc.Timestamp{}
+	for i := 0; i < numKeys; i++ {
+		for j := 0; j < mergesPerKey; j++ {
+			timeseries := &roachpb.InternalTimeSeriesData{
+				StartTimestampNanos: 0,
+				SampleDurationNanos: 1000,
+				Samples: []roachpb.InternalTimeSeriesSample{
+					{Offset: int32(j), Count: 1, Sum: 5.0},
+				},
+			}
+			var value roachpb.Value
+			if err := value.SetProto(timeseries); err != nil {
+				b.Fatal(err)
+			}
+			ms := enginepb.MVCCStats{}
+			timestamp.Logical++
+			err := MVCCMerge(ctx, eng, &ms, keys[i], timestamp, value)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, err := MVCCGet(ctx, eng, keys[rand.Intn(numKeys)], timestamp, MVCCGetOptions{})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 	b.StopTimer()
 }
 
