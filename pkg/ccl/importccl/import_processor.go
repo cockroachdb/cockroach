@@ -68,49 +68,13 @@ func newReadImportDataProcessor(
 func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
 	defer tracing.FinishSpan(span)
-
 	defer cp.output.ProducerDone()
 
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan row.KVBatch, 10)
 
-	conv, err := makeInputConverter(&cp.spec, cp.flowCtx.NewEvalCtx(), kvCh)
-	if err != nil {
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
-	}
 
-	conv.start(group)
-
-	// Read input files into kvs
-	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
-		defer tracing.FinishSpan(span)
-		defer conv.inputFinished(ctx)
-
-		job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
-		if err != nil {
-			return err
-		}
-
-		progFn := func(pct float32) error {
-			if cp.spec.IngestDirectly {
-				return nil
-			}
-			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				d := details.(*jobspb.Progress_Import).Import
-				slotpct := pct * cp.spec.Progress.Contribution
-				if len(d.SamplingProgress) > 0 {
-					d.SamplingProgress[cp.spec.Progress.Slot] = slotpct
-				} else {
-					d.ReadProgress[cp.spec.Progress.Slot] = slotpct
-				}
-				return d.Completed()
-			})
-		}
-
-		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Cfg.Settings)
-	})
+	group.GoCtx(func(ctx context.Context) error { return runImport(ctx, cp.flowCtx, &cp.spec, kvCh) })
 
 	if cp.spec.IngestDirectly {
 		// IngestDirectly means this reader will just ingest the KVs that the

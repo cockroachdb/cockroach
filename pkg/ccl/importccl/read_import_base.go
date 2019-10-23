@@ -19,16 +19,66 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
 type readFileFunc func(context.Context, *fileReader, int32, string, progressFn, chan string) error
+
+func runImport(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	spec *execinfrapb.ReadImportDataSpec,
+	kvCh chan row.KVBatch,
+) error {
+	group := ctxgroup.WithContext(ctx)
+
+	conv, err := makeInputConverter(spec, flowCtx.NewEvalCtx(), kvCh)
+	if err != nil {
+		return err
+	}
+	conv.start(group)
+
+	// Read input files into kvs
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
+		defer tracing.FinishSpan(span)
+		defer conv.inputFinished(ctx)
+		job, err := flowCtx.Cfg.JobRegistry.LoadJob(ctx, spec.Progress.JobID)
+		if err != nil {
+			return err
+		}
+
+		progFn := func(pct float32) error {
+			if spec.IngestDirectly {
+				return nil
+			}
+			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				d := details.(*jobspb.Progress_Import).Import
+				slotpct := pct * spec.Progress.Contribution
+				if len(d.SamplingProgress) > 0 {
+					d.SamplingProgress[spec.Progress.Slot] = slotpct
+				} else {
+					d.ReadProgress[spec.Progress.Slot] = slotpct
+				}
+				return d.Completed()
+			})
+		}
+		return conv.readFiles(ctx, spec.Uri, spec.Format, progFn, flowCtx.Cfg.Settings)
+	})
+
+	return group.Wait()
+}
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
