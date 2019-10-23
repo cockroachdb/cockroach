@@ -80,6 +80,11 @@ type Transitions struct {
 	expanded Pattern
 }
 
+// GetExpanded returns the expanded map of transitions.
+func (t Transitions) GetExpanded() Pattern {
+	return t.expanded
+}
+
 // Compile creates a set of state Transitions from a Pattern. This is relatively
 // expensive so it's expected that Compile is called once for each transition
 // graph and assigned to a static variable. This variable can then be given to
