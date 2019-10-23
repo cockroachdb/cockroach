@@ -146,9 +146,9 @@ func (s *Iterator) UnsafeValue() []byte {
 
 // ComputeStats is part of the engine.Iterator interface.
 func (s *Iterator) ComputeStats(
-	start, end engine.MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return s.i.ComputeStats(start, end, nowNanos)

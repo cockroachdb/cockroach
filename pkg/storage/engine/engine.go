@@ -96,7 +96,7 @@ type Iterator interface {
 	// recomputed for the first range (i.e. the one with start key == KeyMin).
 	// The nowNanos arg specifies the wall time in nanoseconds since the
 	// epoch and is used to compute the total age of all intents.
-	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
+	ComputeStats(start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always

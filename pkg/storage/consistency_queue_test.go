@@ -342,7 +342,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		iter := cpEng.NewIterator(engine.IterOptions{UpperBound: []byte("\xff")})
 		defer iter.Close()
 
-		ms, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, 0 /* nowNanos */)
+		ms, err := engine.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
 		assert.NoError(t, err)
 
 		assert.NotZero(t, ms.KeyBytes)

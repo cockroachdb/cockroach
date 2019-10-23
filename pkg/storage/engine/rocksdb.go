@@ -1491,7 +1491,7 @@ func (r *batchIterator) PrevKey() {
 }
 
 func (r *batchIterator) ComputeStats(
-	start, end MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	r.batch.flushMutations()
 	return r.iter.ComputeStats(start, end, nowNanos)
@@ -2274,10 +2274,13 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 }
 
 func (r *rocksDBIterator) ComputeStats(
-	start, end MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	r.clearState()
-	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
+	result := C.MVCCComputeStats(r.iter,
+		goToCKey(MakeMVCCMetadataKey(start)),
+		goToCKey(MakeMVCCMetadataKey(end)),
+		C.int64_t(nowNanos))
 	stats, err := cStatsToGoStats(result, nowNanos)
 	if util.RaceEnabled {
 		// If we've come here via batchIterator, then flushMutations (which forces
