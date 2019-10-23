@@ -72,6 +72,24 @@ func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
 	}
 }
 
+// BenchmarkMVCCGetMergedTimeSeries computes performance of reading merged
+// time series data using `MVCCGet()`. Uses an in-memory engine.
+func BenchmarkMVCCGetMergedTimeSeries_Pebble(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	ctx := context.Background()
+	for _, numKeys := range []int{1, 16, 256} {
+		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
+			for _, mergesPerKey := range []int{1, 16, 256} {
+				b.Run(fmt.Sprintf("mergesPerKey=%d", mergesPerKey), func(b *testing.B) {
+					runMVCCGetMergedValue(ctx, b, setupMVCCPebble, numKeys, mergesPerKey)
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkMVCCGarbageCollect_Pebble(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
