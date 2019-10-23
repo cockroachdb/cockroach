@@ -123,29 +123,17 @@ func NewPebbleTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
 	// Default options as copied over from pebble/cmd/pebble/db.go
-	opts := &pebble.Options{
-		// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
-		// now.
-		Cache: pebble.NewCache(128 << 20),
-		// The Pebble temp engine does not use MVCC Encoding. Instead, the
-		// caller-provided key is used as-is (with the prefix prepended). See
-		// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
-		// Use the default bytes.Compare-like comparer.
-		Comparer:                    pebble.DefaultComparer,
-		DisableWAL:                  true,
-		MemTableSize:                64 << 20,
-		MemTableStopWritesThreshold: 4,
-		MinFlushRate:                4 << 20,
-		L0CompactionThreshold:       2,
-		L0StopWritesThreshold:       400,
-		LBaseMaxBytes:               64 << 20, // 64 MB
-		Levels: []pebble.LevelOptions{{
-			BlockSize: 32 << 10,
-		}},
-		Merger: &pebble.Merger{
-			Name: "cockroach_merge_operator",
-		},
-	}
+	opts := DefaultPebbleOptions()
+	// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
+	// now.
+	opts.Cache = pebble.NewCache(128 << 20)
+	// The Pebble temp engine does not use MVCC Encoding. Instead, the
+	// caller-provided key is used as-is (with the prefix prepended). See
+	// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
+	// Use the default bytes.Compare-like comparer.
+	opts.Comparer = pebble.DefaultComparer
+	opts.DisableWAL = true
+	opts.TablePropertyCollectors = nil
 
 	path := tempStorage.Path
 	if tempStorage.InMemory {

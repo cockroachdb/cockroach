@@ -186,6 +186,24 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
 }
 
+// DefaultPebbleOptions returns the default pebble options.
+func DefaultPebbleOptions() *pebble.Options {
+	return &pebble.Options{
+		Comparer:              MVCCComparer,
+		L0CompactionThreshold: 2,
+		L0StopWritesThreshold: 1000,
+		LBaseMaxBytes:         64 << 20, // 64 MB
+		Levels: []pebble.LevelOptions{{
+			BlockSize: 32 << 10, // 32 KB
+		}},
+		MemTableSize:                64 << 20, // 64 MB
+		MemTableStopWritesThreshold: 4,
+		Merger:                      MVCCMerger,
+		MinFlushRate:                4 << 20, // 4 MB/sec
+		TablePropertyCollectors:     PebbleTablePropertyCollectors,
+	}
+}
+
 // PebbleConfig holds all configuration parameters and knobs used in setting up
 // a new Pebble instance.
 type PebbleConfig struct {
@@ -212,10 +230,6 @@ var _ Engine = &Pebble{}
 
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(cfg PebbleConfig) (*Pebble, error) {
-	cfg.Opts.Comparer = MVCCComparer
-	cfg.Opts.Merger = MVCCMerger
-	cfg.Opts.TablePropertyCollectors = PebbleTablePropertyCollectors
-
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
 	// cfg.FS and cfg.ReadOnly later on.
