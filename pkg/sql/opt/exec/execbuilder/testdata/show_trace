@@ -139,7 +139,6 @@ WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-[async] kv.DistSender: sending pre-commit query intents  r7: sending batch 1 QueryIntent to (n1,s1):1
 table reader                                             Scan /Table/55/{1-2}
 table reader                                             fetched: /kv2/primary/-9222809086901354496/k/v -> /1/2
 flow                                                     Put /Table/55/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
@@ -297,7 +296,6 @@ SELECT DISTINCT node_id, store_id, replica_id
 ----
 node_id  store_id  replica_id
 1        1         6
-1        1         7
 1        1         25
 
 subtest system_table_lookup
