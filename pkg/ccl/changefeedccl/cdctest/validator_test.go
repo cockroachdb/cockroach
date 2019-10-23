@@ -181,12 +181,14 @@ func TestFingerprintValidator(t *testing.T) {
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// Intentionally missing {"k":1,"v":1} at ts[1].
+		// Insert a fake row since we don't fingerprint earlier than the first seen row.
+		v.NoteRow(ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2].Prev())
 		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
 		v.NoteRow(ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
-		noteResolved(t, v, `p`, ts[2])
+		noteResolved(t, v, `p`, ts[2].Prev())
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[2].Prev().AsOfSystemTime()+
-				`: 590700560494856539 vs EMPTY`,
+				`: 590700560494856539 vs 590699460983228293`,
 		)
 	})
 	t.Run(`missed_middle`, func(t *testing.T) {
@@ -197,12 +199,11 @@ func TestFingerprintValidator(t *testing.T) {
 		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
 		// Intentionally missing {"k":1,"v":2} at ts[2].
 		v.NoteRow(ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[2])
+		noteResolved(t, v, `p`, ts[2])
 		v.NoteRow(ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
 		noteResolved(t, v, `p`, ts[3])
 		assertValidatorFailures(t, v,
 			`fingerprints did not match at `+ts[2].AsOfSystemTime()+
-				`: 1099511631581 vs 1099511631582`,
-			`fingerprints did not match at `+ts[3].Prev().AsOfSystemTime()+
 				`: 1099511631581 vs 1099511631582`,
 		)
 	})

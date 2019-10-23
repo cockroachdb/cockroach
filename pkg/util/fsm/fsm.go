@@ -141,3 +141,8 @@ func (m *Machine) ApplyWithPayload(ctx context.Context, e Event, b EventPayload)
 func (m *Machine) CurState() State {
 	return m.cur
 }
+
+// GetExpandedStateTransitions returns the underlying expanded pattern map.
+func (m *Machine) GetExpandedStateTransitions() *Pattern {
+	return &m.t.expanded
+}
