@@ -11,11 +11,9 @@
 package bulk
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/pkg/errors"
@@ -30,75 +28,14 @@ type SSTWriter struct {
 	scratch  []byte
 }
 
-// timeboundPropCollector implements a property collector for MVCC Timestamps.
-// Its behavior matches TimeBoundTblPropCollector in table_props.cc.
-type timeboundPropCollector struct {
-	min, max []byte
-}
-
-var _ pebble.TablePropertyCollector = &timeboundPropCollector{}
-
-func (t *timeboundPropCollector) Add(key pebble.InternalKey, value []byte) error {
-	_, ts, ok := enginepb.SplitMVCCKey(key.UserKey)
-	if !ok {
-		return errors.Errorf("failed to split MVCC key")
-	}
-	if len(ts) > 0 {
-		if len(t.min) == 0 || bytes.Compare(ts, t.min) < 0 {
-			t.min = append(t.min[:0], ts...)
-		}
-		if len(t.max) == 0 || bytes.Compare(ts, t.max) > 0 {
-			t.max = append(t.max[:0], ts...)
-		}
-	}
-	return nil
-}
-
-func (t *timeboundPropCollector) Finish(userProps map[string]string) error {
-	userProps["crdb.ts.min"] = string(t.min)
-	userProps["crdb.ts.max"] = string(t.max)
-	return nil
-}
-
-func (t *timeboundPropCollector) Name() string {
-	return "TimeBoundTblPropCollectorFactory"
-}
-
-// dummyDeleteRangeCollector is a stub collector that just identifies itself.
-// This stub can be installed so that SSTs claim to have the same props as those
-// written by the Rocks writer, using the collector in table_props.cc. However
-// since bulk-ingestion SSTs never contain deletions (range or otherwise), there
-// is no actual implementation needed here.
-type dummyDeleteRangeCollector struct{}
-
-var _ pebble.TablePropertyCollector = &dummyDeleteRangeCollector{}
-
-func (dummyDeleteRangeCollector) Add(key pebble.InternalKey, value []byte) error {
-	if key.Kind() != pebble.InternalKeyKindSet {
-		return errors.Errorf("unsupported key kind %v", key.Kind())
-	}
-	return nil
-}
-
-func (dummyDeleteRangeCollector) Finish(userProps map[string]string) error {
-	return nil
-}
-
-func (dummyDeleteRangeCollector) Name() string {
-	return "DeleteRangeTblPropCollectorFactory"
-}
-
 // MakeSSTWriter creates a new SSTWriter.
 func MakeSSTWriter() SSTWriter {
 	opts := sstable.WriterOptions{
-		BlockSize:   32 * 1024,
-		TableFormat: pebble.TableFormatLevelDB,
-		Comparer:    engine.MVCCComparer,
-		MergerName:  "nullptr",
-		TablePropertyCollectors: []func() pebble.TablePropertyCollector{
-			func() pebble.TablePropertyCollector { return &timeboundPropCollector{} },
-			func() pebble.TablePropertyCollector { return &dummyDeleteRangeCollector{} },
-		},
+		BlockSize:               32 * 1024,
+		TableFormat:             pebble.TableFormatLevelDB,
+		Comparer:                engine.MVCCComparer,
+		MergerName:              "nullptr",
+		TablePropertyCollectors: engine.PebbleTablePropertyCollectors,
 	}
 	f := &memFile{}
 	sst := sstable.NewWriter(f, opts)

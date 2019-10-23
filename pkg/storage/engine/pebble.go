@@ -11,6 +11,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -85,6 +86,67 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
+// pebbleTimeBoundPropCollector implements a property collector for MVCC
+// Timestamps.  Its behavior matches TimeBoundTblPropCollector in
+// table_props.cc.
+type pebbleTimeBoundPropCollector struct {
+	min, max []byte
+}
+
+func (t *pebbleTimeBoundPropCollector) Add(key pebble.InternalKey, value []byte) error {
+	_, ts, ok := enginepb.SplitMVCCKey(key.UserKey)
+	if !ok {
+		return errors.Errorf("failed to split MVCC key")
+	}
+	if len(ts) > 0 {
+		if len(t.min) == 0 || bytes.Compare(ts, t.min) < 0 {
+			t.min = append(t.min[:0], ts...)
+		}
+		if len(t.max) == 0 || bytes.Compare(ts, t.max) > 0 {
+			t.max = append(t.max[:0], ts...)
+		}
+	}
+	return nil
+}
+
+func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error {
+	userProps["crdb.ts.min"] = string(t.min)
+	userProps["crdb.ts.max"] = string(t.max)
+	return nil
+}
+
+func (t *pebbleTimeBoundPropCollector) Name() string {
+	// This constant needs to match the one used by the RocksDB version of this
+	// table property collector. DO NOT CHANGE.
+	return "TimeBoundTblPropCollectorFactory"
+}
+
+// pebbleDeleteRangeCollector marks an sstable for compaction that contains a
+// range tombstone.
+type pebbleDeleteRangeCollector struct{}
+
+func (pebbleDeleteRangeCollector) Add(key pebble.InternalKey, value []byte) error {
+	// TODO(peter): track whether a range tombstone is present. Need to extend
+	// the TablePropertyCollector interface.
+	return nil
+}
+
+func (pebbleDeleteRangeCollector) Finish(userProps map[string]string) error {
+	return nil
+}
+
+func (pebbleDeleteRangeCollector) Name() string {
+	// This constant needs to match the one used by the RocksDB version of this
+	// table property collector. DO NOT CHANGE.
+	return "DeleteRangeTblPropCollectorFactory"
+}
+
+// PebbleTablePropertyCollectors is the list of Pebble TablePropertyCollectors.
+var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
+	func() pebble.TablePropertyCollector { return &pebbleTimeBoundPropCollector{} },
+	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
+}
+
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
 	db *pebble.DB
@@ -104,6 +166,7 @@ var _ WithSSTables = &Pebble{}
 func NewPebble(path string, cfg *pebble.Options) (*Pebble, error) {
 	cfg.Comparer = MVCCComparer
 	cfg.Merger = MVCCMerger
+	cfg.TablePropertyCollectors = PebbleTablePropertyCollectors
 
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save

@@ -44,7 +44,7 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 }
 
 // DecodeKey decodes an key/timestamp from its serialized representation. This
-// decoding must match engine/db.cc:DecodeKey().
+// decoding must match libroach/encoding.cc:DecodeKey().
 func DecodeKey(encodedKey []byte) (key []byte, timestamp hlc.Timestamp, _ error) {
 	key, ts, ok := SplitMVCCKey(encodedKey)
 	if !ok {
