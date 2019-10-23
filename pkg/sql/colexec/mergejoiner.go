@@ -446,7 +446,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	bufferedGroup.length += uint64(groupLength)
 	for _, v := range bufferedGroup.colVecs {
 		if v.Type() == coltypes.Bytes {
-			v.Bytes().EnforceNonDecreasingOffsets(bufferedGroup.length)
+			v.Bytes().UpdateOffsetsToBeNonDecreasing(bufferedGroup.length)
 		}
 	}
 }

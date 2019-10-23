@@ -154,6 +154,7 @@ func applyMethodsAndVerify(
 		default:
 			return errors.Errorf("unknown method name: %s", m)
 		}
+		b1.AssertOffsetsAreNonDecreasing(uint64(b1.Len()))
 		debugString += fmt.Sprintf("\n%s\n", b1)
 		if err := verifyEqual(b1, b2); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat (maxSetIdx=%d):\n%sreference:\n%s", debugString, b1.maxSetIndex, b1.String(), prettyByteSlice(b2)))
@@ -368,5 +369,18 @@ func TestBytes(t *testing.T) {
 		b2.AppendVal([]byte("four"))
 		require.Equal(t, "four", string(b1.Get(2)), "appending to the slice of b1 should have updated b1")
 		require.Equal(t, "four", string(b2.Get(1)))
+	})
+
+	t.Run("InvariantSimple", func(t *testing.T) {
+		b1 := NewBytes(8)
+		b1.Set(0, []byte("zero"))
+		other := b1.Slice(0, 2)
+		other.AssertOffsetsAreNonDecreasing(2)
+
+		b2 := NewBytes(8)
+		b2.Set(0, []byte("zero"))
+		b2.Set(2, []byte("two"))
+		other = b2.Slice(0, 4)
+		other.AssertOffsetsAreNonDecreasing(4)
 	})
 }
