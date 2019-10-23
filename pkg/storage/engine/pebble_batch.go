@@ -13,6 +13,7 @@ package engine
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
 )
@@ -139,6 +140,13 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 	}
 	if p.distinctOpen {
 		panic("distinct batch open")
+	}
+
+	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+		// Iterators that specify timestamp bounds cannot be cached.
+		iter := &pebbleBatchIterator{batch: p}
+		iter.init(p.batch, opts)
+		return iter
 	}
 
 	// Use the cached iterator.
