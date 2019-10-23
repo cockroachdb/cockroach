@@ -1,4 +1,6 @@
-# LogicTest: local
+# LogicTest: local local-vec-off local-mixed-19.1-19.2 fakedist fakedist-vec-off fakedist-disk
+# TODO(radu): the test fails on fakedist-metadata config (#41816); remove this
+# directive once that is fixed.
 
 statement ok
 CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)
@@ -326,3 +328,41 @@ query III
 SELECT * FROM foo41004
 ----
 1  2  NULL
+
+# Test CREATE TABLE AS with a correlated subquery.
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE cd (c INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3)
+
+statement ok
+INSERT INTO cd VALUES (2, 2), (3, 3), (4, 4)
+
+statement ok
+CREATE TABLE t AS SELECT a, b, EXISTS(SELECT c FROM cd WHERE cd.c=ab.a) FROM ab;
+
+query IIB rowsort
+SELECT * FROM t
+----
+1  1  false
+2  2  true
+3  3  true
+
+# Test CREATE TABLE AS with a mutation.
+statement ok
+CREATE TABLE t2 AS SELECT * FROM [DELETE FROM t WHERE b>2 RETURNING a,b]
+
+# TODO(radu): this should contain (3,3); bug tracked by #39197.
+query II
+SELECT * FROM t2
+----
+
+query IIB rowsort
+SELECT * FROM t
+----
+1  1  false
+2  2  true
