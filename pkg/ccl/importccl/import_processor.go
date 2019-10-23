@@ -66,27 +66,11 @@ func newReadImportDataProcessor(
 func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
 	defer tracing.FinishSpan(span)
-
 	defer cp.output.ProducerDone()
 
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan row.KVBatch, 10)
-
-	conv, err := makeInputConverter(&cp.spec, cp.flowCtx.NewEvalCtx(), kvCh)
-	if err != nil {
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
-	}
-
-	conv.start(group)
-
-	// Read input files into kvs
-	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
-		defer tracing.FinishSpan(span)
-		defer conv.inputFinished(ctx)
-		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, cp.flowCtx.Cfg.ExternalStorage)
-	})
+	group.GoCtx(func(ctx context.Context) error { return runImport(ctx, cp.flowCtx, &cp.spec, kvCh) })
 
 	// Ingest the KVs that the producer emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
