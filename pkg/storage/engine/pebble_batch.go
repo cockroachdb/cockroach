@@ -22,7 +22,7 @@ type pebbleBatch struct {
 	db           *pebble.DB
 	batch        *pebble.Batch
 	buf          []byte
-	iter         pebbleBatchIterator
+	iter         pebbleIterator
 	closed       bool
 	isDistinct   bool
 	distinctOpen bool
@@ -44,23 +44,20 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch) *pebbleBatch {
 		db:    db,
 		batch: batch,
 		buf:   pb.buf,
-		iter: pebbleBatchIterator{
-			pebbleIterator: pebbleIterator{
-				lowerBoundBuf: pb.iter.lowerBoundBuf,
-				upperBoundBuf: pb.iter.upperBoundBuf,
-			},
+		iter: pebbleIterator{
+			lowerBoundBuf: pb.iter.lowerBoundBuf,
+			upperBoundBuf: pb.iter.upperBoundBuf,
 		},
 	}
-
 	return pb
 }
 
 // Close implements the Batch interface.
 func (p *pebbleBatch) Close() {
-	if p.iter.iter != nil {
-		_ = p.iter.iter.Close()
-		p.iter.destroy()
+	if p.closed {
+		panic("closing an already-closed pebbleBatch")
 	}
+	p.closed = true
 	if !p.isDistinct {
 		_ = p.batch.Close()
 		p.batch = nil
@@ -68,7 +65,7 @@ func (p *pebbleBatch) Close() {
 		p.parentBatch.distinctOpen = false
 		p.isDistinct = false
 	}
-	p.closed = true
+	p.iter.destroy()
 	pebbleBatchPool.Put(p)
 }
 
@@ -79,17 +76,22 @@ func (p *pebbleBatch) Closed() bool {
 
 // Get implements the Batch interface.
 func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
-	if !p.batch.Indexed() {
-		panic("write-only batch")
-	}
-	if p.distinctOpen {
-		panic("distinct batch open")
+	r := pebble.Reader(p.batch)
+	if !p.isDistinct {
+		if !p.batch.Indexed() {
+			panic("write-only batch")
+		}
+		if p.distinctOpen {
+			panic("distinct batch open")
+		}
+	} else if !p.batch.Indexed() {
+		r = p.db
 	}
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
 	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	ret, err := p.batch.Get(p.buf)
+	ret, err := r.Get(p.buf)
 	if err == pebble.ErrNotFound || len(ret) == 0 {
 		return nil, nil
 	}
@@ -100,17 +102,22 @@ func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
 func (p *pebbleBatch) GetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
-	if !p.batch.Indexed() {
-		panic("write-only batch")
-	}
-	if p.distinctOpen {
-		panic("distinct batch open")
+	r := pebble.Reader(p.batch)
+	if !p.isDistinct {
+		if !p.batch.Indexed() {
+			panic("write-only batch")
+		}
+		if p.distinctOpen {
+			panic("distinct batch open")
+		}
+	} else if !p.batch.Indexed() {
+		r = p.db
 	}
 	if len(key.Key) == 0 {
 		return false, 0, 0, emptyKeyError()
 	}
 	p.buf = EncodeKeyToBuf(p.buf[:0], key)
-	val, err := p.batch.Get(p.buf)
+	val, err := r.Get(p.buf)
 	if err != nil || val == nil {
 		return false, 0, 0, err
 	}
@@ -125,6 +132,9 @@ func (p *pebbleBatch) GetProto(
 func (p *pebbleBatch) Iterate(
 	start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error),
 ) error {
+	if p.distinctOpen {
+		panic("distinct batch open")
+	}
 	return iterateOnReader(p, start, end, f)
 }
 
@@ -140,27 +150,19 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 	if p.distinctOpen {
 		panic("distinct batch open")
 	}
-
-	// Use the cached iterator.
-	//
-	// TODO(itsbilal): Investigate if it's equally or more efficient to just call
-	// newPebbleIterator with p.batch as the handle, instead of caching an
-	// iterator in pebbleBatch. This would clean up some of the oddities around
-	// pebbleBatchIterator.Close() (which doesn't close the underlying pebble
-	// Iterator), vs pebbleIterator.Close(), and the way memory is managed for
-	// the two iterators.
-	if p.iter.batch != nil {
+	if p.iter.inuse {
 		panic("iterator already in use")
-	} else if p.iter.iter != nil {
-		_ = p.iter.iter.Close()
 	}
+	p.iter.inuse = true
+	p.iter.reusable = true
 
-	if p.batch.Indexed() {
+	if p.iter.iter != nil {
+		p.iter.setOptions(opts)
+	} else if p.batch.Indexed() {
 		p.iter.init(p.batch, opts)
 	} else {
 		p.iter.init(p.db, opts)
 	}
-	p.iter.batch = p
 	return &p.iter
 }
 
@@ -340,35 +342,4 @@ func (p *pebbleBatch) Repr() []byte {
 	reprCopy := make([]byte, len(p.batch.Repr()))
 	copy(reprCopy, repr)
 	return reprCopy
-}
-
-// pebbleBatchIterator extends pebbleIterator and is meant to be embedded inside
-// a pebbleBatch.
-type pebbleBatchIterator struct {
-	pebbleIterator
-	batch *pebbleBatch
-}
-
-// Close implements the Iterator interface. There are two notable differences
-// from pebbleIterator.Close: 1. don't close the underlying p.iter (this is done
-// when the batch is closed), and 2. don't release the pebbleIterator back into
-// pebbleIterPool, since this memory is managed by pebbleBatch instead.
-func (p *pebbleBatchIterator) Close() {
-	if p.batch == nil {
-		panic("closing idle iterator")
-	}
-	p.batch = nil
-}
-
-// destroy resets all fields in a pebbleBatchIterator, while holding onto
-// some buffers to reduce allocations down the line. Assumes the underlying
-// pebble.Iterator has been closed already.
-func (p *pebbleBatchIterator) destroy() {
-	*p = pebbleBatchIterator{
-		pebbleIterator: pebbleIterator{
-			lowerBoundBuf: p.lowerBoundBuf,
-			upperBoundBuf: p.upperBoundBuf,
-		},
-		batch: nil,
-	}
 }

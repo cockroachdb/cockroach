@@ -167,6 +167,8 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 				t.Fatalf("iterator unexpectedly valid: %v -> %v",
 					iter.UnsafeKey(), iter.UnsafeValue())
 			}
+
+			iter.Close()
 		}
 
 		// Higher-level failure mode. Mostly for documentation.

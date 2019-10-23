@@ -94,8 +94,7 @@ type Pebble struct {
 	attrs  roachpb.Attributes
 
 	// Relevant options copied over from pebble.Options.
-	fs       vfs.FS
-	readOnly bool
+	fs vfs.FS
 }
 
 var _ WithSSTables = &Pebble{}
@@ -116,22 +115,15 @@ func NewPebble(path string, cfg *pebble.Options) (*Pebble, error) {
 	}
 
 	return &Pebble{
-		db:       db,
-		path:     path,
-		fs:       cfg.FS,
-		readOnly: cfg.ReadOnly,
+		db:   db,
+		path: path,
+		fs:   cfg.FS,
 	}, nil
 }
 
 // Close implements the Engine interface.
 func (p *Pebble) Close() {
 	p.closed = true
-
-	if p.readOnly {
-		// Don't close the underlying handle; the non-ReadOnly instance will handle
-		// that.
-		return
-	}
 	_ = p.db.Close()
 }
 
@@ -217,9 +209,6 @@ func (p *Pebble) NewIterator(opts IterOptions) Iterator {
 
 // ApplyBatchRepr implements the Engine interface.
 func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
 	// batch.SetRepr takes ownership of the underlying slice, so make a copy.
 	reprCopy := make([]byte, len(repr))
 	copy(reprCopy, repr)
@@ -238,34 +227,22 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 
 // Clear implements the Engine interface.
 func (p *Pebble) Clear(key MVCCKey) error {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
 	return p.db.Delete(EncodeKey(key), pebble.Sync)
 }
 
 // SingleClear implements the Engine interface.
 func (p *Pebble) SingleClear(key MVCCKey) error {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
 	return p.db.SingleDelete(EncodeKey(key), pebble.Sync)
 }
 
 // ClearRange implements the Engine interface.
 func (p *Pebble) ClearRange(start, end MVCCKey) error {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
-
 	bufStart := EncodeKey(start)
 	bufEnd := EncodeKey(end)
 	return p.db.DeleteRange(bufStart, bufEnd, pebble.Sync)
@@ -273,10 +250,6 @@ func (p *Pebble) ClearRange(start, end MVCCKey) error {
 
 // ClearIterRange implements the Engine interface.
 func (p *Pebble) ClearIterRange(iter Iterator, start, end MVCCKey) error {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
-
 	// Write all the tombstones in one batch.
 	batch := p.NewWriteOnlyBatch()
 	defer batch.Close()
@@ -289,25 +262,17 @@ func (p *Pebble) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 
 // Merge implements the Engine interface.
 func (p *Pebble) Merge(key MVCCKey, value []byte) error {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
 	return p.db.Merge(EncodeKey(key), value, pebble.Sync)
 }
 
 // Put implements the Engine interface.
 func (p *Pebble) Put(key MVCCKey, value []byte) error {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
 	return p.db.Set(EncodeKey(key), value, pebble.Sync)
 }
 
@@ -364,28 +329,18 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
 	return newPebbleBatch(p.db, p.db.NewIndexedBatch())
 }
 
 // NewReadOnly implements the Engine interface.
 func (p *Pebble) NewReadOnly() ReadWriter {
-	peb := &Pebble{
-		db:       p.db,
-		path:     p.path,
-		readOnly: true,
-		fs:       p.fs,
+	return &pebbleReadOnly{
+		parent: p,
 	}
-	return peb
 }
 
 // NewWriteOnlyBatch implements the Engine interface.
 func (p *Pebble) NewWriteOnlyBatch() Batch {
-	if p.readOnly {
-		panic("write operation called on read-only pebble instance")
-	}
 	return newPebbleBatch(p.db, p.db.NewBatch())
 }
 
@@ -507,6 +462,113 @@ func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
 		}
 	}
 	return sstables
+}
+
+type pebbleReadOnly struct {
+	parent *Pebble
+	iter   pebbleIterator
+	closed bool
+}
+
+var _ ReadWriter = &pebbleReadOnly{}
+
+func (p *pebbleReadOnly) Close() {
+	if p.closed {
+		panic("closing an already-closed pebbleReadOnly")
+	}
+	p.closed = true
+	p.iter.destroy()
+}
+
+func (p *pebbleReadOnly) Closed() bool {
+	return p.closed
+}
+
+func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
+	if p.closed {
+		panic("using a closed pebbleReadOnly")
+	}
+	return p.parent.Get(key)
+}
+
+func (p *pebbleReadOnly) GetProto(
+	key MVCCKey, msg protoutil.Message,
+) (ok bool, keyBytes, valBytes int64, err error) {
+	if p.closed {
+		panic("using a closed pebbleReadOnly")
+	}
+	return p.parent.GetProto(key, msg)
+}
+
+func (p *pebbleReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	if p.closed {
+		panic("using a closed pebbleReadOnly")
+	}
+	return p.parent.Iterate(start, end, f)
+}
+
+func (p *pebbleReadOnly) NewIterator(opts IterOptions) Iterator {
+	if p.closed {
+		panic("using a closed pebbleReadOnly")
+	}
+
+	if opts.MinTimestampHint != (hlc.Timestamp{}) {
+		// Iterators that specify timestamp bounds cannot be cached.
+		return newPebbleIterator(p.parent.db, opts)
+	}
+
+	if p.iter.inuse {
+		panic("iterator already in use")
+	}
+	p.iter.inuse = true
+	p.iter.reusable = true
+
+	if p.iter.iter != nil {
+		p.iter.setOptions(opts)
+	} else {
+		p.iter.init(p.parent.db, opts)
+	}
+	return &p.iter
+}
+
+// Writer methods are not implemented for pebbleReadOnly. Ideally, the code
+// could be refactored so that a Reader could be supplied to evaluateBatch
+
+// Writer is the write interface to an engine's data.
+func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) Clear(key MVCCKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) SingleClear(key MVCCKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ClearRange(start, end MVCCKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) Put(key MVCCKey, value []byte) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) LogData(data []byte) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	panic("not implemented")
 }
 
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
