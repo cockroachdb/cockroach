@@ -11,6 +11,7 @@
 package engine
 
 import (
+	"C"
 	"bytes"
 	"math"
 	"sync"
@@ -39,6 +40,10 @@ type pebbleIterator struct {
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC key when true.
 	prefix bool
+	// If reusable is true, Close() does not actually close the underlying
+	// iterator, but simply marks it as not inuse. Used by pebbleReadOnly.
+	reusable bool
+	inuse    bool
 }
 
 var _ Iterator = &pebbleIterator{}
@@ -92,8 +97,43 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 	}
 }
 
+func (p *pebbleIterator) setOptions(opts IterOptions) {
+	if opts.MinTimestampHint != (hlc.Timestamp{}) || opts.MaxTimestampHint != (hlc.Timestamp{}) {
+		panic("iterator with timestamp hints cannot be reused")
+	}
+	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
+		panic("iterator must set prefix or upper bound or lower bound")
+	}
+
+	p.prefix = opts.Prefix
+	if opts.LowerBound != nil {
+		// This is the same as
+		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[:0], MVCCKey{Key: opts.LowerBound}) .
+		// Since we are encoding zero-timestamp MVCC Keys anyway, we can just append
+		// the NUL byte instead of calling EncodeKey which will do the same thing.
+		p.lowerBoundBuf = append(p.lowerBoundBuf[:0], opts.LowerBound...)
+		p.lowerBoundBuf = append(p.lowerBoundBuf, 0x00)
+		p.options.LowerBound = p.lowerBoundBuf
+	}
+	if opts.UpperBound != nil {
+		// Same as above.
+		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
+		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
+		p.options.UpperBound = p.upperBoundBuf
+	}
+	p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
+}
+
 // Close implements the Iterator interface.
 func (p *pebbleIterator) Close() {
+	if p.reusable {
+		if !p.inuse {
+			panic("closing idle iterator")
+		}
+		p.inuse = false
+		return
+	}
+
 	if p.iter != nil {
 		err := p.iter.Close()
 		if err != nil {
@@ -472,4 +512,10 @@ func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
 func (p *pebbleIterator) Stats() IteratorStats {
 	// TODO(itsbilal): Implement this.
 	panic("implement me")
+}
+
+func (p *pebbleIterator) destroy() {
+	p.reusable = false
+	p.inuse = false
+	p.Close()
 }
