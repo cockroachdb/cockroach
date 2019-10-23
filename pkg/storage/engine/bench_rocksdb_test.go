@@ -359,7 +359,7 @@ func BenchmarkClearIterRange_RocksDB(b *testing.B) {
 	runClearRange(ctx, b, setupMVCCRocksDB, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
-		return batch.ClearIterRange(iter, start, end)
+		return batch.ClearIterRange(iter, start.Key, end.Key)
 	})
 }
 

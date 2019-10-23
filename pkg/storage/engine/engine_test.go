@@ -839,7 +839,7 @@ func TestEngineDeleteIterRange(t *testing.T) {
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
-		return engine.ClearIterRange(iter, start, end)
+		return engine.ClearIterRange(iter, start.Key, end.Key)
 	})
 }
 
