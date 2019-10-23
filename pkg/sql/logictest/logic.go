@@ -1076,6 +1076,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	if cfg.distSQLMetadataTestEnabled {
 		distSQLKnobs.MetadataTestLevel = execinfra.On
 	}
+	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
+		distSQLKnobs.EnableVectorizedInvariantsChecker = true
+	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 	if cfg.bootstrapVersion != (cluster.ClusterVersion{}) {
 		params.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs).BootstrapVersion = &cfg.bootstrapVersion
