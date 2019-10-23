@@ -33,12 +33,10 @@ SELECT count(w) OVER () FROM kv GROUP BY 1
 query error window functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
 
-# The HP and CBO have different errors.
-query error (window functions are not allowed in LIMIT|column "v" does not exist)
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v) OVER ()
 
-# The HP and CBO have different errors.
-query error (window functions are not allowed in OFFSET|column "v" does not exist)
+query error column "v" does not exist
 SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v) OVER ()
 
 query error window functions are not allowed in VALUES
@@ -2298,9 +2296,7 @@ Tablet      Samsung          200.00   6450.00
 statement error aggregate functions are not allowed in FILTER
 SELECT count(*) FILTER (WHERE count(*) > 5) OVER () FROM products
 
-# TODO(justin): it's a bit troublesome to get the error messages between the HP
-# and CBO to match here, so once the HP is removed put the CBO error message here.
-statement error window function
+statement error window function calls cannot be nested
 SELECT count(*) FILTER (WHERE count(*) OVER () > 5) OVER () FROM products
 
 statement error incompatible FILTER expression type: int

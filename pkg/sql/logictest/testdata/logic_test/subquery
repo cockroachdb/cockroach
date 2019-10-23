@@ -231,21 +231,8 @@ SELECT * FROM xyz
 statement error value type tuple{int, int} doesn't match type int of column "z"
 UPDATE xyz SET z = (SELECT (10, 11)) WHERE x = 7
 
-# HP and CBO return slightly different (but reasonable) errors, so accept both.
-statement error [subquery must return 2 columns, found 1 | number of columns (2) does not match number of values (1)]
+statement error number of columns \(2\) does not match number of values \(1\)
 UPDATE xyz SET (y, z) = (SELECT (11, 12)) WHERE x = 7
-
-#regression, see #6852
-#statement ok
-#UPDATE xyz SET (y, z) = (SELECT 11, 12) WHERE x = 7
-#
-#query III rowsort
-#SELECT * FROM xyz
-#----
-#1 2  3
-#4 5  6
-#7 11 12
-#10 11 12
 
 query B
 SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC)
@@ -265,6 +252,17 @@ SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz)
 query III
 SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz WHERE EXISTS(SELECT * FROM xyz WHERE z=x+3))
 ----
+10 11 12
+
+statement ok
+UPDATE xyz SET (y, z) = (SELECT 11, 12) WHERE x = 7
+
+query III rowsort
+SELECT * FROM xyz
+----
+1 2  3
+4 5  6
+7 11 12
 10 11 12
 
 statement ok
@@ -523,3 +521,28 @@ SELECT * FROM abc WHERE a = 11
 
 statement error pq: bar
 INSERT INTO abc VALUES (1,2, (SELECT crdb_internal.force_error('foo', 'bar')))
+
+# Regression test for #37263.
+query B
+SELECT 3::decimal IN (SELECT 1)
+----
+false
+
+query error unsupported comparison operator
+SELECT 3::decimal IN (SELECT 1::int)
+
+query B
+SELECT 1 IN (SELECT '1');
+----
+true
+
+# Regression test for #14554.
+query ITIIIII
+SELECT
+  t.oid, t.typname, t.typsend, t.typreceive, t.typoutput, t.typinput, t.typelem
+FROM
+  pg_type AS t
+WHERE
+  t.oid
+  NOT IN (SELECT (ARRAY[704, 11676, 10005, 3912, 11765, 59410, 11397])[i] FROM generate_series(1, 376) AS i)
+----
