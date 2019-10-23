@@ -223,7 +223,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
 		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-		_, _ = iter.ComputeStats(MakeMVCCMetadataKey(roachpb.KeyMin), MakeMVCCMetadataKey(roachpb.KeyMax), 0)
+		_, _ = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
 		iter.Close()
 	}
 
@@ -726,7 +726,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, emk engineMaker, val
 	var err error
 	for i := 0; i < b.N; i++ {
 		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-		stats, err = iter.ComputeStats(mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 0)
+		stats, err = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
 		iter.Close()
 		if err != nil {
 			b.Fatal(err)
