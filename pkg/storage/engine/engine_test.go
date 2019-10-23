@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func ensureRangeEqual(
@@ -61,12 +63,15 @@ var (
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	inMem := NewInMem(inMemAttrs, testCacheSize)
-	stopper.AddCloser(inMem)
-	test(inMem, t)
-	inMem.Close()
-	pebbleInMem, err := NewPebble("", &pebble.Options{
-		FS: vfs.NewMem(),
+	rocksDBInMem := NewInMem(inMemAttrs, testCacheSize)
+	stopper.AddCloser(rocksDBInMem)
+	test(rocksDBInMem, t)
+	rocksDBInMem.Close()
+
+	pebbleInMem, err := NewPebble(PebbleConfig{
+		Opts: &pebble.Options{
+			FS: vfs.NewMem(),
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -861,5 +866,29 @@ func TestCreateCheckpoint(t *testing.T) {
 	assert.True(t, len(m) > 0)
 	if err := db.CreateCheckpoint(dir); !testutils.IsError(err, "exists") {
 		t.Fatal(err)
+	}
+}
+
+func TestIngestDelayLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := cluster.MakeTestingClusterSettings()
+
+	max, ramp := time.Second*5, time.Second*5/10
+
+	for _, tc := range []struct {
+		exp   time.Duration
+		stats Stats
+	}{
+		{0, Stats{}},
+		{0, Stats{L0FileCount: 19}},
+		{0, Stats{L0FileCount: 20}},
+		{ramp, Stats{L0FileCount: 21}},
+		{ramp * 2, Stats{L0FileCount: 22}},
+		{max, Stats{L0FileCount: 55}},
+		{0, Stats{PendingCompactionBytesEstimate: (2 << 30) - 1}},
+		{max, Stats{L0FileCount: 25, PendingCompactionBytesEstimate: 80 << 30}},
+		{max, Stats{L0FileCount: 35, PendingCompactionBytesEstimate: 20 << 30}},
+	} {
+		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.stats))
 	}
 }
