@@ -1517,7 +1517,7 @@ func (r *batchIterator) MVCCGet(
 
 func (r *batchIterator) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
-) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	r.batch.flushMutations()
 	return r.iter.MVCCScan(start, end, max, timestamp, opts)
 }
@@ -2372,7 +2372,7 @@ func (r *rocksDBIterator) MVCCGet(
 
 func (r *rocksDBIterator) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
-) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	if opts.Inconsistent && opts.Txn != nil {
 		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
@@ -2400,7 +2400,7 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, 0, nil, nil, err
 	}
 
-	kvData = copyFromSliceVector(state.data.bufs, state.data.len)
+	kvData = [][]byte{copyFromSliceVector(state.data.bufs, state.data.len)}
 	numKVs = int64(state.data.count)
 
 	if resumeKey := cSliceToGoBytes(state.resume_key); resumeKey != nil {

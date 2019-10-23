@@ -111,8 +111,9 @@ type Iterator interface {
 	) (*roachpb.Value, *roachpb.Intent, error)
 	// MVCCScan is the internal implementation of the family of package-level
 	// MVCCScan functions. The notable difference is that key/value pairs are
-	// returned raw, as a buffer of varint-prefixed slices, alternating from key
-	// to value, where numKVs specifies the number of pairs in the buffer.
+	// returned raw, as a series of buffers of length-prefixed slices,
+	// alternating from key to value, where numKVs specifies the number of pairs
+	// in the buffer.
 	//
 	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
 	// package-level MVCCScan, or one of its variants, instead. For correct
@@ -122,7 +123,7 @@ type Iterator interface {
 	// TODO(peter): unexport this method.
 	MVCCScan(
 		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
-	) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
+	) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
 	// SetUpperBound installs a new upper bound for this iterator.
 	SetUpperBound(roachpb.Key)
 

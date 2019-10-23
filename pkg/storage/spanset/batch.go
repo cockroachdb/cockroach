@@ -177,7 +177,7 @@ func (s *Iterator) MVCCGet(
 // MVCCScan is part of the engine.Iterator interface.
 func (s *Iterator) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts engine.MVCCScanOptions,
-) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return nil, 0, nil, nil, err
 	}
