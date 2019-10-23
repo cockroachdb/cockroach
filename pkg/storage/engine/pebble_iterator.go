@@ -39,6 +39,9 @@ type pebbleIterator struct {
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC key when true.
 	prefix bool
+	// Stat tracking the number of sstables encountered during time-bound
+	// iteration.
+	timeBoundNumSSTables int
 }
 
 var _ Iterator = &pebbleIterator{}
@@ -84,6 +87,34 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
 		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
 		p.options.UpperBound = p.upperBoundBuf
+	}
+
+	if opts.MaxTimestampHint != (hlc.Timestamp{}) {
+		encodedMinTS := string(encodeTimestamp(opts.MinTimestampHint))
+		encodedMaxTS := string(encodeTimestamp(opts.MaxTimestampHint))
+		p.options.TableFilter = func(userProps map[string]string) bool {
+			tableMinTS := userProps["crdb.ts.min"]
+			if len(tableMinTS) == 0 {
+				if opts.WithStats {
+					p.timeBoundNumSSTables++
+				}
+				return true
+			}
+			tableMaxTS := userProps["crdb.ts.max"]
+			if len(tableMaxTS) == 0 {
+				if opts.WithStats {
+					p.timeBoundNumSSTables++
+				}
+				return true
+			}
+			used := encodedMaxTS >= tableMinTS && encodedMinTS <= tableMaxTS
+			if used && opts.WithStats {
+				p.timeBoundNumSSTables++
+			}
+			return used
+		}
+	} else if opts.MinTimestampHint != (hlc.Timestamp{}) {
+		panic("min timestamp hint set without max timestamp hint")
 	}
 
 	p.iter = handle.NewIter(&p.options)
@@ -470,6 +501,7 @@ func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
 
 // Stats implements the Iterator interface.
 func (p *pebbleIterator) Stats() IteratorStats {
-	// TODO(itsbilal): Implement this.
-	panic("implement me")
+	return IteratorStats{
+		TimeBoundNumSSTs: p.timeBoundNumSSTables,
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"path/filepath"
 	"reflect"
@@ -476,6 +477,168 @@ func TestEngineMerge(t *testing.T) {
 			}
 		}
 	}, t)
+}
+
+func TestEngineTimeBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			var minTimestamp = hlc.Timestamp{WallTime: 1, Logical: 0}
+			var maxTimestamp = hlc.Timestamp{WallTime: 3, Logical: 0}
+			times := []hlc.Timestamp{
+				{WallTime: 2, Logical: 0},
+				minTimestamp,
+				maxTimestamp,
+				{WallTime: 2, Logical: 0},
+			}
+
+			for i, time := range times {
+				s := fmt.Sprintf("%02d", i)
+				key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
+				if err := engine.Put(key, []byte(s)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := engine.Flush(); err != nil {
+				t.Fatal(err)
+			}
+
+			batch := engine.NewBatch()
+			defer batch.Close()
+
+			check := func(t *testing.T, tbi Iterator, keys, ssts int) {
+				defer tbi.Close()
+				tbi.Seek(NilKey)
+
+				var count int
+				for ; ; tbi.Next() {
+					ok, err := tbi.Valid()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok {
+						break
+					}
+					count++
+				}
+
+				// Make sure the iterator sees no writes.
+				if keys != count {
+					t.Fatalf("saw %d values in time bounded iterator, but expected %d", count, keys)
+				}
+				stats := tbi.Stats()
+				if a := stats.TimeBoundNumSSTs; a != ssts {
+					t.Fatalf("touched %d SSTs, expected %d", a, ssts)
+				}
+			}
+
+			testCases := []struct {
+				iter       Iterator
+				keys, ssts int
+			}{
+				// Completely to the right, not touching.
+				{
+					iter: batch.NewIterator(IterOptions{
+						MinTimestampHint: maxTimestamp.Next(),
+						MaxTimestampHint: maxTimestamp.Next().Next(),
+						UpperBound:       roachpb.KeyMax,
+						WithStats:        true,
+					}),
+					keys: 0,
+					ssts: 0,
+				},
+				// Completely to the left, not touching.
+				{
+					iter: batch.NewIterator(IterOptions{
+						MinTimestampHint: minTimestamp.Prev().Prev(),
+						MaxTimestampHint: minTimestamp.Prev(),
+						UpperBound:       roachpb.KeyMax,
+						WithStats:        true,
+					}),
+					keys: 0,
+					ssts: 0,
+				},
+				// Touching on the right.
+				{
+					iter: batch.NewIterator(IterOptions{
+						MinTimestampHint: maxTimestamp,
+						MaxTimestampHint: maxTimestamp,
+						UpperBound:       roachpb.KeyMax,
+						WithStats:        true,
+					}),
+					keys: len(times),
+					ssts: 1,
+				},
+				// Touching on the left.
+				{
+					iter: batch.NewIterator(IterOptions{
+						MinTimestampHint: minTimestamp,
+						MaxTimestampHint: minTimestamp,
+						UpperBound:       roachpb.KeyMax,
+						WithStats:        true,
+					}),
+					keys: len(times),
+					ssts: 1,
+				},
+				// Copy of last case, but confirm that we don't get SST stats if we don't
+				// ask for them.
+				{
+					iter: batch.NewIterator(IterOptions{
+						MinTimestampHint: minTimestamp,
+						MaxTimestampHint: minTimestamp,
+						UpperBound:       roachpb.KeyMax,
+						WithStats:        false,
+					}),
+					keys: len(times),
+					ssts: 0,
+				},
+				// Copy of last case, but confirm that upper bound is respected.
+				{
+					iter: batch.NewIterator(IterOptions{
+						MinTimestampHint: minTimestamp,
+						MaxTimestampHint: minTimestamp,
+						UpperBound:       []byte("02"),
+						WithStats:        false,
+					}),
+					keys: 2,
+					ssts: 0,
+				},
+			}
+
+			for _, test := range testCases {
+				t.Run("", func(t *testing.T) {
+					check(t, test.iter, test.keys, test.ssts)
+				})
+			}
+
+			// Make a regular iterator. Before #21721, this would accidentally pick up the
+			// time bounded iterator instead.
+			iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			defer iter.Close()
+			iter.Seek(NilKey)
+
+			var count int
+			for ; ; iter.Next() {
+				ok, err := iter.Valid()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					break
+				}
+				count++
+			}
+
+			// Make sure the iterator sees the writes (i.e. it's not the time bounded iterator).
+			if expCount := len(times); expCount != count {
+				t.Fatalf("saw %d values in regular iterator, but expected %d", count, expCount)
+			}
+		})
+	}
 }
 
 func TestFlushWithSSTables(t *testing.T) {
