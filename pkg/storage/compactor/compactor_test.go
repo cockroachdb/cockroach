@@ -570,8 +570,8 @@ func TestCompactorThresholds(t *testing.T) {
 				// spans have been cleared and uncompacted spans remain.
 				var idx int
 				return we.Iterate(
-					engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
-					engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
+					keys.LocalStoreSuggestedCompactionsMin,
+					keys.LocalStoreSuggestedCompactionsMax,
 					func(kv engine.MVCCKeyValue) (bool, error) {
 						start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 						if err != nil {

@@ -178,7 +178,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return db.Iterate(debugCtx.startKey, debugCtx.endKey, printer)
+	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, printer)
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
@@ -319,8 +319,8 @@ func loadRangeDescriptor(
 
 	// Range descriptors are stored by key, so we have to scan over the
 	// range-local data to find the one for this RangeID.
-	start := engine.MakeMVCCMetadataKey(keys.LocalRangePrefix)
-	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
+	start := keys.LocalRangePrefix
+	end := keys.LocalRangeMax
 
 	if err := db.Iterate(start, end, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
@@ -340,8 +340,8 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	start := engine.MakeMVCCMetadataKey(keys.LocalRangePrefix)
-	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
+	start := keys.LocalRangePrefix
+	end := keys.LocalRangeMax
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		if storage.IsRangeDescriptorKey(kv.Key) != nil {
@@ -445,10 +445,12 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
-	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
+	start := keys.RaftLogPrefix(rangeID)
+	end := keys.RaftLogPrefix(rangeID).PrefixEnd()
 	fmt.Printf("Printing keys %s -> %s (RocksDB keys: %#x - %#x )\n",
-		start, end, string(engine.EncodeKey(start)), string(engine.EncodeKey(end)))
+		start, end,
+		string(engine.EncodeKey(engine.MakeMVCCMetadataKey(start))),
+		string(engine.EncodeKey(engine.MakeMVCCMetadataKey(end))))
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		storage.PrintKeyValue(kv)

@@ -83,8 +83,7 @@ func TestExportCmd(t *testing.T) {
 			if err := sst.IngestExternalFile(file.SST); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
-			if err := sst.Iterate(start, end, ingestFunc); err != nil {
+			if err := sst.Iterate(keys.MinKey, keys.MaxKey, ingestFunc); err != nil {
 				t.Fatalf("%+v", err)
 			}
 		}
@@ -280,7 +279,7 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []engine.MVCCKey
 	}
 
 	var kvs []engine.MVCCKeyValue
-	if err := sst.Iterate(engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, func(kv engine.MVCCKeyValue) (bool, error) {
+	if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		kvs = append(kvs, kv)
 		return false, nil
 	}); err != nil {

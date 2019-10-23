@@ -83,7 +83,7 @@ func clearExistingData(
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.Iterate(start, end, func(_ engine.MVCCKeyValue) (bool, error) {
+		if err := batch.Iterate(start.Key, end.Key, func(_ engine.MVCCKeyValue) (bool, error) {
 			isEmpty = false
 			return true, nil // stop right away
 		}); err != nil {
