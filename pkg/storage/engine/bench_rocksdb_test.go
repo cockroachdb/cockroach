@@ -312,6 +312,24 @@ func BenchmarkMVCCMergeTimeSeries_RocksDB(b *testing.B) {
 	runMVCCMerge(ctx, b, setupMVCCInMemRocksDB, &value, 1024)
 }
 
+// BenchmarkMVCCGetMergedTimeSeries computes performance of reading merged
+// time series data using `MVCCGet()`. Uses an in-memory engine.
+func BenchmarkMVCCGetMergedTimeSeries_RocksDB(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	ctx := context.Background()
+	for _, numKeys := range []int{1, 16, 256} {
+		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
+			for _, mergesPerKey := range []int{1, 16, 256} {
+				b.Run(fmt.Sprintf("mergesPerKey=%d", mergesPerKey), func(b *testing.B) {
+					runMVCCGetMergedValue(ctx, b, setupMVCCInMemRocksDB, numKeys, mergesPerKey)
+				})
+			}
+		})
+	}
+}
+
 // DeleteRange benchmarks below (using on-disk data).
 
 func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
