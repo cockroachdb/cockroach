@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -147,13 +148,28 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
 }
 
+// PebbleConfig holds all configuration parameters and knobs used in setting up
+// a new Pebble instance.
+type PebbleConfig struct {
+	// Store attributes. These are only placed here for convenience, and not used
+	// by Pebble or the Pebble-based Engine implementation.
+	Attrs roachpb.Attributes
+	// Dir is the data directory for the Pebble instance.
+	Dir string
+	// Pebble specific options.
+	Opts *pebble.Options
+	// Settings instance for cluster-wide knobs.
+	Settings *cluster.Settings
+}
+
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
 	db *pebble.DB
 
-	closed bool
-	path   string
-	attrs  roachpb.Attributes
+	closed   bool
+	path     string
+	attrs    roachpb.Attributes
+	settings *cluster.Settings
 
 	// Relevant options copied over from pebble.Options.
 	fs vfs.FS
@@ -162,25 +178,27 @@ type Pebble struct {
 var _ WithSSTables = &Pebble{}
 
 // NewPebble creates a new Pebble instance, at the specified path.
-func NewPebble(path string, cfg *pebble.Options) (*Pebble, error) {
-	cfg.Comparer = MVCCComparer
-	cfg.Merger = MVCCMerger
-	cfg.TablePropertyCollectors = PebbleTablePropertyCollectors
+func NewPebble(cfg PebbleConfig) (*Pebble, error) {
+	cfg.Opts.Comparer = MVCCComparer
+	cfg.Opts.Merger = MVCCMerger
+	cfg.Opts.TablePropertyCollectors = PebbleTablePropertyCollectors
 
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
 	// cfg.FS and cfg.ReadOnly later on.
-	cfg.EnsureDefaults()
+	cfg.Opts.EnsureDefaults()
 
-	db, err := pebble.Open(path, cfg)
+	db, err := pebble.Open(cfg.Dir, cfg.Opts)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Pebble{
-		db:   db,
-		path: path,
-		fs:   cfg.FS,
+		db:       db,
+		path:     cfg.Dir,
+		attrs:    cfg.Attrs,
+		settings: cfg.Settings,
+		fs:       cfg.Opts.FS,
 	}, nil
 }
 
@@ -349,12 +367,6 @@ func (p *Pebble) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails
 	// No-op. Logical logging disabled.
 }
 
-// SetAttrs sets the attributes returned by Atts(). This method is not safe for
-// concurrent use.
-func (p *Pebble) SetAttrs(attrs roachpb.Attributes) {
-	p.attrs = attrs
-}
-
 // Attrs implements the Engine interface.
 func (p *Pebble) Attrs() roachpb.Attributes {
 	return p.attrs
@@ -393,7 +405,7 @@ func (p *Pebble) GetStats() (*Stats, error) {
 
 // GetEnvStats implements the Engine interface.
 func (p *Pebble) GetEnvStats() (*EnvStats, error) {
-	// TODO(itsbilal): Implement this.
+	// TODO(sumeer): Implement this. These are encryption-at-rest specific stats.
 	return &EnvStats{}, nil
 }
 
@@ -435,9 +447,8 @@ func (p *Pebble) IngestExternalFiles(
 }
 
 // PreIngestDelay implements the Engine interface.
-func (p *Pebble) PreIngestDelay(_ context.Context) {
-	// TODO(itsbilal): See if we need to add pre-ingestion delays, similar to
-	// how we do with rocksdb.
+func (p *Pebble) PreIngestDelay(ctx context.Context) {
+	preIngestDelay(ctx, p, p.settings)
 }
 
 // ApproximateDiskBytes implements the Engine interface.
