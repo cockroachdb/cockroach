@@ -56,7 +56,21 @@ func runImport(
 	producerGroup.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
-		return conv.readFiles(ctx, spec.Uri, spec.Format, flowCtx.Cfg.ExternalStorage)
+		var inputs map[int32]string
+		if spec.ResumePos != nil {
+			// Filter out files that were completely processed.
+			inputs = make(map[int32]string)
+			for id, name := range spec.Uri {
+				// TODO(yevgeniy): Support offsets into the file, not just full file skipping.
+				if seek, ok := spec.ResumePos[id]; !ok || seek != math.MaxUint64 {
+					inputs[id] = name
+				}
+			}
+		} else {
+			inputs = spec.Uri
+		}
+
+		return conv.readFiles(ctx, inputs, spec.Format, flowCtx.Cfg.ExternalStorage)
 	})
 
 	// This group links together the producers (via producerGroup) and the KV ingester.
@@ -75,11 +89,11 @@ func runImport(
 			return err
 		}
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-		prog.CompletedRow = make(map[int32]uint64)
+		prog.ResumePos = make(map[int32]uint64)
 		prog.CompletedFraction = make(map[int32]float32)
 		for i := range spec.Uri {
 			prog.CompletedFraction[i] = 1.0
-			prog.CompletedRow[i] = math.MaxUint64
+			prog.ResumePos[i] = math.MaxUint64
 		}
 		progCh <- prog
 		return nil
