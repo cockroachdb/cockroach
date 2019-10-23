@@ -52,7 +52,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Database name.
-	nameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "test")
+	nameKey := sqlbase.NewDatabaseKey("test").Key()
 	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {

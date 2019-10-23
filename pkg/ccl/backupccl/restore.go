@@ -369,7 +369,8 @@ func allocateTableRewrites(
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, name))
+			dKey := sqlbase.NewDatabaseKey(name)
+			existingDatabaseID, err := txn.Get(ctx, dKey.Key())
 			if err != nil {
 				return err
 			}
@@ -396,7 +397,8 @@ func allocateTableRewrites(
 			} else {
 				var parentID sqlbase.ID
 				{
-					existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, targetDB))
+					dKey := sqlbase.NewDatabaseKey(targetDB)
+					existingDatabaseID, err := txn.Get(ctx, dKey.Key())
 					if err != nil {
 						return err
 					}
@@ -486,8 +488,8 @@ func allocateTableRewrites(
 func CheckTableExists(
 	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
 ) error {
-	nameKey := sqlbase.MakeNameMetadataKey(parentID, name)
-	res, err := txn.Get(ctx, nameKey)
+	tKey := sqlbase.NewTableKey(parentID, name)
+	res, err := txn.Get(ctx, tKey.Key())
 	if err != nil {
 		return err
 	}
@@ -1055,7 +1057,7 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
+			b.CPut(sqlbase.NewDatabaseKey(desc.Name).Key(), desc.ID, nil)
 		}
 		for i := range tables {
 			if wrote, ok := wroteDBs[tables[i].ParentID]; ok {
@@ -1077,7 +1079,7 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.MakeNameMetadataKey(tables[i].ParentID, tables[i].Name), tables[i].ID, nil)
+			b.CPut(sqlbase.NewTableKey(tables[i].ParentID, tables[i].Name).Key(), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
@@ -1789,7 +1791,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		var existingIDVal roachpb.Value
 		existingIDVal.SetInt(int64(tableDesc.ID))
 		b.CPut(
-			sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name),
+			sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
 			nil,
 			&existingIDVal,
 		)
