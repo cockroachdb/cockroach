@@ -259,7 +259,7 @@ func DistIngest(
 	fractionProgress := make([]uint32, len(from))
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) {
 		if meta.BulkProcessorProgress != nil {
-			for i, v := range meta.BulkProcessorProgress.CompletedRow {
+			for i, v := range meta.BulkProcessorProgress.ResumePos {
 				atomic.StoreUint64(&rowProgress[i], v)
 			}
 			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
