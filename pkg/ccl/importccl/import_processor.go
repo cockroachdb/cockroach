@@ -85,7 +85,22 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
 		defer conv.inputFinished(ctx)
-		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, cp.flowCtx.Cfg.ExternalStorage)
+
+		var inputs map[int32]string
+		if cp.spec.ResumePos != nil {
+			// Filter out files that were completely processed.
+			inputs = make(map[int32]string)
+			for id, name := range cp.spec.Uri {
+				// TODO(yevgeniy): Support offsets into the file, not just full file skipping.
+				if seek, ok := cp.spec.ResumePos[id]; !ok || seek != math.MaxUint64 {
+					inputs[id] = name
+				}
+			}
+		} else {
+			inputs = cp.spec.Uri
+		}
+
+		return conv.readFiles(ctx, inputs, cp.spec.Format, cp.flowCtx.Cfg.ExternalStorage)
 	})
 
 	// Ingest the KVs that the producer emitted to the chan and the row result
@@ -252,7 +267,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 				return nil
 			case <-tick.C:
 				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-				prog.CompletedRow = make(map[int32]uint64)
+				prog.ResumePos = make(map[int32]uint64)
 				prog.CompletedFraction = make(map[int32]float32)
 				for file, offset := range offsets {
 					pk := atomic.LoadUint64(&pkFlushedRow[offset])
@@ -260,9 +275,9 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 					// On resume we'll be able to skip up the last row for which both the
 					// PK and index adders have flushed KVs.
 					if idx > pk {
-						prog.CompletedRow[file] = pk
+						prog.ResumePos[file] = pk
 					} else {
-						prog.CompletedRow[file] = idx
+						prog.ResumePos[file] = idx
 					}
 					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
 				}
@@ -348,11 +363,11 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	}
 
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	prog.CompletedRow = make(map[int32]uint64)
+	prog.ResumePos = make(map[int32]uint64)
 	prog.CompletedFraction = make(map[int32]float32)
 	for i := range cp.spec.Uri {
 		prog.CompletedFraction[i] = 1.0
-		prog.CompletedRow[i] = math.MaxUint64
+		prog.ResumePos[i] = math.MaxUint64
 	}
 	cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog})
 
