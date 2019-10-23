@@ -2128,6 +2128,21 @@ may increase either contention or retry errors, or both.`,
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log10(x))), nil
 		}, "Calculates the base 10 log of `val`."),
+		floatOverload2("b", "x", func(b, x float64) (tree.Datum, error) {
+			switch {
+			case x < 0.0:
+				return nil, errLogOfNegNumber
+			case x == 0.0:
+				return nil, errLogOfZero
+			}
+			switch b {
+			case b < 0.0:
+				return nil, errLogOfNegNumber
+			case b == 0.0:
+				return nil, errLogOfZero
+			}
+			return tree.NewDFloat(tree.DFloat(math.Log10(x) / math.Log10(b))), nil
+		}, "Calculates the base `b` log of `val`."),
 		decimalLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
 	),
 
