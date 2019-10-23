@@ -498,23 +498,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				// TODO(itsbilal): Tune these options, and allow them to be overridden
 				// in the spec (similar to the existing spec.RocksDBOptions and others).
 				pebbleConfig := engine.PebbleConfig{
-					Dir: spec.Path,
-					Opts: &pebble.Options{
-						Cache:                       pebbleCache,
-						MaxOpenFiles:                int(openFileLimitPerStore),
-						MemTableSize:                64 << 20,
-						MemTableStopWritesThreshold: 4,
-						MinFlushRate:                4 << 20,
-						L0CompactionThreshold:       2,
-						L0StopWritesThreshold:       400,
-						LBaseMaxBytes:               64 << 20, // 64 MB
-						Levels: []pebble.LevelOptions{{
-							BlockSize: 32 << 10,
-						}},
-					},
+					Dir:      spec.Path,
+					Opts:     engine.DefaultPebbleOptions(),
 					Attrs:    spec.Attributes,
 					Settings: cfg.Settings,
 				}
+				pebbleConfig.Opts.Cache = pebbleCache
+				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 				eng, err = engine.NewPebble(pebbleConfig)
 			} else {
 				rocksDBConfig := engine.RocksDBConfig{
