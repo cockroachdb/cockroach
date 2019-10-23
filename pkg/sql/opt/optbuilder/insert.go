@@ -868,6 +868,8 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
+	mb.buildFKChecksForUpsert()
+
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, mb.checks, private)
 

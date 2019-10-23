@@ -127,6 +127,10 @@ type mutationBuilder struct {
 	// checks contains foreign key check queries; see buildFKChecks methods.
 	checks memo.FKChecksExpr
 
+	// fkFallback is true if we need to fall back on the legacy path for
+	// FK checks / cascades. See buildFKChecks methos.
+	fkFallback bool
+
 	// withID is nonzero if we need to buffer the input for FK checks.
 	withID opt.WithID
 
@@ -724,6 +728,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		UpdateCols: makeColList(mb.updateOrds),
 		CanaryCol:  mb.canaryColID,
 		CheckCols:  makeColList(mb.checkOrds),
+		FKFallback: mb.fkFallback,
 	}
 
 	// If we didn't actually plan any checks (e.g. because of cascades), don't
@@ -884,7 +889,12 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 // buildFKChecks* methods populate mb.checks with queries that check the
 // integrity of foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecksForInsert() {
-	if !mb.b.evalCtx.SessionData.OptimizerFKs || mb.tab.OutboundForeignKeyCount() == 0 {
+	if mb.tab.OutboundForeignKeyCount() == 0 {
+		// No relevant FKs.
+		return
+	}
+	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+		mb.fkFallback = true
 		return
 	}
 
@@ -906,7 +916,12 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 // buildFKChecks* methods populate mb.checks with queries that check the
 // integrity of foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecksForDelete() {
-	if !mb.b.evalCtx.SessionData.OptimizerFKs || mb.tab.InboundForeignKeyCount() == 0 {
+	if mb.tab.InboundForeignKeyCount() == 0 {
+		// No relevant FKs.
+		return
+	}
+	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+		mb.fkFallback = true
 		return
 	}
 
@@ -935,7 +950,8 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 		ok := mb.addDeletionCheck(i, input, cols, fk.DeleteReferenceAction())
 		if !ok {
 			mb.checks = nil
-			break
+			mb.fkFallback = true
+			return
 		}
 	}
 }
@@ -943,10 +959,11 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 // buildFKChecks* methods populate mb.checks with queries that check the
 // integrity of foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecksForUpdate() {
-	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
 		return
 	}
-	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
+	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+		mb.fkFallback = true
 		return
 	}
 
@@ -1079,9 +1096,22 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		ok := mb.addDeletionCheck(i, input, outCols, fk.UpdateReferenceAction())
 		if !ok {
 			mb.checks = nil
-			break
+			mb.fkFallback = true
+			return
 		}
 	}
+}
+
+func (mb *mutationBuilder) buildFKChecksForUpsert() {
+	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
+		return
+	}
+	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+		mb.fkFallback = true
+		return
+	}
+	// TODO(justin): not implemented yet.
+	mb.fkFallback = true
 }
 
 // addInsertionCheck adds a FK check for rows which are added to a table.

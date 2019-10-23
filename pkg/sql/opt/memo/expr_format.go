@@ -368,7 +368,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatMutationWithID(tp, t.WithID)
+			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
 	case *UpdateExpr:
@@ -379,7 +379,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
 			f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatMutationWithID(tp, t.WithID)
+			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
 	case *UpsertExpr:
@@ -397,7 +397,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				f.formatMutationCols(e, tp, "upsert-mapping:", t.InsertCols, t.Table)
 			}
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatMutationWithID(tp, t.WithID)
+			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
 	case *DeleteExpr:
@@ -406,7 +406,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-			f.formatMutationWithID(tp, t.WithID)
+			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
 	case *WithScanExpr:
@@ -880,11 +880,14 @@ func (f *ExprFmtCtx) formatMutationCols(
 	}
 }
 
-// formatMutationWithID shows the binding ID, if the mutation is buffering its
-// input.
-func (f *ExprFmtCtx) formatMutationWithID(tp treeprinter.Node, id opt.WithID) {
-	if id != 0 {
-		tp.Childf("input binding: &%d", id)
+// formatMutationCommon shows the MutationPrivate fields that format the same
+// for all types of mutations.
+func (f *ExprFmtCtx) formatMutationCommon(tp treeprinter.Node, p *MutationPrivate) {
+	if p.WithID != 0 {
+		tp.Childf("input binding: &%d", p.WithID)
+	}
+	if p.FKFallback {
+		tp.Childf("fk-fallback")
 	}
 }
 
