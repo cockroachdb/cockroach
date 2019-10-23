@@ -83,6 +83,7 @@ func NewRocksDBTempEngine(
 		ExtraOptions:    storeSpec.ExtraOptions,
 	}
 	rocksDBCache := NewRocksDBCache(0)
+	defer rocksDBCache.Release()
 	db, err := NewRocksDB(cfg, rocksDBCache)
 	if err != nil {
 		return nil, err
