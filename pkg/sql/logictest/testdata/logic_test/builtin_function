@@ -730,6 +730,28 @@ SELECT log(10.0::float), log(100.000::decimal)
 ----
 1 2.0000000000000000000
 
+query R
+SELECT log(2.0::float, 4.0::float)
+----
+2
+
+query R
+SELECT log(2.0::decimal, 4.0::decimal)
+----
+2.0000000000000000000
+
+query error cannot take logarithm of a negative number
+SELECT log(2.0::float, -10.0::float)
+
+query error cannot take logarithm of zero
+SELECT log(2.0::float, 0.0::float)
+
+query error cannot take logarithm of a negative number
+SELECT log(2.0::decimal, -10.0::decimal)
+
+query error cannot take logarithm of zero
+SELECT log(2.0::decimal, 0.0::decimal)
+
 query error cannot take logarithm of a negative number
 SELECT log(-100.000::decimal)
 

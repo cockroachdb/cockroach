@@ -666,6 +666,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="ln"></a><code>ln(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the natural log of <code>val</code>.</p>
 </span></td></tr>
+<tr><td><a name="log"></a><code>log(b: <a href="decimal.html">decimal</a>, x: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base <code>b</code> log of <code>val</code>.</p>
+</span></td></tr>
+<tr><td><a name="log"></a><code>log(b: <a href="float.html">float</a>, x: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the base <code>b</code> log of <code>val</code>.</p>
+</span></td></tr>
 <tr><td><a name="log"></a><code>log(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="log"></a><code>log(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
