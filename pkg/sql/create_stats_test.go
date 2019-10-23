@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -97,12 +98,9 @@ func TestStatsWithLowTTL(t *testing.T) {
 				return
 			}
 			// Force a table GC of values older than 1 second.
-			if err := s.ForceTableGC(
-				context.Background(), "test", "t", s.Clock().Now().Add(-int64(1*time.Second), 0),
-			); err != nil {
-				goroutineErr = err
-				return
-			}
+			sqlutils.ForceTableGC(
+				t, s.DistSenderI().(*kv.DistSender), db2,
+				"test", "t", s.Clock().Now().Add(-int64(1*time.Second), 0))
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()

@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
@@ -779,11 +779,11 @@ func TestReportUsage(t *testing.T) {
 			if a, e := zone.GC.TTLSeconds, int32(1); a != e {
 				t.Errorf("expected zone %d GC.TTLSeconds = %d; got %d", id, e, a)
 			}
-			if a, e := zone.Constraints, []zonepb.Constraints{
+			if a, e := zone.Constraints, []config.Constraints{
 				{
-					Constraints: []zonepb.Constraint{
-						{Key: hashedZone, Value: hashedElemName, Type: zonepb.Constraint_REQUIRED},
-						{Value: hashedElemName, Type: zonepb.Constraint_REQUIRED},
+					Constraints: []config.Constraint{
+						{Key: hashedZone, Value: hashedElemName, Type: config.Constraint_REQUIRED},
+						{Value: hashedElemName, Type: config.Constraint_REQUIRED},
 					},
 				},
 			}; !reflect.DeepEqual(a, e) {
@@ -791,30 +791,30 @@ func TestReportUsage(t *testing.T) {
 			}
 		}
 		if id == keys.SystemDatabaseID {
-			if a, e := zone.Constraints, []zonepb.Constraints{
+			if a, e := zone.Constraints, []config.Constraints{
 				{
 					NumReplicas: 1,
-					Constraints: []zonepb.Constraint{{Value: hashedElemName, Type: zonepb.Constraint_REQUIRED}},
+					Constraints: []config.Constraint{{Value: hashedElemName, Type: config.Constraint_REQUIRED}},
 				},
 				{
 					NumReplicas: 2,
-					Constraints: []zonepb.Constraint{
-						{Key: hashedZone, Value: hashedElemName, Type: zonepb.Constraint_REQUIRED},
-						{Value: hashedElemName, Type: zonepb.Constraint_REQUIRED},
+					Constraints: []config.Constraint{
+						{Key: hashedZone, Value: hashedElemName, Type: config.Constraint_REQUIRED},
+						{Value: hashedElemName, Type: config.Constraint_REQUIRED},
 					},
 				},
 			}; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected zone %d Constraints = %+v; got %+v", id, e, a)
 			}
-			if a, e := zone.LeasePreferences, []zonepb.LeasePreference{
+			if a, e := zone.LeasePreferences, []config.LeasePreference{
 				{
-					Constraints: []zonepb.Constraint{
-						{Key: hashedZone, Value: hashedElemName, Type: zonepb.Constraint_REQUIRED},
-						{Value: hashedElemName, Type: zonepb.Constraint_REQUIRED},
+					Constraints: []config.Constraint{
+						{Key: hashedZone, Value: hashedElemName, Type: config.Constraint_REQUIRED},
+						{Value: hashedElemName, Type: config.Constraint_REQUIRED},
 					},
 				},
 				{
-					Constraints: []zonepb.Constraint{{Value: hashedElemName, Type: zonepb.Constraint_REQUIRED}},
+					Constraints: []config.Constraint{{Value: hashedElemName, Type: config.Constraint_REQUIRED}},
 				},
 			}; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected zone %d LeasePreferences = %+v; got %+v", id, e, a)

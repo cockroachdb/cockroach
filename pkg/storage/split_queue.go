@@ -90,13 +90,9 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 }
 
 func shouldSplitRange(
-	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
-	ms enginepb.MVCCStats,
-	maxBytes int64,
-	sysCfg *config.SystemConfig,
+	desc *roachpb.RangeDescriptor, ms enginepb.MVCCStats, maxBytes int64, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	if sysCfg.NeedsSplit(ctx, desc.StartKey, desc.EndKey) {
+	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
 		priority = 1
 		shouldQ = true
@@ -119,7 +115,7 @@ func shouldSplitRange(
 func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
+	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
 		repl.GetMaxBytes(), sysCfg)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
@@ -163,7 +159,7 @@ func (sq *splitQueue) processAttempt(
 ) error {
 	desc := r.Desc()
 	// First handle the case of splitting due to zone config maps.
-	if splitKey := sysCfg.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey); splitKey != nil {
+	if splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey); splitKey != nil {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{

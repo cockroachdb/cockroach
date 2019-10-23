@@ -14,7 +14,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"gopkg.in/yaml.v2"
@@ -68,7 +68,7 @@ func TestLocalityMatchScore(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		zone := &zonepb.ZoneConfig{}
+		zone := &config.ZoneConfig{}
 
 		var locality roachpb.Locality
 		if err := locality.Set(tc.locality); err != nil {
@@ -76,7 +76,7 @@ func TestLocalityMatchScore(t *testing.T) {
 		}
 
 		if tc.constraints != "" {
-			constraintsList := &zonepb.ConstraintsList{}
+			constraintsList := &config.ConstraintsList{}
 			if err := yaml.UnmarshalStrict([]byte(tc.constraints), constraintsList); err != nil {
 				t.Fatal(err)
 			}

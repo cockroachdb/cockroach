@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -81,7 +80,7 @@ func TestSystemConfigDeltaFilter(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	df := MakeSystemConfigDeltaFilter(nil)
-	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
+	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
 
 	// Add one key.
 	addKV(rng, cfg, 1)
@@ -111,7 +110,7 @@ func TestSystemConfigDeltaFilterWithKeyPrefix(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	df := MakeSystemConfigDeltaFilter(keyFromInt(12))
-	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
+	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
 
 	// Add one non-matching key.
 	addKV(rng, cfg, 1)
@@ -137,7 +136,7 @@ func BenchmarkSystemConfigDeltaFilter(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	// Create two configs.
-	cfg1, cfg2 := config.NewSystemConfig(zonepb.DefaultZoneConfigRef()), config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
+	cfg1, cfg2 := config.NewSystemConfig(config.DefaultZoneConfigRef()), config.NewSystemConfig(config.DefaultZoneConfigRef())
 	for i := 0; i < 1000; i++ {
 		key := i + 100000 // +100000 to match filter
 		addKV(rng, cfg1, key)
@@ -161,7 +160,7 @@ func BenchmarkSystemConfigDeltaFilter(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
+		cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
 		cfg.Values = cfg1.Values
 		if i%2 == 1 {
 			cfg.Values = cfg2.Values

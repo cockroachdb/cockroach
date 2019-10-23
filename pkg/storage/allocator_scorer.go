@@ -18,7 +18,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/constraint"
@@ -1008,7 +1008,7 @@ func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
 
 // constraintsCheck returns true iff the provided store would be a valid in a
 // range with the provided constraints.
-func constraintsCheck(store roachpb.StoreDescriptor, constraints []zonepb.Constraints) bool {
+func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraints) bool {
 	if len(constraints) == 0 {
 		return true
 	}

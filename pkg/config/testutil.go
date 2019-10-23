@@ -11,12 +11,11 @@
 package config
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-type zoneConfigMap map[uint32]zonepb.ZoneConfig
+type zoneConfigMap map[uint32]ZoneConfig
 
 var (
 	testingZoneConfig   zoneConfigMap
@@ -70,15 +69,13 @@ func testingResetZoneConfigHook() {
 
 // TestingSetZoneConfig sets the zone config entry for object 'id'
 // in the testing map.
-func TestingSetZoneConfig(id uint32, zone zonepb.ZoneConfig) {
+func TestingSetZoneConfig(id uint32, zone ZoneConfig) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	testingZoneConfig[id] = zone
 }
 
-func testingZoneConfigHook(
-	_ *SystemConfig, id uint32,
-) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
+func testingZoneConfigHook(_ *SystemConfig, id uint32) (*ZoneConfig, *ZoneConfig, bool, error) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if zone, ok := testingZoneConfig[id]; ok {
