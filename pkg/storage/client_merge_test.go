@@ -2922,7 +2922,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKeyMax,
 		}
 		r := rditer.MakeUserKeyRange(&desc)
-		if err := engine.ClearRangeWithHeuristic(eng, &sst, r.Start, r.End); err != nil {
+		if err := engine.ClearRangeWithHeuristic(eng, &sst, r.Start.Key, r.End.Key); err != nil {
 			return err
 		}
 		expectedSST, err := sst.Finish()

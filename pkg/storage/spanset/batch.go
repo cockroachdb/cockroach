@@ -290,8 +290,8 @@ func (s spanSetWriter) ClearRange(start, end engine.MVCCKey) error {
 	return s.w.ClearRange(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(iter engine.Iterator, start, end engine.MVCCKey) error {
-	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+func (s spanSetWriter) ClearIterRange(iter engine.Iterator, start, end roachpb.Key) error {
+	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return err
 	}
 	return s.w.ClearIterRange(iter, start, end)

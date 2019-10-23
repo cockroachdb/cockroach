@@ -74,7 +74,7 @@ func TestSpanSetBatch(t *testing.T) {
 	}
 	{
 		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
-		err := batch.ClearIterRange(iter, outsideKey, outsideKey2)
+		err := batch.ClearIterRange(iter, outsideKey.Key, outsideKey2.Key)
 		iter.Close()
 		if !isWriteSpanErr(err) {
 			t.Errorf("ClearIterRange: unexpected error %v", err)
