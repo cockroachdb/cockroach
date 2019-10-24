@@ -123,7 +123,10 @@ func fuzz(patterns []string, tests string, timeout time.Duration) (int, error) {
 		dir := filepath.Dir(pkg.GoFiles[0])
 		{
 			log("%s: executing go-fuzz-build...", pkg)
-			cmd := exec.Command("go-fuzz-build")
+			cmd := exec.Command("go-fuzz-build",
+				// These packages break go-fuzz for some reason, so skip them.
+				"-preserve", "github.com/cockroachdb/cockroach/pkg/sql/stats,github.com/cockroachdb/cockroach/pkg/server/serverpb",
+			)
 			cmd.Dir = dir
 			out, err := cmd.CombinedOutput()
 			log(" done\n")
