@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -851,4 +852,39 @@ func (r *meta2RangeIter) reset() {
 	r.buffer = nil
 	r.resumeSpan = nil
 	r.readingDone = false
+}
+
+type reportID int
+
+// getReportGenerationTime returns the time at a particular report was last
+// generated. Returns time.Time{} if the report is not found.
+func getReportGenerationTime(
+	ctx context.Context, rid reportID, ex sqlutil.InternalExecutor, txn *client.Txn,
+) (time.Time, error) {
+	// check to see if the last timestamp for the update matches the local one.
+	row, err := ex.QueryRow(
+		ctx,
+		"get-previous-timestamp",
+		txn,
+		"select generated from system.reports_meta where id = $1",
+		replicationConstraintsReportID,
+	)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	if row == nil {
+		return time.Time{}, nil
+	}
+
+	if len(row) != 1 {
+		return time.Time{}, errors.AssertionFailedf(
+			"expected 1 column from intenal query, got: %d", len(row))
+	}
+	generated, ok := row[0].(*tree.DTimestampTZ)
+	if !ok {
+		return time.Time{}, errors.AssertionFailedf("expected to get timestamptz from "+
+			"system.reports_meta got %+v (%T)", row[0], row[0])
+	}
+	return generated.Time, nil
 }

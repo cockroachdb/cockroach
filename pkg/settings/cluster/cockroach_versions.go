@@ -47,6 +47,7 @@ const (
 	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
 	VersionDummyMarkerForMigrationsIncludedInBootstrap
+	VersionReportsTimestampTZ
 
 	// Add new versions here (step one of two).
 
@@ -562,6 +563,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// version).
 		Key:     VersionDummyMarkerForMigrationsIncludedInBootstrap,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 12},
+	},
+	{
+		// VersionReportsTimestampTZ is https://github.com/cockroachdb/cockroach/pull/41905
+		//
+		// It represents a small change in the schema of some system.replication*
+		// report tables - converting some fields from timestamp to timestamptz.
+		Key:     VersionReportsTimestampTZ,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 13},
 	},
 
 	// Add new versions here (step two of two).
