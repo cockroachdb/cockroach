@@ -130,7 +130,7 @@ func runTestImport(t *testing.T, batchSize uint64) {
 
 			ts := hlc.Timestamp{WallTime: 100}
 			b, err := bulk.MakeBulkAdder(
-				ctx, kvDB, mockCache, ts, storagebase.BulkAdderOptions{MinBufferSize: batchSize, SSTSize: batchSize}, nil, /* bulkMon */
+				ctx, kvDB, mockCache, s.ClusterSettings(), ts, storagebase.BulkAdderOptions{MinBufferSize: batchSize, SSTSize: batchSize}, nil, /* bulkMon */
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -219,6 +219,7 @@ func (m mockSender) AddSSTable(
 	data []byte,
 	disallowShadowing bool,
 	_ *enginepb.MVCCStats,
+	ingestAsWrites bool,
 ) error {
 	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
 }
@@ -283,7 +284,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 
 	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
 	if _, err := bulk.AddSSTable(
-		context.TODO(), mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{},
+		context.TODO(), mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, nil,
 	); err != nil {
 		t.Fatal(err)
 	}

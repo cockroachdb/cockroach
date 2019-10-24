@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -72,6 +73,7 @@ func MakeBulkAdder(
 	ctx context.Context,
 	db sender,
 	rangeCache *kv.RangeDescriptorCache,
+	settings *cluster.Settings,
 	timestamp hlc.Timestamp,
 	opts storagebase.BulkAdderOptions,
 	bulkMon *mon.BytesMonitor,
@@ -100,6 +102,7 @@ func MakeBulkAdder(
 			db:                db,
 			maxSize:           opts.SSTSize,
 			rc:                rangeCache,
+			settings:          settings,
 			skipDuplicates:    opts.SkipDuplicates,
 			disallowShadowing: opts.DisallowShadowing,
 			splitAfter:        opts.SplitAndScatterAfter,

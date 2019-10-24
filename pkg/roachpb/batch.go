@@ -236,11 +236,12 @@ func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 }
 
 // IsSingleAddSSTableRequest returns true iff the batch contains a single
-// request, and that request is an AddSSTableRequest.
+// request, and that request is an AddSSTableRequest that will ingest as an SST,
+// (i.e. does not have IngestAsWrites set)
 func (ba *BatchRequest) IsSingleAddSSTableRequest() bool {
 	if ba.IsSingleRequest() {
-		_, ok := ba.Requests[0].GetInner().(*AddSSTableRequest)
-		return ok
+		req, ok := ba.Requests[0].GetInner().(*AddSSTableRequest)
+		return ok && !req.IngestAsWrites
 	}
 	return false
 }

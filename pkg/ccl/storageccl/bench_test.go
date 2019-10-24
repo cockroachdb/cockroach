@@ -78,7 +78,9 @@ func BenchmarkAddSSTable(b *testing.B) {
 				totalLen += int64(len(data))
 
 				b.StartTimer()
-				if err := kvDB.AddSSTable(ctx, span.Key, span.EndKey, data, false /* disallowShadowing */, nil /* stats */); err != nil {
+				if err := kvDB.AddSSTable(
+					ctx, span.Key, span.EndKey, data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+				); err != nil {
 					b.Fatalf("%+v", err)
 				}
 				b.StopTimer()

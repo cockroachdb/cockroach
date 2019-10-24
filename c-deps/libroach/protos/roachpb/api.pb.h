@@ -12826,6 +12826,12 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
   bool disallow_shadowing() const;
   void set_disallow_shadowing(bool value);
 
+  // bool ingest_as_writes = 5;
+  void clear_ingest_as_writes();
+  static const int kIngestAsWritesFieldNumber = 5;
+  bool ingest_as_writes() const;
+  void set_ingest_as_writes(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.AddSSTableRequest)
  private:
 
@@ -12834,6 +12840,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::cockroach::roachpb::RequestHeader* header_;
   ::cockroach::storage::engine::enginepb::MVCCStats* mvcc_stats_;
   bool disallow_shadowing_;
+  bool ingest_as_writes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -27768,6 +27775,20 @@ inline void AddSSTableRequest::set_allocated_mvcc_stats(::cockroach::storage::en
   }
   mvcc_stats_ = mvcc_stats;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AddSSTableRequest.mvcc_stats)
+}
+
+// bool ingest_as_writes = 5;
+inline void AddSSTableRequest::clear_ingest_as_writes() {
+  ingest_as_writes_ = false;
+}
+inline bool AddSSTableRequest::ingest_as_writes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AddSSTableRequest.ingest_as_writes)
+  return ingest_as_writes_;
+}
+inline void AddSSTableRequest::set_ingest_as_writes(bool value) {
+  
+  ingest_as_writes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.AddSSTableRequest.ingest_as_writes)
 }
 
 // -------------------------------------------------------------------
