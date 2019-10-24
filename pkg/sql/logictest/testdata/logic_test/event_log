@@ -1,3 +1,7 @@
+# LogicTest: local fakedist
+# This test file fails with the local-mixed-19.1-19.2 config because some extra
+# migrations run in that configuration and create unexpected events.
+
 ##################
 # TABLE DDL
 ##################
@@ -389,7 +393,7 @@ ALTER TABLE a CONFIGURE ZONE DISCARD
 query IT
 SELECT "reportingID", "info"
 FROM system.eventlog
-WHERE "eventType" = 'set_zone_config' and info not like '%system.public%'
+WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp"
 ----
 1  {"Target":"TABLE test.public.a","Options":"range_max_bytes = 67108865, range_min_bytes = 16777216","User":"root"}
