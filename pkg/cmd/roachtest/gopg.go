@@ -177,7 +177,7 @@ func registerGopg(r *testRegistry) {
 				destPath, goPath, resultsFilePath, goPath),
 		)
 
-		results.parseJUnitXML(t, expectedFailures, xmlResults)
+		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeFailed(
 			t, "gopg", blacklistName, expectedFailures, version, latestTag,
 			0, /* notRunCount */

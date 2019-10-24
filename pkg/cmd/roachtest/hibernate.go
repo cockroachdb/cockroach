@@ -181,7 +181,7 @@ func registerHibernate(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "hibernate" /* ormName */, output,
-			blacklistName, expectedFailures, version, latestTag,
+			blacklistName, expectedFailures, nil /* ignorelist */, version, latestTag,
 		)
 	}
 
