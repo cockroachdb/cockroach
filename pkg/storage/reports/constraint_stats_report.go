@@ -197,9 +197,9 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 
 		// if the row is nil then this is the first time we are running and the reload is needed.
 		if row != nil {
-			generated, ok := row[0].(*tree.DTimestamp)
+			generated, ok := row[0].(*tree.DTimestampTZ)
 			if !ok {
-				return errors.Errorf("Expected to get time from system.reports_meta but got %+v", row)
+				return errors.Errorf("Expected to get time from system.reports_meta but got %+v", row[0])
 			}
 			if generated.Time == r.lastGenerated {
 				// No need to reload.

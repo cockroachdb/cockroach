@@ -65,6 +65,8 @@ query IT rowsort
 SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
+2  system.public.reports_meta
+2  system.public.replication_constraint_stats
 
 statement ok
 ALTER TABLE a ADD val INT
@@ -74,6 +76,8 @@ SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 1  test.public.a
+2  system.public.reports_meta
+2  system.public.replication_constraint_stats
 
 query IT rowsort
 SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
@@ -110,6 +114,8 @@ query IT rowsort
 SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
+2  system.public.reports_meta
+2  system.public.replication_constraint_stats
 1  test.public.a
 1  test.public.a
 
