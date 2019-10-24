@@ -489,17 +489,15 @@ values  ·            ·
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
 ----
-·                     distributed  false
-·                     vectorized   true
-limit                 ·            ·
- │                    offset       1
- └── limit            ·            ·
-      │               count        2
-      └── ordinality  ·            ·
-           └── scan   ·            ·
-·                     table        t@primary
-·                     spans        ALL
-·                     limit        2
+·                distributed  false
+·                vectorized   true
+limit            ·            ·
+ │               offset       1
+ └── ordinality  ·            ·
+      └── scan   ·            ·
+·                table        t@primary
+·                spans        ALL
+·                limit        2
 
 query TTT
 EXPLAIN SELECT DISTINCT v FROM t

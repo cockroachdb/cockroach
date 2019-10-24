@@ -405,6 +405,21 @@ func (c *CustomFuncs) EmptyOrdering() physical.OrderingChoice {
 	return physical.OrderingChoice{}
 }
 
+// OrderingIntersects returns true if <ordering1> and <ordering2> have an
+// intersection. See OrderingChoice.Intersection for more information.
+func (c *CustomFuncs) OrderingIntersects(ordering1, ordering2 physical.OrderingChoice) bool {
+	return ordering1.Intersects(&ordering2)
+}
+
+// OrderingIntersection returns the intersection of two orderings. Should only be
+// called if it is known that an intersection exists.
+// See OrderingChoice.Intersection for more information.
+func (c *CustomFuncs) OrderingIntersection(
+	ordering1, ordering2 physical.OrderingChoice,
+) physical.OrderingChoice {
+	return ordering1.Intersection(&ordering2)
+}
+
 // MakeSegmentedOrdering returns an ordering choice which satisfies both
 // limitOrdering and the ordering required by a window function. Returns nil if
 // no such ordering exists. See OrderingChoice.PrefixIntersection for more
@@ -476,6 +491,11 @@ func (c *CustomFuncs) isPrefixSafe(fn *memo.WindowsItem) bool {
 	// * the mode is ROWS, or
 	// * the mode is RANGE and the ordering is over a key.
 	return false
+}
+
+// OrdinalityOrdering returns an ordinality operator's ordering choice.
+func (c *CustomFuncs) OrdinalityOrdering(private *memo.OrdinalityPrivate) physical.OrderingChoice {
+	return private.Ordering
 }
 
 // -----------------------------------------------------------------------
