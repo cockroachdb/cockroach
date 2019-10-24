@@ -20,7 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -311,7 +311,7 @@ type Replica struct {
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.Timestamp
 		// A pointer to the zone config for this replica.
-		zone *zonepb.ZoneConfig
+		zone *config.ZoneConfig
 		// proposalBuf buffers Raft commands as they are passed to the Raft
 		// replication subsystem. The buffer is populated by requests after
 		// evaluation and is consumed by the Raft processing thread. Once
@@ -658,7 +658,7 @@ func (r *Replica) GetMaxBytes() int64 {
 }
 
 // SetZoneConfig sets the replica's zone config.
-func (r *Replica) SetZoneConfig(zone *zonepb.ZoneConfig) {
+func (r *Replica) SetZoneConfig(zone *config.ZoneConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.zone = zone
@@ -683,7 +683,7 @@ func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
 
 // DescAndZone returns the authoritative range descriptor as well
 // as the zone config for the replica.
-func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig) {
+func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *config.ZoneConfig) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.Desc, r.mu.zone

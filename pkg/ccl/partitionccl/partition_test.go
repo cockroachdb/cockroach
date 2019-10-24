@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -98,7 +98,7 @@ type partitioningTest struct {
 		zoneConfigStmts string
 
 		// subzones are the `configs` shorthand parsed into Subzones.
-		subzones []zonepb.Subzone
+		subzones []config.Subzone
 	}
 }
 
@@ -154,7 +154,7 @@ func (pt *partitioningTest) parse() error {
 		}
 
 		var indexName string
-		var subzone zonepb.Subzone
+		var subzone config.Subzone
 		subzoneParts := strings.Split(subzoneShort, ".")
 		switch len(subzoneParts) {
 		case 1:
@@ -191,7 +191,7 @@ func (pt *partitioningTest) parse() error {
 			}
 		}
 
-		var parsedConstraints zonepb.ConstraintsList
+		var parsedConstraints config.ConstraintsList
 		if err := yaml.UnmarshalStrict([]byte("["+constraints+"]"), &parsedConstraints); err != nil {
 			return errors.Wrapf(err, "parsing constraints: %s", constraints)
 		}
@@ -1122,7 +1122,7 @@ func verifyScansOnNode(
 func setupPartitioningTestCluster(
 	ctx context.Context, t testing.TB,
 ) (*gosql.DB, *sqlutils.SQLRunner, func()) {
-	cfg := zonepb.DefaultZoneConfig()
+	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
 
 	tsArgs := func(attr string) base.TestServerArgs {

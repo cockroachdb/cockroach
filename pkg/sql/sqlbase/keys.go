@@ -34,12 +34,15 @@ func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 
 // MakeAllDescsMetadataKey returns the key for all descriptors.
 func MakeAllDescsMetadataKey() roachpb.Key {
-	return keys.DescMetadataPrefix()
+	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
+	return encoding.EncodeUvarintAscending(k, uint64(DescriptorTable.PrimaryIndex.ID))
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) roachpb.Key {
-	return keys.DescMetadataKey(uint32(descID))
+	k := MakeAllDescsMetadataKey()
+	k = encoding.EncodeUvarintAscending(k, uint64(descID))
+	return keys.MakeFamilyKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the

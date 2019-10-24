@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -74,7 +73,7 @@ func TestSelfBootstrap(t *testing.T) {
 func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	cfg := zonepb.DefaultZoneConfig()
+	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{
 		Knobs: base.TestingKnobs{

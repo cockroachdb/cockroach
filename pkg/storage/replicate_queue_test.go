@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -115,7 +115,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 		return counts
 	}
 
-	initialRanges, err := server.ExpectedInitialRangeCount(tc.Servers[0].DB(), zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	initialRanges, err := server.ExpectedInitialRangeCount(tc.Servers[0].DB(), config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +380,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 
 	// Create a cluster with really small ranges.
 	const rangeMaxSize = base.MinRangeMaxBytes
-	zcfg := zonepb.DefaultZoneConfig()
+	zcfg := config.DefaultZoneConfig()
 	zcfg.RangeMinBytes = proto.Int64(rangeMaxSize / 2)
 	zcfg.RangeMaxBytes = proto.Int64(rangeMaxSize)
 	tc := testcluster.StartTestCluster(t, 5,

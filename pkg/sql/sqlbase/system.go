@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -22,6 +22,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
+
+func init() {
+	// We use a hook to avoid a dependency on the sqlbase package. We
+	// should probably move keys/protos elsewhere.
+	config.SplitAtIDHook = SplitAtIDHook
+}
+
+// SplitAtIDHook determines whether a specific descriptor ID
+// should be considered for a split at all. If it is a database
+// or a view table descriptor, it should not be considered.
+func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
+	descVal := cfg.GetDesc(MakeDescMetadataKey(ID(id)))
+	if descVal == nil {
+		return false
+	}
+	var desc Descriptor
+	if err := descVal.GetProto(&desc); err != nil {
+		return false
+	}
+	if dbDesc := desc.GetDatabase(); dbDesc != nil {
+		return false
+	}
+	if tableDesc := desc.Table(descVal.Timestamp); tableDesc != nil {
+		if viewStr := tableDesc.GetViewQuery(); viewStr != "" {
+			return false
+		}
+	}
+	return true
+}
 
 // sql CREATE commands and full schema for each system table.
 // These strings are *not* used at runtime, but are checked by the
@@ -307,15 +336,12 @@ var (
 		Version:    1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
-			{Name: "descriptor", ID: keys.DescriptorTableDescriptorColID, Type: *types.Bytes, Nullable: true},
+			{Name: "descriptor", ID: 2, Type: *types.Bytes, Nullable: true},
 		},
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
-			// The id of the first col fam is hardcoded in keys.MakeDescMetadataKey().
 			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
-			{Name: "fam_2_descriptor", ID: keys.DescriptorTableDescriptorColFamID,
-				ColumnNames: []string{"descriptor"},
-				ColumnIDs:   []ColumnID{keys.DescriptorTableDescriptorColID}, DefaultColumnID: keys.DescriptorTableDescriptorColID},
+			{Name: "fam_2_descriptor", ID: 2, ColumnNames: []string{"descriptor"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
 		},
 		PrimaryIndex:   pk("id"),
 		NextFamilyID:   3,
@@ -1027,13 +1053,13 @@ var (
 )
 
 // Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(keyID int, zoneConfig *zonepb.ZoneConfig) roachpb.KeyValue {
+func createZoneConfigKV(keyID int, zoneConfig *config.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(zoneConfig); err != nil {
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
-		Key:   keys.ZoneKey(uint32(keyID)),
+		Key:   config.MakeZoneKey(uint32(keyID)),
 		Value: value,
 	}
 }
@@ -1079,8 +1105,8 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // System database, its tables and zone configurations.
 func addSystemDatabaseToSchema(
 	target *MetadataSchema,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	defaultZoneConfig *config.ZoneConfig,
+	defaultSystemZoneConfig *config.ZoneConfig,
 ) {
 	addSystemDescriptorsToSchema(target)
 
@@ -1093,9 +1119,9 @@ func addSystemDatabaseToSchema(
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, defaultZoneConfig))
 
 	systemZoneConf := defaultSystemZoneConfig
-	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
-	jobsZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
-	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
+	jobsZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
+	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
@@ -1106,11 +1132,11 @@ func addSystemDatabaseToSchema(
 	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, jobsZoneConf))
 
 	// Some reporting tables have shorter GC times.
-	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: int32(ReplicationConstraintStatsTableTTL.Seconds())},
+	replicationConstraintStatsZoneConf := &config.ZoneConfig{
+		GC: &config.GCPolicy{TTLSeconds: int32(ReplicationConstraintStatsTableTTL.Seconds())},
 	}
-	replicationStatsZoneConf := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: int32(ReplicationStatsTableTTL.Seconds())},
+	replicationStatsZoneConf := &config.ZoneConfig{
+		GC: &config.GCPolicy{TTLSeconds: int32(ReplicationStatsTableTTL.Seconds())},
 	}
 
 	// Liveness zone config entry with a shorter GC time.

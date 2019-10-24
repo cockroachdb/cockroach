@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -3008,7 +3008,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Add a zone config.
-	cfg := zonepb.DefaultZoneConfig()
+	cfg := config.DefaultZoneConfig()
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -3118,7 +3118,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Add a zone config.
-	var cfg zonepb.ZoneConfig
+	var cfg config.ZoneConfig
 	cfg, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
 	if err != nil {
 		t.Fatal(err)
