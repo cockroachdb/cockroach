@@ -3050,11 +3050,7 @@ func MVCCFindSplitKey(
 		minSplitKey = it.Key().Key.Next()
 	}
 
-	splitKey, err := it.FindSplitKey(
-		MakeMVCCMetadataKey(key.AsRawKey()),
-		MakeMVCCMetadataKey(endKey.AsRawKey()),
-		MakeMVCCMetadataKey(minSplitKey),
-		targetSize)
+	splitKey, err := it.FindSplitKey(key.AsRawKey(), endKey.AsRawKey(), minSplitKey, targetSize)
 	if err != nil {
 		return nil, err
 	}
