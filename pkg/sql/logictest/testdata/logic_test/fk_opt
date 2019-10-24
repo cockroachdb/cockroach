@@ -69,7 +69,7 @@ INSERT INTO child VALUES (1, 1)
 statement ok
 DELETE FROM parent WHERE p = 2
 
-statement error delete on table "parent" violates foreign key constraint on table "child"
+statement error delete on table "parent" violates foreign key constraint "fk_p_ref_parent" on table "child"\nDETAIL: Key \(p\)=\(1\) is still referenced from table "child"\.
 DELETE FROM parent WHERE p = 1
 
 statement ok
@@ -81,7 +81,7 @@ DROP TABLE child
 statement ok
 INSERT INTO child_u VALUES (1, 10)
 
-statement error delete on table "parent" violates foreign key constraint on table "child_u"
+statement error delete on table "parent" violates foreign key constraint "fk_u_ref_parent" on table "child_u"\nDETAIL: Key \(u\)=\(10\) is still referenced from table "child_u"\.
 DELETE FROM parent WHERE p = 1
 
 statement ok
@@ -110,7 +110,7 @@ INSERT INTO child2 VALUES
   (4, 20, 200),
   (5, NULL, 100)
 
-statement error delete on table "parent2" violates foreign key constraint on table "child2"
+statement error delete on table "parent2" violates foreign key constraint "fk_p1_ref_parent2" on table "child2"\nDETAIL: Key \(p1, p2\)=\(10, 100\) is still referenced from table "child2"\.
 DELETE FROM parent2 WHERE p1 = 10 AND p2 = 100
 
 statement ok
@@ -279,8 +279,7 @@ INSERT INTO orders VALUES (1, 1, '780', 2)
 statement error insert on table "orders" violates foreign key constraint "fk_product_ref_products"\nDETAIL: Key \(product\)=\('fake'\) is not present in table "products"
 INSERT INTO orders VALUES (2, 2, 'fake', 2)
 
-# TODO(radu): this error should include details.
-statement error pgcode 23503 delete on table "products" violates foreign key constraint on table "orders"
+statement error pgcode 23503 delete on table "products" violates foreign key constraint "fk_product_ref_products" on table "orders"\nDETAIL: Key \(sku\)=\('780'\) is still referenced from table "orders"\.
 DELETE FROM products
 
 statement ok
@@ -311,7 +310,7 @@ INSERT INTO "user content".review_stats (id, upvotes) VALUES (5, 1)
 statement ok
 INSERT INTO "user content".review_stats (id, upvotes) VALUES (2, 1)
 
-statement error pgcode 23503 delete on table "customer reviews" violates foreign key constraint on table "review_stats"
+statement error pgcode 23503 delete on table "customer reviews" violates foreign key constraint "reviewfk" on table "review_stats"\nDETAIL: Key \(id\)=\(2\) is still referenced from table "review_stats"\.
 DELETE FROM "user content"."customer reviews" WHERE id = 2
 
 statement ok
@@ -384,15 +383,15 @@ statement ok
 INSERT INTO delivery ("order", shipment, item) VALUES
   (1, 1, '867072000006'), (1, 1, '867072000006'), (1, 1, '885155001450'), (1, 1, '867072000006')
 
-statement error pgcode 23503 foreign key violation: value \['missing'\] not found in products@products_upc_key \[upc\]|insert on table "delivery" violates foreign key constraint "fk_item_ref_products"\nDETAIL: Key \(item\)=\('missing'\) is not present in table "products"
+statement error pgcode 23503 insert on table "delivery" violates foreign key constraint "fk_item_ref_products"\nDETAIL: Key \(item\)=\('missing'\) is not present in table "products"
 INSERT INTO delivery ("order", shipment, item) VALUES
   (1, 1, '867072000006'), (1, 1, 'missing'), (1, 1, '885155001450'), (1, 1, '867072000006')
 
-statement error pgcode 23503 foreign key violation: value \[1 99\] not found in orders@primary \[id shipment\]|insert on table "delivery" violates foreign key constraint "fk_order_ref_orders"\nDETAIL: Key \(order, shipment\)=\(1, 99\) is not present in table "orders"
+statement error pgcode 23503 insert on table "delivery" violates foreign key constraint "fk_order_ref_orders"\nDETAIL: Key \(order, shipment\)=\(1, 99\) is not present in table "orders"
 INSERT INTO delivery ("order", shipment, item) VALUES
   (1, 1, '867072000006'), (1, 99, '867072000006')
 
-statement error pgcode 23503 foreign key violation: values \['867072000006'\] in columns \[upc\] referenced in table "delivery"|pq: delete on table "products" violates foreign key constraint on table "delivery"
+statement error pgcode 23503 delete on table "products" violates foreign key constraint "fk_item_ref_products" on table "delivery"\nDETAIL: Key \(upc\)=\('867072000006'\) is still referenced from table "delivery"\.
 DELETE FROM products WHERE sku = 'VP-W9QH-W44L'
 
 # Blanking a field nobody cares about is fine.
@@ -404,7 +403,7 @@ statement ok
 UPDATE products SET sku = '770' WHERE sku = '750'
 
 # Changing referenced PK fails.
-statement error pgcode 23503 update on table "products" violates foreign key constraint on table "orders"
+statement error pgcode 23503 update on table "products" violates foreign key constraint "fk_product_ref_products" on table "orders"\nDETAIL: Key \(sku\)=\('780'\) is still referenced from table "orders"\.
 UPDATE products SET sku = '770' WHERE sku = '780'
 
 # No-op change to existing data is fine.
@@ -412,7 +411,7 @@ statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
 
 # Changing referenced non-pk index fails.
-statement error pgcode 23503 update on table "products" violates foreign key constraint on table "delivery"
+statement error pgcode 23503 update on table "products" violates foreign key constraint "fk_item_ref_products" on table "delivery"\nDETAIL: Key \(upc\)=\('885155001450'\) is still referenced from table "delivery"\.
 UPDATE products SET upc = 'blah' WHERE sku = '780'
 
 statement ok
@@ -461,10 +460,10 @@ ALTER TABLE "user content"."customer reviews"
 statement ok
 INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (4, '780', 'i ordered 101 of them', 9)
 
-statement error pgcode 23503 foreign key violation: value \[9 1\] not found in orders@primary \[id shipment\]|insert on table "customer reviews" violates foreign key constraint "orderfk2"\nDETAIL: Key \(order, shipment\)=\(9, 1\) is not present in table "orders"
+statement error pgcode 23503 insert on table "customer reviews" violates foreign key constraint "orderfk2"\nDETAIL: Key \(order, shipment\)=\(9, 1\) is not present in table "orders"
 INSERT INTO "user content"."customer reviews" (id, product, body, "order", shipment) VALUES (5, '780', 'i ordered 101 of them', 9, 1)
 
-statement error pgcode 23503 foreign key violation: value \[1 9\] not found in orders@primary \[id shipment\]|insert on table "customer reviews" violates foreign key constraint "orderfk2"\nDETAIL: Key \(order, shipment\)=\(1, 9\) is not present in table "orders"
+statement error pgcode 23503 insert on table "customer reviews" violates foreign key constraint "orderfk2"\nDETAIL: Key \(order, shipment\)=\(1, 9\) is not present in table "orders"
 INSERT INTO "user content"."customer reviews" (id, product, body, shipment, "order") VALUES (5, '780', 'i ordered 101 of them', 9, 1)
 
 statement ok
@@ -478,10 +477,10 @@ statement ok
 UPDATE products SET sku = '750', vendor = 'roomba' WHERE sku = '780'
 
 # Changing PK and referenced secondary index is not ok.
-statement error pgcode 23503 update on table "products" violates foreign key constraint on table "delivery"
+statement error pgcode 23503 update on table "products" violates foreign key constraint "fk_item_ref_products" on table "delivery"\nDETAIL: Key \(upc\)=\('885155001450'\) is still referenced from table "delivery"\.
 UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
 
-statement error pgcode 23503 foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "delivery"|delete on table "products" violates foreign key constraint on table "delivery"
+statement error pgcode 23503 delete on table "products" violates foreign key constraint "fk_item_ref_products" on table "delivery"\nDETAIL: Key \(upc\)=\('885155001450'\) is still referenced from table "delivery"\.
 DELETE FROM products WHERE sku = '750'
 
 statement error "products" is referenced by foreign key from table "orders"
@@ -720,13 +719,13 @@ INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
 statement ok
 INSERT INTO refpairs VALUES (100, 'one', 3), (200, 'two', null)
 
-statement error pgcode 23503 update on table "pairs" violates foreign key constraint on table "refpairs"
+statement error pgcode 23503 update on table "pairs" violates foreign key constraint "fk_a_ref_pairs" on table "refpairs"\nDETAIL: Key \(src, dest\)=\(200, 'two'\) is still referenced from table "refpairs"\.
 UPDATE pairs SET dest = 'too' WHERE id = 2
 
-statement error pgcode 23503 delete on table "pairs" violates foreign key constraint on table "refpairs"
+statement error pgcode 23503 delete on table "pairs" violates foreign key constraint "fk_a_ref_pairs" on table "refpairs"\nDETAIL: Key \(src, dest\)=\(200, 'two'\) is still referenced from table "refpairs"\.
 DELETE FROM pairs WHERE id = 2
 
-statement error pgcode 23503 delete on table "pairs" violates foreign key constraint on table "refpairs"
+statement error pgcode 23503 delete on table "pairs" violates foreign key constraint "fk_a_ref_pairs" on table "refpairs"\nDETAIL: Key \(src, dest\)=\(100, 'one'\) is still referenced from table "refpairs"\.
 DELETE FROM pairs WHERE id = 1
 
 # since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
@@ -742,7 +741,7 @@ INSERT INTO foo VALUES (2)
 statement ok
 INSERT INTO bar VALUES (2)
 
-statement error pgcode 23503 delete on table "foo" violates foreign key constraint on table "bar"
+statement error pgcode 23503 delete on table "foo" violates foreign key constraint "fk_id_ref_foo" on table "bar"\nDETAIL: Key \(id\)=\(2\) is still referenced from table "bar"\.
 DELETE FROM foo
 
 statement ok
@@ -763,7 +762,7 @@ INSERT INTO otherdb.othertable VALUES (1), (2)
 statement ok
 INSERT INTO crossdb VALUES (2)
 
-statement error pgcode 23503 pq: delete on table "othertable" violates foreign key constraint on table "crossdb"
+statement error pgcode 23503 delete on table "othertable" violates foreign key constraint "fk_id_ref_othertable" on table "crossdb"\nDETAIL: Key \(id\)=\(2\) is still referenced from table "crossdb"\.
 DELETE FROM otherdb.othertable WHERE id = 2
 
 statement error "othertable" is referenced by foreign key from table "crossdb"
@@ -2761,7 +2760,7 @@ statement ok
 INSERT INTO child VALUES (1, 1)
 
 # Updating the referenced table
-statement error update on table "parent" violates foreign key constraint on table "child"
+statement error update on table "parent" violates foreign key constraint "fk_p_ref_parent" on table "child"\nDETAIL: Key \(p\)=\(1\) is still referenced from table "child"\.
 UPDATE parent SET p = 3 WHERE p = 1
 
 statement ok
@@ -2810,7 +2809,7 @@ INSERT INTO self VALUES (1, 2), (2, 3), (3, 4), (4, 1)
 statement error update on table "self" violates foreign key constraint "fk_y_ref_self"
 UPDATE self SET y = 5 WHERE y = 1
 
-statement error update on table "self" violates foreign key constraint on table "self"
+statement error update on table "self" violates foreign key constraint "fk_y_ref_self" on table "self"\nDETAIL: Key \(x\)=\(4\) is still referenced from table "self"\.
 UPDATE self SET x = 5 WHERE y = 1
 
 statement ok
