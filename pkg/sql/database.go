@@ -40,7 +40,7 @@ import (
 // system the periodic reset whenever the system config is gossiped.
 type databaseCache struct {
 	// databases is really a map of string -> sqlbase.ID
-	databases sync.Map
+	databases *sync.Map
 
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
@@ -53,7 +53,23 @@ func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 	}
 }
 
+// disable means databaseCache is too old
+func (dc *databaseCache) disable() {
+	// use system set database cache disable
+	dc.setID("system", 1)
+}
+
+// isValid check databaseCache available
+func (dc *databaseCache) isValid() bool {
+	// use system check database cache available
+	val, ok := dc.databases.Load("system")
+	return !ok || val == sqlbase.InvalidID
+}
+
 func (dc *databaseCache) getID(name string) sqlbase.ID {
+	if !dc.isValid() {
+		return sqlbase.InvalidID
+	}
 	val, ok := dc.databases.Load(name)
 	if !ok {
 		return sqlbase.InvalidID
