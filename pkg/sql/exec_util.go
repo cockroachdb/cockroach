@@ -639,6 +639,8 @@ var _ dbCacheSubscriber = &databaseCacheHolder{}
 // received.
 func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
+	dc.mu.c.disable()
+	// use newDatabaseCache avoid race without lock
 	dc.mu.c = newDatabaseCache(cfg)
 	dc.mu.cv.Broadcast()
 	dc.mu.Unlock()

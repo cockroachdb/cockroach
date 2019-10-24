@@ -53,6 +53,20 @@ func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 	}
 }
 
+// disable means databaseCache is too old
+func (dc *databaseCache) disable() {
+	// use system set database cache disable
+	// systemDB.ID is 1
+	dc.setID("system", sqlbase.InvalidID)
+}
+
+// isValid check databaseCache available
+func (dc *databaseCache) isValid() bool {
+	// use system check database cache available
+	val, ok := dc.databases.Load("system")
+	return !ok || val == sqlbase.SystemDB.ID
+}
+
 func (dc *databaseCache) getID(name string) sqlbase.ID {
 	val, ok := dc.databases.Load(name)
 	if !ok {
@@ -250,6 +264,10 @@ func (dc *databaseCache) getDatabaseID(
 // the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
 func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
+	if !dc.isValid() {
+		return sqlbase.InvalidID, nil
+	}
+
 	if id := dc.getID(name); id != sqlbase.InvalidID {
 		return id, nil
 	}
