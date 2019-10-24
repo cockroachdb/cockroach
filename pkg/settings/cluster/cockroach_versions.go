@@ -46,6 +46,7 @@ const (
 	VersionAtomicChangeReplicas
 	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
+	VersionDummyMarkerForMigrationsIncludedInBootstrap
 
 	// Add new versions here (step one of two).
 
@@ -550,6 +551,17 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
 		Key:     VersionPartitionedBackup,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 11},
+	},
+	{
+		// VersionDummyMarkerForMigrationsIncludedInBootstrap is https://github.com/cockroachdb/cockroach/pull/41905
+		// This version doesn't gate any new functionality. It is used by old
+		// migrations that need to say that they've been included in some bootstrap
+		// version, but they were written before this mechanism was implemented and
+		// so it's forgotten what cluster version they've started being included in
+		// (in fact, some of these migrations did not even create a new cluster
+		// version).
+		Key:     VersionDummyMarkerForMigrationsIncludedInBootstrap,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 12},
 	},
 
 	// Add new versions here (step two of two).
