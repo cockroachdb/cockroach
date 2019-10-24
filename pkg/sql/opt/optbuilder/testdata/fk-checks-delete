@@ -159,13 +159,14 @@ exec-ddl
 CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
 ----
 
-# Bail in the presence of CASCADE, so that exec-style FK checks take over.
+# Fall back to the exec-style checks in the presence of CASCADE.
 build
 DELETE FROM parent WHERE p = 1
 ----
 delete parent
  ├── columns: <none>
  ├── fetch columns: x:4(int) parent.p:5(int) parent.other:6(int)
+ ├── fk-fallback
  └── select
       ├── columns: x:4(int) parent.p:5(int!null) parent.other:6(int)
       ├── scan parent

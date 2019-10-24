@@ -132,6 +132,10 @@ define MutationPrivate {
     # input, making it accessible to FK queries. If this is not required, WithID
     # is zero.
     WithID WithID
+
+    # FKFallback is true if we need to fall back to the legacy path for FK
+    # checks / cascades.
+    FKFallback bool
 }
 
 # Update evaluates a relational input expression that fetches existing rows from

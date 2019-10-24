@@ -69,7 +69,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
 	returnOrds := ordinalSetFromColList(ins.ReturnCols)
 	// If we planned FK checks, disable the execution code for FK checks.
-	disableExecFKs := len(ins.Checks) > 0
+	disableExecFKs := !ins.FKFallback
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
@@ -142,7 +142,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		}
 	}
 
-	disableExecFKs := len(upd.Checks) > 0
+	disableExecFKs := !upd.FKFallback
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
@@ -263,7 +263,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
-	disableExecFKs := len(del.Checks) > 0
+	disableExecFKs := !del.FKFallback
 	node, err := b.factory.ConstructDelete(
 		input.root,
 		tab,
