@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -412,73 +411,11 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		}
 		// Wrap the query in an error node.
 		mkErr := func(row tree.Datums) error {
-			origin := md.TableMeta(c.OriginTable)
-			referenced := md.TableMeta(c.ReferencedTable)
-			var fk cat.ForeignKeyConstraint
-			if c.FKOutbound {
-				fk = origin.Table.OutboundForeignKey(c.FKOrdinal)
-			} else {
-				fk = referenced.Table.InboundForeignKey(c.FKOrdinal)
+			keyVals := make(tree.Datums, len(c.KeyCols))
+			for i, col := range c.KeyCols {
+				keyVals[i] = row[query.getColumnOrdinal(col)]
 			}
-
-			var msg, details bytes.Buffer
-			if c.FKOutbound {
-				// Generate an error of the form:
-				//   ERROR:  insert on table "child" violates foreign key constraint "foo"
-				//   DETAIL: Key (child_p)=(2) is not present in table "parent".
-				fmt.Fprintf(&msg, "%s on table ", c.OpName)
-				lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
-				msg.WriteString(" violates foreign key constraint ")
-				lex.EncodeEscapedSQLIdent(&msg, fk.Name())
-
-				details.WriteString("Key (")
-				for i := 0; i < fk.ColumnCount(); i++ {
-					if i > 0 {
-						details.WriteString(", ")
-					}
-					col := origin.Table.Column(fk.OriginColumnOrdinal(origin.Table, i))
-					details.WriteString(string(col.ColName()))
-				}
-				details.WriteString(")=(")
-				sawNull := false
-				for i, col := range c.KeyCols {
-					if i > 0 {
-						details.WriteString(", ")
-					}
-					d := row[query.getColumnOrdinal(col)]
-					if d == tree.DNull {
-						sawNull = true
-						break
-					}
-					details.WriteString(d.String())
-				}
-				if sawNull {
-					details.Reset()
-					details.WriteString("MATCH FULL does not allow mixing of null and nonnull key values.")
-				} else {
-					details.WriteString(") is not present in table ")
-					lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
-					details.WriteByte('.')
-				}
-			} else {
-				// Generate an error of the form:
-				//   ERROR:  delete on table "parent" violates foreign key constraint "child_child_p_fkey" on table "child"
-				//   DETAIL: Key (p)=(1) is still referenced from table "child".
-				fmt.Fprintf(&msg, "%s on table ", c.OpName)
-				lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.TableName))
-				msg.WriteString(" violates foreign key constraint")
-				// TODO(justin): get the name of the FK constraint (it's not populated
-				// on this descriptor.
-				msg.WriteString(" on table ")
-				lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
-				// TODO(justin): get the details, the columns are not populated on this
-				// descriptor.
-			}
-
-			return errors.WithDetail(
-				pgerror.New(pgcode.ForeignKeyViolation, msg.String()),
-				details.String(),
-			)
+			return mkFKCheckErr(md, c, keyVals)
 		}
 		node, err := b.factory.ConstructErrorIfRows(query.root, mkErr)
 		if err != nil {
@@ -487,6 +424,93 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		b.postqueries = append(b.postqueries, node)
 	}
 	return nil
+}
+
+// mkFKCheckErr generates a user-friendly error describing a foreign key
+// violation. The keyVals are the values that correspond to the
+// cat.ForeignKeyConstraint columns.
+func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) error {
+	origin := md.TableMeta(c.OriginTable)
+	referenced := md.TableMeta(c.ReferencedTable)
+
+	var msg, details bytes.Buffer
+	if c.FKOutbound {
+		// Generate an error of the form:
+		//   ERROR:  insert on table "child" violates foreign key constraint "foo"
+		//   DETAIL: Key (child_p)=(2) is not present in table "parent".
+		fk := origin.Table.OutboundForeignKey(c.FKOrdinal)
+		fmt.Fprintf(&msg, "%s on table ", c.OpName)
+		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
+		msg.WriteString(" violates foreign key constraint ")
+		lex.EncodeEscapedSQLIdent(&msg, fk.Name())
+
+		details.WriteString("Key (")
+		for i := 0; i < fk.ColumnCount(); i++ {
+			if i > 0 {
+				details.WriteString(", ")
+			}
+			col := origin.Table.Column(fk.OriginColumnOrdinal(origin.Table, i))
+			details.WriteString(string(col.ColName()))
+		}
+		details.WriteString(")=(")
+		sawNull := false
+		for i, d := range keyVals {
+			if i > 0 {
+				details.WriteString(", ")
+			}
+			if d == tree.DNull {
+				// If we see a NULL, this must be a MATCH FULL failure (otherwise the
+				// row would have been filtered out).
+				sawNull = true
+				break
+			}
+			details.WriteString(d.String())
+		}
+		if sawNull {
+			details.Reset()
+			details.WriteString("MATCH FULL does not allow mixing of null and nonnull key values.")
+		} else {
+			details.WriteString(") is not present in table ")
+			lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
+			details.WriteByte('.')
+		}
+	} else {
+		// Generate an error of the form:
+		//   ERROR:  delete on table "parent" violates foreign key constraint
+		//           "child_child_p_fkey" on table "child"
+		//   DETAIL: Key (p)=(1) is still referenced from table "child".
+		fk := referenced.Table.InboundForeignKey(c.FKOrdinal)
+		fmt.Fprintf(&msg, "%s on table ", c.OpName)
+		lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.TableName))
+		msg.WriteString(" violates foreign key constraint ")
+		lex.EncodeEscapedSQLIdent(&msg, fk.Name())
+		msg.WriteString(" on table ")
+		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
+
+		details.WriteString("Key (")
+		for i := 0; i < fk.ColumnCount(); i++ {
+			if i > 0 {
+				details.WriteString(", ")
+			}
+			col := referenced.Table.Column(fk.ReferencedColumnOrdinal(referenced.Table, i))
+			details.WriteString(string(col.ColName()))
+		}
+		details.WriteString(")=(")
+		for i, d := range keyVals {
+			if i > 0 {
+				details.WriteString(", ")
+			}
+			details.WriteString(d.String())
+		}
+		details.WriteString(") is still referenced from table ")
+		lex.EncodeEscapedSQLIdent(&details, string(origin.Alias.TableName))
+		details.WriteByte('.')
+	}
+
+	return errors.WithDetail(
+		pgerror.New(pgcode.ForeignKeyViolation, msg.String()),
+		details.String(),
+	)
 }
 
 // canAutoCommit determines if it is safe to auto commit the mutation contained
