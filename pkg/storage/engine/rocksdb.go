@@ -1023,8 +1023,8 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	return iter
 }
 
-// Writer methods are not implemented for rocksDBReadOnly. Ideally, the code could be refactored so that
-// a Reader could be supplied to evaluateBatch
+// Writer methods are not implemented for rocksDBReadOnly. Ideally, the code
+// could be refactored so that a Reader could be supplied to evaluateBatch
 
 // Writer is the write interface to an engine's data.
 func (r *rocksDBReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
@@ -1433,6 +1433,12 @@ func (r *distinctBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOp
 }
 
 func (r *distinctBatch) close() {
+	if r.prefixIter.inuse {
+		panic("iterator still inuse")
+	}
+	if r.normalIter.inuse {
+		panic("iterator still inuse")
+	}
 	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
 		i.destroy()
 	}
@@ -1615,6 +1621,12 @@ func (r *rocksDBBatch) Close() {
 		panic("this batch was already closed")
 	}
 	r.distinct.close()
+	if r.prefixIter.batch != nil {
+		panic("iterator still inuse")
+	}
+	if r.normalIter.batch != nil {
+		panic("iterator still inuse")
+	}
 	if i := &r.prefixIter.iter; i.iter != nil {
 		i.destroy()
 	}
