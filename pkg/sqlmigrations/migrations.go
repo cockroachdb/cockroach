@@ -228,6 +228,28 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "update system.locations with default location data",
 		workFn: updateSystemLocationData,
 	},
+	{
+		// Introduced in v19.2.
+		name:                "change reports fields from timestamp to timestamptz",
+		includedInBootstrap: true,
+		workFn: func(ctx context.Context, r runner) error {
+			// Note that these particular schema changes are idempotent.
+			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
+				security.NodeUser,
+				`ALTER TABLE system.reports_meta ALTER generated TYPE TIMESTAMP WITH TIME ZONE`,
+			); err != nil {
+				return err
+			}
+			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
+				security.NodeUser,
+				"ALTER TABLE system.replication_constraint_stats ALTER violation_start "+
+					"TYPE TIMESTAMP WITH TIME ZONE",
+			); err != nil {
+				return err
+			}
+			return nil
+		},
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {

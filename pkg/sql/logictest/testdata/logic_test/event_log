@@ -63,7 +63,7 @@ WHERE "eventType" = 'create_table'
 
 query IT rowsort
 SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
-WHERE "eventType" = 'alter_table'
+WHERE "eventType" = 'alter_table' AND info::JSONB->>'TableName' not like 'system.public.%'
 ----
 
 statement ok
@@ -71,7 +71,7 @@ ALTER TABLE a ADD val INT
 
 query IT rowsort
 SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
-WHERE "eventType" = 'alter_table'
+WHERE "eventType" = 'alter_table' AND info::JSONB->>'TableName' not like 'system.public.%'
 ----
 1  test.public.a
 
@@ -108,7 +108,7 @@ ALTER TABLE a ADD CONSTRAINT foo UNIQUE(val)
 
 query IT rowsort
 SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
-WHERE "eventType" = 'alter_table'
+WHERE "eventType" = 'alter_table' AND info::JSONB->>'TableName' not like 'system.public.%'
 ----
 1  test.public.a
 1  test.public.a
