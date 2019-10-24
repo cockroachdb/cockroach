@@ -15,6 +15,7 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"strings"
 
@@ -39,13 +40,15 @@ func runImport(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
+	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh chan row.KVBatch,
-) error {
+	output execinfra.RowReceiver,
+) (*roachpb.BulkOpSummary, error) {
 	group := ctxgroup.WithContext(ctx)
 
 	conv, err := makeInputConverter(spec, flowCtx.NewEvalCtx(), kvCh)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	conv.start(group)
 
@@ -77,7 +80,39 @@ func runImport(
 		return conv.readFiles(ctx, spec.Uri, spec.Format, progFn, flowCtx.Cfg.Settings)
 	})
 
-	return group.Wait()
+	// Ingest the KVs that the producer emitted to the chan and the row result
+	// at the end is one row containing an encoded BulkOpSummary.
+	var summary *roachpb.BulkOpSummary
+	if spec.IngestDirectly {
+		// IngestDirectly means this reader will just ingest the KVs that the
+		// producer emitted to the chan, and the only result we push into distsql at
+		// the end is one row containing an encoded BulkOpSummary.
+		group.GoCtx(func(ctx context.Context) error {
+			summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
+			if err != nil {
+				return err
+			}
+			var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+			prog.CompletedRow = make(map[int32]uint64)
+			prog.CompletedFraction = make(map[int32]float32)
+			for i := range spec.Uri {
+				prog.CompletedFraction[i] = 1.0
+				prog.CompletedRow[i] = math.MaxUint64
+			}
+			progCh <- prog
+			return nil
+		})
+	} else {
+		// Sample KVs
+		group.GoCtx(func(ctx context.Context) error {
+			return emitKvs(flowCtx, spec, ctx, kvCh, output)
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+
+	return summary, nil
 }
 
 // readInputFile reads each of the passed dataFiles using the passed func. The

@@ -70,29 +70,42 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	defer tracing.FinishSpan(span)
 	defer cp.output.ProducerDone()
 
-	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan row.KVBatch, 10)
+	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
+	var summary *roachpb.BulkOpSummary
+	var err error
+	// We don't have to worry about this go routine leaking because next we loop over progCh
+	// which is closed only after the go routine returns.
+	go func() {
+		defer close(progCh)
+		summary, err = runImport(ctx, cp.flowCtx, &cp.spec, progCh, kvCh, cp.output)
+	}()
 
-	group.GoCtx(func(ctx context.Context) error { return runImport(ctx, cp.flowCtx, &cp.spec, kvCh) })
-
-	if cp.spec.IngestDirectly {
-		// IngestDirectly means this reader will just ingest the KVs that the
-		// producer emitted to the chan, and the only result we push into distsql at
-		// the end is one row containing an encoded BulkOpSummary.
-		group.GoCtx(func(ctx context.Context) error {
-			return cp.ingestKvs(ctx, kvCh)
-		})
-	} else {
-		// Sample KVs
-		group.GoCtx(func(ctx context.Context) error {
-			return cp.emitKvs(ctx, kvCh)
-		})
+	for prog := range progCh {
+		cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog})
 	}
 
-	if err := group.Wait(); err != nil {
+
+	if err != nil {
 		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+		return
 	}
+
+	// Once the import is done, send back to the controller the serialized
+	// summary of the import operation. For more info see roachpb.BulkOpSummary.
+	if summary == nil {
+		return
+	}
+	countsBytes, err := protoutil.Marshal(summary)
+	if err != nil {
+		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+		return
+	}
+	cp.output.Push(sqlbase.EncDatumRow{
+		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+	}, nil)
 }
 
 func makeInputConverter(
@@ -156,25 +169,31 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	return prob > s.rnd.Float64()
 }
 
-func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.KVBatch) error {
+func emitKvs(
+	flowCtx *execinfra.FlowCtx,
+	spec *execinfrapb.ReadImportDataSpec,
+	ctx context.Context,
+	kvCh <-chan row.KVBatch,
+	output execinfra.RowReceiver,
+) error {
 	ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
 	defer tracing.FinishSpan(span)
 
 	var fn sampleFunc
 	var sampleAll bool
-	if cp.spec.SampleSize == 0 {
+	if spec.SampleSize == 0 {
 		sampleAll = true
 	} else {
 		sr := sampleRate{
 			rnd:        rand.New(rand.NewSource(rand.Int63())),
-			sampleSize: float64(cp.spec.SampleSize),
+			sampleSize: float64(spec.SampleSize),
 		}
 		fn = sr.sample
 	}
 
 	// Populate the split-point spans which have already been imported.
 	var completedSpans roachpb.SpanGroup
-	job, err := cp.flowCtx.Cfg.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
+	job, err := flowCtx.Cfg.JobRegistry.LoadJob(ctx, spec.Progress.JobID)
 	if err != nil {
 		return err
 	}
@@ -207,7 +226,7 @@ func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.
 						sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
 					}
 				}
-				if cp.output.Push(row, nil) != execinfra.NeedMoreRows {
+				if output.Push(row, nil) != execinfra.NeedMoreRows {
 					return errors.New("unexpected closure of consumer")
 				}
 			}
@@ -218,13 +237,19 @@ func (cp *readImportDataProcessor) emitKvs(ctx context.Context, kvCh <-chan row.
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
-func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan row.KVBatch) error {
+func ingestKvs(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	spec *execinfrapb.ReadImportDataSpec,
+	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	kvCh <-chan row.KVBatch,
+) (*roachpb.BulkOpSummary, error) {
 	ctx, span := tracing.ChildSpan(ctx, "ingestKVs")
 	defer tracing.FinishSpan(span)
 
-	writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
+	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 
-	flushSize := storageccl.MaxImportBatchSize(cp.flowCtx.Cfg.Settings)
+	flushSize := storageccl.MaxImportBatchSize(flowCtx.Cfg.Settings)
 
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and
@@ -235,8 +260,8 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
 	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
 	// will hog memory as it tries to grow more aggressively.
-	minBufferSize, maxBufferSize, stepSize := storageccl.ImportBufferConfigSizes(cp.flowCtx.Cfg.Settings, true /* isPKAdder */)
-	pkIndexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+	minBufferSize, maxBufferSize, stepSize := storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, true /* isPKAdder */)
+	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
 		Name:              "pkAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
@@ -246,12 +271,12 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 		SSTSize:           uint64(flushSize),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer pkIndexAdder.Close(ctx)
 
-	minBufferSize, maxBufferSize, stepSize = storageccl.ImportBufferConfigSizes(cp.flowCtx.Cfg.Settings, false /* isPKAdder */)
-	indexAdder, err := cp.flowCtx.Cfg.BulkAdder(ctx, cp.flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+	minBufferSize, maxBufferSize, stepSize = storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, false /* isPKAdder */)
+	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
 		Name:              "indexAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
@@ -261,7 +286,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 		SSTSize:           uint64(flushSize),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer indexAdder.Close(ctx)
 
@@ -273,11 +298,11 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	//  - idxFlushedRow contains `writtenRow` as of the last index adder flush.
 	// In pkFlushedRow, idxFlushedRow and writtenFaction values are written via
 	// `atomic` so the progress reporting go goroutine can read them.
-	writtenRow := make([]uint64, len(cp.spec.Uri))
-	writtenFraction := make([]uint32, len(cp.spec.Uri))
+	writtenRow := make([]uint64, len(spec.Uri))
+	writtenFraction := make([]uint32, len(spec.Uri))
 
-	pkFlushedRow := make([]uint64, len(cp.spec.Uri))
-	idxFlushedRow := make([]uint64, len(cp.spec.Uri))
+	pkFlushedRow := make([]uint64, len(spec.Uri))
+	idxFlushedRow := make([]uint64, len(spec.Uri))
 
 	// When the PK adder flushes, everything written has been flushed, so we set
 	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
@@ -299,9 +324,9 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	})
 
 	// offsets maps input file ID to a slot in our progress tracking slices.
-	offsets := make(map[int32]int, len(cp.spec.Uri))
+	offsets := make(map[int32]int, len(spec.Uri))
 	var offset int
-	for i := range cp.spec.Uri {
+	for i := range spec.Uri {
 		offsets[i] = offset
 		offset++
 	}
@@ -335,7 +360,7 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 					}
 					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
 				}
-				cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog})
+				progCh <- prog
 			}
 		}
 	})
@@ -399,43 +424,26 @@ func (cp *readImportDataProcessor) ingestKvs(ctx context.Context, kvCh <-chan ro
 	})
 
 	if err := g.Wait(); err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
 		if err, ok := err.(storagebase.DuplicateKeyError); ok {
-			return errors.Wrap(err, "duplicate key in primary index")
+			return nil, errors.Wrap(err, "duplicate key in primary index")
 		}
-		return err
+		return nil, err
 	}
 
 	if err := indexAdder.Flush(ctx); err != nil {
 		if err, ok := err.(storagebase.DuplicateKeyError); ok {
-			return errors.Wrap(err, "duplicate key in index")
+			return nil, errors.Wrap(err, "duplicate key in index")
 		}
-		return err
+		return nil, err
 	}
-
-	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	prog.CompletedRow = make(map[int32]uint64)
-	prog.CompletedFraction = make(map[int32]float32)
-	for i := range cp.spec.Uri {
-		prog.CompletedFraction[i] = 1.0
-		prog.CompletedRow[i] = math.MaxUint64
-	}
-	cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog})
 
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
-	countsBytes, err := protoutil.Marshal(&addedSummary)
-	if err != nil {
-		return err
-	}
-	cp.output.Push(sqlbase.EncDatumRow{
-		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
-		sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-	}, nil)
-	return nil
+	return &addedSummary, nil
 }
 
 func init() {
