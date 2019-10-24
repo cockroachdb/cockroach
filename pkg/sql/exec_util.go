@@ -639,7 +639,8 @@ var _ dbCacheSubscriber = &databaseCacheHolder{}
 // received.
 func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
-	dc.mu.c = newDatabaseCache(cfg)
+	dc.mu.c.databases = sync.Map{}
+	dc.mu.c.systemConfig = cfg
 	dc.mu.cv.Broadcast()
 	dc.mu.Unlock()
 }
