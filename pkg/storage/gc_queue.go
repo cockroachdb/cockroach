@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -599,7 +598,7 @@ type GCInfo struct {
 	// Now is the timestamp used for age computations.
 	Now hlc.Timestamp
 	// Policy is the policy used for this garbage collection cycle.
-	Policy zonepb.GCPolicy
+	Policy config.GCPolicy
 	// Stats about the userspace key-values considered, namely the number of
 	// keys with GC'able data, the number of "old" intents and the number of
 	// associated distinct transactions.
@@ -680,7 +679,7 @@ func RunGC(
 	desc *roachpb.RangeDescriptor,
 	snap engine.Reader,
 	now hlc.Timestamp,
-	policy zonepb.GCPolicy,
+	policy config.GCPolicy,
 	gcer GCer,
 	cleanupIntentsFn cleanupIntentsFunc,
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,

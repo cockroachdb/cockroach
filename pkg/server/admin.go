@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1641,7 +1641,7 @@ func (s *adminServer) DataDistribution(
 		target := string(tree.MustBeDString(row[0]))
 		zcSQL := tree.MustBeDString(row[1])
 		zcBytes := tree.MustBeDBytes(row[2])
-		var zcProto zonepb.ZoneConfig
+		var zcProto config.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
 			return nil, s.serverError(err)
 		}
@@ -2033,29 +2033,29 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // if it exists.
 func (s *adminServer) queryZone(
 	ctx context.Context, userName string, id sqlbase.ID,
-) (zonepb.ZoneConfig, bool, error) {
+) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-query-zone", nil /* txn */, userName, query, id,
 	)
 	if err != nil {
-		return *zonepb.NewZoneConfig(), false, err
+		return *config.NewZoneConfig(), false, err
 	}
 
 	if len(rows) == 0 {
-		return *zonepb.NewZoneConfig(), false, nil
+		return *config.NewZoneConfig(), false, nil
 	}
 
 	var zoneBytes []byte
 	scanner := resultScanner{}
 	err = scanner.ScanIndex(rows[0], 0, &zoneBytes)
 	if err != nil {
-		return *zonepb.NewZoneConfig(), false, err
+		return *config.NewZoneConfig(), false, err
 	}
 
-	var zone zonepb.ZoneConfig
+	var zone config.ZoneConfig
 	if err := protoutil.Unmarshal(zoneBytes, &zone); err != nil {
-		return *zonepb.NewZoneConfig(), false, err
+		return *config.NewZoneConfig(), false, err
 	}
 	return zone, true, nil
 }
@@ -2065,14 +2065,14 @@ func (s *adminServer) queryZone(
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
 	ctx context.Context, userName string, path []sqlbase.ID,
-) (sqlbase.ID, zonepb.ZoneConfig, bool, error) {
+) (sqlbase.ID, config.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
 		zone, zoneExists, err := s.queryZone(ctx, userName, path[i])
 		if err != nil || zoneExists {
 			return path[i], zone, true, err
 		}
 	}
-	return 0, *zonepb.NewZoneConfig(), false, nil
+	return 0, *config.NewZoneConfig(), false, nil
 }
 
 // queryNamespaceID queries for the ID of the namespace with the given name and

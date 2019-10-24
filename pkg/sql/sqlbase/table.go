@@ -14,9 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -490,45 +488,4 @@ func ConditionalGetTableDescFromTxn(
 		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
 	}
 	return existingKV.Value, nil
-}
-
-// SplitKeysForTable computes the split keys for a given table descriptor,
-// taking into account all its partitions and their zone configs.
-// The descriptor is taken as a raw Value, as the config package needs to invoke
-// this. If the descriptor represents indeed a table, at least one split point
-// is returned (the start of the table). If the descriptor that's passed in is
-// not a table (i.e. it's a database or a view), then nil is returned.
-//
-// zone is the zone config for the table. Can be nil if no zone config has been
-// configured.
-//
-// The split keys are returned sorted.
-// An error is returned iff a descVal is not a descriptor.
-func SplitKeysForTable(descVal *roachpb.Value, zone *zonepb.ZoneConfig) ([]roachpb.RKey, error) {
-	var desc Descriptor
-	if err := descVal.GetProto(&desc); err != nil {
-		return nil, errors.AssertionFailedf("failed to decode descriptor")
-	}
-
-	table := desc.Table(descVal.Timestamp)
-	if table == nil {
-		// Databases don't require splits.
-		return nil, nil
-	}
-	if viewStr := table.GetViewQuery(); viewStr != "" {
-		// Views don't require splits.
-		return nil, nil
-	}
-	tableKey := roachpb.RKey(keys.MakeTablePrefix(uint32(table.ID)))
-	if zone == nil {
-		return []roachpb.RKey{tableKey}, nil
-	}
-	subzoneSplits := zone.SubzoneSplits()
-	splits := make([]roachpb.RKey, len(subzoneSplits)+1)
-	splits[0] = tableKey
-	for i, s := range subzoneSplits {
-		// Prepend the table prefix to the subzone splits.
-		splits[i+1] = append(append([]byte(nil), tableKey...), s...)
-	}
-	return splits, nil
 }

@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -257,13 +256,13 @@ type zone struct {
 	constraints string
 }
 
-func (z zone) toZoneConfig() zonepb.ZoneConfig {
-	cfg := zonepb.NewZoneConfig()
+func (z zone) toZoneConfig() config.ZoneConfig {
+	cfg := config.NewZoneConfig()
 	if z.replicas != 0 {
 		cfg.NumReplicas = proto.Int32(z.replicas)
 	}
 	if z.constraints != "" {
-		var constraintsList zonepb.ConstraintsList
+		var constraintsList config.ConstraintsList
 		if err := yaml.UnmarshalStrict([]byte(z.constraints), &constraintsList); err != nil {
 			panic(err)
 		}
@@ -788,11 +787,11 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 	}, nil
 }
 
-func generateTableZone(t table, tableDesc sqlbase.TableDescriptor) (*zonepb.ZoneConfig, error) {
+func generateTableZone(t table, tableDesc sqlbase.TableDescriptor) (*config.ZoneConfig, error) {
 	// Create the table's zone config.
-	var tableZone *zonepb.ZoneConfig
+	var tableZone *config.ZoneConfig
 	if t.zone != nil {
-		tableZone = new(zonepb.ZoneConfig)
+		tableZone = new(config.ZoneConfig)
 		*tableZone = t.zone.toZoneConfig()
 	}
 	// Add subzones for the PK partitions.
@@ -889,7 +888,7 @@ func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, err
 //
 // parent: Can be nil if the parent table doesn't have a zone of its own. In that
 //   case, if any subzones are created, a placeholder zone will also be created and returned.
-func addIndexSubzones(idx index, parent *zonepb.ZoneConfig, idxID int) *zonepb.ZoneConfig {
+func addIndexSubzones(idx index, parent *config.ZoneConfig, idxID int) *config.ZoneConfig {
 	res := parent
 
 	ensureParent := func() {
@@ -897,13 +896,13 @@ func addIndexSubzones(idx index, parent *zonepb.ZoneConfig, idxID int) *zonepb.Z
 			return
 		}
 		// Create a placeholder zone config.
-		res = zonepb.NewZoneConfig()
+		res = config.NewZoneConfig()
 		res.DeleteTableConfig()
 	}
 
 	if idx.zone != nil {
 		ensureParent()
-		res.SetSubzone(zonepb.Subzone{
+		res.SetSubzone(config.Subzone{
 			IndexID:       uint32(idxID),
 			PartitionName: "",
 			Config:        idx.zone.toZoneConfig(),
@@ -915,7 +914,7 @@ func addIndexSubzones(idx index, parent *zonepb.ZoneConfig, idxID int) *zonepb.Z
 			continue
 		}
 		ensureParent()
-		res.SetSubzone(zonepb.Subzone{
+		res.SetSubzone(config.Subzone{
 			IndexID:       uint32(idxID),
 			PartitionName: p.name,
 			Config:        p.zone.toZoneConfig(),
@@ -927,7 +926,7 @@ func addIndexSubzones(idx index, parent *zonepb.ZoneConfig, idxID int) *zonepb.Z
 // systemConfigBuilder build a system config. Clients will call some setters and then call build().
 type systemConfigBuilder struct {
 	kv                []roachpb.KeyValue
-	defaultZoneConfig *zonepb.ZoneConfig
+	defaultZoneConfig *config.ZoneConfig
 	zoneToObject      map[ZoneKey]string
 }
 
@@ -948,12 +947,12 @@ func (b *systemConfigBuilder) addZoneToObjectMapping(k ZoneKey, object string) e
 	return nil
 }
 
-func (b *systemConfigBuilder) setDefaultZoneConfig(cfg zonepb.ZoneConfig) error {
+func (b *systemConfigBuilder) setDefaultZoneConfig(cfg config.ZoneConfig) error {
 	b.defaultZoneConfig = &cfg
 	return b.addZoneInner("default", keys.RootNamespaceID, cfg)
 }
 
-func (b *systemConfigBuilder) addZoneInner(objectName string, id int, cfg zonepb.ZoneConfig) error {
+func (b *systemConfigBuilder) addZoneInner(objectName string, id int, cfg config.ZoneConfig) error {
 	k := config.MakeZoneKey(uint32(id))
 	var v roachpb.Value
 	if err := v.SetProto(&cfg); err != nil {
@@ -963,11 +962,11 @@ func (b *systemConfigBuilder) addZoneInner(objectName string, id int, cfg zonepb
 	return b.addZoneToObjectMapping(MakeZoneKey(uint32(id), NoSubzone), objectName)
 }
 
-func (b *systemConfigBuilder) addDatabaseZone(name string, id int, cfg zonepb.ZoneConfig) error {
+func (b *systemConfigBuilder) addDatabaseZone(name string, id int, cfg config.ZoneConfig) error {
 	return b.addZoneInner(name, id, cfg)
 }
 
-func (b *systemConfigBuilder) addTableZone(t sqlbase.TableDescriptor, cfg zonepb.ZoneConfig) error {
+func (b *systemConfigBuilder) addTableZone(t sqlbase.TableDescriptor, cfg config.ZoneConfig) error {
 	if err := b.addZoneInner(t.Name, int(t.ID), cfg); err != nil {
 		return err
 	}

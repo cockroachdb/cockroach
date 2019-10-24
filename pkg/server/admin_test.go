@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -649,7 +649,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	// Function to verify the zone for table "test.tbl" as returned by the Admin
 	// API.
 	verifyTblZone := func(
-		expectedZone zonepb.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel,
+		expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel,
 	) {
 		var resp serverpb.TableDetailsResponse
 		if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
@@ -669,7 +669,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	// Function to verify the zone for database "test" as returned by the Admin
 	// API.
 	verifyDbZone := func(
-		expectedZone zonepb.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel,
+		expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel,
 	) {
 		var resp serverpb.DatabaseDetailsResponse
 		if err := getAdminJSONProto(s, "databases/test", &resp); err != nil {
@@ -687,7 +687,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	}
 
 	// Function to store a zone config for a given object ID.
-	setZone := func(zoneCfg zonepb.ZoneConfig, id sqlbase.ID) {
+	setZone := func(zoneCfg config.ZoneConfig, id sqlbase.ID) {
 		zoneBytes, err := protoutil.Marshal(&zoneCfg)
 		if err != nil {
 			t.Fatal(err)
@@ -710,7 +710,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	}
 
 	// Apply zone configuration to database and check again.
-	dbZone := zonepb.ZoneConfig{
+	dbZone := config.ZoneConfig{
 		RangeMinBytes: proto.Int64(456),
 	}
 	setZone(dbZone, idPath[1])
@@ -718,7 +718,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	verifyTblZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
 
 	// Apply zone configuration to table and check again.
-	tblZone := zonepb.ZoneConfig{
+	tblZone := config.ZoneConfig{
 		RangeMinBytes: proto.Int64(789),
 	}
 	setZone(tblZone, idPath[2])

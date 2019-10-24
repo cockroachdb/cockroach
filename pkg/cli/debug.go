@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -539,7 +538,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			&desc,
 			snap,
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)},
+			config.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)},
 			storage.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },

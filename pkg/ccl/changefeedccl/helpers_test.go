@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -329,7 +330,6 @@ func forceTableGC(
 	database, table string,
 ) {
 	t.Helper()
-	if err := tsi.ForceTableGC(context.TODO(), database, table, tsi.Clock().Now()); err != nil {
-		t.Fatal(err)
-	}
+	sqlutils.ForceTableGC(
+		t, tsi.DistSenderI().(*kv.DistSender), sqlDB.DB, database, table, tsi.Clock().Now())
 }

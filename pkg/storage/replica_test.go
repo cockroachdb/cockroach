@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -8428,7 +8427,7 @@ func TestReplicaMetrics(t *testing.T) {
 
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			zoneConfig := protoutil.Clone(cfg.DefaultZoneConfig).(*zonepb.ZoneConfig)
+			zoneConfig := protoutil.Clone(cfg.DefaultZoneConfig).(*config.ZoneConfig)
 			zoneConfig.NumReplicas = proto.Int32(c.replicas)
 
 			// Alternate between quiescent and non-quiescent replicas to test the

@@ -15,7 +15,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -36,7 +35,7 @@ type SystemConfigDeltaFilter struct {
 func MakeSystemConfigDeltaFilter(keyPrefix roachpb.Key) SystemConfigDeltaFilter {
 	return SystemConfigDeltaFilter{
 		keyPrefix: keyPrefix,
-		lastCfg:   config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
+		lastCfg:   config.NewSystemConfig(config.DefaultZoneConfigRef()),
 	}
 }
 
