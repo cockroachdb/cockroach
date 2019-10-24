@@ -39,8 +39,10 @@ import (
 // which is naturally limited by the number of database descriptors in the
 // system the periodic reset whenever the system config is gossiped.
 type databaseCache struct {
+	sync.RWMutex // avoid databases race
+
 	// databases is really a map of string -> sqlbase.ID
-	databases sync.Map
+	databases *sync.Map
 
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
@@ -54,7 +56,9 @@ func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 }
 
 func (dc *databaseCache) getID(name string) sqlbase.ID {
+	dc.RLock()
 	val, ok := dc.databases.Load(name)
+	dc.RUnlock()
 	if !ok {
 		return sqlbase.InvalidID
 	}
@@ -62,7 +66,9 @@ func (dc *databaseCache) getID(name string) sqlbase.ID {
 }
 
 func (dc *databaseCache) setID(name string, id sqlbase.ID) {
+	dc.RLock()
 	dc.databases.Store(name, id)
+	dc.RUnlock()
 }
 
 func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
