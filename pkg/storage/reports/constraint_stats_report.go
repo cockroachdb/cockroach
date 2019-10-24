@@ -23,13 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // replicationConstraintsReportID is the id of the row in the system.
 // reports_meta table corresponding to the constraints conformance report (i.e.
 // the system.replicationConstraintsReportID table).
-const replicationConstraintsReportID = 1
+const replicationConstraintsReportID reportID = 1
 
 // ConstraintReport contains information about the constraint conformance for
 // the cluster's data.
@@ -183,28 +183,15 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 	// - in case that the lastUpdatedAt is set but is different than the timestamp in reports_meta
 	//   this indicates that some other worker wrote after we did the write.
 	if !r.lastGenerated.IsZero() {
-		// check to see if the last timestamp for the update matches the local one.
-		row, err := ex.QueryRow(
-			ctx,
-			"get-previous-timestamp",
-			txn,
-			"select generated from system.reports_meta where id = $1",
-			replicationConstraintsReportID,
-		)
+		generated, err := getReportGenerationTime(ctx, replicationConstraintsReportID, ex, txn)
 		if err != nil {
 			return err
 		}
-
-		// if the row is nil then this is the first time we are running and the reload is needed.
-		if row != nil {
-			generated, ok := row[0].(*tree.DTimestamp)
-			if !ok {
-				return errors.Errorf("Expected to get time from system.reports_meta but got %+v", row)
-			}
-			if generated.Time == r.lastGenerated {
-				// No need to reload.
-				return nil
-			}
+		// If the report is missing, this is the first time we are running and the
+		// reload is needed. In that case, generated will be the zero value.
+		if generated == r.lastGenerated {
+			// We have the latest report; reload not needed.
+			return nil
 		}
 	}
 	const prevViolations = "select zone_id, subzone_id, type, config, " +

@@ -27,7 +27,7 @@ import (
 // replicationStatsReportID is the id of the row in the system. reports_meta
 // table corresponding to the replication stats report (i.e. the
 // system.replication_stats table).
-const replicationStatsReportID = 3
+const replicationStatsReportID reportID = 3
 
 // RangeReport represents the system.zone_range_status report.
 type RangeReport map[ZoneKey]zoneRangeStatus
@@ -99,28 +99,15 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 	// - in case that the lastUpdatedAt is set but is different than the timestamp in reports_meta
 	//   this indicates that some other worker wrote after we did the write.
 	if !r.lastGenerated.IsZero() {
-		// check to see if the last timestamp for the update matches the local one.
-		row, err := ex.QueryRow(
-			ctx,
-			"get-previous-timestamp",
-			txn,
-			"select generated from system.reports_meta where id = $1",
-			replicationStatsReportID,
-		)
+		generated, err := getReportGenerationTime(ctx, replicationStatsReportID, ex, txn)
 		if err != nil {
 			return err
 		}
-
-		// if the row is nil then this is the first time we are running and the reload is needed.
-		if row != nil {
-			generated, ok := row[0].(*tree.DTimestamp)
-			if !ok {
-				return errors.Errorf("Expected to get time from system.reports_meta but got %+v", row)
-			}
-			if generated.Time == r.lastGenerated {
-				// No need to reload.
-				return nil
-			}
+		// If the report is missing, this is the first time we are running and the
+		// reload is needed. In that case, generated will be the zero value.
+		if generated == r.lastGenerated {
+			// We have the latest report; reload not needed.
+			return nil
 		}
 	}
 	const prevViolations = "select zone_id, subzone_id, total_ranges, " +
