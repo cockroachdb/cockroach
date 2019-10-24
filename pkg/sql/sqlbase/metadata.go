@@ -140,10 +140,27 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
-		ret = append(ret, roachpb.KeyValue{
-			Key:   NewTableKey(parentID, desc.GetName()).Key(),
-			Value: value,
-		})
+		if parentID != keys.RootNamespaceID {
+			ret = append(ret, roachpb.KeyValue{
+				Key:   NewPublicTableKey(parentID, desc.GetName()).Key(),
+				Value: value,
+			})
+		} else {
+			// Initializing the system database. The database must be initialized with
+			// the public schema, as all tables are scoped under the public schema.
+			publicSchemaValue := roachpb.Value{}
+			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+			ret = append(
+				ret,
+				roachpb.KeyValue{
+					Key:   NewDatabaseKey(desc.GetName()).Key(),
+					Value: value,
+				},
+				roachpb.KeyValue{
+					Key:   NewPublicSchemaKey(desc.GetID()).Key(),
+					Value: publicSchemaValue,
+				})
+		}
 
 		// Create descriptor metadata key.
 		value = roachpb.Value{}

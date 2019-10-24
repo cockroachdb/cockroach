@@ -76,8 +76,8 @@ type SchemaAccessor interface {
 	// an error is returned; otherwise a nil reference is returned.
 	GetDatabaseDesc(ctx context.Context, txn *client.Txn, dbName string, flags tree.DatabaseLookupFlags) (*DatabaseDescriptor, error)
 
-	// IsValidSchema returns true if the given schema name is valid for the given database.
-	IsValidSchema(db *DatabaseDescriptor, scName string) bool
+	// IsValidSchema returns true and the SchemaID if the given schema name is valid for the given database.
+	IsValidSchema(ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string) (bool, sqlbase.ID, error)
 
 	// GetObjectNames returns the list of all objects in the given
 	// database and schema.

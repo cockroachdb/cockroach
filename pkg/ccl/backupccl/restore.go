@@ -488,7 +488,7 @@ func allocateTableRewrites(
 func CheckTableExists(
 	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
 ) error {
-	tKey := sqlbase.NewTableKey(parentID, name)
+	tKey := sqlbase.NewPublicTableKey(parentID, name)
 	res, err := txn.Get(ctx, tKey.Key())
 	if err != nil {
 		return err
@@ -1079,7 +1079,7 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.NewTableKey(tables[i].ParentID, tables[i].Name).Key(), tables[i].ID, nil)
+			b.CPut(sqlbase.NewPublicTableKey(tables[i].ParentID, tables[i].Name).Key(), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
@@ -1791,7 +1791,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		var existingIDVal roachpb.Value
 		existingIDVal.SetInt(int64(tableDesc.ID))
 		b.CPut(
-			sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
+			sqlbase.NewPublicTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
 			nil,
 			&existingIDVal,
 		)

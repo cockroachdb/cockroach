@@ -1302,7 +1302,7 @@ func runSchemaChangesInTxn(
 		// cleanup for later.
 		b := planner.Txn().NewBatch()
 		for _, drain := range tableDesc.DrainingNames {
-			tbKey := sqlbase.NewTableKey(drain.ParentID, drain.Name).Key()
+			tbKey := sqlbase.NewPublicTableKey(drain.ParentID, drain.Name).Key()
 			b.Del(tbKey)
 		}
 		tableDesc.DrainingNames = nil

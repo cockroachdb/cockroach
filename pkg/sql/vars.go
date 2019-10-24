@@ -615,7 +615,7 @@ var varGen = map[string]sessionVar{
 		},
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			paths := strings.Split(s, ",")
-			m.SetSearchPath(sessiondata.MakeSearchPath(paths))
+			m.UpdateSearchPath(paths)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {

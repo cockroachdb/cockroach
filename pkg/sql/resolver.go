@@ -271,7 +271,11 @@ func (p *planner) LookupSchema(
 	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
-	return sc.IsValidSchema(dbDesc, scName), dbDesc, nil
+	found, _, err = sc.IsValidSchema(ctx, p.txn, dbDesc.ID, scName)
+	if err != nil {
+		return false, nil, err
+	}
+	return found, dbDesc, nil
 }
 
 // LookupObject implements the tree.TableNameExistingResolver interface.

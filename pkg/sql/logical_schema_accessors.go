@@ -33,13 +33,15 @@ type LogicalSchemaAccessor struct {
 var _ SchemaAccessor = &LogicalSchemaAccessor{}
 
 // IsValidSchema implements the DatabaseLister interface.
-func (l *LogicalSchemaAccessor) IsValidSchema(dbDesc *DatabaseDescriptor, scName string) bool {
+func (l *LogicalSchemaAccessor) IsValidSchema(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
+) (bool, sqlbase.ID, error) {
 	if _, ok := l.vt.getVirtualSchemaEntry(scName); ok {
-		return true
+		return true, sqlbase.InvalidID, nil
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.IsValidSchema(dbDesc, scName)
+	return l.SchemaAccessor.IsValidSchema(ctx, txn, dbID, scName)
 }
 
 // GetObjectNames implements the DatabaseLister interface.

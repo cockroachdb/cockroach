@@ -78,7 +78,16 @@ func (p *planner) createDatabase(
 		return false, err
 	}
 
-	return true, p.createDescriptorWithID(ctx, idKey, id, desc, nil)
+	if err := p.createDescriptorWithID(ctx, idKey, id, desc, nil); err != nil {
+		return true, err
+	}
+
+	// Every database must be initialized with the public schema
+	if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(), keys.PublicSchemaID); err != nil {
+		return true, err
+	}
+
+	return true, nil
 }
 
 func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, error) {

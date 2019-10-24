@@ -875,7 +875,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 		func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
-				tbKey := sqlbase.NewTableKey(drain.ParentID, drain.Name).Key()
+				tbKey := sqlbase.NewPublicTableKey(drain.ParentID, drain.Name).Key()
 				b.Del(tbKey)
 			}
 

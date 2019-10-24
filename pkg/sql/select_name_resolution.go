@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 //
 // This file implements the select code that deals with column references
-// and resolving column names in expressions.
+// and resolving column nmes in expressions.
 
 package sql
 

@@ -32,7 +32,7 @@ func TestImpliedSearchPath(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(strings.Join(tc.explicitSearchPath, ","), func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath)
+			searchPath := MakeSearchPath(tc.explicitSearchPath, DefaultTemporarySchema)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.Iter()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
@@ -44,9 +44,9 @@ func TestImpliedSearchPath(t *testing.T) {
 		})
 
 		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/no-pg-catalog", func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath)
+			searchPath := MakeSearchPath(tc.explicitSearchPath, DefaultTemporarySchema)
 			actualSearchPath := make([]string, 0)
-			iter := searchPath.IterWithoutImplicitPGCatalog()
+			iter := searchPath.IterWithoutImplicitPGSchemas()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
 				actualSearchPath = append(actualSearchPath, p)
 			}
@@ -58,8 +58,8 @@ func TestImpliedSearchPath(t *testing.T) {
 }
 
 func TestSearchPathEquals(t *testing.T) {
-	a1 := MakeSearchPath([]string{"x", "y", "z"})
-	a2 := MakeSearchPath([]string{"x", "y", "z"})
+	a1 := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchema)
+	a2 := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchema)
 	assert.True(t, a1.Equals(&a1))
 	assert.True(t, a2.Equals(&a2))
 

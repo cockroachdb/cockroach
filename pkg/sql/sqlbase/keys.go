@@ -21,10 +21,11 @@ import (
 // MakeNameMetadataKey returns the key for the name. Pass name == "" in order
 // to generate the prefix key to use to scan over all of the names for the
 // specified parentID.
-func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
+func MakeNameMetadataKey(parentID ID, parentSchemaID ID, name string) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
+	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
 		k = keys.MakeFamilyKey(k, uint32(NamespaceTable.Columns[2].ID))

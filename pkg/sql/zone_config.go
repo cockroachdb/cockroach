@@ -262,8 +262,13 @@ func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (
 	errMissingKey := errors.New("missing key")
 	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
-			tKey := sqlbase.NewTableKey(sqlbase.ID(parentID), name)
-			kv, err := txn.Get(ctx, tKey.Key())
+			var key sqlbase.DescriptorKey
+			if parentID == keys.RootNamespaceID {
+				key = sqlbase.NewDatabaseKey(name)
+			} else {
+				key = sqlbase.NewPublicTableKey(sqlbase.ID(parentID), name)
+			}
+			kv, err := txn.Get(ctx, key.Key())
 			if err != nil {
 				return 0, err
 			}

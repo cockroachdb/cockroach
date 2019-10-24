@@ -295,12 +295,12 @@ const (
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
 	// NOTE: IDs must be <= MaxSystemConfigDescID.
-	SystemDatabaseID  = 1
-	NamespaceTableID  = 2
-	DescriptorTableID = 3
-	UsersTableID      = 4
-	ZonesTableID      = 5
-	SettingsTableID   = 6
+	SystemDatabaseID           = 1
+	DeprecatedNamespaceTableID = 2
+	DescriptorTableID          = 3
+	UsersTableID               = 4
+	ZonesTableID               = 5
+	SettingsTableID            = 6
 
 	// IDs for the important columns and indexes in the zones table live here to
 	// avoid introducing a dependency on sql/sqlbase throughout the codebase.
@@ -330,6 +330,11 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
+	PublicSchemaID                       = 29
+
+	// New NamespaceTableID for cluster version >= 20.1
+	// Ensures that NamespaceTable does not get gossiped again
+	NamespaceTableID = 30
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
