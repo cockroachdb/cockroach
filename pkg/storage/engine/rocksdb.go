@@ -1498,7 +1498,7 @@ func (r *batchIterator) ComputeStats(
 }
 
 func (r *batchIterator) FindSplitKey(
-	start, end, minSplitKey MVCCKey, targetSize int64,
+	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	r.batch.flushMutations()
 	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize)
@@ -2303,11 +2303,13 @@ func (r *rocksDBIterator) ComputeStats(
 }
 
 func (r *rocksDBIterator) FindSplitKey(
-	start, end, minSplitKey MVCCKey, targetSize int64,
+	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	var splitKey C.DBString
 	r.clearState()
-	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(minSplitKey),
+	status := C.MVCCFindSplitKey(r.iter,
+		goToCKey(MakeMVCCMetadataKey(start)),
+		goToCKey(MakeMVCCMetadataKey(minSplitKey)),
 		C.int64_t(targetSize), &splitKey)
 	if err := statusToError(status); err != nil {
 		return MVCCKey{}, err

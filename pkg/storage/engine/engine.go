@@ -105,7 +105,7 @@ type Iterator interface {
 	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
-	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
+	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
 	//
