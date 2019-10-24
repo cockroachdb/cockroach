@@ -13,7 +13,7 @@ package engine
 import (
 	"context"
 	"math"
-	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/kr/pretty"
 )
 
 func TestMVCCOpLogWriter(t *testing.T) {
@@ -164,8 +165,8 @@ func TestMVCCOpLogWriter(t *testing.T) {
 					TxnID: txn2.ID,
 				}),
 			}
-			if ops := ol.LogicalOps(); !reflect.DeepEqual(exp, ops) {
-				t.Errorf("expected logical ops %+v, found %+v", exp, ops)
+			if diff := pretty.Diff(exp, ol.LogicalOps()); diff != nil {
+				t.Errorf("unexpected logical op differences:\n%s", strings.Join(diff, "\n"))
 			}
 		})
 	}

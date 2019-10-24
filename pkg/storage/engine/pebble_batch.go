@@ -23,7 +23,8 @@ type pebbleBatch struct {
 	db           *pebble.DB
 	batch        *pebble.Batch
 	buf          []byte
-	iter         pebbleIterator
+	prefixIter   pebbleIterator
+	normalIter   pebbleIterator
 	closed       bool
 	isDistinct   bool
 	distinctOpen bool
@@ -45,9 +46,15 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch) *pebbleBatch {
 		db:    db,
 		batch: batch,
 		buf:   pb.buf,
-		iter: pebbleIterator{
-			lowerBoundBuf: pb.iter.lowerBoundBuf,
-			upperBoundBuf: pb.iter.upperBoundBuf,
+		prefixIter: pebbleIterator{
+			lowerBoundBuf: pb.prefixIter.lowerBoundBuf,
+			upperBoundBuf: pb.prefixIter.upperBoundBuf,
+			reusable:      true,
+		},
+		normalIter: pebbleIterator{
+			lowerBoundBuf: pb.normalIter.lowerBoundBuf,
+			upperBoundBuf: pb.normalIter.upperBoundBuf,
+			reusable:      true,
 		},
 	}
 	return pb
@@ -59,6 +66,11 @@ func (p *pebbleBatch) Close() {
 		panic("closing an already-closed pebbleBatch")
 	}
 	p.closed = true
+
+	// Destroy the iterators before closing the batch.
+	p.prefixIter.destroy()
+	p.normalIter.destroy()
+
 	if !p.isDistinct {
 		_ = p.batch.Close()
 		p.batch = nil
@@ -66,7 +78,7 @@ func (p *pebbleBatch) Close() {
 		p.parentBatch.distinctOpen = false
 		p.isDistinct = false
 	}
-	p.iter.destroy()
+
 	pebbleBatchPool.Put(p)
 }
 
@@ -157,20 +169,24 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 		return newPebbleIterator(p.batch, opts)
 	}
 
-	if p.iter.inuse {
+	iter := &p.normalIter
+	if opts.Prefix {
+		iter = &p.prefixIter
+	}
+	if iter.inuse {
 		panic("iterator already in use")
 	}
-	p.iter.inuse = true
-	p.iter.reusable = true
 
-	if p.iter.iter != nil {
-		p.iter.setOptions(opts)
+	if iter.iter != nil {
+		iter.setOptions(opts)
 	} else if p.batch.Indexed() {
-		p.iter.init(p.batch, opts)
+		iter.init(p.batch, opts)
 	} else {
-		p.iter.init(p.db, opts)
+		iter.init(p.db, opts)
 	}
-	return &p.iter
+
+	iter.inuse = true
+	return iter
 }
 
 // NewIterator implements the Batch interface.
@@ -322,12 +338,10 @@ func (p *pebbleBatch) Distinct() ReadWriter {
 	// optimization. In Pebble we're still using the same underlying batch and if
 	// it is indexed we'll still be indexing it as we Go.
 	p.distinctOpen = true
-	return &pebbleBatch{
-		db:          p.db,
-		batch:       p.batch,
-		parentBatch: p,
-		isDistinct:  true,
-	}
+	d := newPebbleBatch(p.db, p.batch)
+	d.parentBatch = p
+	d.isDistinct = true
+	return d
 }
 
 // Empty implements the Batch interface.
