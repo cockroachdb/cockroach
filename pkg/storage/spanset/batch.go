@@ -111,14 +111,6 @@ func (s *Iterator) NextKey() {
 	}
 }
 
-// PrevKey is part of the engine.Iterator interface.
-func (s *Iterator) PrevKey() {
-	s.i.PrevKey()
-	if s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
-		s.invalid = true
-	}
-}
-
 // Key is part of the engine.Iterator interface.
 func (s *Iterator) Key() engine.MVCCKey {
 	return s.i.Key()
