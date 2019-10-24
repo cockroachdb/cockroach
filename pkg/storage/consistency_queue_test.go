@@ -202,7 +202,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		mtc.engines = append(mtc.engines, eng)
 	}
 
-	// Store 0 will report a diff with inconsistent key "e".
+	// s1 will report a diff with inconsistent key "e", and only s2 has that
+	// write (s3 agrees with s1).
 	diffKey := []byte("e")
 	var diffTimestamp hlc.Timestamp
 	notifyReportDiff := make(chan struct{}, 1)
@@ -241,9 +242,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		}
 	// Store 0 will panic.
 	notifyPanic := make(chan struct{}, 1)
-	sc.TestingKnobs.ConsistencyTestingKnobs.BadChecksumPanic = func(s roachpb.StoreIdent) {
-		if s != *mtc.Store(0).Ident {
-			t.Errorf("BadChecksumPanic called from follower (StoreIdent = %v)", s)
+	sc.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal = func(s roachpb.StoreIdent) {
+		if s != *mtc.Store(1).Ident {
+			t.Errorf("OnBadChecksumFatal called from %v", s)
 			return
 		}
 		notifyPanic <- struct{}{}
@@ -554,7 +555,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 
 	select {
 	case resp := <-ccCh:
-		assert.Contains(t, resp.Result[0].Detail, `stats delta`)
+		assert.Contains(t, resp.Result[0].Detail, `KeyBytes`) // contains printed stats
 		assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT, resp.Result[0].Status)
 	default:
 		t.Errorf("no response indicating the incorrect stats")

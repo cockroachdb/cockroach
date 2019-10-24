@@ -485,6 +485,7 @@ message CheckConsistencyRequest {
   // in-time backup of the database. It will be put into the engines' auxiliary
   // directory and needs to be removed manually to avoid leaking disk space.
   bool checkpoint = 4;
+  repeated ReplicaDescriptor terminate = 5 [(gogoproto.nullable) = false];
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
@@ -1204,6 +1205,9 @@ message ComputeChecksumRequest {
   // we want to preserve as much state as possible. The checkpoint will be stored
   // in the engine's auxiliary directory.
   bool checkpoint = 6;
+  // If set, specifies the replicas which are the most likely source of the
+  // inconsistency. After evaluating the command, these replicas will terminate.
+  repeated ReplicaDescriptor terminate = 7 [(gogoproto.nullable) = false];
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
