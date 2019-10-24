@@ -188,33 +188,38 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v2.2.
 		// TODO(knz): bake this migration into v2.3.
-		name:                "create system.comment table",
-		workFn:              createCommentTable,
-		includedInBootstrap: true,
+		name:   "create system.comment table",
+		workFn: createCommentTable,
+		// This migration has been introduced some time before 19.2.
+		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
 	{
-		name:                "create system.replication_constraint_stats table",
-		workFn:              createReplicationConstraintStatsTable,
-		includedInBootstrap: true,
+		name:   "create system.replication_constraint_stats table",
+		workFn: createReplicationConstraintStatsTable,
+		// This migration has been introduced some time before 19.2.
+		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReplicationConstraintStatsTableID),
 	},
 	{
-		name:                "create system.replication_critical_localities table",
-		workFn:              createReplicationCriticalLocalitiesTable,
-		includedInBootstrap: true,
+		name:   "create system.replication_critical_localities table",
+		workFn: createReplicationCriticalLocalitiesTable,
+		// This migration has been introduced some time before 19.2.
+		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReplicationCriticalLocalitiesTableID),
 	},
 	{
-		name:                "create system.reports_meta table",
-		workFn:              createReportsMetaTable,
-		includedInBootstrap: true,
+		name:   "create system.reports_meta table",
+		workFn: createReportsMetaTable,
+		// This migration has been introduced some time before 19.2.
+		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReportsMetaTableID),
 	},
 	{
-		name:                "create system.replication_stats table",
-		workFn:              createReplicationStatsTable,
-		includedInBootstrap: true,
+		name:   "create system.replication_stats table",
+		workFn: createReplicationStatsTable,
+		// This migration has been introduced some time before 19.2.
+		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReplicationStatsTableID),
 	},
 	{
@@ -231,7 +236,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v19.2.
 		name:                "change reports fields from timestamp to timestamptz",
-		includedInBootstrap: true,
+		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		workFn: func(ctx context.Context, r runner) error {
 			// Note that these particular schema changes are idempotent.
 			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
@@ -290,7 +295,10 @@ type migrationDescriptor struct {
 	// for tests) we want to create these tables by hand so that a corresponding
 	// range is created at bootstrap time. Otherwise, we'd have the split queue
 	// asynchronously creating some ranges which is annoying for tests.
-	includedInBootstrap bool
+	//
+	// Generally when setting this field you'll want to introduce a new cluster
+	// version.
+	includedInBootstrap roachpb.Version
 	// doesBackfill should be set to true if the migration triggers a backfill.
 	doesBackfill bool
 	// newDescriptorIDs is a function that returns the IDs of any additional
@@ -389,7 +397,7 @@ func ExpectedDescriptorIDs(
 		// Is the migration not creating descriptors?
 		if migration.newDescriptorIDs == nil ||
 			// Is the migration included in the metadata schema considered above?
-			migration.includedInBootstrap {
+			(migration.includedInBootstrap != roachpb.Version{}) {
 			continue
 		}
 		if _, ok := completedMigrations[string(migrationKey(migration))]; ok {
@@ -404,21 +412,10 @@ func ExpectedDescriptorIDs(
 	return descriptorIDs, nil
 }
 
-// MigrationFilter is used to indicate to EnsureMigrations what to run.
-type MigrationFilter bool
-
-const (
-	// AllMigrations means run all the migrations.
-	AllMigrations MigrationFilter = true
-	// ExcludeMigrationsIncludedInBootstrap means don't run migrations with the
-	// includedInBootstrap field set.
-	ExcludeMigrationsIncludedInBootstrap MigrationFilter = false
-)
-
 // EnsureMigrations should be run during node startup to ensure that all
 // required migrations have been run (and running all those that are definitely
 // safe to run).
-func (m *Manager) EnsureMigrations(ctx context.Context, filter MigrationFilter) error {
+func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb.Version) error {
 	// First, check whether there are any migrations that need to be run.
 	completedMigrations, err := getCompletedMigrations(ctx, m.db)
 	if err != nil {
@@ -426,10 +423,10 @@ func (m *Manager) EnsureMigrations(ctx context.Context, filter MigrationFilter) 
 	}
 	allMigrationsCompleted := true
 	for _, migration := range backwardCompatibleMigrations {
+		minVersion := migration.includedInBootstrap
 		if migration.workFn == nil || // has the migration been baked in?
-			// is the migration unnecessary?
-			(migration.includedInBootstrap &&
-				filter == ExcludeMigrationsIncludedInBootstrap) {
+			// is the migration unnecessary? It's not if it's been baked in.
+			(minVersion != roachpb.Version{} && !bootstrapVersion.Less(minVersion)) {
 			continue
 		}
 		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
@@ -520,10 +517,10 @@ func (m *Manager) EnsureMigrations(ctx context.Context, filter MigrationFilter) 
 		sqlExecutor: m.sqlExecutor,
 	}
 	for _, migration := range backwardCompatibleMigrations {
+		minVersion := migration.includedInBootstrap
 		if migration.workFn == nil || // has the migration been baked in?
-			// is the migration unnecessary?
-			(migration.includedInBootstrap &&
-				filter == ExcludeMigrationsIncludedInBootstrap) {
+			// is the migration unnecessary? It's not if it's been baked in.
+			(minVersion != roachpb.Version{} && !bootstrapVersion.Less(minVersion)) {
 			continue
 		}
 

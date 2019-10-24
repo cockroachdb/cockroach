@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -82,7 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
-	"github.com/getsentry/raven-go"
+	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -1595,14 +1596,14 @@ func (s *Server) Start(ctx context.Context) error {
 		mmKnobs,
 		s.NodeID().String(),
 	)
-	migrationFilter := sqlmigrations.AllMigrations
-	if doBootstrap {
-		// If we've just bootstrapped, some migrations are unnecessary because
-		// they're included in the metadata schema that we've written to the store
-		// by hand.
-		migrationFilter = sqlmigrations.ExcludeMigrationsIncludedInBootstrap
+
+	var bootstrapVersion roachpb.Version
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+	}); err != nil {
+		return err
 	}
-	if err := migMgr.EnsureMigrations(ctx, migrationFilter); err != nil {
+	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
 		select {
 		case <-s.stopper.ShouldQuiesce():
 			// Avoid turning an early shutdown into a fatal error. See #19579.
