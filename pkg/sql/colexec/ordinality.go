@@ -58,6 +58,11 @@ func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 		c.ordinalityCol = bat.Width()
 		bat.AppendCol(coltypes.Int64)
 	}
+
+	if bat.Length() == 0 {
+		return bat
+	}
+
 	vec := bat.ColVec(c.ordinalityCol).Int64()
 	sel := bat.Selection()
 
