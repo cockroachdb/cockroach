@@ -73,11 +73,6 @@ type Iterator interface {
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
 	Prev()
-	// PrevKey moves the iterator backward to the previous MVCC key. This
-	// operation is distinct from Prev which moves the iterator backward to the
-	// prev version of the current key or the prev key if the iterator is
-	// currently located at the first version for a key.
-	PrevKey()
 	// Key returns the current key.
 	Key() MVCCKey
 	// Value returns the current value as a byte slice.
@@ -239,6 +234,10 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after ClearRange
 	// returns.
+	//
+	// TODO(peter): Most callers want to pass roachpb.Key, except for
+	// MVCCClearTimeRange. That function actually does what to clear records
+	// between specific versions.
 	ClearRange(start, end MVCCKey) error
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear and ClearRange, this method actually removes
@@ -526,7 +525,7 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
 // (exclusive). Depending on the number of keys, it will either use ClearRange
-// or ClearRangeIter.
+// or ClearIterRange.
 func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end roachpb.Key) error {
 	iter := eng.NewIterator(IterOptions{UpperBound: end})
 	defer iter.Close()

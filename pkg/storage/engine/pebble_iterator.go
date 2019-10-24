@@ -251,19 +251,6 @@ func (p *pebbleIterator) Prev() {
 	p.iter.Prev()
 }
 
-// PrevKey implements the Iterator interface.
-func (p *pebbleIterator) PrevKey() {
-	if valid, err := p.Valid(); err != nil || !valid {
-		return
-	}
-	curKey := p.Key()
-	for p.iter.Prev() {
-		if !bytes.Equal(curKey.Key, p.UnsafeKey().Key) {
-			break
-		}
-	}
-}
-
 // Key implements the Iterator interface.
 func (p *pebbleIterator) Key() MVCCKey {
 	key := p.UnsafeKey()

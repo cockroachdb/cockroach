@@ -1503,11 +1503,6 @@ func (r *batchIterator) NextKey() {
 	r.iter.NextKey()
 }
 
-func (r *batchIterator) PrevKey() {
-	r.batch.flushMutations()
-	r.iter.PrevKey()
-}
-
 func (r *batchIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
@@ -2242,11 +2237,6 @@ func (r *rocksDBIterator) Prev() {
 func (r *rocksDBIterator) NextKey() {
 	r.checkEngineOpen()
 	r.setState(C.DBIterNext(r.iter, C.bool(true) /* skip_current_key_versions */))
-}
-
-func (r *rocksDBIterator) PrevKey() {
-	r.checkEngineOpen()
-	r.setState(C.DBIterPrev(r.iter, C.bool(true) /* skip_current_key_versions */))
 }
 
 func (r *rocksDBIterator) Key() MVCCKey {
