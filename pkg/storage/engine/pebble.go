@@ -528,9 +528,10 @@ func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
 }
 
 type pebbleReadOnly struct {
-	parent *Pebble
-	iter   pebbleIterator
-	closed bool
+	parent     *Pebble
+	prefixIter pebbleIterator
+	normalIter pebbleIterator
+	closed     bool
 }
 
 var _ ReadWriter = &pebbleReadOnly{}
@@ -540,7 +541,8 @@ func (p *pebbleReadOnly) Close() {
 		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
-	p.iter.destroy()
+	p.prefixIter.destroy()
+	p.normalIter.destroy()
 }
 
 func (p *pebbleReadOnly) Closed() bool {
@@ -580,18 +582,23 @@ func (p *pebbleReadOnly) NewIterator(opts IterOptions) Iterator {
 		return newPebbleIterator(p.parent.db, opts)
 	}
 
-	if p.iter.inuse {
+	iter := &p.normalIter
+	if opts.Prefix {
+		iter = &p.prefixIter
+	}
+	if iter.inuse {
 		panic("iterator already in use")
 	}
-	p.iter.inuse = true
-	p.iter.reusable = true
 
-	if p.iter.iter != nil {
-		p.iter.setOptions(opts)
+	if iter.iter != nil {
+		iter.setOptions(opts)
 	} else {
-		p.iter.init(p.parent.db, opts)
+		iter.init(p.parent.db, opts)
+		iter.reusable = true
 	}
-	return &p.iter
+
+	iter.inuse = true
+	return iter
 }
 
 // Writer methods are not implemented for pebbleReadOnly. Ideally, the code
