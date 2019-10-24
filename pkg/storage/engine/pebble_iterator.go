@@ -71,6 +71,7 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 		lowerBoundBuf: p.lowerBoundBuf,
 		upperBoundBuf: p.upperBoundBuf,
 		prefix:        opts.Prefix,
+		reusable:      p.reusable,
 	}
 
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
@@ -533,6 +534,9 @@ func (p *pebbleIterator) Stats() IteratorStats {
 }
 
 func (p *pebbleIterator) destroy() {
+	if p.inuse {
+		panic("iterator still in use")
+	}
 	if p.iter != nil {
 		err := p.iter.Close()
 		if err != nil {

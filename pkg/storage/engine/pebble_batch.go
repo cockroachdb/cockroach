@@ -48,6 +48,7 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch) *pebbleBatch {
 		iter: pebbleIterator{
 			lowerBoundBuf: pb.iter.lowerBoundBuf,
 			upperBoundBuf: pb.iter.upperBoundBuf,
+			reusable:      true,
 		},
 	}
 	return pb
@@ -59,6 +60,10 @@ func (p *pebbleBatch) Close() {
 		panic("closing an already-closed pebbleBatch")
 	}
 	p.closed = true
+
+	// Destroy the iterator before closing the batch.
+	p.iter.destroy()
+
 	if !p.isDistinct {
 		_ = p.batch.Close()
 		p.batch = nil
@@ -66,7 +71,7 @@ func (p *pebbleBatch) Close() {
 		p.parentBatch.distinctOpen = false
 		p.isDistinct = false
 	}
-	p.iter.destroy()
+
 	pebbleBatchPool.Put(p)
 }
 
@@ -160,8 +165,6 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 	if p.iter.inuse {
 		panic("iterator already in use")
 	}
-	p.iter.inuse = true
-	p.iter.reusable = true
 
 	if p.iter.iter != nil {
 		p.iter.setOptions(opts)
@@ -170,6 +173,8 @@ func (p *pebbleBatch) NewIterator(opts IterOptions) Iterator {
 	} else {
 		p.iter.init(p.db, opts)
 	}
+
+	p.iter.inuse = true
 	return &p.iter
 }
 
