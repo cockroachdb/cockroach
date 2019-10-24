@@ -105,7 +105,7 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 // parseJUnitXML parses testOutputInJUnitXMLFormat and updates the receiver
 // accordingly.
 func (r *ormTestsResults) parseJUnitXML(
-	t *test, expectedFailures blacklist, testOutputInJUnitXMLFormat []byte,
+	t *test, expectedFailures, ignorelist blacklist, testOutputInJUnitXMLFormat []byte,
 ) {
 	tests, passed, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
 	if err != nil {
@@ -121,12 +121,16 @@ func (r *ormTestsResults) parseJUnitXML(
 			continue
 		}
 		r.allTests = append(r.allTests, test)
+		ignoredIssue, expectedIgnored := ignorelist[test]
 		issue, expectedFailure := expectedFailures[test]
 		if len(issue) == 0 || issue == "unknown" {
 			issue = issueHints[test]
 		}
 		pass := passed[i]
 		switch {
+		case expectedIgnored:
+			r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
+			r.ignoredCount++
 		case pass && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 			r.passExpectedCount++
@@ -164,6 +168,7 @@ func parseAndSummarizeJavaORMTestsResults(
 	testOutput []byte,
 	blacklistName string,
 	expectedFailures blacklist,
+	ignorelist blacklist,
 	version string,
 	latestTag string,
 ) {
@@ -193,7 +198,7 @@ func parseAndSummarizeJavaORMTestsResults(
 			t.Fatal(err)
 		}
 
-		results.parseJUnitXML(t, expectedFailures, fileOutput)
+		results.parseJUnitXML(t, expectedFailures, ignorelist, fileOutput)
 	}
 
 	results.summarizeAll(

@@ -96,16 +96,9 @@ func registerLibPQ(r *testRegistry) {
 			fmt.Sprintf("cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -v 2>&1 | %s/bin/go-junit-report > %s", libPQPath, goPath, resultsPath),
 		)
 
-		// Add ignored failures to expected failures.
-		// TODO(asubiotto): Add ignored tests to
-		//  parseAndSummarizeJavaORMTestsResults.
-		for k, v := range ignoredFailures {
-			expectedFailures[k] = v
-		}
-
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "lib/pq" /* ormName */, []byte(resultsPath),
-			blacklistName, expectedFailures, version, latestTag,
+			blacklistName, expectedFailures, ignoredFailures, version, latestTag,
 		)
 	}
 
