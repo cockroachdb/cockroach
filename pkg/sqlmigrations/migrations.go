@@ -275,6 +275,8 @@ func databaseIDs(names ...string) func(ctx context.Context, db db) ([]sqlbase.ID
 // See docs/RFCs/cluster_upgrade_tool.md for details.
 type migrationDescriptor struct {
 	// name must be unique amongst all hard-coded migrations.
+	// ATTENTION: A migration's name can never be changed. It is included in a key
+	// marking a migration as completed.
 	name string
 	// workFn must be idempotent so that we can safely re-run it if a node failed
 	// while running it. nil if the migration has been "backed in" and is no
