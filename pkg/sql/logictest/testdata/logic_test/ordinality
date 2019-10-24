@@ -53,6 +53,21 @@ SELECT * FROM (SELECT x, ordinality*2 FROM foo WITH ORDINALITY AS a) JOIN foo WI
 a 2 1
 b 4 2
 
+query TI
+SELECT * FROM (SELECT * FROM foo ORDER BY x DESC) WITH ORDINALITY LIMIT 1
+----
+b 1
+
+query TI
+SELECT * FROM (SELECT * FROM foo WITH ORDINALITY) ORDER BY x DESC LIMIT 1
+----
+b 2
+
+query TI
+SELECT * FROM (SELECT * FROM foo WITH ORDINALITY) ORDER BY ordinality DESC LIMIT 1
+----
+b 2
+
 statement ok
 INSERT INTO foo(x) VALUES ('c')
 

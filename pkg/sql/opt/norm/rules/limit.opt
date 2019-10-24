@@ -79,3 +79,42 @@ $input
     (Const $offset)
     $offsetOrdering
 )
+
+# PushLimitIntoOrdinality pushes the Limit operator into the Ordinality
+# operator when the ordering associated with both operators allows it.
+#
+# Pushing the limit as far as possible down the tree shouldn't have negative
+# effects, but will reduce the number of rows processed by operators higher up,
+# and if the limit is pushed all the way down to a scan, the scan can be limited
+# directly.
+#
+# In order to prevent this rule from affecting:
+#   1. the set of rows kept by the limit,
+#   2. the ordinals assigned to those rows by the ordinality, and
+#   3. the final ordering of the rows,
+# the rule should only be applied if the ordinality's ordering implies the
+# original limit's ordering (see OrderingChoice.Implies).
+#
+# The new limit's ordering must also be "extended" to imply the ordinality's
+# ordering, which is done by setting it to be the intersection of the old limit's
+# ordering and the ordinality's ordering (see OrderingChoice.Intersection).
+[PushLimitIntoOrdinality, Normalize]
+(Limit
+    (Ordinality
+        $input:*
+        $private:*
+    )
+    $limit:*
+    $limitOrdering:* &
+        (HasColsInOrdering $input $limitOrdering) &
+        (OrderingImplies (OrdinalityOrdering $private) $limitOrdering)
+)
+=>
+(Ordinality
+    (Limit
+        $input
+        $limit
+        (OrderingIntersection (OrdinalityOrdering $private) $limitOrdering)
+    )
+    $private
+)
