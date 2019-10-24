@@ -36,7 +36,10 @@ func newPebbleOptions(fs vfs.FS) *pebble.Options {
 }
 
 func setupMVCCPebble(b testing.TB, dir string) Engine {
-	peb, err := NewPebble(dir, newPebbleOptions(vfs.Default))
+	peb, err := NewPebble(PebbleConfig{
+		Dir:  dir,
+		Opts: newPebbleOptions(vfs.Default),
+	})
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
@@ -44,7 +47,9 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 }
 
 func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
-	peb, err := NewPebble("", newPebbleOptions(vfs.NewMem()))
+	peb, err := NewPebble(PebbleConfig{
+		Opts: newPebbleOptions(vfs.NewMem()),
+	})
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
 	}
