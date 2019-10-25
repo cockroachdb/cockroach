@@ -440,9 +440,7 @@ func (p *Pebble) NewSnapshot() Reader {
 }
 
 // IngestExternalFiles implements the Engine interface.
-func (p *Pebble) IngestExternalFiles(
-	ctx context.Context, paths []string, skipWritingSeqNo, allowFileModifications bool,
-) error {
+func (p *Pebble) IngestExternalFiles(ctx context.Context, paths []string) error {
 	return p.db.Ingest(paths)
 }
 

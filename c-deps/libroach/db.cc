@@ -829,8 +829,7 @@ DBStatus DBGetSortedWALFiles(DBEngine* db, DBWALFile** files, int* n) {
 
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }
 
-DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
-                               bool write_global_seqno, bool allow_file_modifications) {
+DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files) {
   std::vector<std::string> paths_vec;
   for (size_t i = 0; i < len; i++) {
     paths_vec.push_back(paths[i]);
@@ -851,15 +850,15 @@ DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move
   // After https://github.com/facebook/rocksdb/pull/4172 this can be disabled
   // (with the mutable manifest/metadata tracking that instead). However it is
   // only safe to disable the seqno write if older versions of RocksDB (<5.16)
-  // will not be used to read these SSTs.
-  //
+  // will not be used to read these SSTs; luckily we no longer need to
+  // interoperate with such older versions.
+  ingest_options.write_global_seqno = false;
   // RocksDB checks the option allow_global_seqno and, if it is false, returns
   // an error instead of ingesting a file that would require one. However it
-  // does this check *even if it is not planning on writing seqno* at all, so we
-  // need to set allow_global_seqno to true for !write_global_seqno to have the
-  // desired effect.
-  ingest_options.write_global_seqno = write_global_seqno;
-  ingest_options.allow_global_seqno = allow_file_modifications || !write_global_seqno;
+  // does this check *even if it is not planning on writing seqno* at all (and
+  // we're not planning on writing any as per write_global_seqno above), so we
+  // need to set allow_global_seqno to true.
+  ingest_options.allow_global_seqno = true;
   // If there are mutations in the memtable for the keyrange covered by the file
   // being ingested, this option is checked. If true, the memtable is flushed
   // using a blocking, write-stalling flush and the ingest run. If false, an
