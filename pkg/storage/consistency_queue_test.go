@@ -214,6 +214,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			}
 			if len(diff) != 1 {
 				t.Errorf("diff length = %d, diff = %v", len(diff), diff)
+				return
 			}
 			d := diff[0]
 			if d.LeaseHolder || !bytes.Equal(diffKey, d.Key) || diffTimestamp != d.Timestamp {
@@ -348,8 +349,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	assert.Len(t, resp.Result, 1)
 	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
-	assert.Contains(t, resp.Result[0].Detail, `is inconsistent`)
-	assert.Contains(t, resp.Result[0].Detail, `persisted stats`)
+	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
+	assert.Contains(t, resp.Result[0].Detail, `stats`)
 }
 
 // TestConsistencyQueueRecomputeStats is an end-to-end test of the mechanism CockroachDB
