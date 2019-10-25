@@ -9,25 +9,24 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[Version2_1-0]
-	_ = x[VersionUnreplicatedRaftTruncatedState-1]
-	_ = x[VersionSideloadedStorageNoReplicaID-2]
-	_ = x[Version19_1-3]
-	_ = x[VersionStart19_2-4]
-	_ = x[VersionQueryTxnTimestamp-5]
-	_ = x[VersionStickyBit-6]
-	_ = x[VersionParallelCommits-7]
-	_ = x[VersionGenerationComparable-8]
-	_ = x[VersionLearnerReplicas-9]
-	_ = x[VersionTopLevelForeignKeys-10]
-	_ = x[VersionAtomicChangeReplicasTrigger-11]
-	_ = x[VersionAtomicChangeReplicas-12]
-	_ = x[VersionTableDescModificationTimeFromMVCC-13]
-	_ = x[VersionPartitionedBackup-14]
+	_ = x[VersionSideloadedStorageNoReplicaID-1]
+	_ = x[Version19_1-2]
+	_ = x[VersionStart19_2-3]
+	_ = x[VersionQueryTxnTimestamp-4]
+	_ = x[VersionStickyBit-5]
+	_ = x[VersionParallelCommits-6]
+	_ = x[VersionGenerationComparable-7]
+	_ = x[VersionLearnerReplicas-8]
+	_ = x[VersionTopLevelForeignKeys-9]
+	_ = x[VersionAtomicChangeReplicasTrigger-10]
+	_ = x[VersionAtomicChangeReplicas-11]
+	_ = x[VersionTableDescModificationTimeFromMVCC-12]
+	_ = x[VersionPartitionedBackup-13]
 }
 
-const _VersionKey_name = "Version2_1VersionUnreplicatedRaftTruncatedStateVersionSideloadedStorageNoReplicaIDVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackup"
+const _VersionKey_name = "Version2_1VersionSideloadedStorageNoReplicaIDVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackup"
 
-var _VersionKey_index = [...]uint16{0, 10, 47, 82, 93, 109, 133, 149, 171, 198, 220, 246, 280, 307, 347, 371}
+var _VersionKey_index = [...]uint16{0, 10, 45, 56, 72, 96, 112, 134, 161, 183, 209, 243, 270, 310, 334}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
