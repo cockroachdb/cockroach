@@ -59,6 +59,7 @@ func ComputeChecksum(
 		SaveSnapshot: args.Snapshot,
 		Mode:         args.Mode,
 		Checkpoint:   args.Checkpoint,
+		Terminate:    args.Terminate,
 	}
 	return pd, nil
 }

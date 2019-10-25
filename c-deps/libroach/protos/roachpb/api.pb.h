@@ -3860,6 +3860,17 @@ class CheckConsistencyRequest : public ::google::protobuf::MessageLite /* @@prot
 
   // accessors -------------------------------------------------------
 
+  int terminate_size() const;
+  void clear_terminate();
+  static const int kTerminateFieldNumber = 5;
+  ::cockroach::roachpb::ReplicaDescriptor* mutable_terminate(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+      mutable_terminate();
+  const ::cockroach::roachpb::ReplicaDescriptor& terminate(int index) const;
+  ::cockroach::roachpb::ReplicaDescriptor* add_terminate();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+      terminate() const;
+
   bool has_header() const;
   void clear_header();
   static const int kHeaderFieldNumber = 1;
@@ -3893,6 +3904,7 @@ class CheckConsistencyRequest : public ::google::protobuf::MessageLite /* @@prot
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > terminate_;
   ::cockroach::roachpb::RequestHeader* header_;
   int mode_;
   bool with_diff_;
@@ -9670,6 +9682,17 @@ class ComputeChecksumRequest : public ::google::protobuf::MessageLite /* @@proto
 
   // accessors -------------------------------------------------------
 
+  int terminate_size() const;
+  void clear_terminate();
+  static const int kTerminateFieldNumber = 7;
+  ::cockroach::roachpb::ReplicaDescriptor* mutable_terminate(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+      mutable_terminate();
+  const ::cockroach::roachpb::ReplicaDescriptor& terminate(int index) const;
+  ::cockroach::roachpb::ReplicaDescriptor* add_terminate();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+      terminate() const;
+
   bool has_header() const;
   void clear_header();
   static const int kHeaderFieldNumber = 1;
@@ -9709,6 +9732,7 @@ class ComputeChecksumRequest : public ::google::protobuf::MessageLite /* @@proto
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > terminate_;
   ::cockroach::roachpb::RequestHeader* header_;
   ::google::protobuf::uint32 version_;
   int mode_;
@@ -19179,6 +19203,32 @@ inline void CheckConsistencyRequest::set_checkpoint(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.CheckConsistencyRequest.checkpoint)
 }
 
+inline int CheckConsistencyRequest::terminate_size() const {
+  return terminate_.size();
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* CheckConsistencyRequest::mutable_terminate(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CheckConsistencyRequest.terminate)
+  return terminate_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+CheckConsistencyRequest::mutable_terminate() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.CheckConsistencyRequest.terminate)
+  return &terminate_;
+}
+inline const ::cockroach::roachpb::ReplicaDescriptor& CheckConsistencyRequest::terminate(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CheckConsistencyRequest.terminate)
+  return terminate_.Get(index);
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* CheckConsistencyRequest::add_terminate() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.CheckConsistencyRequest.terminate)
+  return terminate_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+CheckConsistencyRequest::terminate() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.CheckConsistencyRequest.terminate)
+  return terminate_;
+}
+
 // -------------------------------------------------------------------
 
 // CheckConsistencyResponse_Result
@@ -24091,6 +24141,32 @@ inline void ComputeChecksumRequest::set_checkpoint(bool value) {
   
   checkpoint_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ComputeChecksumRequest.checkpoint)
+}
+
+inline int ComputeChecksumRequest::terminate_size() const {
+  return terminate_.size();
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ComputeChecksumRequest::mutable_terminate(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ComputeChecksumRequest.terminate)
+  return terminate_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
+ComputeChecksumRequest::mutable_terminate() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ComputeChecksumRequest.terminate)
+  return &terminate_;
+}
+inline const ::cockroach::roachpb::ReplicaDescriptor& ComputeChecksumRequest::terminate(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ComputeChecksumRequest.terminate)
+  return terminate_.Get(index);
+}
+inline ::cockroach::roachpb::ReplicaDescriptor* ComputeChecksumRequest::add_terminate() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ComputeChecksumRequest.terminate)
+  return terminate_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
+ComputeChecksumRequest::terminate() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ComputeChecksumRequest.terminate)
+  return terminate_;
 }
 
 // -------------------------------------------------------------------
