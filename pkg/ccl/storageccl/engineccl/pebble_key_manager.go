@@ -294,7 +294,8 @@ func validateRegistry(keyRegistry *enginepbccl.DataKeysRegistry) error {
 
 // Generates a new data key and adds it to the keyRegistry proto and sets it as the active key.
 func generateAndSetNewDataKey(
-	keyRegistry *enginepbccl.DataKeysRegistry) (*enginepbccl.SecretKey, error) {
+	keyRegistry *enginepbccl.DataKeysRegistry,
+) (*enginepbccl.SecretKey, error) {
 	activeStoreKey := keyRegistry.StoreKeys[keyRegistry.ActiveStoreKeyId]
 	if activeStoreKey == nil {
 		panic("expected registry with active store key")

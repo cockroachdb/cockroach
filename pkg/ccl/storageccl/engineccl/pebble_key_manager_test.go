@@ -195,7 +195,7 @@ func TestStoreKeyManager(t *testing.T) {
 func setActiveStoreKeyInProto(dkr *enginepbccl.DataKeysRegistry, id string) {
 	dkr.StoreKeys[id] = &enginepbccl.KeyInfo{
 		EncryptionType: enginepbccl.EncryptionType_AES128_CTR,
-		KeyId: id,
+		KeyId:          id,
 	}
 	dkr.ActiveStoreKeyId = id
 }
