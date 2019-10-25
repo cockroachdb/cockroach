@@ -18,6 +18,8 @@ import (
 )
 
 func TestVersionsAreValid(t *testing.T) {
+	t.Skip("test skipped on the release 19.2 branch because we haven't " +
+		"removed old migrations introduced in 19.1")
 	defer leaktest.AfterTest(t)()
 
 	require.NoError(t, versionsSingleton.Validate())

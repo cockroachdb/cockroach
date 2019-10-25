@@ -46,6 +46,7 @@ const (
 	VersionAtomicChangeReplicas
 	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
+	Version19_2
 
 	// Add new versions here (step one of two).
 
@@ -550,6 +551,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
 		Key:     VersionPartitionedBackup,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 11},
+	},
+	{
+		// Version19_2 is CockroachDB v19.2. It's used for all v19.2.x patch releases.
+		Key:     Version19_2,
+		Version: roachpb.Version{Major: 19, Minor: 2},
 	},
 
 	// Add new versions here (step two of two).
