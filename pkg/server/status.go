@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -268,21 +267,17 @@ func (s *statusServer) EngineStats(
 
 	resp := new(serverpb.EngineStatsResponse)
 	err = s.stores.VisitStores(func(store *storage.Store) error {
-		if rocksdb, ok := store.Engine().(*engine.RocksDB); ok {
-			tickersAndHistograms, err := rocksdb.GetTickersAndHistograms()
-			if err != nil {
-				return grpcstatus.Errorf(codes.Internal, err.Error())
-			}
-			resp.Stats = append(
-				resp.Stats,
-				serverpb.EngineStatsInfo{
-					StoreID:              store.Ident.StoreID,
-					TickersAndHistograms: tickersAndHistograms,
-				},
-			)
-		} else {
-			return grpcstatus.Errorf(codes.Internal, "engine is not rocksdb")
+		tickersAndHistograms, err := store.Engine().GetTickersAndHistograms()
+		if err != nil {
+			return grpcstatus.Errorf(codes.Internal, err.Error())
 		}
+		resp.Stats = append(
+			resp.Stats,
+			serverpb.EngineStatsInfo{
+				StoreID:              store.Ident.StoreID,
+				TickersAndHistograms: tickersAndHistograms,
+			},
+		)
 		return nil
 	})
 	if err != nil {
@@ -1786,21 +1781,18 @@ func (s *statusServer) Stores(
 			StoreID: store.Ident.StoreID,
 		}
 
-		// Encryption Status only exists for rocksdb engines.
-		if rocksdb, ok := store.Engine().(*engine.RocksDB); ok {
-			envStats, err := rocksdb.GetEnvStats()
-			if err != nil {
-				return err
-			}
-
-			if len(envStats.EncryptionStatus) > 0 {
-				storeDetails.EncryptionStatus = envStats.EncryptionStatus
-			}
-			storeDetails.TotalFiles = envStats.TotalFiles
-			storeDetails.TotalBytes = envStats.TotalBytes
-			storeDetails.ActiveKeyFiles = envStats.ActiveKeyFiles
-			storeDetails.ActiveKeyBytes = envStats.ActiveKeyBytes
+		envStats, err := store.Engine().GetEnvStats()
+		if err != nil {
+			return err
 		}
+
+		if len(envStats.EncryptionStatus) > 0 {
+			storeDetails.EncryptionStatus = envStats.EncryptionStatus
+		}
+		storeDetails.TotalFiles = envStats.TotalFiles
+		storeDetails.TotalBytes = envStats.TotalBytes
+		storeDetails.ActiveKeyFiles = envStats.ActiveKeyFiles
+		storeDetails.ActiveKeyBytes = envStats.ActiveKeyBytes
 
 		resp.Stores = append(resp.Stores, storeDetails)
 

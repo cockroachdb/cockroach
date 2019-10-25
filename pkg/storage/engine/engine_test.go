@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -672,7 +673,7 @@ func TestFlushWithSSTables(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		ssts := engine.(WithSSTables).GetSSTables()
+		ssts := engine.GetSSTables()
 		if len(ssts) == 0 {
 			t.Fatal("expected non-zero sstables, got 0")
 		}
@@ -1012,8 +1013,10 @@ func TestCreateCheckpoint(t *testing.T) {
 
 	rocksDB, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		RocksDBCache{},
 	)

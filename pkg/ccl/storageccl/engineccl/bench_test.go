@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -52,8 +53,10 @@ func loadTestData(
 
 	eng, err := engine.NewRocksDB(
 		engine.RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		engine.RocksDBCache{},
 	)

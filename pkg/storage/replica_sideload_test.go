@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -107,9 +108,8 @@ func testSideloadingSideloadedStorage(
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	cleanup, cache, eng := newRocksDB(t)
+	cleanup, eng := newEngine(t)
 	defer cleanup()
-	defer cache.Release()
 	defer eng.Close()
 
 	ss, err := maker(st, 1, 2, dir, eng)
@@ -401,9 +401,8 @@ func TestSideloadedStorageReplicaIDMigration(t *testing.T) {
 
 	const rangeID = roachpb.RangeID(1)
 
-	cleanup, cache, eng := newRocksDB(t)
+	cleanup, eng := newEngine(t)
 	defer cleanup()
-	defer cache.Release()
 	defer eng.Close()
 	limiter := rate.NewLimiter(rate.Inf, 1<<9)
 
@@ -680,8 +679,10 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 	tc := testContext{}
 	if !engineInMem {
 		cfg := engine.RocksDBConfig{
-			Dir:      dir,
-			Settings: cluster.MakeTestingClusterSettings(),
+			StorageConfig: base.StorageConfig{
+				Dir:      dir,
+				Settings: cluster.MakeTestingClusterSettings(),
+			},
 		}
 		var err error
 		cache := engine.NewRocksDBCache(1 << 20)
@@ -817,17 +818,18 @@ func (mr *mockSender) Recv() (*SnapshotResponse, error) {
 	return &SnapshotResponse{Status: status}, nil
 }
 
-func newRocksDB(t *testing.T) (func(), engine.RocksDBCache, *engine.RocksDB) {
+func newEngine(t *testing.T) (func(), engine.Engine) {
 	dir, cleanup := testutils.TempDir(t)
-	cache := engine.NewRocksDBCache(1 << 20)
-	eng, err := engine.NewRocksDB(engine.RocksDBConfig{
-		Dir:       dir,
-		MustExist: false,
-	}, cache)
+	eng, err := engine.NewEngine(
+		1<<20,
+		base.StorageConfig{
+			Dir:       dir,
+			MustExist: false,
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cleanup, cache, eng
+	return cleanup, eng
 }
 
 // This test verifies that when a snapshot is sent, sideloaded proposals are
@@ -839,10 +841,9 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 	ctx := context.Background()
 	tc := testContext{}
 
-	cleanup, cache, eng := newRocksDB(t)
+	cleanup, eng := newEngine(t)
 	tc.engine = eng
 	defer cleanup()
-	defer cache.Release()
 	defer eng.Close()
 
 	stopper := stop.NewStopper()

@@ -13,6 +13,7 @@ package engine
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,8 +30,10 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 	open := func() (*RocksDB, error) {
 		return NewRocksDB(
 			RocksDBConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
-				Dir:      dir,
+				StorageConfig: base.StorageConfig{
+					Settings: cluster.MakeTestingClusterSettings(),
+					Dir:      dir,
+				},
 			},
 			RocksDBCache{},
 		)
@@ -47,13 +50,13 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 		defer r2.Close()
 		t.Fatal("expected error")
 	}
-	rErr, ok := errors.Cause(err).(*RocksDBError)
+	rErr, ok := errors.Cause(err).(*StorageEngineError)
 	if !ok {
 		t.Fatalf("unexpected error of cause %T: %+v", errors.Cause(err), err)
 	}
 
 	for _, test := range []struct {
-		err    *RocksDBError
+		err    *StorageEngineError
 		expMsg string
 	}{
 		{
@@ -63,7 +66,7 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 		},
 		{
 			// A real-world example.
-			err: &RocksDBError{
+			err: &StorageEngineError{
 				msg: "Corruption: block checksum mismatch: expected 4187431493, got 3338436330  " +
 					"in /home/agent/activerecord-cockroachdb-adapter/cockroach-data/000012.sst " +
 					"offset 59661 size 7425",
@@ -72,7 +75,7 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 		},
 		{
 			// An example that shows that paths containing dictionary words are still redacted.
-			err: &RocksDBError{
+			err: &StorageEngineError{
 				msg: "Corruption: block checksum mismatch in /block C:\\checksum /mismatch/corruption/Corruption C:\\checksum\\corruption",
 			},
 			expMsg: "corruption block checksum mismatch in <redacted> <redacted> <redacted> <redacted>",

@@ -73,14 +73,16 @@ func NewRocksDBTempEngine(
 	}
 
 	cfg := RocksDBConfig{
-		Attrs: roachpb.Attributes{},
-		Dir:   tempStorage.Path,
+		StorageConfig: base.StorageConfig{
+			Attrs:           roachpb.Attributes{},
+			Dir:             tempStorage.Path,
+			UseFileRegistry: storeSpec.UseFileRegistry,
+			ExtraOptions:    storeSpec.ExtraOptions,
+		},
 		// MaxSizeBytes doesn't matter for temp storage - it's not
 		// enforced in any way.
-		MaxSizeBytes:    0,
-		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
-		UseFileRegistry: storeSpec.UseFileRegistry,
-		ExtraOptions:    storeSpec.ExtraOptions,
+		MaxSizeBytes: 0,
+		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	defer rocksDBCache.Release()

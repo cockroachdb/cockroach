@@ -513,7 +513,7 @@ func addSSTablePreApply(
 				// going to be surfaced.
 				ingestErrMsg := ingestErr.Error()
 				isSeqNoErr := strings.Contains(ingestErrMsg, seqNoMsg) || strings.Contains(ingestErrMsg, seqNoOnReIngest)
-				if _, ok := ingestErr.(*engine.RocksDBError); !ok || !isSeqNoErr {
+				if _, ok := ingestErr.(*engine.StorageEngineError); !ok || !isSeqNoErr {
 					log.Fatalf(ctx, "while ingesting %s: %s", ingestPath, ingestErr)
 				}
 			}

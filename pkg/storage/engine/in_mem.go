@@ -23,6 +23,7 @@ type InMem struct {
 //
 // FIXME(tschottdorf): make the signature similar to NewRocksDB (require a cfg).
 func NewInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
+	// TODO(hueypark): Support all engines like NewTempEngine.
 	cache := NewRocksDBCache(cacheSize)
 	// The cache starts out with a refcount of one, and creating the engine
 	// from it adds another refcount, at which point we release one of them.

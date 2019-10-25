@@ -17,15 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// A RocksDBError wraps an error returned from a RocksDB operation.
-type RocksDBError struct {
+// A StorageEngineError wraps an error returned from a RocksDB operation.
+type StorageEngineError struct {
 	msg string
 }
 
-var _ log.SafeMessager = (*RocksDBError)(nil)
+var _ log.SafeMessager = (*StorageEngineError)(nil)
 
 // Error implements the error interface.
-func (err *RocksDBError) Error() string {
+func (err *StorageEngineError) Error() string {
 	return err.msg
 }
 
@@ -42,7 +42,7 @@ func (err *RocksDBError) Error() string {
 //
 // The originating RocksDB error type is defined in
 // c-deps/rocksdb/util/status.cc.
-func (err RocksDBError) SafeMessage() string {
+func (err StorageEngineError) SafeMessage() string {
 	var out []string
 	// NB: we leave (unix and windows style) directory separators in the cleaned
 	// string to avoid a directory such as /mnt/rocksdb/known/words from showing

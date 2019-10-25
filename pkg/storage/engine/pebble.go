@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -151,15 +152,10 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 // PebbleConfig holds all configuration parameters and knobs used in setting up
 // a new Pebble instance.
 type PebbleConfig struct {
-	// Store attributes. These are only placed here for convenience, and not used
-	// by Pebble or the Pebble-based Engine implementation.
-	Attrs roachpb.Attributes
-	// Dir is the data directory for the Pebble instance.
-	Dir string
+	// StorageConfig contains storage configs for all storage engines.
+	StorageConfig base.StorageConfig
 	// Pebble specific options.
 	Opts *pebble.Options
-	// Settings instance for cluster-wide knobs.
-	Settings *cluster.Settings
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -175,7 +171,7 @@ type Pebble struct {
 	fs vfs.FS
 }
 
-var _ WithSSTables = &Pebble{}
+var _ Engine = &Pebble{}
 
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(cfg PebbleConfig) (*Pebble, error) {
@@ -188,16 +184,16 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 	// cfg.FS and cfg.ReadOnly later on.
 	cfg.Opts.EnsureDefaults()
 
-	db, err := pebble.Open(cfg.Dir, cfg.Opts)
+	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Pebble{
 		db:       db,
-		path:     cfg.Dir,
-		attrs:    cfg.Attrs,
-		settings: cfg.Settings,
+		path:     cfg.StorageConfig.Dir,
+		attrs:    cfg.StorageConfig.Attrs,
+		settings: cfg.StorageConfig.Settings,
 		fs:       cfg.Opts.FS,
 	}, nil
 }
@@ -223,6 +219,18 @@ func (p *Pebble) Get(key MVCCKey) ([]byte, error) {
 		return nil, nil
 	}
 	return ret, err
+}
+
+// GetCompactionStats implements the Engine interface.
+func (p *Pebble) GetCompactionStats() string {
+	// TODO(hueypark): Implement this.
+	return ""
+}
+
+// GetTickersAndHistograms implements the Engine interface.
+func (p *Pebble) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error) {
+	// TODO(hueypark): Implement this.
+	return nil, nil
 }
 
 // GetProto implements the Engine interface.
@@ -403,6 +411,12 @@ func (p *Pebble) GetStats() (*Stats, error) {
 	}, nil
 }
 
+// GetEncryptionRegistries implements the Engine interface.
+func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
+	// TODO(sumeer): Implement this. These are encryption-at-rest specific stats.
+	return &EncryptionRegistries{}, nil
+}
+
 // GetEnvStats implements the Engine interface.
 func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 	// TODO(sumeer): Implement this. These are encryption-at-rest specific stats.
@@ -461,6 +475,12 @@ func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 		return false, nil
 	})
 	return count, nil
+}
+
+// Compact implements the Engine interface.
+func (p *Pebble) Compact() error {
+	// TODO(hueypark): Implement this.
+	return nil
 }
 
 // CompactRange implements the Engine interface.

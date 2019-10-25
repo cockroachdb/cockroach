@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,8 +31,10 @@ func setupMVCCRocksDB(b testing.TB, dir string) Engine {
 
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		cache,
 	)

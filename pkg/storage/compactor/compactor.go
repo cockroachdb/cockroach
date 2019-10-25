@@ -38,7 +38,7 @@ type doneCompactingFunc func(ctx context.Context)
 // makes requests to the engine to reclaim storage space.
 type Compactor struct {
 	st      *cluster.Settings
-	eng     engine.WithSSTables
+	eng     engine.Engine
 	capFn   storeCapacityFunc
 	doneFn  doneCompactingFunc
 	ch      chan struct{}
@@ -47,7 +47,7 @@ type Compactor struct {
 
 // NewCompactor returns a compactor for the specified storage engine.
 func NewCompactor(
-	st *cluster.Settings, eng engine.WithSSTables, capFn storeCapacityFunc, doneFn doneCompactingFunc,
+	st *cluster.Settings, eng engine.Engine, capFn storeCapacityFunc, doneFn doneCompactingFunc,
 ) *Compactor {
 	return &Compactor{
 		st:      st,
