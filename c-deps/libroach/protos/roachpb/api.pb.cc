@@ -41,10 +41,8 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_BeginTransactionRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_BeginTransactionResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_CheckConsistencyRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComputeChecksumRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComputeChecksumResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ConditionalPutResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_DeleteRangeRequest;
@@ -87,7 +85,9 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminRelocateRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminScatterResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminSplitRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_CheckConsistencyRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_CheckConsistencyResponse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ComputeChecksumRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ConditionalPutRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_EndTransactionResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ExportResponse_File;
@@ -1253,9 +1253,10 @@ static void InitDefaultsCheckConsistencyRequest() {
   ::cockroach::roachpb::CheckConsistencyRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_CheckConsistencyRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsCheckConsistencyRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_CheckConsistencyRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsCheckConsistencyRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_ReplicaDescriptor.base,}};
 
 static void InitDefaultsCheckConsistencyResponse_Result() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2005,9 +2006,10 @@ static void InitDefaultsComputeChecksumRequest() {
   ::cockroach::roachpb::ComputeChecksumRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_ComputeChecksumRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComputeChecksumRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_ComputeChecksumRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsComputeChecksumRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_ReplicaDescriptor.base,}};
 
 static void InitDefaultsComputeChecksumResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -9147,11 +9149,15 @@ void CheckConsistencyRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_CheckConsistencyRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
 }
+void CheckConsistencyRequest::clear_terminate() {
+  terminate_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int CheckConsistencyRequest::kHeaderFieldNumber;
 const int CheckConsistencyRequest::kWithDiffFieldNumber;
 const int CheckConsistencyRequest::kModeFieldNumber;
 const int CheckConsistencyRequest::kCheckpointFieldNumber;
+const int CheckConsistencyRequest::kTerminateFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 CheckConsistencyRequest::CheckConsistencyRequest()
@@ -9163,7 +9169,8 @@ CheckConsistencyRequest::CheckConsistencyRequest()
 }
 CheckConsistencyRequest::CheckConsistencyRequest(const CheckConsistencyRequest& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      terminate_(from.terminate_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
@@ -9206,6 +9213,7 @@ void CheckConsistencyRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  terminate_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
@@ -9286,6 +9294,17 @@ bool CheckConsistencyRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_terminate()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -9333,6 +9352,14 @@ void CheckConsistencyRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->checkpoint(), output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->terminate_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5,
+      this->terminate(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.CheckConsistencyRequest)
@@ -9343,6 +9370,16 @@ size_t CheckConsistencyRequest::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->terminate_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->terminate(static_cast<int>(i)));
+    }
+  }
 
   if (this->has_header()) {
     total_size += 1 +
@@ -9383,6 +9420,7 @@ void CheckConsistencyRequest::MergeFrom(const CheckConsistencyRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  terminate_.MergeFrom(from.terminate_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
@@ -9414,6 +9452,7 @@ void CheckConsistencyRequest::Swap(CheckConsistencyRequest* other) {
 }
 void CheckConsistencyRequest::InternalSwap(CheckConsistencyRequest* other) {
   using std::swap;
+  CastToBase(&terminate_)->InternalSwap(CastToBase(&other->terminate_));
   swap(header_, other->header_);
   swap(mode_, other->mode_);
   swap(with_diff_, other->with_diff_);
@@ -20742,12 +20781,16 @@ void ComputeChecksumRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ComputeChecksumRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
 }
+void ComputeChecksumRequest::clear_terminate() {
+  terminate_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ComputeChecksumRequest::kHeaderFieldNumber;
 const int ComputeChecksumRequest::kVersionFieldNumber;
 const int ComputeChecksumRequest::kSnapshotFieldNumber;
 const int ComputeChecksumRequest::kModeFieldNumber;
 const int ComputeChecksumRequest::kCheckpointFieldNumber;
+const int ComputeChecksumRequest::kTerminateFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ComputeChecksumRequest::ComputeChecksumRequest()
@@ -20759,7 +20802,8 @@ ComputeChecksumRequest::ComputeChecksumRequest()
 }
 ComputeChecksumRequest::ComputeChecksumRequest(const ComputeChecksumRequest& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      terminate_(from.terminate_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
@@ -20802,6 +20846,7 @@ void ComputeChecksumRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  terminate_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
@@ -20896,6 +20941,17 @@ bool ComputeChecksumRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(58u /* 58 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_terminate()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -20948,6 +21004,14 @@ void ComputeChecksumRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(6, this->checkpoint(), output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->terminate_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      7,
+      this->terminate(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ComputeChecksumRequest)
@@ -20958,6 +21022,16 @@ size_t ComputeChecksumRequest::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->terminate_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->terminate(static_cast<int>(i)));
+    }
+  }
 
   if (this->has_header()) {
     total_size += 1 +
@@ -21005,6 +21079,7 @@ void ComputeChecksumRequest::MergeFrom(const ComputeChecksumRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  terminate_.MergeFrom(from.terminate_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
@@ -21039,6 +21114,7 @@ void ComputeChecksumRequest::Swap(ComputeChecksumRequest* other) {
 }
 void ComputeChecksumRequest::InternalSwap(ComputeChecksumRequest* other) {
   using std::swap;
+  CastToBase(&terminate_)->InternalSwap(CastToBase(&other->terminate_));
   swap(header_, other->header_);
   swap(version_, other->version_);
   swap(mode_, other->mode_);
