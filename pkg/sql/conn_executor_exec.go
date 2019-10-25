@@ -831,6 +831,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ctx,
 			ex.executorType,
 			ex.extraTxnState.autoRetryCounter,
+			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),
 			res.Err(),
 			ex.statsCollector.phaseTimes[sessionQueryReceived],
