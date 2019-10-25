@@ -44,6 +44,7 @@ const (
 	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
 	Version19_2
+	VersionStart20_1
 
 	// Add new versions here (step one of two).
 
@@ -559,6 +560,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     Version19_2,
 		Version: roachpb.Version{Major: 19, Minor: 2},
 	},
+	{
+		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
+		Key:     VersionStart20_1,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 1},
+	},
 
 	// Add new versions here (step two of two).
 
@@ -569,7 +575,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than BinaryMinimumSupportedVersion, then the binary will exit with
 	// an error.
-	BinaryMinimumSupportedVersion = VersionByKey(Version19_1)
+	BinaryMinimumSupportedVersion = VersionByKey(Version19_2)
 
 	// BinaryServerVersion is the version of this binary.
 	//
