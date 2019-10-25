@@ -785,9 +785,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="ltrim"></a><code>ltrim(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes all spaces from the beginning (left-hand side) of <code>val</code>.</p>
 </span></td></tr>
-<tr><td><a name="md5"></a><code>md5(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the MD5 hash value of a set of values.</p>
+<tr><td><a name="md5"></a><code>md5(<a href="bytes.html">bytes</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the MD5 hash value of a set of values.</p>
 </span></td></tr>
-<tr><td><a name="md5"></a><code>md5(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the MD5 hash value of a set of values.</p>
+<tr><td><a name="md5"></a><code>md5(<a href="string.html">string</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the MD5 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="octet_length"></a><code>octet_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bytes in <code>val</code>.</p>
 </span></td></tr>
@@ -906,17 +906,17 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="rtrim"></a><code>rtrim(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes all spaces from the end (right-hand side) of <code>val</code>.</p>
 </span></td></tr>
-<tr><td><a name="sha1"></a><code>sha1(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
+<tr><td><a name="sha1"></a><code>sha1(<a href="bytes.html">bytes</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
 </span></td></tr>
-<tr><td><a name="sha1"></a><code>sha1(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
+<tr><td><a name="sha1"></a><code>sha1(<a href="string.html">string</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
 </span></td></tr>
-<tr><td><a name="sha256"></a><code>sha256(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
+<tr><td><a name="sha256"></a><code>sha256(<a href="bytes.html">bytes</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
 </span></td></tr>
-<tr><td><a name="sha256"></a><code>sha256(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
+<tr><td><a name="sha256"></a><code>sha256(<a href="string.html">string</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the SHA256 hash value of a set of values.</p>
 </span></td></tr>
-<tr><td><a name="sha512"></a><code>sha512(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
+<tr><td><a name="sha512"></a><code>sha512(<a href="bytes.html">bytes</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
 </span></td></tr>
-<tr><td><a name="sha512"></a><code>sha512(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
+<tr><td><a name="sha512"></a><code>sha512(<a href="string.html">string</a>...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
 <p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
