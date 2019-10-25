@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 )
@@ -384,72 +383,6 @@ func testSideloadingSideloadedStorage(
 	if size, err := maybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 0 {
 		t.Fatalf("expected noop, got (%d, %v)", size, err)
 	}
-}
-
-func TestSideloadedStorageReplicaIDMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	preV := cluster.VersionByKey(cluster.VersionSideloadedStorageNoReplicaID - 1)
-	stPre := cluster.MakeTestingClusterSettingsWithVersion(preV, preV)
-
-	postV := cluster.VersionByKey(cluster.VersionSideloadedStorageNoReplicaID)
-	stPost := cluster.MakeTestingClusterSettingsWithVersion(postV, postV)
-
-	const rangeID = roachpb.RangeID(1)
-
-	cleanup, cache, eng := newRocksDB(t)
-	defer cleanup()
-	defer cache.Release()
-	defer eng.Close()
-	limiter := rate.NewLimiter(rate.Inf, 1<<9)
-
-	var ss SideloadStorage
-	create := func(st *cluster.Settings, replicaID roachpb.ReplicaID) *diskSideloadStorage {
-		t.Helper()
-		if err := moveSideloadedData(ss, dir, rangeID, replicaID); err != nil {
-			t.Fatal(err)
-		}
-		ss, err := newDiskSideloadStorage(st, rangeID, replicaID, dir, limiter, eng)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return ss
-	}
-
-	ss = create(stPre, 120)
-	foo := []byte("foo")
-	if err := ss.Put(ctx, 1, 10, foo); err != nil {
-		t.Fatal(err)
-	}
-
-	// Jog moveSideloadedData (via create) prior to the migration.
-	for _, replicaID := range []roachpb.ReplicaID{123, 124} {
-		ss = create(stPre, replicaID)
-		v, err := ss.Get(ctx, 1, 10)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assert.Equal(t, foo, v)
-	}
-
-	// Migrate.
-	for _, replicaID := range []roachpb.ReplicaID{125, 126} {
-		ss = create(stPost, replicaID)
-		v, err := ss.Get(ctx, 1, 10)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assert.Equal(t, foo, v)
-	}
-
-	// Check that we really did migrate.
-	prevDir := ss.Dir()
-	ss = create(stPost, 129)
-	assert.Equal(t, prevDir, ss.Dir())
 }
 
 func TestRaftSSTableSideloadingInline(t *testing.T) {
