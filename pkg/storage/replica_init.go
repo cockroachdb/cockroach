@@ -192,10 +192,6 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(
 	// and this is under raftMu.
 	ssBase := r.store.Engine().GetAuxiliaryDir()
 	rangeID := r.mu.state.Desc.RangeID
-	if err := moveSideloadedData(r.raftMu.sideloaded, ssBase, rangeID, replicaID); err != nil {
-		return err
-	}
-
 	var err error
 	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
 		r.store.cfg.Settings,

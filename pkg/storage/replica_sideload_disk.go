@@ -72,51 +72,6 @@ func exists(path string) (bool, error) {
 	return false, err
 }
 
-// moveSideloadedData handles renames of sideloaded directories that precede
-// VersionSideloadedStorageNoReplicaID. Such directories depend on the replicaID
-// which can change, in which case this method needs to be called to move the
-// directory to its new location before instantiating the sideloaded storage for
-// the updated replicaID.
-// The method is aware of the "new" naming scheme that is not dependent on the
-// replicaID (see sideloadedPath) and will not touch them.
-func moveSideloadedData(
-	prevSideloaded SideloadStorage, base string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
-) error {
-	if prevSideloaded == nil || prevSideloaded.Dir() == "" {
-		// No storage or in-memory storage.
-		return nil
-	}
-	prevSideloadedDir := prevSideloaded.Dir()
-
-	if prevSideloadedDir == sideloadedPath(base, rangeID) {
-		// ReplicaID didn't change or already migrated (see below).
-		return nil
-	}
-
-	// The code below is morally dead in a v19.1 cluster (after an initial
-	// period post the upgrade from 2.1). See the migration notes on the cluster
-	// associated version VersionSideloadedStorageNoReplicaID for details on
-	// when it is actually safe to remove this.
-	// TODO(tbg): Remove this code in 20.1.
-	ex, err := exists(prevSideloadedDir)
-	if err != nil {
-		return errors.Wrap(err, "looking up previous sideloaded directory")
-	}
-	if !ex {
-		return nil
-	}
-
-	// NB: when VersionSideloadedStorageNoReplicaID is active (and has been active
-	// inside of newDiskSideloadStorage at least once), this block of code is dead
-	// as the sideloaded directory no longer depends on the replica ID and so
-	// equality above will always hold.
-
-	if err := os.Rename(prevSideloadedDir, deprecatedSideloadedPath(base, rangeID, replicaID)); err != nil {
-		return errors.Wrap(err, "moving sideloaded directory")
-	}
-	return nil
-}
-
 func newDiskSideloadStorage(
 	st *cluster.Settings,
 	rangeID roachpb.RangeID,
