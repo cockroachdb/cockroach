@@ -1238,19 +1238,21 @@ func (ef *execFactory) ConstructInsert(
 	// Construct the check helper if there are any check constraints.
 	checkHelper := sqlbase.NewInputCheckHelper(checkOrdSet, tabDesc)
 
-	// Determine the foreign key tables involved in the update.
-	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckInserts, checkHelper)
-	if err != nil {
-		return nil, err
+	var fkTables row.FkTableMetadata
+	checkFKs := row.SkipFKs
+	if !skipFKChecks {
+		checkFKs = row.CheckFKs
+		// Determine the foreign key tables involved in the update.
+		var err error
+		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckInserts, checkHelper)
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	// Create the table insert, which does the bulk of the work.
-	checkFKs := row.CheckFKs
-	if skipFKChecks {
-		checkFKs = row.SkipFKs
-	}
-	ri, err := row.MakeInserter(ef.planner.txn, tabDesc, fkTables, colDescs,
-		checkFKs, &ef.planner.alloc)
+	// Create the table inserter, which does the bulk of the work.
+	ri, err := row.MakeInserter(
+		ef.planner.txn, tabDesc, colDescs, checkFKs, fkTables, &ef.planner.alloc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1505,8 +1507,9 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
-	ri, err := row.MakeInserter(ef.planner.txn, tabDesc, fkTables, insertColDescs,
-		row.CheckFKs, &ef.planner.alloc)
+	ri, err := row.MakeInserter(
+		ef.planner.txn, tabDesc, insertColDescs, row.CheckFKs, fkTables, &ef.planner.alloc,
+	)
 	if err != nil {
 		return nil, err
 	}
