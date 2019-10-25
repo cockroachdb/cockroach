@@ -366,7 +366,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 
 	// clusterVersionUpgrade performs a cluster version upgrade to its version.
 	// It waits until all nodes have seen the upgraded cluster version.
-	// If manual is set, we'll performe a SET CLUSTER SETTING version =
+	// If newVersion is set, we'll performe a SET CLUSTER SETTING version =
 	// <newVersion>. If it's not, we'll rely on the automatic cluster version
 	// upgrade mechanism (which is not inhibited by the
 	// cluster.preserve_downgrade_option cluster setting in this test.
@@ -474,7 +474,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		// From now on, all version upgrade steps pass an empty version which
 		// means the test will look it up from node_executable_version().
 
-		binaryVersionUpgrade("v19.1.3", nodes),
+		binaryVersionUpgrade("v19.1.5", nodes),
 		clusterVersionUpgrade(""),
 
 		// HEAD gives us the main binary for this roachtest run.
