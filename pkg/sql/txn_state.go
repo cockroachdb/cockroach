@@ -108,6 +108,17 @@ type txnState struct {
 	// activeSavepointName stores the name of the active savepoint,
 	// or is empty if no savepoint is active.
 	activeSavepointName tree.Name
+
+	// txnCounter keeps track of how many SQL txns have been open since
+	// the start of the session. This is used for logging, to
+	// distinguish statements that belong to separate SQL transactions.
+	// A txn unique key can be obtained by grouping this counter with
+	// the session ID.
+	//
+	// Note that a single SQL txn can use multiple KV txns under the
+	// hood with multiple KV txn UUIDs, so the KV UUID is not a good
+	// txn identifier for SQL logging.
+	txnCounter int
 }
 
 // txnType represents the type of a SQL transaction.
@@ -151,6 +162,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
 	ts.isHistorical = false
+	// Bump the txn counter for logging.
+	ts.txnCounter++
 
 	// Create a context for this transaction. It will include a root span that
 	// will contain everything executed as part of the upcoming SQL txn, including
