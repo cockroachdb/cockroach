@@ -109,8 +109,7 @@ func benchmarkWriteAndLink(b *testing.B, dir string, tables []tableSSTable) {
 		for i, table := range tables {
 			require.NoError(b, ioutil.WriteFile(paths[i], table.sstData, 0644))
 		}
-		const skipSeqNo, canModify = true, true
-		require.NoError(b, db.IngestExternalFiles(ctx, paths, skipSeqNo, canModify))
+		require.NoError(b, db.IngestExternalFiles(ctx, paths))
 		b.StopTimer()
 
 		db.Close()
