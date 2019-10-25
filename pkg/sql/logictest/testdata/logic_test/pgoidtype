@@ -319,3 +319,10 @@ query I
 SELECT 'trigger'::REGTYPE::INT
 ----
 -1
+
+# Regression test for #41708.
+
+query TT
+SELECT 1::OID::TEXT, quote_literal(1::OID)
+----
+1  '1'
