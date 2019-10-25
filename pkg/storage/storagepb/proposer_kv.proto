@@ -84,6 +84,9 @@ message ComputeChecksum {
   // is expected to be set only if we already know that there is an
   // inconsistency and we want to preserve as much state as possible.
   bool checkpoint = 4;
+  // Replicas processing this command which find themselves in this slice will
+  // terminate. See `CheckConsistencyRequest.Terminate`.
+  repeated roachpb.ReplicaDescriptor terminate = 6 [(gogoproto.nullable) = false];
 }
 
 // Compaction holds core details about a suggested compaction.
