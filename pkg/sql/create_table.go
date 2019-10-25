@@ -210,9 +210,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		ri, err := row.MakeInserter(
 			params.p.txn,
 			sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
-			nil,
 			desc.Columns,
 			row.SkipFKs,
+			nil, /* fkTables */
 			&params.p.alloc)
 		if err != nil {
 			return err
