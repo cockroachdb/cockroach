@@ -601,7 +601,7 @@ func init() {
 	BoolFlag(demoFlags, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas, false)
 	// Mark the --global flag as hidden until we investigate it more.
 	BoolFlag(demoFlags, &demoCtx.simulateLatency, cliflags.Global, false)
-	_ = demoCmd.Flags().MarkHidden(cliflags.Global.Name)
+	_ = demoFlags.MarkHidden(cliflags.Global.Name)
 	// The --empty flag is only valid for the top level demo command,
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, false)
