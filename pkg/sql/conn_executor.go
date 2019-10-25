@@ -986,6 +986,17 @@ type connExecutor struct {
 		// comprising statements.
 		numRows int
 
+		// txnCounter keeps track of how many SQL txns have been open since
+		// the start of the session. This is used for logging, to
+		// distinguish statements that belong to separate SQL transactions.
+		// A txn unique key can be obtained by grouping this counter with
+		// the session ID.
+		//
+		// Note that a single SQL txn can use multiple KV txns under the
+		// hood with multiple KV txn UUIDs, so the KV UUID is not a good
+		// txn identifier for SQL logging.
+		txnCounter int
+
 		// txnRewindPos is the position within stmtBuf to which we'll rewind when
 		// performing automatic retries. This is more or less the position where the
 		// current transaction started.
@@ -2299,6 +2310,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
 		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
+		// Bump the txn counter for logging.
+		ex.extraTxnState.txnCounter++
+
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(
