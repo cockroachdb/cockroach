@@ -9,24 +9,23 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[Version2_1-0]
-	_ = x[VersionSideloadedStorageNoReplicaID-1]
-	_ = x[Version19_1-2]
-	_ = x[VersionStart19_2-3]
-	_ = x[VersionQueryTxnTimestamp-4]
-	_ = x[VersionStickyBit-5]
-	_ = x[VersionParallelCommits-6]
-	_ = x[VersionGenerationComparable-7]
-	_ = x[VersionLearnerReplicas-8]
-	_ = x[VersionTopLevelForeignKeys-9]
-	_ = x[VersionAtomicChangeReplicasTrigger-10]
-	_ = x[VersionAtomicChangeReplicas-11]
-	_ = x[VersionTableDescModificationTimeFromMVCC-12]
-	_ = x[VersionPartitionedBackup-13]
+	_ = x[Version19_1-1]
+	_ = x[VersionStart19_2-2]
+	_ = x[VersionQueryTxnTimestamp-3]
+	_ = x[VersionStickyBit-4]
+	_ = x[VersionParallelCommits-5]
+	_ = x[VersionGenerationComparable-6]
+	_ = x[VersionLearnerReplicas-7]
+	_ = x[VersionTopLevelForeignKeys-8]
+	_ = x[VersionAtomicChangeReplicasTrigger-9]
+	_ = x[VersionAtomicChangeReplicas-10]
+	_ = x[VersionTableDescModificationTimeFromMVCC-11]
+	_ = x[VersionPartitionedBackup-12]
 }
 
-const _VersionKey_name = "Version2_1VersionSideloadedStorageNoReplicaIDVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackup"
+const _VersionKey_name = "Version2_1Version19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackup"
 
-var _VersionKey_index = [...]uint16{0, 10, 45, 56, 72, 96, 112, 134, 161, 183, 209, 243, 270, 310, 334}
+var _VersionKey_index = [...]uint16{0, 10, 21, 37, 61, 77, 99, 126, 148, 174, 208, 235, 275, 299}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
