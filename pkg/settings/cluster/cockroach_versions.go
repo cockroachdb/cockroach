@@ -31,7 +31,6 @@ type VersionKey int
 //go:generate stringer -type=VersionKey
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
-	Version2_1
 	Version19_1
 	VersionStart19_2
 	VersionQueryTxnTimestamp
@@ -44,6 +43,7 @@ const (
 	VersionAtomicChangeReplicas
 	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
+	Version19_2
 
 	// Add new versions here (step one of two).
 
@@ -288,11 +288,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionLoadBasedRebalancing,
 	// 	Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
 	// },
-	{
-		// Version2_1 is CockroachDB v2.1. It's used for all v2.1.x patch releases.
-		Key:     Version2_1,
-		Version: roachpb.Version{Major: 2, Minor: 1},
-	},
+	// Removed.
+	//{
+	//	// Version2_1 is CockroachDB v2.1. It's used for all v2.1.x patch releases.
+	//	Key:     Version2_1,
+	//	Version: roachpb.Version{Major: 2, Minor: 1},
+	//},
 	// Removed.
 	// {
 	// 	// VersionCascadingZoneConfigs is https://github.com/cockroachdb/cockroach/pull/30611.
@@ -552,6 +553,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
 		Key:     VersionPartitionedBackup,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 11},
+	},
+	{
+		// Version19_2 is CockroachDB v19.2. It's used for all v19.2.x patch releases.
+		Key:     Version19_2,
+		Version: roachpb.Version{Major: 19, Minor: 2},
 	},
 
 	// Add new versions here (step two of two).
