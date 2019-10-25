@@ -224,14 +224,7 @@ func WriteInitialClusterData(
 			}
 		}
 
-		// See the cluster version for more details. We're basically saying that if the cluster
-		// is bootstrapped at a version that uses the unreplicated truncated state, initialize
-		// it with such a truncated state.
 		truncStateType := stateloader.TruncatedStateUnreplicated
-		if bootstrapVersion.Less(cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState)) {
-			truncStateType = stateloader.TruncatedStateLegacyReplicated
-		}
-
 		lease := roachpb.BootstrapLease()
 		_, err := stateloader.WriteInitialState(
 			ctx, batch,

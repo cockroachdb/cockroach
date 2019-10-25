@@ -957,7 +957,7 @@ func splitTriggerHelper(
 
 		// We're about to write the initial state for the replica. We migrated
 		// the formerly replicated truncated state into unreplicated keyspace
-		// in 2.2., but this range may still be using the replicated version
+		// in 19.1, but this range may still be using the replicated version
 		// and we need to make a decision about what to use for the RHS that
 		// is consistent across the followers: do for the RHS what the LHS
 		// does: if the LHS has the legacy key, initialize the RHS with a

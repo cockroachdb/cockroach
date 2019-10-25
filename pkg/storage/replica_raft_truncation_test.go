@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,8 +30,8 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// This test verifies the expected behavior of the downstream-of-Raft log
-	// truncation code, in particular regarding the migration below:
-	_ = cluster.VersionUnreplicatedRaftTruncatedState
+	// truncation code, in particular regarding the
+	// VersionUnreplicatedRaftTruncatedState migration.
 
 	ctx := context.Background()
 

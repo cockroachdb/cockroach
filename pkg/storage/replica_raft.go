@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -1705,11 +1704,6 @@ func handleTruncatedStateBelowRaft(
 			// which case truncStatePostApply equals the current value of the
 			// new key (which wasn't touched by the batch), and we need to
 			// overwrite it if this truncation "moves it forward".
-
-			// NB: before the first log truncation evaluated under the
-			// cluster version which activates this code (see anchor below) this
-			// block is never reached as truncStatePostApply will equal newTruncatedState.
-			_ = cluster.VersionUnreplicatedRaftTruncatedState
 
 			if err := engine.MVCCPutProto(
 				ctx, batch, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
