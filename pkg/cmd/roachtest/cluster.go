@@ -1331,10 +1331,14 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 		c.l.Printf("no live node found, skipping consistency check")
 		return
 	}
-
 	defer db.Close()
 
-	if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
+	if err := contextutil.RunWithTimeout(
+		ctx, "consistency check", time.Minute,
+		func(ctx context.Context) error {
+			return c.CheckReplicaDivergenceOnDB(ctx, db)
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 }
