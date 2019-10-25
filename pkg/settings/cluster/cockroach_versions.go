@@ -21,7 +21,8 @@ type VersionKey int
 //   - Add it at the end of this block.
 //   - Add it at the end of the `Versions` block below.
 //   - For major or minor versions, bump BinaryMinimumSupportedVersion. For
-//     example, if introducing the `1.4` release, bump it from `1.2` to `1.3`.
+//     example, if introducing the `20.1` release, bump it to
+//     VersionStart19_2 (i.e. `19.1-1`).
 //
 // To delete a version.
 //   - Remove its associated runtime checks.
@@ -44,6 +45,7 @@ const (
 	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
 	Version19_2
+	VersionStart20_1
 
 	// Add new versions here (step one of two).
 
@@ -559,6 +561,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     Version19_2,
 		Version: roachpb.Version{Major: 19, Minor: 2},
 	},
+	{
+		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
+		Key:     VersionStart20_1,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 1},
+	},
 
 	// Add new versions here (step two of two).
 
@@ -569,7 +576,13 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than BinaryMinimumSupportedVersion, then the binary will exit with
 	// an error.
-	BinaryMinimumSupportedVersion = VersionByKey(Version19_1)
+	// We support everything after 19.1, including pre-release 19.2 versions.
+	// This is generally beneficial, but in particular it allows the
+	// version-upgrade roachtest to use a pre-release 19.2 binary before upgrading
+	// to HEAD; if we were to set BinaryMinimumSupportedVersion to Version19_2,
+	// that wouldn't work since you'd have to go through the final 19.2 binary
+	// before going to HEAD.
+	BinaryMinimumSupportedVersion = VersionByKey(VersionStart19_2)
 
 	// BinaryServerVersion is the version of this binary.
 	//
