@@ -60,8 +60,8 @@ type remoteClient struct {
 	dialer *nodedialer.Dialer
 }
 
-// NewRemoteClient instantiates a blob service client.
-func NewRemoteClient(dialer *nodedialer.Dialer) BlobClient {
+// newRemoteClient instantiates a remote blob service client.
+func newRemoteClient(dialer *nodedialer.Dialer) BlobClient {
 	return &remoteClient{dialer: dialer}
 }
 
@@ -156,4 +156,114 @@ func (c *remoteClient) Stat(
 		return nil, err
 	}
 	return resp, nil
+}
+
+var _ BlobClient = &localClient{}
+
+// localClient executes the local blob service's code
+// to Read or Write bulk files on the current node.
+type localClient struct {
+	localStorage *localStorage
+}
+
+// newLocalClient instantiates a local blob service client.
+func newLocalClient(externalIODir string) (BlobClient, error) {
+	storage, err := newLocalStorage(externalIODir)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating local client")
+	}
+	return &localClient{localStorage: storage}, nil
+}
+
+func (c *localClient) ReadFile(
+	ctx context.Context, _ roachpb.NodeID, file string,
+) (io.ReadCloser, error) {
+	return c.localStorage.ReadFile(file)
+}
+
+func (c *localClient) WriteFile(
+	ctx context.Context, _ roachpb.NodeID, file string, content io.ReadSeeker,
+) error {
+	return c.localStorage.WriteFile(file, content)
+}
+
+func (c *localClient) List(
+	ctx context.Context, _ roachpb.NodeID, pattern string,
+) ([]string, error) {
+	return c.localStorage.List(pattern)
+}
+
+func (c *localClient) Delete(ctx context.Context, _ roachpb.NodeID, file string) error {
+	return c.localStorage.Delete(file)
+}
+
+func (c *localClient) Stat(
+	ctx context.Context, _ roachpb.NodeID, file string,
+) (*blobspb.BlobStat, error) {
+	return c.localStorage.Stat(file)
+}
+
+var _ BlobClient = &wrapperClient{}
+
+// wrapperClient decides between using localClient
+// or remoteClient, based on the node ID.
+type wrapperClient struct {
+	self         roachpb.NodeID
+	remoteClient BlobClient
+	localClient  BlobClient
+}
+
+// NewBlobClient instantiates a wrapper blob service client.
+func NewBlobClient(
+	self roachpb.NodeID, dialer *nodedialer.Dialer, localExternalIODir string,
+) (BlobClient, error) {
+	localClient, err := newLocalClient(localExternalIODir)
+	if err != nil {
+		return nil, err
+	}
+	return &wrapperClient{
+		self:         self,
+		remoteClient: newRemoteClient(dialer),
+		localClient:  localClient,
+	}, nil
+}
+
+func (c *wrapperClient) getClient(nodeID roachpb.NodeID) BlobClient {
+	if nodeID == c.self {
+		return c.localClient
+	}
+	return c.remoteClient
+}
+
+func (c *wrapperClient) ReadFile(
+	ctx context.Context, from roachpb.NodeID, file string,
+) (io.ReadCloser, error) {
+	client := c.getClient(from)
+	return client.ReadFile(ctx, from, file)
+}
+
+func (c *wrapperClient) WriteFile(
+	ctx context.Context, to roachpb.NodeID, file string, content io.ReadSeeker,
+) error {
+	client := c.getClient(to)
+	return client.WriteFile(ctx, to, file, content)
+}
+
+func (c *wrapperClient) List(
+	ctx context.Context, from roachpb.NodeID, pattern string,
+) ([]string, error) {
+	client := c.getClient(from)
+	return client.List(ctx, from, pattern)
+}
+
+func (c *wrapperClient) Delete(ctx context.Context, from roachpb.NodeID, file string) error {
+	client := c.getClient(from)
+	return client.Delete(ctx, from, file)
+}
+
+func (c *wrapperClient) Stat(
+	ctx context.Context, from roachpb.NodeID, file string,
+) (*blobspb.BlobStat, error) {
+	client := c.getClient(from)
+	return client.Stat(ctx, from, file)
 }
