@@ -3074,7 +3074,7 @@ func (r *RocksDB) PreIngestDelay(ctx context.Context) {
 // IngestExternalFiles atomically links a slice of files into the RocksDB
 // log-structured merge-tree.
 func (r *RocksDB) IngestExternalFiles(
-	ctx context.Context, paths []string, skipWritingSeqNo, allowFileModifications bool,
+	ctx context.Context, paths []string, allowFileModifications bool,
 ) error {
 	cPaths := make([]*C.char, len(paths))
 	for i := range paths {
@@ -3091,7 +3091,6 @@ func (r *RocksDB) IngestExternalFiles(
 		&cPaths[0],
 		C.size_t(len(cPaths)),
 		C._Bool(true), // move_files
-		C._Bool(!skipWritingSeqNo),
 		C._Bool(allowFileModifications),
 	))
 }

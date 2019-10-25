@@ -345,12 +345,8 @@ type Engine interface {
 	// original engine has been stopped.
 	NewSnapshot() Reader
 	// IngestExternalFiles atomically links a slice of files into the RocksDB
-	// log-structured merge-tree. skipWritingSeqNo = true may be passed iff this
-	// rocksdb will never be read by versions prior to 5.16. Otherwise, if it is
-	// false, ingestion may modify the files (including the underlying file in the
-	// case of hard-links) when allowFileModifications true. See additional
-	// comments in db.cc's IngestExternalFile explaining modification behavior.
-	IngestExternalFiles(ctx context.Context, paths []string, skipWritingSeqNo, allowFileModifications bool) error
+	// log-structured merge-tree.
+	IngestExternalFiles(ctx context.Context, paths []string, allowFileModifications bool) error
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
