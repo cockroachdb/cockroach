@@ -8,24 +8,24 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[Version2_1-0]
-	_ = x[Version19_1-1]
-	_ = x[VersionStart19_2-2]
-	_ = x[VersionQueryTxnTimestamp-3]
-	_ = x[VersionStickyBit-4]
-	_ = x[VersionParallelCommits-5]
-	_ = x[VersionGenerationComparable-6]
-	_ = x[VersionLearnerReplicas-7]
-	_ = x[VersionTopLevelForeignKeys-8]
-	_ = x[VersionAtomicChangeReplicasTrigger-9]
-	_ = x[VersionAtomicChangeReplicas-10]
-	_ = x[VersionTableDescModificationTimeFromMVCC-11]
-	_ = x[VersionPartitionedBackup-12]
+	_ = x[Version19_1-0]
+	_ = x[VersionStart19_2-1]
+	_ = x[VersionQueryTxnTimestamp-2]
+	_ = x[VersionStickyBit-3]
+	_ = x[VersionParallelCommits-4]
+	_ = x[VersionGenerationComparable-5]
+	_ = x[VersionLearnerReplicas-6]
+	_ = x[VersionTopLevelForeignKeys-7]
+	_ = x[VersionAtomicChangeReplicasTrigger-8]
+	_ = x[VersionAtomicChangeReplicas-9]
+	_ = x[VersionTableDescModificationTimeFromMVCC-10]
+	_ = x[VersionPartitionedBackup-11]
+	_ = x[Version19_2-12]
 }
 
-const _VersionKey_name = "Version2_1Version19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackup"
+const _VersionKey_name = "Version19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackupVersion19_2"
 
-var _VersionKey_index = [...]uint16{0, 10, 21, 37, 61, 77, 99, 126, 148, 174, 208, 235, 275, 299}
+var _VersionKey_index = [...]uint16{0, 11, 27, 51, 67, 89, 116, 138, 164, 198, 225, 265, 289, 300}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
