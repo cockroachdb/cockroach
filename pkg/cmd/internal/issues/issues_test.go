@@ -261,9 +261,16 @@ Failed test: %s`,
 				p.init()
 
 				ctx := context.Background()
+				req := PostRequest{
+					Title:       DefaultStressFailureTitle(c.packageName, c.testName),
+					PackageName: c.packageName,
+					TestName:    c.testName,
+					Message:     c.message,
+					Artifacts:   c.artifacts,
+					AuthorEmail: c.author,
+				}
 				if err := p.post(
-					ctx, DefaultStressFailureTitle(c.packageName, c.testName),
-					c.packageName, c.testName, c.message, c.artifacts, c.author, nil,
+					ctx, req,
 				); err != nil {
 					t.Fatal(err)
 				}
