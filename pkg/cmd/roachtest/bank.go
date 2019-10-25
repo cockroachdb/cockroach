@@ -342,6 +342,7 @@ func isExpectedRelocateError(err error) bool {
 		"unable to add replica .* which is already present",
 		"received invalid ChangeReplicasTrigger .* to remove self",
 		"failed to apply snapshot: raft group deleted",
+		"snapshot failed:",
 	}
 	pattern := "(" + strings.Join(whitelist, "|") + ")"
 	return testutils.IsError(err, pattern)
