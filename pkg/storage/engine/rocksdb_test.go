@@ -1256,7 +1256,7 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := db.IngestExternalFiles(context.Background(), []string{filename}, true, true); err != nil {
+		if err := db.IngestExternalFiles(context.Background(), []string{filename}); err != nil {
 			t.Fatal(err)
 		}
 		if testing.Verbose() {
@@ -1378,7 +1378,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 							b.Fatal(err)
 						}
 
-						err = db.IngestExternalFiles(context.Background(), []string{filename}, true, true)
+						err = db.IngestExternalFiles(context.Background(), []string{filename})
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -1491,7 +1491,7 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 		if err := db.WriteFile(`ingest`, sstContents); err != nil {
 			t.Fatal(err)
 		}
-		if err := db.IngestExternalFiles(ctx, []string{`ingest`}, true, true); err != nil {
+		if err := db.IngestExternalFiles(ctx, []string{`ingest`}); err != nil {
 			t.Fatal(err)
 		}
 	}
