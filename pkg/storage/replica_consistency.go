@@ -94,46 +94,74 @@ func (r *Replica) CheckConsistency(
 		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
 	}
 
-	var inconsistencyCount int
-	var missingCount int
-
 	res := roachpb.CheckConsistencyResponse_Result{}
 	res.RangeID = r.RangeID
+
+	shaToIdxs := map[string][]int{}
+	var missing []ConsistencyCheckResult
 	for i, result := range results {
-		expResponse := results[0].Response
 		if result.Err != nil {
-			res.Detail += fmt.Sprintf("%s: %v\n", result.Replica, result.Err)
-			missingCount++
+			missing = append(missing, result)
 			continue
 		}
-		if bytes.Equal(expResponse.Checksum, result.Response.Checksum) {
-			// Replica is consistent (or rather, agrees with the local result).
-			if i == 0 {
-				res.Detail += fmt.Sprintf("stats: %+v\n", expResponse.Persisted)
+		s := string(result.Response.Checksum)
+		shaToIdxs[s] = append(shaToIdxs[s], i)
+	}
+
+	// When replicas diverge, anecdotally often the minority (usually of size
+	// one) is in the wrong. If there's more than one smallest minority (for
+	// example, if three replicas all return different hashes) we pick any of
+	// them.
+	var minoritySHA string
+	if len(shaToIdxs) > 1 {
+		for sha, idxs := range shaToIdxs {
+			if minoritySHA == "" || len(shaToIdxs[minoritySHA]) > len(idxs) {
+				minoritySHA = sha
 			}
-			continue
 		}
-		inconsistencyCount++
+	}
+
+	// There is an inconsistency if and only if there is a minority SHA.
+
+	if minoritySHA != "" {
 		var buf bytes.Buffer
-		_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x\n"+
-			"persisted stats: exp %+v, got %+v\n"+
-			"stats delta: exp %+v, got %+v\n",
-			result.Replica,
-			expResponse.Checksum, result.Response.Checksum,
-			expResponse.Persisted, result.Response.Persisted,
-			expResponse.Delta, result.Response.Delta,
-		)
-		if expResponse.Snapshot != nil && result.Response.Snapshot != nil {
-			diff := diffRange(expResponse.Snapshot, result.Response.Snapshot)
-			if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
-				report(*r.store.Ident, diff)
+		for sha, idxs := range shaToIdxs {
+			minority := ""
+			if sha == minoritySHA {
+				minority = " [minority]"
 			}
-			_, _ = diff.WriteTo(&buf)
+			for _, idx := range idxs {
+				_, _ = fmt.Fprintf(&buf, "%s: checksum %x%s\n"+
+					"- stats: %+v\n"+
+					"- recomputed delta: %+v\n",
+					&results[idx].Replica,
+					sha,
+					minority,
+					&results[idx].Response.Persisted,
+					&results[idx].Response.Delta,
+				)
+			}
+			minoritySnap := results[shaToIdxs[minoritySHA][0]].Response.Snapshot
+			curSnap := results[shaToIdxs[sha][0]].Response.Snapshot
+			if sha != minoritySHA && minoritySnap != nil && curSnap != nil {
+				diff := diffRange(curSnap, minoritySnap)
+				if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
+					report(*r.store.Ident, diff)
+				}
+				_, _ = fmt.Fprintf(&buf, "====== diff(%x, [minority]) ======\n", sha)
+				_, _ = diff.WriteTo(&buf)
+			}
 		}
+
 		if isQueue {
 			log.Error(ctx, buf.String())
 		}
 		res.Detail += buf.String()
+	} else {
+		res.Detail += fmt.Sprintf("stats: %+v\n", results[0].Response.Persisted)
+	}
+	for _, result := range missing {
+		res.Detail += fmt.Sprintf("%s: error: %v\n", result.Replica, result.Err)
 	}
 
 	delta := enginepb.MVCCStats(results[0].Response.Delta)
@@ -141,7 +169,7 @@ func (r *Replica) CheckConsistency(
 
 	res.StartKey = []byte(startKey)
 	res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT
-	if inconsistencyCount != 0 {
+	if minoritySHA != "" {
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
 	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && delta != (enginepb.MVCCStats{}) {
 		if delta.ContainsEstimates {
@@ -154,7 +182,8 @@ func (r *Replica) CheckConsistency(
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT
 		}
 		res.Detail += fmt.Sprintf("stats delta: %+v\n", enginepb.MVCCStats(results[0].Response.Delta))
-	} else if missingCount > 0 {
+	} else if len(missing) > 0 {
+		// No inconsistency was detected, but we didn't manage to inspect all replicas.
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE
 	}
 	var resp roachpb.CheckConsistencyResponse
@@ -167,7 +196,7 @@ func (r *Replica) CheckConsistency(
 		return resp, nil
 	}
 
-	if inconsistencyCount == 0 {
+	if minoritySHA == "" {
 		// The replicas were in sync. Check that the MVCCStats haven't diverged from
 		// what they should be. This code originated in the realization that there
 		// were many bugs in our stats computations. These are being fixed, but it
@@ -216,14 +245,13 @@ func (r *Replica) CheckConsistency(
 
 	// Diff was printed above, so call logFunc with a short message only.
 	if args.WithDiff {
-		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
+		logFunc(ctx, "consistency check failed")
 		return resp, nil
 	}
 
 	// No diff was printed, so we want to re-run with diff.
 	// Note that this will call Fatal recursively in `CheckConsistency` (in the code above).
-	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
-		inconsistencyCount)
+	log.Errorf(ctx, "consistency check failed; fetching details")
 	args.WithDiff = true
 	args.Checkpoint = true
 
