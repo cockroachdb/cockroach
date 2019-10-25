@@ -357,7 +357,7 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 ) (err error) {
 	defer func() {
 		if err != nil {
-			log.Infof(ctx, "error while attempting to rotate data key: %s", err.Error())
+			log.Infof(ctx, "error while attempting to rotate data key: %s", err)
 		} else {
 			log.Infof(ctx, "rotated to new active data key: %s", proto.CompactTextString(m.mu.activeKey.Info))
 		}
