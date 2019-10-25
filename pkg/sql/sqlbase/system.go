@@ -874,7 +874,7 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
-			{Name: "generated", ID: 2, Type: *types.Timestamp},
+			{Name: "generated", ID: 2, Type: *types.TimestampTZ},
 		},
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
@@ -917,7 +917,7 @@ var (
 			{Name: "type", ID: 3, Type: *types.String},
 			{Name: "config", ID: 4, Type: *types.String},
 			{Name: "report_id", ID: 5, Type: *types.Int},
-			{Name: "violation_start", ID: 6, Type: *types.Timestamp, Nullable: true},
+			{Name: "violation_start", ID: 6, Type: *types.TimestampTZ, Nullable: true},
 			{Name: "violating_ranges", ID: 7, Type: *types.Int},
 		},
 		NextColumnID: 8,
