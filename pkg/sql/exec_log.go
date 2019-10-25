@@ -115,23 +115,17 @@ var logLabels = []string{"exec", "exec-internal"}
 // logLabel returns the log label for the given executor type.
 func (s executorType) logLabel() string { return logLabels[s] }
 
+var sqlPerfLogger log.ChannelLogger = log.SqlPerf
+var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
+
 // maybeLogStatement conditionally records the current statement
 // (p.curPlan) to the exec / audit logs.
 func (p *planner) maybeLogStatement(
 	ctx context.Context,
 	execType executorType,
-	numRetries, rows int,
+	numRetries, txnCounter, rows int,
 	err error,
-	queryReceived time.Time,
-) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, rows, err, queryReceived)
-}
-
-var sqlPerfLogger log.ChannelLogger = log.SqlPerf
-var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
-
-func (p *planner) maybeLogStatementInternal(
-	ctx context.Context, execType executorType, numRetries, rows int, err error, startTime time.Time,
+	startTime time.Time,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -253,6 +247,7 @@ func (p *planner) maybeLogStatementInternal(
 		NumRetries:    uint32(numRetries),
 		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
 		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
+		TxnCounter:    uint32(txnCounter),
 	}
 
 	if logV {
