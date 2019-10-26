@@ -795,7 +795,7 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(fmt.Sprintf("%x", int64(tree.MustBeDInt(args[0])))), nil
+				return tree.NewDString(fmt.Sprintf("%x", uint64(tree.MustBeDInt(args[0])))), nil
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
