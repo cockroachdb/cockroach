@@ -94,20 +94,14 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 			return false, nil
 		}
 
-		idx := 0
 		types := r.source.OutputTypes()
-		for i, col := range r.planCols {
-			if col.Omitted {
-				r.datumRow[i] = tree.DNull
-				continue
-			}
-			encDatum := r.row[idx]
-			err := encDatum.EnsureDecoded(&types[idx], &r.da)
+		for i := range r.planCols {
+			encDatum := r.row[i]
+			err := encDatum.EnsureDecoded(&types[i], &r.da)
 			if err != nil {
 				return false, err
 			}
 			r.datumRow[i] = encDatum.Datum
-			idx++
 		}
 
 		return true, nil

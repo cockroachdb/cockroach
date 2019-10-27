@@ -23,9 +23,6 @@ type ResultColumn struct {
 
 	// If set, this is an implicit column; used internally.
 	Hidden bool
-
-	// If set, a value won't be produced for this column; used internally.
-	Omitted bool
 }
 
 // ResultColumns is the type used throughout the sql module to
