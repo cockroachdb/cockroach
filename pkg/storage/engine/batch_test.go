@@ -200,7 +200,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				if !b.Closed() {
 					t.Fatal("even after calling Close, a read-only should not be closed")
 				}
-				name := "rocksDBReadOnly"
+				name := "RocksDBReadOnly"
 				if engineImpl.name == "pebble" {
 					name = "pebbleReadOnly"
 				}

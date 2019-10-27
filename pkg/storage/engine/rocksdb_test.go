@@ -310,7 +310,7 @@ func TestIterBounds(t *testing.T) {
 
 			// Perform additional tests if the engine supports writes.
 			w, isReadWriter := e.(ReadWriter)
-			if _, isSecretlyReadOnly := e.(*rocksDBReadOnly); !isReadWriter || isSecretlyReadOnly {
+			if _, isSecretlyReadOnly := e.(*RocksDBReadOnly); !isReadWriter || isSecretlyReadOnly {
 				return
 			}
 			if err := w.Put(mvccKey("c"), []byte("val")); err != nil {

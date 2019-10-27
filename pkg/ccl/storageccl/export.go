@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -118,23 +119,9 @@ func evalExport(
 	start := engine.MVCCKey{Key: args.Key, Timestamp: args.StartTime}
 	end := engine.MVCCKey{Key: args.EndKey, Timestamp: h.Timestamp}
 
-	io := engine.IterOptions{
-		UpperBound: args.EndKey,
-	}
-
-	// Time-bound iterators only make sense to use if the start time is set.
-	if args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty() {
-		// The call to startTime.Next() converts our exclusive start bound into the
-		// inclusive start bound that MinTimestampHint expects. This is strictly a
-		// performance optimization; omitting the call would still return correct
-		// results.
-		io.MinTimestampHint = args.StartTime.Next()
-		io.MaxTimestampHint = h.Timestamp
-	}
-
 	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 
-	data, summary, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
+	data, summary, err := exportToSst(e, start, end, exportAllRevisions, args)
 
 	if err != nil {
 		return result.Result{}, err
@@ -197,4 +184,87 @@ func getMatchingStore(
 		}
 	}
 	return "", roachpb.ExternalStorage{}, false
+}
+
+func exportToSst(
+	e engine.Reader, start, end engine.MVCCKey, exportAllRevisions bool, args *roachpb.ExportRequest,
+) ([]byte, roachpb.BulkOpSummary, error) {
+
+	switch e.(type) {
+	case *engine.RocksDB, *engine.RocksDBReadOnly:
+		io := engine.IterOptions{
+			UpperBound: args.EndKey,
+		}
+
+		// Time-bound iterators only make sense to use if the start time is set.
+		if args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty() {
+			// The call to startTime.Next() converts our exclusive start bound into the
+			// inclusive start bound that MinTimestampHint expects. This is strictly a
+			// performance optimization; omitting the call would still return correct
+			// results.
+			io.MinTimestampHint = args.StartTime.Next()
+			io.MaxTimestampHint = end.Timestamp
+		}
+
+		return engine.RocksDBExportToSst(e, start, end, exportAllRevisions, io)
+	case *engine.Pebble:
+		io := IterOptions{
+			StartTime:                           start.Timestamp,
+			EndTime:                             end.Timestamp,
+			UpperBound:                          end.Key,
+			EnableTimeBoundIteratorOptimization: args.EnableTimeBoundIteratorOptimization,
+		}
+
+		return pebbleExportToSst(e, start, end, exportAllRevisions, io)
+	default:
+		return []byte{}, roachpb.BulkOpSummary{}, errors.Errorf("Not a valid engine but a %T", e)
+	}
+}
+
+func pebbleExportToSst(
+	e engine.Reader, start, end engine.MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	sstWriter := bulk.MakeSSTWriter()
+	defer sstWriter.Close()
+
+	var rows bulk.RowCounter
+	iter := NewMVCCIncrementalIterator(e, io)
+	defer iter.Close()
+	for iter.Seek(engine.MakeMVCCMetadataKey(start.Key)); ; {
+		ok, err := iter.Valid()
+		if err != nil {
+			// The error may be a WriteIntentError. In which case, returning it will
+			// cause this command to be retried.
+			return []byte{}, roachpb.BulkOpSummary{}, err
+		}
+		if !ok || iter.UnsafeKey().Key.Compare(end.Key) >= 0 {
+			break
+		}
+
+		// Skip tombstone (len=0) records when startTime is zero
+		// (non-incremental) and we're not exporting all versions.
+		if !exportAllRevisions && start.Timestamp.IsEmpty() && len(iter.UnsafeValue()) == 0 {
+			continue
+		}
+
+		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
+			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
+		}
+		if err := sstWriter.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
+		}
+
+		if exportAllRevisions {
+			iter.Next()
+		} else {
+			iter.NextKey()
+		}
+	}
+
+	data, err := sstWriter.Finish()
+	if err != nil {
+		return []byte{}, roachpb.BulkOpSummary{}, err
+	}
+
+	return data, roachpb.BulkOpSummary{}, nil
 }

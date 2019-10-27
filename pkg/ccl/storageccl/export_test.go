@@ -315,17 +315,13 @@ func assertEqualKVs(
 			t.Fatalf("Oracle failed to export provided key range.")
 		}
 
-		// Run new C++ implementation of IncrementalIterator.
 		start := engine.MVCCKey{Key: startKey, Timestamp: startTime}
 		end := engine.MVCCKey{Key: endKey, Timestamp: endTime}
-		io := engine.IterOptions{
-			UpperBound: endKey,
+		args := roachpb.ExportRequest{
+			RequestHeader: roachpb.RequestHeader{EndKey: endKey},
+			StartTime:     startTime,
 		}
-		if enableTimeBoundIteratorOptimization {
-			io.MaxTimestampHint = endTime
-			io.MinTimestampHint = startTime
-		}
-		sst, _, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
+		sst, _, err := exportToSst(e, start, end, exportAllRevisions, &args)
 		if err != nil {
 			t.Fatal(err)
 		}

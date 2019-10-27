@@ -923,22 +923,24 @@ func (r *RocksDB) NewSnapshot() Reader {
 
 // NewReadOnly returns a new ReadWriter wrapping this rocksdb engine.
 func (r *RocksDB) NewReadOnly() ReadWriter {
-	return &rocksDBReadOnly{
+	return &RocksDBReadOnly{
 		parent:   r,
 		isClosed: false,
 	}
 }
 
-type rocksDBReadOnly struct {
+// RocksDBReadOnly is a read only wrapper around a RocksDB database instance.
+type RocksDBReadOnly struct {
 	parent     *RocksDB
 	prefixIter reusableIterator
 	normalIter reusableIterator
 	isClosed   bool
 }
 
-func (r *rocksDBReadOnly) Close() {
+// Close closes the database by deallocating the underlying handle.
+func (r *RocksDBReadOnly) Close() {
 	if r.isClosed {
-		panic("closing an already-closed rocksDBReadOnly")
+		panic("closing an already-closed RocksDBReadOnly")
 	}
 	r.isClosed = true
 	if i := &r.prefixIter.rocksDBIterator; i.iter != nil {
@@ -949,41 +951,45 @@ func (r *rocksDBReadOnly) Close() {
 	}
 }
 
-// Read-only batches are not committed
-func (r *rocksDBReadOnly) Closed() bool {
+// Closed returns true if the engine is closed.
+func (r *RocksDBReadOnly) Closed() bool {
 	return r.isClosed
 }
 
-func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
+// Get returns the value for the given key.
+func (r *RocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
 	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
+		panic("using a closed RocksDBReadOnly")
 	}
 	return dbGet(r.parent.rdb, key)
 }
 
-func (r *rocksDBReadOnly) GetProto(
+// GetProto fetches the value at the specified key and unmarshals it.
+func (r *RocksDBReadOnly) GetProto(
 	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
+		panic("using a closed RocksDBReadOnly")
 	}
 	return dbGetProto(r.parent.rdb, key, msg)
 }
 
-func (r *rocksDBReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+// Iterate iterates from start to end keys, invoking f on each
+// key/value pair. See engine.Iterate for details.
+func (r *RocksDBReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
 	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
+		panic("using a closed RocksDBReadOnly")
 	}
 	return dbIterate(r.parent.rdb, r, start, end, f)
 }
 
 // NewIterator returns an iterator over the underlying engine. Note
 // that the returned iterator is cached and re-used for the lifetime of the
-// rocksDBReadOnly. A panic will be thrown if multiple prefix or normal (non-prefix)
-// iterators are used simultaneously on the same rocksDBReadOnly.
-func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
+// RocksDBReadOnly. A panic will be thrown if multiple prefix or normal (non-prefix)
+// iterators are used simultaneously on the same RocksDBReadOnly.
+func (r *RocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	if r.isClosed {
-		panic("using a closed rocksDBReadOnly")
+		panic("using a closed RocksDBReadOnly")
 	}
 	if opts.MinTimestampHint != (hlc.Timestamp{}) {
 		// Iterators that specify timestamp bounds cannot be cached.
@@ -1005,43 +1011,48 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	return iter
 }
 
-// Writer methods are not implemented for rocksDBReadOnly. Ideally, the code
-// could be refactored so that a Reader could be supplied to evaluateBatch
-
-// Writer is the write interface to an engine's data.
-func (r *rocksDBReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
+// ApplyBatchRepr should not be implemented.
+func (r *RocksDBReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) Clear(key MVCCKey) error {
+// Clear should not be implemented.
+func (r *RocksDBReadOnly) Clear(key MVCCKey) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) SingleClear(key MVCCKey) error {
+// SingleClear should not be implemented.
+func (r *RocksDBReadOnly) SingleClear(key MVCCKey) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) ClearRange(start, end MVCCKey) error {
+// ClearRange should not be implemented.
+func (r *RocksDBReadOnly) ClearRange(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+// ClearIterRange should not be implemented.
+func (r *RocksDBReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) Merge(key MVCCKey, value []byte) error {
+// Merge should not be implemented.
+func (r *RocksDBReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) Put(key MVCCKey, value []byte) error {
+// Put should not be implemented.
+func (r *RocksDBReadOnly) Put(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) LogData(data []byte) error {
+// LogData should not be implemented.
+func (r *RocksDBReadOnly) LogData(data []byte) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+// LogLogicalOp should not be implemented.
+func (r *RocksDBReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
 	panic("not implemented")
 }
 
@@ -3188,21 +3199,21 @@ func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 	return MVCCKey{k, ts}, value, orepr, err
 }
 
-// ExportToSst exports changes to the keyrange [start.Key, end.Key) over the
+// RocksDBExportToSst exports changes to the keyrange [start.Key, end.Key) over the
 // interval (start.Timestamp, end.Timestamp]. Passing exportAllRevisions exports
 // every revision of a key for the interval, otherwise only the latest value
 // within the interval is exported. Deletions are included if all revisions are
 // requested or if the start.Timestamp is non-zero. Returns the bytes of an
 // SSTable containing the exported keys, the size of exported data, or an error.
-func ExportToSst(
-	ctx context.Context, e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+func RocksDBExportToSst(
+	e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
 
 	var cdbEngine *C.DBEngine
 	switch v := e.(type) {
 	case *RocksDB:
 		cdbEngine = v.rdb
-	case *rocksDBReadOnly:
+	case *RocksDBReadOnly:
 		cdbEngine = v.parent.rdb
 	default:
 		panic(errors.Errorf("Not a rocksdb or rocksdbReadOnly engine but a %T", e))
