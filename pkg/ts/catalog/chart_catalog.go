@@ -1802,6 +1802,10 @@ var charts = []sectionDescription{
 				Title:   "Read Amplification",
 				Metrics: []string{"rocksdb.read-amplification"},
 			},
+			{
+				Title:   "Pending Compaction",
+				Metrics: []string{"rocksdb.estimated-pending-compaction"},
+			},
 		},
 	},
 	{
@@ -1817,6 +1821,13 @@ var charts = []sectionDescription{
 					"addsstable.copies",
 					"addsstable.applications",
 					"addsstable.proposals",
+				},
+			},
+			{
+				Title: "Ingestion Delays",
+				Metrics: []string{
+					"addsstable.delay.total",
+					"addsstable.delay.enginebackpressure",
 				},
 			},
 		},

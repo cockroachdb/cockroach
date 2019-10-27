@@ -13,6 +13,7 @@ package tracing
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -229,23 +230,6 @@ func IsRecordable(os opentracing.Span) bool {
 // Recording represents a group of RecordedSpans, as returned by GetRecording.
 type Recording []RecordedSpan
 
-func (r Recording) String() string {
-	sb := strings.Builder{}
-	for _, sp := range r {
-		sb.WriteString(fmt.Sprintf("=== %s [", sp.Operation))
-		for k, v := range sp.Tags {
-			if v != "" {
-				sb.WriteString(fmt.Sprintf("%s:%s ", k, v))
-			} else {
-				sb.WriteString(fmt.Sprintf("%s ", k))
-			}
-		}
-		sb.WriteString("]\n")
-		sb.WriteString(sp.String())
-	}
-	return sb.String()
-}
-
 // GetRecording retrieves the current recording, if the span has recording
 // enabled. This can be called while spans that are part of the record are
 // still open; it can run concurrently with operations on those spans.
@@ -264,6 +248,102 @@ func GetRecording(os opentracing.Span) Recording {
 		return nil
 	}
 	return group.getSpans()
+}
+
+type traceLogData struct {
+	opentracing.LogRecord
+	depth int
+}
+
+type traceLogs []traceLogData
+
+func (l traceLogs) Len() int {
+	return len(l)
+}
+
+func (l traceLogs) Less(i, j int) bool {
+	return l[i].Timestamp.Before(l[j].Timestamp)
+}
+
+func (l traceLogs) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
+}
+
+// String formats the given spans for human consumption, showing the
+// relationship using nesting and times as both relative to the previous event
+// and cumulative.
+//
+// TODO(andrei): this should be unified with
+// SessionTracing.GenerateSessionTraceVTable.
+func (r Recording) String() string {
+	m := make(map[uint64]*RecordedSpan)
+	for i, sp := range r {
+		m[sp.SpanID] = &r[i]
+	}
+
+	var depth func(uint64) int
+	depth = func(parentID uint64) int {
+		p := m[parentID]
+		if p == nil {
+			return 0
+		}
+		return depth(p.ParentSpanID) + 1
+	}
+
+	var logs traceLogs
+	var start time.Time
+	for _, sp := range r {
+		if sp.ParentSpanID == 0 {
+			start = sp.StartTime
+		}
+		d := depth(sp.ParentSpanID)
+		// Issue a log with the operation name. Include any tags.
+		lr := opentracing.LogRecord{
+			Timestamp: sp.StartTime,
+			Fields:    []otlog.Field{otlog.String("operation", sp.Operation)},
+		}
+		if len(sp.Tags) > 0 {
+			tags := make([]string, 0, len(sp.Tags))
+			for k := range sp.Tags {
+				tags = append(tags, k)
+			}
+			sort.Strings(tags)
+			for _, k := range tags {
+				lr.Fields = append(lr.Fields, otlog.String(k, sp.Tags[k]))
+			}
+		}
+		logs = append(logs, traceLogData{LogRecord: lr, depth: d})
+		for _, l := range sp.Logs {
+			lr := opentracing.LogRecord{
+				Timestamp: l.Time,
+				Fields:    make([]otlog.Field, len(l.Fields)),
+			}
+			for i, f := range l.Fields {
+				lr.Fields[i] = otlog.String(f.Key, f.Value)
+			}
+
+			logs = append(logs, traceLogData{LogRecord: lr, depth: d})
+		}
+	}
+	sort.Sort(logs)
+
+	var buf bytes.Buffer
+	last := start
+	for _, entry := range logs {
+		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
+			1000*entry.Timestamp.Sub(start).Seconds(),
+			1000*entry.Timestamp.Sub(last).Seconds(),
+			strings.Repeat("    ", entry.depth+1))
+		for i, f := range entry.Fields {
+			if i != 0 {
+				buf.WriteByte(' ')
+			}
+			fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
+		}
+		buf.WriteByte('\n')
+		last = entry.Timestamp
+	}
+	return buf.String()
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given span;
@@ -498,7 +578,7 @@ func (s *span) Log(data opentracing.LogData) {
 	panic("unimplemented")
 }
 
-// getRecording returns a RecordedSpan. This method used to be part of (*spanGroup).getSpans.
+// getRecording returns the span's recording.
 func (s *span) getRecording() RecordedSpan {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -579,7 +659,7 @@ type spanGroup struct {
 	spans []*span
 	// remoteSpans stores spans obtained from another host that we want to associate
 	// with the record for this group.
-	remoteSpans []RecordedSpan
+	remoteSpans Recording
 }
 
 func (ss *spanGroup) addSpan(s *span) {
@@ -591,13 +671,13 @@ func (ss *spanGroup) addSpan(s *span) {
 // getSpans returns all the local and remote spans accumulated in this group.
 // The first result is the first local span - i.e. the span originally passed to
 // StartRecording().
-func (ss *spanGroup) getSpans() []RecordedSpan {
+func (ss *spanGroup) getSpans() Recording {
 	ss.Lock()
 	spans := ss.spans
 	remoteSpans := ss.remoteSpans
 	ss.Unlock()
 
-	result := make([]RecordedSpan, 0, len(spans)+len(remoteSpans))
+	result := make(Recording, 0, len(spans)+len(remoteSpans))
 	for _, s := range spans {
 		rs := s.getRecording()
 		result = append(result, rs)

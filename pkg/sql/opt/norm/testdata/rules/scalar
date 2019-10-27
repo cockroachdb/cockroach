@@ -765,7 +765,7 @@ project
  └── scan t.public.e@secondary
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
       ├── constraint: /2/1: [/NULL - /NULL]
-      ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=10]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=10]
       ├── cost: 10.41
       ├── key: (1)
       ├── fd: ()-->(2)
@@ -785,7 +785,7 @@ project
  └── scan t.public.e@secondary
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int!null)
       ├── constraint: /2/1: (/NULL - ]
-      ├── stats: [rows=990, distinct(1)=990, null(1)=0, distinct(2)=100, null(2)=0]
+      ├── stats: [rows=990, distinct(2)=100, null(2)=0]
       ├── cost: 1029.61
       ├── key: (1)
       ├── fd: (1)-->(2)

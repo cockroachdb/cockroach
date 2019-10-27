@@ -18,15 +18,15 @@ import (
 
 func init() {
 	logflags.InitFlags(
-		&logging.noStderrRedirect,
-		&logging.logDir, &showLogs, &noColor,
-		&logging.vmodule,
+		&mainLog.noStderrRedirect,
+		&mainLog.logDir, &showLogs, &noColor,
+		&logging.vmoduleConfig.mu.vmodule,
 		&LogFileMaxSize, &LogFilesCombinedMaxSize,
 	)
 	// We define these flags here because they have the type Severity
 	// which we can't pass to logflags without creating an import cycle.
 	flag.Var(&logging.stderrThreshold,
 		logflags.LogToStderrName, "logs at or above this threshold go to stderr")
-	flag.Var(&logging.fileThreshold,
+	flag.Var(&mainLog.fileThreshold,
 		logflags.LogFileVerbosityThresholdName, "minimum verbosity of messages written to the log file")
 }

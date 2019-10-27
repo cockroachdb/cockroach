@@ -120,18 +120,6 @@ const (
 
 const escapeLength = 2
 
-// Reverse returns the opposite direction.
-func (d Direction) Reverse() Direction {
-	switch d {
-	case Ascending:
-		return Descending
-	case Descending:
-		return Ascending
-	default:
-		panic(fmt.Sprintf("Invalid direction %d", d))
-	}
-}
-
 // EncodeUint32Ascending encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.

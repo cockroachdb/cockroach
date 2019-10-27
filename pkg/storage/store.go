@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -114,15 +115,6 @@ var importRequestsLimit = settings.RegisterPositiveIntSetting(
 	1,
 )
 
-// addSSTableRequestMaxRate is the maximum number of AddSSTable requests per second.
-var addSSTableRequestMaxRate = settings.RegisterNonNegativeFloatSetting(
-	"kv.bulk_io_write.addsstable_max_rate",
-	"maximum number of AddSSTable requests per second for a single store",
-	float64(rate.Inf),
-)
-
-const addSSTableRequestBurst = 32
-
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterPositiveIntSetting(
 	"kv.bulk_io_write.concurrent_addsstable_requests",
@@ -157,8 +149,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		DefaultZoneConfig:           config.DefaultZoneConfigRef(),
-		DefaultSystemZoneConfig:     config.DefaultSystemZoneConfigRef(),
+		DefaultZoneConfig:           zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig:     zonepb.DefaultSystemZoneConfigRef(),
 		Settings:                    st,
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
@@ -603,8 +595,8 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultZoneConfig       *config.ZoneConfig
-	DefaultSystemZoneConfig *config.ZoneConfig
+	DefaultZoneConfig       *zonepb.ZoneConfig
+	DefaultSystemZoneConfig *zonepb.ZoneConfig
 	Settings                *cluster.Settings
 	Clock                   *hlc.Clock
 	DB                      *client.DB
@@ -872,16 +864,6 @@ func NewStore(
 			limit = exportCores
 		}
 		s.limiters.ConcurrentExportRequests.SetLimit(limit)
-	})
-	s.limiters.AddSSTableRequestRate = rate.NewLimiter(
-		rate.Limit(addSSTableRequestMaxRate.Get(&cfg.Settings.SV)), addSSTableRequestBurst)
-	addSSTableRequestMaxRate.SetOnChange(&cfg.Settings.SV, func() {
-		rateLimit := addSSTableRequestMaxRate.Get(&cfg.Settings.SV)
-		if math.IsInf(rateLimit, 0) {
-			// This value causes the burst limit to be ignored
-			rateLimit = float64(rate.Inf)
-		}
-		s.limiters.AddSSTableRequestRate.SetLimit(rate.Limit(rateLimit))
 	})
 	s.limiters.ConcurrentAddSSTableRequests = limit.MakeConcurrentRequestLimiter(
 		"addSSTableRequestLimiter", int(addSSTableRequestLimit.Get(&cfg.Settings.SV)),
@@ -2360,6 +2342,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
 		readAmp := sstables.ReadAmplification()
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
+		s.metrics.RdbPendingCompaction.Update(stats.PendingCompactionBytesEstimate)
 		// Log this metric infrequently (with current configurations,
 		// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
 		// non-periodic callers of this method don't trigger expensive
@@ -2434,9 +2417,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 // AllocatorDryRun runs the given replica through the allocator without actually
 // carrying out any changes, returning all trace messages collected along the way.
 // Intended to help power a debug endpoint.
-func (s *Store) AllocatorDryRun(
-	ctx context.Context, repl *Replica,
-) ([]tracing.RecordedSpan, error) {
+func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "allocator dry run")
 	defer cancel()
 	canTransferLease := func() bool { return true }
@@ -2454,7 +2435,7 @@ func (s *Store) AllocatorDryRun(
 // power an admin debug endpoint.
 func (s *Store) ManuallyEnqueue(
 	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool,
-) ([]tracing.RecordedSpan, string, error) {
+) (tracing.Recording, string, error) {
 	ctx = repl.AnnotateCtx(ctx)
 
 	var queue queueImpl

@@ -12,10 +12,13 @@ package reports
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -49,7 +52,7 @@ type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *storage.Stores
 	// Constraints constructed from the locality information
-	localityConstraints []config.Constraints
+	localityConstraints []zonepb.Constraints
 	// The store that is the current meta 1 leaseholder
 	meta1LeaseHolder *storage.Store
 	// Latest zone config
@@ -163,6 +166,12 @@ func (stats *Reporter) update(
 	replStatsSaver *replicationStatsReportSaver,
 	locSaver *replicationCriticalLocalitiesReportSaver,
 ) error {
+	start := timeutil.Now()
+	log.VEventf(ctx, 2, "updating replication reports...")
+	defer func() {
+		log.VEventf(ctx, 2, "updating replication reports... done. Generation took: %s.",
+			timeutil.Now().Sub(start))
+	}()
 	stats.updateLatestConfig()
 	if stats.latestConfig == nil {
 		return nil
@@ -175,7 +184,9 @@ func (stats *Reporter) update(
 	}
 
 	allStores := stats.storePool.GetStores()
-	var getStoresFromGossip StoreResolver = func(r roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
+	var getStoresFromGossip StoreResolver = func(
+		r *roachpb.RangeDescriptor,
+	) []roachpb.StoreDescriptor {
 		storeDescs := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
 		// We'll return empty descriptors for stores that gossip doesn't have a
 		// descriptor for. These stores will be considered to satisfy all
@@ -204,23 +215,33 @@ func (stats *Reporter) update(
 		ctx, &rangeIter, stats.latestConfig,
 		&constraintConfVisitor, &localityStatsVisitor, &statusVisitor,
 	); err != nil {
-		return errors.Wrap(err, "failed to compute constraint conformance report")
+		if _, ok := err.(visitorError); ok {
+			log.Errorf(ctx, "some reports have not been generated: %s", err)
+		} else {
+			return errors.Wrap(err, "failed to compute constraint conformance report")
+		}
 	}
 
-	if err := constraintConfVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
-	); err != nil {
-		return errors.Wrap(err, "failed to save constraint report")
+	if !constraintConfVisitor.failed() {
+		if err := constraintConfVisitor.report.Save(
+			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		); err != nil {
+			return errors.Wrap(err, "failed to save constraint report")
+		}
 	}
-	if err := localityStatsVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
-	); err != nil {
-		return errors.Wrap(err, "failed to save locality report")
+	if !localityStatsVisitor.failed() {
+		if err := localityStatsVisitor.report.Save(
+			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		); err != nil {
+			return errors.Wrap(err, "failed to save locality report")
+		}
 	}
-	if err := statusVisitor.report.Save(
-		ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
-	); err != nil {
-		return errors.Wrap(err, "failed to save range status report")
+	if !localityStatsVisitor.failed() {
+		if err := statusVisitor.report.Save(
+			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		); err != nil {
+			return errors.Wrap(err, "failed to save range status report")
+		}
 	}
 	return nil
 }
@@ -250,19 +271,19 @@ func (stats *Reporter) updateLatestConfig() {
 }
 
 func (stats *Reporter) updateLocalityConstraints() error {
-	localityConstraintsByName := make(map[string]config.Constraints, 16)
+	localityConstraintsByName := make(map[string]zonepb.Constraints, 16)
 	for _, sd := range stats.storePool.GetStores() {
-		c := config.Constraints{
-			Constraints: make([]config.Constraint, 0),
+		c := zonepb.Constraints{
+			Constraints: make([]zonepb.Constraint, 0),
 		}
 		for _, t := range sd.Node.Locality.Tiers {
 			c.Constraints = append(
 				c.Constraints,
-				config.Constraint{Type: config.Constraint_REQUIRED, Key: t.Key, Value: t.Value})
+				zonepb.Constraint{Type: zonepb.Constraint_REQUIRED, Key: t.Key, Value: t.Value})
 			localityConstraintsByName[c.String()] = c
 		}
 	}
-	stats.localityConstraints = make([]config.Constraints, 0, len(localityConstraintsByName))
+	stats.localityConstraints = make([]zonepb.Constraints, 0, len(localityConstraintsByName))
 	for _, c := range localityConstraintsByName {
 		stats.localityConstraints = append(stats.localityConstraints, c)
 	}
@@ -290,7 +311,106 @@ func (stats *Reporter) isNodeLive(nodeID roachpb.NodeID) bool {
 	}
 }
 
-// visitZones applies a visitor to the hierarchy of zone zonfigs that apply to
+// zoneResolver resolves ranges to their zone configs. It is optimized for the
+// case where a range falls in the same range as a the previously-resolved range
+// (which is the common case when asked to resolve ranges in key order).
+type zoneResolver struct {
+	init bool
+	// curObjectID is the object (i.e. usually table) of the configured range.
+	curObjectID uint32
+	// curRootZone is the lowest zone convering the previously resolved range
+	// that's not a subzone.
+	// This is used to compute the subzone for a range.
+	curRootZone *zonepb.ZoneConfig
+	// curZoneKey is the zone key for the previously resolved range.
+	curZoneKey ZoneKey
+}
+
+// resolveRange resolves a range to its zone.
+func (c *zoneResolver) resolveRange(
+	ctx context.Context, rng *roachpb.RangeDescriptor, cfg *config.SystemConfig,
+) (ZoneKey, error) {
+	if c.checkSameZone(ctx, rng) {
+		return c.curZoneKey, nil
+	}
+	return c.updateZone(ctx, rng, cfg)
+}
+
+// setZone remembers the passed-in info as the reference for further
+// checkSameZone() calls.
+// Clients should generally use the higher-level updateZone().
+func (c *zoneResolver) setZone(objectID uint32, key ZoneKey, rootZone *zonepb.ZoneConfig) {
+	c.init = true
+	c.curObjectID = objectID
+	c.curRootZone = rootZone
+	c.curZoneKey = key
+}
+
+// updateZone updates the state of the zoneChecker to the zone of the passed-in
+// range descriptor.
+func (c *zoneResolver) updateZone(
+	ctx context.Context, rd *roachpb.RangeDescriptor, cfg *config.SystemConfig,
+) (ZoneKey, error) {
+	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(rd.StartKey)
+	first := true
+	var zoneKey ZoneKey
+	var rootZone *zonepb.ZoneConfig
+	// We're going to walk the zone hierarchy looking for two things:
+	// 1) The lowest zone containing rd. We'll use the subzone ID for it.
+	// 2) The lowest zone containing rd that's not a subzone.
+	// visitZones() walks the zone hierarchy from the bottom upwards.
+	found, err := visitZones(
+		ctx, rd, cfg, includeSubzonePlaceholders,
+		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
+			if first {
+				first = false
+				zoneKey = key
+			}
+			if key.SubzoneID == NoSubzone {
+				rootZone = zone
+				return true
+			}
+			return false
+		})
+	if err != nil {
+		return ZoneKey{}, err
+	}
+	if !found {
+		return ZoneKey{}, errors.AssertionFailedf("failed to resolve zone for range: %s", rd)
+	}
+	c.setZone(objectID, zoneKey, rootZone)
+	return zoneKey, nil
+}
+
+// checkSameZone returns true if the most specific zone that contains rng is the
+// one previously passed to setZone().
+//
+// NB: This method allows for false negatives (but no false positives). For
+// example, if the zoneChecker was previously configured for a range starting at
+// /Table/51 and is now queried for /Table/52, it will say that the zones don't
+// match even if in fact they do (because neither table defines its own zone
+// and they're both inheriting a higher zone).
+func (c *zoneResolver) checkSameZone(ctx context.Context, rng *roachpb.RangeDescriptor) bool {
+	if !c.init {
+		return false
+	}
+
+	objectID, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
+	if objectID != c.curObjectID {
+		return false
+	}
+	_, subzoneIdx := c.curRootZone.GetSubzoneForKeySuffix(keySuffix)
+	return subzoneIdx == c.curZoneKey.SubzoneID.ToSubzoneIndex()
+}
+
+type visitOpt bool
+
+const (
+	ignoreSubzonePlaceholders  visitOpt = false
+	includeSubzonePlaceholders visitOpt = true
+)
+
+// visitZones applies a visitor to the hierarchy of zone configs that apply to
 // the given range, starting from the most specific to the default zone config.
 //
 // visitor is called for each zone config until it returns true, or until the
@@ -301,11 +421,12 @@ func (stats *Reporter) isNodeLive(nodeID roachpb.NodeID) bool {
 // zone hierarchy was exhausted.
 func visitZones(
 	ctx context.Context,
-	r roachpb.RangeDescriptor,
+	rng *roachpb.RangeDescriptor,
 	cfg *config.SystemConfig,
-	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
+	opt visitOpt,
+	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
-	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(r.StartKey)
+	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
 	zone, err := getZoneByID(id, cfg)
 	if err != nil {
 		return false, err
@@ -326,8 +447,10 @@ func visitZones(
 			}
 		}
 		// Try the zone for our object.
-		if visitor(ctx, zone, MakeZoneKey(id, 0)) {
-			return true, nil
+		if (opt == includeSubzonePlaceholders) || !zone.IsSubzonePlaceholder() {
+			if visitor(ctx, zone, MakeZoneKey(id, 0)) {
+				return true, nil
+			}
 		}
 	}
 
@@ -341,7 +464,7 @@ func visitAncestors(
 	ctx context.Context,
 	id uint32,
 	cfg *config.SystemConfig,
-	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
+	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
@@ -379,7 +502,7 @@ func visitAncestors(
 func visitDefaultZone(
 	ctx context.Context,
 	cfg *config.SystemConfig,
-	visitor func(context.Context, *config.ZoneConfig, ZoneKey) bool,
+	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) bool {
 	zone, err := getZoneByID(keys.RootNamespaceID, cfg)
 	if err != nil {
@@ -392,12 +515,12 @@ func visitDefaultZone(
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
-func getZoneByID(id uint32, cfg *config.SystemConfig) (*config.ZoneConfig, error) {
+func getZoneByID(id uint32, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error) {
 	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
 	if zoneVal == nil {
 		return nil, nil
 	}
-	zone := new(config.ZoneConfig)
+	zone := new(zonepb.ZoneConfig)
 	if err := zoneVal.GetProto(zone); err != nil {
 		return nil, err
 	}
@@ -407,7 +530,7 @@ func getZoneByID(id uint32, cfg *config.SystemConfig) (*config.ZoneConfig, error
 // processRange returns the list of constraints violated by a range. The range
 // is represented by the descriptors of the replicas' stores.
 func processRange(
-	ctx context.Context, storeDescs []roachpb.StoreDescriptor, constraintGroups []config.Constraints,
+	ctx context.Context, storeDescs []roachpb.StoreDescriptor, constraintGroups []zonepb.Constraints,
 ) []ConstraintRepr {
 	var res []ConstraintRepr
 	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.
@@ -428,7 +551,7 @@ func processRange(
 // constraintSatisfied checks that a range (represented by its replicas' stores)
 // satisfies a constraint.
 func constraintSatisfied(
-	c config.Constraint, replicasRequiredToMatch int, storeDescs []roachpb.StoreDescriptor,
+	c zonepb.Constraint, replicasRequiredToMatch int, storeDescs []roachpb.StoreDescriptor,
 ) bool {
 	passCount := 0
 	for _, storeDesc := range storeDescs {
@@ -439,11 +562,11 @@ func constraintSatisfied(
 		}
 
 		storeMatches := true
-		match := config.StoreMatchesConstraint(storeDesc, c)
-		if c.Type == config.Constraint_REQUIRED && !match {
+		match := zonepb.StoreMatchesConstraint(storeDesc, c)
+		if c.Type == zonepb.Constraint_REQUIRED && !match {
 			storeMatches = false
 		}
-		if c.Type == config.Constraint_PROHIBITED && match {
+		if c.Type == zonepb.Constraint_PROHIBITED && match {
 			storeMatches = false
 		}
 
@@ -457,26 +580,75 @@ func constraintSatisfied(
 // StoreResolver is a function resolving a range to a store descriptor for each
 // of the replicas. Empty store descriptors are to be returned when there's no
 // information available for the store.
-type StoreResolver func(roachpb.RangeDescriptor) []roachpb.StoreDescriptor
+type StoreResolver func(*roachpb.RangeDescriptor) []roachpb.StoreDescriptor
 
+// rangeVisitor abstracts the interface for range iteration implemented by all
+// report generators.
 type rangeVisitor interface {
-	visit(context.Context, roachpb.RangeDescriptor)
+	// visitNewZone/visitSameZone is called by visitRanges() for each range, in
+	// order. The visitor will update its report with the range's info. If an
+	// error is returned, visit() will not be called anymore before reset().
+	// If an error() is returned, failed() needs to return true until reset() is
+	// called.
+	//
+	// Once visitNewZone() has been called once, visitSameZone() is called for
+	// further ranges as long as these ranges are covered by the same zone config.
+	// As soon as the range is not covered by it, visitNewZone() is called again.
+	// The idea is that visitors can maintain state about that zone that applies
+	// to multiple ranges, and so visitSameZone() allows them to efficiently reuse
+	// that state (in particular, not unmarshall ZoneConfigs again).
+	visitNewZone(context.Context, *roachpb.RangeDescriptor) error
+	visitSameZone(context.Context, *roachpb.RangeDescriptor) error
+
+	// failed returns true if an error was encountered by the last visit() call
+	// (and reset( ) wasn't called since).
+	// The idea is that, if failed() returns true, the report that the visitor
+	// produces will be considered incomplete and not persisted.
+	failed() bool
+
+	// reset resets the visitor's state, preparing it for visit() calls starting
+	// at the first range. This is called on retriable errors during range iteration.
 	reset(ctx context.Context)
+}
+
+// visitorError is returned by visitRanges when one or more visitors failed.
+type visitorError struct {
+	errs []error
+}
+
+func (e visitorError) Error() string {
+	s := make([]string, len(e.errs))
+	for i, err := range e.errs {
+		s[i] = fmt.Sprintf("%d: %s", i, err)
+	}
+	return fmt.Sprintf("%d visitors encountered errors:\n%s", len(e.errs), strings.Join(s, "\n"))
 }
 
 // visitRanges iterates through all the range descriptors in Meta2 and calls the
 // supplied visitors.
 //
-// An error is returned if some descriptors could not be read.
+// An error is returned if some descriptors could not be read. Additionally,
+// visitorError is returned if some visitors failed during the iteration. In
+// that case, it is expected that the reports produced by those specific
+// visitors will not be persisted, but the other reports will.
 func visitRanges(
-	ctx context.Context, rangeStore RangeIterator, cfg *config.SystemConfig, visitor ...rangeVisitor,
+	ctx context.Context, rangeStore RangeIterator, cfg *config.SystemConfig, visitors ...rangeVisitor,
 ) error {
+	origVisitors := make([]rangeVisitor, len(visitors))
+	copy(origVisitors, visitors)
+	var visitorErrs []error
+	var resolver zoneResolver
+
+	var key ZoneKey
+	first := true
+
 	// Iterate over all the ranges.
 	for {
 		rd, err := rangeStore.Next(ctx)
 		if err != nil {
 			if errIsRetriable(err) {
-				for _, v := range visitor {
+				visitors = origVisitors
+				for _, v := range visitors {
 					v.reset(ctx)
 				}
 				// The iterator has been positioned to the beginning.
@@ -487,12 +659,40 @@ func visitRanges(
 		}
 		if rd.RangeID == 0 {
 			// We're done.
-			return nil
+			break
 		}
-		for _, v := range visitor {
-			v.visit(ctx, rd)
+
+		newKey, err := resolver.resolveRange(ctx, &rd, cfg)
+		if err != nil {
+			return err
+		}
+		sameZoneAsPrevRange := !first && key == newKey
+		key = newKey
+		first = false
+
+		for i, v := range visitors {
+			var err error
+			if sameZoneAsPrevRange {
+				err = v.visitSameZone(ctx, &rd)
+			} else {
+				err = v.visitNewZone(ctx, &rd)
+			}
+
+			if err != nil {
+				// Sanity check - v.failed() should return an error now (the same as err above).
+				if !v.failed() {
+					return errors.Errorf("expected visitor %T to have failed() after error: %s", v, err)
+				}
+				// Remove this visitor; it shouldn't be called any more.
+				visitors = append(visitors[:i], visitors[i+1:]...)
+				visitorErrs = append(visitorErrs, err)
+			}
 		}
 	}
+	if len(visitorErrs) > 0 {
+		return visitorError{errs: visitorErrs}
+	}
+	return nil
 }
 
 // RangeIterator abstracts the interface for reading range descriptors.

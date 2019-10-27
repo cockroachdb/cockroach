@@ -1202,7 +1202,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "sort_clause",
-		inline: []string{"sortby_list", "sortby", "opt_asc_desc"},
+		inline: []string{"sortby_list", "sortby", "opt_asc_desc", "opt_nulls_order"},
 	},
 	{
 		name:    "split_index_at",

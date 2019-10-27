@@ -56,7 +56,7 @@ func compareTraces(expected, actual events) bool {
 // noLogV returns a verbosity level that will not result in VEvents and
 // VErrEvents being logged.
 func noLogV() int32 {
-	return int32(logging.verbosity.get() + 1)
+	return int32(logging.vmoduleConfig.verbosity.get() + 1)
 }
 
 func TestTrace(t *testing.T) {

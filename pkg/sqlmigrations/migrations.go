@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -97,11 +97,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v1.1. Permanent migration.
 		name:   "populate initial version cluster setting table entry",
 		workFn: populateVersionSetting,
-	},
-	{
-		// Introduced in v1.1. Permanent migration.
-		name:   "persist trace.debug.enable = 'false'",
-		workFn: disableNetTrace,
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
@@ -358,8 +353,8 @@ func NewManager(
 func ExpectedDescriptorIDs(
 	ctx context.Context,
 	db db,
-	defaultZoneConfig *config.ZoneConfig,
-	defaultSystemZoneConfig *config.ZoneConfig,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (sqlbase.IDs, error) {
 	completedMigrations, err := getCompletedMigrations(ctx, db)
 	if err != nil {
@@ -629,7 +624,6 @@ func runStmtAsRootWithRetry(
 // from what was defined in code.
 var SettingsDefaultOverrides = map[string]string{
 	"diagnostics.reporting.enabled": "true",
-	"trace.debug.enable":            "false",
 	"cluster.secret":                "<random>",
 }
 
@@ -640,11 +634,6 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	}
 	return runStmtAsRootWithRetry(
 		ctx, r, "optInToDiagnosticsStatReporting", `SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
-}
-
-func disableNetTrace(ctx context.Context, r runner) error {
-	return runStmtAsRootWithRetry(
-		ctx, r, "disableNetTrace", `SET CLUSTER SETTING trace.debug.enable = false`)
 }
 
 func initializeClusterSecret(ctx context.Context, r runner) error {

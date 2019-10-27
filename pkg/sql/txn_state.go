@@ -239,7 +239,7 @@ func (ts *txnState) finishSQLTxn() {
 	if ts.recordingThreshold > 0 {
 		if r := tracing.GetRecording(ts.sp); r != nil {
 			if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
-				dump := tracing.FormatRecordedSpans(r)
+				dump := r.String()
 				if len(dump) > 0 {
 					log.Infof(ts.Ctx, "SQL txn took %s, exceeding tracing threshold of %s:\n%s",
 						elapsed, ts.recordingThreshold, dump)

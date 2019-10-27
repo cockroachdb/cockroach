@@ -1132,6 +1132,9 @@ func (node *Order) doc(p *PrettyCfg) pretty.Doc {
 	if node.Direction != DefaultDirection {
 		d = p.nestUnder(d, pretty.Text(node.Direction.String()))
 	}
+	if node.NullsOrder != DefaultNullsOrder {
+		d = p.nestUnder(d, pretty.Text(node.NullsOrder.String()))
+	}
 	return d
 }
 
@@ -1150,12 +1153,16 @@ func (node *UpdateExpr) doc(p *PrettyCfg) pretty.Doc {
 func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// CREATE TABLE [IF NOT EXISTS] name ( .... ) [AS]
+	// CREATE [TEMP] TABLE [IF NOT EXISTS] name ( .... ) [AS]
 	//     [SELECT ...] - for CREATE TABLE AS
 	//     [INTERLEAVE ...]
 	//     [PARTITION BY ...]
 	//
-	title := pretty.Keyword("CREATE TABLE")
+	title := pretty.Keyword("CREATE")
+	if node.Temporary {
+		title = pretty.ConcatSpace(title, pretty.Keyword("TEMPORARY"))
+	}
+	title = pretty.ConcatSpace(title, pretty.Keyword("TABLE"))
 	if node.IfNotExists {
 		title = pretty.ConcatSpace(title, pretty.Keyword("IF NOT EXISTS"))
 	}
@@ -1192,11 +1199,16 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// CREATE VIEW name ( ... ) AS
+	// CREATE [TEMP] VIEW name ( ... ) AS
 	//     SELECT ...
 	//
+	title := pretty.Keyword("CREATE")
+	if node.Temporary {
+		title = pretty.ConcatSpace(title, pretty.Keyword("TEMPORARY"))
+	}
+	title = pretty.ConcatSpace(title, pretty.Keyword("VIEW"))
 	d := pretty.ConcatSpace(
-		pretty.Keyword("CREATE VIEW"),
+		title,
 		p.Doc(&node.Name),
 	)
 	if len(node.ColumnNames) > 0 {
@@ -1489,6 +1501,9 @@ func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
 	d := p.Doc(&node.Column)
 	if node.Direction != DefaultDirection {
 		d = pretty.ConcatSpace(d, pretty.Keyword(node.Direction.String()))
+	}
+	if node.NullsOrder != DefaultNullsOrder {
+		d = pretty.ConcatSpace(d, pretty.Keyword(node.NullsOrder.String()))
 	}
 	return d
 }

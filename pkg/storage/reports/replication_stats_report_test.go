@@ -12,6 +12,8 @@ package reports
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,4 +133,187 @@ func TestRangeReport(t *testing.T) {
 		{"3", "'2001-01-01 12:30:00+00:00'"},
 	})
 	require.Equal(t, 2, r.LastUpdatedRowCount())
+}
+
+type replicationStatsEntry struct {
+	zoneRangeStatus
+	object string
+}
+
+type replicationStatsTestCase struct {
+	baseReportTestCase
+	name string
+	exp  []replicationStatsEntry
+}
+
+// runReplicationStatsTest runs one test case. It processes the input schema,
+// runs the reports, and verifies that the report looks as expected.
+func runReplicationStatsTest(t *testing.T, tc replicationStatsTestCase) {
+	ctc, err := compileTestCase(tc.baseReportTestCase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := computeReplicationStatsReport(context.Background(), &ctc.iter, ctc.checker, ctc.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Sort the report's keys.
+	gotRows := make([]replicationStatsEntry, len(rep.stats))
+	i := 0
+	for zone, stats := range rep.stats {
+		object := ctc.zoneToObject[zone]
+		gotRows[i] = replicationStatsEntry{
+			zoneRangeStatus: stats,
+			object:          object,
+		}
+		i++
+	}
+	sort.Slice(gotRows, func(i, j int) bool {
+		return strings.Compare(gotRows[i].object, gotRows[j].object) < 0
+	})
+	sort.Slice(tc.exp, func(i, j int) bool {
+		return strings.Compare(tc.exp[i].object, tc.exp[j].object) < 0
+	})
+
+	require.Equal(t, tc.exp, gotRows)
+}
+
+func TestReplicationStatsReport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tests := []replicationStatsTestCase{
+		{
+			name: "simple no violations",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1",
+								partitions: []partition{{
+									name:  "p1",
+									start: []int{100},
+									end:   []int{200},
+									zone:  &zone{constraints: "[+p1]"},
+								}},
+							},
+							{name: "t2"},
+						},
+						zone: &zone{
+							// Change replication options so that db1 gets a report entry.
+							replicas: 3,
+						},
+					},
+					{
+						name:   "db2",
+						tables: []table{{name: "sentinel"}},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/100", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/150", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/200", stores: []int{1, 2, 3}},
+					{key: "/Table/t2", stores: []int{1, 2, 3}},
+					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
+					{
+						// This range is not covered by the db1's zone config; it'll be
+						// counted for the default zone.
+						key: "/Table/sentinel", stores: []int{1, 2, 3},
+					},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "default",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       1,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  0,
+					},
+				},
+				{
+					object: "db1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       8,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  0,
+					},
+				},
+				{
+					object: "t1.p1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       2,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  0,
+					},
+				},
+			},
+		},
+		{
+			name: "simple violations",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1",
+								partitions: []partition{{
+									name:  "p1",
+									start: []int{100},
+									end:   []int{200},
+									zone:  &zone{constraints: "[+p1]"},
+								}},
+							},
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1/pk/100", stores: []int{1, 2, 3}},
+					// Under-replicated.
+					{key: "/Table/t1/pk/101", stores: []int{1}},
+					// Under-replicated and unavailable.
+					{key: "/Table/t1/pk/101", stores: []int{3}},
+					// Over-replicated.
+					{key: "/Table/t1/pk/101", stores: []int{1, 2, 3, 4}},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}, dead: true},
+					{id: 4, stores: []store{{id: 4}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "t1.p1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       4,
+						unavailable:     1,
+						underReplicated: 2,
+						overReplicated:  1,
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runReplicationStatsTest(t, tc)
+		})
+	}
 }

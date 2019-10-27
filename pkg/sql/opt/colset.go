@@ -98,3 +98,43 @@ func (s ColSet) SingleColumn() ColumnID {
 	col, _ := s.Next(0)
 	return col
 }
+
+// TranslateColSet is used to translate a ColSet from one set of column IDs
+// to an equivalent set. This is relevant for set operations such as UNION,
+// INTERSECT and EXCEPT, and can be used to map a ColSet defined on the left
+// relation to an equivalent ColSet on the right relation (or between any two
+// relations with a defined column mapping).
+//
+// For example, suppose we have a UNION with the following column mapping:
+//   Left:  1, 2, 3
+//   Right: 4, 5, 6
+//   Out:   7, 8, 9
+//
+// Here are some possible calls to TranslateColSet and their results:
+//   TranslateColSet(ColSet{1, 2}, Left, Right) -> ColSet{4, 5}
+//   TranslateColSet(ColSet{5, 6}, Right, Out)  -> ColSet{8, 9}
+//   TranslateColSet(ColSet{9}, Out, Right)     -> ColSet{6}
+//
+// Note that for the output of TranslateColSet to be correct, colSetIn must be
+// a subset of the columns in `from`. TranslateColSet does not check that this
+// is the case, because that would require building a ColSet from `from`, and
+// checking that colSetIn.SubsetOf(fromColSet) is true -- a lot of computation
+// for a validation check. It is not correct or sufficient to check that
+// colSetIn.Len() == colSetOut.Len(), because it is possible that colSetIn and
+// colSetOut could have different lengths and still be valid. Consider the
+// following case:
+//
+//   SELECT x, x, y FROM xyz UNION SELECT a, b, c FROM abc
+//
+// TranslateColSet(ColSet{x, y}, Left, Right) correctly returns
+// ColSet{a, b, c}, even though ColSet{x, y}.Len() != ColSet{a, b, c}.Len().
+func TranslateColSet(colSetIn ColSet, from ColList, to ColList) ColSet {
+	var colSetOut ColSet
+	for i := range from {
+		if colSetIn.Contains(from[i]) {
+			colSetOut.Add(to[i])
+		}
+	}
+
+	return colSetOut
+}

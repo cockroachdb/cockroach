@@ -218,6 +218,9 @@ func (u *sqlSymUnion) colQualElem() tree.ColumnQualification {
 func (u *sqlSymUnion) colQuals() []tree.NamedColumnQualification {
     return u.val.([]tree.NamedColumnQualification)
 }
+func (u *sqlSymUnion) persistenceType() bool {
+  return u.val.(bool)
+}
 func (u *sqlSymUnion) colType() *types.T {
     if colType, ok := u.val.(*types.T); ok && colType != nil {
         return colType
@@ -349,6 +352,9 @@ func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
 }
 func (u *sqlSymUnion) dir() tree.Direction {
     return u.val.(tree.Direction)
+}
+func (u *sqlSymUnion) nullsOrder() tree.NullsOrder {
+    return u.val.(tree.NullsOrder)
 }
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
@@ -533,14 +539,14 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> KEY KEYS KV
 
-%token <str> LANGUAGE LATERAL LC_CTYPE LC_COLLATE
+%token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
-%token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NUMERIC
+%token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
@@ -787,6 +793,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.Expr> alter_column_default
 %type <tree.Direction> opt_asc_desc
+%type <tree.NullsOrder> opt_nulls_order
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
@@ -1003,11 +1010,14 @@ func newNameFromStr(s string) *tree.Name {
 %type <privilege.List> privileges
 %type <tree.AuditMode> audit_mode
 
-%type <str> relocate_kw 
+%type <str> relocate_kw
 
 %type <*tree.SetZoneConfig> set_zone_config
 
 %type <tree.Expr> opt_alter_column_using
+
+%type <bool> opt_temp
+%type <bool> opt_temp_create_table
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -2174,6 +2184,10 @@ comment_stmt:
 
     $$.val = &tree.CommentOnColumn{ColumnItem: columnItem, Comment: $6.strPtr()}
   }
+| COMMENT ON INDEX table_index_name IS comment_text
+  {
+    $$.val = &tree.CommentOnIndex{Index: $4.tableIndexName(), Comment: $6.strPtr()}
+  }
 
 comment_text:
   SCONST
@@ -2214,7 +2228,7 @@ create_unsupported:
 | CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
-| CREATE MATERIALIZED VIEW error { return unimplementedWithIssue(sqllex, 24747) }
+| CREATE MATERIALIZED VIEW error { return unimplementedWithIssue(sqllex, 41649) }
 | CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
@@ -2265,7 +2279,7 @@ create_ddl_stmt:
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
-| CREATE opt_temp TABLE error   // SHOW HELP: CREATE TABLE
+| CREATE opt_temp_create_table TABLE error   // SHOW HELP: CREATE TABLE
 | create_type_stmt     { /* SKIP DOC */ }
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
@@ -3531,34 +3545,34 @@ show_grants_stmt:
 
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
-// %Text: SHOW INDEXES FROM { <tablename> | DATABASE <database_name> }
+// %Text: SHOW INDEXES FROM { <tablename> | DATABASE <database_name> } [WITH COMMENT]
 // %SeeAlso: WEBDOCS/show-index.html
 show_indexes_stmt:
-  SHOW INDEX FROM table_name
+  SHOW INDEX FROM table_name with_comment
   {
-    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
-| SHOW INDEX FROM DATABASE database_name
+| SHOW INDEX FROM DATABASE database_name with_comment
   {
-    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5), WithComment: $6.bool()}
   }
-| SHOW INDEXES FROM table_name
+| SHOW INDEXES FROM table_name with_comment
   {
-    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
-| SHOW INDEXES FROM DATABASE database_name
+| SHOW INDEXES FROM DATABASE database_name with_comment
   {
-    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5), WithComment: $6.bool()}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
-| SHOW KEYS FROM table_name
+| SHOW KEYS FROM table_name with_comment
   {
-    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
-| SHOW KEYS FROM DATABASE database_name
+| SHOW KEYS FROM DATABASE database_name with_comment
   {
-    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5), WithComment: $6.bool()}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 
@@ -3915,7 +3929,7 @@ show_ranges_stmt:
   {
     $$.val = &tree.ShowRanges{TableOrIndex: $5.tableIndexName()}
   }
-| SHOW RANGES FROM DATABASE database_name 
+| SHOW RANGES FROM DATABASE database_name
   {
     $$.val = &tree.ShowRanges{DatabaseName: tree.Name($5)}
   }
@@ -4164,8 +4178,8 @@ pause_stmt:
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL
 // %Text:
-// CREATE TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
-// CREATE TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
 //
 // Table elements:
 //    <name> <type> [<qualifiers...>]
@@ -4194,7 +4208,7 @@ pause_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
+  CREATE opt_temp_create_table TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4204,9 +4218,10 @@ create_table_stmt:
       Defs: $6.tblDefs(),
       AsSource: nil,
       PartitionBy: $9.partitionBy(),
+      Temporary: $2.persistenceType(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
+| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4216,6 +4231,7 @@ create_table_stmt:
       Defs: $9.tblDefs(),
       AsSource: nil,
       PartitionBy: $12.partitionBy(),
+      Temporary: $2.persistenceType(),
     }
   }
 
@@ -4225,7 +4241,7 @@ opt_table_with:
 | WITH name error { return unimplemented(sqllex, "create table with " + $2) }
 
 create_table_as_stmt:
-  CREATE opt_temp TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
+  CREATE opt_temp_create_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4236,7 +4252,7 @@ create_table_as_stmt:
       AsSource: $8.slct(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
+| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4259,20 +4275,27 @@ opt_create_as_data:
  *
  * NOTE: we accept both GLOBAL and LOCAL options.  They currently do nothing,
  * but future versions might consider GLOBAL to request SQL-spec-compliant
- * temp table behavior, so warn about that.  Since we have no modules the
+ * temp table behavior.  Since we have no modules the
  * LOCAL keyword is really meaningless; furthermore, some other products
  * implement LOCAL as meaning the same as our default temp table behavior,
  * so we'll probably continue to treat LOCAL as a noise word.
+ *
+ * NOTE: PG only accepts GLOBAL/LOCAL keywords for temp tables -- not sequences
+ * and views. These keywords are no-ops in PG. This behavior is replicated by
+ * making the distinction between opt_temp and opt_temp_create_table.
  */
-opt_temp:
-  TEMPORARY         { return unimplementedWithIssue(sqllex, 5807) }
-| TEMP              { return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMPORARY   { return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMP        { return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMPORARY  { return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMP       { return unimplementedWithIssue(sqllex, 5807) }
+ opt_temp:
+  TEMPORARY         { $$.val = true }
+| TEMP              { $$.val = true }
+| /*EMPTY*/         { $$.val = false }
+
+opt_temp_create_table:
+   opt_temp
+|  LOCAL TEMPORARY   { $$.val = true }
+| LOCAL TEMP        { $$.val = true }
+| GLOBAL TEMPORARY  { $$.val = true }
+| GLOBAL TEMP       { $$.val = true }
 | UNLOGGED          { return unimplemented(sqllex, "create unlogged") }
-| /*EMPTY*/         { /* no error */ }
 
 opt_table_elem_list:
   table_elem_list
@@ -4882,7 +4905,7 @@ numeric_only:
 // %Help: CREATE SEQUENCE - create a new sequence
 // %Category: DDL
 // %Text:
-// CREATE SEQUENCE <seqname>
+// CREATE [TEMPORARY | TEMP] SEQUENCE <seqname>
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
@@ -4896,12 +4919,20 @@ create_sequence_stmt:
   CREATE opt_temp SEQUENCE sequence_name opt_sequence_option_list
   {
     name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateSequence{Name: name, Options: $5.seqOpts()}
+    $$.val = &tree.CreateSequence {
+      Name: name,
+      Temporary: $2.persistenceType(),
+      Options: $5.seqOpts(),
+    }
   }
 | CREATE opt_temp SEQUENCE IF NOT EXISTS sequence_name opt_sequence_option_list
   {
     name := $7.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateSequence{Name: name, Options: $8.seqOpts(), IfNotExists: true}
+    $$.val = &tree.CreateSequence {
+      Name: name, Options: $8.seqOpts(),
+      Temporary: $2.persistenceType(),
+      IfNotExists: true,
+    }
   }
 | CREATE opt_temp SEQUENCE error // SHOW HELP: CREATE SEQUENCE
 
@@ -4997,7 +5028,7 @@ role_or_group:
 
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL
-// %Text: CREATE VIEW <viewname> [( <colnames...> )] AS <source>
+// %Text: CREATE [TEMPORARY | TEMP] VIEW <viewname> [( <colnames...> )] AS <source>
 // %SeeAlso: CREATE TABLE, SHOW CREATE, WEBDOCS/create-view.html
 create_view_stmt:
   CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
@@ -5007,6 +5038,7 @@ create_view_stmt:
       Name: name,
       ColumnNames: $6.nameList(),
       AsSource: $8.slct(),
+      Temporary: $2.persistenceType(),
     }
   }
 | CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }
@@ -5154,12 +5186,23 @@ index_params:
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that is just a function call to be written without parens.
 index_elem:
-  a_expr opt_asc_desc
+  a_expr opt_asc_desc opt_nulls_order
   {
     /* FORCE DOC */
     e := $1.expr()
+    dir := $2.dir()
+    nullsOrder := $3.nullsOrder()
+    // We currently only support the opposite of Postgres defaults.
+    if nullsOrder != tree.DefaultNullsOrder {
+      if dir == tree.Descending && nullsOrder == tree.NullsFirst {
+        return unimplementedWithIssue(sqllex, 6224)
+      }
+      if dir != tree.Descending && nullsOrder == tree.NullsLast {
+        return unimplementedWithIssue(sqllex, 6224)
+      }
+    }
     if colName, ok := e.(*tree.UnresolvedName); ok && colName.NumParts == 1 {
-      $$.val = tree.IndexElem{Column: tree.Name(colName.Parts[0]), Direction: $2.dir()}
+      $$.val = tree.IndexElem{Column: tree.Name(colName.Parts[0]), Direction: dir, NullsOrder: nullsOrder}
     } else {
       return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", e))
     }
@@ -6135,9 +6178,26 @@ sortby_list:
   }
 
 sortby:
-  a_expr opt_asc_desc
+  a_expr opt_asc_desc opt_nulls_order
   {
-    $$.val = &tree.Order{OrderType: tree.OrderByColumn, Expr: $1.expr(), Direction: $2.dir()}
+    /* FORCE DOC */
+    dir := $2.dir()
+    nullsOrder := $3.nullsOrder()
+    // We currently only support the opposite of Postgres defaults.
+    if nullsOrder != tree.DefaultNullsOrder {
+      if dir == tree.Descending && nullsOrder == tree.NullsFirst {
+        return unimplementedWithIssue(sqllex, 6224)
+      }
+      if dir != tree.Descending && nullsOrder == tree.NullsLast {
+        return unimplementedWithIssue(sqllex, 6224)
+      }
+    }
+    $$.val = &tree.Order{
+      OrderType:  tree.OrderByColumn,
+      Expr:       $1.expr(),
+      Direction:  dir,
+      NullsOrder: nullsOrder,
+    }
   }
 | PRIMARY KEY table_name opt_asc_desc
   {
@@ -6153,6 +6213,20 @@ sortby:
       Table:     name,
       Index:     tree.UnrestrictedName($4),
     }
+  }
+
+opt_nulls_order:
+  NULLS FIRST
+  {
+    $$.val = tree.NullsFirst
+  }
+| NULLS LAST
+  {
+    $$.val = tree.NullsLast
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.DefaultNullsOrder
   }
 
 // TODO(pmattis): Support ordering using arbitrary math ops?
@@ -9358,6 +9432,7 @@ unreserved_keyword:
 | KEYS
 | KV
 | LANGUAGE
+| LAST
 | LC_COLLATE
 | LC_CTYPE
 | LEASE
@@ -9383,6 +9458,7 @@ unreserved_keyword:
 | NORMAL
 | NO_INDEX_JOIN
 | NOWAIT
+| NULLS
 | IGNORE_FOREIGN_KEYS
 | OF
 | OFF

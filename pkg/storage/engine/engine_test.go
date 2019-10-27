@@ -171,14 +171,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 		// Higher-level failure mode. Mostly for documentation.
 		{
-			// TODO(itsbilal): Stop skipping this test for pebble batches when the
-			// pebble MVCC scanner is merged.
 			batch := eng.NewBatch()
-			switch batch.(type) {
-			case *pebbleBatch:
-				return
-			default:
-			}
 			defer batch.Close()
 
 			key := roachpb.Key("z")

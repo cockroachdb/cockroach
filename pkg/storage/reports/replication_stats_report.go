@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -275,7 +276,14 @@ type replicationStatsVisitor struct {
 	cfg         *config.SystemConfig
 	nodeChecker nodeChecker
 
-	report *replicationStatsReportSaver
+	report   *replicationStatsReportSaver
+	visitErr bool
+
+	// prevZoneKey and prevNumReplicas maintain state from one range to the next.
+	// This state can be reused when a range is covered by the same zone config as
+	// the previous one. Reusing it speeds up the report generation.
+	prevZoneKey     ZoneKey
+	prevNumReplicas int
 }
 
 var _ rangeVisitor = &replicationStatsVisitor{}
@@ -295,9 +303,17 @@ func makeReplicationStatsVisitor(
 	return v
 }
 
+// failed is part of the rangeVisitor interface.
+func (v *replicationStatsVisitor) failed() bool {
+	return v.visitErr
+}
+
 // reset is part of the rangeVisitor interface.
 func (v *replicationStatsVisitor) reset(ctx context.Context) {
+	v.visitErr = false
 	v.report.resetReport()
+	v.prevZoneKey = ZoneKey{}
+	v.prevNumReplicas = -1
 
 	// Iterate through all the zone configs to create report entries for all the
 	// zones that have constraints. Otherwise, just iterating through the ranges
@@ -318,7 +334,7 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 	}
 }
 
-func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneConfig) {
+func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *zonepb.ZoneConfig) {
 	if zoneChangesReplication(zone) {
 		v.report.EnsureEntry(key)
 	}
@@ -327,14 +343,25 @@ func (v *replicationStatsVisitor) ensureEntries(key ZoneKey, zone *config.ZoneCo
 	}
 }
 
-// visit is part of the rangeVisitor interface.
-func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDescriptor) {
-	// Get the zone
+// visitNewZone is part of the rangeVisitor interface.
+func (v *replicationStatsVisitor) visitNewZone(
+	ctx context.Context, r *roachpb.RangeDescriptor,
+) (retErr error) {
+
+	defer func() {
+		v.visitErr = retErr != nil
+	}()
 	var zKey ZoneKey
-	var zConfig *config.ZoneConfig
+	var zConfig *zonepb.ZoneConfig
 	var numReplicas int
-	found, err := visitZones(ctx, r, v.cfg,
-		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
+
+	// Figure out the zone config for whose report the current range is to be
+	// counted. This is the lowest-level zone config covering the range that
+	// changes replication settings. We also need to figure out the replication
+	// factor this zone is configured with; the replication factor might be
+	// inherited from a higher-level zone config.
+	found, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
+		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
 			if zConfig == nil {
 				if !zoneChangesReplication(zone) {
 					return false
@@ -357,15 +384,33 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 			return false
 		})
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
+		return errors.AssertionFailedf("unexpected error visiting zones for range %s: %s", r, err)
 	}
+	v.prevZoneKey = zKey
+	v.prevNumReplicas = numReplicas
 	if !found {
-		log.Errorf(ctx, "no zone config with replication attributes found for range: %s", &r)
-		return
+		return errors.AssertionFailedf(
+			"no zone config with replication attributes found for range: %s", r)
 	}
 
-	underReplicated := numReplicas > len(r.Replicas().Voters())
-	overReplicated := numReplicas < len(r.Replicas().Voters())
+	v.countRange(zKey, numReplicas, r)
+	return nil
+}
+
+// visitSameZone is part of the rangeVisitor interface.
+func (v *replicationStatsVisitor) visitSameZone(
+	ctx context.Context, r *roachpb.RangeDescriptor,
+) error {
+	v.countRange(v.prevZoneKey, v.prevNumReplicas, r)
+	return nil
+}
+
+func (v *replicationStatsVisitor) countRange(
+	key ZoneKey, replicationFactor int, r *roachpb.RangeDescriptor,
+) {
+	voters := len(r.Replicas().Voters())
+	underReplicated := replicationFactor > voters
+	overReplicated := replicationFactor < voters
 	var liveNodeCount int
 	for _, rep := range r.Replicas().Voters() {
 		if v.nodeChecker(rep.NodeID) {
@@ -374,7 +419,7 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 	}
 	unavailable := liveNodeCount < (len(r.Replicas().Voters())/2 + 1)
 
-	v.report.AddZoneRangeStatus(zKey, unavailable, underReplicated, overReplicated)
+	v.report.AddZoneRangeStatus(key, unavailable, underReplicated, overReplicated)
 }
 
 // zoneChangesReplication determines whether a given zone config changes
@@ -383,7 +428,7 @@ func (v *replicationStatsVisitor) visit(ctx context.Context, r roachpb.RangeDesc
 // This is used to determine which zone's report a range counts towards for the
 // replication_stats and the critical_localities reports : it'll count towards
 // the lowest ancestor for which this method returns true.
-func zoneChangesReplication(zone *config.ZoneConfig) bool {
+func zoneChangesReplication(zone *zonepb.ZoneConfig) bool {
 	return (zone.NumReplicas != nil && *zone.NumReplicas != 0) ||
 		zone.Constraints != nil
 }

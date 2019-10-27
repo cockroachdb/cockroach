@@ -93,7 +93,7 @@ type SSTBatcher struct {
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(ctx context.Context, db sender, flushBytes uint64) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, maxSize: flushBytes}
+	b := &SSTBatcher{db: db, maxSize: flushBytes, disallowShadowing: true}
 	err := b.Reset()
 	return b, err
 }

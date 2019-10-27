@@ -18,7 +18,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,7 +54,7 @@ func Load(
 	tempPrefix string,
 ) (backupccl.BackupDescriptor, error) {
 	if loadChunkBytes == 0 {
-		loadChunkBytes = *config.DefaultZoneConfig().RangeMaxBytes / 2
+		loadChunkBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
 	var txCtx transform.ExprTransformContext
@@ -163,8 +163,8 @@ func Load(
 			var txn *client.Txn
 			// At this point the CREATE statements in the loaded SQL do not
 			// use the SERIAL type so we need not process SERIAL types here.
-			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID,
-				0 /* table ID */, ts, privs, affected, nil, evalCtx)
+			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID, 0, /* table ID */
+				ts, privs, affected, nil, evalCtx, false /* temporary */)
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}

@@ -976,8 +976,14 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 // to be closed.
 //
 // It returns a non-nil (although it can be a noop when an error is
-// encountered) cleanup function that must be called in order to release the
-// resources.
+// encountered) cleanup function that must be called once the planTop AST is no
+// longer needed and can be closed. Note that this function also cleans up the
+// flow which is unfortunate but is caused by the sharing of memory monitors
+// between planning and execution - cleaning up the flow wants to close the
+// monitor, but it cannot do so because the AST needs to live longer and still
+// uses the same monitor. That's why we end up in a situation that in order to
+// clean up the flow, we need to close the AST first, but we can only do that
+// after PlanAndRun returns.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,

@@ -546,7 +546,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			t.Fatalf("%s: %+v", k, err)
 		}
 
-		if dump := tracing.FormatRecordedSpans(collect()); test.expTrace != "" {
+		if dump := collect().String(); test.expTrace != "" {
 			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {
 				t.Fatalf("%s: %+v", k, err)
 			} else if !ok {
@@ -742,7 +742,9 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 			t.Fatal("sideloaded storage is empty")
 		}
 
-		if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()), "sideloadable proposal detected", "ingested SSTable"); err != nil {
+		if err := testutils.MatchInOrder(
+			collect().String(), "sideloadable proposal detected", "ingested SSTable",
+		); err != nil {
 			t.Fatal(err)
 		}
 

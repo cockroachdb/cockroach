@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -538,7 +539,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			&desc,
 			snap,
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			config.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)},
+			zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)},
 			storage.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
@@ -1259,7 +1260,12 @@ func removeDeadReplicas(
 		// there will be keys not represented by any ranges or vice
 		// versa).
 		key := keys.RangeDescriptorKey(desc.StartKey)
-		err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, clock.Now(), nil /* txn */, &desc)
+		sl := stateloader.Make(desc.RangeID)
+		ms, err := sl.LoadMVCCStats(ctx, batch)
+		if err != nil {
+			return nil, errors.Wrap(err, "loading MVCCStats")
+		}
+		err = engine.MVCCPutProto(ctx, batch, &ms, key, clock.Now(), nil /* txn */, &desc)
 		if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
 			if len(wiErr.Intents) != 1 {
 				return nil, errors.Errorf("expected 1 intent, found %d: %s", len(wiErr.Intents), wiErr)
@@ -1283,21 +1289,24 @@ func removeDeadReplicas(
 			// A crude form of the intent resolution process: abort the
 			// transaction by deleting its record.
 			txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
-			if err := engine.MVCCDelete(ctx, batch, nil /* stats */, txnKey, hlc.Timestamp{}, nil); err != nil {
+			if err := engine.MVCCDelete(ctx, batch, &ms, txnKey, hlc.Timestamp{}, nil); err != nil {
 				return nil, err
 			}
 			intent.Status = roachpb.ABORTED
-			if err := engine.MVCCResolveWriteIntent(ctx, batch, nil /* stats */, intent); err != nil {
+			if err := engine.MVCCResolveWriteIntent(ctx, batch, &ms, intent); err != nil {
 				return nil, err
 			}
 			// With the intent resolved, we can try again.
-			if err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, clock.Now(),
+			if err := engine.MVCCPutProto(ctx, batch, &ms, key, clock.Now(),
 				nil /* txn */, &desc); err != nil {
 				return nil, err
 			}
 		} else if err != nil {
 			batch.Close()
 			return nil, err
+		}
+		if err := sl.SetMVCCStats(ctx, batch, &ms); err != nil {
+			return nil, errors.Wrap(err, "updating MVCCStats")
 		}
 	}
 

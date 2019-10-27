@@ -313,3 +313,14 @@ SET DATESTYLE = ISO;
   SET lock_timeout = 0;
   SET idle_in_transaction_session_timeout = 0;
   SET row_security = off;
+
+subtest regression_41567_subqueries
+
+statement error subqueries are not allowed in SET
+SET SESSION SCHEMA EXISTS ( TABLE ( ( ( ( ( ( ( ( TABLE error ) ) ) ) ) ) ) ) ORDER BY INDEX FAMILY . IS . MAXVALUE @ OF DESC , INDEX FAMILY . FOR . ident @ ident ASC )
+
+statement error subqueries are not allowed in SET
+USE EXISTS ( TABLE error ) IS NULL
+
+statement error subqueries are not allowed in SET
+PREPARE a AS USE EXISTS ( TABLE error ) IS NULL

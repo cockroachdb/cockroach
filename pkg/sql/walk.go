@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type observeVerbosity int
@@ -697,12 +698,24 @@ func (v *planVisitor) metadataExpr(nodeName string, fieldName string, n int, exp
 	v.observer.expr(observeMetadata, nodeName, fieldName, n, expr)
 }
 
-func formatOrdering(ordering sqlbase.ColumnOrdering, cols sqlbase.ResultColumns) string {
-	var order physicalProps
-	for _, o := range ordering {
-		order.addOrderColumn(o.ColIdx, o.Direction)
+func formatOrdering(ordering sqlbase.ColumnOrdering, columns sqlbase.ResultColumns) string {
+	var buf bytes.Buffer
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, o := range ordering {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		prefix := byte('+')
+		if o.Direction == encoding.Descending {
+			prefix = byte('-')
+		}
+		buf.WriteByte(prefix)
+
+		fmtCtx.FormatNameP(&columns[o.ColIdx].Name)
+		_, _ = fmtCtx.WriteTo(&buf)
 	}
-	return order.AsString(cols)
+	fmtCtx.Close()
+	return buf.String()
 }
 
 // nodeName returns the name of the given planNode as string.  The
@@ -769,6 +782,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&changePrivilegesNode{}):     "change privileges",
 	reflect.TypeOf(&commentOnColumnNode{}):      "comment on column",
 	reflect.TypeOf(&commentOnDatabaseNode{}):    "comment on database",
+	reflect.TypeOf(&commentOnIndexNode{}):       "comment on index",
 	reflect.TypeOf(&commentOnTableNode{}):       "comment on table",
 	reflect.TypeOf(&controlJobsNode{}):          "control jobs",
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",

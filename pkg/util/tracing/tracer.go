@@ -55,11 +55,7 @@ const (
 var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen in the /debug page",
-	// This setting defaults to true, but there is a sql migration that sets it
-	// to false. The effect is that we have tracing when the server starts and
-	// gets stuck there, without paying the overhead of having it on all the
-	// time (unless that's how the operator explicitly configures the cluster).
-	true,
+	false,
 )
 
 var lightstepToken = settings.RegisterStringSetting(
@@ -829,17 +825,17 @@ func matchesWithoutFileLine(msg string, expected string) bool {
 // be called before cancel()).
 //
 // Note that to convert the recorded spans into text, you can use
-// FormatRecordedSpans. Tests can also use FindMsgInRecording().
+// Recording.String(). Tests can also use FindMsgInRecording().
 func ContextWithRecordingSpan(
 	ctx context.Context, opName string,
-) (retCtx context.Context, getRecording func() []RecordedSpan, cancel func()) {
+) (retCtx context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
 	sp := tr.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
 	StartRecording(sp, SingleNodeRecording)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
-	getRecording = func() []RecordedSpan {
+	getRecording = func() Recording {
 		return GetRecording(sp)
 	}
 	cancel = func() {

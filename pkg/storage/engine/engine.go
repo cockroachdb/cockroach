@@ -96,12 +96,16 @@ type Iterator interface {
 	// the split is roughly targetSize bytes. The returned key will never be
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always
 	// sort equal to or after minSplitKey.
+	//
+	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
+	// package-level MVCCFindSplitKey instead. For correct operation, the caller
+	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
 	//
-	// There is little reason to use this function directly. Use the package-level
-	// MVCCGet, or one of its variants, instead.
+	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
+	// package-level MVCCGet, or one of its variants, instead.
 	MVCCGet(
 		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 	) (*roachpb.Value, *roachpb.Intent, error)
@@ -110,8 +114,12 @@ type Iterator interface {
 	// returned raw, as a buffer of varint-prefixed slices, alternating from key
 	// to value, where numKVs specifies the number of pairs in the buffer.
 	//
-	// There is little reason to use this function directly. Use the package-level
-	// MVCCScan, or one of its variants, instead.
+	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
+	// package-level MVCCScan, or one of its variants, instead. For correct
+	// operation, the caller must set the lower and upper bounds on the iterator
+	// before calling this method.
+	//
+	// TODO(peter): unexport this method.
 	MVCCScan(
 		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 	) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
@@ -316,6 +324,9 @@ type Engine interface {
 	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
 	// this engine. A write-only batch accumulates all mutations and applies them
 	// atomically on a call to Commit(). Read operations return an error.
+	//
+	// Note that a distinct write-only batch allows reads. Distinct batches are a
+	// means of indicating that the user does not need to read its own writes.
 	//
 	// TODO(peter): This should return a WriteBatch interface, but there are mild
 	// complications in both defining that interface and implementing it. In

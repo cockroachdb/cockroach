@@ -500,7 +500,6 @@ cluster.secret
 diagnostics.reporting.enabled
 kv.range_merge.queue_enabled
 sql.stats.automatic_collection.min_stale_rows
-trace.debug.enable
 version
 
 statement ok
@@ -518,7 +517,6 @@ diagnostics.reporting.enabled                  true
 kv.range_merge.queue_enabled                   false
 somesetting                                    somevalue
 sql.stats.automatic_collection.min_stale_rows  5
-trace.debug.enable                             false
 
 user testuser
 

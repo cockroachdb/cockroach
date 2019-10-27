@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/ghemawat/stream"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/buildutil"
@@ -348,7 +349,7 @@ func TestLint(t *testing.T) {
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
-					":!util/log/clog.go",
+					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
 				},
 			},

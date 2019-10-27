@@ -110,6 +110,7 @@ func makePoller(
 		p.mu.highWater = highWater
 	}
 	p.tableHist = makeTableHistory(p.validateTable, highWater)
+
 	return p
 }
 
@@ -117,12 +118,45 @@ func makePoller(
 // the experimental Rangefeed system to capture changes rather than the
 // poll-and-export method.  Note
 func (p *poller) RunUsingRangefeeds(ctx context.Context) error {
+	// Fetch the table descs as of the initial highWater and prime the table
+	// history with them. This addresses #41694 where we'd skip the rest of a
+	// backfill if the changefeed was paused/unpaused during it. The bug was that
+	// the changefeed wouldn't notice the table descriptor had changed (and thus
+	// we were in the backfill state) when it restarted.
+	if err := p.primeInitialTableDescs(ctx); err != nil {
+		return err
+	}
+
 	// Start polling tablehistory, which must be done concurrently with
 	// the individual rangefeed routines.
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(p.pollTableHistory)
 	g.GoCtx(p.rangefeedImpl)
 	return g.Wait()
+}
+
+func (p *poller) primeInitialTableDescs(ctx context.Context) error {
+	p.mu.Lock()
+	initialTableDescTs := p.mu.highWater
+	p.mu.Unlock()
+	var initialDescs []*sqlbase.TableDescriptor
+	initialTableDescsFn := func(ctx context.Context, txn *client.Txn) error {
+		initialDescs = initialDescs[:0]
+		txn.SetFixedTimestamp(ctx, initialTableDescTs)
+		// Note that all targets are currently guaranteed to be tables.
+		for tableID := range p.details.Targets {
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			if err != nil {
+				return err
+			}
+			initialDescs = append(initialDescs, tableDesc)
+		}
+		return nil
+	}
+	if err := p.db.Txn(ctx, initialTableDescsFn); err != nil {
+		return err
+	}
+	return p.tableHist.IngestDescriptors(ctx, hlc.Timestamp{}, initialTableDescTs, initialDescs)
 }
 
 var errBoundaryReached = errors.New("scan boundary reached")
@@ -264,21 +298,33 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 				} else if e.resolved != nil {
 					resolvedTS := e.resolved.Timestamp
 					boundaryBreak := false
+					// Make sure scan boundaries less than or equal to `resolvedTS` were
+					// added to the `scanBoundaries` list before proceeding.
+					if err := p.tableHist.WaitForTS(ctx, resolvedTS); err != nil {
+						return err
+					}
 					p.mu.Lock()
-					if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(resolvedTS) {
+					if len(p.mu.scanBoundaries) > 0 && !resolvedTS.Less(p.mu.scanBoundaries[0]) {
 						boundaryBreak = true
 						resolvedTS = p.mu.scanBoundaries[0]
 					}
 					p.mu.Unlock()
-					if err := p.buf.AddResolved(ctx, e.resolved.Span, resolvedTS); err != nil {
-						return err
-					}
 					if boundaryBreak {
+						// A boundary here means we're about to do a full scan (backfill)
+						// at this timestamp, so at the changefeed level the boundary
+						// itself is not resolved. Skip emitting this resolved timestamp
+						// because we want to trigger the scan first before resolving its
+						// scan boundary timestamp.
+						resolvedTS = resolvedTS.Prev()
 						frontier.Forward(e.resolved.Span, resolvedTS)
 						if frontier.Frontier() == resolvedTS {
 							// All component rangefeeds are now at the boundary.
 							// Break out of the ctxgroup by returning a sentinel error.
 							return errBoundaryReached
+						}
+					} else {
+						if err := p.buf.AddResolved(ctx, e.resolved.Span, resolvedTS); err != nil {
+							return err
 						}
 					}
 				}
@@ -374,7 +420,7 @@ func (p *poller) exportSpansParallel(
 			err := p.exportSpan(ctx, span, ts)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if log.V(2) {
-				log.Infof(ctx, `exported %d of %d`, finished, len(spans))
+				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
 			if err != nil {
 				return err
@@ -404,7 +450,7 @@ func (p *poller) exportSpan(ctx context.Context, span roachpb.Span, ts hlc.Times
 	exportDuration := timeutil.Since(stopwatchStart)
 	if log.V(2) {
 		log.Infof(ctx, `finished ExportRequest %s at %s took %s`,
-			span, ts, exportDuration)
+			span, ts.AsOfSystemTime(), exportDuration)
 	}
 	slowExportThreshold := 10 * changefeedPollInterval.Get(&p.settings.SV)
 	if exportDuration > slowExportThreshold {

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -106,8 +106,8 @@ func initCLIDefaults() {
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
 	serverCfg.JoinList = nil
-	serverCfg.DefaultZoneConfig = config.DefaultZoneConfig()
-	serverCfg.DefaultSystemZoneConfig = config.DefaultSystemZoneConfig()
+	serverCfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
+	serverCfg.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
 
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
@@ -277,8 +277,7 @@ var startCtx struct {
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string
-	// storage engine to use for temporary storage (eg. rocksdb, pebble)
-	tempEngine storageEngine
+
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string

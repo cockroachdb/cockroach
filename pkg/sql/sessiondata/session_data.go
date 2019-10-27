@@ -94,6 +94,8 @@ type SessionData struct {
 	// given prefix for the output of each subexpression in a query. If
 	// SaveTablesPrefix is empty, no tables are created.
 	SaveTablesPrefix string
+	// TempTablesEnabled indicates whether temporary tables can be created or not.
+	TempTablesEnabled bool
 }
 
 // DataConversionConfig contains the parameters that influence

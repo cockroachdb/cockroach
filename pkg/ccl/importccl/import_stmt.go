@@ -42,10 +42,11 @@ import (
 )
 
 const (
-	csvDelimiter = "delimiter"
-	csvComment   = "comment"
-	csvNullIf    = "nullif"
-	csvSkip      = "skip"
+	csvDelimiter    = "delimiter"
+	csvComment      = "comment"
+	csvNullIf       = "nullif"
+	csvSkip         = "skip"
+	csvStrictQuotes = "strict_quotes"
 
 	mysqlOutfileRowSep   = "rows_terminated_by"
 	mysqlOutfileFieldSep = "fields_terminated_by"
@@ -66,10 +67,11 @@ const (
 )
 
 var importOptionExpectValues = map[string]sql.KVStringOptValidate{
-	csvDelimiter: sql.KVStringOptRequireValue,
-	csvComment:   sql.KVStringOptRequireValue,
-	csvNullIf:    sql.KVStringOptRequireValue,
-	csvSkip:      sql.KVStringOptRequireValue,
+	csvDelimiter:    sql.KVStringOptRequireValue,
+	csvComment:      sql.KVStringOptRequireValue,
+	csvNullIf:       sql.KVStringOptRequireValue,
+	csvSkip:         sql.KVStringOptRequireValue,
+	csvStrictQuotes: sql.KVStringOptRequireNoValue,
 
 	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
 	mysqlOutfileFieldSep: sql.KVStringOptRequireValue,
@@ -127,6 +129,10 @@ func importPlanHook(
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
 		return nil, nil, nil, false, nil
+	}
+
+	if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionPartitionedBackup) {
+		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
 	}
 
 	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
@@ -258,6 +264,9 @@ func importPlanHook(
 					return pgerror.Newf(pgcode.Syntax, "%s must be >= 0", csvSkip)
 				}
 				format.Csv.Skip = uint32(skip)
+			}
+			if _, ok := opts[csvStrictQuotes]; ok {
+				format.Csv.StrictQuotes = true
 			}
 		case "DELIMITED":
 			telemetry.Count("import.format.mysqlout")

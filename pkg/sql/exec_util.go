@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -480,7 +481,7 @@ type nodeStatusGenerator interface {
 type ExecutorConfig struct {
 	Settings *cluster.Settings
 	NodeInfo
-	DefaultZoneConfig *config.ZoneConfig
+	DefaultZoneConfig *zonepb.ZoneConfig
 	Locality          roachpb.Locality
 	AmbientCtx        log.AmbientContext
 	DB                *client.DB
@@ -1826,6 +1827,10 @@ func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 
 func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 	m.data.SaveTablesPrefix = prefix
+}
+
+func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
+	m.data.TempTablesEnabled = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

@@ -524,6 +524,11 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		usedCols := projectSet.Zip.OuterCols(e.Memo())
 		relProps.Rule.PruneCols.DifferenceWith(usedCols)
 
+	case opt.UnionAllOp:
+		// All columns can potentially be pruned from the UnionAll, if they're never
+		// used in a higher-level expression.
+		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
+
 	case opt.WindowOp:
 		win := e.(*memo.WindowExpr)
 		relProps.Rule.PruneCols = DerivePruneCols(win.Input).Copy()

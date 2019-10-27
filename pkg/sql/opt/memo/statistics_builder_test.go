@@ -121,12 +121,10 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 		// Calculate row count and selectivity.
 		s.RowCount = scan.Relational().Stats.RowCount
-		savedRowCount := s.RowCount
 		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, sel, s))
 
 		// Update null counts.
-		sb.updateNullCountsFromProps(sel, relProps, savedRowCount)
-		s.ApplySelectivity(sb.selectivityFromNullCounts(cols, sel, s, savedRowCount))
+		sb.updateNullCountsFromProps(sel, relProps)
 
 		// Check if the statistics match the expected value.
 		testStats(t, s, expectedStats, expectedSelectivity)
@@ -177,7 +175,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs12 := constraint.SingleConstraint(&c12)
 	statsFunc(
 		cs12,
-		"[rows=20000000, distinct(1)=1, null(1)=0, distinct(2)=500, null(2)=0]",
+		"[rows=20000000, distinct(1)=1, null(1)=0]",
 		1.0/500,
 	)
 
@@ -205,7 +203,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs321 := constraint.SingleConstraint(&c321)
 	statsFunc(
 		cs321,
-		"[rows=160000, distinct(1)=500, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=2, null(3)=0]",
+		"[rows=160000, distinct(2)=2, null(2)=0, distinct(3)=2, null(3)=0]",
 		4.0/250000,
 	)
 
@@ -240,36 +238,9 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
 	statsFunc(
 		cs45,
-		"[rows=1e+09, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0]",
+		"[rows=1e+09, distinct(4)=1, null(4)=0]",
 		1.0/10,
 	)
-}
-
-func TestTranslateColSet(t *testing.T) {
-	test := func(t *testing.T, colSetIn opt.ColSet, from opt.ColList, to opt.ColList, expected opt.ColSet) {
-		t.Helper()
-
-		actual := translateColSet(colSetIn, from, to)
-		if !actual.Equals(expected) {
-			t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
-		}
-	}
-
-	colSetIn, from, to := opt.MakeColSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(4, 5, 6))
-
-	colSetIn, from, to = opt.MakeColSet(2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(5, 6))
-
-	// colSetIn and colSetOut might not be the same length.
-	colSetIn, from, to = opt.MakeColSet(1, 2), opt.ColList{1, 1, 2}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(4, 5, 6))
-
-	colSetIn, from, to = opt.MakeColSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 4}
-	test(t, colSetIn, from, to, opt.MakeColSet(4, 5))
-
-	colSetIn, from, to = opt.MakeColSet(2), opt.ColList{1, 2, 2}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, opt.MakeColSet(5, 6))
 }
 
 func testStats(

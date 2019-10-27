@@ -48,6 +48,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 )
 
 var buildCtx = func() build.Context {

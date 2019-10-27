@@ -982,8 +982,8 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 	<tr><th>Cluster</th>
 	<th>Test</th>
 	</tr>`)
-	for c, msg := range r.cr.savedClusters() {
-		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><tr/>", c.name, msg)
+	for _, c := range r.cr.savedClusters() {
+		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><tr/>", c.name, c.savedMsg)
 	}
 	fmt.Fprintf(wr, "</table>")
 

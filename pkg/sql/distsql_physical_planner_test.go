@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -782,7 +782,7 @@ func TestPartitionSpans(t *testing.T) {
 	testStopper := stop.NewStopper()
 	defer testStopper.Stop(context.TODO())
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
-		testStopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
+		testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 10; i++ {
 		nodeID := roachpb.NodeID(i)
@@ -972,7 +972,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.TODO())
 			mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
-				testStopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
+				testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
 				nodeID := roachpb.NodeID(i)
@@ -1061,7 +1061,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
-		stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
+		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 2; i++ {
 		nodeID := roachpb.NodeID(i)
@@ -1151,7 +1151,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	const nodeID = roachpb.NodeID(5)
 
 	mockGossip := gossip.NewTest(nodeID, nil /* rpcContext */, nil, /* grpcServer */
-		stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
+		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	desc := &roachpb.NodeDescriptor{
 		NodeID:  nodeID,

@@ -93,6 +93,7 @@ type Pebble struct {
 
 	closed bool
 	path   string
+	attrs  roachpb.Attributes
 
 	// Relevant options copied over from pebble.Options.
 	fs       vfs.FS
@@ -322,10 +323,15 @@ func (p *Pebble) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails
 	// No-op. Logical logging disabled.
 }
 
+// SetAttrs sets the attributes returned by Atts(). This method is not safe for
+// concurrent use.
+func (p *Pebble) SetAttrs(attrs roachpb.Attributes) {
+	p.attrs = attrs
+}
+
 // Attrs implements the Engine interface.
 func (p *Pebble) Attrs() roachpb.Attributes {
-	// TODO(itsbilal): Implement this.
-	return roachpb.Attributes{}
+	return p.attrs
 }
 
 // Capacity implements the Engine interface.
@@ -363,7 +369,7 @@ func (p *Pebble) NewBatch() Batch {
 	if p.readOnly {
 		panic("write operation called on read-only pebble instance")
 	}
-	return newPebbleBatch(p.db.NewIndexedBatch())
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch())
 }
 
 // NewReadOnly implements the Engine interface.
@@ -382,7 +388,7 @@ func (p *Pebble) NewWriteOnlyBatch() Batch {
 	if p.readOnly {
 		panic("write operation called on read-only pebble instance")
 	}
-	return newPebbleBatch(p.db.NewBatch())
+	return newPebbleBatch(p.db, p.db.NewBatch())
 }
 
 // NewSnapshot implements the Engine interface.
@@ -426,15 +432,7 @@ func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) erro
 
 // OpenFile implements the Engine interface.
 func (p *Pebble) OpenFile(filename string) (DBFile, error) {
-	file, err := p.fs.Open(p.fs.PathJoin(p.path, filename))
-	if err != nil {
-		return nil, err
-	}
-
-	pebbleFile := &pebbleFile{
-		file: file,
-	}
-	return pebbleFile, nil
+	return p.fs.Open(p.fs.PathJoin(p.path, filename))
 }
 
 // ReadFile implements the Engine interface.
@@ -510,29 +508,6 @@ func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
 		}
 	}
 	return sstables
-}
-
-// pebbleFile wraps a pebble File and implements the DBFile interface.
-type pebbleFile struct {
-	file vfs.File
-}
-
-var _ DBFile = &pebbleFile{}
-
-// Append implements the DBFile interface.
-func (p *pebbleFile) Append(data []byte) error {
-	_, err := p.file.Write(data)
-	return err
-}
-
-// Close implements the DBFile interface.
-func (p *pebbleFile) Close() error {
-	return p.file.Close()
-}
-
-// Close implements the DBFile interface.
-func (p *pebbleFile) Sync() error {
-	return p.file.Sync()
 }
 
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().

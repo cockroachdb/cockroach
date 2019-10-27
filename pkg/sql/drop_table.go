@@ -588,5 +588,12 @@ func (p *planner) removeTableComment(
 		keys.ColumnCommentType,
 		tableDesc.ID)
 
+	for _, indexDesc := range tableDesc.Indexes {
+		err = p.removeIndexComment(
+			ctx,
+			tableDesc.ID,
+			indexDesc.ID)
+	}
+
 	return err
 }

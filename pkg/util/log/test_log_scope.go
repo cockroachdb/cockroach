@@ -81,20 +81,20 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 // enableLogFileOutput turns on logging using the specified directory.
 // For unittesting only.
 func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
+	mainLog.mu.Lock()
+	defer mainLog.mu.Unlock()
 	oldStderrThreshold := logging.stderrThreshold
-	oldNoStderrRedirect := logging.noStderrRedirect
+	oldNoStderrRedirect := mainLog.noStderrRedirect
 
 	undo := func() {
-		logging.mu.Lock()
-		defer logging.mu.Unlock()
+		mainLog.mu.Lock()
+		defer mainLog.mu.Unlock()
 		logging.stderrThreshold = oldStderrThreshold
-		logging.noStderrRedirect = oldNoStderrRedirect
+		mainLog.noStderrRedirect = oldNoStderrRedirect
 	}
 	logging.stderrThreshold = stderrSeverity
-	logging.noStderrRedirect = true
-	return undo, logging.logDir.Set(dir)
+	mainLog.noStderrRedirect = true
+	return undo, mainLog.logDir.Set(dir)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
@@ -159,24 +159,36 @@ func calledDuringPanic() bool {
 // dirTestOverride sets the default value for the logging output directory
 // for use in tests.
 func dirTestOverride(expected, newDir string) error {
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
+	mainLog.mu.Lock()
+	defer mainLog.mu.Unlock()
 
-	logging.logDir.Lock()
+	mainLog.logDir.Lock()
 	// The following check is intended to catch concurrent uses of
 	// Scope() or TestLogScope.Close(), which would be invalid.
-	if logging.logDir.name != expected {
-		logging.logDir.Unlock()
+	if mainLog.logDir.name != expected {
+		mainLog.logDir.Unlock()
 		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
-			logging.logDir.name, expected)
+			mainLog.logDir.name, expected)
 	}
-	logging.logDir.name = newDir
-	logging.logDir.Unlock()
+	mainLog.logDir.name = newDir
+	mainLog.logDir.Unlock()
 
 	// When we change the directory we close the current logging
 	// output, so that a rotation to the new directory is forced on
 	// the next logging event.
-	return logging.closeFileLocked()
+	return mainLog.closeFileLocked()
+}
+
+func (l *loggerT) closeFileLocked() error {
+	if l.mu.file != nil {
+		if sb, ok := l.mu.file.(*syncBuffer); ok {
+			if err := sb.file.Close(); err != nil {
+				return err
+			}
+		}
+		l.mu.file = nil
+	}
+	return restoreStderr()
 }
 
 func isDirEmpty(dirname string) (bool, error) {

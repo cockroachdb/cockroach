@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"os"
@@ -2299,7 +2300,7 @@ func (r *rocksDBIterator) FindSplitKey(
 ) (MVCCKey, error) {
 	var splitKey C.DBString
 	r.clearState()
-	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end), goToCKey(minSplitKey),
+	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(minSplitKey),
 		C.int64_t(targetSize), &splitKey)
 	if err := statusToError(status); err != nil {
 		return MVCCKey{}, err
@@ -3298,12 +3299,8 @@ func notFoundErrOrDefault(err error) error {
 
 // DBFile is an interface for interacting with DBWritableFile in RocksDB.
 type DBFile interface {
-	// Append appends data to this DBFile.
-	//
-	// TODO(itsbilal): Rename this to Write([]byte) to adhere to io.Writer.
-	Append(data []byte) error
-	// Close closes this DBFile.
-	Close() error
+	io.Writer
+	io.Closer
 	// Sync synchronously flushes this DBFile's data to disk.
 	Sync() error
 }
@@ -3315,9 +3312,10 @@ type rocksdbFile struct {
 	rdb  *C.DBEngine
 }
 
-// Append implements the DBFile interface.
-func (f *rocksdbFile) Append(data []byte) error {
-	return statusToError(C.DBEnvAppendFile(f.rdb, f.file, goToCSlice(data)))
+// Write implements the DBFile interface.
+func (f *rocksdbFile) Write(data []byte) (int, error) {
+	err := statusToError(C.DBEnvAppendFile(f.rdb, f.file, goToCSlice(data)))
+	return len(data), err
 }
 
 // Close implements the DBFile interface.

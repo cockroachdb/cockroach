@@ -18,11 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -265,19 +265,25 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 // criticalLocalitiesVisitor is a visitor that, when passed to visitRanges(), builds
 // a LocalityReport.
 type criticalLocalitiesVisitor struct {
-	localityConstraints []config.Constraints
+	localityConstraints []zonepb.Constraints
 	cfg                 *config.SystemConfig
 	storeResolver       StoreResolver
 	nodeChecker         nodeChecker
 
-	report *replicationCriticalLocalitiesReportSaver
+	report   *replicationCriticalLocalitiesReportSaver
+	visitErr bool
+
+	// prevZoneKey maintains state from one range to the next. This state can be
+	// reused when a range is covered by the same zone config as the previous one.
+	// Reusing it speeds up the report generation.
+	prevZoneKey ZoneKey
 }
 
 var _ rangeVisitor = &criticalLocalitiesVisitor{}
 
 func makeLocalityStatsVisitor(
 	ctx context.Context,
-	localityConstraints []config.Constraints,
+	localityConstraints []zonepb.Constraints,
 	cfg *config.SystemConfig,
 	storeResolver StoreResolver,
 	nodeChecker nodeChecker,
@@ -293,34 +299,30 @@ func makeLocalityStatsVisitor(
 	return v
 }
 
+// failed is part of the rangeVisitor interface.
+func (v *criticalLocalitiesVisitor) failed() bool {
+	return v.visitErr
+}
+
 // reset is part of the rangeVisitor interface.
 func (v *criticalLocalitiesVisitor) reset(ctx context.Context) {
+	v.visitErr = false
 	v.report.resetReport()
 }
 
-// visit is part of the rangeVisitor interface.
-func (v *criticalLocalitiesVisitor) visit(ctx context.Context, r roachpb.RangeDescriptor) {
-	stores := v.storeResolver(r)
-	for _, c := range v.localityConstraints {
-		processLocalityForRange(ctx, r, v.report, &c, v.cfg, v.nodeChecker, stores)
-	}
-}
+// visitNewZone is part of the rangeVisitor interface.
+func (v *criticalLocalitiesVisitor) visitNewZone(
+	ctx context.Context, r *roachpb.RangeDescriptor,
+) (retErr error) {
 
-// processLocalityForRange checks a single locality constraint against a
-// range with replicas in each of the stores given, contributing to rep.
-func processLocalityForRange(
-	ctx context.Context,
-	r roachpb.RangeDescriptor,
-	rep *replicationCriticalLocalitiesReportSaver,
-	c *config.Constraints,
-	cfg *config.SystemConfig,
-	nodeChecker nodeChecker,
-	storeDescs []roachpb.StoreDescriptor,
-) {
+	defer func() {
+		v.visitErr = retErr != nil
+	}()
+
 	// Get the zone.
 	var zKey ZoneKey
-	found, err := visitZones(ctx, r, cfg,
-		func(_ context.Context, zone *config.ZoneConfig, key ZoneKey) bool {
+	found, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
+		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
 			if !zoneChangesReplication(zone) {
 				return false
 			}
@@ -328,15 +330,57 @@ func processLocalityForRange(
 			return true
 		})
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error visiting zones: %s", err)
+		return errors.AssertionFailedf("unexpected error visiting zones: %s", err)
 	}
 	if !found {
-		log.Errorf(ctx, "no suitable zone config found for range: %s", &r)
-		return
+		return errors.AssertionFailedf("no suitable zone config found for range: %s", r)
 	}
+	v.prevZoneKey = zKey
 
-	// Compute the required quorum and the number of live nodes. If the number of live nodes gets lower
-	// than the required quorum then the range is already unavailable.
+	return v.countRange(ctx, zKey, r)
+}
+
+// visitSameZone is part of the rangeVisitor interface.
+func (v *criticalLocalitiesVisitor) visitSameZone(
+	ctx context.Context, r *roachpb.RangeDescriptor,
+) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			v.visitErr = true
+		}
+	}()
+	return v.countRange(ctx, v.prevZoneKey, r)
+}
+
+func (v *criticalLocalitiesVisitor) countRange(
+	ctx context.Context, zoneKey ZoneKey, r *roachpb.RangeDescriptor,
+) error {
+	stores := v.storeResolver(r)
+	for _, c := range v.localityConstraints {
+		if err := processLocalityForRange(
+			ctx, r, zoneKey, v.report, &c, v.cfg, v.nodeChecker, stores,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// processLocalityForRange checks a single locality constraint against a
+// range with replicas in each of the stores given, contributing to rep.
+func processLocalityForRange(
+	ctx context.Context,
+	r *roachpb.RangeDescriptor,
+	zoneKey ZoneKey,
+	rep *replicationCriticalLocalitiesReportSaver,
+	c *zonepb.Constraints,
+	cfg *config.SystemConfig,
+	nodeChecker nodeChecker,
+	storeDescs []roachpb.StoreDescriptor,
+) error {
+	// Compute the required quorum and the number of live nodes. If the number of
+	// live nodes gets lower than the required quorum then the range is already
+	// unavailable.
 	quorumCount := len(r.Replicas().Voters())/2 + 1
 	liveNodeCount := len(storeDescs)
 	for _, storeDesc := range storeDescs {
@@ -362,7 +406,7 @@ func processLocalityForRange(
 		storeHasConstraint := true
 		for _, constraint := range c.Constraints {
 			// For required constraints - consider unavailable nodes as not matching.
-			if !config.StoreMatchesConstraint(storeDesc, constraint) {
+			if !zonepb.StoreMatchesConstraint(storeDesc, constraint) {
 				storeHasConstraint = false
 				break
 			}
@@ -376,6 +420,7 @@ func processLocalityForRange(
 	// If the live nodes outside of the given locality are not enough to
 	// form quorum then this locality is critical.
 	if quorumCount > liveNodeCount-passCount {
-		rep.AddCriticalLocality(zKey, loc)
+		rep.AddCriticalLocality(zoneKey, loc)
 	}
+	return nil
 }

@@ -40,7 +40,7 @@ func verifyColOperator(
 ) error {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	tempEngine, err := engine.NewTempEngine(engine.TestStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		return err
 	}

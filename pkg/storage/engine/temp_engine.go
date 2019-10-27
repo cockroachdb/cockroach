@@ -16,10 +16,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
+
+// TestStorageEngine represents an engine type for testing.
+var TestStorageEngine base.EngineType
+
+func init() {
+	_ = TestStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_TEST_STORAGE_ENGINE", "rocksdb"))
+}
+
+// NewTempEngine creates a new engine for DistSQL processors to use when
+// the working set is larger than can be stored in memory.
+func NewTempEngine(
+	engine base.EngineType, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+) (diskmap.Factory, error) {
+	if engine == base.EngineTypePebble {
+		return NewPebbleTempEngine(tempStorage, storeSpec)
+	}
+
+	return NewRocksDBTempEngine(tempStorage, storeSpec)
+}
 
 type rocksDBTempEngine struct {
 	db *RocksDB
@@ -40,15 +60,11 @@ func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 	return newRocksDBMap(r.db, true /* allowDuplicates */)
 }
 
-// NewTempEngine creates a new engine for DistSQL processors to use when the
-// working set is larger than can be stored in memory.
-func NewTempEngine(
+// NewRocksDBTempEngine creates a new RocksDB engine for DistSQL processors to use when
+// the working set is larger than can be stored in memory.
+func NewRocksDBTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
-	if tempStorage.Engine == base.EngineTypePebble {
-		return NewPebbleTempEngine(tempStorage, storeSpec)
-	}
-
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
@@ -97,8 +113,8 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 	return newPebbleMap(r.db, true /* allowDuplicates */)
 }
 
-// NewPebbleTempEngine creates a new engine for DistSQL processors to use when the
-// working set is larger than can be stored in memory.
+// NewPebbleTempEngine creates a new Pebble engine for DistSQL processors to use
+// when the working set is larger than can be stored in memory.
 func NewPebbleTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {

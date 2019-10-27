@@ -306,7 +306,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 		}
 	}()
 	ctx := context.Background()
-	tempEngine, err := NewTempEngine(base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
+	tempEngine, err := NewRocksDBTempEngine(base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 			b.Fatal(err)
 		}
 	}()
-	tempEngine, err := NewTempEngine(base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
+	tempEngine, err := NewRocksDBTempEngine(base.TempStorageConfig{Path: dir}, base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)
 	}

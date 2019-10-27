@@ -102,8 +102,9 @@ func (l *DirName) IsSet() bool {
 	return res
 }
 
-// DirSet returns true of the log directory has been changed from its default.
-func DirSet() bool { return logging.logDir.IsSet() }
+// DirSet returns true of the log directory for the main logger has
+// been changed from its default.
+func DirSet() bool { return mainLog.logDir.IsSet() }
 
 // FileNamePattern matches log files to avoid exposing non-log files
 // accidentally and it splits the details of the filename into groups for easy
@@ -272,10 +273,10 @@ func create(
 // ListLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
-	return logging.listLogFiles()
+	return mainLog.listLogFiles()
 }
 
-func (l *loggingT) listLogFiles() ([]FileInfo, error) {
+func (l *loggerT) listLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
 	dir, err := l.logDir.get()
 	if err != nil {
@@ -311,8 +312,10 @@ func (l *loggingT) listLogFiles() ([]FileInfo, error) {
 // current directory, with the added feature that simple (base name)
 // file names will be searched in this process's log directory if not
 // found in the current directory.
+//
+// TODO(knz): make this work for secondary loggers too.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	dir, err := logging.logDir.get()
+	dir, err := mainLog.logDir.get()
 	if err != nil {
 		return nil, err
 	}

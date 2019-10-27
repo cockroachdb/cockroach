@@ -213,12 +213,11 @@ MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64
 
 bool MVCCIsValidSplitKey(DBSlice key) { return IsValidSplitKey(ToSlice(key)); }
 
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split,
                           int64_t target_size, DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
-  const std::string end_key = EncodeKey(end);
   const rocksdb::Slice min_split_key = ToSlice(min_split.key);
 
   int64_t size_so_far = 0;
@@ -226,7 +225,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
   int64_t best_split_diff = std::numeric_limits<int64_t>::max();
   std::string prev_key;
 
-  for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0; iter_rep->Next()) {
+  for (; iter_rep->Valid(); iter_rep->Next()) {
     const rocksdb::Slice key = iter_rep->key();
     rocksdb::Slice decoded_key;
     int64_t wall_time = 0;

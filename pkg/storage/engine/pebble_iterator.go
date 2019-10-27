@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
 
@@ -238,9 +239,9 @@ func (p *pebbleIterator) ComputeStats(
 
 // Go-only version of IsValidSplitKey. Checks if the specified key is in
 // NoSplitSpans.
-func isValidSplitKey(key roachpb.Key) bool {
-	for _, noSplitSpan := range keys.NoSplitSpans {
-		if noSplitSpan.ContainsKey(key) {
+func isValidSplitKey(key roachpb.Key, noSplitSpans []roachpb.Span) bool {
+	for i := range noSplitSpans {
+		if noSplitSpans[i].ContainsKey(key) {
 			return false
 		}
 	}
@@ -251,17 +252,28 @@ func isValidSplitKey(key roachpb.Key) bool {
 func (p *pebbleIterator) FindSplitKey(
 	start, end, minSplitKey MVCCKey, targetSize int64,
 ) (MVCCKey, error) {
-	const timestampLen = int64(12)
-	p.Seek(start)
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], end)
-	minSplitKeyBuf := EncodeKey(minSplitKey)
-	prevKey := make([]byte, 0)
+	const timestampLen = 12
 
 	sizeSoFar := int64(0)
 	bestDiff := int64(math.MaxInt64)
-	bestSplitKey := MVCCKey{}
+	var bestSplitKey MVCCKey
+	var prevKey []byte
 
-	for ; p.iter.Valid() && MVCCKeyCompare(p.iter.Key(), p.keyBuf) < 0; p.iter.Next() {
+	// We only have to consider no-split spans if our minimum split key possibly
+	// lies before them. Note that the no-split spans are ordered by end-key.
+	noSplitSpans := keys.NoSplitSpans
+	for i := range noSplitSpans {
+		if minSplitKey.Key.Compare(noSplitSpans[i].EndKey) <= 0 {
+			noSplitSpans = noSplitSpans[i:]
+			break
+		}
+	}
+
+	// Note that it is unnecessary to compare against "end" to decide to
+	// terminate iteration because the iterator's upper bound has already been
+	// set to end.
+	p.Seek(start)
+	for ; p.iter.Valid(); p.iter.Next() {
 		mvccKey, err := DecodeMVCCKey(p.iter.Key())
 		if err != nil {
 			return MVCCKey{}, err
@@ -271,19 +283,26 @@ func (p *pebbleIterator) FindSplitKey(
 		if diff < 0 {
 			diff = -diff
 		}
-		if diff < bestDiff && MVCCKeyCompare(p.iter.Key(), minSplitKeyBuf) >= 0 && isValidSplitKey(mvccKey.Key) {
+		if diff > bestDiff && bestSplitKey.Key != nil {
+			break
+		}
+
+		if diff < bestDiff &&
+			(minSplitKey.Key == nil || !mvccKey.Less(minSplitKey)) &&
+			(len(noSplitSpans) == 0 || isValidSplitKey(mvccKey.Key, noSplitSpans)) {
 			// We are going to have to copy bestSplitKey, since by the time we find
 			// out it's the actual best split key, the underlying slice would have
 			// changed (due to the iter.Next() call).
 			//
 			// TODO(itsbilal): Instead of copying into bestSplitKey each time,
-			// consider just calling iter.Prev() at the end to get to the same key.
+			// consider just calling iter.Prev() at the end to get to the same
+			// key. This isn't quite as easy as it sounds due to the mvccKey and
+			// noSplitSpans checks.
 			bestDiff = diff
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], mvccKey.Key...)
 			bestSplitKey.Timestamp = mvccKey.Timestamp
-		}
-		if diff > bestDiff && bestSplitKey.Key != nil {
-			break
+			// Avoid comparing against minSplitKey on future iterations.
+			minSplitKey.Key = nil
 		}
 
 		sizeSoFar += int64(len(p.iter.Value()))
@@ -307,16 +326,138 @@ func (p *pebbleIterator) FindSplitKey(
 func (p *pebbleIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (value *roachpb.Value, intent *roachpb.Intent, err error) {
-	// TODO(itsbilal): Implement in a separate PR. See #39674.
-	panic("unimplemented for now, see #39674")
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(key) == 0 {
+		return nil, nil, emptyKeyError()
+	}
+	if p.iter == nil {
+		panic("uninitialized iterator")
+	}
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
+	// specify an empty key for the end key which will ensure we don't retrieve a
+	// key different than the start key. This is a bit of a hack.
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       p.iter,
+		start:        key,
+		ts:           timestamp,
+		maxKeys:      1,
+		txn:          opts.Txn,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+		ignoreSeq:    opts.IgnoreSequence,
+	}
+
+	mvccScanner.init()
+	mvccScanner.get()
+
+	if mvccScanner.err != nil {
+		return nil, nil, mvccScanner.err
+	}
+	intents, err := buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	if len(intents) > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+	} else if len(intents) == 1 {
+		intent = &intents[0]
+	}
+
+	if len(mvccScanner.results.repr) == 0 {
+		return nil, intent, nil
+	}
+
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	value = &roachpb.Value{
+		RawBytes:  rawValue,
+		Timestamp: mvccKey.Timestamp,
+	}
+	return
 }
 
 // MVCCScan implements the Iterator interface.
 func (p *pebbleIterator) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 ) (kvData []byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
-	// TODO(itsbilal): Implement in a separate PR. See #39674.
-	panic("unimplemented for now, see #39674")
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(end) == 0 {
+		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if max == 0 {
+		resumeSpan = &roachpb.Span{Key: start, EndKey: end}
+		return nil, 0, resumeSpan, nil, nil
+	}
+	if p.iter == nil {
+		panic("uninitialized iterator")
+	}
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       p.iter,
+		reverse:      opts.Reverse,
+		start:        start,
+		end:          end,
+		ts:           timestamp,
+		maxKeys:      max,
+		txn:          opts.Txn,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+		ignoreSeq:    opts.IgnoreSequence,
+	}
+
+	mvccScanner.init()
+	mvccScanner.scan()
+
+	if mvccScanner.err != nil {
+		return nil, 0, nil, nil, mvccScanner.err
+	}
+
+	kvData = mvccScanner.results.repr
+	numKVs = mvccScanner.results.count
+
+	if mvccScanner.curKey != nil {
+		if opts.Reverse {
+			resumeSpan = &roachpb.Span{
+				Key:    mvccScanner.start,
+				EndKey: mvccScanner.curKey,
+			}
+			// curKey was not added to results, so it needs to be included in the
+			// resume span.
+			resumeSpan.EndKey = resumeSpan.EndKey.Next()
+		} else {
+			resumeSpan = &roachpb.Span{
+				Key:    mvccScanner.curKey,
+				EndKey: mvccScanner.end,
+			}
+		}
+	}
+	intents, err = buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	return
 }
 
 // SetUpperBound implements the Iterator interface.

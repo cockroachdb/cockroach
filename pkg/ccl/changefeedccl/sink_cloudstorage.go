@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 )
 
 func isCloudStorageSink(u *url.URL) bool {
@@ -46,12 +47,8 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 	return fmt.Sprintf(`%s%09d%010d`, t.Format(f), t.Nanosecond(), ts.Logical)
 }
 
-type cloudStorageSinkKey struct {
-	Topic    string
-	SchemaID sqlbase.DescriptorVersion
-}
-
 type cloudStorageSinkFile struct {
+	cloudStorageSinkKey
 	buf bytes.Buffer
 }
 
@@ -118,14 +115,11 @@ type cloudStorageSinkFile struct {
 // timestamp, a data file can't even be emitted at the same timestamp, it must be emitted
 // at a timestamp that is strictly greater than the last globally resolved timestamp. Note
 // that the local frontier is a guarantee that the sink will never get an EmitRow with
-// that timestamp or lower. (NOTE: there is a known bug in the poller which can cause row
-// updates to be emitted with a timestamp that is equal to the local frontier, during a
-// schema change with backfill. See #41415 for more details) (a2) is that whenever Flush
-// is called, all files written by the sink must be named using timestamps less than or
-// equal to the one for the local frontier at the time Flush is called. This is again
-// because our local progress update could cause the global progress to be updated and we
-// need everything written so far to lexically compare as less than the new resolved
-// timestamp.
+// that timestamp or lower. (a2) is that whenever Flush is called, all files written by
+// the sink must be named using timestamps less than or equal to the one for the local
+// frontier at the time Flush is called. This is again because our local progress update
+// could cause the global progress to be updated and we need everything written so far to
+// lexically compare as less than the new resolved timestamp.
 //
 // The data files written by this sink are named according to the pattern
 // `<timestamp>-<uniquer>-<topic_id>-<schema_id>.<ext>`, each component of which is as
@@ -135,8 +129,6 @@ type cloudStorageSinkFile struct {
 // `changeAggregator`, as of the time the last `Flush()` call was made (or `StatementTime`
 // if `Flush()` hasn't been called yet). Intuitively, this can be thought of as an
 // inclusive lower bound on the timestamps of updates that can be seen in a given file.
-// NOTE: Due to a bug in the poller, this is not always true when there's a schema change
-// that causes a backfill. See issue #41415 for more details.
 //
 // `<topic>` corresponds to one SQL table.
 //
@@ -207,9 +199,7 @@ type cloudStorageSinkFile struct {
 // time the last `Flush()` call was made (or StatementTime in case `Flush()` hasn't been
 // called yet). Since all EmitRow calls are guaranteed to be for rows that equal or
 // succeed this timestamp, ts(Xi) is an inclusive lower bound for the rows contained
-// inside Xi. NOTE: There is a known bug in the poller which causes this guarantee to be
-// violated in case of a schema change that causes a backfill. See issue #41415 for more
-// details.
+// inside Xi.
 // 4. When a job restarts, the new job session starts with a catch-up scan
 // from the last globally resolved timestamp of the changefeed. This catch-up
 // scan replays all rows since this resolved timestamp preserving invariant 1.
@@ -272,8 +262,9 @@ type cloudStorageSink struct {
 
 	// These are fields to track information needed to output files based on the naming
 	// convention described above. See comment on cloudStorageSink above for more details.
-	fileID          int64
-	files           map[cloudStorageSinkKey]*cloudStorageSinkFile
+	fileID int64
+	files  *btree.BTree // of *cloudStorageSinkFile
+
 	timestampOracle timestampLowerBoundOracle
 	jobSessionID    string
 	// We keep track of the successor of the least resolved timestamp in the local
@@ -305,7 +296,7 @@ func makeCloudStorageSink(
 		sinkID:            sinkID,
 		settings:          settings,
 		targetMaxFileSize: targetMaxFileSize,
-		files:             make(map[cloudStorageSinkKey]*cloudStorageSinkFile),
+		files:             btree.New(8),
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
 		// TODO(aayush): Use the jobs framework's session ID once that's available.
@@ -350,6 +341,20 @@ func makeCloudStorageSink(
 	return s, nil
 }
 
+func (s *cloudStorageSink) getOrCreateFile(
+	topic string, schemaID sqlbase.DescriptorVersion,
+) *cloudStorageSinkFile {
+	key := cloudStorageSinkKey{topic, schemaID}
+	if item := s.files.Get(key); item != nil {
+		return item.(*cloudStorageSinkFile)
+	}
+	f := &cloudStorageSinkFile{
+		cloudStorageSinkKey: key,
+	}
+	s.files.ReplaceOrInsert(f)
+	return f
+}
+
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
 	ctx context.Context, table *sqlbase.TableDescriptor, _, value []byte, updated hlc.Timestamp,
@@ -358,17 +363,7 @@ func (s *cloudStorageSink) EmitRow(
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 
-	key := cloudStorageSinkKey{
-		Topic:    table.Name,
-		SchemaID: table.Version,
-	}
-	file := s.files[key]
-	if file == nil {
-		// We could pool the bytes.Buffers if necessary, but we'd need to be
-		// careful to bound the size of the memory held by the pool.
-		file = &cloudStorageSinkFile{}
-		s.files[key] = file
-	}
+	file := s.getOrCreateFile(table.Name, table.Version)
 
 	// TODO(dan): Memory monitoring for this
 	if _, err := file.buf.Write(value); err != nil {
@@ -379,10 +374,9 @@ func (s *cloudStorageSink) EmitRow(
 	}
 
 	if int64(file.buf.Len()) > s.targetMaxFileSize {
-		if err := s.flushFile(ctx, key, file); err != nil {
+		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
 			return err
 		}
-		delete(s.files, key)
 	}
 	return nil
 }
@@ -405,9 +399,45 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Info(ctx, "writing ", filename)
+		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(payload))
+}
+
+// flushTopicVersions flushes all open files for the provided topic up to and
+// including maxVersionToFlush.
+//
+// To understand why we need to do this, consider the following example in case
+// we didn't have this logic:
+//
+//  1. The sink starts buffering a file for schema 1.
+//  2. It then starts buffering a file for schema 2.
+//  3. The newer, schema 2 file exceeds the file size threshold and thus gets
+//     flushed at timestamp x with fileID 0.
+//  4. The older, schema 1 file is also flushed at timestamp x and thus is
+//     assigned a fileID greater than 0.
+//
+// This would lead to the older file being lexically ordered after the newer,
+// schema 2 file, leading to a violation of our ordering guarantees (see comment
+// on cloudStorageSink)
+func (s *cloudStorageSink) flushTopicVersions(
+	ctx context.Context, topic string, maxVersionToFlush sqlbase.DescriptorVersion,
+) (err error) {
+	var toRemoveAlloc [2]sqlbase.DescriptorVersion // generally avoid allocating
+	toRemove := toRemoveAlloc[:0]                  // schemaIDs of flushed files
+	gte := cloudStorageSinkKey{topic: topic}
+	lt := cloudStorageSinkKey{topic: topic, schemaID: maxVersionToFlush + 1}
+	s.files.AscendRange(gte, lt, func(i btree.Item) (wantMore bool) {
+		f := i.(*cloudStorageSinkFile)
+		if err = s.flushFile(ctx, f); err == nil {
+			toRemove = append(toRemove, f.schemaID)
+		}
+		return err == nil
+	})
+	for _, v := range toRemove {
+		s.files.Delete(cloudStorageSinkKey{topic: topic, schemaID: v})
+	}
+	return err
 }
 
 // Flush implements the Sink interface.
@@ -416,14 +446,16 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
 
-	for key, file := range s.files {
-		if err := s.flushFile(ctx, key, file); err != nil {
-			return err
-		}
+	var err error
+	s.files.Ascend(func(i btree.Item) (wantMore bool) {
+		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
+		return err == nil
+	})
+	if err != nil {
+		return err
 	}
-	for key := range s.files {
-		delete(s.files, key)
-	}
+	s.files.Clear(true /* addNodesToFreeList */)
+
 	// Record the least resolved timestamp being tracked in the frontier as of this point,
 	// to use for naming files until the next `Flush()`. See comment on cloudStorageSink
 	// for an overview of the naming convention and proof of correctness.
@@ -432,9 +464,8 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (s *cloudStorageSink) flushFile(
-	ctx context.Context, key cloudStorageSinkKey, file *cloudStorageSinkFile,
-) error {
+// file should not be used after flushing.
+func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
 	if file.buf.Len() == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
 		// about not writing empty files anyway.
@@ -450,7 +481,7 @@ func (s *cloudStorageSink) flushFile(
 	// `%d.RESOLVED` files to lexicographically succeed data files that have the
 	// same timestamp. This works because ascii `-` < ascii '.'.
 	filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
-		s.jobSessionID, s.nodeID, s.sinkID, fileID, key.Topic, key.SchemaID, s.ext)
+		s.jobSessionID, s.nodeID, s.sinkID, fileID, file.topic, file.schemaID, s.ext)
 	if s.prevFilename != "" && filename < s.prevFilename {
 		return errors.AssertionFailedf("error: detected a filename %s that lexically "+
 			"precedes a file emitted before: %s", filename, s.prevFilename)
@@ -463,4 +494,27 @@ func (s *cloudStorageSink) flushFile(
 func (s *cloudStorageSink) Close() error {
 	s.files = nil
 	return s.es.Close()
+}
+
+type cloudStorageSinkKey struct {
+	topic    string
+	schemaID sqlbase.DescriptorVersion
+}
+
+func (k cloudStorageSinkKey) Less(other btree.Item) bool {
+	switch other := other.(type) {
+	case *cloudStorageSinkFile:
+		return keyLess(k, other.cloudStorageSinkKey)
+	case cloudStorageSinkKey:
+		return keyLess(k, other)
+	default:
+		panic(errors.Errorf("unexpected item type %T", other))
+	}
+}
+
+func keyLess(a, b cloudStorageSinkKey) bool {
+	if a.topic == b.topic {
+		return a.schemaID < b.schemaID
+	}
+	return a.topic < b.topic
 }

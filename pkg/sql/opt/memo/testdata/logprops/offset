@@ -124,11 +124,13 @@ OFFSET 2
 offset
  ├── columns: x:6(int!null)
  ├── cardinality: [1 - 11]
+ ├── prune: (6)
  ├── union-all
  │    ├── columns: x:6(int!null)
  │    ├── left columns: xyzs.x:1(int)
  │    ├── right columns: column1:5(int)
  │    ├── cardinality: [3 - 13]
+ │    ├── prune: (6)
  │    ├── limit
  │    │    ├── columns: xyzs.x:1(int!null)
  │    │    ├── cardinality: [0 - 10]

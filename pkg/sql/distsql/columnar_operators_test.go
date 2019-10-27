@@ -189,76 +189,88 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
-					triedWithoutOnExpr, triedWithOnExpr := false, false
-					if !testSpec.onExprSupported {
-						triedWithOnExpr = true
-					}
-					for !triedWithoutOnExpr || !triedWithOnExpr {
-						var (
-							lRows, rRows     sqlbase.EncDatumRows
-							lEqCols, rEqCols []uint32
-							inputTypes       []types.T
-							usingRandomTypes bool
-						)
-						if rng.Float64() < randTypesProbability {
-							inputTypes = generateRandomSupportedTypes(rng, nCols)
-							lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-							rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-							lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-							// Since random types might not be comparable, we use the same
-							// equality columns for both inputs.
-							rEqCols = lEqCols
-							usingRandomTypes = true
-						} else {
-							inputTypes = intTyps[:nCols]
-							lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-							rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-							lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-							rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-						}
-
-						outputTypes := append(inputTypes, inputTypes...)
-						if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI {
-							outputTypes = inputTypes
-						}
-						outputColumns := make([]uint32, len(outputTypes))
-						for i := range outputColumns {
-							outputColumns[i] = uint32(i)
-						}
-
-						var onExpr execinfrapb.Expression
-						if triedWithoutOnExpr {
-							colTypes := append(inputTypes, inputTypes...)
-							onExpr = generateOnExpr(rng, nCols, nEqCols, colTypes, usingRandomTypes)
-						}
-						hjSpec := &execinfrapb.HashJoinerSpec{
-							LeftEqColumns:  lEqCols,
-							RightEqColumns: rEqCols,
-							OnExpr:         onExpr,
-							Type:           testSpec.joinType,
-						}
-						pspec := &execinfrapb.ProcessorSpec{
-							Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
-							Core:  execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
-							Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
-						}
-						if err := verifyColOperator(
-							true, /* anyOrder */
-							[][]types.T{inputTypes, inputTypes},
-							[]sqlbase.EncDatumRows{lRows, rRows},
-							outputTypes,
-							pspec,
-						); err != nil {
-							fmt.Printf("--- join type = %s onExpr = %q seed = %d run = %d ---\n",
-								testSpec.joinType.String(), onExpr.Expr, seed, run)
-							fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
-							fmt.Printf("--- inputTypes = %v ---\n", inputTypes)
-							t.Fatal(err)
-						}
-						if onExpr.Expr == "" {
-							triedWithoutOnExpr = true
-						} else {
+					for _, addFilter := range []bool{false, true} {
+						triedWithoutOnExpr, triedWithOnExpr := false, false
+						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
+						}
+						for !triedWithoutOnExpr || !triedWithOnExpr {
+							var (
+								lRows, rRows     sqlbase.EncDatumRows
+								lEqCols, rEqCols []uint32
+								inputTypes       []types.T
+								usingRandomTypes bool
+							)
+							if rng.Float64() < randTypesProbability {
+								inputTypes = generateRandomSupportedTypes(rng, nCols)
+								lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+								rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+								// Since random types might not be comparable, we use the same
+								// equality columns for both inputs.
+								rEqCols = lEqCols
+								usingRandomTypes = true
+							} else {
+								inputTypes = intTyps[:nCols]
+								lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+								rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+							}
+
+							outputTypes := append(inputTypes, inputTypes...)
+							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI {
+								outputTypes = inputTypes
+							}
+							outputColumns := make([]uint32, len(outputTypes))
+							for i := range outputColumns {
+								outputColumns[i] = uint32(i)
+							}
+
+							var filter, onExpr execinfrapb.Expression
+							if addFilter {
+								colTypes := append(inputTypes, inputTypes...)
+								forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
+								filter = generateFilterExpr(
+									rng, nCols, nEqCols, colTypes, usingRandomTypes, forceLeftSide,
+								)
+							}
+							if triedWithoutOnExpr {
+								colTypes := append(inputTypes, inputTypes...)
+								onExpr = generateFilterExpr(
+									rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
+								)
+							}
+							hjSpec := &execinfrapb.HashJoinerSpec{
+								LeftEqColumns:  lEqCols,
+								RightEqColumns: rEqCols,
+								OnExpr:         onExpr,
+								Type:           testSpec.joinType,
+							}
+							pspec := &execinfrapb.ProcessorSpec{
+								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+								Core:  execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
+								Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
+							}
+							if err := verifyColOperator(
+								true, /* anyOrder */
+								[][]types.T{inputTypes, inputTypes},
+								[]sqlbase.EncDatumRows{lRows, rRows},
+								outputTypes,
+								pspec,
+							); err != nil {
+								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
+									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
+								fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
+								fmt.Printf("--- inputTypes = %v ---\n", inputTypes)
+								t.Fatal(err)
+							}
+							if onExpr.Expr == "" {
+								triedWithoutOnExpr = true
+							} else {
+								triedWithOnExpr = true
+							}
 						}
 					}
 				}
@@ -334,95 +346,107 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-					triedWithoutOnExpr, triedWithOnExpr := false, false
-					if !testSpec.onExprSupported {
-						triedWithOnExpr = true
-					}
-					for !triedWithoutOnExpr || !triedWithOnExpr {
-						var (
-							lRows, rRows                 sqlbase.EncDatumRows
-							inputTypes                   []types.T
-							lOrderingCols, rOrderingCols []execinfrapb.Ordering_Column
-							usingRandomTypes             bool
-						)
-						if rng.Float64() < randTypesProbability {
-							inputTypes = generateRandomSupportedTypes(rng, nCols)
-							lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-							rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-							lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
-							// We use the same ordering columns in the same order because the
-							// columns can be not comparable in different order.
-							rOrderingCols = lOrderingCols
-							usingRandomTypes = true
-						} else {
-							inputTypes = intTyps[:nCols]
-							lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-							rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-							lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
-							rOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
-						}
-						// Set the directions of both columns to be the same.
-						for i, lCol := range lOrderingCols {
-							rOrderingCols[i].Direction = lCol.Direction
-						}
-
-						lMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: lOrderingCols})
-						rMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: rOrderingCols})
-						sort.Slice(lRows, func(i, j int) bool {
-							cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
-							if err != nil {
-								t.Fatal(err)
-							}
-							return cmp < 0
-						})
-						sort.Slice(rRows, func(i, j int) bool {
-							cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
-							if err != nil {
-								t.Fatal(err)
-							}
-							return cmp < 0
-						})
-						outputTypes := append(inputTypes, inputTypes...)
-						if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-							testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
-							outputTypes = inputTypes
-						}
-						outputColumns := make([]uint32, len(outputTypes))
-						for i := range outputColumns {
-							outputColumns[i] = uint32(i)
-						}
-
-						var onExpr execinfrapb.Expression
-						if triedWithoutOnExpr {
-							colTypes := append(inputTypes, inputTypes...)
-							onExpr = generateOnExpr(rng, nCols, nOrderingCols, colTypes, usingRandomTypes)
-						}
-						mjSpec := &execinfrapb.MergeJoinerSpec{
-							OnExpr:        onExpr,
-							LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
-							RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
-							Type:          testSpec.joinType,
-						}
-						pspec := &execinfrapb.ProcessorSpec{
-							Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
-							Core:  execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
-							Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
-						}
-						if err := verifyColOperator(
-							testSpec.anyOrder,
-							[][]types.T{inputTypes, inputTypes},
-							[]sqlbase.EncDatumRows{lRows, rRows},
-							outputTypes,
-							pspec,
-						); err != nil {
-							fmt.Printf("--- join type = %s onExpr = %q seed = %d run = %d ---\n",
-								testSpec.joinType.String(), onExpr.Expr, seed, run)
-							t.Fatal(err)
-						}
-						if onExpr.Expr == "" {
-							triedWithoutOnExpr = true
-						} else {
+					for _, addFilter := range []bool{false, true} {
+						triedWithoutOnExpr, triedWithOnExpr := false, false
+						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
+						}
+						for !triedWithoutOnExpr || !triedWithOnExpr {
+							var (
+								lRows, rRows                 sqlbase.EncDatumRows
+								inputTypes                   []types.T
+								lOrderingCols, rOrderingCols []execinfrapb.Ordering_Column
+								usingRandomTypes             bool
+							)
+							if rng.Float64() < randTypesProbability {
+								inputTypes = generateRandomSupportedTypes(rng, nCols)
+								lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+								rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+								// We use the same ordering columns in the same order because the
+								// columns can be not comparable in different order.
+								rOrderingCols = lOrderingCols
+								usingRandomTypes = true
+							} else {
+								inputTypes = intTyps[:nCols]
+								lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+								rOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+							}
+							// Set the directions of both columns to be the same.
+							for i, lCol := range lOrderingCols {
+								rOrderingCols[i].Direction = lCol.Direction
+							}
+
+							lMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: lOrderingCols})
+							rMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: rOrderingCols})
+							sort.Slice(lRows, func(i, j int) bool {
+								cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
+								if err != nil {
+									t.Fatal(err)
+								}
+								return cmp < 0
+							})
+							sort.Slice(rRows, func(i, j int) bool {
+								cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
+								if err != nil {
+									t.Fatal(err)
+								}
+								return cmp < 0
+							})
+							outputTypes := append(inputTypes, inputTypes...)
+							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+								testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+								outputTypes = inputTypes
+							}
+							outputColumns := make([]uint32, len(outputTypes))
+							for i := range outputColumns {
+								outputColumns[i] = uint32(i)
+							}
+
+							var filter, onExpr execinfrapb.Expression
+							if addFilter {
+								colTypes := append(inputTypes, inputTypes...)
+								forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
+								filter = generateFilterExpr(
+									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, forceLeftSide,
+								)
+							}
+							if triedWithoutOnExpr {
+								colTypes := append(inputTypes, inputTypes...)
+								onExpr = generateFilterExpr(
+									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
+								)
+							}
+							mjSpec := &execinfrapb.MergeJoinerSpec{
+								OnExpr:        onExpr,
+								LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
+								RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
+								Type:          testSpec.joinType,
+							}
+							pspec := &execinfrapb.ProcessorSpec{
+								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+								Core:  execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+								Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
+							}
+							if err := verifyColOperator(
+								testSpec.anyOrder,
+								[][]types.T{inputTypes, inputTypes},
+								[]sqlbase.EncDatumRows{lRows, rRows},
+								outputTypes,
+								pspec,
+							); err != nil {
+								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
+									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
+								t.Fatal(err)
+							}
+							if onExpr.Expr == "" {
+								triedWithoutOnExpr = true
+							} else {
+								triedWithOnExpr = true
+							}
 						}
 					}
 				}
@@ -451,14 +475,21 @@ func generateColumnOrdering(
 	return orderingCols
 }
 
-// generateOnExpr populates a distsqlpb.Expression that contains a single
-// comparison which can be either comparing a column from the left against a
-// column from the right or comparing a column from either side against a
-// constant.
+// generateFilterExpr populates an execinfrapb.Expression that contains a
+// single comparison which can be either comparing a column from the left
+// against a column from the right or comparing a column from either side
+// against a constant.
 // If forceConstComparison is true, then the comparison against the constant
 // will be used.
-func generateOnExpr(
-	rng *rand.Rand, nCols int, nEqCols int, colTypes []types.T, forceConstComparison bool,
+// If forceLeftSide is true, then the comparison of a column from the left
+// against a constant will be used.
+func generateFilterExpr(
+	rng *rand.Rand,
+	nCols int,
+	nEqCols int,
+	colTypes []types.T,
+	forceConstComparison bool,
+	forceLeftSide bool,
 ) execinfrapb.Expression {
 	var comparison string
 	r := rng.Float64()
@@ -475,9 +506,9 @@ func generateOnExpr(
 	// only one interesting case when a column from either side is compared
 	// against a constant. The second conditional is us choosing to compare
 	// against a constant.
-	if nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison {
+	if nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison || forceLeftSide {
 		colIdx := rng.Intn(nCols)
-		if rng.Float64() >= 0.5 {
+		if !forceLeftSide && rng.Float64() >= 0.5 {
 			// Use right side.
 			colIdx += nCols
 		}
