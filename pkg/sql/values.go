@@ -149,14 +149,10 @@ func (n *valuesNode) startExec(params runParams) error {
 	row := make([]tree.Datum, len(n.columns))
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
-			if n.columns[i].Omitted {
-				row[i] = tree.DNull
-			} else {
-				var err error
-				row[i], err = typedExpr.Eval(params.EvalContext())
-				if err != nil {
-					return err
-				}
+			var err error
+			row[i], err = typedExpr.Eval(params.EvalContext())
+			if err != nil {
+				return err
 			}
 		}
 		if _, err := n.rows.AddRow(params.ctx, row); err != nil {

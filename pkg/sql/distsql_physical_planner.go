@@ -1194,25 +1194,15 @@ func (dsp *DistSQLPlanner) createTableReaders(
 func (dsp *DistSQLPlanner) selectRenders(
 	p *PhysicalPlan, n *renderNode, planCtx *PlanningCtx,
 ) error {
-	// We want to skip any unused renders.
-	planToStreamColMap := makePlanToStreamColMap(len(n.render))
-	renders := make([]tree.TypedExpr, 0, len(n.render))
-	for i, r := range n.render {
-		if !n.columns[i].Omitted {
-			planToStreamColMap[i] = len(renders)
-			renders = append(renders, r)
-		}
-	}
-
-	typs, err := getTypesForPlanResult(n, planToStreamColMap)
+	typs, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
 	if err != nil {
 		return err
 	}
-	err = p.AddRendering(renders, planCtx, p.PlanToStreamColMap, typs)
+	err = p.AddRendering(n.render, planCtx, p.PlanToStreamColMap, typs)
 	if err != nil {
 		return err
 	}
-	p.PlanToStreamColMap = planToStreamColMap
+	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(n.render))
 	return nil
 }
 
@@ -1839,15 +1829,12 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	}
 
 	// Calculate the output columns from n.cols.
-	post.OutputColumns = make([]uint32, 0, len(n.cols))
-	plan.PlanToStreamColMap = makePlanToStreamColMap(len(n.cols))
+	post.OutputColumns = make([]uint32, len(n.cols))
+	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(n.cols))
 
 	for i := range n.cols {
-		if !n.resultColumns[i].Omitted {
-			plan.PlanToStreamColMap[i] = len(post.OutputColumns)
-			ord := tableOrdinal(n.table.desc, n.cols[i].ID, n.table.colCfg.visibility)
-			post.OutputColumns = append(post.OutputColumns, uint32(ord))
-		}
+		ord := tableOrdinal(n.table.desc, n.cols[i].ID, n.table.colCfg.visibility)
+		post.OutputColumns[i] = uint32(ord)
 	}
 
 	types, err := getTypesForPlanResult(n, plan.PlanToStreamColMap)

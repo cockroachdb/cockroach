@@ -251,26 +251,15 @@ func joinOutColumns(
 	// The join columns are in two groups:
 	//  - the columns on the left side (numLeftCols)
 	//  - the columns on the right side (numRightCols)
-	joinCol := 0
-	leftCols := 0
 	for i := 0; i < n.pred.numLeftCols; i++ {
-		if !n.columns[i].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlanToStreamColMap[i]))
-		}
-		if leftPlanToStreamColMap[i] != -1 {
-			leftCols++
-		}
-		joinCol++
+		joinToStreamColMap[i] = addOutCol(uint32(leftPlanToStreamColMap[i]))
 	}
 
 	if n.pred.joinType != sqlbase.LeftSemiJoin && n.pred.joinType != sqlbase.LeftAntiJoin {
 		for i := 0; i < n.pred.numRightCols; i++ {
-			if !n.columns[joinCol].Omitted {
-				joinToStreamColMap[joinCol] = addOutCol(
-					uint32(leftCols + rightPlanToStreamColMap[i]),
-				)
-			}
-			joinCol++
+			joinToStreamColMap[n.pred.numLeftCols+i] = addOutCol(
+				uint32(n.pred.numLeftCols + rightPlanToStreamColMap[i]),
+			)
 		}
 	}
 
