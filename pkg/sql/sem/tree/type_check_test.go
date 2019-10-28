@@ -136,6 +136,11 @@ func TestTypeCheck(t *testing.T) {
 			`(ROW(1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
 			`((1:::INT8, 2:::INT8, 3:::INT8) AS "One", two, "Three")`,
 		},
+		// Tuples with duplicate labels are allowed, but raise error when accessed by a duplicate label name.
+		// This satisfies a postgres-compatible implementation of unnest(array, array...), where all columns
+		// have the same label (unnest).
+		{`((1,2) AS a,a)`, `((1:::INT8, 2:::INT8) AS a, a)`},
+		{`((1,2,3) AS a,a,a)`, `((1:::INT8, 2:::INT8, 3:::INT8) AS a, a, a)`},
 		// And tuples without labels still work as advertized
 		{`(ROW (1))`, `(1:::INT8,)`},
 		{`ROW(1:::INT8)`, `(1:::INT8,)`},
@@ -246,12 +251,12 @@ func TestTypeCheckError(t *testing.T) {
 			`mismatch in tuple definition: 1 expressions, 2 labels`,
 		},
 		{
-			`((1,2) AS a,a)`,
-			`duplicate tuple label: "a"`,
+			`(((1,2) AS a,a)).a`,
+			`column reference "a" is ambiguous`,
 		},
 		{
-			`((1,2,3) AS a,b,a)`,
-			`duplicate tuple label: "a"`,
+			`((ROW (1, '2') AS b,b)).b`,
+			`column reference "b" is ambiguous`,
 		},
 		{
 			`((ROW (1, '2') AS a,b)).x`,
