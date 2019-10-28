@@ -800,6 +800,22 @@ var specs = []stmtSpec{
 		unlink: []string{"file_location"},
 	},
 	{
+		name:   "import_into",
+		stmt:   "import_stmt",
+		match:  []*regexp.Regexp{regexp.MustCompile("INTO")},
+		inline: []string{"insert_column_list", "string_or_placeholder_list", "opt_with_options", "kv_option_list"},
+		replace: map[string]string{
+			"table_option":          "table_name",
+			"insert_column_item":    "column_name",
+			"import_format":         "'CSV'",
+			"string_or_placeholder": "file_location",
+			"kv_option":             "option '=' value"},
+		unlink: []string{"table_name", "column_name", "file_location", "option", "value"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'WITH' 'OPTIONS'"),
+		},
+	},
+	{
 		name:   "import_dump",
 		stmt:   "import_stmt",
 		inline: []string{"string_or_placeholder_list", "opt_with_options"},
