@@ -1785,7 +1785,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 						_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 					case "computeStats":
 						iter := batch.NewIterator(iterOptions)
-						_, err = iter.ComputeStats(NilKey, MVCCKeyMax, 0)
+						_, err = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
 						iter.Close()
 					}
 					if err != nil {
@@ -2941,7 +2941,7 @@ func computeStats(
 	t.Helper()
 	iter := batch.NewIterator(IterOptions{UpperBound: to})
 	defer iter.Close()
-	s, err := ComputeStatsGo(iter, MVCCKey{Key: from}, MVCCKey{Key: to}, nowNanos)
+	s, err := ComputeStatsGo(iter, from, to, nowNanos)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -5549,7 +5549,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				}
 			}
 			if log.V(1) {
-				kvsn, err := Scan(engine, mvccKey(keyMin), mvccKey(keyMax), 0)
+				kvsn, err := Scan(engine, keyMin, keyMax, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -5580,7 +5580,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				mvccVersionKey(roachpb.Key("b"), ts2),
 				mvccVersionKey(roachpb.Key("b-del"), ts3),
 			}
-			kvs, err := Scan(engine, mvccKey(keyMin), mvccKey(keyMax), 0)
+			kvs, err := Scan(engine, keyMin, keyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -5598,8 +5598,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {
-					expMS, err := mvccStatsTest.fn(iter, mvccKey(roachpb.KeyMin),
-						mvccKey(roachpb.KeyMax), ts3.WallTime)
+					expMS, err := mvccStatsTest.fn(iter, roachpb.KeyMin, roachpb.KeyMax, ts3.WallTime)
 					if err != nil {
 						t.Fatal(err)
 					}

@@ -103,8 +103,8 @@ func TruncateLog(
 	// off either way, though in practice we don't expect followers to have
 	// a first index smaller than the leaseholder's (see #34287), and most of
 	// the time everyone's first index should be the same.
-	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, firstIndex))
-	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, args.Index))
+	start := keys.RaftLogKey(rangeID, firstIndex)
+	end := keys.RaftLogKey(rangeID, args.Index)
 
 	// Compute the stats delta that were to occur should the log entries be
 	// purged. We do this as a side effect of seeing a new TruncatedState,
@@ -117,7 +117,7 @@ func TruncateLog(
 	// bugs that let it diverge. It might be easier to compute the stats
 	// from scratch, stopping when 4mb (defaultRaftLogTruncationThreshold)
 	// is reached as at that point we'll truncate aggressively anyway.
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: end.Key})
+	iter := batch.NewIterator(engine.IterOptions{UpperBound: end})
 	defer iter.Close()
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
 	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)

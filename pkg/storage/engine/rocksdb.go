@@ -860,14 +860,14 @@ func (r *RocksDB) ClearRange(start, end MVCCKey) error {
 //
 // It is safe to modify the contents of the arguments after ClearIterRange
 // returns.
-func (r *RocksDB) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *RocksDB) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	return dbClearIterRange(r.rdb, iter, start, end)
 }
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (r *RocksDB) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
-	return dbIterate(r.rdb, r, start, end, f)
+func (r *RocksDB) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
+	return iterateOnReader(r, start, end, f)
 }
 
 // Capacity queries the underlying file system for disk capacity information.
@@ -970,11 +970,13 @@ func (r *rocksDBReadOnly) GetProto(
 	return dbGetProto(r.parent.rdb, key, msg)
 }
 
-func (r *rocksDBReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+func (r *rocksDBReadOnly) Iterate(
+	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
+) error {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
 	}
-	return dbIterate(r.parent.rdb, r, start, end, f)
+	return iterateOnReader(r, start, end, f)
 }
 
 // NewIterator returns an iterator over the underlying engine. Note
@@ -1025,7 +1027,7 @@ func (r *rocksDBReadOnly) ClearRange(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (r *rocksDBReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *rocksDBReadOnly) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
@@ -1270,8 +1272,10 @@ func (r *rocksDBSnapshot) GetProto(
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair using the snapshot
 // handle.
-func (r *rocksDBSnapshot) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
-	return dbIterate(r.handle, r, start, end, f)
+func (r *rocksDBSnapshot) Iterate(
+	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
+) error {
+	return iterateOnReader(r, start, end, f)
 }
 
 // NewIterator returns a new instance of an Iterator over the
@@ -1363,9 +1367,9 @@ func (r *distinctBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *distinctBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+func (r *distinctBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
 	r.ensureBatch()
-	return dbIterate(r.batch, r, start, end, f)
+	return iterateOnReader(r, start, end, f)
 }
 
 func (r *distinctBatch) Put(key MVCCKey, value []byte) error {
@@ -1403,7 +1407,7 @@ func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
 	return dbClearRange(r.batch, start, end)
 }
 
-func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *distinctBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	r.flushMutations()
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
 	r.ensureBatch()
@@ -1477,20 +1481,15 @@ func (r *batchIterator) NextKey() {
 	r.iter.NextKey()
 }
 
-func (r *batchIterator) PrevKey() {
-	r.batch.flushMutations()
-	r.iter.PrevKey()
-}
-
 func (r *batchIterator) ComputeStats(
-	start, end MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	r.batch.flushMutations()
 	return r.iter.ComputeStats(start, end, nowNanos)
 }
 
 func (r *batchIterator) FindSplitKey(
-	start, end, minSplitKey MVCCKey, targetSize int64,
+	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	r.batch.flushMutations()
 	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize)
@@ -1710,7 +1709,7 @@ func (r *rocksDBBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+func (r *rocksDBBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
 	if r.writeOnly {
 		panic("write-only batch")
 	}
@@ -1719,7 +1718,7 @@ func (r *rocksDBBatch) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, e
 	}
 	r.flushMutations()
 	r.ensureBatch()
-	return dbIterate(r.batch, r, start, end, f)
+	return iterateOnReader(r, start, end, f)
 }
 
 func (r *rocksDBBatch) Clear(key MVCCKey) error {
@@ -1750,7 +1749,7 @@ func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
 	return dbClearRange(r.batch, start, end)
 }
 
-func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -2216,11 +2215,6 @@ func (r *rocksDBIterator) NextKey() {
 	r.setState(C.DBIterNext(r.iter, C.bool(true) /* skip_current_key_versions */))
 }
 
-func (r *rocksDBIterator) PrevKey() {
-	r.checkEngineOpen()
-	r.setState(C.DBIterPrev(r.iter, C.bool(true) /* skip_current_key_versions */))
-}
-
 func (r *rocksDBIterator) Key() MVCCKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed
@@ -2264,10 +2258,13 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 }
 
 func (r *rocksDBIterator) ComputeStats(
-	start, end MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	r.clearState()
-	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
+	result := C.MVCCComputeStats(r.iter,
+		goToCKey(MakeMVCCMetadataKey(start)),
+		goToCKey(MakeMVCCMetadataKey(end)),
+		C.int64_t(nowNanos))
 	stats, err := cStatsToGoStats(result, nowNanos)
 	if util.RaceEnabled {
 		// If we've come here via batchIterator, then flushMutations (which forces
@@ -2290,11 +2287,13 @@ func (r *rocksDBIterator) ComputeStats(
 }
 
 func (r *rocksDBIterator) FindSplitKey(
-	start, end, minSplitKey MVCCKey, targetSize int64,
+	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	var splitKey C.DBString
 	r.clearState()
-	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(minSplitKey),
+	status := C.MVCCFindSplitKey(r.iter,
+		goToCKey(MakeMVCCMetadataKey(start)),
+		goToCKey(MakeMVCCMetadataKey(minSplitKey)),
 		C.int64_t(targetSize), &splitKey)
 	if err := statusToError(status); err != nil {
 		return MVCCKey{}, err
@@ -2742,40 +2741,13 @@ func dbClearRange(rdb *C.DBEngine, start, end MVCCKey) error {
 	return nil
 }
 
-func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end MVCCKey) error {
+func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end roachpb.Key) error {
 	getter, ok := iter.(dbIteratorGetter)
 	if !ok {
 		return errors.Errorf("%T is not a RocksDB iterator", iter)
 	}
-	return statusToError(C.DBDeleteIterRange(rdb, getter.getIter(), goToCKey(start), goToCKey(end)))
-}
-
-func dbIterate(
-	rdb *C.DBEngine, engine Reader, start, end MVCCKey, f func(MVCCKeyValue) (bool, error),
-) error {
-	if !start.Less(end) {
-		return nil
-	}
-	it := newRocksDBIterator(rdb, IterOptions{UpperBound: end.Key}, engine, nil)
-	defer it.Close()
-
-	it.Seek(start)
-	for ; ; it.Next() {
-		ok, err := it.Valid()
-		if err != nil {
-			return err
-		} else if !ok {
-			break
-		}
-		k := it.Key()
-		if !k.Less(end) {
-			break
-		}
-		if done, err := f(MVCCKeyValue{Key: k, Value: it.Value()}); done || err != nil {
-			return err
-		}
-	}
-	return nil
+	return statusToError(C.DBDeleteIterRange(rdb, getter.getIter(),
+		goToCKey(MakeMVCCMetadataKey(start)), goToCKey(MakeMVCCMetadataKey(end))))
 }
 
 // TODO(dan): Rename this to RocksDBSSTFileReader and RocksDBSSTFileWriter.
@@ -2825,7 +2797,7 @@ func (fr *RocksDBSstFileReader) IngestExternalFile(data []byte) error {
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair.
 func (fr *RocksDBSstFileReader) Iterate(
-	start, end MVCCKey, f func(MVCCKeyValue) (bool, error),
+	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
 ) error {
 	if fr.rocksDB.RocksDB == nil {
 		return errors.New("cannot call Iterate on a closed reader")
@@ -2932,17 +2904,18 @@ func (fw *RocksDBSstFileWriter) ClearRange(start, end MVCCKey) error {
 //
 // NOTE: This method is fairly expensive as it performs a Cgo call for every
 // key deleted.
-func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearIterRange on a closed writer")
 	}
-	iter.Seek(start)
+	mvccEndKey := MakeMVCCMetadataKey(end)
+	iter.Seek(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {
 			return err
 		}
-		if !valid || !iter.Key().Less(end) {
+		if !valid || !iter.Key().Less(mvccEndKey) {
 			break
 		}
 		if err := fw.Clear(iter.Key()); err != nil {

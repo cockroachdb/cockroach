@@ -295,8 +295,8 @@ func (c *Compactor) fetchSuggestions(
 	defer delBatch.Close()
 
 	err = c.eng.Iterate(
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
+		keys.LocalStoreSuggestedCompactionsMin,
+		keys.LocalStoreSuggestedCompactionsMax,
 		func(kv engine.MVCCKeyValue) (bool, error) {
 			var sc storagepb.SuggestedCompaction
 			var err error
@@ -463,8 +463,8 @@ func (c *Compactor) aggregateCompaction(
 func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 	var totalBytes int64
 	if err := c.eng.Iterate(
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
+		keys.LocalStoreSuggestedCompactionsMin,
+		keys.LocalStoreSuggestedCompactionsMax,
 		func(kv engine.MVCCKeyValue) (bool, error) {
 			var c storagepb.Compaction
 			if err := protoutil.Unmarshal(kv.Value, &c); err != nil {

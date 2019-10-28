@@ -243,39 +243,10 @@ func (p *Pebble) GetProto(
 	return true, keyBytes, valBytes, err
 }
 
-// Helper function to implement Iterate() on Pebble, pebbleSnapshot,
-// and pebbleBatch.
-func iterateOnReader(
-	reader Reader, start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error),
-) error {
-	if reader.Closed() {
-		return errors.New("cannot call Iterate on a closed batch")
-	}
-	if !start.Less(end) {
-		return nil
-	}
-
-	it := reader.NewIterator(IterOptions{UpperBound: end.Key})
-	defer it.Close()
-
-	it.Seek(start)
-	for ; ; it.Next() {
-		ok, err := it.Valid()
-		if err != nil {
-			return err
-		} else if !ok {
-			break
-		}
-
-		if done, err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); done || err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Iterate implements the Engine interface.
-func (p *Pebble) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error {
+func (p *Pebble) Iterate(
+	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
+) error {
 	return iterateOnReader(p, start, end, f)
 }
 
@@ -330,7 +301,7 @@ func (p *Pebble) ClearRange(start, end MVCCKey) error {
 }
 
 // ClearIterRange implements the Engine interface.
-func (p *Pebble) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (p *Pebble) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	// Write all the tombstones in one batch.
 	batch := p.NewWriteOnlyBatch()
 	defer batch.Close()
@@ -456,7 +427,7 @@ func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	// TODO(itsbilal): Add functionality in Pebble to do this count internally,
 	// instead of iterating over the range.
 	count := uint64(0)
-	_ = p.Iterate(MVCCKey{from, hlc.Timestamp{}}, MVCCKey{to, hlc.Timestamp{}}, func(kv MVCCKeyValue) (bool, error) {
+	_ = p.Iterate(from, to, func(kv MVCCKeyValue) (bool, error) {
 		count += uint64(kv.Key.Len() + len(kv.Value))
 		return false, nil
 	})
@@ -589,11 +560,11 @@ func (p *pebbleReadOnly) GetProto(
 	return p.parent.GetProto(key, msg)
 }
 
-func (p *pebbleReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+func (p *pebbleReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
-	return p.parent.Iterate(start, end, f)
+	return iterateOnReader(p, start, end, f)
 }
 
 func (p *pebbleReadOnly) NewIterator(opts IterOptions) Iterator {
@@ -645,7 +616,7 @@ func (p *pebbleReadOnly) ClearRange(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+func (p *pebbleReadOnly) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
@@ -718,7 +689,7 @@ func (p *pebbleSnapshot) GetProto(
 
 // Iterate implements the Reader interface.
 func (p *pebbleSnapshot) Iterate(
-	start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error),
+	start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
 ) error {
 	return iterateOnReader(p, start, end, f)
 }

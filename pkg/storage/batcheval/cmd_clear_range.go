@@ -62,8 +62,8 @@ func ClearRange(
 
 	// Encode MVCCKey values for start and end of clear span.
 	args := cArgs.Args.(*roachpb.ClearRangeRequest)
-	from := engine.MVCCKey{Key: args.Key}
-	to := engine.MVCCKey{Key: args.EndKey}
+	from := args.Key
+	to := args.EndKey
 	var pd result.Result
 
 	// Before clearing, compute the delta in MVCCStats.
@@ -78,8 +78,7 @@ func ClearRange(
 	// instead of using a range tombstone (inefficient for small ranges).
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
-		if err := batch.Iterate(
-			from, to,
+		if err := batch.Iterate(from, to,
 			func(kv engine.MVCCKeyValue) (bool, error) {
 				return false, batch.Clear(kv.Key)
 			},
@@ -93,15 +92,16 @@ func ClearRange(
 	// the key span using engine.ClearRange.
 	pd.Replicated.SuggestedCompactions = []storagepb.SuggestedCompaction{
 		{
-			StartKey: from.Key,
-			EndKey:   to.Key,
+			StartKey: from,
+			EndKey:   to,
 			Compaction: storagepb.Compaction{
 				Bytes:            statsDelta.Total(),
 				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
 			},
 		},
 	}
-	if err := batch.ClearRange(from, to); err != nil {
+	if err := batch.ClearRange(engine.MakeMVCCMetadataKey(from),
+		engine.MakeMVCCMetadataKey(to)); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil
@@ -116,14 +116,14 @@ func ClearRange(
 // path of simply subtracting the non-system values is accurate.
 // Returns the delta stats.
 func computeStatsDelta(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, from, to engine.MVCCKey,
+	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, from, to roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	desc := cArgs.EvalCtx.Desc()
 	var delta enginepb.MVCCStats
 
 	// We can avoid manually computing the stats delta if we're clearing
 	// the entire range.
-	fast := desc.StartKey.Equal(from.Key) && desc.EndKey.Equal(to.Key)
+	fast := desc.StartKey.Equal(from) && desc.EndKey.Equal(to)
 	if fast {
 		// Note this it is safe to use the full range MVCC stats, as
 		// opposed to the usual method of computing only a localizied
@@ -137,7 +137,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled,
 	// compute stats across the key span to be cleared.
 	if !fast || util.RaceEnabled {
-		iter := batch.NewIterator(engine.IterOptions{UpperBound: to.Key})
+		iter := batch.NewIterator(engine.IterOptions{UpperBound: to})
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {

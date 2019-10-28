@@ -254,19 +254,6 @@ func (p *pebbleIterator) Prev() {
 	p.iter.Prev()
 }
 
-// PrevKey implements the Iterator interface.
-func (p *pebbleIterator) PrevKey() {
-	if valid, err := p.Valid(); err != nil || !valid {
-		return
-	}
-	curKey := p.Key()
-	for p.iter.Prev() {
-		if !bytes.Equal(curKey.Key, p.UnsafeKey().Key) {
-			break
-		}
-	}
-}
-
 // Key implements the Iterator interface.
 func (p *pebbleIterator) Key() MVCCKey {
 	key := p.UnsafeKey()
@@ -293,7 +280,7 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 
 // ComputeStats implements the Iterator interface.
 func (p *pebbleIterator) ComputeStats(
-	start, end MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	return ComputeStatsGo(p, start, end, nowNanos)
 }
@@ -311,7 +298,7 @@ func isValidSplitKey(key roachpb.Key, noSplitSpans []roachpb.Span) bool {
 
 // FindSplitKey implements the Iterator interface.
 func (p *pebbleIterator) FindSplitKey(
-	start, end, minSplitKey MVCCKey, targetSize int64,
+	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	const timestampLen = 12
 
@@ -324,7 +311,7 @@ func (p *pebbleIterator) FindSplitKey(
 	// lies before them. Note that the no-split spans are ordered by end-key.
 	noSplitSpans := keys.NoSplitSpans
 	for i := range noSplitSpans {
-		if minSplitKey.Key.Compare(noSplitSpans[i].EndKey) <= 0 {
+		if minSplitKey.Compare(noSplitSpans[i].EndKey) <= 0 {
 			noSplitSpans = noSplitSpans[i:]
 			break
 		}
@@ -333,7 +320,8 @@ func (p *pebbleIterator) FindSplitKey(
 	// Note that it is unnecessary to compare against "end" to decide to
 	// terminate iteration because the iterator's upper bound has already been
 	// set to end.
-	p.Seek(start)
+	mvccMinSplitKey := MakeMVCCMetadataKey(minSplitKey)
+	p.Seek(MakeMVCCMetadataKey(start))
 	for ; p.iter.Valid(); p.iter.Next() {
 		mvccKey, err := DecodeMVCCKey(p.iter.Key())
 		if err != nil {
@@ -349,7 +337,7 @@ func (p *pebbleIterator) FindSplitKey(
 		}
 
 		if diff < bestDiff &&
-			(minSplitKey.Key == nil || !mvccKey.Less(minSplitKey)) &&
+			(mvccMinSplitKey.Key == nil || !mvccKey.Less(mvccMinSplitKey)) &&
 			(len(noSplitSpans) == 0 || isValidSplitKey(mvccKey.Key, noSplitSpans)) {
 			// We are going to have to copy bestSplitKey, since by the time we find
 			// out it's the actual best split key, the underlying slice would have
@@ -363,7 +351,7 @@ func (p *pebbleIterator) FindSplitKey(
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], mvccKey.Key...)
 			bestSplitKey.Timestamp = mvccKey.Timestamp
 			// Avoid comparing against minSplitKey on future iterations.
-			minSplitKey.Key = nil
+			mvccMinSplitKey.Key = nil
 		}
 
 		sizeSoFar += int64(len(p.iter.Value()))

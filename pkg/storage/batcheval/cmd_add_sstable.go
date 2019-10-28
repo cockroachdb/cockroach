@@ -88,7 +88,8 @@ func EvalAddSSTable(
 	if args.MVCCStats == nil || verifyFastPath {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
-		computed, err := engine.ComputeStatsGo(dataIter, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+		computed, err := engine.ComputeStatsGo(
+			dataIter, mvccStartKey.Key, mvccEndKey.Key, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
 		}

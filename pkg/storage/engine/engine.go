@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 // SimpleIterator is an interface for iterating over key/value pairs in an
@@ -76,11 +77,6 @@ type Iterator interface {
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
 	Prev()
-	// PrevKey moves the iterator backward to the previous MVCC key. This
-	// operation is distinct from Prev which moves the iterator backward to the
-	// prev version of the current key or the prev key if the iterator is
-	// currently located at the first version for a key.
-	PrevKey()
 	// Key returns the current key.
 	Key() MVCCKey
 	// Value returns the current value as a byte slice.
@@ -95,7 +91,7 @@ type Iterator interface {
 	// recomputed for the first range (i.e. the one with start key == KeyMin).
 	// The nowNanos arg specifies the wall time in nanoseconds since the
 	// epoch and is used to compute the total age of all intents.
-	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
+	ComputeStats(start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always
@@ -104,7 +100,7 @@ type Iterator interface {
 	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
-	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
+	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
 	//
@@ -198,10 +194,7 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	//
-	// TODO(itsbilal): Change type of start and end to roachpb.Key instead of
-	// MVCCKey. All keys passed in have zero timestamps anyway.
-	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error
+	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error)) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
@@ -245,6 +238,10 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after ClearRange
 	// returns.
+	//
+	// TODO(peter): Most callers want to pass roachpb.Key, except for
+	// MVCCClearTimeRange. That function actually does what to clear records
+	// between specific versions.
 	ClearRange(start, end MVCCKey) error
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear and ClearRange, this method actually removes
@@ -254,11 +251,7 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
-	//
-	// TODO(itsbilal): All calls to ClearIterRange pass in metadata keys for
-	// start and end that have a zero timestamp. Change the type of those args
-	// to roachpb.Key to make this expectation explicit.
-	ClearIterRange(iter Iterator, start, end MVCCKey) error
+	ClearIterRange(iter Iterator, start, end roachpb.Key) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
@@ -507,7 +500,7 @@ func PutProto(
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // Specify max=0 for unbounded scans.
-func Scan(engine Reader, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) {
+func Scan(engine Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
 	err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
@@ -536,9 +529,9 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
 // (exclusive). Depending on the number of keys, it will either use ClearRange
-// or ClearRangeIter.
-func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) error {
-	iter := eng.NewIterator(IterOptions{UpperBound: end.Key})
+// or ClearIterRange.
+func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end roachpb.Key) error {
+	iter := eng.NewIterator(IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same
@@ -557,13 +550,13 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) erro
 	// TODO(bdarnell): Move this into ClearIterRange so we don't have
 	// to do this scan twice.
 	count := 0
-	iter.Seek(start)
+	iter.Seek(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {
 			return err
 		}
-		if !valid || !iter.Key().Less(end) {
+		if !valid {
 			break
 		}
 		count++
@@ -574,7 +567,7 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end MVCCKey) erro
 	}
 	var err error
 	if count > clearRangeMinKeys {
-		err = writer.ClearRange(start, end)
+		err = writer.ClearRange(MakeMVCCMetadataKey(start), MakeMVCCMetadataKey(end))
 	} else {
 		err = writer.ClearIterRange(iter, start, end)
 	}
@@ -651,4 +644,33 @@ func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Dura
 		return targetDelay
 	}
 	return 0
+}
+
+// Helper function to implement Reader.Iterate().
+func iterateOnReader(
+	reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
+) error {
+	if reader.Closed() {
+		return errors.New("cannot call Iterate on a closed batch")
+	}
+	if start.Compare(end) >= 0 {
+		return nil
+	}
+
+	it := reader.NewIterator(IterOptions{UpperBound: end})
+	defer it.Close()
+
+	it.Seek(MakeMVCCMetadataKey(start))
+	for ; ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		if done, err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); done || err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -74,7 +74,7 @@ func TestSpanSetBatch(t *testing.T) {
 	}
 	{
 		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
-		err := batch.ClearIterRange(iter, outsideKey, outsideKey2)
+		err := batch.ClearIterRange(iter, outsideKey.Key, outsideKey2.Key)
 		iter.Close()
 		if !isWriteSpanErr(err) {
 			t.Errorf("ClearIterRange: unexpected error %v", err)
@@ -107,7 +107,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if _, _, _, err := batch.GetProto(outsideKey, nil); !isReadSpanErr(err) {
 		t.Errorf("GetProto: unexpected error %v", err)
 	}
-	if err := batch.Iterate(outsideKey, outsideKey2,
+	if err := batch.Iterate(outsideKey.Key, outsideKey2.Key,
 		func(v engine.MVCCKeyValue) (bool, error) {
 			return false, errors.Errorf("unexpected callback: %v", v)
 		},
