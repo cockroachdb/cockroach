@@ -560,9 +560,6 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 		if rCol.Hidden {
 			outputProp("hidden")
 		}
-		if rCol.Omitted {
-			outputProp("omitted")
-		}
 		if hasProps {
 			f.WriteByte(']')
 		}
