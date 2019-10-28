@@ -1,0 +1,176 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package engineccl
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
+)
+
+func TestEncryptedFS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	memFS := vfs.NewMem()
+
+	fileRegistry := &engine.PebbleFileRegistry{FS: memFS, DBDir: "/bar"}
+	require.NoError(t, fileRegistry.Load())
+
+	// Using a StoreKeyManager for the test since it is easy to create. Write a key for the
+	// StoreKeyManager.
+	var b []byte
+	for i := 0; i < keyIDLength+16; i++ {
+		b = append(b, 'a')
+	}
+	f, err := memFS.Create("keyfile")
+	require.NoError(t, err)
+	bReader := bytes.NewReader(b)
+	_, err = io.Copy(f, bReader)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "keyfile", oldKeyFilename: "plain"}
+	require.NoError(t, keyManager.Load(context.Background()))
+
+	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
+
+	fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
+
+	// Style (and most code) is from Pebble's mem_fs_test.go. We are mainly testing the integration of
+	// encryptedFS with FileRegistry and FileCipherStreamCreator. This uses real encryption but the
+	// strings here are not very long since we've tested that in lower-level unit tests.
+	testCases := []string{
+		// Make the /bar/baz directory; create a third-level file.
+		"1a: mkdirall /bar/baz",
+		"1b: f = create /bar/baz/y",
+		"1c: f.stat.name == y",
+		// Write more than a block of data; read it back.
+		"2a: f.write abcdefghijklmnopqrstuvwxyz",
+		"2b: f.close",
+		"2c: f = open /bar/baz/y",
+		"2d: f.read 5 == abcde",
+		"2e: f.readat 2 1 == bc",
+		"2f: f.readat 5 20 == uvwxy",
+		"2g: f.close",
+		// Link /bar/baz/y to /bar/z. We should be able to read from both files
+		// and remove them independently.
+		"3a: link /bar/baz/y /bar/z",
+		"3b: f = open /bar/z",
+		"3c: f.read 5 == abcde",
+		"3d: f.close",
+		"3e: remove /bar/baz/y",
+		"3f: f = open /bar/z",
+		"3g: f.read 5 == abcde",
+		"3h: f.close",
+		// Rename /bar/z to /foo
+		"4a: rename /bar/z /foo",
+		"4b: f = open /foo",
+		"4c: f.readat 5 20 == uvwxy",
+		"4d: f.close",
+		"4e: open /bar/z fails",
+		// ReuseWAL /foo /baz
+		"5a: reuseWAL /foo /baz fails",
+	}
+
+	for _, tc := range testCases {
+		s := strings.Split(tc, " ")[1:]
+
+		saveF := s[0] == "f" && s[1] == "="
+		if saveF {
+			s = s[2:]
+		}
+
+		fails := s[len(s)-1] == "fails"
+		if fails {
+			s = s[:len(s)-1]
+		}
+
+		var (
+			fi  os.FileInfo
+			g   vfs.File
+			err error
+		)
+		switch s[0] {
+		case "create":
+			g, err = fs.Create(s[1])
+		case "link":
+			err = fs.Link(s[1], s[2])
+		case "open":
+			g, err = fs.Open(s[1])
+		case "mkdirall":
+			err = fs.MkdirAll(s[1], 0755)
+		case "remove":
+			err = fs.Remove(s[1])
+		case "rename":
+			err = fs.Rename(s[1], s[2])
+		case "reuseWAL":
+			_, err = fs.ReuseWAL(s[1], s[2])
+		case "f.write":
+			_, err = f.Write([]byte(s[1]))
+		case "f.read":
+			n, _ := strconv.Atoi(s[1])
+			buf := make([]byte, n)
+			_, err = io.ReadFull(f, buf)
+			if err != nil {
+				break
+			}
+			if got, want := string(buf), s[3]; got != want {
+				t.Fatalf("%q: got %q, want %q", tc, got, want)
+			}
+		case "f.readat":
+			n, _ := strconv.Atoi(s[1])
+			off, _ := strconv.Atoi(s[2])
+			buf := make([]byte, n)
+			_, err = f.ReadAt(buf, int64(off))
+			if err != nil {
+				break
+			}
+			if got, want := string(buf), s[4]; got != want {
+				t.Fatalf("%q: got %q, want %q", tc, got, want)
+			}
+		case "f.close":
+			f, err = nil, f.Close()
+		case "f.stat.name":
+			fi, err = f.Stat()
+			if err != nil {
+				break
+			}
+			if got, want := fi.Name(), s[2]; got != want {
+				t.Fatalf("%q: got %q, want %q", tc, got, want)
+			}
+		default:
+			t.Fatalf("bad test case: %q", tc)
+		}
+
+		if saveF {
+			f, g = g, nil
+		} else if g != nil {
+			g.Close()
+		}
+
+		if fails {
+			if err == nil {
+				t.Fatalf("%q: got nil error, want non-nil", tc)
+			}
+		} else {
+			if err != nil {
+				t.Fatalf("%q: %v", tc, err)
+			}
+		}
+	}
+}
