@@ -134,11 +134,35 @@ func setupMixedCluster(
 }
 
 // Prev returns the previous version of the given version.
-// eg. prev(2.0) = 1.0, prev(2.1) == 2.0, prev(2.1-5) == 2.1.
+// eg. prev(20.1) = 19.2, prev(19.2) = 19.1, prev(19.1) = 2.1,
+// prev(2.0) = 1.0, prev(2.1) == 2.0, prev(2.1-5) == 2.1.
 func prev(version roachpb.Version) roachpb.Version {
 	if version.Unstable != 0 {
 		return roachpb.Version{Major: version.Major, Minor: version.Minor}
-	} else if version.Minor != 0 {
+	}
+
+	v19_1 := roachpb.Version{Major: 19, Minor: 1}
+
+	if v19_1.Less(version) {
+		if version.Minor > 1 {
+			return roachpb.Version{Major: version.Major, Minor: version.Minor - 1}
+		}
+		// Here we assume that there's going to only be 2 releases per year.
+		// Otherwise we'd need to keep some history of what releases we've had.
+		return roachpb.Version{Major: version.Major - 1, Minor: 2}
+	}
+
+	if version == v19_1 {
+		return roachpb.Version{Major: 2, Minor: 1}
+	}
+
+	// Logic for versions below 19.1.
+
+	if version.Major > 2 {
+		log.Fatalf(context.TODO(), "can't compute previous version for %s", version)
+	}
+
+	if version.Minor != 0 {
 		return roachpb.Version{Major: version.Major}
 	} else {
 		// version will be at least 2.0-X, so it's safe to set new Major to be version.Major-1.
