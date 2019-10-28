@@ -29,48 +29,32 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
-	"github.com/pkg/errors"
 )
 
 // Service implements the gRPC BlobService which exchanges bulk files between different nodes.
 type Service struct {
-	base string
+	localStorage *localStorage
 }
 
 var _ blobspb.BlobServer = &Service{}
 
 // NewBlobService instantiates a blob service server.
-func NewBlobService(basePath string) (*Service, error) {
-	absPath, err := filepath.Abs(basePath)
-	if err != nil {
-		return nil, errors.Wrap(err, "externalIODir should be an absolute path")
-	}
-	return &Service{base: absPath}, nil
-}
-
-func (s *Service) prependExternalIODir(path string) (string, error) {
-	localBase := filepath.Join(s.base, path)
-	// Make sure we didn't ../ our way back out.
-	if !strings.HasPrefix(localBase, s.base) {
-		return "", errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
-	}
-	return localBase, nil
+func NewBlobService(externalIODir string) (*Service, error) {
+	localStorage, err := newLocalStorage(externalIODir)
+	return &Service{localStorage: localStorage}, err
 }
 
 // GetBlob implements the gRPC service.
 func (s *Service) GetBlob(
 	ctx context.Context, req *blobspb.GetRequest,
 ) (*blobspb.GetResponse, error) {
-	localFile, err := s.prependExternalIODir(req.Filename)
+	reader, err := s.localStorage.ReadFile(req.Filename)
 	if err != nil {
-		return nil, err
+		return &blobspb.GetResponse{}, err
 	}
-	payload, err := ioutil.ReadFile(localFile)
+	payload, err := ioutil.ReadAll(reader)
 	return &blobspb.GetResponse{Payload: payload}, err
 }
 
@@ -78,28 +62,15 @@ func (s *Service) GetBlob(
 func (s *Service) PutBlob(
 	ctx context.Context, req *blobspb.PutRequest,
 ) (*blobspb.PutResponse, error) {
-	localFile, err := s.prependExternalIODir(req.Filename)
-	if err != nil {
-		return nil, err
-	}
-	return &blobspb.PutResponse{}, writeFileLocally(localFile, bytes.NewReader(req.Payload))
+	return &blobspb.PutResponse{},
+		s.localStorage.WriteFile(req.Filename, bytes.NewReader(req.Payload))
 }
 
 // List implements the gRPC service.
 func (s *Service) List(
 	ctx context.Context, req *blobspb.GlobRequest,
 ) (*blobspb.GlobResponse, error) {
-	if req.Pattern == "" {
-		return nil, errors.New("pattern cannot be empty")
-	}
-	fullPath, err := s.prependExternalIODir(req.Pattern)
-	if err != nil {
-		return nil, err
-	}
-	matches, err := filepath.Glob(fullPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to match pattern provided")
-	}
+	matches, err := s.localStorage.List(req.Pattern)
 	return &blobspb.GlobResponse{Files: matches}, err
 }
 
@@ -107,26 +78,10 @@ func (s *Service) List(
 func (s *Service) Delete(
 	ctx context.Context, req *blobspb.DeleteRequest,
 ) (*blobspb.DeleteResponse, error) {
-	fullPath, err := s.prependExternalIODir(req.Filename)
-	if err != nil {
-		return nil, err
-	}
-	return &blobspb.DeleteResponse{}, os.Remove(fullPath)
+	return &blobspb.DeleteResponse{}, s.localStorage.Delete(req.Filename)
 }
 
 // Stat implements the gRPC service.
 func (s *Service) Stat(ctx context.Context, req *blobspb.StatRequest) (*blobspb.BlobStat, error) {
-	fullPath, err := s.prependExternalIODir(req.Filename)
-	if err != nil {
-		return nil, err
-	}
-
-	fi, err := os.Stat(fullPath)
-	if err != nil {
-		return nil, err
-	}
-	if fi.IsDir() {
-		return nil, errors.Errorf("expected a file but %q is a directory", fi.Name())
-	}
-	return &blobspb.BlobStat{Filesize: fi.Size()}, nil
+	return s.localStorage.Stat(req.Filename)
 }

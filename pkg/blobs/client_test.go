@@ -86,7 +86,11 @@ func setUpService(
 			return nil, errors.Errorf("node %d not found", nodeID)
 		},
 	)
-	return NewRemoteClient(localDialer)
+	client, err := NewBlobClient(localNodeID, localDialer, localExternalDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
 }
 
 func writeTestFile(t *testing.T, file string, content []byte) {
