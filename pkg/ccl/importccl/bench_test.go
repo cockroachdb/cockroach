@@ -42,6 +42,7 @@ type tableSSTable struct {
 }
 
 func BenchmarkImportWorkload(b *testing.B) {
+	b.Skip("#41932: broken due to adding keys out-of-order to an sstable")
 	if testing.Short() {
 		b.Skip("skipping long benchmark")
 	}
