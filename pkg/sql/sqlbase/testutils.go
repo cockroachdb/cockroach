@@ -769,7 +769,7 @@ func RandCreateTable(rng *rand.Rand, tableIdx int) *tree.CreateTable {
 			}
 		}
 
-		famDef := &tree.FamilyTableDef{
+		famDef := &tree.FamilyDef{
 			Name:    tree.Name(fmt.Sprintf("fam%d", i)),
 			Columns: names,
 		}

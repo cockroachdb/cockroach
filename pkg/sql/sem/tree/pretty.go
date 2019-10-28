@@ -1443,6 +1443,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	// CREATE [UNIQUE] [INVERTED] INDEX [name]
 	//    ON tbl (cols...)
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1475,6 +1476,9 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 			")", "",
 		))
 	}
+	if node.Families != nil {
+		clauses = append(clauses, p.Doc(node.Families))
+	}
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
 	}
@@ -1486,7 +1490,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 		pretty.Group(pretty.Stack(clauses...)))
 }
 
-func (node *FamilyTableDef) doc(p *PrettyCfg) pretty.Doc {
+func (node *FamilyDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// FAMILY [name] (columns...)
 	//
@@ -1523,6 +1527,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// [INVERTED] INDEX [name] (columns...)
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1542,6 +1547,9 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 			p.Doc(&node.Storing),
 			")", ""))
 	}
+	if node.Families != nil {
+		clauses = append(clauses, p.Doc(node.Families))
+	}
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
 	}
@@ -1560,6 +1568,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// [CONSTRAINT name]
 	//    [PRIMARY KEY|UNIQUE] ( ... )
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1567,6 +1576,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//
 	// [PRIMARY KEY|UNIQUE] ( ... )
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1587,6 +1597,9 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 			"STORING", "(",
 			p.Doc(&node.Storing),
 			")", ""))
+	}
+	if node.Families != nil {
+		clauses = append(clauses, p.Doc(node.Families))
 	}
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))

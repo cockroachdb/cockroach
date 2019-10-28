@@ -162,7 +162,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		case *tree.IndexTableDef:
 			tab.addIndex(def, nonUniqueIndex)
 
-		case *tree.FamilyTableDef:
+		case *tree.FamilyDef:
 			tab.addFamily(def)
 
 		case *tree.ColumnTableDef:
@@ -497,7 +497,7 @@ func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 	return name
 }
 
-func (tt *Table) addFamily(def *tree.FamilyTableDef) {
+func (tt *Table) addFamily(def *tree.FamilyDef) {
 	// Synthesize name if one was not provided.
 	name := string(def.Name)
 	if name == "" {

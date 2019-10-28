@@ -473,6 +473,13 @@ func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
 func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
     return u.val.([]tree.PartitionedBackup)
 }
+func (u *sqlSymUnion) family() *tree.FamilyDef {
+    return u.val.(*tree.FamilyDef)
+}
+func (u *sqlSymUnion) families() tree.FamilyDefs {
+    return u.val.(tree.FamilyDefs)
+}
+
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
 }
@@ -521,7 +528,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
 
-%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
+%token <str> FALSE FAMILY FAMILIES FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL FUNCTION
 
@@ -976,7 +983,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem create_as_constraint_def create_as_constraint_elem
 %type <tree.TableDef> index_def
-%type <tree.TableDef> family_def
+%type <*tree.FamilyDef> family_def
+%type <tree.FamilyDefs> opt_idx_families family_def_list
 %type <[]tree.NamedColumnQualification> col_qual_list create_as_col_qual_list
 %type <tree.NamedColumnQualification> col_qualification create_as_col_qualification
 %type <tree.ColumnQualification> col_qualification_elem create_as_col_qualification_elem
@@ -4321,6 +4329,9 @@ table_elem:
   }
 | index_def
 | family_def
+  {
+    $$.val = $1.family()
+  }
 | table_constraint
   {
     $$.val = $1.constraintDef()
@@ -4556,25 +4567,27 @@ col_qualification_elem:
  }
 
 index_def:
-  INDEX opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+  INDEX opt_index_name '(' index_params ')' opt_storing opt_idx_families opt_interleave opt_partition_by
   {
     $$.val = &tree.IndexTableDef{
       Name:    tree.Name($2),
       Columns: $4.idxElems(),
       Storing: $6.nameList(),
-      Interleave: $7.interleave(),
-      PartitionBy: $8.partitionBy(),
+      Families: $7.families(),
+      Interleave: $8.interleave(),
+      PartitionBy: $9.partitionBy(),
     }
   }
-| UNIQUE INDEX opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| UNIQUE INDEX opt_index_name '(' index_params ')' opt_storing opt_idx_families opt_interleave opt_partition_by
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
         Name:    tree.Name($3),
         Columns: $5.idxElems(),
         Storing: $7.nameList(),
-        Interleave: $8.interleave(),
-        PartitionBy: $9.partitionBy(),
+        Families: $8.families(),
+        Interleave: $9.interleave(),
+        PartitionBy: $10.partitionBy(),
       },
     }
   }
@@ -4587,10 +4600,30 @@ index_def:
     }
   }
 
+opt_idx_families:
+  FAMILIES '(' family_def_list ')'
+  {
+    $$.val = $3.families()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.FamilyDefs(nil)
+  }
+
+family_def_list:
+  family_def_list ',' family_def
+  {
+    $$.val = append($1.families(), $3.family())
+  }
+| family_def
+  {
+    $$.val = tree.FamilyDefs{$1.family()}
+  }
+
 family_def:
   FAMILY opt_family_name '(' name_list ')'
   {
-    $$.val = &tree.FamilyTableDef{
+    $$.val = &tree.FamilyDef{
       Name: tree.Name($2),
       Columns: $4.nameList(),
     }
@@ -4617,14 +4650,15 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by  opt_deferrable
+| UNIQUE '(' index_params ')' opt_storing opt_idx_families opt_interleave opt_partition_by  opt_deferrable
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $3.idxElems(),
         Storing: $5.nameList(),
-        Interleave: $6.interleave(),
-        PartitionBy: $7.partitionBy(),
+        Families: $6.families(),
+        Interleave: $7.interleave(),
+        PartitionBy: $8.partitionBy(),
       },
     }
   }
@@ -4685,7 +4719,7 @@ create_as_table_defs:
   }
 | create_as_table_defs ',' family_def
   {
-    $$.val = append($1.tblDefs(), $3.tblDef())
+    $$.val = append($1.tblDefs(), $3.family())
   }
 | create_as_table_defs ',' create_as_constraint_def
 {
@@ -5069,7 +5103,8 @@ create_type_stmt:
 // %Text:
 // CREATE [UNIQUE | INVERTED] INDEX [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
-//        [STORING ( <colnames...> )] [<interleave>]
+//        [STORING ( <colnames...> )] [FAMILIES ( <family definitions...>)]
+//        [<interleave>]
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
@@ -5077,7 +5112,7 @@ create_type_stmt:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_idx_families opt_interleave opt_partition_by opt_idx_where
   {
     table := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5086,12 +5121,13 @@ create_index_stmt:
       Unique:  $2.bool(),
       Columns: $9.idxElems(),
       Storing: $11.nameList(),
-      Interleave: $12.interleave(),
-      PartitionBy: $13.partitionBy(),
+      Families: $12.families(),
+      Interleave: $13.interleave(),
+      PartitionBy: $14.partitionBy(),
       Inverted: $7.bool(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_idx_families opt_interleave opt_partition_by opt_idx_where
   {
     table := $9.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5101,8 +5137,9 @@ create_index_stmt:
       IfNotExists: true,
       Columns:     $12.idxElems(),
       Storing:     $14.nameList(),
-      Interleave:  $15.interleave(),
-      PartitionBy: $16.partitionBy(),
+      Families:    $15.families(),
+      Interleave:  $16.interleave(),
+      PartitionBy: $17.partitionBy(),
       Inverted:    $10.bool(),
     }
   }
@@ -9393,6 +9430,7 @@ unreserved_keyword:
 | EXPLAIN
 | EXPORT
 | EXTENSION
+| FAMILIES
 | FILES
 | FILTER
 | FIRST

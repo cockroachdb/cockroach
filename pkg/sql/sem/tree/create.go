@@ -110,6 +110,7 @@ type CreateIndex struct {
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
 	Storing     NameList
+	Families    FamilyDefs
 	Interleave  *InterleaveDef
 	PartitionBy *PartitionBy
 }
@@ -149,6 +150,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
 	}
+	if node.Families != nil {
+		ctx.FormatNode(node.Families)
+	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
 	}
@@ -171,7 +175,7 @@ type TableDef interface {
 
 func (*ColumnTableDef) tableDef()               {}
 func (*IndexTableDef) tableDef()                {}
-func (*FamilyTableDef) tableDef()               {}
+func (*FamilyDef) tableDef()                    {}
 func (*ForeignKeyConstraintTableDef) tableDef() {}
 func (*CheckConstraintTableDef) tableDef()      {}
 
@@ -545,6 +549,7 @@ type IndexTableDef struct {
 	Name        Name
 	Columns     IndexElemList
 	Storing     NameList
+	Families    FamilyDefs
 	Interleave  *InterleaveDef
 	Inverted    bool
 	PartitionBy *PartitionBy
@@ -572,6 +577,9 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
+	}
+	if node.Families != nil {
+		ctx.FormatNode(node.Families)
 	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
@@ -620,6 +628,9 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
+	}
+	if node.Families != nil {
+		ctx.FormatNode(node.Families)
 	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
@@ -762,20 +773,20 @@ func (node *CheckConstraintTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
-// FamilyTableDef represents a family definition within a CREATE TABLE
+// FamilyDef represents a family definition within a CREATE TABLE
 // statement.
-type FamilyTableDef struct {
+type FamilyDef struct {
 	Name    Name
 	Columns NameList
 }
 
 // SetName implements the TableDef interface.
-func (node *FamilyTableDef) SetName(name Name) {
+func (node *FamilyDef) SetName(name Name) {
 	node.Name = name
 }
 
 // Format implements the NodeFormatter interface.
-func (node *FamilyTableDef) Format(ctx *FmtCtx) {
+func (node *FamilyDef) Format(ctx *FmtCtx) {
 	ctx.WriteString("FAMILY ")
 	if node.Name != "" {
 		ctx.FormatNode(&node.Name)
@@ -784,6 +795,21 @@ func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
+}
+
+// FamilyDefs represents a list of FamilyDef structs.
+type FamilyDefs []*FamilyDef
+
+// Format implements the NodeFormatter interface.
+func (node FamilyDefs) Format(ctx *FmtCtx) {
+	ctx.WriteString(" FAMILIES (")
+	for i, f := range []*FamilyDef(node) {
+		if i != 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(f)
+	}
+	ctx.WriteString(")")
 }
 
 // InterleaveDef represents an interleave definition within a CREATE TABLE

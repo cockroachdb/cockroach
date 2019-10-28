@@ -93,6 +93,14 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	for _, def := range n.n.Defs {
+		if d, ok := def.(*tree.IndexTableDef); ok {
+			if d.Families != nil {
+				return unimplemented.NewWithIssue(41964, "column families on secondary indexes are unsupported")
+			}
+		}
+	}
+
 	id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
 	if err != nil {
 		return err
@@ -1158,7 +1166,7 @@ func MakeTableDesc(
 			if d.Interleave != nil {
 				return desc, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
-		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
+		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyDef:
 			// pass, handled below.
 
 		default:
@@ -1179,7 +1187,7 @@ func MakeTableDesc(
 	// here, rather than in the constraint pass below since we want to pick up
 	// explicit allocations before AllocateIDs adds implicit ones).
 	for _, def := range n.Defs {
-		if d, ok := def.(*tree.FamilyTableDef); ok {
+		if d, ok := def.(*tree.FamilyDef); ok {
 			fam := sqlbase.ColumnFamilyDescriptor{
 				Name:        string(d.Name),
 				ColumnNames: d.Columns.ToStrings(),
@@ -1229,7 +1237,7 @@ func MakeTableDesc(
 		case *tree.ColumnTableDef:
 			// Check after all ResolveFK calls.
 
-		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
+		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyDef:
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:

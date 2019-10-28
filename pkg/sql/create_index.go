@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type createIndexNode struct {
@@ -94,6 +95,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if params.SessionData().SafeUpdates && n.n.PartitionBy == nil &&
 		n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
 		return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
+	}
+
+	if n.n.Families != nil {
+		return unimplemented.NewWithIssue(41964, "column families on secondary indexes are unsupported")
 	}
 
 	indexDesc, err := MakeIndexDescriptor(n.n)

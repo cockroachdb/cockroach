@@ -1955,7 +1955,7 @@ func (t *logicTest) assignRandomFamily(sql string) string {
 		create := stmt.SQL
 		for _, def := range ast.Defs {
 			switch def := def.(type) {
-			case *tree.FamilyTableDef:
+			case *tree.FamilyDef:
 				hasFamily = true
 			case *tree.ColumnTableDef:
 				if def.HasColumnFamily() {
@@ -2003,7 +2003,7 @@ func (t *logicTest) assignRandomFamily(sql string) string {
 			rand.Shuffle(len(columns), func(i, j int) {
 				columns[i], columns[j] = columns[j], columns[i]
 			})
-			fd := &tree.FamilyTableDef{}
+			fd := &tree.FamilyDef{}
 			for {
 				if len(columns) == 0 {
 					if len(fd.Columns) > 0 {
@@ -2016,7 +2016,7 @@ func (t *logicTest) assignRandomFamily(sql string) string {
 				// 50% chance to make a new column family.
 				if rand.Intn(2) != 0 {
 					ast.Defs = append(ast.Defs, fd)
-					fd = &tree.FamilyTableDef{}
+					fd = &tree.FamilyDef{}
 				}
 			}
 			create = ast.String()
