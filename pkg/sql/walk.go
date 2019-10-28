@@ -166,9 +166,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if v.observer.expr != nil {
 			for i, tuple := range n.tuples {
 				for j, expr := range tuple {
-					if n.columns[j].Omitted {
-						continue
-					}
 					var fieldName string
 					if v.observer.attr != nil {
 						fieldName = fmt.Sprintf("row %d, expr", i)
