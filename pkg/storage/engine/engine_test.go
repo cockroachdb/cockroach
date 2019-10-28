@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
@@ -62,23 +61,24 @@ var (
 // runWithAllEngines creates a new engine of each supported type and
 // invokes the supplied test func with each instance.
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	rocksDBInMem := NewInMem(inMemAttrs, testCacheSize)
-	stopper.AddCloser(rocksDBInMem)
-	test(rocksDBInMem, t)
-	rocksDBInMem.Close()
+	func() {
+		rocksDBInMem := NewInMem(inMemAttrs, testCacheSize)
+		defer rocksDBInMem.Close()
+		test(rocksDBInMem, t)
+	}()
 
-	pebbleInMem, err := NewPebble(PebbleConfig{
-		Opts: &pebble.Options{
-			FS: vfs.NewMem(),
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	test(pebbleInMem, t)
-	pebbleInMem.Close()
+	func() {
+		pebbleInMem, err := NewPebble(PebbleConfig{
+			Opts: &pebble.Options{
+				FS: vfs.NewMem(),
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer pebbleInMem.Close()
+		test(pebbleInMem, t)
+	}()
 }
 
 // TestEngineBatchCommit writes a batch containing 10K rows (all the
