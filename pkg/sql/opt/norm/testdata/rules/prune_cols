@@ -2873,6 +2873,34 @@ scalar-group-by
  └── aggregations
       └── count-rows [type=int]
 
+opt format=show-all
+SELECT 1 FROM (SELECT a FROM abcde WHERE a > 3 UNION ALL SELECT a FROM abcde)
+----
+project
+ ├── columns: "?column?":12(int!null)
+ ├── stats: [rows=1333.33333]
+ ├── cost: 1426.72667
+ ├── fd: ()-->(12)
+ ├── prune: (12)
+ ├── union-all
+ │    ├── stats: [rows=1333.33333]
+ │    ├── cost: 1400.05
+ │    ├── project
+ │    │    ├── stats: [rows=333.333333]
+ │    │    ├── cost: 356.686667
+ │    │    └── scan t.public.abcde
+ │    │         ├── columns: t.public.abcde.a:1(int!null)
+ │    │         ├── constraint: /1: [/4 - ]
+ │    │         ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
+ │    │         ├── cost: 353.343333
+ │    │         ├── key: (1)
+ │    │         └── interesting orderings: (+1)
+ │    └── scan t.public.abcde@bc
+ │         ├── stats: [rows=1000]
+ │         └── cost: 1030.02
+ └── projections
+      └── const: 1 [type=int]
+
 opt expect=PruneUnionAllCols
 SELECT 1 FROM a INNER JOIN (SELECT a, b FROM abcde UNION ALL SELECT * from xy) AS b ON a.i=b.b
 ----
@@ -2926,3 +2954,72 @@ project
  │              └── fd: ()-->(6)
  └── projections
       └── const: 1 [type=int]
+
+# Regression test for #41772.
+
+exec-ddl
+CREATE TABLE table41772 ()
+----
+
+norm
+WITH
+    with_5211 AS (SELECT NULL FROM table41772),
+    with_5212
+        AS (
+            SELECT
+                *
+            FROM
+                (VALUES (NOT NULL, ARRAY[0, 0, 0, 0:::OID]))
+                    AS tab_12862 (col_29995, col_29996)
+            UNION ALL
+                SELECT
+                    *
+                FROM
+                    (VALUES (NULL, NULL), (false, ARRAY[0:::OID]))
+                        AS tab_12863 (col_29997, col_29998)
+        )
+SELECT
+    NULL
+FROM
+    with_5211, with_5212
+WHERE
+    with_5212.col_29995
+----
+project
+ ├── columns: "?column?":12(unknown)
+ ├── fd: ()-->(12)
+ ├── inner-join (hash)
+ │    ├── columns: col_29995:7(bool!null)
+ │    ├── scan table41772
+ │    ├── union-all
+ │    │    ├── columns: col_29995:7(bool!null)
+ │    │    ├── left columns: column1:3(bool)
+ │    │    ├── right columns: column1:5(bool)
+ │    │    ├── cardinality: [0 - 3]
+ │    │    ├── select
+ │    │    │    ├── columns: column1:3(bool!null)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(3)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:3(bool)
+ │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(3)
+ │    │    │    │    └── (NOT NULL,) [type=tuple{bool}]
+ │    │    │    └── filters
+ │    │    │         └── variable: column1 [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ │    │    └── select
+ │    │         ├── columns: column1:5(bool!null)
+ │    │         ├── cardinality: [0 - 2]
+ │    │         ├── fd: ()-->(5)
+ │    │         ├── values
+ │    │         │    ├── columns: column1:5(bool)
+ │    │         │    ├── cardinality: [2 - 2]
+ │    │         │    ├── (NULL,) [type=tuple{bool}]
+ │    │         │    └── (false,) [type=tuple{bool}]
+ │    │         └── filters
+ │    │              └── variable: column1 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ │    └── filters (true)
+ └── projections
+      └── null [type=unknown]
