@@ -1,0 +1,46 @@
+# build
+# key/0 timestamp=value
+# key/timestamp value
+# ...
+# ----
+
+build
+a/2 b
+a/1 c
+----
+crdb.ts.max: 0000000000000002
+crdb.ts.min: 0000000000000001
+
+build
+a/0 timestamp=2
+a/2 b
+a/1 c
+----
+crdb.ts.max: 0000000000000002
+crdb.ts.min: 0000000000000001
+
+build
+a/0 timestamp=2
+----
+crdb.ts.max: 0000000000000002
+crdb.ts.min: 0000000000000002
+
+# Note that this case should never happen. We can't have an intent on
+# "a" without a corresponding timestamped value.
+
+build
+a/0 timestamp=2
+b/0 timestamp=3
+----
+crdb.ts.max: 0000000000000003
+crdb.ts.min: 0000000000000003
+
+# Note that this case should never happen. The timestamp in the intent
+# on "a" should match the subsequent timestamped value.
+
+build
+a/0 timestamp=3
+a/1 b
+----
+crdb.ts.max: 0000000000000001
+crdb.ts.min: 0000000000000001
