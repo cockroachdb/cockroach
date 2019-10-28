@@ -512,10 +512,16 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "sink", "option", "value"},
 	},
 	{
-		name:    "create_index_stmt",
-		inline:  []string{"opt_unique", "opt_storing", "storing", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
-		replace: map[string]string{"opt_using_gin_btree": "", "a_expr": "column_name"},
-		exclude: []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
+		name:   "create_index_stmt",
+		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_using_gin_btree"},
+		replace: map[string]string{
+			"a_expr":          "column_name",
+			"opt_nulls_order": "",
+		},
+		regreplace: map[string]string{
+			".* 'CREATE' .* 'INVERTED' 'INDEX' .*": "",
+		},
+		nosplit: true,
 	},
 	{
 		name:   "create_index_interleaved_stmt",
