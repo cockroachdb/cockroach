@@ -3097,7 +3097,10 @@ func willOverflow(a, b int64) bool {
 //
 // This implementation must match engine/db.cc:MVCCComputeStatsInternal.
 func ComputeStatsGo(
-	iter SimpleIterator, start, end roachpb.Key, nowNanos int64, callbacks ...func(MVCCKey, []byte) error,
+	iter SimpleIterator,
+	start, end roachpb.Key,
+	nowNanos int64,
+	callbacks ...func(MVCCKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
