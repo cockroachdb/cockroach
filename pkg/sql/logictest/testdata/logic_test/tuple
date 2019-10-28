@@ -675,6 +675,37 @@ SELECT ((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5) AS r,
 r              s
 (1,2,hello,,)  (t,,"(f,6.6,f)")
 
+# Duplicate tuple labels are allowed (but access fails when a duplicated label is accessed,
+# see the labeled_tuple_column_access_errors subtest)
+query T colnames
+SELECT ((1, '2') AS a, a) FROM tb
+----
+?column?
+(1,2)
+
+query T
+SELECT ((1, '2', true) AS a, a, b) FROM tb
+----
+(1,2,t)
+
+query T
+SELECT ((1, '2', true) AS a, b, a) FROM tb
+----
+(1,2,t)
+
+query T
+SELECT ((1, 'asd', true) AS b, a, a) FROM tb
+----
+(1,asd,t)
+
+query TT colnames
+SELECT ((1, 2, 'hello', NULL, NULL) AS a, a, a, a, a) AS r,
+       ((true, NULL, (false, 6.6, false)) AS a, a, a) AS s
+  FROM tb
+----
+r              s
+(1,2,hello,,)  (t,,"(f,6.6,f)")
+
 # Comparing tuples
 query BBB colnames
 SELECT ((2, 2) AS a, b) < ((1, 1) AS c, d) AS r
@@ -733,19 +764,6 @@ SELECT ((1, '2') AS a) FROM tb
 query error pq: mismatch in tuple definition: 1 expressions, 2 labels
 SELECT (ROW(1) AS a, b) FROM tb
 
-# Tuple labels must be different
-query error pq: found duplicate tuple label: "a"
-SELECT ((1, '2') AS a, a) FROM tb
-
-query error pq: found duplicate tuple label: "a"
-SELECT ((1, '2', true) AS a, a, b) FROM tb
-
-query error pq: found duplicate tuple label: "a"
-SELECT ((1, '2', true) AS a, b, a) FROM tb
-
-query error pq: found duplicate tuple label: "a"
-SELECT ((1, '2', true) AS b, a, a) FROM tb
-
 # But inner tuples can reuse labels
 query T colnames
 SELECT ((
@@ -795,6 +813,13 @@ SELECT ((1,2,3) AS a,b,c).x FROM tb
 
 query error at or near ".": syntax error
 SELECT ((1,2,3) AS a,b,c).* FROM tb
+
+# Accessing duplicate labels
+query error pq: column reference "a" is ambiguous
+SELECT (((1,2,3) AS a,b,a)).a FROM tb
+
+query error pq: column reference "unnest" is ambiguous
+SELECT ((unnest(ARRAY[1,2], ARRAY[1,2]))).unnest;
 
 # No labels
 query error pq: type tuple{int, int, int} is not composite

@@ -169,6 +169,26 @@ var generators = map[string]builtinDefinition{
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
 		),
+		makeGeneratorOverloadWithReturnType(
+			tree.VariadicType{
+				FixedTypes: []*types.T{types.AnyArray, types.AnyArray},
+				VarType:    types.AnyArray,
+			},
+			func(args []tree.TypedExpr) *types.T {
+				returnTypes := make([]types.T, len(args))
+				labels := make([]string, len(args))
+				for i, arg := range args {
+					if arg.ResolvedType().Family() == types.UnknownFamily {
+						return tree.UnknownReturnType
+					}
+					returnTypes[i] = *arg.ResolvedType().ArrayContents()
+					labels[i] = "unnest"
+				}
+				return types.MakeLabeledTuple(returnTypes, labels)
+			},
+			makeVariadicUnnestGenerator,
+			"Returns the input arrays as a set of rows",
+		),
 	),
 
 	"information_schema._pg_expandarray": makeBuiltin(genProps(),
@@ -257,7 +277,7 @@ var generators = map[string]builtinDefinition{
 }
 
 func makeGeneratorOverload(
-	in tree.ArgTypes, ret *types.T, g tree.GeneratorFactory, info string,
+	in tree.TypeList, ret *types.T, g tree.GeneratorFactory, info string,
 ) tree.Overload {
 	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info)
 }
@@ -267,7 +287,7 @@ func newUnsuitableUseOfGeneratorError() error {
 }
 
 func makeGeneratorOverloadWithReturnType(
-	in tree.ArgTypes, retType tree.ReturnTyper, g tree.GeneratorFactory, info string,
+	in tree.TypeList, retType tree.ReturnTyper, g tree.GeneratorFactory, info string,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      in,
@@ -458,6 +478,70 @@ func (s *seriesValueGenerator) Next(_ context.Context) (bool, error) {
 func (s *seriesValueGenerator) Values() tree.Datums {
 	x := s.genValue(s)
 	return x
+}
+
+func makeVariadicUnnestGenerator(
+	_ *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	var arrays []*tree.DArray
+	for _, a := range args {
+		arrays = append(arrays, tree.MustBeDArray(a))
+	}
+	g := &multipleArrayValueGenerator{arrays: arrays}
+	return g, nil
+}
+
+// multipleArrayValueGenerator is a value generator that returns each element of a
+// list of arrays.
+type multipleArrayValueGenerator struct {
+	arrays    []*tree.DArray
+	nextIndex int
+	datums    tree.Datums
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) ResolvedType() *types.T {
+	arraysN := len(s.arrays)
+	returnTypes := make([]types.T, arraysN)
+	labels := make([]string, arraysN)
+	for i, arr := range s.arrays {
+		returnTypes[i] = *arr.ParamTyp
+		labels[i] = "unnest"
+	}
+	return types.MakeLabeledTuple(returnTypes, labels)
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *client.Txn) error {
+	s.datums = make(tree.Datums, len(s.arrays))
+	s.nextIndex = -1
+	return nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Next(_ context.Context) (bool, error) {
+	s.nextIndex++
+	for _, arr := range s.arrays {
+		if s.nextIndex < arr.Len() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *multipleArrayValueGenerator) Values() tree.Datums {
+	for i, arr := range s.arrays {
+		if s.nextIndex < arr.Len() {
+			s.datums[i] = arr.Array[s.nextIndex]
+		} else {
+			s.datums[i] = tree.DNull
+		}
+	}
+	return s.datums
 }
 
 func makeArrayGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
