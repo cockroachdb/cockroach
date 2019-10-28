@@ -1660,7 +1660,7 @@ func (node *TupleStar) Format(ctx *FmtCtx) {
 }
 
 // ColumnAccessExpr represents (E).x expressions. Specifically, it
-// allows accessing the column(s) from a Set Retruning Function.
+// allows accessing the column(s) from a Set Returning Function.
 type ColumnAccessExpr struct {
 	Expr    Expr
 	ColName string
