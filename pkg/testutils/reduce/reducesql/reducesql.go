@@ -194,7 +194,7 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				for _, expr := range node {
 					walk(expr)
 				}
-			case *tree.FamilyTableDef:
+			case *tree.FamilyDef:
 			case *tree.FuncExpr:
 				if node.WindowDef != nil {
 					walk(node.WindowDef)

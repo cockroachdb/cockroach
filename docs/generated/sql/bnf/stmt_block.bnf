@@ -1384,7 +1384,7 @@ index_params ::=
 	( index_elem ) ( ( ',' index_elem ) )*
 
 opt_storing ::=
-	storing '(' name_list ')'
+	storing '(' storing_items ')'
 	| 
 
 opt_interleave ::=
@@ -1758,6 +1758,9 @@ index_elem ::=
 storing ::=
 	'COVERING'
 	| 'STORING'
+
+storing_items ::=
+	( name | family_def ) ( ( ',' name | ',' family_def ) )*
 
 partition_by ::=
 	'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'

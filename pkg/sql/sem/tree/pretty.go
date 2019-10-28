@@ -1443,6 +1443,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	// CREATE [UNIQUE] [INVERTED] INDEX [name]
 	//    ON tbl (cols...)
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1468,12 +1469,8 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 		p.Doc(&node.Table),
 		p.bracket("(", p.Doc(&node.Columns), ")")))
 
-	if len(node.Storing) > 0 {
-		clauses = append(clauses, p.bracketKeyword(
-			"STORING", " (",
-			p.Doc(&node.Storing),
-			")", "",
-		))
+	if node.Storing != nil {
+		clauses = append(clauses, p.Doc(node.Storing))
 	}
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
@@ -1486,7 +1483,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 		pretty.Group(pretty.Stack(clauses...)))
 }
 
-func (node *FamilyTableDef) doc(p *PrettyCfg) pretty.Doc {
+func (node *FamilyDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// FAMILY [name] (columns...)
 	//
@@ -1523,6 +1520,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// [INVERTED] INDEX [name] (columns...)
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1537,10 +1535,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 
 	clauses := make([]pretty.Doc, 0, 3)
 	if node.Storing != nil {
-		clauses = append(clauses, p.bracketKeyword(
-			"STORING", "(",
-			p.Doc(&node.Storing),
-			")", ""))
+		clauses = append(clauses, p.Doc(node.Storing))
 	}
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
@@ -1560,6 +1555,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// [CONSTRAINT name]
 	//    [PRIMARY KEY|UNIQUE] ( ... )
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1567,6 +1563,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//
 	// [PRIMARY KEY|UNIQUE] ( ... )
 	//    [STORING ( ... )]
+	//    [FAMILIES ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
@@ -1583,10 +1580,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 		title = pretty.ConcatSpace(pretty.Keyword("CONSTRAINT"), p.Doc(&node.Name))
 	}
 	if node.Storing != nil {
-		clauses = append(clauses, p.bracketKeyword(
-			"STORING", "(",
-			p.Doc(&node.Storing),
-			")", ""))
+		clauses = append(clauses, p.Doc(node.Storing))
 	}
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))

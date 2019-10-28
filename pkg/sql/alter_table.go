@@ -198,7 +198,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				idx := sqlbase.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
-					StoreColumnNames: d.Storing.ToStrings(),
+					StoreColumnNames: d.Storing.ColumnNames(),
 				}
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err

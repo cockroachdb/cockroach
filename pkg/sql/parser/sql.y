@@ -473,6 +473,13 @@ func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
 func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
     return u.val.([]tree.PartitionedBackup)
 }
+func (u *sqlSymUnion) family() *tree.FamilyDef {
+    return u.val.(*tree.FamilyDef)
+}
+func (u *sqlSymUnion) storing() *tree.StoringDef {
+    return u.val.(*tree.StoringDef)
+}
+
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
 }
@@ -903,7 +910,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> begin_transaction
 %type <tree.TransactionModes> transaction_mode_list transaction_mode
 
-%type <tree.NameList> opt_storing
+%type <*tree.StoringDef> opt_storing storing_items
 %type <*tree.ColumnTableDef> column_def
 %type <tree.TableDef> table_elem
 %type <tree.Expr> where_clause opt_where_clause
@@ -976,7 +983,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem create_as_constraint_def create_as_constraint_elem
 %type <tree.TableDef> index_def
-%type <tree.TableDef> family_def
+%type <*tree.FamilyDef> family_def
 %type <[]tree.NamedColumnQualification> col_qual_list create_as_col_qual_list
 %type <tree.NamedColumnQualification> col_qualification create_as_col_qualification
 %type <tree.ColumnQualification> col_qualification_elem create_as_col_qualification_elem
@@ -4321,6 +4328,9 @@ table_elem:
   }
 | index_def
 | family_def
+  {
+    $$.val = $1.family()
+  }
 | table_constraint
   {
     $$.val = $1.constraintDef()
@@ -4561,7 +4571,7 @@ index_def:
     $$.val = &tree.IndexTableDef{
       Name:    tree.Name($2),
       Columns: $4.idxElems(),
-      Storing: $6.nameList(),
+      Storing: $6.storing(),
       Interleave: $7.interleave(),
       PartitionBy: $8.partitionBy(),
     }
@@ -4572,7 +4582,7 @@ index_def:
       IndexTableDef: tree.IndexTableDef {
         Name:    tree.Name($3),
         Columns: $5.idxElems(),
-        Storing: $7.nameList(),
+        Storing: $7.storing(),
         Interleave: $8.interleave(),
         PartitionBy: $9.partitionBy(),
       },
@@ -4590,7 +4600,7 @@ index_def:
 family_def:
   FAMILY opt_family_name '(' name_list ')'
   {
-    $$.val = &tree.FamilyTableDef{
+    $$.val = &tree.FamilyDef{
       Name: tree.Name($2),
       Columns: $4.nameList(),
     }
@@ -4622,7 +4632,7 @@ constraint_elem:
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $3.idxElems(),
-        Storing: $5.nameList(),
+        Storing: $5.storing(),
         Interleave: $6.interleave(),
         PartitionBy: $7.partitionBy(),
       },
@@ -4685,7 +4695,7 @@ create_as_table_defs:
   }
 | create_as_table_defs ',' family_def
   {
-    $$.val = append($1.tblDefs(), $3.tblDef())
+    $$.val = append($1.tblDefs(), $3.family())
   }
 | create_as_table_defs ',' create_as_constraint_def
 {
@@ -4774,13 +4784,35 @@ storing:
 // and dropping columns without rewriting indexes that are storing the
 // adjusted column.
 opt_storing:
-  storing '(' name_list ')'
+  storing '(' storing_items ')'
   {
-    $$.val = $3.nameList()
+    $$.val = $3.storing()
   }
 | /* EMPTY */
   {
-    $$.val = tree.NameList(nil)
+	$$.val = (*tree.StoringDef)(nil)
+  }
+
+storing_items:
+  name
+  {
+    $$.val = &tree.StoringDef{Names:tree.NameList{tree.Name($1)}}
+  }
+| family_def
+  {
+    $$.val = &tree.StoringDef{Families:[]*tree.FamilyDef{$1.family()}}
+  }
+| storing_items ',' name
+  {
+    storing := $1.storing()
+    storing.Names = append(storing.Names, tree.Name($3))
+    $$.val = storing
+  }
+| storing_items ',' family_def
+  {
+    storing := $1.storing()
+    storing.Families = append(storing.Families, $3.family())
+    $$.val = storing
   }
 
 opt_column_list:
@@ -5069,7 +5101,8 @@ create_type_stmt:
 // %Text:
 // CREATE [UNIQUE | INVERTED] INDEX [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
-//        [STORING ( <colnames...> )] [<interleave>]
+//        [STORING ( <colnames...> [ <family definitions...> ] ) ]
+//        [<interleave>]
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
@@ -5085,7 +5118,7 @@ create_index_stmt:
       Table:   table,
       Unique:  $2.bool(),
       Columns: $9.idxElems(),
-      Storing: $11.nameList(),
+      Storing: $11.storing(),
       Interleave: $12.interleave(),
       PartitionBy: $13.partitionBy(),
       Inverted: $7.bool(),
@@ -5100,7 +5133,7 @@ create_index_stmt:
       Unique:      $2.bool(),
       IfNotExists: true,
       Columns:     $12.idxElems(),
-      Storing:     $14.nameList(),
+      Storing:     $14.storing(),
       Interleave:  $15.interleave(),
       PartitionBy: $16.partitionBy(),
       Inverted:    $10.bool(),
@@ -5115,7 +5148,7 @@ create_index_stmt:
       Unique:     $2.bool(),
       Inverted:   true,
       Columns:    $9.idxElems(),
-      Storing:     $11.nameList(),
+      Storing:     $11.storing(),
       Interleave:  $12.interleave(),
       PartitionBy: $13.partitionBy(),
     }
@@ -5130,7 +5163,7 @@ create_index_stmt:
       Inverted:    true,
       IfNotExists: true,
       Columns:     $12.idxElems(),
-      Storing:     $14.nameList(),
+      Storing:     $14.storing(),
       Interleave:  $15.interleave(),
       PartitionBy: $16.partitionBy(),
     }

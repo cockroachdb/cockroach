@@ -1469,7 +1469,6 @@ func indexDefFromDescriptor(
 		Table:   tree.MakeTableName(tree.Name(db.Name), tree.Name(table.Name)),
 		Unique:  index.Unique,
 		Columns: make(tree.IndexElemList, len(index.ColumnNames)),
-		Storing: make(tree.NameList, len(index.StoreColumnNames)),
 	}
 	for i, name := range index.ColumnNames {
 		elem := tree.IndexElem{
@@ -1481,8 +1480,11 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Columns[i] = elem
 	}
-	for i, name := range index.StoreColumnNames {
-		indexDef.Storing[i] = tree.Name(name)
+	if len(index.StoreColumnNames) > 0 {
+		indexDef.Storing = &tree.StoringDef{Names: make(tree.NameList, len(index.StoreColumnNames))}
+		for i, name := range index.StoreColumnNames {
+			indexDef.Storing.Names[i] = tree.Name(name)
+		}
 	}
 	if len(index.Interleave.Ancestors) > 0 {
 		intl := index.Interleave
