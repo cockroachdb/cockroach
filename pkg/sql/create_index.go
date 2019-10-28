@@ -62,6 +62,10 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support partitioning")
 		}
 
+		if n.Sharded != nil {
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
+		}
+
 		if len(indexDesc.StoreColumnNames) > 0 {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns")
 		}
@@ -76,6 +80,28 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 		return nil, err
 	}
 	return &indexDesc, nil
+}
+
+func createAndAddShardColumn(shardBuckets tree.Expr, desc *sqlbase.MutableTableDescriptor, colNames []string) error {
+	cst, ok := shardBuckets.(*tree.NumVal)
+	if !ok {
+		return pgerror.New(pgcode.InvalidParameterValue,
+			`BUCKET_COUNT must be a strictly positive integer value.`)
+	}
+	buckets, err := cst.AsInt32()
+	if err != nil {
+		return pgerror.Wrap(err, pgcode.InvalidParameterValue,
+			`BUCKET_COUNT must be a strictly positive integer value.`)
+	}
+	shardCol, err := makeShardColumnDesc(colNames, int(buckets), false)
+	if err != nil {
+		return err
+	}
+
+	if !hasColumn(*desc, shardCol.Name) {
+		desc.AddColumn(shardCol)
+	}
+	return nil
 }
 
 func (n *createIndexNode) startExec(params runParams) error {
@@ -97,6 +123,16 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
 	}
 
+	if n.n.Sharded != nil {
+		colNames := make([]string, 0, len(n.n.Columns))
+		for _, c := range n.n.Columns {
+			colNames = append(colNames, string(c.Column))
+		}
+		if err := createAndAddShardColumn(n.n.Sharded.ShardBuckets, n.tableDesc,
+			colNames); err != nil {
+			return err
+		}
+	}
 	indexDesc, err := MakeIndexDescriptor(n.n)
 	if err != nil {
 		return err

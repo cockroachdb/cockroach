@@ -1725,7 +1725,7 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 
 	// PRIMARY KEY / UNIQUE constraint.
 	pkConstraint := pretty.Nil
-	if node.PrimaryKey {
+	if node.PrimaryKey.PrimaryKey {
 		pkConstraint = pretty.Keyword("PRIMARY KEY")
 	} else if node.Unique {
 		pkConstraint = pretty.Keyword("UNIQUE")

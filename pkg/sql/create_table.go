@@ -998,6 +998,15 @@ func dequalifyColumnRefs(
 	)
 }
 
+func hasColumn(desc sqlbase.MutableTableDescriptor, colName string) bool {
+	for _, n := range desc.Columns {
+		if n.Name == colName {
+			return true
+		}
+	}
+	return false
+}
+
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
 //
 // txn and vt can be nil if the table to be created does not contain references
@@ -1050,6 +1059,12 @@ func MakeTableDesc(
 					)
 				}
 			}
+			if d.PrimaryKey.Sharded {
+				if err := createAndAddShardColumn(d.PrimaryKey.ShardBuckets, &desc,
+					[]string{string(d.Name)}); err != nil {
+					return desc, err
+				}
+			}
 			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx)
 			if err != nil {
 				return desc, err
@@ -1062,7 +1077,7 @@ func MakeTableDesc(
 			}
 
 			if idx != nil {
-				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
+				if err := desc.AddIndex(*idx, d.PrimaryKey.PrimaryKey); err != nil {
 					return desc, err
 				}
 			}
@@ -1104,6 +1119,7 @@ func MakeTableDesc(
 	}
 
 	var primaryIndexColumnSet map[string]struct{}
+	generatedNames := map[string]struct{}{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
@@ -1139,9 +1155,7 @@ func MakeTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 			}
-			if err := idx.FillColumns(d.Columns); err != nil {
-				return desc, err
-			}
+			idxColumns := d.Columns
 			if d.PartitionBy != nil {
 				partitioning, err := CreatePartitioning(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
@@ -1149,12 +1163,53 @@ func MakeTableDesc(
 				}
 				idx.Partitioning = partitioning
 			}
+			if d.PrimaryKey && d.Sharded {
+				cst, ok := d.ShardBuckets.(*tree.NumVal)
+				if !ok {
+					return desc, pgerror.Newf(pgcode.InvalidParameterValue,
+						`BUCKET_COUNT must be a strictly positive integer.`)
+				}
+				buckets, err := cst.AsInt32()
+				if err != nil {
+					return desc, err
+				}
+				if buckets < 1 {
+					return desc, pgerror.Newf(pgcode.InvalidParameterValue,
+						`BUCKET_COUNT must be a strictly positive integer.`)
+				}
+				var colNames []string
+				for _, c := range d.IndexTableDef.Columns {
+					colNames = append(colNames, string(c.Column))
+				}
+				shardCol, err := makeShardColumnDesc(colNames, int(buckets), true)
+				if err != nil {
+					return desc, err
+				}
+				desc.AddColumn(shardCol)
+				// Prepend the shard column because we want the shard values, which we
+				// assume to be roughly uniformly distributed, to determine the underlying
+				// layout of this table's ranges.
+				idxColumns = append(tree.IndexElemList{
+					tree.IndexElem{
+						Column:    tree.Name(shardCol.Name),
+						Direction: tree.Ascending,
+					}}, idxColumns...)
+				checkConstraint, err := makeCheckConstraintForShard(ctx, &desc,
+					generatedNames, semaCtx, int(buckets), n.Table, shardCol)
+				if err != nil {
+					return desc, err
+				}
+				desc.Checks = append(desc.Checks, checkConstraint)
+			}
+			if err := idx.FillColumns(idxColumns); err != nil {
+				return desc, err
+			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err
 			}
 			if d.PrimaryKey {
 				primaryIndexColumnSet = make(map[string]struct{})
-				for _, c := range d.Columns {
+				for _, c := range idxColumns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
 			}
@@ -1240,7 +1295,6 @@ func MakeTableDesc(
 		newTableName:   &n.Table,
 	}
 
-	generatedNames := map[string]struct{}{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
@@ -1388,8 +1442,40 @@ func (d *dummyColumnItem) ResolvedType() *types.T {
 	return d.typ
 }
 
+// MakeShardColumnDesc returns a new column descriptor for a hidden shard column
+// based on all the `columns`.
+func makeShardColumnDesc(
+	colNames []string, buckets int, primaryKey bool,
+) (*sqlbase.ColumnDescriptor, error) {
+	col := &sqlbase.ColumnDescriptor{
+		Hidden:   true,
+		Nullable: false,
+	}
+	col.Type = *types.Int4
+	computeExprBuilder := strings.Builder{}
+	// TODO(aayush): Write a universal hash function that can take a set of
+	// columns, hash them all individually and sum their results. It should then return
+	// this sum of hash values.
+	computeExprBuilder.WriteString(`MOD(fnv32(`)
+	for i, c := range colNames {
+		if i != 0 {
+			computeExprBuilder.WriteString(", ")
+		}
+		fmt.Fprintf(&computeExprBuilder, `%s::STRING`, c)
+	}
+	fmt.Fprintf(&computeExprBuilder, `), %d)`, buckets)
+	parsed, err := parser.ParseExpr(computeExprBuilder.String())
+	if err != nil {
+		return nil, err
+	}
+	col.Name = sqlbase.GetShardColumnName(colNames)
+	serialized := tree.Serialize(parsed)
+	col.ComputeExpr = &serialized
+	return col, nil
+}
+
 func generateNameForCheckConstraint(
-	desc *sqlbase.MutableTableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
+	desc *MutableTableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
 ) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
@@ -1423,6 +1509,31 @@ func generateNameForCheckConstraint(
 	return name, nil
 }
 
+func makeCheckConstraintForShard(
+	ctx context.Context,
+	desc *MutableTableDescriptor,
+	generatedNames map[string]struct{},
+	semaCtx *tree.SemaContext,
+	shardBuckets int,
+	table tree.TableName,
+	col *sqlbase.ColumnDescriptor,
+) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+	checkConstraintBuilder := strings.Builder{}
+	fmt.Fprintf(&checkConstraintBuilder, `%s in (`, col.Name)
+	for i := 0; i < shardBuckets; i++ {
+		if i != 0 {
+			checkConstraintBuilder.WriteString(`, `)
+		}
+		fmt.Fprintf(&checkConstraintBuilder, `%d`, i)
+	}
+	checkConstraintBuilder.WriteString(`)`)
+	parsed, err := parser.ParseExpr(checkConstraintBuilder.String())
+	if err != nil {
+		return nil, err
+	}
+	constraint := &tree.CheckConstraintTableDef{Expr: parsed}
+	return MakeCheckConstraint(ctx, desc, constraint, generatedNames, semaCtx, table)
+}
 func iterColDescriptorsInExpr(
 	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(*sqlbase.ColumnDescriptor) error,
 ) error {

@@ -107,6 +107,7 @@ type CreateIndex struct {
 	Inverted    bool
 	IfNotExists bool
 	Columns     IndexElemList
+	Sharded     *ShardedIndexDef
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
 	Storing     NameList
@@ -209,7 +210,11 @@ type ColumnTableDef struct {
 		Nullability    Nullability
 		ConstraintName Name
 	}
-	PrimaryKey           bool
+	PrimaryKey struct {
+		PrimaryKey   bool
+		Sharded      bool
+		ShardBuckets Expr
+	}
 	Unique               bool
 	UniqueConstraintName Name
 	DefaultExpr          struct {
@@ -305,7 +310,13 @@ func NewColumnTableDef(
 			d.Nullable.Nullability = Null
 			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:
-			d.PrimaryKey = true
+			d.PrimaryKey.PrimaryKey = true
+			d.UniqueConstraintName = c.Name
+		case ShardedPrimaryKeyConstraint:
+			d.PrimaryKey.PrimaryKey = true
+			constraint := c.Qualification.(ShardedPrimaryKeyConstraint)
+			d.PrimaryKey.Sharded = true
+			d.PrimaryKey.ShardBuckets = constraint.ShardBuckets
 			d.UniqueConstraintName = c.Name
 		case UniqueConstraint:
 			d.Unique = true
@@ -389,12 +400,12 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
 	}
-	if node.PrimaryKey || node.Unique {
+	if node.PrimaryKey.PrimaryKey || node.Unique {
 		if node.UniqueConstraintName != "" {
 			ctx.WriteString(" CONSTRAINT ")
 			ctx.FormatNode(&node.UniqueConstraintName)
 		}
-		if node.PrimaryKey {
+		if node.PrimaryKey.PrimaryKey {
 			ctx.WriteString(" PRIMARY KEY")
 		} else if node.Unique {
 			ctx.WriteString(" UNIQUE")
@@ -483,16 +494,17 @@ type ColumnQualification interface {
 	columnQualification()
 }
 
-func (ColumnCollation) columnQualification()         {}
-func (*ColumnDefault) columnQualification()          {}
-func (NotNullConstraint) columnQualification()       {}
-func (NullConstraint) columnQualification()          {}
-func (PrimaryKeyConstraint) columnQualification()    {}
-func (UniqueConstraint) columnQualification()        {}
-func (*ColumnCheckConstraint) columnQualification()  {}
-func (*ColumnComputedDef) columnQualification()      {}
-func (*ColumnFKConstraint) columnQualification()     {}
-func (*ColumnFamilyConstraint) columnQualification() {}
+func (ColumnCollation) columnQualification()             {}
+func (*ColumnDefault) columnQualification()              {}
+func (NotNullConstraint) columnQualification()           {}
+func (NullConstraint) columnQualification()              {}
+func (PrimaryKeyConstraint) columnQualification()        {}
+func (ShardedPrimaryKeyConstraint) columnQualification() {}
+func (UniqueConstraint) columnQualification()            {}
+func (*ColumnCheckConstraint) columnQualification()      {}
+func (*ColumnComputedDef) columnQualification()          {}
+func (*ColumnFKConstraint) columnQualification()         {}
+func (*ColumnFamilyConstraint) columnQualification()     {}
 
 // ColumnCollation represents a COLLATE clause for a column.
 type ColumnCollation string
@@ -508,8 +520,15 @@ type NotNullConstraint struct{}
 // NullConstraint represents NULL on a column.
 type NullConstraint struct{}
 
-// PrimaryKeyConstraint represents NULL on a column.
+// PrimaryKeyConstraint represents PRIMARY KEY on a column.
 type PrimaryKeyConstraint struct{}
+
+// ShardedPrimaryKeyConstraint represents `PRIMARY KEY .. USING HASH..`
+// on a column.
+type ShardedPrimaryKeyConstraint struct {
+	Sharded      bool
+	ShardBuckets Expr
+}
 
 // UniqueConstraint represents UNIQUE on a column.
 type UniqueConstraint struct{}
@@ -542,12 +561,14 @@ type ColumnFamilyConstraint struct {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name        Name
-	Columns     IndexElemList
-	Storing     NameList
-	Interleave  *InterleaveDef
-	Inverted    bool
-	PartitionBy *PartitionBy
+	Name         Name
+	Columns      IndexElemList
+	Storing      NameList
+	Interleave   *InterleaveDef
+	Inverted     bool
+	PartitionBy  *PartitionBy
+	Sharded      bool
+	ShardBuckets Expr
 }
 
 // SetName implements the TableDef interface.
@@ -786,6 +807,12 @@ func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
+// ShardedIndexDef represents a hash sharded secondary index definition within a CREATE
+// TABLE or CREATE INDEX statement.
+type ShardedIndexDef struct {
+	ShardBuckets Expr
+}
+
 // InterleaveDef represents an interleave definition within a CREATE TABLE
 // or CREATE INDEX statement.
 type InterleaveDef struct {
@@ -927,7 +954,7 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 		for _, def := range node.Defs {
 			if d, ok := def.(*ColumnTableDef); !ok {
 				return false
-			} else if d.PrimaryKey {
+			} else if d.PrimaryKey.PrimaryKey {
 				return true
 			}
 		}

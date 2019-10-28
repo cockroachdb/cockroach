@@ -12,7 +12,9 @@ package sqlbase
 
 import (
 	"context"
+	"sort"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -149,7 +151,7 @@ func MakeColumnDefDescs(
 
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
-		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
+		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.PrimaryKey,
 	}
 
 	// Validate and assign column type.
@@ -186,11 +188,16 @@ func MakeColumnDefDescs(
 	}
 
 	var idx *IndexDescriptor
-	if d.PrimaryKey || d.Unique {
+	if d.PrimaryKey.PrimaryKey || d.Unique {
+		colNames := []string{string(d.Name)}
+		if d.PrimaryKey.Sharded {
+			colNames = append([]string{GetShardColumnName(colNames)}, colNames...)
+		}
 		idx = &IndexDescriptor{
-			Unique:           true,
-			ColumnNames:      []string{string(d.Name)},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			Unique:      true,
+			ColumnNames: colNames,
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC,
+				IndexDescriptor_ASC},
 		}
 		if d.UniqueConstraintName != "" {
 			idx.Name = string(d.UniqueConstraintName)
@@ -198,6 +205,15 @@ func MakeColumnDefDescs(
 	}
 
 	return col, idx, typedExpr, nil
+}
+
+// GetShardColumnName generates a name for the hidden shard column to be used to create a
+// hash sharded index.
+func GetShardColumnName(colNames []string) string {
+	// We sort the `colNames` here because we want to avoid creating a dupicate shard
+	// column if one already exists for the set of columns in `colNames`.
+	sort.Strings(colNames)
+	return strings.Join(append(colNames, `shard`), `_`)
 }
 
 // EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
