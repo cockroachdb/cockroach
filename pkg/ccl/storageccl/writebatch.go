@@ -66,7 +66,7 @@ func evalWriteBatch(
 
 	// Check if there was data in the affected keyrange. If so, delete it (and
 	// adjust the MVCCStats) before applying the WriteBatch data.
-	existingStats, err := clearExistingData(ctx, batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
+	existingStats, err := clearExistingData(ctx, batch, args.Key, args.EndKey, h.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "clearing existing data")
 	}
@@ -79,7 +79,7 @@ func evalWriteBatch(
 }
 
 func clearExistingData(
-	ctx context.Context, batch engine.ReadWriter, start, end engine.MVCCKey, nowNanos int64,
+	ctx context.Context, batch engine.ReadWriter, start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
@@ -95,13 +95,13 @@ func clearExistingData(
 		}
 	}
 
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: end.Key})
+	iter := batch.NewIterator(engine.IterOptions{UpperBound: end})
 	defer iter.Close()
 
-	iter.Seek(start)
+	iter.Seek(engine.MakeMVCCMetadataKey(start))
 	if ok, err := iter.Valid(); err != nil {
 		return enginepb.MVCCStats{}, err
-	} else if ok && !iter.UnsafeKey().Less(end) {
+	} else if ok && !iter.UnsafeKey().Less(engine.MakeMVCCMetadataKey(end)) {
 		return enginepb.MVCCStats{}, nil
 	}
 

@@ -111,14 +111,6 @@ func (s *Iterator) NextKey() {
 	}
 }
 
-// PrevKey is part of the engine.Iterator interface.
-func (s *Iterator) PrevKey() {
-	s.i.PrevKey()
-	if s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
-		s.invalid = true
-	}
-}
-
 // Key is part of the engine.Iterator interface.
 func (s *Iterator) Key() engine.MVCCKey {
 	return s.i.Key()
@@ -146,9 +138,9 @@ func (s *Iterator) UnsafeValue() []byte {
 
 // ComputeStats is part of the engine.Iterator interface.
 func (s *Iterator) ComputeStats(
-	start, end engine.MVCCKey, nowNanos int64,
+	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return s.i.ComputeStats(start, end, nowNanos)
@@ -156,9 +148,9 @@ func (s *Iterator) ComputeStats(
 
 // FindSplitKey is part of the engine.Iterator interface.
 func (s *Iterator) FindSplitKey(
-	start, end, minSplitKey engine.MVCCKey, targetSize int64,
+	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (engine.MVCCKey, error) {
-	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return engine.MVCCKey{}, err
 	}
 	return s.i.FindSplitKey(start, end, minSplitKey, targetSize)
@@ -223,9 +215,9 @@ func (s spanSetReader) GetProto(
 }
 
 func (s spanSetReader) Iterate(
-	start, end engine.MVCCKey, f func(engine.MVCCKeyValue) (bool, error),
+	start, end roachpb.Key, f func(engine.MVCCKeyValue) (bool, error),
 ) error {
-	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return err
 	}
 	return s.r.Iterate(start, end, f)
@@ -290,8 +282,8 @@ func (s spanSetWriter) ClearRange(start, end engine.MVCCKey) error {
 	return s.w.ClearRange(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(iter engine.Iterator, start, end engine.MVCCKey) error {
-	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+func (s spanSetWriter) ClearIterRange(iter engine.Iterator, start, end roachpb.Key) error {
+	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
 		return err
 	}
 	return s.w.ClearIterRange(iter, start, end)

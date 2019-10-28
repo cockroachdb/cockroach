@@ -698,17 +698,17 @@ func clearRangeData(
 	} else {
 		keyRanges = rditer.MakeAllKeyRanges(desc)
 	}
-	var clearRangeFn func(engine.Reader, engine.Writer, engine.MVCCKey, engine.MVCCKey) error
+	var clearRangeFn func(engine.Reader, engine.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
-		clearRangeFn = func(eng engine.Reader, writer engine.Writer, start, end engine.MVCCKey) error {
-			return writer.ClearRange(start, end)
+		clearRangeFn = func(eng engine.Reader, writer engine.Writer, start, end roachpb.Key) error {
+			return writer.ClearRange(engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end))
 		}
 	} else {
 		clearRangeFn = engine.ClearRangeWithHeuristic
 	}
 
 	for _, keyRange := range keyRanges {
-		if err := clearRangeFn(eng, writer, keyRange.Start, keyRange.End); err != nil {
+		if err := clearRangeFn(eng, writer, keyRange.Start.Key, keyRange.End.Key); err != nil {
 			return err
 		}
 	}
@@ -1056,8 +1056,8 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			if err := engine.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
-				keyRanges[i].End,
-				totalKeyRanges[i].End,
+				keyRanges[i].End.Key,
+				totalKeyRanges[i].End.Key,
 			); err != nil {
 				subsumedReplSST.Close()
 				return err

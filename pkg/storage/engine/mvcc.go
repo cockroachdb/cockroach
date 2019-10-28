@@ -3050,11 +3050,7 @@ func MVCCFindSplitKey(
 		minSplitKey = it.Key().Key.Next()
 	}
 
-	splitKey, err := it.FindSplitKey(
-		MakeMVCCMetadataKey(key.AsRawKey()),
-		MakeMVCCMetadataKey(endKey.AsRawKey()),
-		MakeMVCCMetadataKey(minSplitKey),
-		targetSize)
+	splitKey, err := it.FindSplitKey(key.AsRawKey(), endKey.AsRawKey(), minSplitKey, targetSize)
 	if err != nil {
 		return nil, err
 	}
@@ -3101,7 +3097,10 @@ func willOverflow(a, b int64) bool {
 //
 // This implementation must match engine/db.cc:MVCCComputeStatsInternal.
 func ComputeStatsGo(
-	iter SimpleIterator, start, end MVCCKey, nowNanos int64, callbacks ...func(MVCCKey, []byte) error,
+	iter SimpleIterator,
+	start, end roachpb.Key,
+	nowNanos int64,
+	callbacks ...func(MVCCKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
@@ -3115,14 +3114,15 @@ func ComputeStatsGo(
 	// reverse chronological order and use this variable to keep track
 	// of the point in time at which the current key begins to age.
 	var accrueGCAgeNanos int64
+	mvccEndKey := MakeMVCCMetadataKey(end)
 
-	iter.Seek(start)
+	iter.Seek(MakeMVCCMetadataKey(start))
 	for ; ; iter.Next() {
 		ok, err := iter.Valid()
 		if err != nil {
 			return ms, err
 		}
-		if !ok || !iter.UnsafeKey().Less(end) {
+		if !ok || !iter.UnsafeKey().Less(mvccEndKey) {
 			break
 		}
 

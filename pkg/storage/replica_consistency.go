@@ -563,7 +563,7 @@ func (r *Replica) sha512(
 	if !statsOnly {
 		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
 			spanMS, err := engine.ComputeStatsGo(
-				iter, span.Start, span.End, 0 /* nowNanos */, visitor,
+				iter, span.Start.Key, span.End.Key, 0 /* nowNanos */, visitor,
 			)
 			if err != nil {
 				return nil, err

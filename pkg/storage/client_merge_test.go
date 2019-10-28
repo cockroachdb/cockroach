@@ -130,7 +130,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 func getEngineKeySet(t *testing.T, e engine.Engine) map[string]struct{} {
 	t.Helper()
-	kvs, err := engine.Scan(e, engine.NilKey, engine.MVCCKeyMax, 0 /* max */)
+	kvs, err := engine.Scan(e, roachpb.KeyMin, roachpb.KeyMax, 0 /* max */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2922,7 +2922,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKeyMax,
 		}
 		r := rditer.MakeUserKeyRange(&desc)
-		if err := engine.ClearRangeWithHeuristic(eng, &sst, r.Start, r.End); err != nil {
+		if err := engine.ClearRangeWithHeuristic(eng, &sst, r.Start.Key, r.End.Key); err != nil {
 			return err
 		}
 		expectedSST, err := sst.Finish()
