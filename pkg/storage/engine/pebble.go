@@ -560,9 +560,7 @@ func (p *pebbleReadOnly) GetProto(
 	return p.parent.GetProto(key, msg)
 }
 
-func (p *pebbleReadOnly) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
-) error {
+func (p *pebbleReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}

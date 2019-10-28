@@ -866,9 +866,7 @@ func (r *RocksDB) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (r *RocksDB) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
-) error {
+func (r *RocksDB) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
 	return iterateOnReader(r, start, end, f)
 }
 
@@ -1369,9 +1367,7 @@ func (r *distinctBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *distinctBatch) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
-) error {
+func (r *distinctBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
 	r.ensureBatch()
 	return iterateOnReader(r, start, end, f)
 }
@@ -1713,9 +1709,7 @@ func (r *rocksDBBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *rocksDBBatch) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
-) error {
+func (r *rocksDBBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
 	if r.writeOnly {
 		panic("write-only batch")
 	}
