@@ -251,7 +251,10 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
 			// Turn stats mismatch into panic, see:
 			// https://github.com/cockroachdb/cockroach/issues/38720#issuecomment-539136246
-			"COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
+			// Disabled because we have a local repro in
+			// https://github.com/cockroachdb/cockroach/issues/37815#issuecomment-545650087
+			//
+			// "COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
 			c.Env + " " + binary + " start " + strings.Join(args, " ") +
 			" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
 			" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
