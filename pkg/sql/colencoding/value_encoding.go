@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,6 +82,14 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 			// Pre-2.1 BIT was using INT encoding with arbitrary sizes.
 			// We map these to 64-bit INT now. See #34161.
 			vec.Int64()[idx] = i
+		}
+	case types.UuidFamily:
+		var data uuid.UUID
+		buf, data, err = encoding.DecodeUntaggedUUIDValue(buf)
+		// TODO(yuzefovich): we could peek inside the encoding package to skip a
+		// couple of conversions.
+		if err == nil {
+			vec.Bytes().Set(int(idx), data.GetBytes())
 		}
 	default:
 		return buf, errors.AssertionFailedf(
