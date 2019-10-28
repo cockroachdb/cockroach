@@ -114,6 +114,24 @@ render                 ·              ·                 ("?column?", "?column?
 ·                      row 0, expr 1  ''                ·                                     ·
 ·                      row 0, expr 2  'x'               ·                                     ·
 
+query TTTTT
+EXPLAIN (VERBOSE)
+SELECT 1 FROM (SELECT k FROM uniontest WHERE k > 3 UNION ALL SELECT k FROM uniontest)
+----
+·                    distributed  false              ·             ·
+·                    vectorized   true               ·             ·
+render               ·            ·                  ("?column?")  ·
+ │                   render 0     1                  ·             ·
+ └── append          ·            ·                  ()            ·
+      ├── scan       ·            ·                  ()            ·
+      │              table        uniontest@primary  ·             ·
+      │              spans        ALL                ·             ·
+      └── render     ·            ·                  ()            ·
+           └── scan  ·            ·                  (k)           ·
+·                    table        uniontest@primary  ·             ·
+·                    spans        ALL                ·             ·
+·                    filter       k > 3              ·             ·
+
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY)
 
