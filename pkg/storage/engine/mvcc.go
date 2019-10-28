@@ -726,7 +726,11 @@ type MVCCGetOptions struct {
 // Note that transactional gets must be consistent. Put another way, only
 // non-transactional gets may be inconsistent.
 func MVCCGet(
-	ctx context.Context, eng Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+	ctx context.Context,
+	eng Reader,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	if timestamp.WallTime < 0 {
 		return nil, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
@@ -2767,7 +2771,11 @@ func (b IterAndBuf) Cleanup() {
 // txns. Returns the number of intents resolved and a resume span if
 // the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context, engine ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent, max int64,
+	ctx context.Context,
+	engine ReadWriter,
+	ms *enginepb.MVCCStats,
+	intent roachpb.Intent,
+	max int64,
 ) (int64, *roachpb.Span, error) {
 	iterAndBuf := GetIterAndBuf(engine, IterOptions{UpperBound: intent.Span.EndKey})
 	defer iterAndBuf.Cleanup()
@@ -3101,7 +3109,10 @@ func willOverflow(a, b int64) bool {
 //
 // This implementation must match engine/db.cc:MVCCComputeStatsInternal.
 func ComputeStatsGo(
-	iter SimpleIterator, start, end MVCCKey, nowNanos int64, callbacks ...func(MVCCKey, []byte) error,
+	iter SimpleIterator,
+	start, end MVCCKey,
+	nowNanos int64,
+	callbacks ...func(MVCCKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
