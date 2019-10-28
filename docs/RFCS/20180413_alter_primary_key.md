@@ -1,28 +1,16 @@
 - Feature Name: Alter Primary Key
 - Status: Draft
 - Start Date: 2018-04-11
-- Authors: David Taylor
+- Authors: David Taylor, Rohan Yadav, Solon Gordon
 - RFC PR: [25208](https://github.com/cockroachdb/cockroach/pull/25208)
 - Cockroach Issues: #19141
-
-[TOC levels=1-3 markdown]: #
 
 # Table of Contents
 - [Summary](#summary)
 - [Motivation](#motivation)
-- [Guide-level explanation](#guide-level-explanation)
-- [Reference-level explanation](#reference-level-explanation)
-
-# Draft Status Note
-
-This feature was de-prioritized and the design process paused after the initial
-draft of this RFC circulated.
-
-As noted above, this document is still in draft status and requires further
-review and expansion before acceptance. It is merged as-is to provide a starting
-point when that work is revisited. Some of the areas needing further attention
-are explicitly highlighted inline below. The [original
-PR](https://github.com/cockroachdb/cockroach/pull/25208) has additional context.
+- [High-level summary](#high-level-summary)
+- [Implementation plan](#implementation-plan)
+- [Follow-up, Out-of-Scope Work](#follow-up-out-of-scope-work)
 
 # Summary
 
@@ -41,14 +29,17 @@ operational considerations as well.
 
 As applications, workloads and operational requirements evolve over time, the
 choice of primary key for a given table may evolve as well, making the ability
-to change it an important feature of a maintainable database.
+to change it an important feature of a maintainable database. In particular,
+the inability to alter primary keys is a painful roadblock for customers who
+start with a single-region Cockroach cluster and later want to expand into a
+partitioned, global deployment.
 
 # High-level Summary
 
 Note: This document assumes familiarity with the content of
 [`Structured data encoding in CockroachDB SQL`](`docs/tech-notes/encoding.md`).
 
-At a _high level_, a "primary key" in CockroachDB is just an unique index on the
+At a _high level_, a "primary key" in CockroachDB is just a unique index on the
 primary key columns that also "stores" all the other table columns. Thus
 "changing the primary key" can be as simple as just changing which (compatible)
 index we call "primary".
@@ -106,7 +97,7 @@ Later improvements may include:
 
 ## Swapping the Primary Index
 
-## Syntax
+### Syntax
 
 Postgres uses the syntax `ALTER TABLE ADD PRIMARY KEY... USING INDEX foo` to use
 an existing index `foo` as the primary key. The explicit specification of the
@@ -125,12 +116,12 @@ extra column, making such a `DROP` a relatively expensive operation that we are
 unlikely to implement.
 
 Thus instead of `ADD` we will use `ALTER` in to edit the existing key, e.g.:
-`ALTER PRIMARY KEY (col1, col2) USING INDEX idx_foo`
+`ALTER TABLE <tablename> ALTER PRIMARY KEY USING INDEX idx_foo`
 
 In the interest of out-of-the-box compatibility, we *could* silently interpret
 `ADD PRIMARY KEY` as `ALTER PRIMARY KEY` but this seems like a risky/error prone
 blurring of semantics. Instead, we may be able to recognize when a `DROP` and
-`ADD` are clause paired in the same `ALTER TABLE`, replacing the pair with our
+`ADD` are paired in the same `ALTER TABLE` clause, replacing the pair with our
 supported in-place alteration.
 
 ### Compatible Primary Indexes
@@ -141,6 +132,7 @@ on which indexes are eligible to become the primary key:
      the new primary key (as that set is what is constrained to be unique).
   2) All indexed columns must be `NOT NULL`
   3) Stores all non-indexed table columns.
+  4) The index is not inverted.
 
 ### Secondary Index Compatibility
 
@@ -154,43 +146,110 @@ For each index i in table,
     If i does not index or store c, fail.
 ```
 
-TODO: Address unique-ifying of non-unique secondary index keys. Currently this
-is done by adding PK cols, as that ensures uniqueness. That stays OK as long as
-the old PK index stays around as a unique index. Expand this to cover what
-follows.
+Non-unique secondary indexes and inverted indexes have an additional
+complication: in order for their KV keys to be unique, they implicitly encode
+all primary key columns into their keys. This means that when we swap the
+primary key, we need to rewrite any non-unique secondary indexes which do not
+contain all the new primary key columns in their own keys. This can be
+performed as a schema change job which adds a new index and then removes the
+previous one. (An alternate approach which does not require rewriting is
+described in the Follow-up Work section.)
 
-### Special Handling of Primary Indexes
+### Example
+Say that we have the following existing table:
+```sql
+CREATE TABLE users (
+  id UUID PRIMARY KEY,
+  email STRING,
+  name STRING,
+  INDEX users_name_idx (name)
+);
+```
+Now we are moving to a global deployment, so we would like to add a new `region`
+column which is part of the primary key. First we add the column, which must
+not be nullable:
+```sql
+ALTER TABLE users ADD COLUMN region STRING NOT NULL;
+```
+Next we add a new index, which will later become the primary key. The index
+must be unique and store all columns.
+```sql
+CREATE UNIQUE INDEX primary_global ON users (region, id) STORING (email, name);
+```
+The existing index `users_name_idx` is not compatible with our new primary key
+because it does not store the `region` column. And aside from the compatibility
+issue, we want to prepend this index with the `region` column anyway so that we
+can properly partition the index. We'll create a new index and drop the old one.
+```sql
+CREATE INDEX users_region_name_idx ON users (region, name);
+DROP INDEX users@users_name_idx;
+```
+Now we are ready to make the primary key change.
+```sql
+ALTER TABLE users ALTER PRIMARY KEY USING INDEX primary_global;
+```
+Optionally we can now drop the previous primary index, assuming that no foreign
+key constraints depend on it.
+```
+DROP INDEX users@primary CASCADE;
+```
 
-In various places, the descriptor handling of the primary index is special-cased
-with respect to handling stored or extra columns. With the ability to swap the
-index which is "primary", such special-handling will need to be revised. Ideally
-it can be simply removed, e.g. all columns just appear in the extra or stored
-lists, rather than being implicitly inferred to be there if primary.  In many
-cases removing special handling may simplify some code that currently needs to
-expand these implicit cases.
+# Implementation Plan
 
-Beyond the mechanical metadata computation and bookkeeping, there are some cases
-where the primary index currently has special-case behaviors, chiefly support
-for column families, which will need to be expanded other indexes as well.
+Although the encoding of primary and secondary indexes is largely the same,
+there are a number of places where we currently treat the primary index as
+special. In order to allow switching a primary index to a secondary one, we
+need to ensure that secondary indexes support all the features that primary
+indexes do, such as column families and interleaving. We expect this to be the
+bulk of the implementation work for this feature. Once all indexes are
+fungible, performing a primary key change is a matter of verifying that the new
+primary index is "valid" as described above and then updating the the table
+descriptor to swap the `PrimaryIndex` with the appropriate `Indexes` entry.
 
-### TODO: Examples (descriptors before and after)
+The major work items for making primary indexes less special are described below.
 
-### Implementation Plan
+## Column Families
 
-Implementing the above likely begins by eliminating as much special-handling of
-the primary index as possible: adding family support to all indexes, adding
-explicit fields that track columns stored, implicitly indexed, etc and/or always
-populating them and using them for all indexes, primary or otherwise. Once the
-primary index is no longer given special treatment, the swap above, when its
-conditions are met, should be possible.
+As it stands, only primary indexes can have more than one column family. We
+will extend column family support to secondary indexes as well. Families will
+still be defined at the table level, but new secondary indexes will start
+respecting these families for their stored columns. (Existing secondary indexes
+will continue storing all data in column family 0.)
 
-### Follow-up, Out-of-Scope Work
+## Interleaving
+
+The parent of an interleaved relationship must currently be a primary index,
+although the child can be either primary or secondary. We will relax this
+restriction so that any index can be an interleaved parent.
+
+## Stored Columns
+
+In various places, the descriptor handling of the primary index is
+special-cased with respect to handling stored or extra columns. With the
+ability to swap the index which is "primary", such special-handling will need
+to be revised. Index descriptors should be updated to make these columns
+explicit rather than being inferred. Specifically, the ExtraColumnIDs and
+StoreColumnIDs fields should include all columns which are not indexed but are
+still stored in the key or value. In many cases removing special handling
+should simplify existing code which needs to expand these implicit cases.
+
+## IndexIDs
+
+Various code assumes that the primary index ID is 0. This will need to be
+updated to consult the table descriptor instead.
+
+# Follow-up, Out-of-Scope Work
 
 These are intended as a starting point for future work, capturing any discussion
 that was had in the process of forming the above plan, but is *not* in scope at
 this time.
 
-#### Automatic Secondary Index Rewriting
+The goal of this RFC is to describe the minimum changes necessary to enable
+online primary key changes. This does put a burden on the user to manually
+prepare their indexes so that the change is possible. The main follow-up work
+will be to try and reduce this burden for the most common use cases.
+
+## Automatic Secondary Index Rewriting
 
 The process above only works with compatible secondary indexes. Initially it
 will be up to the user to prepare their schema, replacing their existing indexes
@@ -200,7 +259,7 @@ make the statement into a long-running job, and thus imply job control,
 including determining potential interaction with jobs for individual indexes.
 This is out of scope for the initial implementation.
 
-#### Altering Indexes In-Place
+## Altering Indexes In-Place
 
 Preparing for a primary key change requires ensuring all secondary indexes are
 compatible with both the old and new primary key. This likely involves altering
@@ -211,13 +270,37 @@ an existing index. This would require a schema-change process and backfill to
 rewrite that index. This could be useful in general, but in particular could
 streamline changing a primary key where several such alterations are likely.
 
-#### Automatic Dropping of the Previous Index
+## Automatic Dropping of the Previous Index
 
-In many cases, queries may still be using the previously primary index so it
-may or may not be disruptive to drop it automatically. It might make sense in
-some cases -- e.g. if or when a syntax is added that does automatic creation or
-modification of secondary indexes.
+In many cases, queries may still be using the previous primary index so it
+may or may not be disruptive to drop it automatically. It may even be
+impossible to drop it, for instance if foreign key constraints depend on it.
+However, it still might make sense in some cases -- e.g. if or when a syntax is
+added that does automatic creation or modification of secondary indexes.
 
 For tables created without an explicit primary key, the extra rowid column and
 the index on it are very likely no longer serving a useful purpose if the index
 considered primary changes. These are likely candidates for automatic dropping.
+
+## Prepending Columns to Indexes
+
+We anticipate that a common use case for index changes is when a customer is
+trying to scale their database to multiple regions. In this case, it is common
+for users to need to prepend something like a `region` column so that they can
+easily apply geo-partitioning strategies. This command syntactically could be
+something like `ALTER TABLE t PREFIX INDEXES BY (region)` and would involve
+rewriting each index in the table. This is not directly applicable to the
+general use case of changing the primary key, but is a step that could help the
+"path to global" user story.
+
+## Letting Secondary Indexes "Depend" on a Secondary Unique Index
+A pain point in the existing plan is that non-unique secondary indexes must be
+rewritten when the primary key is swapped, because their keys implicitly encode
+primary key columns to make them unique. However, note that as long as the old
+primary index isn't dropped, its columns could still be used to "uniquify" these
+keys. If we introduced and persisted a new "depends" relationship, we could
+allow non-unique indexes to continue depending on the old primary index rather
+than rewriting them. We would also prevent the user from dropping the old
+primary index without first dropping and recreating these indexes. This would
+streamline primary key changes at the expense of introducing more user-facing
+complexity.
