@@ -160,7 +160,7 @@ func BenchmarkMVCCGetMergedTimeSeries_Pebble(b *testing.B) {
 		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
 			for _, mergesPerKey := range []int{1, 16, 256} {
 				b.Run(fmt.Sprintf("mergesPerKey=%d", mergesPerKey), func(b *testing.B) {
-					runMVCCGetMergedValue(ctx, b, setupMVCCPebble, numKeys, mergesPerKey)
+					runMVCCGetMergedValue(ctx, b, setupMVCCInMemPebble, numKeys, mergesPerKey)
 				})
 			}
 		})
