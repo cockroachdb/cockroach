@@ -2874,6 +2874,22 @@ scalar-group-by
       └── count-rows [type=int]
 
 opt expect=PruneUnionAllCols
+SELECT 1 FROM (SELECT a FROM abcde WHERE a > 3 UNION ALL SELECT a FROM abcde)
+----
+project
+ ├── columns: "?column?":12(int!null)
+ ├── fd: ()-->(12)
+ ├── union-all
+ │    ├── project
+ │    │    └── scan abcde
+ │    │         ├── columns: abcde.a:1(int!null)
+ │    │         ├── constraint: /1: [/4 - ]
+ │    │         └── key: (1)
+ │    └── scan abcde@bc
+ └── projections
+      └── const: 1 [type=int]
+
+opt expect=PruneUnionAllCols
 SELECT 1 FROM a INNER JOIN (SELECT a, b FROM abcde UNION ALL SELECT * from xy) AS b ON a.i=b.b
 ----
 project
@@ -2926,3 +2942,72 @@ project
  │              └── fd: ()-->(6)
  └── projections
       └── const: 1 [type=int]
+
+# Regression test for #41772.
+
+exec-ddl
+CREATE TABLE table41772 ()
+----
+
+norm
+WITH
+    a AS (SELECT NULL FROM table41772),
+    b
+        AS (
+            SELECT
+                *
+            FROM
+                (VALUES (NOT NULL, ARRAY[0, 0, 0, 0:::OID]))
+                    AS l (u, v)
+            UNION ALL
+                SELECT
+                    *
+                FROM
+                    (VALUES (NULL, NULL), (false, ARRAY[0:::OID]))
+                        AS r (x, y)
+        )
+SELECT
+    NULL
+FROM
+    a, b
+WHERE
+    b.u
+----
+project
+ ├── columns: "?column?":12(unknown)
+ ├── fd: ()-->(12)
+ ├── inner-join (hash)
+ │    ├── columns: u:7(bool!null)
+ │    ├── scan table41772
+ │    ├── union-all
+ │    │    ├── columns: u:7(bool!null)
+ │    │    ├── left columns: column1:3(bool)
+ │    │    ├── right columns: column1:5(bool)
+ │    │    ├── cardinality: [0 - 3]
+ │    │    ├── select
+ │    │    │    ├── columns: column1:3(bool!null)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(3)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:3(bool)
+ │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(3)
+ │    │    │    │    └── (NOT NULL,) [type=tuple{bool}]
+ │    │    │    └── filters
+ │    │    │         └── variable: column1 [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ │    │    └── select
+ │    │         ├── columns: column1:5(bool!null)
+ │    │         ├── cardinality: [0 - 2]
+ │    │         ├── fd: ()-->(5)
+ │    │         ├── values
+ │    │         │    ├── columns: column1:5(bool)
+ │    │         │    ├── cardinality: [2 - 2]
+ │    │         │    ├── (NULL,) [type=tuple{bool}]
+ │    │         │    └── (false,) [type=tuple{bool}]
+ │    │         └── filters
+ │    │              └── variable: column1 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ │    └── filters (true)
+ └── projections
+      └── null [type=unknown]

@@ -582,7 +582,7 @@
 # EliminateProject.
 [PruneUnionAllCols, Normalize]
 (Project
-    (UnionAll
+    $union:(UnionAll
         $left:*
         $right:*
         $colmap:*
@@ -590,21 +590,17 @@
     $projections:*
     $passthrough:* &
         (CanPruneCols
-            $left
-            $neededLeft:(NeededColMapLeft
-                $needed:(UnionCols
-                    (ProjectionOuterCols $projections) $passthrough
-                )
-                $colmap
-            )
-        ) &
-        (CanPruneCols $right $neededRight:(NeededColMapRight $needed $colmap))
+             $union
+             $needed:(UnionCols
+                 (ProjectionOuterCols $projections) $passthrough
+             )
+         )
 )
 =>
 (Project
     (UnionAll
-        (Project $left [] $neededLeft)
-        (Project $right [] $neededRight)
+        (Project $left [] (NeededColMapLeft $needed $colmap))
+        (Project $right [] (NeededColMapRight $needed $colmap))
         (PruneSetPrivate $needed $colmap)
     )
     $projections

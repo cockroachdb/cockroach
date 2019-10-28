@@ -525,9 +525,12 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		relProps.Rule.PruneCols.DifferenceWith(usedCols)
 
 	case opt.UnionAllOp:
-		// All columns can potentially be pruned from the UnionAll, if they're never
-		// used in a higher-level expression.
-		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
+		// Pruning can be beneficial as long as one of our inputs has advertised pruning,
+		// so that we can push down the project and eliminate the advertisement.
+		u := e.(*memo.UnionAllExpr)
+		pruneFromLeft := opt.TranslateColSet(DerivePruneCols(u.Left), u.LeftCols, u.OutCols)
+		pruneFromRight := opt.TranslateColSet(DerivePruneCols(u.Right), u.RightCols, u.OutCols)
+		relProps.Rule.PruneCols = pruneFromLeft.Union(pruneFromRight)
 
 	case opt.WindowOp:
 		win := e.(*memo.WindowExpr)
