@@ -107,6 +107,7 @@ const (
 	version30     = 196608
 	versionSSL    = 80877103
 	versionCancel = 80877102
+	versionGSSENC = 80877104
 )
 
 // cancelMaxWait is the amount of time a draining server gives to sessions to
@@ -268,7 +269,7 @@ func Match(rd io.Reader) bool {
 	if err != nil {
 		return false
 	}
-	return version == version30 || version == versionSSL || version == versionCancel
+	return version == version30 || version == versionSSL || version == versionCancel || version == versionGSSENC
 }
 
 // Start makes the Server ready for serving connections.
