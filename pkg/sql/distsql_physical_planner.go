@@ -2964,6 +2964,16 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			p.AddSingleGroupStage(
 				dsp.nodeDesc.NodeID, distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes)
 		} else {
+			// With UNION ALL, we can end up with multiple streams on the same node.
+			// We don't want to have unnecessary routers and cross-node streams, so
+			// merge these streams now.
+			//
+			// More importantly, we need to guarantee that if everything is planned
+			// on a single node (which is always the case when there are mutations),
+			// we can fuse everything so there are no concurrent KV operations (see
+			// #40487, #41307).
+			p.EnsureSingleStreamPerNode()
+
 			// UNION ALL is special: it doesn't have any required downstream
 			// processor, so its two inputs might have different post-processing
 			// which would violate an assumption later down the line. Check for this
@@ -2975,16 +2985,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 					execinfrapb.PostProcessSpec{},
 					p.ResultTypes,
 				)
-			} else {
-				// With UNION ALL, we can end up with multiple streams on the same node.
-				// We don't want to have unnecessary routers and cross-node streams, so
-				// merge these streams now.
-				//
-				// More importantly, we need to guarantee that if everything is planned
-				// on a single node (which is always the case when there are mutations),
-				// we can fuse everything so there are no concurrent KV operations (see
-				// #40487, #41307).
-				p.EnsureSingleStreamPerNode()
 			}
 		}
 	} else {
