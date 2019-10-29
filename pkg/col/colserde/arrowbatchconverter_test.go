@@ -65,13 +65,18 @@ func copyBatch(original coldata.Batch) coldata.Batch {
 	return b
 }
 
-func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
+func assertEqualBatches(t testing.TB, expected, actual coldata.Batch) {
 	t.Helper()
 
 	if actual.Selection() != nil {
 		t.Fatal("violated invariant that batches have no selection vectors")
 	}
 	require.Equal(t, expected.Length(), actual.Length())
+	if expected.Length() == 0 {
+		// The schema of a zero-length batch is undefined, so the rest of the check
+		// is not required.
+		return
+	}
 	require.Equal(t, expected.Width(), actual.Width())
 	for colIdx := 0; colIdx < expected.Width(); colIdx++ {
 		// Verify equality of ColVecs (this includes nulls). Since the coldata.Vec
