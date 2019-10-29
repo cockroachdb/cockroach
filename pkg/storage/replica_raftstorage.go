@@ -936,6 +936,19 @@ func (r *Replica) applySnapshot(
 			s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
+	if expLen := s.RaftAppliedIndex - s.TruncatedState.Index; expLen != uint64(len(logEntries)) {
+		entriesRange, err := extractRangeFromEntries(inSnap.LogEntries)
+		if err != nil {
+			return err
+		}
+
+		log.Fatalf(ctx,
+			"missing log entries in snapshot: got %d entries, expected %d "+
+				"(RaftAppliedIndex=%d, TruncatedState.Index=%d, HardState=%s, LogEntries=%s)",
+			len(logEntries), expLen, s.RaftAppliedIndex, s.TruncatedState.Index,
+			hs.String(), entriesRange)
+	}
+
 	// We've written Raft log entries, so we need to sync the WAL.
 	if err := batch.Commit(syncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
 		return err
@@ -1014,6 +1027,29 @@ func (r *Replica) applySnapshot(
 	}
 
 	return nil
+}
+
+// extractRangeFromEntries returns a string representation of the range of
+// marshalled list of raft log entries in the form of [first-index, last-index].
+// If the list is empty, "[n/a, n/a]" is returned instead.
+func extractRangeFromEntries(logEntries [][]byte) (string, error) {
+	var firstIndex, lastIndex string
+	if len(logEntries) == 0 {
+		firstIndex = "n/a"
+		lastIndex = "n/a"
+	} else {
+		firstAndLastLogEntries := make([]raftpb.Entry, 2)
+		if err := protoutil.Unmarshal(logEntries[0], &firstAndLastLogEntries[0]); err != nil {
+			return "", err
+		}
+		if err := protoutil.Unmarshal(logEntries[len(logEntries)-1], &firstAndLastLogEntries[1]); err != nil {
+			return "", err
+		}
+
+		firstIndex = string(firstAndLastLogEntries[0].Index)
+		lastIndex = string(firstAndLastLogEntries[1].Index)
+	}
+	return fmt.Sprintf("[%s, %s]", firstIndex, lastIndex), nil
 }
 
 type raftCommandEncodingVersion byte
