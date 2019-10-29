@@ -186,11 +186,29 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
 }
 
+// DefaultPebbleOptions returns the default pebble options.
+func DefaultPebbleOptions() *pebble.Options {
+	return &pebble.Options{
+		Comparer:              MVCCComparer,
+		L0CompactionThreshold: 2,
+		L0StopWritesThreshold: 1000,
+		LBaseMaxBytes:         64 << 20, // 64 MB
+		Levels: []pebble.LevelOptions{{
+			BlockSize: 32 << 10, // 32 KB
+		}},
+		MemTableSize:                64 << 20, // 64 MB
+		MemTableStopWritesThreshold: 4,
+		Merger:                      MVCCMerger,
+		MinFlushRate:                4 << 20, // 4 MB/sec
+		TablePropertyCollectors:     PebbleTablePropertyCollectors,
+	}
+}
+
 // PebbleConfig holds all configuration parameters and knobs used in setting up
 // a new Pebble instance.
 type PebbleConfig struct {
 	// StorageConfig contains storage configs for all storage engines.
-	StorageConfig base.StorageConfig
+	base.StorageConfig
 	// Pebble specific options.
 	Opts *pebble.Options
 }
@@ -201,6 +219,7 @@ type Pebble struct {
 
 	closed   bool
 	path     string
+	maxSize  int64
 	attrs    roachpb.Attributes
 	settings *cluster.Settings
 
@@ -212,10 +231,6 @@ var _ Engine = &Pebble{}
 
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(cfg PebbleConfig) (*Pebble, error) {
-	cfg.Opts.Comparer = MVCCComparer
-	cfg.Opts.Merger = MVCCMerger
-	cfg.Opts.TablePropertyCollectors = PebbleTablePropertyCollectors
-
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
 	// cfg.FS and cfg.ReadOnly later on.
@@ -228,9 +243,10 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 
 	return &Pebble{
 		db:       db,
-		path:     cfg.StorageConfig.Dir,
-		attrs:    cfg.StorageConfig.Attrs,
-		settings: cfg.StorageConfig.Settings,
+		path:     cfg.Dir,
+		maxSize:  cfg.MaxSize,
+		attrs:    cfg.Attrs,
+		settings: cfg.Settings,
 		fs:       cfg.Opts.FS,
 	}, nil
 }
@@ -389,9 +405,7 @@ func (p *Pebble) Attrs() roachpb.Attributes {
 
 // Capacity implements the Engine interface.
 func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
-	// Pebble doesn't have a capacity limiting parameter, so pass 0 for
-	// maxSizeBytes to denote no limit.
-	return computeCapacity(p.path, 0)
+	return computeCapacity(p.path, p.maxSize)
 }
 
 // Flush implements the Engine interface.
