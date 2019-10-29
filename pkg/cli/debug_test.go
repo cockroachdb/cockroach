@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -134,6 +135,13 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// This test is pretty slow under race (200+ cpu-seconds) because it
+	// uses multiple real disk-backed stores and goes through multiple
+	// cycles of rereplicating all ranges.
+	if util.RaceEnabled {
+		t.Skip("skipping under race")
+	}
 
 	ctx := context.Background()
 
