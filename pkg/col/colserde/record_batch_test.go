@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
@@ -132,6 +133,20 @@ func randomDataFromType(rng *rand.Rand, t coltypes.T, n int, nullProbability flo
 			}
 			builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
 		}
+	case coltypes.Timestamp:
+		var err error
+		now := time.Now()
+		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+		data := make([][]byte, n)
+		for i := range data {
+			delta := rng.Int63()
+			ts := now.Add(time.Duration(delta))
+			data[i], err = ts.MarshalBinary()
+			if err != nil {
+				panic(err)
+			}
+		}
+		builder.(*array.BinaryBuilder).AppendValues(data, valid)
 	default:
 		panic(fmt.Sprintf("unsupported type %s", t))
 	}
@@ -180,9 +195,9 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 		buf             = bytes.Buffer{}
 	)
 
-	// We do not support decimals or timestamps yet.
+	// We do not support decimals.
 	for _, t := range coltypes.AllTypes {
-		if t == coltypes.Decimal || t == coltypes.Timestamp {
+		if t == coltypes.Decimal {
 			continue
 		}
 		supportedTypes = append(supportedTypes, t)
