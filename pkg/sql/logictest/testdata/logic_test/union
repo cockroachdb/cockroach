@@ -286,3 +286,20 @@ SELECT a FROM (SELECT a FROM c UNION ALL SELECT a FROM a) WHERE a > 0 AND a < 3
 ----
 1
 1
+
+# Regression test for 41973 (union operator with no output columns).
+statement ok
+CREATE TABLE tab41973 ()
+
+statement ok
+INSERT INTO tab41973 (rowid) VALUES (1), (2), (3)
+
+query I
+SELECT 1 FROM ((SELECT * FROM tab41973) UNION ALL (SELECT * FROM tab41973))
+----
+1
+1
+1
+1
+1
+1
