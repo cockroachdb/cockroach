@@ -3059,8 +3059,10 @@ func (r *RocksDB) GetAuxiliaryDir() string {
 }
 
 func (r *RocksDB) setAuxiliaryDir(d string) error {
-	if err := os.MkdirAll(d, 0755); err != nil {
-		return err
+	if !r.cfg.ReadOnly {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			return err
+		}
 	}
 	r.auxDir = d
 	return nil
