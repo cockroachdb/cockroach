@@ -158,12 +158,12 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	}
 
 	input := truncateDecisionInput{
-		RaftStatus:                     *raftStatus,
-		LogSize:                        raftLogSize,
-		MaxLogSize:                     targetSize,
-		FirstIndex:                     firstIndex,
-		LastIndex:                      lastIndex,
-		PendingPreemptiveSnapshotIndex: pendingSnapshotIndex,
+		RaftStatus:           *raftStatus,
+		LogSize:              raftLogSize,
+		MaxLogSize:           targetSize,
+		FirstIndex:           firstIndex,
+		LastIndex:            lastIndex,
+		PendingSnapshotIndex: pendingSnapshotIndex,
 	}
 
 	decision := computeTruncateDecision(input)
@@ -206,10 +206,10 @@ const (
 )
 
 type truncateDecisionInput struct {
-	RaftStatus                     raft.Status
-	LogSize, MaxLogSize            int64
-	FirstIndex, LastIndex          uint64
-	PendingPreemptiveSnapshotIndex uint64
+	RaftStatus            raft.Status
+	LogSize, MaxLogSize   int64
+	FirstIndex, LastIndex uint64
+	PendingSnapshotIndex  uint64
 }
 
 func (input truncateDecisionInput) LogTooLarge() bool {
@@ -246,7 +246,7 @@ func (td *truncateDecision) raftSnapshotsForIndex(index uint64) int {
 			n++
 		}
 	}
-	if td.Input.PendingPreemptiveSnapshotIndex != 0 && td.Input.PendingPreemptiveSnapshotIndex < index {
+	if td.Input.PendingSnapshotIndex != 0 && td.Input.PendingSnapshotIndex < index {
 		n++
 	}
 
@@ -351,8 +351,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// snapshots with overlapping bounds that put significant stress on the
 		// Raft snapshot queue.
 		if progress.State == raft.ProgressStateProbe {
-			if decision.NewFirstIndex > decision.Input.FirstIndex {
-				decision.NewFirstIndex = decision.Input.FirstIndex
+			if decision.NewFirstIndex > input.FirstIndex {
+				decision.NewFirstIndex = input.FirstIndex
 				decision.ChosenVia = truncatableIndexChosenViaProbingFollower
 			}
 		} else if !input.LogTooLarge() && decision.NewFirstIndex > progress.Match {
@@ -365,8 +365,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// about to be added to the range (or is in Raft recovery). We don't want to
 	// truncate the log in a way that will require that new replica to be caught
 	// up via yet another Raft snapshot.
-	if input.PendingPreemptiveSnapshotIndex > 0 && decision.NewFirstIndex > input.PendingPreemptiveSnapshotIndex {
-		decision.NewFirstIndex = input.PendingPreemptiveSnapshotIndex
+	if input.PendingSnapshotIndex > 0 && decision.NewFirstIndex > input.PendingSnapshotIndex {
+		decision.NewFirstIndex = input.PendingSnapshotIndex
 		decision.ChosenVia = truncatableIndexChosenViaPendingSnap
 	}
 
@@ -388,17 +388,28 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 
 	// If new first index dropped below first index, make them equal (resulting
 	// in a no-op).
-	if decision.NewFirstIndex < decision.Input.FirstIndex {
-		decision.NewFirstIndex = decision.Input.FirstIndex
+	if decision.NewFirstIndex < input.FirstIndex {
+		decision.NewFirstIndex = input.FirstIndex
 		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
 	}
+
+	// Invariants: NewFirstIndex >= FirstIndex
+	//             NewFirstIndex <= LastIndex (if != 10)
+	//             NewFirstIndex <= QuorumIndex (if non-zero)
+	valid := (decision.NewFirstIndex >= input.FirstIndex) &&
+		(decision.NewFirstIndex <= input.LastIndex || input.LastIndex != 10) &&
+		(decision.NewFirstIndex <= decision.QuorumIndex || decision.QuorumIndex == 0)
+	if !valid {
+		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], quorum idx = %d",
+			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.QuorumIndex)
+		panic(err)
+	}
+
 	return decision
 }
 
 // getQuorumIndex returns the index which a quorum of the nodes have
-// committed. The snapshotLogTruncationConstraints indicates the index of a pending
-// snapshot which is considered part of the Raft group even though it hasn't
-// been added yet. Note that getQuorumIndex may return 0 if the progress map
+// committed. Note that getQuorumIndex may return 0 if the progress map
 // doesn't contain information for a sufficient number of followers (e.g. the
 // local replica has only recently become the leader). In general, the value
 // returned by getQuorumIndex may be smaller than raftStatus.Commit which is

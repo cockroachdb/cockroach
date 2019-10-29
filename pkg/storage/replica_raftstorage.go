@@ -936,6 +936,12 @@ func (r *Replica) applySnapshot(
 			s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
+	if expLen := (s.RaftAppliedIndex - s.TruncatedState.Index); expLen != uint64(len(logEntries)) {
+		log.Fatalf(ctx,
+			"received inconsistent number of log entries: got %d entries, expected %d entries",
+			len(logEntries), s.RaftAppliedIndex-s.TruncatedState.Index)
+	}
+
 	// We've written Raft log entries, so we need to sync the WAL.
 	if err := batch.Commit(syncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
 		return err

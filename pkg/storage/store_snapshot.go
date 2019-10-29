@@ -109,7 +109,7 @@ type kvBatchSnapshotStrategy struct {
 	newBatch  func() engine.Batch
 }
 
-// Send implements the snapshotStrategy interface.
+// Receive implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context, stream incomingSnapshotStream, header SnapshotRequest_Header,
 ) (IncomingSnapshot, error) {
@@ -139,7 +139,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				err = errors.Wrap(err, "invalid snapshot")
 				return IncomingSnapshot{}, sendSnapshotError(stream, err)
 			}
-
 			inSnap := IncomingSnapshot{
 				SnapUUID:   snapUUID,
 				Batches:    batches,
@@ -147,6 +146,12 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				State:      &header.State,
 				snapType:   snapTypeRaft,
 			}
+
+			expLen := inSnap.State.RaftAppliedIndex - inSnap.State.TruncatedState.Index
+			if expLen != uint64(len(logEntries)) {
+				log.Fatal(ctx, "missing log entries in snapshot", expLen, len(logEntries))
+			}
+
 			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
 				inSnap.snapType = snapTypePreemptive
 			}
@@ -264,6 +269,14 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
+	}
+
+	// The difference between the snapshot index (applied index at the time of
+	// snapshot) and the truncated index should equal the number of log entries
+	// shipped over.
+	expLen := endIndex - firstIndex
+	if expLen != uint64(len(logEntries)) {
+		log.Fatal(ctx, "missing log entries in snapshot", expLen, len(logEntries))
 	}
 
 	// Inline the payloads for all sideloaded proposals.

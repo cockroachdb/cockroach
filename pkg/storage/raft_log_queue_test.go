@@ -207,12 +207,12 @@ func TestComputeTruncateDecision(t *testing.T) {
 			status.Progress[uint64(j)] = raft.Progress{RecentActive: true, State: raft.ProgressStateReplicate, Match: v, Next: v + 1}
 		}
 		decision := computeTruncateDecision(truncateDecisionInput{
-			RaftStatus:                     status,
-			LogSize:                        c.raftLogSize,
-			MaxLogSize:                     targetSize,
-			FirstIndex:                     c.firstIndex,
-			LastIndex:                      c.lastIndex,
-			PendingPreemptiveSnapshotIndex: c.pendingSnapshot,
+			RaftStatus:           status,
+			LogSize:              c.raftLogSize,
+			MaxLogSize:           targetSize,
+			FirstIndex:           c.firstIndex,
+			LastIndex:            c.lastIndex,
+			PendingSnapshotIndex: c.pendingSnapshot,
 		})
 		if act, exp := decision.String(), c.exp; act != exp {
 			t.Errorf("%d: got:\n%s\nwanted:\n%s", i, act, exp)
