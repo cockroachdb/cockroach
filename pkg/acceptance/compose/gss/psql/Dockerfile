@@ -1,4 +1,5 @@
-FROM postgres:11
+# TODO(mjibson): See #41999
+FROM postgres:11.4
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
