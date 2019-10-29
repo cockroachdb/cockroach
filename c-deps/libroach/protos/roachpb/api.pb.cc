@@ -39,6 +39,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminTransferLeaseResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitResponse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminVerifyProtectedTimestampResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_BeginTransactionRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_BeginTransactionResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeRequest;
@@ -85,6 +86,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminRelocateRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminScatterResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminSplitRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminVerifyProtectedTimestampRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_CheckConsistencyRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_CheckConsistencyResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ComputeChecksumRequest;
@@ -121,8 +123,8 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResponseHeader;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_SubsumeResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<43> scc_info_ResponseUnion;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<44> scc_info_RequestUnion;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<44> scc_info_ResponseUnion;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<45> scc_info_RequestUnion;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_AdminChangeReplicasRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_BatchResponse_Header;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_ExportRequest;
@@ -649,6 +651,16 @@ class AdminScatterResponseDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<AdminScatterResponse>
       _instance;
 } _AdminScatterResponse_default_instance_;
+class AdminVerifyProtectedTimestampRequestDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<AdminVerifyProtectedTimestampRequest>
+      _instance;
+} _AdminVerifyProtectedTimestampRequest_default_instance_;
+class AdminVerifyProtectedTimestampResponseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<AdminVerifyProtectedTimestampResponse>
+      _instance;
+} _AdminVerifyProtectedTimestampResponse_default_instance_;
 class AddSSTableRequestDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<AddSSTableRequest>
@@ -747,6 +759,7 @@ class RequestUnionDefaultTypeInternal {
   const ::cockroach::roachpb::RefreshRangeRequest* refresh_range_;
   const ::cockroach::roachpb::SubsumeRequest* subsume_;
   const ::cockroach::roachpb::RangeStatsRequest* range_stats_;
+  const ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* admin_verify_protected_timestamp_;
 } _RequestUnion_default_instance_;
 class ResponseUnionDefaultTypeInternal {
  public:
@@ -795,6 +808,7 @@ class ResponseUnionDefaultTypeInternal {
   const ::cockroach::roachpb::RefreshRangeResponse* refresh_range_;
   const ::cockroach::roachpb::SubsumeResponse* subsume_;
   const ::cockroach::roachpb::RangeStatsResponse* range_stats_;
+  const ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* admin_verify_protected_timestamp_;
 } _ResponseUnion_default_instance_;
 class HeaderDefaultTypeInternal {
  public:
@@ -2350,6 +2364,37 @@ static void InitDefaultsAdminScatterResponse() {
       &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_AdminScatterResponse_Range.base,}};
 
+static void InitDefaultsAdminVerifyProtectedTimestampRequest() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_AdminVerifyProtectedTimestampRequest_default_instance_;
+    new (ptr) ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<2> scc_info_AdminVerifyProtectedTimestampRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsAdminVerifyProtectedTimestampRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+
+static void InitDefaultsAdminVerifyProtectedTimestampResponse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_AdminVerifyProtectedTimestampResponse_default_instance_;
+    new (ptr) ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_AdminVerifyProtectedTimestampResponse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsAdminVerifyProtectedTimestampResponse}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,}};
+
 static void InitDefaultsAddSSTableRequest() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -2516,8 +2561,8 @@ static void InitDefaultsRequestUnion() {
   ::cockroach::roachpb::RequestUnion::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<44> scc_info_RequestUnion =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 44, InitDefaultsRequestUnion}, {
+::google::protobuf::internal::SCCInfo<45> scc_info_RequestUnion =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 45, InitDefaultsRequestUnion}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_GetRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_PutRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_ConditionalPutRequest.base,
@@ -2561,7 +2606,8 @@ static void InitDefaultsRequestUnion() {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RefreshRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_RefreshRangeRequest.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_SubsumeRequest.base,
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RangeStatsRequest.base,}};
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RangeStatsRequest.base,
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampRequest.base,}};
 
 static void InitDefaultsResponseUnion() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2574,8 +2620,8 @@ static void InitDefaultsResponseUnion() {
   ::cockroach::roachpb::ResponseUnion::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<43> scc_info_ResponseUnion =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 43, InitDefaultsResponseUnion}, {
+::google::protobuf::internal::SCCInfo<44> scc_info_ResponseUnion =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 44, InitDefaultsResponseUnion}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_GetResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_PutResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_ConditionalPutResponse.base,
@@ -2618,7 +2664,8 @@ static void InitDefaultsResponseUnion() {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RefreshResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_RefreshRangeResponse.base,
       &protobuf_roachpb_2fapi_2eproto::scc_info_SubsumeResponse.base,
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RangeStatsResponse.base,}};
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RangeStatsResponse.base,
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampResponse.base,}};
 
 static void InitDefaultsHeader() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2865,6 +2912,8 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_AdminScatterRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AdminScatterResponse_Range.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AdminScatterResponse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_AdminVerifyProtectedTimestampRequest.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_AdminVerifyProtectedTimestampResponse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AddSSTableRequest.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AddSSTableResponse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RefreshRequest.base);
@@ -27483,6 +27532,505 @@ void AdminScatterResponse::InternalSwap(AdminScatterResponse* other) {
 
 // ===================================================================
 
+void AdminVerifyProtectedTimestampRequest::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_AdminVerifyProtectedTimestampRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
+      ::cockroach::roachpb::RequestHeader::internal_default_instance());
+  ::cockroach::roachpb::_AdminVerifyProtectedTimestampRequest_default_instance_._instance.get_mutable()->protected__ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::roachpb::_AdminVerifyProtectedTimestampRequest_default_instance_._instance.get_mutable()->record_created_at_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void AdminVerifyProtectedTimestampRequest::clear_protected_() {
+  if (GetArenaNoVirtual() == NULL && protected__ != NULL) {
+    delete protected__;
+  }
+  protected__ = NULL;
+}
+void AdminVerifyProtectedTimestampRequest::clear_record_created_at() {
+  if (GetArenaNoVirtual() == NULL && record_created_at_ != NULL) {
+    delete record_created_at_;
+  }
+  record_created_at_ = NULL;
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int AdminVerifyProtectedTimestampRequest::kHeaderFieldNumber;
+const int AdminVerifyProtectedTimestampRequest::kProtectedFieldNumber;
+const int AdminVerifyProtectedTimestampRequest::kRecordCreatedAtFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+AdminVerifyProtectedTimestampRequest::AdminVerifyProtectedTimestampRequest()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampRequest.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+}
+AdminVerifyProtectedTimestampRequest::AdminVerifyProtectedTimestampRequest(const AdminVerifyProtectedTimestampRequest& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_header()) {
+    header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
+  } else {
+    header_ = NULL;
+  }
+  if (from.has_protected_()) {
+    protected__ = new ::cockroach::util::hlc::Timestamp(*from.protected__);
+  } else {
+    protected__ = NULL;
+  }
+  if (from.has_record_created_at()) {
+    record_created_at_ = new ::cockroach::util::hlc::Timestamp(*from.record_created_at_);
+  } else {
+    record_created_at_ = NULL;
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+}
+
+void AdminVerifyProtectedTimestampRequest::SharedCtor() {
+  ::memset(&header_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&record_created_at_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(record_created_at_));
+}
+
+AdminVerifyProtectedTimestampRequest::~AdminVerifyProtectedTimestampRequest() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  SharedDtor();
+}
+
+void AdminVerifyProtectedTimestampRequest::SharedDtor() {
+  if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete protected__;
+  if (this != internal_default_instance()) delete record_created_at_;
+}
+
+void AdminVerifyProtectedTimestampRequest::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const AdminVerifyProtectedTimestampRequest& AdminVerifyProtectedTimestampRequest::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampRequest.base);
+  return *internal_default_instance();
+}
+
+
+void AdminVerifyProtectedTimestampRequest::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && protected__ != NULL) {
+    delete protected__;
+  }
+  protected__ = NULL;
+  if (GetArenaNoVirtual() == NULL && record_created_at_ != NULL) {
+    delete record_created_at_;
+  }
+  record_created_at_ = NULL;
+  _internal_metadata_.Clear();
+}
+
+bool AdminVerifyProtectedTimestampRequest::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_protected_()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_record_created_at()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  return false;
+#undef DO_
+}
+
+void AdminVerifyProtectedTimestampRequest::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_header(), output);
+  }
+
+  if (this->has_protected_()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2, this->_internal_protected_(), output);
+  }
+
+  if (this->has_record_created_at()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_record_created_at(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+}
+
+size_t AdminVerifyProtectedTimestampRequest::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_header()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *header_);
+  }
+
+  if (this->has_protected_()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *protected__);
+  }
+
+  if (this->has_record_created_at()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *record_created_at_);
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void AdminVerifyProtectedTimestampRequest::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const AdminVerifyProtectedTimestampRequest*>(&from));
+}
+
+void AdminVerifyProtectedTimestampRequest::MergeFrom(const AdminVerifyProtectedTimestampRequest& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_header()) {
+    mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
+  }
+  if (from.has_protected_()) {
+    mutable_protected_()->::cockroach::util::hlc::Timestamp::MergeFrom(from.protected_());
+  }
+  if (from.has_record_created_at()) {
+    mutable_record_created_at()->::cockroach::util::hlc::Timestamp::MergeFrom(from.record_created_at());
+  }
+}
+
+void AdminVerifyProtectedTimestampRequest::CopyFrom(const AdminVerifyProtectedTimestampRequest& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.AdminVerifyProtectedTimestampRequest)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool AdminVerifyProtectedTimestampRequest::IsInitialized() const {
+  return true;
+}
+
+void AdminVerifyProtectedTimestampRequest::Swap(AdminVerifyProtectedTimestampRequest* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void AdminVerifyProtectedTimestampRequest::InternalSwap(AdminVerifyProtectedTimestampRequest* other) {
+  using std::swap;
+  swap(header_, other->header_);
+  swap(protected__, other->protected__);
+  swap(record_created_at_, other->record_created_at_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string AdminVerifyProtectedTimestampRequest::GetTypeName() const {
+  return "cockroach.roachpb.AdminVerifyProtectedTimestampRequest";
+}
+
+
+// ===================================================================
+
+void AdminVerifyProtectedTimestampResponse::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_AdminVerifyProtectedTimestampResponse_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(
+      ::cockroach::roachpb::ResponseHeader::internal_default_instance());
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int AdminVerifyProtectedTimestampResponse::kHeaderFieldNumber;
+const int AdminVerifyProtectedTimestampResponse::kVerifiedFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+AdminVerifyProtectedTimestampResponse::AdminVerifyProtectedTimestampResponse()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampResponse.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+}
+AdminVerifyProtectedTimestampResponse::AdminVerifyProtectedTimestampResponse(const AdminVerifyProtectedTimestampResponse& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_header()) {
+    header_ = new ::cockroach::roachpb::ResponseHeader(*from.header_);
+  } else {
+    header_ = NULL;
+  }
+  verified_ = from.verified_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+}
+
+void AdminVerifyProtectedTimestampResponse::SharedCtor() {
+  ::memset(&header_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&verified_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(verified_));
+}
+
+AdminVerifyProtectedTimestampResponse::~AdminVerifyProtectedTimestampResponse() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  SharedDtor();
+}
+
+void AdminVerifyProtectedTimestampResponse::SharedDtor() {
+  if (this != internal_default_instance()) delete header_;
+}
+
+void AdminVerifyProtectedTimestampResponse::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const AdminVerifyProtectedTimestampResponse& AdminVerifyProtectedTimestampResponse::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fapi_2eproto::scc_info_AdminVerifyProtectedTimestampResponse.base);
+  return *internal_default_instance();
+}
+
+
+void AdminVerifyProtectedTimestampResponse::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+  verified_ = false;
+  _internal_metadata_.Clear();
+}
+
+bool AdminVerifyProtectedTimestampResponse::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool verified = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &verified_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  return false;
+#undef DO_
+}
+
+void AdminVerifyProtectedTimestampResponse::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_header()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_header(), output);
+  }
+
+  // bool verified = 2;
+  if (this->verified() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->verified(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+}
+
+size_t AdminVerifyProtectedTimestampResponse::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_header()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *header_);
+  }
+
+  // bool verified = 2;
+  if (this->verified() != 0) {
+    total_size += 1 + 1;
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void AdminVerifyProtectedTimestampResponse::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const AdminVerifyProtectedTimestampResponse*>(&from));
+}
+
+void AdminVerifyProtectedTimestampResponse::MergeFrom(const AdminVerifyProtectedTimestampResponse& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_header()) {
+    mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
+  }
+  if (from.verified() != 0) {
+    set_verified(from.verified());
+  }
+}
+
+void AdminVerifyProtectedTimestampResponse::CopyFrom(const AdminVerifyProtectedTimestampResponse& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.AdminVerifyProtectedTimestampResponse)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool AdminVerifyProtectedTimestampResponse::IsInitialized() const {
+  return true;
+}
+
+void AdminVerifyProtectedTimestampResponse::Swap(AdminVerifyProtectedTimestampResponse* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void AdminVerifyProtectedTimestampResponse::InternalSwap(AdminVerifyProtectedTimestampResponse* other) {
+  using std::swap;
+  swap(header_, other->header_);
+  swap(verified_, other->verified_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string AdminVerifyProtectedTimestampResponse::GetTypeName() const {
+  return "cockroach.roachpb.AdminVerifyProtectedTimestampResponse";
+}
+
+
+// ===================================================================
+
 void AddSSTableRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_AddSSTableRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
@@ -30485,6 +31033,20 @@ void RequestUnion::set_allocated_range_stats(::cockroach::roachpb::RangeStatsReq
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestUnion.range_stats)
 }
+void RequestUnion::set_allocated_admin_verify_protected_timestamp(::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* admin_verify_protected_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  clear_value();
+  if (admin_verify_protected_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      admin_verify_protected_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, admin_verify_protected_timestamp, submessage_arena);
+    }
+    set_has_admin_verify_protected_timestamp();
+    value_.admin_verify_protected_timestamp_ = admin_verify_protected_timestamp;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RequestUnion.admin_verify_protected_timestamp)
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RequestUnion::kGetFieldNumber;
 const int RequestUnion::kPutFieldNumber;
@@ -30530,6 +31092,7 @@ const int RequestUnion::kRefreshFieldNumber;
 const int RequestUnion::kRefreshRangeFieldNumber;
 const int RequestUnion::kSubsumeFieldNumber;
 const int RequestUnion::kRangeStatsFieldNumber;
+const int RequestUnion::kAdminVerifyProtectedTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RequestUnion::RequestUnion()
@@ -30719,6 +31282,10 @@ RequestUnion::RequestUnion(const RequestUnion& from)
     }
     case kRangeStats: {
       mutable_range_stats()->::cockroach::roachpb::RangeStatsRequest::MergeFrom(from.range_stats());
+      break;
+    }
+    case kAdminVerifyProtectedTimestamp: {
+      mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampRequest::MergeFrom(from.admin_verify_protected_timestamp());
       break;
     }
     case VALUE_NOT_SET: {
@@ -30929,6 +31496,10 @@ void RequestUnion::clear_value() {
     }
     case kRangeStats: {
       delete value_.range_stats_;
+      break;
+    }
+    case kAdminVerifyProtectedTimestamp: {
+      delete value_.admin_verify_protected_timestamp_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -31493,6 +32064,18 @@ bool RequestUnion::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+      case 49: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(138u /* 394 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_admin_verify_protected_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -31781,6 +32364,12 @@ void RequestUnion::SerializeWithCachedSizes(
   if (has_revert_range()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       48, this->_internal_revert_range(), output);
+  }
+
+  // .cockroach.roachpb.AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+  if (has_admin_verify_protected_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      49, this->_internal_admin_verify_protected_timestamp(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -32103,6 +32692,13 @@ size_t RequestUnion::ByteSizeLong() const {
           *value_.range_stats_);
       break;
     }
+    // .cockroach.roachpb.AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+    case kAdminVerifyProtectedTimestamp: {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *value_.admin_verify_protected_timestamp_);
+      break;
+    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -32299,6 +32895,10 @@ void RequestUnion::MergeFrom(const RequestUnion& from) {
     }
     case kRangeStats: {
       mutable_range_stats()->::cockroach::roachpb::RangeStatsRequest::MergeFrom(from.range_stats());
+      break;
+    }
+    case kAdminVerifyProtectedTimestamp: {
+      mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampRequest::MergeFrom(from.admin_verify_protected_timestamp());
       break;
     }
     case VALUE_NOT_SET: {
@@ -32940,6 +33540,20 @@ void ResponseUnion::set_allocated_range_stats(::cockroach::roachpb::RangeStatsRe
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseUnion.range_stats)
 }
+void ResponseUnion::set_allocated_admin_verify_protected_timestamp(::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* admin_verify_protected_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  clear_value();
+  if (admin_verify_protected_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      admin_verify_protected_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, admin_verify_protected_timestamp, submessage_arena);
+    }
+    set_has_admin_verify_protected_timestamp();
+    value_.admin_verify_protected_timestamp_ = admin_verify_protected_timestamp;
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ResponseUnion.admin_verify_protected_timestamp)
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResponseUnion::kGetFieldNumber;
 const int ResponseUnion::kPutFieldNumber;
@@ -32984,6 +33598,7 @@ const int ResponseUnion::kRefreshFieldNumber;
 const int ResponseUnion::kRefreshRangeFieldNumber;
 const int ResponseUnion::kSubsumeFieldNumber;
 const int ResponseUnion::kRangeStatsFieldNumber;
+const int ResponseUnion::kAdminVerifyProtectedTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResponseUnion::ResponseUnion()
@@ -33169,6 +33784,10 @@ ResponseUnion::ResponseUnion(const ResponseUnion& from)
     }
     case kRangeStats: {
       mutable_range_stats()->::cockroach::roachpb::RangeStatsResponse::MergeFrom(from.range_stats());
+      break;
+    }
+    case kAdminVerifyProtectedTimestamp: {
+      mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampResponse::MergeFrom(from.admin_verify_protected_timestamp());
       break;
     }
     case VALUE_NOT_SET: {
@@ -33375,6 +33994,10 @@ void ResponseUnion::clear_value() {
     }
     case kRangeStats: {
       delete value_.range_stats_;
+      break;
+    }
+    case kAdminVerifyProtectedTimestamp: {
+      delete value_.admin_verify_protected_timestamp_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -33927,6 +34550,18 @@ bool ResponseUnion::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+      case 49: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(138u /* 394 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_admin_verify_protected_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -34209,6 +34844,12 @@ void ResponseUnion::SerializeWithCachedSizes(
   if (has_revert_range()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       48, this->_internal_revert_range(), output);
+  }
+
+  // .cockroach.roachpb.AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+  if (has_admin_verify_protected_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      49, this->_internal_admin_verify_protected_timestamp(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -34524,6 +35165,13 @@ size_t ResponseUnion::ByteSizeLong() const {
           *value_.range_stats_);
       break;
     }
+    // .cockroach.roachpb.AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+    case kAdminVerifyProtectedTimestamp: {
+      total_size += 2 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *value_.admin_verify_protected_timestamp_);
+      break;
+    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -34716,6 +35364,10 @@ void ResponseUnion::MergeFrom(const ResponseUnion& from) {
     }
     case kRangeStats: {
       mutable_range_stats()->::cockroach::roachpb::RangeStatsResponse::MergeFrom(from.range_stats());
+      break;
+    }
+    case kAdminVerifyProtectedTimestamp: {
+      mutable_admin_verify_protected_timestamp()->::cockroach::roachpb::AdminVerifyProtectedTimestampResponse::MergeFrom(from.admin_verify_protected_timestamp());
       break;
     }
     case VALUE_NOT_SET: {
@@ -37630,6 +38282,12 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminScatter
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminScatterResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::AdminScatterResponse >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::AdminScatterResponse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* Arena::CreateMaybeMessage< ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* Arena::CreateMaybeMessage< ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AddSSTableRequest* Arena::CreateMaybeMessage< ::cockroach::roachpb::AddSSTableRequest >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::AddSSTableRequest >(arena);

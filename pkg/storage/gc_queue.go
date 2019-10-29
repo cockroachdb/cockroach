@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -148,7 +149,26 @@ func (r gcQueueScore) String() string {
 func (gcq *gcQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (bool, float64) {
+
+	// We're going to need to read the protected timestamp state and check the
+	// variety of conditions which disallow GC.
+	// TODO(ajwerner): think about races with changing replica descriptors as they
+	// pertain to protected timestamps.
+	desc := repl.Desc()
+	var overlapping []*ptpb.Record
+	now = repl.store.protectedtsTracker.ProtectedBy(ctx, roachpb.Span{
+		Key:    roachpb.Key(desc.StartKey),
+		EndKey: roachpb.Key(desc.EndKey),
+	}, func(r *ptpb.Record) {
+		overlapping = append(overlapping, r)
+	})
+	if len(overlapping) > 0 {
+		log.VEventf(ctx, 1, "not gc'ing replica %v due to protected timestamps %v as of %v",
+			repl, overlapping, now)
+		return false, 0
+	}
 	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	log.Infof(ctx, "score %v %v %v", repl, r, now)
 	return r.ShouldQueue, r.FinalScore
 }
 
@@ -548,15 +568,34 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
-	now := repl.store.Clock().Now()
+	// Lookup the descriptor and GC policy for the zone containing this key range.
+	// TODO(ajwerner): think about races in terms of merges and other badness for this validation.
+	desc, zone := repl.DescAndZone()
+	var overlapping []*ptpb.Record
+	now := repl.store.protectedtsTracker.ProtectedBy(ctx, roachpb.Span{
+		Key:    roachpb.Key(desc.StartKey),
+		EndKey: roachpb.Key(desc.EndKey),
+	}, func(r *ptpb.Record) {
+		overlapping = append(overlapping, r)
+	})
+
+	if len(overlapping) > 0 {
+		log.VEventf(ctx, 1, "not gc'ing replica %v due to protected timestamps %v as of %v",
+			repl, overlapping, now)
+		return nil
+	}
+
+	// Let's treat now as instead now less the time since the last read from the tracker (or rather
+	// as just the last read from the tracker).
 	r := makeGCQueueScore(ctx, repl, now, sysCfg)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
 
+	if err := repl.markPendingGC(now, engine.MakeGarbageCollector(now, *zone.GC).Threshold); err != nil {
+		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
+		return nil
+	}
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
-
-	// Lookup the descriptor and GC policy for the zone containing this key range.
-	desc, zone := repl.DescAndZone()
 
 	info, err := RunGC(ctx, desc, snap, now, *zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {

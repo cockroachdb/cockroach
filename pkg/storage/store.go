@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnrecovery"
@@ -160,6 +161,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 		ClosedTimestamp:             container.NoopContainer(),
+		ProtectedTimestampTracker:   protectedts.ClockTracker(clock),
 	}
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
@@ -384,6 +386,7 @@ type Store struct {
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
 	sss                SSTSnapshotStorage
+	protectedtsTracker protectedts.Tracker
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -690,6 +693,8 @@ type StoreConfig struct {
 	// ExternalStorage creates ExternalStorage objects which allows access to external files
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
+
+	ProtectedTimestampTracker protectedts.Tracker
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -850,6 +855,7 @@ func NewStore(
 	if err := s.sss.Clear(); err != nil {
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
+	s.protectedtsTracker = cfg.ProtectedTimestampTracker
 
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.

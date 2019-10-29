@@ -489,6 +489,13 @@ type Replica struct {
 		syncutil.Mutex
 		remotes map[roachpb.ReplicaID]struct{}
 	}
+
+	// r.mu < r.protectedTimestampMu
+	protectedTimestampMu struct {
+		syncutil.Mutex
+		minStateReadTimestamp hlc.Timestamp
+		pendingGCThreshold    hlc.Timestamp
+	}
 }
 
 var _ batcheval.EvalContext = &Replica{}
@@ -1436,7 +1443,10 @@ func (r *Replica) executeAdminBatch(
 		reply, err := r.adminScatter(ctx, *tArgs)
 		pErr = roachpb.NewError(err)
 		resp = &reply
-
+	case *roachpb.AdminVerifyProtectedTimestampRequest:
+		reply, err := r.adminVerifyProtectedTimestamp(ctx, *tArgs)
+		pErr = roachpb.NewError(err)
+		resp = &reply
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
 	}
