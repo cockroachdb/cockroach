@@ -3333,3 +3333,142 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 		Used:      totalUsedBytes,
 	}, nil
 }
+
+// CheckForKeyCollisions indicates if the provided sstData has any colliding
+// keys with existingIter in the specified range.
+func CheckForKeyCollisions(existingIter Iterator, sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error) {
+	type iterCheckForKeyCollisions interface {
+		CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
+	}
+	return existingIter.(iterCheckForKeyCollisions).CheckForKeyCollisions(sstData, start, end)
+}
+
+// checkForKeyCollisionsGo is a Go port of DBCheckForKeyCollisions.
+func checkForKeyCollisionsGo(existingIter Iterator, sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error) {
+	var skippedKVStats enginepb.MVCCStats
+	sstIter, err := NewMemSSTIterator(sstData, false)
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+
+	defer sstIter.Close()
+	sstIter.Seek(MakeMVCCMetadataKey(start))
+	if ok, err := sstIter.Valid(); err != nil || !ok {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "checking for key collisions")
+	}
+
+	ok, extErr := existingIter.Valid()
+	ok2, sstErr := sstIter.Valid()
+	for extErr == nil && sstErr == nil && ok && ok2 {
+		existingKey := existingIter.UnsafeKey()
+		existingValue := existingIter.UnsafeValue()
+		sstKey := sstIter.UnsafeKey()
+		sstValue := sstIter.UnsafeValue()
+
+		if !existingKey.IsValue() {
+			var mvccMeta enginepb.MVCCMetadata
+			err := existingIter.ValueProto(&mvccMeta)
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+
+			// Check for an inline value, as these are only used in non-user data.
+			// This method is currently used by AddSSTable when performing an IMPORT
+			// INTO. We do not expect to encounter any inline values, and thus we
+			// report an error.
+			if len(mvccMeta.RawBytes) > 0 {
+				return enginepb.MVCCStats{}, errors.Errorf("inline values are unsupported when checking for key collisions")
+			} else if mvccMeta.Txn != nil {
+				// Check for a write intent.
+				//
+				// TODO(adityamaru): Currently, we raise a WriteIntentError on
+				// encountering all intents. This is because, we do not expect to
+				// encounter many intents during IMPORT INTO as we lock the key space we
+				// are importing into. Older write intents could however be found in the
+				// target key space, which will require appropriate resolution logic.
+				var writeIntentErr roachpb.WriteIntentError
+				var intent roachpb.Intent
+				intent.Txn = *mvccMeta.Txn
+				intent.Key = existingIter.Key().Key
+				writeIntentErr.Intents = append(writeIntentErr.Intents, intent)
+
+				return enginepb.MVCCStats{}, &writeIntentErr
+			} else {
+				return enginepb.MVCCStats{}, errors.Errorf("intent without transaction")
+			}
+		}
+
+		bytesCompare := bytes.Compare(existingKey.Key, sstKey.Key)
+		if bytesCompare == 0 {
+			// If the colliding key is a tombstone in the existing data, and the
+			// timestamp of the sst key is greater than or equal to the timestamp of
+			// the tombstone, then this is not considered a collision. We move the
+			// iterator over the existing data to the next potentially colliding key
+			// (skipping all versions of the deleted key), and resume iteration.
+			//
+			// If the ts of the sst key is less than that of the tombstone it is
+			// changing existing data, and we treat this as a collision.
+			if len(existingValue) == 0 && !sstKey.Timestamp.Less(existingKey.Timestamp) {
+				existingIter.NextKey()
+				ok, extErr = existingIter.Valid()
+				ok2, sstErr = sstIter.Valid()
+
+				continue
+			}
+
+			// If the ingested KV has an identical timestamp and value as the existing
+			// data then we do not consider it to be a collision. We move the iterator
+			// over the existing data to the next potentially colliding key (skipping
+			// all versions of the current key), and resume iteration.
+			if sstKey.Timestamp.Equal(existingKey.Timestamp) && bytes.Equal(existingValue, sstValue) {
+				// Even though we skip over the KVs described above, their stats have
+				// already been accounted for resulting in a problem of double-counting.
+				// To solve this we send back the stats of these skipped KVs so that we
+				// can subtract them later. This enables us to construct accurate
+				// MVCCStats and prevents expensive recomputation in the future.
+				metaKeySize := int64(len(sstKey.Key) + 1)
+				metaValSize := int64(0)
+				totalBytes := metaKeySize + metaValSize
+
+				// Update the skipped stats to account fot the skipped meta key.
+				skippedKVStats.LiveBytes += totalBytes
+				skippedKVStats.LiveCount++
+				skippedKVStats.KeyBytes += metaKeySize
+				skippedKVStats.ValBytes += metaValSize
+				skippedKVStats.KeyCount++
+
+				// Update the stats to account for the skipped versioned key/value.
+				totalBytes = int64(len(sstValue)) + MVCCVersionTimestampSize
+				skippedKVStats.LiveBytes += totalBytes
+				skippedKVStats.KeyBytes += MVCCVersionTimestampSize
+				skippedKVStats.ValBytes += int64(len(sstValue))
+				skippedKVStats.ValCount++
+
+				existingIter.NextKey()
+				ok, extErr = existingIter.Valid()
+				ok2, sstErr = sstIter.Valid()
+
+				continue
+			}
+
+			err := &Error{msg: existingIter.Key().Key.String()}
+			return enginepb.MVCCStats{}, errors.Wrap(err, "ingested key collides with an existing one")
+		} else if bytesCompare < 0 {
+			existingIter.Seek(MVCCKey{Key: sstKey.Key})
+		} else {
+			sstIter.Seek(MVCCKey{Key: existingKey.Key})
+		}
+
+		ok, extErr = existingIter.Valid()
+		ok2, sstErr = sstIter.Valid()
+	}
+
+	if extErr != nil {
+		return enginepb.MVCCStats{}, extErr
+	}
+	if sstErr != nil {
+		return enginepb.MVCCStats{}, sstErr
+	}
+
+	return skippedKVStats, nil
+}
