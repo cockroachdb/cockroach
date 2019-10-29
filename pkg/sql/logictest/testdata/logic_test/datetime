@@ -773,27 +773,27 @@ FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 query T
 SELECT date_trunc('millennia', '2000-02-10 19:46:33.306157519-04'::timestamptz)::string
 ----
-1001-01-01 00:00:00-04:00
+1001-01-01 00:00:00+00:00
 
 query T
 SELECT date_trunc('centuries', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
 ----
-2001-01-01 00:00:00-04:00
+2001-01-01 00:00:00+00:00
 
 query T
 SELECT date_trunc('decades', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
 ----
-2010-01-01 00:00:00-04:00
+2010-01-01 00:00:00+00:00
 
 query T
 SELECT date_trunc('hour', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
 ----
-2016-02-10 19:00:00-04:00
+2016-02-10 23:00:00+00:00
 
 query T
 SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
 ----
-2016-02-10 19:00:00-04:00
+2016-02-10 23:00:00+00:00
 
 query IBT
 SELECT k, date_trunc(element, input::date) = date_trunc_result::date, date_trunc(element, input::date)::string
@@ -1415,6 +1415,31 @@ SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 ----
 2017-12-01 00:00:00 +0000 UTC
 
+# Test date_trunc works when timestamp zone changes.
+subtest regression_41663
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00'::date);
+----
+2011-01-01 00:00:00 +0000 UTC
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz);
+----
+2011-01-01 00:00:00 +0000 UTC
+
+statement ok
+SET TIME ZONE 'Africa/Nairobi';
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00'::date);
+----
+2011-01-01 00:00:00 +0300 +0300
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz);
+----
+2011-01-02 00:00:00 +0300 +0300
 
 # Test negative years to ensure they can round-trip through the parser.
 # Also ensure that we don't trigger any of the "convenience" rules.

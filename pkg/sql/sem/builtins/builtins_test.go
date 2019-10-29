@@ -15,10 +15,15 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCategory(t *testing.T) {
@@ -232,6 +237,40 @@ func TestLPadRPad(t *testing.T) {
 		if out != tc.expected {
 			t.Errorf("expected %s, found %s", tc.expected, out)
 		}
+	}
+}
+
+func TestTruncateTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	loc, err := timeutil.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+
+	testCases := []struct {
+		fromTime time.Time
+		timeSpan string
+		expected *tree.DTimestampTZ
+	}{
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "millennium", tree.MakeDTimestampTZ(time.Date(2001, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "century", tree.MakeDTimestampTZ(time.Date(2101, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "decade", tree.MakeDTimestampTZ(time.Date(2110, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "year", tree.MakeDTimestampTZ(time.Date(2118, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "quarter", tree.MakeDTimestampTZ(time.Date(2118, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "month", tree.MakeDTimestampTZ(time.Date(2118, time.March, 1, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "day", tree.MakeDTimestampTZ(time.Date(2118, time.March, 11, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "week", tree.MakeDTimestampTZ(time.Date(2118, time.March, 6, 0, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "hour", tree.MakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 0, 0, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "second", tree.MakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 0, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "millisecond", tree.MakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 80000000, loc), time.Microsecond)},
+		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "microsecond", tree.MakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 80009000, loc), time.Microsecond)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.timeSpan, func(t *testing.T) {
+			result, err := truncateTimestamp(nil, tc.fromTime, tc.timeSpan)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, result)
+		})
 	}
 }
 

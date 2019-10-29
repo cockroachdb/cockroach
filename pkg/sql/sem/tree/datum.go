@@ -2124,7 +2124,7 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, erro
 	if err != nil {
 		return nil, err
 	}
-	return MakeDTimestampTZ(t, time.Microsecond), nil
+	return MakeDTimestampTZ(t.In(loc), time.Microsecond), nil
 }
 
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
