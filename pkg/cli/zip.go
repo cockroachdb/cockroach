@@ -466,7 +466,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 
 				var ranges *serverpb.RangesResponse
 				if err := contextutil.RunWithTimeout(baseCtx, "request ranges", timeout, func(ctx context.Context) error {
-					ranges, err = status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
+					ranges, err = status.Ranges(ctx,
+						&serverpb.RangesRequest{
+							NodeId:   id,
+							AllInfo:  true,
+							Ordering: serverpb.RangesRequest_RANDOM,
+						})
 					return err
 				}); err != nil {
 					if err := z.createError(prefix+"/ranges", err); err != nil {

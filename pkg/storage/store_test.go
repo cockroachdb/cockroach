@@ -781,7 +781,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 
 		// Ensure that our next pass is done in-order.
 		if pass == 1 {
-			_ = visitor.InOrder()
+			_ = visitor.InOrder(VisitOrderByRangeID)
 		}
 		var lastRangeID roachpb.RangeID
 		visitor.Visit(func(repl *Replica) bool {

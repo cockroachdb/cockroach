@@ -268,7 +268,7 @@ ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
 
 	for _, server := range tc.Servers {
 		assert.NoError(t, server.GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-			s.VisitReplicas(func(r *storage.Replica) bool {
+			s.VisitReplicas(storage.VisitOrderRandom, func(r *storage.Replica) bool {
 				key := keys.RaftTruncatedStateKey(r.RangeID)
 				var truncState roachpb.RaftTruncatedState
 				found, err := engine.MVCCGetProto(
@@ -305,7 +305,7 @@ ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
 				// slow because those replicas aren't caught up any more.
 				s.MustForceReplicaGCScanAndProcess()
 				var err error
-				s.VisitReplicas(func(r *storage.Replica) bool {
+				s.VisitReplicas(storage.VisitOrderRandom, func(r *storage.Replica) bool {
 					snap := s.Engine().NewSnapshot()
 					defer snap.Close()
 

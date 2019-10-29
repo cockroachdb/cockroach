@@ -197,17 +197,37 @@ message RangeInfo {
   storage.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
+  cockroach.roachpb.RangeDescriptor desc = 16 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+  // range_ids specifies which ranges we're requesting information about. If
+  // empty, information on all the ranges for which the node has a replica will
+  // be returned.
   repeated int64 range_ids = 2 [
     (gogoproto.customname) = "RangeIDs",
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
+
+  // AllInfo and the following fields control what information is returned. If
+  // AllInfo is set, everything is returned. Otherwise, the following fields
+  // control various bits of info.
+  // There's no controls for most of the fields, as these options were added
+  // later. The debug.zip needs everything, but other range reports need a lot
+  // less info.
+  bool all_info = 3;
+  bool lease_info = 4;
+  bool desc_info = 5;
+
+  enum ordering_opt {
+    RANDOM = 0;
+    BY_KEY = 1;
+  }
+  ordering_opt ordering = 6;
 }
 
 message RangesResponse {
@@ -775,6 +795,8 @@ service Status {
       get : "/_status/ranges/{node_id}"
     };
   }
+  // RangesStream is a streaming version of Ranges.
+  rpc RangesStream(RangesRequest) returns (stream RangeInfo) {}
   rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
     option (google.api.http) = {
       get : "/_status/gossip/{node_id}"
