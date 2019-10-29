@@ -528,7 +528,7 @@ var specs = []stmtSpec{
 			" opt_partition_by":                    "",
 			" opt_using_gin_btree":                 "",
 			"'ON' table_name '(' index_params ')'": "'...'",
-			"storing '(' name_list ')'":            "'STORING' '(' stored_columns ')'",
+			"storing '(' storing_items ')'":        "'STORING' '(' stored_columns ')'",
 			"table_name '(' name_list":             "parent_table '(' interleave_prefix",
 		},
 		exclude: []*regexp.Regexp{

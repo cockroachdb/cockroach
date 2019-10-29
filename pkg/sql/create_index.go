@@ -50,7 +50,7 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:             string(n.Name),
 		Unique:           n.Unique,
-		StoreColumnNames: n.Storing.ToStrings(),
+		StoreColumnNames: n.Storing.ColumnNames(),
 	}
 
 	if n.Inverted {
@@ -97,7 +97,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
 	}
 
-	if n.n.Families != nil {
+	if n.n.Storing != nil && len(n.n.Storing.Families) > 0 {
 		return unimplemented.NewWithIssue(41964, "column families on secondary indexes are unsupported")
 	}
 

@@ -109,8 +109,7 @@ type CreateIndex struct {
 	Columns     IndexElemList
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
-	Storing     NameList
-	Families    FamilyDefs
+	Storing     *StoringDef
 	Interleave  *InterleaveDef
 	PartitionBy *PartitionBy
 }
@@ -145,13 +144,8 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	ctx.WriteString(" (")
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
-	if len(node.Storing) > 0 {
-		ctx.WriteString(" STORING (")
-		ctx.FormatNode(&node.Storing)
-		ctx.WriteByte(')')
-	}
-	if node.Families != nil {
-		ctx.FormatNode(node.Families)
+	if node.Storing != nil {
+		ctx.FormatNode(node.Storing)
 	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
@@ -548,8 +542,7 @@ type ColumnFamilyConstraint struct {
 type IndexTableDef struct {
 	Name        Name
 	Columns     IndexElemList
-	Storing     NameList
-	Families    FamilyDefs
+	Storing     *StoringDef
 	Interleave  *InterleaveDef
 	Inverted    bool
 	PartitionBy *PartitionBy
@@ -574,12 +567,7 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
 	if node.Storing != nil {
-		ctx.WriteString(" STORING (")
-		ctx.FormatNode(&node.Storing)
-		ctx.WriteByte(')')
-	}
-	if node.Families != nil {
-		ctx.FormatNode(node.Families)
+		ctx.FormatNode(node.Storing)
 	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
@@ -587,6 +575,37 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
 	}
+}
+
+// StoringDef represents a STORING clause with optional FAMILY
+// sub-clauses.
+type StoringDef struct {
+	Names    NameList
+	Families []*FamilyDef
+}
+
+func (node *StoringDef) Format(ctx *FmtCtx) {
+	ctx.WriteString(" STORING (")
+	ctx.FormatNode(&node.Names)
+	if len(node.Families) > 0 {
+		if len(node.Names) > 0 {
+			ctx.WriteString(", ")
+		}
+		comma := ""
+		for _, n := range node.Families {
+			ctx.WriteString(comma)
+			ctx.FormatNode(n)
+			comma = ", "
+		}
+	}
+	ctx.WriteByte(')')
+}
+
+func (node *StoringDef) ColumnNames() []string {
+	if node == nil {
+		return nil
+	}
+	return node.Names.ToStrings()
 }
 
 // ConstraintTableDef represents a constraint definition within a CREATE TABLE
@@ -625,12 +644,7 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
 	if node.Storing != nil {
-		ctx.WriteString(" STORING (")
-		ctx.FormatNode(&node.Storing)
-		ctx.WriteByte(')')
-	}
-	if node.Families != nil {
-		ctx.FormatNode(node.Families)
+		ctx.FormatNode(node.Storing)
 	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
