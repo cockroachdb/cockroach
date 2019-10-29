@@ -362,8 +362,10 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	spans *spanset.SpanSet,
 	canRetry bool,
 ) (batch engine.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+	goldenMS := *ms
 	for retries := 0; ; retries++ {
 		if batch != nil {
+			*ms = goldenMS
 			batch.Close()
 		}
 		batch = r.store.Engine().NewBatch()
