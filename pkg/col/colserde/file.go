@@ -72,6 +72,10 @@ func NewFileSerializer(w io.Writer, typs []coltypes.T) (*FileSerializer, error) 
 	return s, s.Reset(w)
 }
 
+func (s *FileSerializer) Written() int {
+	return s.w.written
+}
+
 // Reset can be called to reuse this FileSerializer with a new io.Writer after
 // calling Finish. The types will remain the ones passed to the constructor. The
 // caller is responsible for closing the given writer.
@@ -124,8 +128,9 @@ func (s *FileSerializer) AppendBatch(batch coldata.Batch) error {
 }
 
 // Finish writes the footer metadata described by the arrow spec. Nothing can be
-// called after Finish except Reset.
-func (s *FileSerializer) Finish() error {
+// called after Finish except Reset. The total number of bytes written since
+// the serializer was initialized is returned.
+func (s *FileSerializer) Finish() (int, error) {
 	defer func() {
 		s.w = nil
 	}()
@@ -137,18 +142,18 @@ func (s *FileSerializer) Finish() error {
 	s.fb.Finish(footerOffset)
 	footerBytes := s.fb.FinishedBytes()
 	if _, err := s.w.Write(footerBytes); err != nil {
-		return err
+		return 0, err
 	}
 	// For the footer, and only the footer, the spec requires the length _after_
 	// the footer so that it can be read by starting at the back of the file and
 	// working forward.
 	binary.LittleEndian.PutUint32(s.scratch[:], uint32(len(footerBytes)))
 	if _, err := s.w.Write(s.scratch[:]); err != nil {
-		return err
+		return 0, err
 	}
 	// Spec wants the magic again here.
 	_, err := io.WriteString(s.w, fileMagic)
-	return err
+	return s.w.written, err
 }
 
 // FileDeserializer decodes columnar data batches from files encoded according
