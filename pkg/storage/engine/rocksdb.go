@@ -1541,6 +1541,12 @@ func (r *batchIterator) getIter() *C.DBIterator {
 	return r.iter.iter
 }
 
+func (r *batchIterator) CheckForKeyCollisions(
+	sstData []byte, start, end roachpb.Key,
+) (enginepb.MVCCStats, error) {
+	return r.iter.CheckForKeyCollisions(sstData, start, end)
+}
+
 // reusableBatchIterator wraps batchIterator and makes the Close method a no-op
 // to allow reuse of the iterator for the lifetime of the batch. The batch must
 // call iter.destroy() when it closes itself.
@@ -2425,6 +2431,53 @@ func (r *rocksDBIterator) SetUpperBound(key roachpb.Key) {
 	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(key)))
 }
 
+// CheckForKeyCollisions indicates if the provided SST data collides with this
+// iterator in the specified range.
+func (r *rocksDBIterator) CheckForKeyCollisions(
+	sstData []byte, start, end roachpb.Key,
+) (enginepb.MVCCStats, error) {
+	// Create a C++ iterator over the SST being added. This iterator is used to
+	// perform a check for key collisions between the SST being ingested, and the
+	// exisiting data. As the collision check is in C++ we are unable to use a
+	// pure go iterator as in verifySSTable.
+	sst := MakeRocksDBSstFileReader()
+	defer sst.Close()
+	emptyStats := enginepb.MVCCStats{}
+
+	if err := sst.IngestExternalFile(sstData); err != nil {
+		return emptyStats, err
+	}
+	sstIterator := sst.NewIterator(IterOptions{UpperBound: end}).(*rocksDBIterator)
+	defer sstIterator.Close()
+	sstIterator.Seek(MakeMVCCMetadataKey(start))
+	if ok, err := sstIterator.Valid(); err != nil || !ok {
+		return emptyStats, errors.Wrap(err, "checking for key collisions")
+	}
+
+	var intentErr C.DBString
+	var skippedKVStats C.MVCCStatsResult
+
+	state := C.DBCheckForKeyCollisions(r.iter, sstIterator.iter, &skippedKVStats, &intentErr)
+
+	err := statusToError(state.status)
+	if err != nil {
+		if err.Error() == "WriteIntentError" {
+			var e roachpb.WriteIntentError
+			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
+				return emptyStats, errors.Wrap(err, "failed to decode write intent error")
+			}
+			return emptyStats, &e
+		} else if err.Error() == "InlineError" {
+			return emptyStats, errors.Errorf("inline values are unsupported when checking for key collisions")
+		}
+		err = errors.Wrap(&Error{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
+		return emptyStats, err
+	}
+
+	skippedStats, err := cStatsToGoStats(skippedKVStats, 0)
+	return skippedStats, err
+}
+
 func copyFromSliceVector(bufs *C.DBSlice, len C.int32_t) []byte {
 	if bufs == nil {
 		return nil
@@ -2821,35 +2874,6 @@ func (fr *RocksDBSstFileReader) Close() {
 	}
 	fr.rocksDB.RocksDB.Close()
 	fr.rocksDB.RocksDB = nil
-}
-
-// CheckForKeyCollisions indicates if the two iterators collide on any keys.
-func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) (enginepb.MVCCStats, error) {
-	existingIterGetter := existingIter.(dbIteratorGetter)
-	sstableIterGetter := sstIter.(dbIteratorGetter)
-	var intentErr C.DBString
-	var skippedKVStats C.MVCCStatsResult
-	emptyStats := enginepb.MVCCStats{}
-
-	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter(), &skippedKVStats, &intentErr)
-
-	err := statusToError(state.status)
-	if err != nil {
-		if err.Error() == "WriteIntentError" {
-			var e roachpb.WriteIntentError
-			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
-				return emptyStats, errors.Wrap(err, "failed to decode write intent error")
-			}
-			return emptyStats, &e
-		} else if err.Error() == "InlineError" {
-			return emptyStats, errors.Errorf("inline values are unsupported when checking for key collisions")
-		}
-		err = errors.Wrap(&Error{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
-		return emptyStats, err
-	}
-
-	skippedStats, err := cStatsToGoStats(skippedKVStats, 0)
-	return skippedStats, err
 }
 
 // RocksDBSstFileWriter creates a file suitable for importing with
