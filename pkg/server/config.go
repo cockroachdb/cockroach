@@ -498,6 +498,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storageConfig := base.StorageConfig{
 				Attrs:           spec.Attributes,
 				Dir:             spec.Path,
+				MaxSize:         sizeInBytes,
 				Settings:        cfg.Settings,
 				UseFileRegistry: spec.UseFileRegistry,
 				ExtraOptions:    spec.ExtraOptions,
@@ -515,7 +516,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			} else {
 				rocksDBConfig := engine.RocksDBConfig{
 					StorageConfig:           storageConfig,
-					MaxSizeBytes:            sizeInBytes,
 					MaxOpenFiles:            openFileLimitPerStore,
 					WarnLargeBatchThreshold: 500 * time.Millisecond,
 					RocksDBOptions:          spec.RocksDBOptions,

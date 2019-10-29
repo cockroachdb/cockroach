@@ -208,7 +208,7 @@ func DefaultPebbleOptions() *pebble.Options {
 // a new Pebble instance.
 type PebbleConfig struct {
 	// StorageConfig contains storage configs for all storage engines.
-	StorageConfig base.StorageConfig
+	base.StorageConfig
 	// Pebble specific options.
 	Opts *pebble.Options
 }
@@ -219,6 +219,7 @@ type Pebble struct {
 
 	closed   bool
 	path     string
+	maxSize  int64
 	attrs    roachpb.Attributes
 	settings *cluster.Settings
 
@@ -242,9 +243,10 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 
 	return &Pebble{
 		db:       db,
-		path:     cfg.StorageConfig.Dir,
-		attrs:    cfg.StorageConfig.Attrs,
-		settings: cfg.StorageConfig.Settings,
+		path:     cfg.Dir,
+		maxSize:  cfg.MaxSize,
+		attrs:    cfg.Attrs,
+		settings: cfg.Settings,
 		fs:       cfg.Opts.FS,
 	}, nil
 }
@@ -403,9 +405,7 @@ func (p *Pebble) Attrs() roachpb.Attributes {
 
 // Capacity implements the Engine interface.
 func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
-	// Pebble doesn't have a capacity limiting parameter, so pass 0 for
-	// maxSizeBytes to denote no limit.
-	return computeCapacity(p.path, 0)
+	return computeCapacity(p.path, p.maxSize)
 }
 
 // Flush implements the Engine interface.
