@@ -217,15 +217,8 @@ func selectTargets(
 		return nil, nil, err
 	}
 
-	seenTable := false
-	for _, desc := range matched.descs {
-		if desc.Table(hlc.Timestamp{}) != nil {
-			seenTable = true
-			break
-		}
-	}
-	if !seenTable {
-		return nil, nil, errors.Errorf("no tables found: %s", tree.ErrString(&targets))
+	if len(matched.descs) == 0 {
+		return nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
 	if lastBackupDesc.FormatVersion >= BackupFormatDescriptorTrackingVersion {
@@ -1526,9 +1519,6 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	if len(filteredTablesByID) == 0 {
-		return errors.Errorf("no tables to restore: %s", tree.ErrString(&restoreStmt.Targets))
-	}
 	tableRewrites, err := allocateTableRewrites(ctx, p, databasesByID, filteredTablesByID, restoreDBs, opts)
 	if err != nil {
 		return err
@@ -1745,6 +1735,17 @@ func (r *restoreResumer) Resume(
 	}
 	r.tables = tables
 	r.databases = databases
+	r.exec = p.ExecCfg().InternalExecutor
+	r.statsRefresher = p.ExecCfg().StatsRefresher
+	r.latestStats = remapRelevantStatistics(latestBackupDesc, details.TableRewrites)
+
+	if len(r.tables) == 0 {
+		// We have no tables to restore (we are restoring an empty DB).
+		// Since we have already created any new databases that we needed,
+		// we can return without importing any data.
+		log.Warning(ctx, "no tables to restore")
+		return nil
+	}
 
 	res, err := restore(
 		ctx,
@@ -1760,9 +1761,6 @@ func (r *restoreResumer) Resume(
 		r.job,
 	)
 	r.res = res
-	r.exec = p.ExecCfg().InternalExecutor
-	r.statsRefresher = p.ExecCfg().StatsRefresher
-	r.latestStats = remapRelevantStatistics(latestBackupDesc, details.TableRewrites)
 	return err
 }
 
