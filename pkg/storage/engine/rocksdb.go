@@ -27,9 +27,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -459,14 +459,8 @@ func (c RocksDBCache) Release() {
 // RocksDBConfig holds all configuration parameters and knobs used in setting
 // up a new RocksDB instance.
 type RocksDBConfig struct {
-	Attrs roachpb.Attributes
-	// Dir is the data directory for this store.
-	Dir string
-	// If true, creating the instance fails if the target directory does not hold
-	// an initialized RocksDB instance.
-	//
-	// Makes no sense for in-memory instances.
-	MustExist bool
+	// StorageConfig contains storage configs for all storage engines.
+	StorageConfig base.StorageConfig
 	// ReadOnly will open the database in read only mode if set to true.
 	ReadOnly bool
 	// MaxSizeBytes is used for calculating free space and making rebalancing
@@ -479,17 +473,9 @@ type RocksDBConfig struct {
 	// WriteBatch takes longer than WarnLargeBatchThreshold. If it is set to
 	// zero, no log messages are ever printed.
 	WarnLargeBatchThreshold time.Duration
-	// Settings instance for cluster-wide knobs.
-	Settings *cluster.Settings
-	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
-	// This may force the store version to versionFileRegistry if currently lower.
-	UseFileRegistry bool
 	// RocksDBOptions contains RocksDB specific options using a semicolon
 	// separated key-value syntax ("key1=value1; key2=value2").
 	RocksDBOptions string
-	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
-	// to C CCL code.
-	ExtraOptions []byte
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -536,7 +522,7 @@ func SetRocksDBOpenHook(fn unsafe.Pointer) {
 // The caller must call the engine's Close method when the engine is no longer
 // needed.
 func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
-	if cfg.Dir == "" {
+	if cfg.StorageConfig.Dir == "" {
 		return nil, errors.New("dir must be non-empty")
 	}
 
@@ -545,7 +531,7 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 		cache: cache.ref(),
 	}
 
-	if err := r.setAuxiliaryDir(filepath.Join(cfg.Dir, "auxiliary")); err != nil {
+	if err := r.setAuxiliaryDir(filepath.Join(cfg.StorageConfig.Dir, "auxiliary")); err != nil {
 		return nil, err
 	}
 
@@ -555,12 +541,30 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 	return r, nil
 }
 
+func newRocksDBInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
+	cache := NewRocksDBCache(cacheSize)
+	// The cache starts out with a refcount of one, and creating the engine
+	// from it adds another refcount, at which point we release one of them.
+	defer cache.Release()
+
+	// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
+	// https://github.com/cockroachdb/cockroach/issues/16750
+	rdb, err := newMemRocksDB(attrs, cache, 512<<20 /* MaxSizeBytes: 512 MiB */)
+	if err != nil {
+		panic(err)
+	}
+	db := InMem{RocksDB: rdb}
+	return db
+}
+
 func newMemRocksDB(
 	attrs roachpb.Attributes, cache RocksDBCache, MaxSizeBytes int64,
 ) (*RocksDB, error) {
 	r := &RocksDB{
 		cfg: RocksDBConfig{
-			Attrs:        attrs,
+			StorageConfig: base.StorageConfig{
+				Attrs: attrs,
+			},
 			MaxSizeBytes: MaxSizeBytes,
 		},
 		// dir: empty dir == "mem" RocksDB instance.
@@ -584,8 +588,8 @@ func newMemRocksDB(
 
 // String formatter.
 func (r *RocksDB) String() string {
-	dir := r.cfg.Dir
-	if r.cfg.Dir == "" {
+	dir := r.cfg.StorageConfig.Dir
+	if r.cfg.StorageConfig.Dir == "" {
 		dir = "<in-mem>"
 	}
 	attrs := r.Attrs().String()
@@ -597,12 +601,12 @@ func (r *RocksDB) String() string {
 
 func (r *RocksDB) open() error {
 	var existingVersion, newVersion storageVersion
-	if len(r.cfg.Dir) != 0 {
-		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.cfg.Dir)
+	if len(r.cfg.StorageConfig.Dir) != 0 {
+		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.cfg.StorageConfig.Dir)
 
 		// Check the version number.
 		var err error
-		if existingVersion, err = getVersion(r.cfg.Dir); err != nil {
+		if existingVersion, err = getVersion(r.cfg.StorageConfig.Dir); err != nil {
 			return err
 		}
 		if existingVersion < versionMinimum || existingVersion > versionCurrent {
@@ -622,7 +626,7 @@ func (r *RocksDB) open() error {
 		}
 
 		// Using the file registry forces the latest version. We can't downgrade!
-		if r.cfg.UseFileRegistry {
+		if r.cfg.StorageConfig.UseFileRegistry {
 			newVersion = versionCurrent
 		}
 	} else {
@@ -639,24 +643,24 @@ func (r *RocksDB) open() error {
 		maxOpenFiles = r.cfg.MaxOpenFiles
 	}
 
-	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
+	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.StorageConfig.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
 			num_cpu:           C.int(rocksdbConcurrency),
 			max_open_files:    C.int(maxOpenFiles),
 			use_file_registry: C.bool(newVersion == versionCurrent),
-			must_exist:        C.bool(r.cfg.MustExist),
+			must_exist:        C.bool(r.cfg.StorageConfig.MustExist),
 			read_only:         C.bool(r.cfg.ReadOnly),
 			rocksdb_options:   goToCSlice([]byte(r.cfg.RocksDBOptions)),
-			extra_options:     goToCSlice(r.cfg.ExtraOptions),
+			extra_options:     goToCSlice(r.cfg.StorageConfig.ExtraOptions),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Wrap(err, "could not open rocksdb instance")
 	}
 
 	// Update or add the version file if needed and if on-disk.
-	if len(r.cfg.Dir) != 0 && existingVersion < newVersion {
-		if err := writeVersionFile(r.cfg.Dir, newVersion); err != nil {
+	if len(r.cfg.StorageConfig.Dir) != 0 && existingVersion < newVersion {
+		if err := writeVersionFile(r.cfg.StorageConfig.Dir, newVersion); err != nil {
 			return err
 		}
 	}
@@ -688,8 +692,8 @@ func (r *RocksDB) syncLoop() {
 		}
 
 		var min time.Duration
-		if r.cfg.Settings != nil {
-			min = minWALSyncInterval.Get(&r.cfg.Settings.SV)
+		if r.cfg.StorageConfig.Settings != nil {
+			min = minWALSyncInterval.Get(&r.cfg.StorageConfig.Settings.SV)
 		}
 		if delta := timeutil.Since(lastSync); delta < min {
 			s.Unlock()
@@ -709,7 +713,7 @@ func (r *RocksDB) syncLoop() {
 		// the WAL, and RocksDB's recovery terminates upon encountering any
 		// corruption. So, we must not call `DBSyncWAL` again after it has
 		// failed once.
-		if r.cfg.Dir != "" && err == nil {
+		if r.cfg.StorageConfig.Dir != "" && err == nil {
 			err = statusToError(C.DBSyncWAL(r.rdb))
 			lastSync = timeutil.Now()
 		}
@@ -729,7 +733,7 @@ func (r *RocksDB) Close() {
 		log.Errorf(context.TODO(), "closing unopened rocksdb instance")
 		return
 	}
-	if len(r.cfg.Dir) == 0 {
+	if len(r.cfg.StorageConfig.Dir) == 0 {
 		if log.V(1) {
 			log.Infof(context.TODO(), "closing in-memory rocksdb instance")
 		}
@@ -738,7 +742,7 @@ func (r *RocksDB) Close() {
 			log.Warning(context.TODO(), err)
 		}
 	} else {
-		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.Dir)
+		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.StorageConfig.Dir)
 	}
 	if r.rdb != nil {
 		if err := statusToError(C.DBClose(r.rdb)); err != nil {
@@ -778,7 +782,7 @@ func (r *RocksDB) Closed() bool {
 // and potentially other labels to identify important attributes of
 // the engine.
 func (r *RocksDB) Attrs() roachpb.Attributes {
-	return r.cfg.Attrs
+	return r.cfg.StorageConfig.Attrs
 }
 
 // Put sets the given key to the value provided.
@@ -872,7 +876,7 @@ func (r *RocksDB) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, er
 
 // Capacity queries the underlying file system for disk capacity information.
 func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
-	return computeCapacity(r.cfg.Dir, r.cfg.MaxSizeBytes)
+	return computeCapacity(r.cfg.StorageConfig.Dir, r.cfg.MaxSizeBytes)
 }
 
 // Compact forces compaction over the entire database.
@@ -919,6 +923,11 @@ func (r *RocksDB) NewSnapshot() Reader {
 		parent: r,
 		handle: C.DBNewSnapshot(r.rdb),
 	}
+}
+
+// Type implements the Engine interface.
+func (r *RocksDB) Type() enginepb.EngineType {
+	return enginepb.EngineTypeRocksDB
 }
 
 // NewReadOnly returns a new ReadWriter wrapping this rocksdb engine.
@@ -2582,7 +2591,7 @@ func statusToError(s C.DBStatus) error {
 	if s.data == nil {
 		return nil
 	}
-	return &RocksDBError{msg: cStringToGoString(s)}
+	return &Error{msg: cStringToGoString(s)}
 }
 
 func uncertaintyToError(
@@ -2762,11 +2771,11 @@ type RocksDBSstFileReader struct {
 // MakeRocksDBSstFileReader creates a RocksDBSstFileReader backed by an
 // in-memory RocksDB instance.
 func MakeRocksDBSstFileReader() RocksDBSstFileReader {
-	// cacheSize was selected because it's used for almost all other NewInMem
+	// cacheSize was selected because it's used for almost all other newRocksDBInMem
 	// calls. It's seemed to work well so far, but there's probably more tuning
 	// to be done here.
 	const cacheSize = 1 << 20
-	return RocksDBSstFileReader{rocksDB: NewInMem(roachpb.Attributes{}, cacheSize)}
+	return RocksDBSstFileReader{rocksDB: newRocksDBInMem(roachpb.Attributes{}, cacheSize)}
 }
 
 // IngestExternalFile links a file with the given contents into a database. See
@@ -2840,7 +2849,7 @@ func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) (enginepb.MV
 		} else if err.Error() == "InlineError" {
 			return emptyStats, errors.Errorf("inline values are unsupported when checking for key collisions")
 		}
-		err = errors.Wrap(&RocksDBError{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
+		err = errors.Wrap(&Error{msg: cToGoKey(state.key).String()}, "ingested key collides with an existing one")
 		return emptyStats, err
 	}
 
@@ -2852,8 +2861,8 @@ func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) (enginepb.MV
 // RocksDBSstFileReader. It implements the Writer interface.
 type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
-	// DataSize tracks the total key and value bytes added so far.
-	DataSize int64
+	// dataSize tracks the total key and value bytes added so far.
+	dataSize int64
 }
 
 var _ Writer = &RocksDBSstFileWriter{}
@@ -2880,8 +2889,13 @@ func (fw *RocksDBSstFileWriter) Clear(key MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Clear on a closed writer")
 	}
-	fw.DataSize += int64(len(key.Key))
+	fw.dataSize += int64(len(key.Key))
 	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(key)))
+}
+
+// DataSize returns the total key and value bytes added so far.
+func (fw *RocksDBSstFileWriter) DataSize() int64 {
+	return fw.dataSize
 }
 
 // SingleClear implements the Writer interface.
@@ -2896,7 +2910,7 @@ func (fw *RocksDBSstFileWriter) ClearRange(start, end MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
 	}
-	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
+	fw.dataSize += int64(len(start.Key)) + int64(len(end.Key))
 	return statusToError(C.DBSstFileWriterDeleteRange(fw.fw, goToCKey(start), goToCKey(end)))
 }
 
@@ -2939,7 +2953,7 @@ func (fw *RocksDBSstFileWriter) Put(key MVCCKey, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Put on a closed writer")
 	}
-	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	fw.dataSize += int64(len(key.Key)) + int64(len(value))
 	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(key), goToCSlice(value)))
 }
 
@@ -3041,7 +3055,7 @@ func (r *RocksDB) setAuxiliaryDir(d string) error {
 
 // PreIngestDelay implements the Engine interface.
 func (r *RocksDB) PreIngestDelay(ctx context.Context) {
-	preIngestDelay(ctx, r, r.cfg.Settings)
+	preIngestDelay(ctx, r, r.cfg.StorageConfig.Settings)
 }
 
 // IngestExternalFiles atomically links a slice of files into the RocksDB

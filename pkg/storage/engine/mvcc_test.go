@@ -83,7 +83,7 @@ var (
 // createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
 // storage capacity.
 func createTestRocksDBEngine() Engine {
-	return NewInMem(roachpb.Attributes{}, 1<<20)
+	return newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 }
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.

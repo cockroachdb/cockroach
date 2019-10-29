@@ -18,11 +18,11 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -99,7 +99,7 @@ AES128_CTR:be235...   # AES-128 encryption with store key ID
 
 // fillEncryptionOptionsForStore fills the RocksDBConfig fields
 // based on the --enterprise-encryption flag value.
-func fillEncryptionOptionsForStore(cfg *engine.RocksDBConfig) error {
+func fillEncryptionOptionsForStore(cfg *base.StorageConfig) error {
 	opts, err := baseccl.EncryptionOptionsForStore(cfg.Dir, storeEncryptionSpecs)
 	if err != nil {
 		return err

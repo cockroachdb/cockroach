@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -50,7 +51,7 @@ func clampLatency(d, min, max time.Duration) time.Duration {
 }
 
 type worker struct {
-	db      *engine.RocksDB
+	db      engine.Engine
 	latency struct {
 		syncutil.Mutex
 		*hdrhistogram.WindowedHistogram
@@ -58,7 +59,7 @@ type worker struct {
 	logOnly bool
 }
 
-func newWorker(db *engine.RocksDB) *worker {
+func newWorker(db engine.Engine) *worker {
 	w := &worker{db: db}
 	w.latency.WindowedHistogram = hdrhistogram.NewWindowed(1,
 		minLatency.Nanoseconds(), maxLatency.Nanoseconds(), 1)
@@ -138,12 +139,12 @@ func Run(opts Options) error {
 
 	fmt.Printf("writing to %s\n", opts.Dir)
 
-	db, err := engine.NewRocksDB(
-		engine.RocksDBConfig{
+	db, err := engine.NewEngine(
+		0,
+		base.StorageConfig{
 			Settings: cluster.MakeTestingClusterSettings(),
 			Dir:      opts.Dir,
-		},
-		engine.RocksDBCache{})
+		})
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ import (
 func TestMultiIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rocksDB := NewInMem(roachpb.Attributes{}, 1<<20)
+	rocksDB := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer rocksDB.Close()
 
 	// Each `input` is turned into an iterator and these are passed to a new

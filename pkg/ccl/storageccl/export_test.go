@@ -252,7 +252,7 @@ func exportUsingGoIterator(
 		}
 	}
 
-	if sst.DataSize == 0 {
+	if sst.DataSize() == 0 {
 		// Let the defer Close the sstable.
 		return nil, nil
 	}
@@ -356,8 +356,10 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 
 	rocksdb, err := engine.NewRocksDB(
 		engine.RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		engine.RocksDBCache{},
 	)
