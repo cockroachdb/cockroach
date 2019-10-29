@@ -103,9 +103,14 @@ func TruncateLog(
 		ms.SysBytes = -ms.SysBytes // simulate the deletion
 
 	} else {
-		if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &ms, start.Key, end.Key, math.MaxInt64, /* max */
-			hlc.Timestamp{}, nil /* txn */, false /* returnKeys */); err != nil {
+		_, _, numDeleted, err := engine.MVCCDeleteRange(ctx, batch, &ms, start.Key, end.Key, math.MaxInt64, /* max */
+			hlc.Timestamp{}, nil /* txn */, false /* returnKeys */)
+		if err != nil {
 			return result.Result{}, err
+		}
+		if expNumDeleted := (args.Index - firstIndex); uint64(numDeleted) > expNumDeleted {
+			log.Fatalf(ctx, "expected to delete up to %d log entries [%d, %d), deleted %d entries",
+				expNumDeleted, firstIndex, args.Index, numDeleted)
 		}
 	}
 

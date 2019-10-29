@@ -1030,6 +1030,13 @@ func (r *Replica) sendSnapshot(
 		r.store.Engine().NewBatch,
 		sent,
 	); err != nil {
+		if errors.Cause(err) == malformedSnapshotError {
+			checkpointDir := r.store.checkpoint(ctx,
+				fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short()))
+
+			log.Fatalf(ctx, "malformed snapshot generated, checkpoint created at: %s", checkpointDir)
+		}
+
 		return &snapshotError{err}
 	}
 	return nil
