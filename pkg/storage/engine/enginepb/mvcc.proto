@@ -24,6 +24,10 @@ message MVCCMetadata {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
+  // The transaction metadata. Present for intents, but not for inline
+  // values (e.g. timeseries data). Also not present for
+  // "reconstructed" metadata that is used during MVCC processing when
+  // no intent exists on disk.
   optional TxnMeta txn = 1;
   // The timestamp of the most recent versioned value if this is a
   // value that may have multiple versions. For values which may have
