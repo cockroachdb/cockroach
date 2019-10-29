@@ -54,7 +54,7 @@ var _ tree.Datum
 var _ = math.MaxInt64
 
 // Dummy import to pull in "time" package.
-var _ = time.Day
+var _ time.Time
 
 // Dummy import to pull in "coltypes" package.
 var _ = coltypes.Bool
