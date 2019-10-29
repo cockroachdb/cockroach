@@ -340,3 +340,8 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 		return b
 	}
 }
+
+// Typs returns the output types of the RandomDataOp.
+func (o *RandomDataOp) Typs() []coltypes.T {
+	return o.typs
+}
