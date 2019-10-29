@@ -109,7 +109,7 @@ type kvBatchSnapshotStrategy struct {
 	newBatch  func() engine.Batch
 }
 
-// Send implements the snapshotStrategy interface.
+// Receive implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context, stream incomingSnapshotStream, header SnapshotRequest_Header,
 ) (IncomingSnapshot, error) {
@@ -147,6 +147,17 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				State:      &header.State,
 				snapType:   snapTypeRaft,
 			}
+
+			expLen := inSnap.State.RaftAppliedIndex - inSnap.State.TruncatedState.Index
+			if expLen != uint64(len(logEntries)) {
+				// We've received a botched snapshot. We could fatal right here but opt
+				// to warn loudly instead, and fatal when applying the snapshot
+				// (in Replica.applySnapshot) in order to capture replica hard state.
+				log.Warningf(ctx,
+					"missing log entries in snapshot (%s): got %d entries, expected %d",
+					inSnap.String(), len(logEntries), expLen)
+			}
+
 			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
 				inSnap.snapType = snapTypePreemptive
 			}
@@ -154,6 +165,14 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return inSnap, nil
 		}
 	}
+}
+
+// A MalformedSnapshotError indicates that the snapshot in question is
+// malformed, for e.g. missing raft log entries.
+type MalformedSnapshotError struct{}
+
+func (e *MalformedSnapshotError) Error() string {
+	return "malformed snapshot generated"
 }
 
 // Send implements the snapshotStrategy interface.
@@ -264,6 +283,24 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
+	}
+
+	// The difference between the snapshot index (applied index at the time of
+	// snapshot) and the truncated index should equal the number of log entries
+	// shipped over.
+	expLen := endIndex - firstIndex
+	if expLen != uint64(len(logEntries)) {
+		// We've generated a botched snapshot. We could fatal right here but opt
+		// to warn loudly instead, and fatal at the caller to capture a checkpoint
+		// of the underlying storage engine.
+		entriesRange, err := extractRangeFromEntries(logEntries)
+		if err != nil {
+			return err
+		}
+		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
+			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
+			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
+		return &MalformedSnapshotError{}
 	}
 
 	// Inline the payloads for all sideloaded proposals.

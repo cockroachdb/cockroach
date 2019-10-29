@@ -24,8 +24,8 @@ if (( version_major != 1 )) || (( version_minor < 10 )); then
   exit 1
 fi
 
-# Pending resolution of #35637
-if [ $version_minor -ge 12 ]; then
-  echo "go 1.12+ is known to produce invalid crdb builds, see https://github.com/cockroachdb/cockroach/issues/35637" >&2
-  exit 1
-fi
+# # Pending resolution of #35637
+# if [ $version_minor -ge 12 ]; then
+#   echo "go 1.12+ is known to produce invalid crdb builds, see https://github.com/cockroachdb/cockroach/issues/35637" >&2
+#   exit 1
+# fi
