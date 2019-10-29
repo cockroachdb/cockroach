@@ -63,7 +63,6 @@ func main() {
 	setup := WorkerSetup{
 		cockroach: *cockroach,
 		reduce:    *reduce,
-		initSQL:   sqlsmith.SeedTable,
 		github:    github.NewClient(nil),
 	}
 	rand.Seed(timeutil.Now().UnixNano())
@@ -84,7 +83,6 @@ func main() {
 // WorkerSetup contains initialization and configuration for running smithers.
 type WorkerSetup struct {
 	cockroach, reduce string
-	initSQL           string
 	github            *github.Client
 }
 
@@ -145,6 +143,9 @@ var (
 // return nil, since they are expected. Something unexpected would be like the
 // initialization SQL was unable to run.
 func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
+	// Stop running after a while to get new setup and settings.
+	done := timeutil.Now().Add(time.Minute)
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.cockroach,
@@ -204,19 +205,24 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 	}
 	fmt.Println("worker started")
 
-	if _, err := pgdb.ExecEx(ctx, s.initSQL, nil); err != nil {
+	initSQL := sqlsmith.Setups[sqlsmith.RandSetup(rnd)](rnd)
+	if _, err := pgdb.ExecEx(ctx, initSQL, nil); err != nil {
 		return errors.Wrap(err, "init")
 	}
 
-	opts := []sqlsmith.SmitherOption{
+	setting := sqlsmith.Settings[sqlsmith.RandSetting(rnd)](rnd)
+	opts := append([]sqlsmith.SmitherOption{
 		sqlsmith.DisableMutations(),
-		sqlsmith.DisableCRDBFns(),
-	}
+	}, setting.Options...)
 	smither, err := sqlsmith.NewSmither(db, rnd, opts...)
 	if err != nil {
 		return errors.Wrap(err, "new smither")
 	}
 	for {
+		if timeutil.Now().After(done) {
+			return nil
+		}
+
 		// If lock is locked for writing (due to a found bug in another
 		// go routine), block here until it has finished reducing.
 		lock.RLock()
@@ -247,13 +253,13 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 				// single logic flow in case of a found error,
 				// which is to shut down and start over (just
 				// like the panic case below).
-				return s.failure(ctx, stmt, err)
+				return s.failure(ctx, initSQL, stmt, err)
 			}
 
 		}
 		// If we can't ping, check if the statement caused a panic.
 		if err := db.PingContext(ctx); err != nil {
-			input := fmt.Sprintf("%s; %s;", s.initSQL, stmt)
+			input := fmt.Sprintf("%s; %s;", initSQL, stmt)
 			out, _ := exec.CommandContext(ctx, s.cockroach, "demo", "--empty", "-e", input).CombinedOutput()
 			var pqerr pq.Error
 			if match := stackRE.FindStringSubmatch(string(out)); match != nil {
@@ -262,7 +268,7 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 			if match := panicRE.FindStringSubmatch(string(out)); match != nil {
 				// We found a panic as expected.
 				pqerr.Message = match[1]
-				return s.failure(ctx, stmt, &pqerr)
+				return s.failure(ctx, initSQL, stmt, &pqerr)
 			}
 			// Not a panic. Maybe a fatal?
 			if match := runtimeStackRE.FindStringSubmatch(string(out)); match != nil {
@@ -271,7 +277,7 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 			if match := fatalRE.FindStringSubmatch(string(out)); match != nil {
 				// A real bad non-panic error.
 				pqerr.Message = match[1]
-				return s.failure(ctx, stmt, &pqerr)
+				return s.failure(ctx, initSQL, stmt, &pqerr)
 			}
 			// A panic was not found. Shut everything down by returning an error so it can be investigated.
 			fmt.Printf("output:\n%s\n", out)
@@ -284,7 +290,7 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 // failure de-duplicates, reduces, and files errors. It generally returns nil
 // indicating that this was successfully filed and we should continue looking
 // for errors.
-func (s WorkerSetup) failure(ctx context.Context, stmt string, err error) error {
+func (s WorkerSetup) failure(ctx context.Context, initSQL, stmt string, err error) error {
 	var message, stack string
 	if pqerr, ok := err.(pgx.PgError); ok {
 		stack = pqerr.Detail
@@ -310,7 +316,7 @@ func (s WorkerSetup) failure(ctx context.Context, stmt string, err error) error 
 		return nil
 	}
 	fmt.Println("found", message)
-	input := fmt.Sprintf("%s\n\n%s;", s.initSQL, stmt)
+	input := fmt.Sprintf("%s\n\n%s;", initSQL, stmt)
 	fmt.Printf("SQL:\n%s\n\n", input)
 
 	// Run reducer.
