@@ -69,7 +69,7 @@ func NewRocksDBTempEngine(
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
-		db := newRocksDBInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */).RocksDB
+		db := newRocksDBInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */)
 		return &rocksDBTempEngine{db: db}, nil
 	}
 

@@ -12,19 +12,11 @@ package engine
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// InMem wraps RocksDB and configures it for in-memory only storage.
-type InMem struct {
-	*RocksDB
-}
-
-// NewInMem allocates and returns a new, opened InMem engine.
-// The caller must call the engine's Close method when the engine is no longer
-// needed.
+// NewInMem allocates and returns a new, opened in-memory engine. The caller
+// must call the engine's Close method when the engine is no longer needed.
 //
 // FIXME(tschottdorf): make the signature similar to NewRocksDB (require a cfg).
-func NewInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
+func NewInMem(attrs roachpb.Attributes, cacheSize int64) *RocksDB {
 	// TODO(hueypark): Support all engines like NewTempEngine.
 	return newRocksDBInMem(attrs, cacheSize)
 }
-
-var _ Engine = InMem{}
