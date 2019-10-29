@@ -166,11 +166,11 @@ func (b *buf) readLocked(size int) ([]byte, error) {
 // be woken and they'll all return err.
 func (b *buf) Close(err error) {
 	b.Lock()
+	defer b.Unlock()
 	b.closed = true
 	b.closedErr = err
 	b.readerWait.Signal()
 	b.capacityWait.Signal()
-	b.Unlock()
 }
 
 // wakeReaderLocked wakes the reader in case it's blocked.
@@ -247,57 +247,57 @@ func NewPartitionableConn(serverConn net.Conn) *PartitionableConn {
 // state.
 func (c *PartitionableConn) Finish() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.mu.c2sPartitioned = false
 	c.mu.c2sWaiter.Signal()
 	c.mu.s2cPartitioned = false
 	c.mu.s2cWaiter.Signal()
-	c.mu.Unlock()
 }
 
 // PartitionC2S partitions the client-to-server direction.
 // If UnpartitionC2S() is not called, Finish() must be called.
 func (c *PartitionableConn) PartitionC2S() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.mu.c2sPartitioned {
 		panic("already partitioned")
 	}
 	c.mu.c2sPartitioned = true
 	c.mu.c2sBuffer.wakeReaderLocked()
-	c.mu.Unlock()
 }
 
 // UnpartitionC2S lifts an existing client-to-server partition.
 func (c *PartitionableConn) UnpartitionC2S() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if !c.mu.c2sPartitioned {
 		panic("not partitioned")
 	}
 	c.mu.c2sPartitioned = false
 	c.mu.c2sWaiter.Signal()
-	c.mu.Unlock()
 }
 
 // PartitionS2C partitions the server-to-client direction.
 // If UnpartitionS2C() is not called, Finish() must be called.
 func (c *PartitionableConn) PartitionS2C() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.mu.s2cPartitioned {
 		panic("already partitioned")
 	}
 	c.mu.s2cPartitioned = true
 	c.mu.s2cBuffer.wakeReaderLocked()
-	c.mu.Unlock()
 }
 
 // UnpartitionS2C lifts an existing server-to-client partition.
 func (c *PartitionableConn) UnpartitionS2C() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if !c.mu.s2cPartitioned {
 		panic("not partitioned")
 	}
 	c.mu.s2cPartitioned = false
 	c.mu.s2cWaiter.Signal()
-	c.mu.Unlock()
 }
 
 // Read is part of the net.Conn interface.
