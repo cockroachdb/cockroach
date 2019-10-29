@@ -104,9 +104,12 @@ var (
 )
 
 const (
-	version30     = 196608
-	versionSSL    = 80877103
-	versionCancel = 80877102
+	version3Major = 3
+	version30     = (version3Major << 16) + 0
+
+	requestBase   = 1234
+	requestCancel = (requestBase << 16) + 5678
+	requestSSL    = (requestBase << 16) + 5679
 )
 
 // cancelMaxWait is the amount of time a draining server gives to sessions to
@@ -268,7 +271,15 @@ func Match(rd io.Reader) bool {
 	if err != nil {
 		return false
 	}
-	return version == version30 || version == versionSSL || version == versionCancel
+	// All request codes begin with (1234 << 16). Defining this as a base
+	// constant allows Match to match against request codes that are added
+	// in the future. For example, Postgres 12 added the GSSENCRequest
+	// (1234 << 16 + 5680) request code, but Match failed to match and thus
+	// sent the connection to grpc, which resulted in misleading error
+	// message. Instead of checking for known versions, just check for
+	// known upper bits (3 for version 3.0 and 1234 for other requests).
+	base := version >> 16
+	return base == version3Major || base == requestBase
 }
 
 // Start makes the Server ready for serving connections.
@@ -450,7 +461,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return err
 	}
 	errSSLRequired := false
-	if version == versionSSL {
+	if version == requestSSL {
 		if len(buf.Msg) > 0 {
 			return errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
 		}
@@ -491,7 +502,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	}
 
 	if version != version30 {
-		if version == versionCancel {
+		if version == requestCancel {
 			telemetry.Inc(sqltelemetry.CancelRequestCounter)
 			_ = conn.Close()
 			return nil
