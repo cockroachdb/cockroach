@@ -62,7 +62,7 @@ func (g *sqlSmith) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(g.seed))
 	var tables []workload.Table
 	for idx := 0; idx < g.tables; idx++ {
-		schema := sqlbase.RandCreateTable(rng, idx)
+		schema := sqlbase.RandCreateTable(rng, "table", idx)
 		table := workload.Table{
 			Name:   schema.Table.String(),
 			Schema: tree.Serialize(schema),

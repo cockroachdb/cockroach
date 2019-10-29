@@ -66,7 +66,7 @@ func makeAlter(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateTable(s *Smither) (tree.Statement, bool) {
-	table := sqlbase.RandCreateTable(s.rnd, 0)
+	table := sqlbase.RandCreateTable(s.rnd, "", 0)
 	table.Table = tree.MakeUnqualifiedTableName(s.name("tab"))
 	return table, true
 }
