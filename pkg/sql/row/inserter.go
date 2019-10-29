@@ -42,9 +42,9 @@ type Inserter struct {
 func MakeInserter(
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables FkTableMetadata,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs checkFKConstraints,
+	fkTables FkTableMetadata,
 	alloc *sqlbase.DatumAlloc,
 ) (Inserter, error) {
 	ri := Inserter{
