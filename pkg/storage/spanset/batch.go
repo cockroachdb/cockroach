@@ -156,6 +156,13 @@ func (s *Iterator) FindSplitKey(
 	return s.i.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
+// CheckForKeyCollisions is part of the engine.Iterator interface.
+func (s *Iterator) CheckForKeyCollisions(
+	sstData []byte, start, end roachpb.Key,
+) (enginepb.MVCCStats, error) {
+	return s.i.CheckForKeyCollisions(sstData, start, end)
+}
+
 // MVCCGet is part of the engine.Iterator interface.
 func (s *Iterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, opts engine.MVCCGetOptions,
