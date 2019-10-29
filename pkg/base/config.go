@@ -659,6 +659,9 @@ type StorageConfig struct {
 	// Makes no sense for in-memory instances.
 	// TODO(hueypark): Implement this for pebble.
 	MustExist bool
+	// MaxSize is used for calculating free space and making rebalancing
+	// decisions. Zero indicates that there is no maximum size.
+	MaxSize int64
 	// Settings instance for cluster-wide knobs.
 	Settings *cluster.Settings
 	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
