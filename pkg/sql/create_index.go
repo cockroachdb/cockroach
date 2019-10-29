@@ -47,9 +47,10 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 // MakeIndexDescriptor creates an index descriptor from a CreateIndex node.
 func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) {
 	indexDesc := sqlbase.IndexDescriptor{
-		Name:             string(n.Name),
-		Unique:           n.Unique,
-		StoreColumnNames: n.Storing.ToStrings(),
+		Name:              string(n.Name),
+		Unique:            n.Unique,
+		StoreColumnNames:  n.Storing.ToStrings(),
+		CreatedExplicitly: true,
 	}
 
 	if n.Inverted {
