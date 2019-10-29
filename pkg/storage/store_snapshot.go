@@ -196,8 +196,8 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key engine.MVCCKey, value 
 	if err := msstw.currSST.Put(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
 	}
-	if msstw.currSST.DataSize-msstw.truncatedSize > msstw.sstChunkSize {
-		msstw.truncatedSize = msstw.currSST.DataSize
+	if msstw.currSST.DataSize()-msstw.truncatedSize > msstw.sstChunkSize {
+		msstw.truncatedSize = msstw.currSST.DataSize()
 		chunk, err := msstw.currSST.Truncate()
 		if err != nil {
 			return errors.Wrap(err, "failed to truncate sst")

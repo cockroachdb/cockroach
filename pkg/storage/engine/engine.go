@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -290,6 +291,18 @@ type ReadWriter interface {
 	Writer
 }
 
+// SstFileWriter is the write interface to an engine's sst file data.
+type SstFileWriter interface {
+	// TODO(hueypark): Check necessity of Pebble SstFileWriter.
+	// Close finishes and frees memory and other resources. Close is idempotent.
+	Close()
+	// DataSize returns the total key and value bytes added so far.
+	DataSize() int64
+	// Finish finalizes the writer and returns the constructed file's contents. At
+	// least one kv entry must have been added.
+	Finish() ([]byte, error)
+}
+
 // Engine is the interface that wraps the core operations of a key/value store.
 type Engine interface {
 	ReadWriter
@@ -297,11 +310,25 @@ type Engine interface {
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
+	// Compact forces compaction over the entire database.
+	Compact() error
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
+	// GetSSTables retrieves metadata about this engine's live sstables.
+	GetSSTables() SSTableInfos
+	// GetCompactionStats returns the internal RocksDB compaction stats. See
+	// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
+	GetCompactionStats() string
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
+	// GetTickersAndHistograms retrieves maps of all RocksDB tickers and histograms.
+	// It differs from `GetStats` by getting _every_ ticker and histogram, and by not
+	// getting anything else (DB properties, for example).
+	GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error)
+	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
+	// on the store.
+	GetEncryptionRegistries() (*EncryptionRegistries, error)
 	// GetEnvStats retrieves stats about the engine's environment
 	// For RocksDB, this includes details of at-rest encryption.
 	GetEnvStats() (*EnvStats, error)
@@ -337,6 +364,8 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
+	// Type returns engine type.
+	Type() enginepb.EngineType
 	// IngestExternalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree. skipWritingSeqNo = true may be passed iff this
 	// rocksdb will never be read by versions prior to 5.16. Otherwise, if it is
@@ -375,14 +404,6 @@ type Engine interface {
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
 	CreateCheckpoint(dir string) error
-}
-
-// WithSSTables extends the Engine interface with a method to get info
-// on all SSTables in use.
-type WithSSTables interface {
-	Engine
-	// GetSSTables retrieves metadata about this engine's live sstables.
-	GetSSTables() SSTableInfos
 }
 
 // Batch is the interface for batch specific operations.
@@ -475,6 +496,17 @@ type EncryptionRegistries struct {
 	// KeyRegistry is the list of keys, scrubbed of actual key data.
 	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
 	KeyRegistry []byte
+}
+
+// NewEngine creates a new storage engine.
+func NewEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
+	// TODO(hueypark): Support all engines like NewTempEngine.
+	cache := NewRocksDBCache(cacheSize)
+	defer cache.Release()
+
+	return NewRocksDB(
+		RocksDBConfig{StorageConfig: storageConfig},
+		cache)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string

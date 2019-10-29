@@ -32,7 +32,7 @@ func TestNewRocksDBTempEngine(t *testing.T) {
 	defer engine.Close()
 
 	// Temp engine initialized with the temporary directory.
-	if dir := engine.(*rocksDBTempEngine).db.cfg.Dir; tempDir != dir {
+	if dir := engine.(*rocksDBTempEngine).db.cfg.StorageConfig.Dir; tempDir != dir {
 		t.Fatalf("temp engine initialized with unexpected parent directory.\nexpected %s\nactual %s",
 			tempDir, dir)
 	}

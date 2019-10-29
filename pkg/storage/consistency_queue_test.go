@@ -193,7 +193,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// able to find it.
 	for i := 0; i < numStores; i++ {
 		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
-			Dir: filepath.Join(dir, fmt.Sprintf("%d", i)),
+			StorageConfig: base.StorageConfig{
+				Dir: filepath.Join(dir, fmt.Sprintf("%d", i)),
+			},
 		}, cache)
 		if err != nil {
 			t.Fatal(err)
@@ -334,7 +336,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		cps := checkpoints(i)
 		assert.Len(t, cps, 1)
 		cpEng, err := engine.NewRocksDB(engine.RocksDBConfig{
-			Dir: cps[0],
+			StorageConfig: base.StorageConfig{
+				Dir: cps[0],
+			},
 		}, cache)
 		assert.NoError(t, err)
 		defer cpEng.Close()
@@ -457,8 +461,10 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		cache := engine.NewRocksDBCache(1 << 20)
 		defer cache.Release()
 		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
-			Dir:       path,
-			MustExist: true,
+			StorageConfig: base.StorageConfig{
+				Dir:       path,
+				MustExist: true,
+			},
 		}, cache)
 		if err != nil {
 			t.Fatal(err)

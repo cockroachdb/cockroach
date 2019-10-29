@@ -45,8 +45,10 @@ func createStore(t *testing.T, path string) {
 	defer cache.Release()
 	db, err := engine.NewRocksDB(
 		engine.RocksDBConfig{
-			Dir:       path,
-			MustExist: false,
+			StorageConfig: base.StorageConfig{
+				Dir:       path,
+				MustExist: false,
+			},
 		},
 		cache,
 	)

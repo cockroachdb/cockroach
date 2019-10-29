@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -134,7 +135,7 @@ type Config struct {
 
 	// StorageEngine specifies the engine type (eg. rocksdb, pebble) to use to
 	// instantiate stores.
-	StorageEngine base.EngineType
+	StorageEngine enginepb.EngineType
 
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
@@ -434,7 +435,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	var cache engine.RocksDBCache
 	var pebbleCache *pebble.Cache
-	if cfg.StorageEngine == base.EngineTypePebble {
+	if cfg.StorageEngine == enginepb.EngineTypePebble {
 		details = append(details, fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 		pebbleCache = pebble.NewCache(cfg.CacheSize)
 	} else {
@@ -494,11 +495,18 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			var eng engine.Engine
 			var err error
-			if cfg.StorageEngine == base.EngineTypePebble {
+			storageConfig := base.StorageConfig{
+				Attrs:           spec.Attributes,
+				Dir:             spec.Path,
+				Settings:        cfg.Settings,
+				UseFileRegistry: spec.UseFileRegistry,
+				ExtraOptions:    spec.ExtraOptions,
+			}
+			if cfg.StorageEngine == enginepb.EngineTypePebble {
 				// TODO(itsbilal): Tune these options, and allow them to be overridden
 				// in the spec (similar to the existing spec.RocksDBOptions and others).
 				pebbleConfig := engine.PebbleConfig{
-					Dir: spec.Path,
+					StorageConfig: storageConfig,
 					Opts: &pebble.Options{
 						Cache:                       pebbleCache,
 						MaxOpenFiles:                int(openFileLimitPerStore),
@@ -512,21 +520,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 							BlockSize: 32 << 10,
 						}},
 					},
-					Attrs:    spec.Attributes,
-					Settings: cfg.Settings,
 				}
 				eng, err = engine.NewPebble(pebbleConfig)
 			} else {
 				rocksDBConfig := engine.RocksDBConfig{
-					Attrs:                   spec.Attributes,
-					Dir:                     spec.Path,
+					StorageConfig:           storageConfig,
 					MaxSizeBytes:            sizeInBytes,
 					MaxOpenFiles:            openFileLimitPerStore,
 					WarnLargeBatchThreshold: 500 * time.Millisecond,
-					Settings:                cfg.Settings,
-					UseFileRegistry:         spec.UseFileRegistry,
 					RocksDBOptions:          spec.RocksDBOptions,
-					ExtraOptions:            spec.ExtraOptions,
 				}
 
 				eng, err = engine.NewRocksDB(rocksDBConfig, cache)

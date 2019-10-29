@@ -790,7 +790,7 @@ func TestBatchBuilder(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
 	batch := e.NewBatch().(*rocksDBBatch)
@@ -846,7 +846,7 @@ func TestBatchBuilderStress(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(e)
 
 	rng, _ := randutil.NewPseudoRand()
@@ -1284,7 +1284,7 @@ func TestBatchCombine(t *testing.T) {
 func TestDecodeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
 	tests := []MVCCKey{

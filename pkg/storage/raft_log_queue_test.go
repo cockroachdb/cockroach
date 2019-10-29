@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -881,7 +882,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 
 	cache := engine.NewRocksDBCache(1 << 20)
 	defer cache.Release()
-	eng, err := engine.NewRocksDB(engine.RocksDBConfig{Dir: dir}, cache)
+	eng, err := engine.NewRocksDB(engine.RocksDBConfig{StorageConfig: base.StorageConfig{Dir: dir}}, cache)
 	if err != nil {
 		t.Fatal(err)
 	}
