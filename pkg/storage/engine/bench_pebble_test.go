@@ -20,20 +20,11 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-func newPebbleOptions(fs vfs.FS) *pebble.Options {
-	return &pebble.Options{
-		Cache:                       pebble.NewCache(testCacheSize),
-		FS:                          fs,
-		MemTableSize:                64 << 20,
-		MemTableStopWritesThreshold: 4,
-		MinFlushRate:                4 << 20,
-		L0CompactionThreshold:       2,
-		L0StopWritesThreshold:       400,
-		LBaseMaxBytes:               64 << 20, // 64 MB
-		Levels: []pebble.LevelOptions{{
-			BlockSize: 32 << 10,
-		}},
-	}
+func testPebbleOptions(fs vfs.FS) *pebble.Options {
+	opts := DefaultPebbleOptions()
+	opts.Cache = pebble.NewCache(testCacheSize)
+	opts.FS = fs
+	return opts
 }
 
 func setupMVCCPebble(b testing.TB, dir string) Engine {
@@ -41,7 +32,7 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 		StorageConfig: base.StorageConfig{
 			Dir: dir,
 		},
-		Opts: newPebbleOptions(vfs.Default),
+		Opts: testPebbleOptions(vfs.Default),
 	})
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
@@ -51,7 +42,7 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 
 func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
 	peb, err := NewPebble(PebbleConfig{
-		Opts: newPebbleOptions(vfs.NewMem()),
+		Opts: testPebbleOptions(vfs.NewMem()),
 	})
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
