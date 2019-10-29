@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -45,7 +46,9 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	defer cache.Release()
 	for i := 0; i < 3; i++ {
 		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
-			Dir: filepath.Join(tempDir, strconv.Itoa(i)),
+			StorageConfig: base.StorageConfig{
+				Dir: filepath.Join(tempDir, strconv.Itoa(i)),
+			},
 		}, cache)
 		if err != nil {
 			t.Fatal(err)

@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -442,8 +443,10 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		RocksDBCache{},
 	)
@@ -461,8 +464,10 @@ func TestRocksDBApproximateDiskBytes(t *testing.T) {
 
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		RocksDBCache{},
 	)
@@ -615,7 +620,9 @@ func TestInMemIllegalOption(t *testing.T) {
 
 	r := &RocksDB{
 		cfg: RocksDBConfig{
-			MustExist: true,
+			StorageConfig: base.StorageConfig{
+				MustExist: true,
+			},
 		},
 		// dir: empty dir == "mem" RocksDB instance.
 		cache: cache.ref(),
@@ -647,8 +654,10 @@ func TestConcurrentBatch(t *testing.T) {
 
 	db, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		RocksDBCache{},
 	)
@@ -934,8 +943,10 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 
 	db, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		RocksDBCache{},
 	)
@@ -1103,8 +1114,10 @@ func TestRocksDBOptions(t *testing.T) {
 	}()
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 			RocksDBOptions: "use_fsync=true;" +
 				"min_write_buffer_number_to_merge=2;" +
 				"block_based_table_factory={block_size=4k}",
@@ -1148,8 +1161,10 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 
 	db, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		RocksDBCache{},
 	)
@@ -1529,8 +1544,10 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 	// necessary for this test.
 	e, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			StorageConfig: base.StorageConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
 		},
 		RocksDBCache{},
 	)

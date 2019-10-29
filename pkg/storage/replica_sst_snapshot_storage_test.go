@@ -30,9 +30,8 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, cache, eng := newRocksDB(t)
+	cleanup, eng := newEngine(t)
 	defer cleanup()
-	defer cache.Release()
 	defer eng.Close()
 
 	sss := NewSSTSnapshotStorage(eng, testLimiter)

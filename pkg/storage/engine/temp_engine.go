@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
@@ -23,7 +24,7 @@ import (
 )
 
 // TestStorageEngine represents an engine type for testing.
-var TestStorageEngine base.EngineType
+var TestStorageEngine enginepb.EngineType
 
 func init() {
 	_ = TestStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_TEST_STORAGE_ENGINE", "rocksdb"))
@@ -32,9 +33,9 @@ func init() {
 // NewTempEngine creates a new engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.
 func NewTempEngine(
-	engine base.EngineType, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
+	engine enginepb.EngineType, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
-	if engine == base.EngineTypePebble {
+	if engine == enginepb.EngineTypePebble {
 		return NewPebbleTempEngine(tempStorage, storeSpec)
 	}
 
@@ -68,19 +69,21 @@ func NewRocksDBTempEngine(
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
-		db := NewInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */).RocksDB
+		db := newRocksDBInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */).RocksDB
 		return &rocksDBTempEngine{db: db}, nil
 	}
 
 	cfg := RocksDBConfig{
-		Attrs: roachpb.Attributes{},
-		Dir:   tempStorage.Path,
+		StorageConfig: base.StorageConfig{
+			Attrs:           roachpb.Attributes{},
+			Dir:             tempStorage.Path,
+			UseFileRegistry: storeSpec.UseFileRegistry,
+			ExtraOptions:    storeSpec.ExtraOptions,
+		},
 		// MaxSizeBytes doesn't matter for temp storage - it's not
 		// enforced in any way.
-		MaxSizeBytes:    0,
-		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
-		UseFileRegistry: storeSpec.UseFileRegistry,
-		ExtraOptions:    storeSpec.ExtraOptions,
+		MaxSizeBytes: 0,
+		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	defer rocksDBCache.Release()

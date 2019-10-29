@@ -64,10 +64,7 @@ func (n *Node) assertEngineHealth(
 		func() {
 			t := time.AfterFunc(maxDuration, func() {
 				n.metrics.DiskStalls.Inc(1)
-				var stats string
-				if rocks, ok := eng.(*engine.RocksDB); ok {
-					stats = "\n" + rocks.GetCompactionStats()
-				}
+				stats := "\n" + eng.GetCompactionStats()
 				logger := log.Warningf
 				if maxSyncDurationFatalOnExceeded {
 					logger = guaranteedExitFatal

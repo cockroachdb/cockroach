@@ -35,7 +35,7 @@ import (
 const testCompactionLatency = 1 * time.Millisecond
 
 type wrappedEngine struct {
-	*engine.RocksDB
+	engine.Engine
 	mu struct {
 		syncutil.Mutex
 		compactions []roachpb.Span
@@ -45,7 +45,7 @@ type wrappedEngine struct {
 func newWrappedEngine() *wrappedEngine {
 	inMem := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	return &wrappedEngine{
-		RocksDB: inMem.RocksDB,
+		Engine: inMem.RocksDB,
 	}
 }
 

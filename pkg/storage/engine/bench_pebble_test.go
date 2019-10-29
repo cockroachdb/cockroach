@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -37,7 +38,9 @@ func newPebbleOptions(fs vfs.FS) *pebble.Options {
 
 func setupMVCCPebble(b testing.TB, dir string) Engine {
 	peb, err := NewPebble(PebbleConfig{
-		Dir:  dir,
+		StorageConfig: base.StorageConfig{
+			Dir: dir,
+		},
 		Opts: newPebbleOptions(vfs.Default),
 	})
 	if err != nil {
