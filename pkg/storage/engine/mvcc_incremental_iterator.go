@@ -1,16 +1,17 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package storageccl
+package engine
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -51,13 +52,13 @@ import (
 type MVCCIncrementalIterator struct {
 	// TODO(dan): Move all this logic into c++ and make this a thin wrapper.
 
-	iter engine.Iterator
+	iter Iterator
 
 	// fields used for a workaround for a bug in the time-bound iterator
 	// (#28358)
 	upperBound roachpb.Key
-	e          engine.Reader
-	sanityIter engine.Iterator
+	e          Reader
+	sanityIter Iterator
 
 	startTime hlc.Timestamp
 	endTime   hlc.Timestamp
@@ -68,10 +69,10 @@ type MVCCIncrementalIterator struct {
 	meta enginepb.MVCCMetadata
 }
 
-var _ engine.SimpleIterator = &MVCCIncrementalIterator{}
+var _ SimpleIterator = &MVCCIncrementalIterator{}
 
-// IterOptions bundles options for NewMVCCIncrementalIterator.
-type IterOptions struct {
+// MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
+type MVCCIncrementalIterOptions struct {
 	StartTime                           hlc.Timestamp
 	EndTime                             hlc.Timestamp
 	UpperBound                          roachpb.Key
@@ -81,14 +82,16 @@ type IterOptions struct {
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
 // specified engine and options.
-func NewMVCCIncrementalIterator(e engine.Reader, opts IterOptions) *MVCCIncrementalIterator {
-	io := engine.IterOptions{
+func NewMVCCIncrementalIterator(
+	e Reader, opts MVCCIncrementalIterOptions,
+) *MVCCIncrementalIterator {
+	io := IterOptions{
 		UpperBound: opts.UpperBound,
 		WithStats:  opts.WithStats,
 	}
 
 	// Time-bound iterators only make sense to use if the start time is set.
-	var sanityIter engine.Iterator
+	var sanityIter Iterator
 	if opts.EnableTimeBoundIteratorOptimization && !opts.StartTime.IsEmpty() {
 		// The call to startTime.Next() converts our exclusive start bound into the
 		// inclusive start bound that MinTimestampHint expects. This is strictly a
@@ -103,7 +106,7 @@ func NewMVCCIncrementalIterator(e engine.Reader, opts IterOptions) *MVCCIncremen
 		// between the two iterators lead to intents and values falling outside of
 		// the timestamp range **from iter's perspective**. This allows us to simply
 		// ignore discrepancies that we notice in advance(). See #34819.
-		sanityIter = e.NewIterator(engine.IterOptions{
+		sanityIter = e.NewIterator(IterOptions{
 			UpperBound: opts.UpperBound,
 		})
 	}
@@ -120,7 +123,7 @@ func NewMVCCIncrementalIterator(e engine.Reader, opts IterOptions) *MVCCIncremen
 
 // Seek advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (i *MVCCIncrementalIterator) Seek(startKey engine.MVCCKey) {
+func (i *MVCCIncrementalIterator) Seek(startKey MVCCKey) {
 	i.iter.Seek(startKey)
 	i.err = nil
 	i.valid = true
@@ -263,9 +266,19 @@ func (i *MVCCIncrementalIterator) Valid() (bool, error) {
 	return i.valid, i.err
 }
 
+// Key returns the current key.
+func (i *MVCCIncrementalIterator) Key() MVCCKey {
+	return i.iter.Key()
+}
+
+// Value returns the current value as a byte slice.
+func (i *MVCCIncrementalIterator) Value() []byte {
+	return i.iter.Value()
+}
+
 // UnsafeKey returns the same key as Key, but the memory is invalidated on the
 // next call to {Next,Reset,Close}.
-func (i *MVCCIncrementalIterator) UnsafeKey() engine.MVCCKey {
+func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 	return i.iter.UnsafeKey()
 }
 
