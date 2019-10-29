@@ -2823,8 +2823,11 @@ func (fr *RocksDBSstFileReader) Close() {
 	fr.rocksDB.RocksDB = nil
 }
 
-// CheckForKeyCollisions indicates if the two iterators collide on any keys.
-func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) (enginepb.MVCCStats, error) {
+// checkForKeyCollisionsRocksDB indicates if the two iterators collide on any
+// keys.
+func checkForKeyCollisionsRocksDB(
+	existingIter Iterator, sstIter Iterator,
+) (enginepb.MVCCStats, error) {
 	existingIterGetter := existingIter.(dbIteratorGetter)
 	sstableIterGetter := sstIter.(dbIteratorGetter)
 	var intentErr C.DBString

@@ -139,8 +139,7 @@ func EvalAddSSTable(
 	//
 	// However, if the underlying range is _not_ empty, then this is not cheap:
 	// recomputing its stats involves traversing lots of data, and iterating the
-	// merged iterator has to constantly go back and forth to the RocksDB-backed
-	// (cgo) iterator.
+	// merged iterator has to constantly go back and forth to the iterator.
 	//
 	// If we assume that most SSTs don't shadow too many keys, then the error of
 	// simply adding the SST stats directly to the range stats is minimal. In the
@@ -213,15 +212,15 @@ func checkForKeyCollisions(
 	mvccEndKey engine.MVCCKey,
 	data []byte,
 ) (enginepb.MVCCStats, error) {
-	// We could get a spansetBatch so fetch the underlying rocksDBBatchEngine as
+	// We could get a spansetBatch so fetch the underlying db engine as
 	// we need access to the underlying C.DBIterator later, and the
 	// dbIteratorGetter is not implemented by a spansetBatch.
-	rocksDBEngine := spanset.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
+	dbEngine := spanset.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
 
 	emptyMVCCStats := enginepb.MVCCStats{}
 
 	// Create iterator over the existing data.
-	existingDataIter := rocksDBEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := dbEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.Seek(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {
