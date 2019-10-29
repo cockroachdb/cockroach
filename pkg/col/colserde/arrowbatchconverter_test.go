@@ -73,7 +73,7 @@ func copyBatch(original coldata.Batch) coldata.Batch {
 	return b
 }
 
-func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
+func assertEqualBatches(t testing.TB, expected, actual coldata.Batch) {
 	t.Helper()
 
 	if actual.Selection() != nil {

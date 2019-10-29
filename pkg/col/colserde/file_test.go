@@ -37,7 +37,8 @@ func TestFileRoundtrip(t *testing.T) {
 		s, err := colserde.NewFileSerializer(&buf, typs)
 		require.NoError(t, err)
 		require.NoError(t, s.AppendBatch(b))
-		require.NoError(t, s.Finish())
+		err = s.Finish()
+		require.NoError(t, err)
 
 		// Parts of the deserialization modify things (null bitmaps) in place, so
 		// run it twice to make sure those modifications don't leak back to the
@@ -72,7 +73,8 @@ func TestFileRoundtrip(t *testing.T) {
 		s, err := colserde.NewFileSerializer(f, typs)
 		require.NoError(t, err)
 		require.NoError(t, s.AppendBatch(b))
-		require.NoError(t, s.Finish())
+		err = s.Finish()
+		require.NoError(t, err)
 		require.NoError(t, f.Sync())
 
 		// Parts of the deserialization modify things (null bitmaps) in place, so
@@ -110,7 +112,8 @@ func TestFileIndexing(t *testing.T) {
 		b.ColVec(0).Int64()[0] = int64(i)
 		require.NoError(t, s.AppendBatch(b))
 	}
-	require.NoError(t, s.Finish())
+	err = s.Finish()
+	require.NoError(t, err)
 
 	d, err := colserde.NewFileDeserializerFromBytes(buf.Bytes())
 	require.NoError(t, err)
