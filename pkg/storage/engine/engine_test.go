@@ -69,6 +69,9 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 
 	func() {
 		pebbleInMem, err := NewPebble(PebbleConfig{
+			StorageConfig: base.StorageConfig{
+				Attrs: inMemAttrs,
+			},
 			Opts: testPebbleOptions(vfs.NewMem()),
 		})
 		if err != nil {
@@ -918,13 +921,8 @@ func TestSnapshotMethods(t *testing.T) {
 		defer snap.Close()
 
 		// Verify Attrs.
-		var attrs roachpb.Attributes
-		switch engine.(type) {
-		case InMem:
-			attrs = inMemAttrs
-		}
-		if !reflect.DeepEqual(engine.Attrs(), attrs) {
-			t.Errorf("attrs mismatch; expected %+v, got %+v", attrs, engine.Attrs())
+		if !reflect.DeepEqual(engine.Attrs(), inMemAttrs) {
+			t.Errorf("attrs mismatch; expected %+v, got %+v", inMemAttrs, engine.Attrs())
 		}
 
 		// Verify Get.

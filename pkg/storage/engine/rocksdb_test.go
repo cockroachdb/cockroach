@@ -1226,12 +1226,12 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	db := setupMVCCInMemRocksDB(t, "delrange").(InMem)
+	db := setupMVCCInMemRocksDB(t, "delrange")
 	defer db.Close()
 
 	// Disable automatic compactions which interfere with test expectations
 	// below.
-	if err := db.disableAutoCompaction(); err != nil {
+	if err := db.(*RocksDB).disableAutoCompaction(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1361,7 +1361,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 		b.Run(fmt.Sprintf("entries=%d", entries), func(b *testing.B) {
 			for _, deleted := range []int{entries, entries - 1} {
 				b.Run(fmt.Sprintf("deleted=%d", deleted), func(b *testing.B) {
-					db := setupMVCCInMemRocksDB(b, "unused").(InMem)
+					db := setupMVCCInMemRocksDB(b, "unused")
 					defer db.Close()
 
 					makeKey := func(i int) roachpb.Key {
@@ -1484,7 +1484,7 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	db := setupMVCCInMemRocksDB(t, "sstwriter-timebound").(InMem)
+	db := setupMVCCInMemRocksDB(t, "sstwriter-timebound")
 	defer db.Close()
 
 	for walltime := int64(1); walltime < 5; walltime++ {
