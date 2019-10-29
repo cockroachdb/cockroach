@@ -17,7 +17,6 @@ import (
 )
 
 func TestComposeGSS(t *testing.T) {
-	t.Skip("#41318")
 	out, err := exec.Command(
 		"docker-compose",
 		"-f", filepath.Join("compose", "gss", "docker-compose.yml"),
