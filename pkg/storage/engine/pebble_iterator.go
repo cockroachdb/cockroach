@@ -524,6 +524,14 @@ func (p *pebbleIterator) Stats() IteratorStats {
 	}
 }
 
+// CheckForKeyCollisions indicates if the provided SST data collides with this
+// iterator in the specified range.
+func (p *pebbleIterator) CheckForKeyCollisions(
+	sstData []byte, start, end roachpb.Key,
+) (enginepb.MVCCStats, error) {
+	return checkForKeyCollisionsGo(p, sstData, start, end)
+}
+
 func (p *pebbleIterator) destroy() {
 	if p.inuse {
 		panic("iterator still in use")
