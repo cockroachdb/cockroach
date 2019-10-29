@@ -36,6 +36,11 @@ func (s *Smither) makeSelectStmt(
 }
 
 func makeSchemaTable(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	// If there's no tables, don't keep failing in this function, just make
+	// a values table.
+	if len(s.tables) == 0 {
+		return makeValuesTable(s, refs, forJoin)
+	}
 	expr, _, _, exprRefs, ok := s.getSchemaTable()
 	return expr, exprRefs, ok
 }
