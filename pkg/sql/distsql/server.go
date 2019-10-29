@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
@@ -274,8 +274,8 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:      nodeID,
 			ReCache:     ds.regexpCache,
 			Mon:         &monitor,
-			// TODO(andrei): This is wrong. Each processor should override Ctx with its
-			// own context.
+			// Most processors will override this Context with their own context in
+			// ProcessorBase. StartInternal().
 			Context:          ctx,
 			Planner:          &sqlbase.DummyEvalPlanner{},
 			SessionAccessor:  &sqlbase.DummySessionAccessor{},
