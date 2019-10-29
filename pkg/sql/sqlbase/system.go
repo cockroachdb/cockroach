@@ -269,6 +269,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.ReplicationCriticalLocalitiesTableID: privilege.ReadWriteData,
 	keys.ReplicationStatsTableID:              privilege.ReadWriteData,
 	keys.ReportsMetaTableID:                   privilege.ReadWriteData,
+	keys.ProtectedTimestampRecordsTableID:     privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -1050,6 +1051,40 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	ProtectedTimestampRecordsTable = TableDescriptor{
+		Name:     "protected_ts_records",
+		ID:       keys.ProtectedTimestampRecordsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: *types.Uuid},
+			{Name: "record", ID: 2, Type: *types.Bytes},
+		},
+		NextColumnID: 3,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"id", "record"},
+				ColumnIDs:   []ColumnID{1, 2},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Unique:      true,
+			ColumnNames: []string{"id"},
+			ColumnIDs:   []ColumnID{1},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC,
+			},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ProtectedTimestampRecordsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -1099,6 +1134,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationConstraintStatsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationStatsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationCriticalLocalitiesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampRecordsTable)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the

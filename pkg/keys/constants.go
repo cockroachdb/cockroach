@@ -235,6 +235,10 @@ var (
 	RangeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
 	StoreIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("store-idgen")))
+	// ProtectedTimestampMetadata is the global protected timestamp metadata.
+	// Underneath it we store a row which contains the version and current summary
+	// statistics of the protectedts subsystem.
+	ProtectedTimestampMetadata = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("protectedts-meta")))
 
 	// StatusPrefix specifies the key prefix to store all status details.
 	StatusPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("status-")))
@@ -330,6 +334,7 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
+	ProtectedTimestampRecordsTableID     = 29
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
