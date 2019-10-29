@@ -205,6 +205,10 @@ type TestingKnobs struct {
 
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
+
+	// EnableVectorizedInvariantsChecker, if enabled, will allow for planning
+	// the invariant checkers between all columnar operators.
+	EnableVectorizedInvariantsChecker bool
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

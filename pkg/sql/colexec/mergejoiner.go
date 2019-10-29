@@ -444,6 +444,11 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	// We've added groupLength number of tuples to bufferedGroup, so we need to
 	// adjust its length.
 	bufferedGroup.length += uint64(groupLength)
+	for _, v := range bufferedGroup.colVecs {
+		if v.Type() == coltypes.Bytes {
+			v.Bytes().UpdateOffsetsToBeNonDecreasing(bufferedGroup.length)
+		}
+	}
 }
 
 // setBuilderSourceToBatch sets the builder state to use groups from the

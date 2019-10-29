@@ -105,7 +105,6 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 		// phase.
 		copy(c.buffered[nRows], row)
 	}
-	c.batch.SetLength(nRows)
 
 	// Write each column into the output batch.
 	for idx, ct := range columnTypes {
@@ -114,6 +113,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 			execerror.VectorizedInternalPanic(err)
 		}
 	}
+	c.batch.SetLength(nRows)
 	return c.batch
 }
 
