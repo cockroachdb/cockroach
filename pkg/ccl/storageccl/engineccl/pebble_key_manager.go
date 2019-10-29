@@ -305,7 +305,7 @@ func validateRegistry(keyRegistry *enginepbccl.DataKeysRegistry) error {
 
 // Generates a new data key and adds it to the keyRegistry proto and sets it as the active key.
 func generateAndSetNewDataKey(
-	keyRegistry *enginepbccl.DataKeysRegistry,
+	ctx context.Context, keyRegistry *enginepbccl.DataKeysRegistry,
 ) (*enginepbccl.SecretKey, error) {
 	activeStoreKey := keyRegistry.StoreKeys[keyRegistry.ActiveStoreKeyId]
 	if activeStoreKey == nil {
@@ -335,13 +335,19 @@ func generateAndSetNewDataKey(
 				activeStoreKey.EncryptionType, activeStoreKey.KeyId)
 		}
 		key.Key = make([]byte, keyLength)
-		_, err := rand.Read(key.Key)
+		n, err := rand.Read(key.Key)
 		if err != nil {
 			return nil, err
 		}
+		if n != keyLength {
+			log.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyLength)
+		}
 		keyID := make([]byte, keyIDLength)
-		if _, err = rand.Read(keyID); err != nil {
+		if n, err = rand.Read(keyID); err != nil {
 			return nil, err
+		}
+		if n != keyIDLength {
+			log.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyIDLength)
 		}
 		// Hex encoding to make it human readable.
 		key.Info.KeyId = hex.EncodeToString(keyID)
@@ -364,7 +370,7 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 	}()
 
 	var newKey *enginepbccl.SecretKey
-	if newKey, err = generateAndSetNewDataKey(keyRegistry); err != nil {
+	if newKey, err = generateAndSetNewDataKey(ctx, keyRegistry); err != nil {
 		return
 	}
 	if err = validateRegistry(keyRegistry); err != nil {
