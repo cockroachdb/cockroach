@@ -688,9 +688,8 @@ func NewColOperator(
 
 	log.VEventf(ctx, 1, "made op %T\n", result.Op)
 
-	if result.ColumnTypes == nil {
-		return result, errors.AssertionFailedf("output columnTypes unset after planning %T", result.Op)
-	}
+	// Note: at this point, it is legal for ColumnTypes to be empty (it is
+	// legal for empty rows to be passed between processors).
 
 	if !post.Filter.Empty() {
 		filterExpr := planningState.postFilterPlanning.remapIVars(post.Filter)
