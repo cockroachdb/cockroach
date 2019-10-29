@@ -1573,15 +1573,14 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// Test cases where, after filtering out views that can't be restored, there are no other tables to restore
 
-		db.ExpectErr(t, `no tables to restore: DATABASE storestats`,
-			`RESTORE DATABASE storestats from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+		db.Exec(t, `RESTORE DATABASE storestats from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+		db.Exec(t, `RESTORE storestats.ordercounts from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+		// Ensure that the views were not restored since they are missing the tables they reference.
+		db.CheckQueryResults(t, `USE storestats; SHOW TABLES;`, [][]string{})
 
-		db.ExpectErr(t, `no tables to restore: TABLE storestats.ordercounts`,
-			`RESTORE storestats.ordercounts from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
-
-		// referencing_early_customers depends only on early_customers, which can't be restored
-		db.ExpectErr(t, `no tables to restore: TABLE store.early_customers, store.referencing_early_customers`,
-			`RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+		db.Exec(t, `RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+		// Ensure that the views were not restored since they are missing the tables they reference.
+		db.CheckQueryResults(t, `SHOW TABLES;`, [][]string{})
 
 		// Test that views with valid dependencies are restored
 
@@ -3076,6 +3075,21 @@ func TestBackupCreatedStats(t *testing.T) {
 		[][]string{
 			{"foo_stats", "{a}", "0", "0", "0"},
 		})
+}
+
+// Ensure that backing up and restoring an empty database succeeds.
+func TestBackupRestoreEmptyDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `CREATE DATABASE empty`)
+	sqlDB.Exec(t, `BACKUP DATABASE empty TO $1`, localFoo)
+	sqlDB.Exec(t, `DROP DATABASE empty`)
+	sqlDB.Exec(t, `RESTORE DATABASE empty FROM $1`, localFoo)
+	sqlDB.CheckQueryResults(t, `USE empty; SHOW TABLES;`, [][]string{})
 }
 
 func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
