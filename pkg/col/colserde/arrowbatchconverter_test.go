@@ -119,7 +119,7 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	unsupportedTypes := []coltypes.T{coltypes.Decimal, coltypes.Timestamp}
+	unsupportedTypes := []coltypes.T{coltypes.Decimal}
 	for _, typ := range unsupportedTypes {
 		_, err := NewArrowBatchConverter([]coltypes.T{typ})
 		require.Error(t, err)
@@ -198,11 +198,21 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	typs := []coltypes.T{coltypes.Bool, coltypes.Bytes, coltypes.Int64}
+	typs := []coltypes.T{
+		coltypes.Bool,
+		coltypes.Bytes,
+		coltypes.Int64,
+		coltypes.Timestamp,
+	}
 	// numBytes corresponds 1:1 to typs and specifies how many bytes we are
 	// converting on one iteration of the benchmark for the corresponding type in
 	// typs.
-	numBytes := []int64{int64(coldata.BatchSize()), fixedLen * int64(coldata.BatchSize()), 8 * int64(coldata.BatchSize())}
+	numBytes := []int64{
+		int64(coldata.BatchSize()),
+		fixedLen * int64(coldata.BatchSize()),
+		8 * int64(coldata.BatchSize()),
+		3 * 8 * int64(coldata.BatchSize()),
+	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
 		batch := colexec.RandomBatch(rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)

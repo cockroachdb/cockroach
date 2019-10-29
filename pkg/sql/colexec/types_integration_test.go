@@ -59,8 +59,8 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, typ := range allSupportedSQLTypes {
-		if typ.Equal(*types.Decimal) || typ.Equal(*types.Timestamp) {
-			// Serialization of Decimals and Timestamps is currently not supported.
+		if typ.Equal(*types.Decimal) {
+			// Serialization of Decimals is currently not supported.
 			// TODO(yuzefovich): remove this once it is supported.
 			continue
 		}

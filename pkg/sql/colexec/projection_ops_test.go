@@ -187,6 +187,7 @@ func TestRandomComparisons(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	ctx := evalCtx.Ctx()
+	defer evalCtx.Stop(ctx)
 	expected := make([]bool, numTuples)
 	var da sqlbase.DatumAlloc
 	lDatums := make([]tree.Datum, numTuples)
