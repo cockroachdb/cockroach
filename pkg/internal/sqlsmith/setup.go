@@ -56,12 +56,11 @@ func stringSetup(s string) Setup {
 }
 
 func randTables(r *rand.Rand) string {
-	var sb strings.Builder
+	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1)
 
-	n := r.Intn(5)
-	for i := 0; i <= n; i++ {
-		create := sqlbase.RandCreateTable(r, i+1)
-		sb.WriteString(create.String())
+	var sb strings.Builder
+	for _, stmt := range stmts {
+		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
 	}
 
