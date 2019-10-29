@@ -95,7 +95,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	for _, def := range n.n.Defs {
 		if d, ok := def.(*tree.IndexTableDef); ok {
-			if d.Families != nil {
+			if d.Storing != nil && len(d.Storing.Families) > 0 {
 				return unimplemented.NewWithIssue(41964, "column families on secondary indexes are unsupported")
 			}
 		}
@@ -1117,7 +1117,7 @@ func MakeTableDesc(
 		case *tree.IndexTableDef:
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
-				StoreColumnNames: d.Storing.ToStrings(),
+				StoreColumnNames: d.Storing.ColumnNames(),
 			}
 			if d.Inverted {
 				idx.Type = sqlbase.IndexDescriptor_INVERTED
@@ -1142,7 +1142,7 @@ func MakeTableDesc(
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
-				StoreColumnNames: d.Storing.ToStrings(),
+				StoreColumnNames: d.Storing.ColumnNames(),
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
