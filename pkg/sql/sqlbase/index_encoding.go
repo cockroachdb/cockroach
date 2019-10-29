@@ -850,7 +850,7 @@ func EncodeSecondaryIndex(
 				return []IndexEntry{}, err
 			}
 		}
-		entry.Value.SetBytes(entryValue)
+		entry.Value.SetTuple(entryValue)
 		entries[i] = entry
 	}
 

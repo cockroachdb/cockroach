@@ -867,7 +867,18 @@ func (rf *cFetcher) processValue(
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
-		valueBytes, err := val.GetBytes()
+		var (
+			valueBytes []byte
+			err        error
+		)
+		switch t := val.GetTag(); t {
+		case roachpb.ValueType_TUPLE:
+			valueBytes, err = val.GetTuple()
+		case roachpb.ValueType_BYTES:
+			valueBytes, err = val.GetBytes()
+		default:
+			err = fmt.Errorf("expected value type BYTES or TUPLE, but found: %s", t)
+		}
 		if err != nil {
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}

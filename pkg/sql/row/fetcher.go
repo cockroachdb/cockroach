@@ -877,7 +877,18 @@ func (rf *Fetcher) processKV(
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
-		valueBytes, err := kv.Value.GetBytes()
+		var (
+			valueBytes []byte
+			err        error
+		)
+		switch t := kv.Value.GetTag(); t {
+		case roachpb.ValueType_TUPLE:
+			valueBytes, err = kv.Value.GetTuple()
+		case roachpb.ValueType_BYTES:
+			valueBytes, err = kv.Value.GetBytes()
+		default:
+			err = fmt.Errorf("expected value type BYTES or TUPLE, but found: %s", t)
+		}
 		if err != nil {
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
