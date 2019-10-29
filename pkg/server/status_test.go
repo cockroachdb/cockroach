@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -260,6 +261,12 @@ func TestStatusEngineStatsJson(t *testing.T) {
 	}
 	if len(engineStats.Stats) != 1 {
 		t.Fatal(errors.Errorf("expected one engine stats, got: %v", engineStats))
+	}
+
+	if engineStats.Stats[0].EngineType == enginepb.EngineTypePebble {
+		// TODO(hueypark): enable when Pebble.GetTickersAndHistograms is
+		// implemented.
+		return
 	}
 
 	tickers := engineStats.Stats[0].TickersAndHistograms.Tickers
