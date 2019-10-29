@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -35,6 +36,21 @@ func randomTypes(rng *rand.Rand, n int) []coltypes.T {
 		typs[i] = randomType(rng)
 	}
 	return typs
+}
+
+var locations []*time.Location
+
+func init() {
+	for a := byte('A'); a <= 'Z'; a++ {
+		for b := byte('A'); b <= 'Z'; b++ {
+			for c := byte('A'); c <= 'Z'; c++ {
+				loc, err := timeutil.LoadLocation(string([]byte{a, b, c}))
+				if err == nil {
+					locations = append(locations, loc)
+				}
+			}
+		}
+	}
 }
 
 // RandomVec populates vec with n random values of typ, setting each value to
@@ -102,6 +118,8 @@ func RandomVec(
 		timestamps := vec.Timestamp()
 		for i := 0; i < n; i++ {
 			timestamps[i] = timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))
+			loc := locations[rng.Intn(len(locations))]
+			timestamps[i] = timestamps[i].In(loc)
 		}
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", typ))

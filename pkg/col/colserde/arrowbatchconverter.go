@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -33,6 +34,9 @@ type ArrowBatchConverter struct {
 	builders struct {
 		// boolBuilder builds arrow bool columns as a bitmap from a bool slice.
 		boolBuilder *array.BooleanBuilder
+		// binaryBuilder builds arrow []byte columns as one []byte slice with
+		// accompanying offsets from a [][]byte slice.
+		binaryBuilder *array.BinaryBuilder
 	}
 
 	scratch struct {
@@ -56,11 +60,13 @@ func NewArrowBatchConverter(typs []coltypes.T) (*ArrowBatchConverter, error) {
 	}
 	c := &ArrowBatchConverter{typs: typs}
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
+	c.builders.binaryBuilder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 	c.scratch.arrowData = make([]*array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
 	for i := range c.scratch.buffers {
 		// Most types need only two buffers: one for the nulls, and one for the
-		// values, but some type (i.e. Bytes) need an extra buffer for the offsets.
+		// values, but some types (i.e. Bytes) need an extra buffer for the
+		// offsets.
 		c.scratch.buffers[i] = make([]*memory.Buffer, 0, 3)
 	}
 	return c, nil
@@ -82,6 +88,7 @@ var supportedTypes = func() map[coltypes.T]struct{} {
 		coltypes.Int32,
 		coltypes.Int64,
 		coltypes.Float64,
+		coltypes.Timestamp,
 	} {
 		typs[t] = struct{}{}
 	}
@@ -108,11 +115,28 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			arrowBitmap = n.NullBitmap()
 		}
 
-		if typ == coltypes.Bool {
-			// Bools are handled differently from other coltypes. Refer to the
-			// comment on ArrowBatchConverter.builders for more information.
-			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
-			data := c.builders.boolBuilder.NewBooleanArray().Data()
+		if typ == coltypes.Bool || typ == coltypes.Timestamp {
+			// Bools and Timestamps are handled differently from other coltypes.
+			// Refer to the comment on ArrowBatchConverter.builders for more
+			// information.
+			var data *array.Data
+			switch typ {
+			case coltypes.Bool:
+				c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
+				data = c.builders.boolBuilder.NewBooleanArray().Data()
+			case coltypes.Timestamp:
+				timestamps := vec.Timestamp()[:n]
+				for _, ts := range timestamps {
+					marshaled, err := ts.MarshalBinary()
+					if err != nil {
+						return nil, err
+					}
+					c.builders.binaryBuilder.Append(marshaled)
+				}
+				data = c.builders.binaryBuilder.NewBinaryArray().Data()
+			default:
+				panic(fmt.Sprintf("unexpected type %s", typ))
+			}
 			if arrowBitmap != nil {
 				// Overwrite empty null bitmap with the true bitmap.
 				data.Buffers()[0] = memory.NewBufferBytes(arrowBitmap)
@@ -222,7 +246,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		d := data[i]
 
 		var arr array.Interface
-		if typ == coltypes.Bool || typ == coltypes.Bytes {
+		if typ == coltypes.Bool || typ == coltypes.Bytes || typ == coltypes.Timestamp {
 			switch typ {
 			case coltypes.Bool:
 				boolArr := array.NewBooleanData(d)
@@ -241,6 +265,25 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 					bytes = make([]byte, 0)
 				}
 				coldata.BytesFromArrowSerializationFormat(vec.Bytes(), bytes, bytesArr.ValueOffsets())
+				arr = bytesArr
+			case coltypes.Timestamp:
+				// TODO(yuzefovich): this serialization is quite inefficient - improve
+				// it.
+				bytesArr := array.NewBinaryData(d)
+				bytes := bytesArr.ValueBytes()
+				if bytes == nil {
+					// All bytes values are empty, so the representation is solely with the
+					// offsets slice, so create an empty slice so that the conversion
+					// corresponds.
+					bytes = make([]byte, 0)
+				}
+				offsets := bytesArr.ValueOffsets()
+				vecArr := vec.Timestamp()
+				for i := 0; i < len(offsets)-1; i++ {
+					if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
+						return err
+					}
+				}
 				arr = bytesArr
 			default:
 				panic(fmt.Sprintf("unexpected type %s", typ))

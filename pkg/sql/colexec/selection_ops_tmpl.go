@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -54,7 +55,7 @@ var _ tree.Datum
 var _ = math.MaxInt64
 
 // Dummy import to pull in "time" package.
-var _ = time.Day
+var _ time.Time
 
 // Dummy import to pull in "coltypes" package.
 var _ = coltypes.Bool

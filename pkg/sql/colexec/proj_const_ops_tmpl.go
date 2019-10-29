@@ -54,7 +54,7 @@ var _ tree.Datum
 var _ = math.MaxInt64
 
 // Dummy import to pull in "time" package.
-var _ = time.Day
+var _ time.Time
 
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
