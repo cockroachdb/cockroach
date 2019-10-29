@@ -46,7 +46,7 @@ func TestCreateRandomSchema(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	for i := 0; i < 100; i++ {
-		tab := sqlbase.RandCreateTable(rng, i)
+		tab := sqlbase.RandCreateTable(rng, "table", i)
 		setDb(t, db, "test")
 		_, err := db.Exec(tab.String())
 		if err != nil {

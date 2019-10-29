@@ -57,6 +57,7 @@ func registerSQLSmith(r *testRegistry) {
 
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")
+		c.l.Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +123,6 @@ func registerSQLSmith(r *testRegistry) {
 
 	register := func(setup, setting string) {
 		r.Add(testSpec{
-			Skip:    "https://github.com/cockroachdb/cockroach/issues/42109",
 			Name:    fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Cluster: makeClusterSpec(4),
 			Timeout: time.Minute * 20,
