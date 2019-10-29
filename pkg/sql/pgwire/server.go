@@ -104,9 +104,20 @@ var (
 )
 
 const (
-	version30     = 196608
-	versionSSL    = 80877103
-	versionCancel = 80877102
+	// The below constants can occur during the first message a client
+	// sends to the server. There are two categories: protocol version and
+	// request code. The protocol version is (major version number << 16)
+	// + minor version number. Request codes are (1234 << 16) + 5678 + N,
+	// where N started at 0 and is increased by 1 for every new request
+	// code added, which happens rarely during major or minor Postgres
+	// releases.
+	//
+	// See: https://www.postgresql.org/docs/current/protocol-message-formats.html
+
+	version30     = 196608   // (3 << 16) + 0
+	versionCancel = 80877102 // (1234 << 16) + 5678
+	versionSSL    = 80877103 // (1234 << 16) + 5679
+	versionGSSENC = 80877104 // (1234 << 16) + 5680
 )
 
 // cancelMaxWait is the amount of time a draining server gives to sessions to
@@ -268,7 +279,7 @@ func Match(rd io.Reader) bool {
 	if err != nil {
 		return false
 	}
-	return version == version30 || version == versionSSL || version == versionCancel
+	return version == version30 || version == versionSSL || version == versionCancel || version == versionGSSENC
 }
 
 // Start makes the Server ready for serving connections.
