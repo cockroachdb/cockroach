@@ -19,6 +19,7 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "server/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
+import "storage/engine/enginepb/engine.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/rocksdb.proto";
 import "storage/storagepb/lease_status.proto";
@@ -227,6 +228,7 @@ message EngineStatsInfo {
         "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
   ];
   cockroach.storage.engine.enginepb.TickersAndHistograms tickers_and_histograms = 2;
+  cockroach.storage.engine.enginepb.EngineType engine_type = 3;
 }
 
 message EngineStatsRequest {

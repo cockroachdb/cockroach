@@ -190,7 +190,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 func TestRocksDBMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
 	runTestForEngine(ctx, t, "testdata/diskmap", &rocksDBTempEngine{db: e.RocksDB})
@@ -199,7 +199,7 @@ func TestRocksDBMap(t *testing.T) {
 func TestRocksDBMultiMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
 	runTestForEngine(ctx, t, "testdata/diskmap_duplicates", &rocksDBTempEngine{db: e.RocksDB})
@@ -208,7 +208,7 @@ func TestRocksDBMultiMap(t *testing.T) {
 func TestRocksDBMapClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
 	decodeKey := func(v []byte) []byte {

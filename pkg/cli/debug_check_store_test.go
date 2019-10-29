@@ -82,8 +82,10 @@ func TestDebugCheckStore(t *testing.T) {
 		cache := engine.NewRocksDBCache(10 << 20 /* 10mb */)
 		defer cache.Release()
 		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
-			Dir:       storePaths[0],
-			MustExist: true,
+			StorageConfig: base.StorageConfig{
+				Dir:       storePaths[0],
+				MustExist: true,
+			},
 		}, cache)
 		require.NoError(t, err)
 		defer eng.Close()

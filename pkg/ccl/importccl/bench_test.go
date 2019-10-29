@@ -97,7 +97,9 @@ func benchmarkWriteAndLink(b *testing.B, dir string, tables []tableSSTable) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		cfg := engine.RocksDBConfig{Dir: filepath.Join(dir, `rocksdb`, timeutil.Now().String())}
+		cfg := engine.RocksDBConfig{
+			StorageConfig: base.StorageConfig{
+				Dir: filepath.Join(dir, `rocksdb`, timeutil.Now().String())}}
 		db, err := engine.NewRocksDB(cfg, cache)
 		if err != nil {
 			b.Fatal(err)

@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -81,7 +82,7 @@ Create a ballast file to fill the store directory up to a given amount
 // PopulateRocksDBConfigHook is a callback set by CCL code.
 // It populates any needed fields in the RocksDBConfig.
 // It must do nothing in OSS code.
-var PopulateRocksDBConfigHook func(*engine.RocksDBConfig) error
+var PopulateRocksDBConfigHook func(*base.StorageConfig) error
 
 func parsePositiveInt(arg string) (int64, error) {
 	i, err := strconv.ParseInt(arg, 10, 64)
@@ -110,15 +111,14 @@ type OpenEngineOptions struct {
 
 // OpenExistingStore opens the rocksdb engine rooted at 'dir'.
 // If 'readOnly' is true, opens the store in read-only mode.
-func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engine.RocksDB, error) {
+func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (engine.Engine, error) {
 	return OpenEngine(dir, stopper, OpenEngineOptions{ReadOnly: readOnly, MustExist: true})
 }
 
-// OpenEngine opens the RocksDB engine at 'dir'. Depending on the supplied options,
+// OpenEngine opens the engine at 'dir'. Depending on the supplied options,
 // an empty engine might be initialized.
-func OpenEngine(
-	dir string, stopper *stop.Stopper, opts OpenEngineOptions,
-) (*engine.RocksDB, error) {
+func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (engine.Engine, error) {
+	// TODO(hueypark): This seems to support all engines like engine.NewTempEngine.
 	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
@@ -127,15 +127,17 @@ func OpenEngine(
 	}
 
 	cfg := engine.RocksDBConfig{
-		Settings:     serverCfg.Settings,
-		Dir:          dir,
+		StorageConfig: base.StorageConfig{
+			Settings:  serverCfg.Settings,
+			Dir:       dir,
+			MustExist: opts.MustExist,
+		},
 		MaxOpenFiles: maxOpenFiles,
-		MustExist:    opts.MustExist,
 		ReadOnly:     opts.ReadOnly,
 	}
 
 	if PopulateRocksDBConfigHook != nil {
-		if err := PopulateRocksDBConfigHook(&cfg); err != nil {
+		if err := PopulateRocksDBConfigHook(&cfg.StorageConfig); err != nil {
 			return nil, err
 		}
 	}

@@ -97,10 +97,10 @@ func (ssss *SSTSnapshotStorageScratch) NewFile() (*SSTSnapshotStorageFile, error
 // the provided SST when it is finished using it. If the provided SST is empty,
 // then no file will be created and nothing will be written.
 func (ssss *SSTSnapshotStorageScratch) WriteSST(
-	ctx context.Context, sst *engine.RocksDBSstFileWriter,
+	ctx context.Context, sst engine.SstFileWriter,
 ) error {
 	defer sst.Close()
-	if sst.DataSize == 0 {
+	if sst.DataSize() == 0 {
 		return nil
 	}
 	data, err := sst.Finish()

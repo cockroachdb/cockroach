@@ -814,7 +814,7 @@ func NewStore(
 
 	s.compactor = compactor.NewCompactor(
 		s.cfg.Settings,
-		s.engine.(engine.WithSSTables),
+		s.engine,
 		func() (roachpb.StoreCapacity, error) {
 			return s.Capacity(false /* useCached */)
 		},
@@ -2330,22 +2330,19 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	}
 	s.metrics.updateEnvStats(*envStats)
 
-	// If we're using RocksDB, log the sstable overview.
-	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
-		sstables := rocksdb.GetSSTables()
-		s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
-		readAmp := sstables.ReadAmplification()
-		s.metrics.RdbReadAmplification.Update(int64(readAmp))
-		s.metrics.RdbPendingCompaction.Update(stats.PendingCompactionBytesEstimate)
-		// Log this metric infrequently (with current configurations,
-		// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
-		// non-periodic callers of this method don't trigger expensive
-		// stats.
-		if tick%logSSTInfoTicks == 1 /* every 10m */ {
-			log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
-			log.Infof(ctx, "%sestimated_pending_compaction_bytes: %s",
-				rocksdb.GetCompactionStats(), humanizeutil.IBytes(stats.PendingCompactionBytesEstimate))
-		}
+	sstables := s.engine.GetSSTables()
+	s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
+	readAmp := sstables.ReadAmplification()
+	s.metrics.RdbReadAmplification.Update(int64(readAmp))
+	s.metrics.RdbPendingCompaction.Update(stats.PendingCompactionBytesEstimate)
+	// Log this metric infrequently (with current configurations,
+	// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
+	// non-periodic callers of this method don't trigger expensive
+	// stats.
+	if tick%logSSTInfoTicks == 1 /* every 10m */ {
+		log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
+		log.Infof(ctx, "%sestimated_pending_compaction_bytes: %s",
+			s.engine.GetCompactionStats(), humanizeutil.IBytes(stats.PendingCompactionBytesEstimate))
 	}
 	return nil
 }
