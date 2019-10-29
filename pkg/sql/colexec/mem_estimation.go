@@ -58,6 +58,13 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// to hold the arbitrary precision decimal objects.
 			acc += 50
 		case coltypes.Timestamp:
+			// time.Time consists of two 64 bit integers and a pointer to
+			// time.Location. We will only account for this 3 bytes without paying
+			// attention to the full time.Location struct. The reason is that it is
+			// likely that time.Location's are cached and are shared among all the
+			// timestamps, so if we were to include that in the estimation, we would
+			// significantly overestimate.
+			// TODO(yuzefovich): figure out whether the caching does take place.
 			acc += sizeOfTime
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))

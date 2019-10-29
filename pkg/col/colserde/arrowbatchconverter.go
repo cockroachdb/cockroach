@@ -87,6 +87,7 @@ var supportedTypes = func() map[coltypes.T]struct{} {
 		coltypes.Int32,
 		coltypes.Int64,
 		coltypes.Float64,
+		coltypes.Timestamp,
 	} {
 		typs[t] = struct{}{}
 	}
@@ -113,9 +114,10 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			arrowBitmap = n.NullBitmap()
 		}
 
-		if typ == coltypes.Bool || typ == coltypes.Bytes {
-			// Bools and Bytes are handled differently from other coltypes. Refer to the
-			// comment on ArrowBatchConverter.builders for more information.
+		if typ == coltypes.Bool || typ == coltypes.Bytes || typ == coltypes.Timestamp {
+			// Bools, Bytes, and Timestamps are handled differently from other
+			// coltypes. Refer to the comment on ArrowBatchConverter.builders for
+			// more information.
 			var data *array.Data
 			switch typ {
 			case coltypes.Bool:
@@ -123,6 +125,16 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 				data = c.builders.boolBuilder.NewBooleanArray().Data()
 			case coltypes.Bytes:
 				c.builders.binaryBuilder.AppendValues(vec.Bytes().PrimitiveRepr()[:n], nil /* valid */)
+				data = c.builders.binaryBuilder.NewBinaryArray().Data()
+			case coltypes.Timestamp:
+				timestamps := vec.Timestamp()[:n]
+				for _, ts := range timestamps {
+					marshaled, err := ts.MarshalBinary()
+					if err != nil {
+						return nil, err
+					}
+					c.builders.binaryBuilder.Append(marshaled)
+				}
 				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			default:
 				panic(fmt.Sprintf("unexpected type %s", typ))
@@ -220,7 +232,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		d := data[i]
 
 		var arr array.Interface
-		if typ == coltypes.Bool || typ == coltypes.Bytes {
+		if typ == coltypes.Bool || typ == coltypes.Bytes || typ == coltypes.Timestamp {
 			switch typ {
 			case coltypes.Bool:
 				boolArr := array.NewBooleanData(d)
@@ -242,6 +254,25 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 				vecArr := vec.Bytes()
 				for i := 0; i < len(offsets)-1; i++ {
 					vecArr.Set(i, bytes[offsets[i]:offsets[i+1]])
+				}
+				arr = bytesArr
+			case coltypes.Timestamp:
+				// TODO(yuzefovich): this serialization is quite inefficient - improve
+				// it.
+				bytesArr := array.NewBinaryData(d)
+				bytes := bytesArr.ValueBytes()
+				if bytes == nil {
+					// All bytes values are empty, so the representation is solely with the
+					// offsets slice, so create an empty slice so that the conversion
+					// corresponds.
+					bytes = make([]byte, 0)
+				}
+				offsets := bytesArr.ValueOffsets()
+				vecArr := vec.Timestamp()
+				for i := 0; i < len(offsets)-1; i++ {
+					if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
+						return err
+					}
 				}
 				arr = bytesArr
 			default:
