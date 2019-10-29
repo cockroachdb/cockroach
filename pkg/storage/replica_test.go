@@ -9380,6 +9380,19 @@ func TestReplicaLocalRetries(t *testing.T) {
 		if pErr != nil {
 			return hlc.Timestamp{}, pErr.GetDetail()
 		}
+
+		// Check that we didn't mess up the stats.
+		// Regression test for #31870.
+		snap := tc.engine.NewSnapshot()
+		defer snap.Close()
+		res, err := tc.repl.sha512(context.Background(), *tc.repl.Desc(), tc.engine, nil /* diff */, roachpb.ChecksumMode_CHECK_FULL)
+		if err != nil {
+			return hlc.Timestamp{}, err
+		}
+		if res.PersistedMS != res.RecomputedMS {
+			return hlc.Timestamp{}, errors.Errorf("stats are inconsistent:\npersisted:\n%+v\nrecomputed:\n%+v", res.PersistedMS, res.RecomputedMS)
+		}
+
 		return br.Timestamp, nil
 	}
 	get := func(key string) (hlc.Timestamp, error) {
