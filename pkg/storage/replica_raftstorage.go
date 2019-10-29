@@ -936,6 +936,14 @@ func (r *Replica) applySnapshot(
 			s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
+	if expLen := s.RaftAppliedIndex - s.TruncatedState.Index; expLen != uint64(len(logEntries)) {
+		log.Fatalf(ctx,
+			"missing log entries in snapshot: got %d entries, expected %d "+
+				"(RaftAppliedIndex=%d, TruncatedState.Index=%d, HardState=%s, ReceivedLogEntries=[%d,%d])",
+			len(logEntries), expLen, s.RaftAppliedIndex, s.TruncatedState.Index,
+			hs.String(), logEntries[0].Index, logEntries[len(logEntries)-1].Index)
+	}
+
 	// We've written Raft log entries, so we need to sync the WAL.
 	if err := batch.Commit(syncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
 		return err

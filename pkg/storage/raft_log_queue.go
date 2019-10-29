@@ -392,13 +392,24 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		decision.NewFirstIndex = decision.Input.FirstIndex
 		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
 	}
+
+	// Invariants: NewFirstIndex >= FirstIndex
+	//             NewFirstIndex <= LastIndex (if != 10)
+	//             NewFirstIndex <= QuorumIndex (if != 0)
+	valid := (decision.NewFirstIndex >= input.FirstIndex) &&
+		(decision.NewFirstIndex <= input.LastIndex || input.LastIndex == 10) &&
+		(decision.NewFirstIndex <= decision.QuorumIndex || decision.QuorumIndex == 0)
+	if !valid {
+		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], quorum idx = %d",
+			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.QuorumIndex)
+		panic(err)
+	}
+
 	return decision
 }
 
 // getQuorumIndex returns the index which a quorum of the nodes have
-// committed. The snapshotLogTruncationConstraints indicates the index of a pending
-// snapshot which is considered part of the Raft group even though it hasn't
-// been added yet. Note that getQuorumIndex may return 0 if the progress map
+// committed. Note that getQuorumIndex may return 0 if the progress map
 // doesn't contain information for a sufficient number of followers (e.g. the
 // local replica has only recently become the leader). In general, the value
 // returned by getQuorumIndex may be smaller than raftStatus.Commit which is
