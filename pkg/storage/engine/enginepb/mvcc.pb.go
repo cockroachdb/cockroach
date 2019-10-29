@@ -29,6 +29,10 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // An MVCCMetadata is stored for a versioned key while there is an intent on
 // that key.
 type MVCCMetadata struct {
+	// The transaction metadata. Present for intents, but not for inline
+	// values (e.g. timeseries data). Also not present for
+	// "reconstructed" metadata that is used during MVCC processing when
+	// no intent exists on disk.
 	Txn *TxnMeta `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
 	// The timestamp of the most recent versioned value if this is a
 	// value that may have multiple versions. For values which may have
@@ -63,7 +67,7 @@ func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
 func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata) ProtoMessage()    {}
 func (*MVCCMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_de8cd815f31819e0, []int{0}
+	return fileDescriptor_mvcc_d6d531974b8f8580, []int{0}
 }
 func (m *MVCCMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -104,7 +108,7 @@ func (m *MVCCMetadata_SequencedIntent) Reset()         { *m = MVCCMetadata_Seque
 func (m *MVCCMetadata_SequencedIntent) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata_SequencedIntent) ProtoMessage()    {}
 func (*MVCCMetadata_SequencedIntent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_de8cd815f31819e0, []int{0, 0}
+	return fileDescriptor_mvcc_d6d531974b8f8580, []int{0, 0}
 }
 func (m *MVCCMetadata_SequencedIntent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -218,7 +222,7 @@ func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 func (*MVCCStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_de8cd815f31819e0, []int{1}
+	return fileDescriptor_mvcc_d6d531974b8f8580, []int{1}
 }
 func (m *MVCCStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1523,10 +1527,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_de8cd815f31819e0)
+	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_d6d531974b8f8580)
 }
 
-var fileDescriptor_mvcc_de8cd815f31819e0 = []byte{
+var fileDescriptor_mvcc_d6d531974b8f8580 = []byte{
 	// 655 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0xcd, 0x4e, 0xdb, 0x4e,
 	0x10, 0xc0, 0xe3, 0x7f, 0x02, 0x38, 0x9b, 0x10, 0xfe, 0xac, 0x38, 0x44, 0x54, 0x72, 0x02, 0x1c,
