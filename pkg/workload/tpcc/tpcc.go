@@ -66,11 +66,11 @@ type tpcc struct {
 	split   bool
 	scatter bool
 
-	partitions        int
-	clientPartitions  int
-	affinityPartition int
-	wPart             *partitioner
-	zoneCfg           zoneConfig
+	partitions         int
+	clientPartitions   int
+	affinityPartitions []int
+	wPart              *partitioner
+	zoneCfg            zoneConfig
 
 	usePostgres  bool
 	serializable bool
@@ -182,7 +182,9 @@ var tpccMeta = workload.Meta{
 		))
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
-		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
+		g.flags.IntSliceVar(&g.affinityPartitions, `partition-affinity`, nil, `Run load generator against specific partition (requires partitions). `+
+			`Note that if one value is provided, the assumption is that all urls are associated with that partition. In all other cases the assumption `+
+			`is that the URLs are distributed evenly over the partitions`)
 		g.flags.Var(&g.zoneCfg.strategy, `partition-strategy`, `Partition tables according to which strategy [replication, leases]`)
 		g.flags.StringSliceVar(&g.zoneCfg.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
@@ -231,20 +233,23 @@ func (w *tpcc) Hooks() workload.Hooks {
 					--client-partitions only modifies client behavior to access a subset of warehouses. Must be used with --partition-affinity`)
 				}
 
-				if w.affinityPartition == -1 {
+				if len(w.affinityPartitions) == 0 {
 					return errors.Errorf(`--client-partitions must be used with --partition-affinity.`)
 				}
 
-				if w.affinityPartition >= w.clientPartitions {
-					return errors.Errorf(`--partition-affinity out of bounds of --client-partitions`)
+				for _, p := range w.affinityPartitions {
+					if p >= w.clientPartitions {
+						return errors.Errorf(`--partition-affinity %d in %v out of bounds of --client-partitions`,
+							p, w.affinityPartitions)
+					}
 				}
 
 			} else {
 
-				if w.affinityPartition < -1 {
-					return errors.Errorf(`if specified, --partition-affinity should be greater than or equal to 0`)
-				} else if w.affinityPartition >= w.partitions {
-					return errors.Errorf(`--partition-affinity out of bounds of --partitions`)
+				for _, p := range w.affinityPartitions {
+					if p < 0 || p >= w.partitions {
+						return errors.Errorf(`--partition-affinity out of bounds of --partitions`)
+					}
 				}
 
 				if len(w.zoneCfg.zones) > 0 && (len(w.zoneCfg.zones) != w.partitions) {
@@ -610,10 +615,18 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		partitionDBs = make([][]*workload.MultiConnPool, w.partitions)
 	}
 
-	if w.affinityPartition >= 0 {
-		// All connections are for our local partition.
-		partitionDBs[w.affinityPartition] = dbs
+	// If there is only one affinityPartition then we assume all of the URLs are
+	// associated with that partition.
+	if len(w.affinityPartitions) == 1 {
+		// All connections are for our local partitions.
+		partitionDBs[w.affinityPartitions[0]] = dbs
+
 	} else {
+		// This is making some assumptions about how racks are handed out.
+		// If we have more than one affinityPartion then we assume that the URLs
+		// are mapped to partitions in a round-robin fashion.
+		// Imagine there are 5 partitions and 15 urls, this code assumes that urls
+		// 0, 5, and 10 correspond to the 0th partition.
 		for i, db := range dbs {
 			p := i % w.partitions
 			partitionDBs[p] = append(partitionDBs[p], db)
@@ -630,16 +643,28 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	ql.WorkerFns = make([]func(context.Context) error, 0, w.workers)
 	var group errgroup.Group
+
+	// Determines whether a partition is in the local workload's set of affinity
+	// partitions.
+	isMyPart := func(p int) bool {
+		for _, ap := range w.affinityPartitions {
+			if p == ap {
+				return true
+			}
+		}
+		// If nothing is mine, then everything is mine.
+		return len(w.affinityPartitions) == 0
+	}
 	// Limit the amount of workers we initialize in parallel, to avoid running out
 	// of memory (#36897).
 	sem := make(chan struct{}, 100)
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
 		workerIdx := workerIdx
 		warehouse := w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
-
 		p := w.wPart.partElemsMap[warehouse]
-		if w.affinityPartition >= 0 && w.affinityPartition != p {
-			// This isn't part of our local partition.
+
+		// This isn't part of our local partition.
+		if !isMyPart(p) {
 			continue
 		}
 		dbs := partitionDBs[p]
