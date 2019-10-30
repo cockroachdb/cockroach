@@ -59,7 +59,7 @@ const (
 
 	// defaultRangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the
 	// leader lease active duration should be of the raft election timeout.
-	defaultRangeLeaseRaftElectionTimeoutMultiplier = 3
+	defaultRangeLeaseRaftElectionTimeoutMultiplier = 10
 
 	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatInterval
 	// used by the rpc context.
