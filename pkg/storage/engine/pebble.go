@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -81,12 +80,13 @@ var MVCCComparer = &pebble.Comparer{
 // by Cockroach.
 var MVCCMerger = &pebble.Merger{
 	Name: "cockroach_merge_operator",
-	Merge: func(key, oldValue, newValue, buf []byte) []byte {
-		res, err := merge(key, oldValue, newValue, buf)
+	Merge: func(_, value []byte) (pebble.ValueMerger, error) {
+		res := &MVCCValueMerger{}
+		err := res.MergeNewer(value)
 		if err != nil {
-			log.Fatalf(context.Background(), "merge: %v", err)
+			return nil, err
 		}
-		return res
+		return res, nil
 	},
 }
 
