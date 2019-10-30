@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -63,12 +62,6 @@ func TruncateLog(
 	if err != nil {
 		return result.Result{}, err
 	}
-
-	// See the comment on the cluster version for all the moving parts involved
-	// in migrating into this cluster version. Note that if the legacy key is
-	// missing, the cluster version has been bumped (though we may not know it
-	// yet) and we keep using the unreplicated key.
-	useNewUnreplicatedTruncatedStateKey := cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionUnreplicatedRaftTruncatedState) || !legacyKeyFound
 
 	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
 	if err != nil {
@@ -138,9 +131,6 @@ func TruncateLog(
 
 	pd.Replicated.RaftLogDelta = ms.SysBytes
 
-	if !useNewUnreplicatedTruncatedStateKey {
-		return pd, MakeStateLoader(cArgs.EvalCtx).SetLegacyRaftTruncatedState(ctx, batch, cArgs.Stats, tState)
-	}
 	if legacyKeyFound {
 		// Time to migrate by deleting the legacy key. The downstream-of-Raft
 		// code will atomically rewrite the truncated state (supplied via the

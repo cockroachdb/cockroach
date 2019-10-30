@@ -8,26 +8,25 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[Version2_1-0]
-	_ = x[VersionUnreplicatedRaftTruncatedState-1]
-	_ = x[VersionSideloadedStorageNoReplicaID-2]
-	_ = x[Version19_1-3]
-	_ = x[VersionStart19_2-4]
-	_ = x[VersionQueryTxnTimestamp-5]
-	_ = x[VersionStickyBit-6]
-	_ = x[VersionParallelCommits-7]
-	_ = x[VersionGenerationComparable-8]
-	_ = x[VersionLearnerReplicas-9]
-	_ = x[VersionTopLevelForeignKeys-10]
-	_ = x[VersionAtomicChangeReplicasTrigger-11]
-	_ = x[VersionAtomicChangeReplicas-12]
-	_ = x[VersionTableDescModificationTimeFromMVCC-13]
-	_ = x[VersionPartitionedBackup-14]
+	_ = x[Version19_1-0]
+	_ = x[VersionStart19_2-1]
+	_ = x[VersionQueryTxnTimestamp-2]
+	_ = x[VersionStickyBit-3]
+	_ = x[VersionParallelCommits-4]
+	_ = x[VersionGenerationComparable-5]
+	_ = x[VersionLearnerReplicas-6]
+	_ = x[VersionTopLevelForeignKeys-7]
+	_ = x[VersionAtomicChangeReplicasTrigger-8]
+	_ = x[VersionAtomicChangeReplicas-9]
+	_ = x[VersionTableDescModificationTimeFromMVCC-10]
+	_ = x[VersionPartitionedBackup-11]
+	_ = x[Version19_2-12]
+	_ = x[VersionStart20_1-13]
 }
 
-const _VersionKey_name = "Version2_1VersionUnreplicatedRaftTruncatedStateVersionSideloadedStorageNoReplicaIDVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackup"
+const _VersionKey_name = "Version19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackupVersion19_2VersionStart20_1"
 
-var _VersionKey_index = [...]uint16{0, 10, 47, 82, 93, 109, 133, 149, 171, 198, 220, 246, 280, 307, 347, 371}
+var _VersionKey_index = [...]uint16{0, 11, 27, 51, 67, 89, 116, 138, 164, 198, 225, 265, 289, 300, 316}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
