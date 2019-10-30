@@ -1445,7 +1445,7 @@ query TTT
 EXPLAIN SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 render     ·            ·
  └── scan  ·            ·
 ·          table        b@b_c_d_key
