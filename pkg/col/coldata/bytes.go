@@ -66,16 +66,10 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n uint64) {
 func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
 	prev := b.offsets[0]
 	for j := uint64(1); j <= n; j++ {
-		if b.offsets[j] == 0 {
-			b.offsets[j] = prev
-		} else if b.offsets[j] < prev {
-			// Having a zero offset is expected (when an actual NULL value is there)
-			// whereas a non-zero offset that is smaller than the largest offset seen
-			// so far is unexpected.
-			panic(fmt.Sprintf("unexpectedly found a decreasing non-zero offset:"+
-				" previous max=%d, found=%d", prev, b.offsets[j]))
-		} else {
+		if b.offsets[j] > prev {
 			prev = b.offsets[j]
+		} else {
+			b.offsets[j] = prev
 		}
 	}
 }
