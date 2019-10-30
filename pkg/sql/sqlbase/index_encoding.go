@@ -43,26 +43,6 @@ func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
 	return key
 }
 
-// EncodeIndexSpan creates the minimal key span for the key specified by the
-// given table, index, and values, with the same method as EncodeIndexKey.
-func EncodeIndexSpan(
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
-	colMap map[ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
-) (span roachpb.Span, containsNull bool, err error) {
-	var key roachpb.Key
-	key, containsNull, err = EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
-	if err != nil {
-		return span, containsNull, err
-	}
-	return roachpb.Span{
-		Key:    key,
-		EndKey: encoding.EncodeInterleavedSentinel(key),
-	}, containsNull, nil
-}
-
 // EncodeIndexKey creates a key by concatenating keyPrefix with the
 // encodings of the columns in the index, and returns the key and
 // whether any of the encoded values were NULLs.
