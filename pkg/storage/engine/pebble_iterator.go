@@ -396,13 +396,12 @@ func (p *pebbleIterator) MVCCGet(
 		start:        key,
 		ts:           timestamp,
 		maxKeys:      1,
-		txn:          opts.Txn,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
 		ignoreSeq:    opts.IgnoreSequence,
 	}
 
-	mvccScanner.init()
+	mvccScanner.init(opts.Txn)
 	mvccScanner.get()
 
 	if mvccScanner.err != nil {
@@ -466,38 +465,21 @@ func (p *pebbleIterator) MVCCScan(
 		end:          end,
 		ts:           timestamp,
 		maxKeys:      max,
-		txn:          opts.Txn,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
 		ignoreSeq:    opts.IgnoreSequence,
 	}
 
-	mvccScanner.init()
-	mvccScanner.scan()
+	mvccScanner.init(opts.Txn)
+	resumeSpan, err = mvccScanner.scan()
 
-	if mvccScanner.err != nil {
-		return nil, 0, nil, nil, mvccScanner.err
+	if err != nil {
+		return nil, 0, nil, nil, err
 	}
 
 	kvData = mvccScanner.results.finish()
 	numKVs = mvccScanner.results.count
 
-	if mvccScanner.curKey != nil {
-		if opts.Reverse {
-			resumeSpan = &roachpb.Span{
-				Key:    mvccScanner.start,
-				EndKey: mvccScanner.curKey,
-			}
-			// curKey was not added to results, so it needs to be included in the
-			// resume span.
-			resumeSpan.EndKey = resumeSpan.EndKey.Next()
-		} else {
-			resumeSpan = &roachpb.Span{
-				Key:    mvccScanner.curKey,
-				EndKey: mvccScanner.end,
-			}
-		}
-	}
 	intents, err = buildScanIntents(mvccScanner.intents.Repr())
 	if err != nil {
 		return nil, 0, nil, nil, err
