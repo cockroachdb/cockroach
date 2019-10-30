@@ -169,6 +169,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		errCh = make(chan error, nodes)
 	}
 
+	disableLBS := false
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
 		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
@@ -202,6 +203,12 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			//serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 			serverArgs.JoinAddr = firstListener.Addr().String()
 		}
+
+		// Disable LBS if any server has a very low scan interval.
+		if serverArgs.ScanInterval > 0 && serverArgs.ScanInterval <= 100*time.Millisecond {
+			disableLBS = true
+		}
+
 		if args.ParallelStart {
 			go func() {
 				errCh <- tc.doAddServer(t, serverArgs)
@@ -224,6 +231,24 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			}
 		}
 		tc.WaitForStores(t, tc.Servers[0].Gossip())
+	}
+
+	if tc.replicationMode == base.ReplicationManual {
+		// We've already disabled the merge queue via testing knobs above, but ALTER
+		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
+		// the cluster setting.
+		//
+		// TODO(benesch): this won't be necessary once we have sticky bits for
+		// splits.
+		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if disableLBS {
+		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Create a closer that will stop the individual server stoppers when the
@@ -319,25 +344,6 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-
-	if tc.replicationMode == base.ReplicationManual && len(tc.Servers) == 0 {
-		// We've already disabled the merge queue via testing knobs above, but ALTER
-		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
-		// the cluster setting.
-		//
-		// TODO(benesch): this won't be necessary once we have sticky bits for
-		// splits.
-		if _, err := conn.Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Disable LBS if the server being added has a scan interval arg this low.
-	if serverArgs.ScanInterval > 0 && serverArgs.ScanInterval <= 100*time.Millisecond {
-		if _, err := conn.Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	tc.Servers = append(tc.Servers, s.(*server.TestServer))
 	tc.Conns = append(tc.Conns, conn)
