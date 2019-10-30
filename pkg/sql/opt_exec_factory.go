@@ -1501,10 +1501,8 @@ func (ef *execFactory) ConstructUpsert(
 				Mapping: ri.InsertColIDtoRowIndex,
 			},
 			tw: optTableUpserter{
-				tableUpserterBase: tableUpserterBase{
-					ri:    ri,
-					alloc: &ef.planner.alloc,
-				},
+				ri:            ri,
+				alloc:         &ef.planner.alloc,
 				canaryOrdinal: int(canaryCol),
 				fkTables:      fkTables,
 				fetchCols:     fetchColDescs,

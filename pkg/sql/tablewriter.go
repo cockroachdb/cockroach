@@ -171,19 +171,3 @@ func (tb *tableWriterBase) finalize(
 func (tb *tableWriterBase) enableAutoCommit() {
 	tb.autoCommit = autoCommitEnabled
 }
-
-// batchedTableWriter is used for tableWriters that
-// do their work at the end of the current batch, currently
-// used for tableUpserter.
-type batchedTableWriter interface {
-	extendedTableWriter
-
-	// batchedCount returns the number of results in the current batch.
-	batchedCount() int
-
-	// batchedValues accesses one row in the current batch.
-	batchedValues(rowIdx int) tree.Datums
-}
-
-var _ batchedTableWriter = (*tableUpserter)(nil)
-var _ batchedTableWriter = (*fastTableUpserter)(nil)
