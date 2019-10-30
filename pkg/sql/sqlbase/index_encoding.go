@@ -796,62 +796,105 @@ func EncodeSecondaryIndex(
 		return []IndexEntry{}, err
 	}
 
-	var entries = make([]IndexEntry, len(secondaryKeys))
-	for i, key := range secondaryKeys {
-		entry := IndexEntry{Key: key}
+	// TODO (rohany): this is a panic included for tests to find tests somewhere that mock
+	//  up a table descriptor without giving it families.
+	if len(tableDesc.Families) == 0 {
+		panic("no families given to secondary index encoder")
+	}
+
+	// entries is the resulting array that we will return. We allocate upfront at least
+	// len(secondaryKeys) positions to avoid allocations from appending.
+	entries := make([]IndexEntry, 0, len(secondaryKeys))
+	// storedColsInFam is shared across iterations for each family to avoid reallocation.
+	storedColsInFam := make([]valueEncodedColumn, 0)
+	var entryValue []byte
+	for _, key := range secondaryKeys {
 
 		if !secondaryIndex.Unique || containsNull {
 			// If the index is not unique or it contains a NULL value, append
 			// extraKey to the key in order to make it unique.
-			entry.Key = append(entry.Key, extraKey...)
+			key = append(key, extraKey...)
 		}
 
-		// Index keys are considered "sentinel" keys in that they do not have a
-		// column ID suffix.
-		entry.Key = keys.MakeFamilyKey(entry.Key, 0)
+		for _, family := range tableDesc.Families {
+			// Clear storedColsInFam from previous iterations allocations.
+			storedColsInFam = storedColsInFam[:0]
 
-		var entryValue []byte
-		if secondaryIndex.Unique {
-			// Note that a unique secondary index that contains a NULL column value
-			// will have extraKey appended to the key and stored in the value. We
-			// require extraKey to be appended to the key in order to make the key
-			// unique. We could potentially get rid of the duplication here but at
-			// the expense of complicating scanNode when dealing with unique
-			// secondary indexes.
-			entryValue = extraKey
-		} else {
-			// The zero value for an index-key is a 0-length bytes value.
-			entryValue = []byte{}
-		}
+			// Copy the key, as we will modify it and move it into the resulting IndexEntry.
+			entryKey := make([]byte, len(key))
+			copy(entryKey, key)
 
-		var cols []valueEncodedColumn
-		for _, id := range secondaryIndex.StoreColumnIDs {
-			cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
-		}
-		for _, id := range secondaryIndex.CompositeColumnIDs {
-			cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
-		}
-		sort.Sort(byID(cols))
+			// Get the stored columns that are part of this family.
+			// TODO (rohany): make this faster by computing this up front with
+			//  fastIntSets? I wonder if there was a way to reuse this computed
+			//  information across calls to EncodeSecondaryIndex.
+			for _, id := range secondaryIndex.StoreColumnIDs {
+				for _, col := range family.ColumnIDs {
+					if id == col {
+						storedColsInFam = append(storedColsInFam, valueEncodedColumn{id: col, isComposite: false})
+					}
+				}
+			}
 
-		var lastColID ColumnID
-		// Composite columns have their contents at the end of the value.
-		for _, col := range cols {
-			val := findColumnValue(col.id, colMap, values)
-			if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
+			// Place all composite column information in column family 0.
+			if family.ID == 0 {
+				for _, id := range secondaryIndex.CompositeColumnIDs {
+					storedColsInFam = append(storedColsInFam, valueEncodedColumn{id: id, isComposite: true})
+				}
+			}
+
+			// If we aren't storing any columns in this family and we are not the first family,
+			// skip onto the next family. We need to write family 0 no matter what to ensure
+			// that each row has at least one entry in the DB.
+			if len(storedColsInFam) == 0 && family.ID != 0 {
 				continue
 			}
-			if lastColID > col.id {
-				panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
+
+			sort.Sort(byID(storedColsInFam))
+
+			entryKey = keys.MakeFamilyKey(entryKey, uint32(family.ID))
+
+			if secondaryIndex.Unique && family.ID == 0 {
+				// Note that a unique secondary index that contains a NULL column value
+				// will have extraKey appended to the key and stored in the value. We
+				// require extraKey to be appended to the key in order to make the key
+				// unique. We could potentially get rid of the duplication here but at
+				// the expense of complicating scanNode when dealing with unique
+				// secondary indexes.
+				entryValue = extraKey
+			} else {
+				// The zero value for an index-key is a 0-length bytes value.
+				entryValue = []byte{}
 			}
-			colIDDiff := col.id - lastColID
-			lastColID = col.id
-			entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
-			if err != nil {
-				return []IndexEntry{}, err
+
+			var lastColID ColumnID
+			// Composite columns have their contents at the end of the value.
+			for _, col := range storedColsInFam {
+				val := findColumnValue(col.id, colMap, values)
+				if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
+					continue
+				}
+				if lastColID > col.id {
+					panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
+				}
+				colIDDiff := col.id - lastColID
+				lastColID = col.id
+				entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
+				if err != nil {
+					return []IndexEntry{}, err
+				}
 			}
+			entry := IndexEntry{Key: entryKey}
+			// If we are looking at family 0, encode the data as BYTES, as it might
+			// include encoded primary key columns. For other families, use the
+			// tuple encoding for the value.
+			if family.ID == 0 {
+				entry.Value.SetBytes(entryValue)
+			} else {
+				entry.Value.SetTuple(entryValue)
+			}
+			entries = append(entries, entry)
 		}
-		entry.Value.SetBytes(entryValue)
-		entries[i] = entry
 	}
 
 	return entries, nil
@@ -879,7 +922,8 @@ func EncodeSecondaryIndexes(
 		secondaryIndexEntries[i] = entries[0]
 
 		// This is specifically for inverted indexes which can have more than one entry
-		// associated with them.
+		// associated with them, or secondary indexes which store columns from
+		// multiple column families.
 		if len(entries) > 1 {
 			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
 		}
