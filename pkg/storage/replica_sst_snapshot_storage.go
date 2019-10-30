@@ -75,6 +75,11 @@ func (ssss *SSTSnapshotStorageScratch) filename(id int) string {
 }
 
 func (ssss *SSTSnapshotStorageScratch) createDir() error {
+	// TODO(peter): The directory creation needs to be plumbed through the Engine
+	// interface. Right now, this is creating a directory on disk even when the
+	// Engine has an in-memory filesystem. The only reason everything still works
+	// is because RocksDB MemEnvs allow the creation of files when the parent
+	// directory doesn't exist.
 	err := os.MkdirAll(ssss.snapDir, 0755)
 	ssss.dirCreated = ssss.dirCreated || err == nil
 	return err
