@@ -11,6 +11,7 @@
 package engine
 
 import (
+	"container/list"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -156,17 +157,111 @@ func ensureColumnar(ts *roachpb.InternalTimeSeriesData) {
 	ts.Samples = ts.Samples[:0]
 }
 
-// mergeTimeSeries combines two `InternalTimeSeriesData`s and returns the result as an
-// `InternalTimeSeriesData`.  The inputs cannot be merged if they have different start
-// timestamps or sample durations.
-func mergeTimeSeries(
-	oldTs, newTs roachpb.InternalTimeSeriesData,
-) (roachpb.InternalTimeSeriesData, error) {
-	if oldTs.StartTimestampNanos != newTs.StartTimestampNanos {
-		return roachpb.InternalTimeSeriesData{}, errors.Errorf("start timestamp mismatch")
+// MVCCValueMerger implements the `ValueMerger` interface. It buffers
+// deserialized `MVCCMetadata` in a linked list in order of decreasing age
+// in the DB, which it determines by whether the operand was added via
+// `MergeNewer()` or `MergeOlder()`. It merges these deserialized
+// operands when `Finish()` is called.
+//
+// It supports merging either all `roachpb.InternalTimeSeriesData` values
+// or all non-timeseries values. Attempting to merge a mixture of timeseries
+// and non-timeseries values will result in an error. In case of non-
+// timeseries the values are simply concatenated from old to new.
+type MVCCValueMerger struct {
+	valsOrderedOldToNew *list.List
+}
+
+const (
+	mvccChecksumSize = 4
+	mvccTagPos       = mvccChecksumSize
+	mvccHeaderSize   = mvccChecksumSize + 1
+)
+
+func deserializeMVCCValue(value []byte) (enginepb.MVCCMetadata, error) {
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(value, &meta); err != nil {
+		return enginepb.MVCCMetadata{}, errors.Errorf("corrupted operand value: %v", err)
 	}
-	if oldTs.SampleDurationNanos != newTs.SampleDurationNanos {
-		return roachpb.InternalTimeSeriesData{}, errors.Errorf("sample duration mismatch")
+	return meta, nil
+}
+
+func deserializeTimeSeries(value []byte) (roachpb.InternalTimeSeriesData, error) {
+	var ts roachpb.InternalTimeSeriesData
+	if err := protoutil.Unmarshal(value, &ts); err != nil {
+		return roachpb.InternalTimeSeriesData{}, errors.Errorf("corrupted timeseries: %v", err)
+	}
+	return ts, nil
+}
+
+func (t *MVCCValueMerger) MergeNewer(value []byte) error {
+	if t.valsOrderedOldToNew == nil {
+		t.valsOrderedOldToNew = list.New()
+	}
+	res, err := deserializeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	t.valsOrderedOldToNew.PushBack(res)
+	return nil
+}
+
+func (t *MVCCValueMerger) MergeOlder(value []byte) error {
+	if t.valsOrderedOldToNew == nil {
+		t.valsOrderedOldToNew = list.New()
+	}
+	res, err := deserializeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	t.valsOrderedOldToNew.PushFront(res)
+	return nil
+}
+
+func (t *MVCCValueMerger) Finish() ([]byte, error) {
+	isColumnar := false
+	front := t.valsOrderedOldToNew.Front()
+	if front == nil {
+		return nil, errors.Errorf("empty merge unsupported")
+	}
+
+	isTimeSeries := func(value enginepb.MVCCMetadata) (bool, error) {
+		if len(value.RawBytes) < mvccHeaderSize {
+			return false, errors.Errorf("operand value too short")
+		}
+		return value.RawBytes[mvccTagPos] == byte(roachpb.ValueType_TIMESERIES), nil
+	}
+	isTs, err := isTimeSeries(front.Value.(enginepb.MVCCMetadata))
+	if err != nil {
+		return nil, err
+	}
+
+	if !isTs {
+		// Concatenate non-timeseries operands from old to new
+		opValues := make([][]byte, 0, t.valsOrderedOldToNew.Len())
+		totalOpLen := 0
+		for e := t.valsOrderedOldToNew.Front(); e != nil; e = e.Next() {
+			val := e.Value.(enginepb.MVCCMetadata)
+			isTs, err := isTimeSeries(val)
+			if err != nil {
+				return nil, err
+			}
+			if isTs {
+				return nil, errors.Errorf("inconsistent value types for non-timeseries merge")
+			}
+			opValues = append(opValues, val.RawBytes[mvccHeaderSize:])
+			totalOpLen += len(val.RawBytes[mvccHeaderSize:])
+		}
+		var meta enginepb.MVCCMetadata
+		meta.RawBytes = make([]byte, mvccHeaderSize, mvccHeaderSize+totalOpLen)
+		meta.RawBytes[mvccTagPos] = byte(roachpb.ValueType_BYTES)
+		for _, opValue := range opValues {
+			meta.RawBytes = append(meta.RawBytes, opValue...)
+		}
+		res, err := protoutil.Marshal(&meta)
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
 	}
 
 	// TODO(ajkr): confirm it is the case that (1) today's CRDB always merges timeseries
@@ -174,92 +269,57 @@ func mergeTimeSeries(
 	// compatible with any version that supports row format only. Then we can drop support
 	// for row format entirely. It requires significant cleanup effort as many tests target
 	// the row format.
-	if len(oldTs.Offset) > 0 || len(newTs.Offset) > 0 {
-		ensureColumnar(&oldTs)
-		ensureColumnar(&newTs)
-		proto.Merge(&oldTs, &newTs)
-		sortAndDeduplicateColumns(&oldTs)
-	} else {
-		proto.Merge(&oldTs, &newTs)
-		sortAndDeduplicateRows(&oldTs)
-	}
-	return oldTs, nil
-}
-
-// mergeTimeSeriesValues attempts to merge two values which contain
-// InternalTimeSeriesData messages.
-func mergeTimeSeriesValues(oldTsBytes, newTsBytes []byte) ([]byte, error) {
-	var oldTs, newTs, mergedTs roachpb.InternalTimeSeriesData
-	if err := protoutil.Unmarshal(oldTsBytes, &oldTs); err != nil {
-		return nil, errors.Errorf("corrupted old timeseries: %v", err)
-	}
-	if err := protoutil.Unmarshal(newTsBytes, &newTs); err != nil {
-		return nil, errors.Errorf("corrupted new timeseries: %v", err)
-	}
-
-	var err error
-	if mergedTs, err = mergeTimeSeries(oldTs, newTs); err != nil {
-		return nil, errors.Errorf("mergeTimeSeries: %v", err)
-	}
-
-	res, err := protoutil.Marshal(&mergedTs)
-	if err != nil {
-		return nil, errors.Errorf("corrupted merged timeseries: %v", err)
-	}
-	return res, nil
-}
-
-// merge combines two serialized `MVCCMetadata`s and returns the result as a serialized
-// `MVCCMetadata`.
-//
-// Replay Advisory: Because merge commands pass through raft, it is possible
-// for merging values to be "replayed". Currently, the only actual use of
-// the merge system is for time series data, which is safe against replay;
-// however, this property is not general for all potential mergeable types.
-// If a future need arises to merge another type of data, replay protection
-// will likely need to be a consideration.
-func merge(key, oldValue, newValue, buf []byte) ([]byte, error) {
-	const (
-		checksumSize = 4
-		tagPos       = checksumSize
-		headerSize   = checksumSize + 1
-	)
-
-	var oldMeta, newMeta, mergedMeta enginepb.MVCCMetadata
-	if err := protoutil.Unmarshal(oldValue, &oldMeta); err != nil {
-		return nil, errors.Errorf("corrupted old operand value: %v", err)
-	}
-	if len(oldMeta.RawBytes) < headerSize {
-		return nil, errors.Errorf("old operand value too short")
-	}
-	if err := protoutil.Unmarshal(newValue, &newMeta); err != nil {
-		return nil, errors.Errorf("corrupted new operand value: %v", err)
-	}
-	if len(newMeta.RawBytes) < headerSize {
-		return nil, errors.Errorf("new operand value too short")
-	}
-
-	tsTag := byte(roachpb.ValueType_TIMESERIES)
-	if oldMeta.RawBytes[tagPos] == tsTag || newMeta.RawBytes[tagPos] == tsTag {
-		if oldMeta.RawBytes[tagPos] != tsTag || newMeta.RawBytes[tagPos] != tsTag {
+	var merged roachpb.InternalTimeSeriesData
+	for e := t.valsOrderedOldToNew.Front(); e != nil; e = e.Next() {
+		isTs, err := isTimeSeries(e.Value.(enginepb.MVCCMetadata))
+		if err != nil {
+			return nil, err
+		}
+		if !isTs {
 			return nil, errors.Errorf("inconsistent value types for timeseries merge")
 		}
-		tsBytes, err := mergeTimeSeriesValues(
-			oldMeta.RawBytes[headerSize:], newMeta.RawBytes[headerSize:])
+		ts, err := deserializeTimeSeries(e.Value.(enginepb.MVCCMetadata).RawBytes[mvccHeaderSize:])
 		if err != nil {
-			return nil, errors.Errorf("mergeTimeSeriesValues: %v", err)
+			return nil, err
 		}
-		header := make([]byte, headerSize)
-		header[tagPos] = tsTag
-		mergedMeta.RawBytes = append(header, tsBytes...)
-	} else {
-		// For non-timeseries values, merge is a simple append.
-		mergedMeta.RawBytes = append(oldMeta.RawBytes, newMeta.RawBytes[headerSize:]...)
-	}
+		if e == t.valsOrderedOldToNew.Front() {
+			merged.StartTimestampNanos = ts.StartTimestampNanos
+			merged.SampleDurationNanos = ts.SampleDurationNanos
+		} else {
+			if ts.StartTimestampNanos != merged.StartTimestampNanos {
+				return nil, errors.Errorf("start timestamp mismatch")
+			}
+			if ts.SampleDurationNanos != merged.SampleDurationNanos {
+				return nil, errors.Errorf("sample duration mismatch")
+			}
+		}
 
-	res, err := protoutil.Marshal(&mergedMeta)
+		if !isColumnar && len(ts.Offset) > 0 {
+			ensureColumnar(&merged)
+			ensureColumnar(&ts)
+			isColumnar = true
+		} else if isColumnar {
+			ensureColumnar(&ts)
+		}
+		proto.Merge(&merged, &ts)
+	}
+	if isColumnar {
+		sortAndDeduplicateColumns(&merged)
+	} else {
+		sortAndDeduplicateRows(&merged)
+	}
+	tsBytes, err := protoutil.Marshal(&merged)
 	if err != nil {
-		return nil, errors.Errorf("corrupted merged value: %v", err)
+		return nil, err
+	}
+	var meta enginepb.MVCCMetadata
+	tsTag := byte(roachpb.ValueType_TIMESERIES)
+	header := make([]byte, mvccHeaderSize)
+	header[mvccTagPos] = tsTag
+	meta.RawBytes = append(header, tsBytes...)
+	res, err := protoutil.Marshal(&meta)
+	if err != nil {
+		return nil, err
 	}
 	return res, nil
 }
