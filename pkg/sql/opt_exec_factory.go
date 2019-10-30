@@ -1196,31 +1196,6 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 	return node, nil
 }
 
-// mutationRowIdxToReturnIdx returns the mapping from the origColDescs to the
-// returnColDescs (where returnColDescs is a subset of the origColDescs).
-// -1 is used for columns not part of the returnColDescs.
-// It is the responsibility of the caller to ensure a mapping is possible.
-func mutationRowIdxToReturnIdx(origColDescs, returnColDescs []sqlbase.ColumnDescriptor) []int {
-	// Create a ColumnID to index map.
-	colIDToRetIndex := row.ColIDtoRowIndexFromCols(origColDescs)
-
-	// Initialize the rowIdxToTabColIdx array.
-	rowIdxToRetIdx := make([]int, len(origColDescs))
-	for i := range rowIdxToRetIdx {
-		// -1 value indicates that this column is not being returned.
-		rowIdxToRetIdx[i] = -1
-	}
-
-	// Set the appropriate index values for the returning columns.
-	for i := range returnColDescs {
-		if idx, ok := colIDToRetIndex[returnColDescs[i].ID]; ok {
-			rowIdxToRetIdx[idx] = i
-		}
-	}
-
-	return rowIdxToRetIdx
-}
-
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
@@ -1257,37 +1232,30 @@ func (ef *execFactory) ConstructInsert(
 		return nil, err
 	}
 
-	// Determine the relational type of the generated insert node.
-	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
-	var tabColIdxToRetIdx []int
-	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
-
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
-
-		// Update the tabColIdxToRetIdx for the mutation. Insert always
-		// returns non-mutation columns in the same order they are defined in
-		// the table.
-		tabColIdxToRetIdx = mutationRowIdxToReturnIdx(tabDesc.Columns, returnColDescs)
-	}
-
 	// Regular path for INSERT.
 	ins := insertNodePool.Get().(*insertNode)
 	*ins = insertNode{
-		source:  input.(planNode),
-		columns: returnCols,
+		source: input.(planNode),
 		run: insertRun{
 			ti:          tableInserter{ri: ri},
 			checkHelper: checkHelper,
-			rowsNeeded:  rowsNeeded,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				Cols:    tabDesc.Columns,
 				Mapping: ri.InsertColIDtoRowIndex,
 			},
-			insertCols:        ri.InsertCols,
-			tabColIdxToRetIdx: tabColIdxToRetIdx,
+			insertCols: ri.InsertCols,
 		},
+	}
+
+	// If rows are not needed, no columns are returned.
+	if rowsNeeded {
+		returnColDescs := makeColDescList(table, returnColOrdSet)
+		ins.columns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
+		// non-mutation columns in the same order they are defined in the table.
+		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
+		ins.run.rowsNeeded = true
 	}
 
 	if allowAutoCommit && ef.planner.autoCommit {
@@ -1376,29 +1344,6 @@ func (ef *execFactory) ConstructUpdate(
 	// computed a correct set that can sometimes be smaller.
 	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
 
-	// Determine the relational type of the generated update node.
-	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
-	var rowIdxToRetIdx []int
-	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
-
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
-
-		// Add the passthrough columns to the returning columns.
-		returnCols = append(returnCols, passthrough...)
-
-		// Update the rowIdxToRetIdx for the mutation. Update returns
-		// the non-mutation columns specified, in the same order they are
-		// defined in the table.
-		//
-		// The Updater derives/stores the fetch columns of the mutation and
-		// since the return columns are always a subset of the fetch columns,
-		// we can use use the fetch columns to generate the mapping for the
-		// returned rows.
-		rowIdxToRetIdx = mutationRowIdxToReturnIdx(ru.FetchCols, returnColDescs)
-	}
-
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
@@ -1409,12 +1354,10 @@ func (ef *execFactory) ConstructUpdate(
 
 	upd := updateNodePool.Get().(*updateNode)
 	*upd = updateNode{
-		source:  input.(planNode),
-		columns: returnCols,
+		source: input.(planNode),
 		run: updateRun{
 			tu:          tableUpdater{ru: ru},
 			checkHelper: checkHelper,
-			rowsNeeded:  rowsNeeded,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
 				Cols:         ru.FetchCols,
@@ -1423,9 +1366,27 @@ func (ef *execFactory) ConstructUpdate(
 			sourceSlots:    sourceSlots,
 			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
 			updateColsIdx:  updateColsIdx,
-			rowIdxToRetIdx: rowIdxToRetIdx,
 			numPassthrough: len(passthrough),
 		},
+	}
+
+	// If rows are not needed, no columns are returned.
+	if rowsNeeded {
+		returnColDescs := makeColDescList(table, returnColOrdSet)
+
+		upd.columns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+		// Add the passthrough columns to the returning columns.
+		upd.columns = append(upd.columns, passthrough...)
+
+		// Set the rowIdxToRetIdx for the mutation. Update returns the non-mutation
+		// columns specified, in the same order they are defined in the table.
+		//
+		// The Updater derives/stores the fetch columns of the mutation and
+		// since the return columns are always a subset of the fetch columns,
+		// we can use use the fetch columns to generate the mapping for the
+		// returned rows.
+		upd.run.rowIdxToRetIdx = row.ColMapping(ru.FetchCols, returnColDescs)
+		upd.run.rowsNeeded = true
 	}
 
 	if allowAutoCommit && ef.planner.autoCommit {
@@ -1520,22 +1481,6 @@ func (ef *execFactory) ConstructUpsert(
 	// computed a correct set that can sometimes be smaller.
 	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
 
-	// Determine the relational type of the generated upsert node.
-	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
-	var returnColDescs []sqlbase.ColumnDescriptor
-	var tabColIdxToRetIdx []int
-	if rowsNeeded {
-		returnColDescs = makeColDescList(table, returnColOrdSet)
-
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
-
-		// Update the tabColIdxToRetIdx for the mutation. Upsert returns
-		// non-mutation columns specified, in the same order they are defined
-		// in the table.
-		tabColIdxToRetIdx = mutationRowIdxToReturnIdx(tabDesc.Columns, returnColDescs)
-	}
-
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
@@ -1547,8 +1492,7 @@ func (ef *execFactory) ConstructUpsert(
 	// Instantiate the upsert node.
 	ups := upsertNodePool.Get().(*upsertNode)
 	*ups = upsertNode{
-		source:  input.(planNode),
-		columns: returnCols,
+		source: input.(planNode),
 		run: upsertRun{
 			checkHelper: checkHelper,
 			insertCols:  ri.InsertCols,
@@ -1556,21 +1500,31 @@ func (ef *execFactory) ConstructUpsert(
 				Cols:    tabDesc.Columns,
 				Mapping: ri.InsertColIDtoRowIndex,
 			},
-			tw: &optTableUpserter{
+			tw: optTableUpserter{
 				tableUpserterBase: tableUpserterBase{
-					ri:          ri,
-					alloc:       &ef.planner.alloc,
-					collectRows: rowsNeeded,
+					ri:    ri,
+					alloc: &ef.planner.alloc,
 				},
-				canaryOrdinal:     int(canaryCol),
-				fkTables:          fkTables,
-				fetchCols:         fetchColDescs,
-				updateCols:        updateColDescs,
-				returnCols:        returnColDescs,
-				ru:                ru,
-				tabColIdxToRetIdx: tabColIdxToRetIdx,
+				canaryOrdinal: int(canaryCol),
+				fkTables:      fkTables,
+				fetchCols:     fetchColDescs,
+				updateCols:    updateColDescs,
+				ru:            ru,
 			},
 		},
+	}
+
+	// If rows are not needed, no columns are returned.
+	if rowsNeeded {
+		returnColDescs := makeColDescList(table, returnColOrdSet)
+		ups.columns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Update the tabColIdxToRetIdx for the mutation. Upsert returns
+		// non-mutation columns specified, in the same order they are defined
+		// in the table.
+		ups.run.tw.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
+		ups.run.tw.returnCols = returnColDescs
+		ups.run.tw.collectRows = true
 	}
 
 	if allowAutoCommit && ef.planner.autoCommit {
@@ -1639,31 +1593,25 @@ func (ef *execFactory) ConstructDelete(
 	// computed a correct set that can sometimes be smaller.
 	rd.FetchCols = rd.FetchCols[:len(fetchColDescs)]
 
-	// Determine the relational type of the generated delete node.
-	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
-	var rowIdxToRetIdx []int
-	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
-
-		// Delete returns the non-mutation columns specified, in the same
-		// order they are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
-
-		// Update the rowIdxToReturnIdx for the mutation.
-		rowIdxToRetIdx = mutationRowIdxToReturnIdx(td.FetchCols, returnColDescs)
-	}
-
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
 	*del = deleteNode{
-		source:  input.(planNode),
-		columns: returnCols,
+		source: input.(planNode),
 		run: deleteRun{
-			td:             tableDeleter{rd: rd, alloc: &ef.planner.alloc},
-			rowsNeeded:     rowsNeeded,
-			rowIdxToRetIdx: rowIdxToRetIdx,
+			td: tableDeleter{rd: rd, alloc: &ef.planner.alloc},
 		},
+	}
+
+	// Determine the relational type of the generated delete node.
+	// If rows are not needed, no columns are returned.
+	if rowsNeeded {
+		returnColDescs := makeColDescList(table, returnColOrdSet)
+		// Delete returns the non-mutation columns specified, in the same
+		// order they are defined in the table.
+		del.columns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		del.run.rowIdxToRetIdx = row.ColMapping(rd.FetchCols, returnColDescs)
+		del.run.rowsNeeded = true
 	}
 
 	if allowAutoCommit && ef.planner.autoCommit {

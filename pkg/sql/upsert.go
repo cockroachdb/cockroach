@@ -41,11 +41,7 @@ type upsertNode struct {
 
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
-	// In contrast with the run part of insert/delete/update, the
-	// upsertRun has a tableWriter interface reference instead of
-	// embedding a direct struct because it can run with either the
-	// fastTableUpdater or the regular tableUpdater.
-	tw          batchedTableWriter
+	tw          optTableUpserter
 	checkHelper *sqlbase.CheckHelper
 
 	// insertCols are the columns being inserted/upserted into.
@@ -223,9 +219,7 @@ func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.tw.bat
 
 func (n *upsertNode) Close(ctx context.Context) {
 	n.source.Close(ctx)
-	if n.run.tw != nil {
-		n.run.tw.close(ctx)
-	}
+	n.run.tw.close(ctx)
 	*n = upsertNode{}
 	upsertNodePool.Put(n)
 }
