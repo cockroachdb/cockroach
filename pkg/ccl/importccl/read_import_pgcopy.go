@@ -57,10 +57,6 @@ func newPgCopyReader(
 func (d *pgCopyReader) start(ctx ctxgroup.Group) {
 }
 
-func (d *pgCopyReader) inputFinished(ctx context.Context) {
-	close(d.conv.KvCh)
-}
-
 func (d *pgCopyReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
