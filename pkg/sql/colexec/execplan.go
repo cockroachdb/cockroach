@@ -1051,7 +1051,7 @@ func planSelectionOperators(
 		if constArg, ok := t.Right.(tree.Datum); ok {
 			if t.Operator == tree.Like || t.Operator == tree.NotLike {
 				negate := t.Operator == tree.NotLike
-				op, err := GetLikeOperator(
+				op, err = GetLikeOperator(
 					ctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate)
 				return op, resultIdx, ct, memUsageLeft, err
 			}
@@ -1062,7 +1062,18 @@ func planSelectionOperators(
 					err = errors.Errorf("IN is only supported for constant expressions")
 					return nil, resultIdx, ct, memUsed, err
 				}
-				op, err := GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
+				op, err = GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
+				return op, resultIdx, ct, memUsageLeft, err
+			}
+			if t.Operator == tree.IsDistinctFrom || t.Operator == tree.IsNotDistinctFrom {
+				if t.Right != tree.DNull {
+					err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
+					return nil, resultIdx, ct, memUsageLeft, err
+				}
+				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
+				// negate when IS DISTINCT FROM is used.
+				negate := t.Operator == tree.IsDistinctFrom
+				op = newIsNullSelOp(leftOp, leftIdx, negate)
 				return op, resultIdx, ct, memUsageLeft, err
 			}
 			op, err := GetSelectionConstOperator(lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx, constArg)
@@ -1298,6 +1309,15 @@ func planProjectionExpr(
 				return nil, resultIdx, ct, leftMem, err
 			}
 			op, err = GetInProjectionOperator(&ct[leftIdx], leftOp, leftIdx, resultIdx, datumTuple, negate)
+		} else if binOp == tree.IsDistinctFrom || binOp == tree.IsNotDistinctFrom {
+			if right != tree.DNull {
+				err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
+				return nil, resultIdx, ct, leftMem, err
+			}
+			// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
+			// negate when IS DISTINCT FROM is used.
+			negate := binOp == tree.IsDistinctFrom
+			op = newIsNullProjOp(leftOp, leftIdx, resultIdx, negate)
 		} else {
 			op, err = GetProjectionRConstOperator(&ct[leftIdx], right.ResolvedType(), binOp, leftOp, leftIdx, rConstArg, resultIdx)
 		}

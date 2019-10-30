@@ -985,7 +985,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ----
 ·     distributed  false          ·       ·
-·     vectorized   false          ·       ·
+·     vectorized   true           ·       ·
 scan  ·            ·              (x, y)  ·
 ·     table        xy@primary     ·       ·
 ·     spans        ALL            ·       ·
