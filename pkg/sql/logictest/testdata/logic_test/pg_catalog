@@ -44,6 +44,7 @@ pg_locks
 pg_matviews
 pg_namespace
 pg_operator
+pg_prepared_statements
 pg_prepared_xacts
 pg_proc
 pg_range
@@ -117,6 +118,7 @@ pg_locks
 pg_matviews
 pg_namespace
 pg_operator
+pg_prepared_statements
 pg_prepared_xacts
 pg_proc
 pg_range
@@ -1441,26 +1443,27 @@ objoid      classoid    objsubid  description
 4294967211  4294967230  0         available materialized views (empty - feature does not exist)
 4294967210  4294967230  0         available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
 4294967209  4294967230  0         operators (incomplete)
-4294967208  4294967230  0         prepared transactions (empty - feature does not exist)
-4294967207  4294967230  0         built-in functions (incomplete)
-4294967206  4294967230  0         range types (empty - feature does not exist)
-4294967205  4294967230  0         rewrite rules (empty - feature does not exist)
-4294967204  4294967230  0         database roles
-4294967191  4294967230  0         security labels (empty - feature does not exist)
-4294967203  4294967230  0         security labels (empty)
-4294967202  4294967230  0         sequences (see also information_schema.sequences)
-4294967201  4294967230  0         session variables (incomplete)
-4294967200  4294967230  0         shared dependencies (empty - not implemented)
+4294967208  4294967230  0         prepared statements
+4294967207  4294967230  0         prepared transactions (empty - feature does not exist)
+4294967206  4294967230  0         built-in functions (incomplete)
+4294967205  4294967230  0         range types (empty - feature does not exist)
+4294967204  4294967230  0         rewrite rules (empty - feature does not exist)
+4294967203  4294967230  0         database roles
+4294967190  4294967230  0         security labels (empty - feature does not exist)
+4294967202  4294967230  0         security labels (empty)
+4294967201  4294967230  0         sequences (see also information_schema.sequences)
+4294967200  4294967230  0         session variables (incomplete)
+4294967199  4294967230  0         shared dependencies (empty - not implemented)
 4294967222  4294967230  0         shared object comments
-4294967190  4294967230  0         shared security labels (empty - feature not supported)
-4294967192  4294967230  0         backend access statistics (empty - monitoring works differently in CockroachDB)
-4294967197  4294967230  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967196  4294967230  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967195  4294967230  0         triggers (empty - feature does not exist)
-4294967194  4294967230  0         scalar types (incomplete)
-4294967199  4294967230  0         database users
-4294967198  4294967230  0         local to remote user mapping (empty - feature does not exist)
-4294967193  4294967230  0         view definitions (incomplete - see also information_schema.views)
+4294967189  4294967230  0         shared security labels (empty - feature not supported)
+4294967191  4294967230  0         backend access statistics (empty - monitoring works differently in CockroachDB)
+4294967196  4294967230  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967195  4294967230  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967194  4294967230  0         triggers (empty - feature does not exist)
+4294967193  4294967230  0         scalar types (incomplete)
+4294967198  4294967230  0         database users
+4294967197  4294967230  0         local to remote user mapping (empty - feature does not exist)
+4294967192  4294967230  0         view definitions (incomplete - see also information_schema.views)
 
 ## pg_catalog.pg_shdescription
 
@@ -1834,6 +1837,26 @@ SELECT unnest((SELECT proargtypes FROM pg_proc WHERE proname='split_part'));
 25
 25
 20
+
+subtest pg_catalog.pg_prepare_statement
+
+statement ok
+CREATE TABLE types(a timestamptz, b integer)
+
+statement ok
+PREPARE test_insert_statement (integer, timestamptz) AS INSERT INTO types VALUES ($2, $1)
+
+statement ok
+PREPARE test_select_statement AS SELECT * FROM types
+
+query TTTB
+select name, statement, parameter_types, from_sql from pg_prepared_statements ORDER BY 1
+----
+test_insert_statement  PREPARE test_insert_statement (int, timestamptz) AS INSERT INTO types VALUES ($2, $1)  {bigint,"'timestamp with time zone'"}  true
+test_select_statement  PREPARE test_select_statement AS SELECT * FROM types                                   {}                                     true
+
+statement ok
+DROP TABLE types;
 
 ## TODO(masha): #16769
 #statement ok
