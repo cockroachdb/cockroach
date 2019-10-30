@@ -21,6 +21,7 @@ package colexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -35,6 +36,9 @@ import (
 
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
 
 // _TYPES_T is the template type variable for coltypes.T. It will be replaced by
 // coltypes.Foo for each type Foo in the coltypes.T type.
