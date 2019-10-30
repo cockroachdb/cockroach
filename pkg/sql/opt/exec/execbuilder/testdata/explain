@@ -21,7 +21,7 @@ EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
 ----
 tree       field        description
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 render     ·            ·
  └── scan  ·            ·
 ·          table        jobs@jobs_status_created_idx

@@ -159,7 +159,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.TimeFamily:
 		return tree.MakeDTime(timeofday.Random(rng))
 	case types.TimestampFamily:
-		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return tree.MakeDTimestamp(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)), time.Microsecond)
 	case types.IntervalFamily:
 		sign := 1 - rng.Int63n(2)*2
 		return &tree.DInterval{Duration: duration.MakeDuration(
