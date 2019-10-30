@@ -73,17 +73,10 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 	group.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "convertcsv")
 		defer tracing.FinishSpan(span)
-
-		defer close(c.kvCh)
-
 		return ctxgroup.GroupWorkers(ctx, c.parallelism, func(ctx context.Context) error {
 			return c.convertRecordWorker(ctx)
 		})
 	})
-}
-
-func (c *csvInputReader) inputFinished(_ context.Context) {
-	close(c.recordCh)
 }
 
 func (c *csvInputReader) readFiles(
@@ -92,6 +85,7 @@ func (c *csvInputReader) readFiles(
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 ) error {
+	defer close(c.recordCh)
 	return readInputFiles(ctx, dataFiles, format, c.readFile, makeExternalStorage)
 }
 

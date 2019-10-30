@@ -37,25 +37,35 @@ func runImport(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-	kvCh chan row.KVBatch,
 ) (*roachpb.BulkOpSummary, error) {
-	group := ctxgroup.WithContext(ctx)
-
+	// Used to send ingested import rows to the KV layer.
+	kvCh := make(chan row.KVBatch, 10)
 	conv, err := makeInputConverter(spec, flowCtx.NewEvalCtx(), kvCh)
 	if err != nil {
 		return nil, err
 	}
-	conv.start(group)
 
+	// This group holds the go routines that are responsible for producing KV batches.
+	// After this group is done, we need to close kvCh.
+	// Depending on the import implementation both conv.start and conv.readFiles can
+	// produce KVs so we should close the channel only after *both* are finished.
+	producerGroup := ctxgroup.WithContext(ctx)
+	conv.start(producerGroup)
 	// Read input files into kvs
-	group.GoCtx(func(ctx context.Context) error {
+	producerGroup.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
-		defer conv.inputFinished(ctx)
 		return conv.readFiles(ctx, spec.Uri, spec.Format, flowCtx.Cfg.ExternalStorage)
 	})
 
-	// Ingest the KVs that the producer emitted to the chan and the row result
+	// This group links together the producers (via producerGroup) and the KV ingester.
+	group := ctxgroup.WithContext(ctx)
+	group.Go(func() error {
+		defer close(kvCh)
+		return producerGroup.Wait()
+	})
+
+	// Ingest the KVs that the producer group emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *roachpb.BulkOpSummary
 	group.GoCtx(func(ctx context.Context) error {
@@ -278,7 +288,6 @@ type inputConverter interface {
 		format roachpb.IOFileFormat,
 		makeExternalStorage cloud.ExternalStorageFactory,
 	) error
-	inputFinished(ctx context.Context)
 }
 
 func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
