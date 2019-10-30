@@ -309,7 +309,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	defer e.Close()
 
 	for _, kv := range mvccKVsFromStrs([]strKv{
@@ -465,7 +465,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	defer e.Close()
 
 	for _, kv := range mvccKVsFromStrs([]strKv{

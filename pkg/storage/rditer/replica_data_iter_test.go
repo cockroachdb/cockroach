@@ -172,7 +172,7 @@ func verifyRDIter(
 func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
 	desc := &roachpb.RangeDescriptor{
@@ -193,7 +193,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 func TestReplicaDataIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
 	descPre := roachpb.RangeDescriptor{

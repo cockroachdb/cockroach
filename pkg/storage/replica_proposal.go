@@ -484,9 +484,9 @@ func addSSTablePreApply(
 	canSkipSeqNo := st.Version.IsActive(cluster.VersionUnreplicatedRaftTruncatedState)
 
 	copied := false
-	if inmem, ok := eng.(engine.InMem); ok {
+	if eng.InMem() {
 		path = fmt.Sprintf("%x", checksum)
-		if err := inmem.WriteFile(path, sst.Data); err != nil {
+		if err := eng.WriteFile(path, sst.Data); err != nil {
 			panic(err)
 		}
 	} else {

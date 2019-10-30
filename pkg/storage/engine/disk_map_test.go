@@ -193,7 +193,7 @@ func TestRocksDBMap(t *testing.T) {
 	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	runTestForEngine(ctx, t, "testdata/diskmap", &rocksDBTempEngine{db: e.RocksDB})
+	runTestForEngine(ctx, t, "testdata/diskmap", &rocksDBTempEngine{db: e})
 }
 
 func TestRocksDBMultiMap(t *testing.T) {
@@ -202,7 +202,7 @@ func TestRocksDBMultiMap(t *testing.T) {
 	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	runTestForEngine(ctx, t, "testdata/diskmap_duplicates", &rocksDBTempEngine{db: e.RocksDB})
+	runTestForEngine(ctx, t, "testdata/diskmap_duplicates", &rocksDBTempEngine{db: e})
 }
 
 func TestRocksDBMapClose(t *testing.T) {

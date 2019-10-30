@@ -538,7 +538,7 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 	return r, nil
 }
 
-func newRocksDBInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
+func newRocksDBInMem(attrs roachpb.Attributes, cacheSize int64) *RocksDB {
 	cache := NewRocksDBCache(cacheSize)
 	// The cache starts out with a refcount of one, and creating the engine
 	// from it adds another refcount, at which point we release one of them.
@@ -546,11 +546,10 @@ func newRocksDBInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
 
 	// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
 	// https://github.com/cockroachdb/cockroach/issues/16750
-	rdb, err := newMemRocksDB(attrs, cache, 512<<20 /* MaxSize: 512 MiB */)
+	db, err := newMemRocksDB(attrs, cache, 512<<20 /* MaxSize: 512 MiB */)
 	if err != nil {
 		panic(err)
 	}
-	db := InMem{RocksDB: rdb}
 	return db
 }
 
@@ -2759,7 +2758,7 @@ func dbClearIterRange(rdb *C.DBEngine, iter Iterator, start, end roachpb.Key) er
 // RocksDBSstFileReader allows iteration over a number of non-overlapping
 // sstables exported by `RocksDBSstFileWriter`.
 type RocksDBSstFileReader struct {
-	rocksDB         InMem
+	rocksDB         *RocksDB
 	filenameCounter int
 }
 
@@ -2777,7 +2776,7 @@ func MakeRocksDBSstFileReader() RocksDBSstFileReader {
 // the RocksDB documentation on `IngestExternalFile` for the various
 // restrictions on what can be added.
 func (fr *RocksDBSstFileReader) IngestExternalFile(data []byte) error {
-	if fr.rocksDB.RocksDB == nil {
+	if fr.rocksDB == nil {
 		return errors.New("cannot call IngestExternalFile on a closed reader")
 	}
 
@@ -2803,7 +2802,7 @@ func (fr *RocksDBSstFileReader) IngestExternalFile(data []byte) error {
 func (fr *RocksDBSstFileReader) Iterate(
 	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
 ) error {
-	if fr.rocksDB.RocksDB == nil {
+	if fr.rocksDB == nil {
 		return errors.New("cannot call Iterate on a closed reader")
 	}
 	return fr.rocksDB.Iterate(start, end, f)
@@ -2811,16 +2810,16 @@ func (fr *RocksDBSstFileReader) Iterate(
 
 // NewIterator returns an iterator over this sst reader.
 func (fr *RocksDBSstFileReader) NewIterator(opts IterOptions) Iterator {
-	return newRocksDBIterator(fr.rocksDB.rdb, opts, fr.rocksDB, fr.rocksDB.RocksDB)
+	return newRocksDBIterator(fr.rocksDB.rdb, opts, fr.rocksDB, fr.rocksDB)
 }
 
 // Close finishes the reader.
 func (fr *RocksDBSstFileReader) Close() {
-	if fr.rocksDB.RocksDB == nil {
+	if fr.rocksDB == nil {
 		return
 	}
-	fr.rocksDB.RocksDB.Close()
-	fr.rocksDB.RocksDB = nil
+	fr.rocksDB.Close()
+	fr.rocksDB = nil
 }
 
 // CheckForKeyCollisions indicates if the two iterators collide on any keys.
@@ -3080,9 +3079,10 @@ func (r *RocksDB) IngestExternalFiles(
 	))
 }
 
-// WriteFile writes data to a file in this RocksDB's env.
-func (r *RocksDB) WriteFile(filename string, data []byte) error {
-	return statusToError(C.DBEnvWriteFile(r.rdb, goToCSlice([]byte(filename)), goToCSlice(data)))
+// InMem returns true if the receiver is an in-memory engine and false
+// otherwise.
+func (r *RocksDB) InMem() bool {
+	return r.cfg.Dir == ""
 }
 
 // OpenFile opens a DBFile, which is essentially a rocksdb WritableFile
@@ -3105,6 +3105,11 @@ func (r *RocksDB) ReadFile(filename string) ([]byte, error) {
 	}
 	defer C.free(unsafe.Pointer(data.data))
 	return cSliceToGoBytes(data), nil
+}
+
+// WriteFile writes data to a file in this RocksDB's env.
+func (r *RocksDB) WriteFile(filename string, data []byte) error {
+	return statusToError(C.DBEnvWriteFile(r.rdb, goToCSlice([]byte(filename)), goToCSlice(data)))
 }
 
 // DeleteFile deletes the file with the given filename from this RocksDB's env.
