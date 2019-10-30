@@ -113,6 +113,19 @@ const (
 	InterleavedFormatVersion
 )
 
+// IndexDescriptorVersion is a custom type for IndexDescriptor Versions.
+type IndexDescriptorVersion uint32
+
+const (
+	// BaseIndexFormatVersion corresponds to the original encoding of secondary indexes that
+	// don't respect table level column family definitions. We allow the 0 value of the type to
+	// have a value so that existing index descriptors are denoted as having the base format.
+	BaseIndexFormatVersion IndexDescriptorVersion = iota
+	// SecondaryIndexFamilyFormatVersion corresponds to the encoding of secondary indexes that
+	// use table level column family definitions.
+	SecondaryIndexFamilyFormatVersion
+)
+
 // MutationID is a custom type for TableDescriptor mutations.
 type MutationID uint32
 

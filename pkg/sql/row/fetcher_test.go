@@ -508,6 +508,18 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		sqlutils.RowModuloFn(storingMods[1]),
 	)
 
+	// Add family definitions to each table.
+	tablesWithFamilies := make(map[string]*fetcherEntryArgs)
+	for tableName, table := range tables {
+		argCopy := *table
+		argCopy.schema = argCopy.schema + ", FAMILY (p), FAMILY (idx), FAMILY (s1), FAMILY (s2)"
+		familyName := tableName + "_with_families"
+		tablesWithFamilies[familyName] = &argCopy
+	}
+	for tableName, args := range tablesWithFamilies {
+		tables[tableName] = args
+	}
+
 	r := sqlutils.MakeSQLRunner(sqlDB)
 	// Initialize tables first.
 	for tableName, table := range tables {
