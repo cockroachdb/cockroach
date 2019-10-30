@@ -581,3 +581,93 @@ query T
 SELECT crdb_internal.cluster_name()
 ----
 testclustername
+
+
+# Verify that privileged tables in zones cannot be seen by other users.
+subtest regression_40917
+
+user testuser
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0   RANGE default
+16  RANGE meta
+17  RANGE system
+18  RANGE timeseries
+22  RANGE liveness
+
+query TT
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] ORDER BY 1
+----
+DATABASE system                                   ALTER DATABASE system CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 90000,
+                                                  num_replicas = 5,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+DATABASE testdb                                   ALTER DATABASE testdb CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 90000,
+                                                  num_replicas = 3,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+RANGE default                                     ALTER RANGE default CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 90000,
+                                                  num_replicas = 3,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+RANGE liveness                                    ALTER RANGE liveness CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 600,
+                                                  num_replicas = 5,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+RANGE meta                                        ALTER RANGE meta CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 3600,
+                                                  num_replicas = 5,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+RANGE system                                      ALTER RANGE system CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 90000,
+                                                  num_replicas = 5,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+RANGE timeseries                                  ALTER RANGE timeseries CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 90000,
+                                                  num_replicas = 3,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+TABLE system.public.jobs                          ALTER TABLE system.public.jobs CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 600,
+                                                  num_replicas = 5,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+TABLE system.public.replication_constraint_stats  ALTER TABLE system.public.replication_constraint_stats CONFIGURE ZONE USING
+                                                  gc.ttlseconds = 600,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+TABLE system.public.replication_stats             ALTER TABLE system.public.replication_stats CONFIGURE ZONE USING
+                                                  gc.ttlseconds = 600,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'
+TABLE testdb.public.foo                           ALTER TABLE testdb.public.foo CONFIGURE ZONE USING
+                                                  range_min_bytes = 16777216,
+                                                  range_max_bytes = 67108864,
+                                                  gc.ttlseconds = 90000,
+                                                  num_replicas = 3,
+                                                  constraints = '[]',
+                                                  lease_preferences = '[]'

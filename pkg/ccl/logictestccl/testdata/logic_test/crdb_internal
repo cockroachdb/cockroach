@@ -48,3 +48,53 @@ SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 53  1  p12  pd  1  b  (DEFAULT)  NULL 0 0
 53  2  NULL  p00  2  a, b  (0, 0)  NULL 0 0
 54  1  NULL  pfoo  1  a  ('foo')  NULL 0 0
+
+# Test crdb_internal.zones functions correctly on zoned indexes.
+subtest privileged_zones_test
+
+statement ok
+CREATE TABLE t3 (a INT PRIMARY KEY, b INT); CREATE INDEX myindex ON t3 (b)
+
+statement ok
+CREATE TABLE t4 (a INT PRIMARY KEY, b INT)
+
+statement ok
+ALTER TABLE t3 CONFIGURE ZONE USING num_replicas = 8
+
+statement ok
+ALTER INDEX myindex CONFIGURE ZONE USING num_replicas = 5
+
+statement ok
+ALTER TABLE t4 CONFIGURE ZONE USING num_replicas = 7
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0   RANGE default
+1   DATABASE system
+15  TABLE system.public.jobs
+16  RANGE meta
+17  RANGE system
+22  RANGE liveness
+25  TABLE system.public.replication_constraint_stats
+27  TABLE system.public.replication_stats
+55  TABLE test.public.t3
+55  INDEX test.public.t3@myindex
+56  TABLE test.public.t4
+
+statement ok
+REVOKE ALL ON t3 FROM testuser
+
+statement ok
+GRANT ALL ON t4 TO testuser
+
+user testuser
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0   RANGE default
+16  RANGE meta
+17  RANGE system
+22  RANGE liveness
+56  TABLE test.public.t4
