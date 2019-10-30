@@ -139,7 +139,7 @@ func DecodeKeyValsToCols(
 		i := indexColIdx[j]
 		if i == -1 {
 			// Don't need the coldata - skip it.
-			key, err = skipTableKey(&types[j], key, enc)
+			key, err = SkipTableKey(&types[j], key, enc)
 		} else {
 			if unseen != nil {
 				unseen.Remove(i)
@@ -231,11 +231,12 @@ func decodeTableKeyToCol(
 	return rkey, err
 }
 
-// skipTableKey skips a value of type valType in key, returning the remainder
+// SkipTableKey skips a value of type valType in key, returning the remainder
 // of the key.
 // TODO(jordan): each type could be optimized here.
 // TODO(jordan): should use this approach in the normal row fetcher.
-func skipTableKey(
+// TODO(rohany): what is the approach in the normal row fetcher?
+func SkipTableKey(
 	valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {

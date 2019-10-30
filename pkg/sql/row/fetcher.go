@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -641,6 +642,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			if err != nil {
 				return false, err
 			}
+
 			rf.keyRemainingBytes = rf.kv.Key[prefixLen:]
 		}
 
@@ -653,15 +655,46 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		//
 		// The index-key extracted from the above keys is /test/unique_idx/NULL. The
 		// trailing /0 and /1 are the primary key used to unique-ify the keys when a
-		// NULL is present. Currently we don't detect NULLs on decoding. If we did
-		// we could detect this case and enlarge the index-key. A simpler fix for
-		// this problem is to simply always output a row for each key scanned from a
-		// secondary index as secondary indexes have only one key per row.
-		// If rf.rowReadyTable differs from rf.currentTable, this denotes
-		// a row is ready for output.
+		// NULL is present. When a null is present in the index key, we cut off more
+		// of the index key so that the prefix includes the primary key columns.
+		//
+		// Note that we do not need to do this for non-unique secondary indexes because
+		// the extra columns in the primary key will _always_ be there, so we can decode
+		// them when processing the index. The difference with unique secondary indexes
+		// is that the extra columns are not always there, and are used to unique-ify
+		// the index key, rather than provide the primary key column values.
+		if rf.currentTable.isSecondaryIndex && rf.currentTable.index.Unique && len(rf.currentTable.desc.Families) != 1 {
+			// TODO (rohany): we don't want to have to look at each indexed value twice (once
+			//  while decoding and once here). A possible optimization is to pass whether a
+			//  null was encountered while decoding and use that information here instead.
+			foundNull := false
+			for _, j := range rf.currentTable.keyVals {
+				if !j.IsUnset() && j.IsNull() {
+					foundNull = true
+					break
+				}
+			}
+			if foundNull {
+				for _, colID := range rf.currentTable.index.ExtraColumnIDs {
+					colIdx := rf.currentTable.colIdxMap[colID]
+					var err error
+					// Slice off an extra encoded column from rf.keyRemainingBytes.
+					rf.keyRemainingBytes, err = colencoding.SkipTableKey(
+						&rf.currentTable.cols[colIdx].Type,
+						rf.keyRemainingBytes,
+						// Extra columns are always stored in ascending order.
+						sqlbase.IndexDescriptor_ASC,
+					)
+					if err != nil {
+						return false, err
+					}
+				}
+			}
+		}
+
 		switch {
-		case rf.currentTable.isSecondaryIndex:
-			// Secondary indexes have only one key per row.
+		case len(rf.currentTable.desc.Families) == 1:
+			// If we only have one family, we know that there is only 1 k/v pair per row.
 			rowDone = true
 		case !unchangedPrefix:
 			// If the prefix of the key has changed, current key is from a different
@@ -877,36 +910,48 @@ func (rf *Fetcher) processKV(
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
-		valueBytes, err := kv.Value.GetBytes()
-		if err != nil {
-			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
-		}
-
-		if hasExtraCols(table) {
-			// This is a unique secondary index; decode the extra
-			// column values from the value.
-			var err error
-			valueBytes, err = sqlbase.DecodeKeyVals(
-				table.extraTypes,
-				table.extraVals,
-				nil,
-				valueBytes,
-			)
+		tag := kv.Value.GetTag()
+		var valueBytes []byte
+		switch tag {
+		case roachpb.ValueType_BYTES:
+			// If we have the ValueType_BYTES on a secondary index, then we know we
+			// are looking at column family 0. Column family 0 stores the extra primary
+			// key columns if they are present, so we decode them here.
+			valueBytes, err = kv.Value.GetBytes()
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
+				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
-			for i, id := range table.index.ExtraColumnIDs {
-				if table.neededCols.Contains(int(id)) {
-					table.row[table.colIdxMap[id]] = table.extraVals[i]
+			if hasExtraCols(table) {
+				// This is a unique secondary index; decode the extra
+				// column values from the value.
+				var err error
+				valueBytes, err = sqlbase.DecodeKeyVals(
+					table.extraTypes,
+					table.extraVals,
+					nil,
+					valueBytes,
+				)
+				if err != nil {
+					return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
+				}
+				for i, id := range table.index.ExtraColumnIDs {
+					if table.neededCols.Contains(int(id)) {
+						table.row[table.colIdxMap[id]] = table.extraVals[i]
+					}
+				}
+				if rf.traceKV {
+					prettyValue = rf.prettyEncDatums(table.extraTypes, table.extraVals)
 				}
 			}
-			if rf.traceKV {
-				prettyValue = rf.prettyEncDatums(table.extraTypes, table.extraVals)
+		case roachpb.ValueType_TUPLE:
+			valueBytes, err = kv.Value.GetTuple()
+			if err != nil {
+				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 		}
 
 		if DebugRowFetch {
-			if hasExtraCols(table) {
+			if hasExtraCols(table) && tag == roachpb.ValueType_BYTES {
 				log.Infof(ctx, "Scan %s -> %s", kv.Key, rf.prettyEncDatums(table.extraTypes, table.extraVals))
 			} else {
 				log.Infof(ctx, "Scan %s", kv.Key)
