@@ -904,7 +904,7 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
-	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSSS.SSTs(), true /* skipWritingSeqNo */, true /* modify */); err != nil {
+	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSSS.SSTs()); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", inSnap.SSSS.SSTs())
 	}
 	stats.ingestion = timeutil.Now()

@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -79,34 +78,28 @@ const (
 
 type unreplicatedTruncStateTest struct {
 	startsWithLegacy bool
-	hasVersionBumped bool
 	exp              int // see consts above
 }
 
 func TestTruncateLogUnreplicatedTruncatedState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Follow the reference below for more information on what's being tested.
-	_ = cluster.VersionUnreplicatedRaftTruncatedState
+	// Check out the old cluster.VersionUnreplicatedRaftTruncatedState for
+	// information on what's being tested. The cluster version is gone,
+	// but the migration is done range by range and so it still exists.
 
 	const (
 		startsLegacy       = true
 		startsUnreplicated = false
-		newVersion         = true
-		oldVersion         = false
 	)
 
 	testCases := []unreplicatedTruncStateTest{
-		// Steady states: we have one type of TruncatedState and will end up with
-		// the same type: either we've already migrated, or we haven't but aren't
-		// allowed to migrate yet.
-		{startsUnreplicated, oldVersion, expectationUnreplicated},
-		{startsUnreplicated, newVersion, expectationUnreplicated},
-		{startsLegacy, oldVersion, expectationLegacy},
+		// This is the case where we've already migrated.
+		{startsUnreplicated, expectationUnreplicated},
 		// This is the case in which the migration is triggered. As a result,
 		// we see neither of the keys written. The new key will be written
 		// atomically as a side effect (outside of the scope of this test).
-		{startsLegacy, newVersion, expectationNeither},
+		{startsLegacy, expectationNeither},
 	}
 
 	for _, tc := range testCases {
@@ -118,15 +111,6 @@ func TestTruncateLogUnreplicatedTruncatedState(t *testing.T) {
 
 func runUnreplicatedTruncatedState(t *testing.T, tc unreplicatedTruncStateTest) {
 	ctx := context.Background()
-	versionOff := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState - 1)
-	versionOn := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState)
-	st := cluster.MakeClusterSettings(versionOff, versionOn)
-
-	if tc.hasVersionBumped {
-		assert.NoError(t, st.InitializeVersion(cluster.ClusterVersion{Version: versionOn}))
-	} else {
-		assert.NoError(t, st.InitializeVersion(cluster.ClusterVersion{Version: versionOff}))
-	}
 
 	const (
 		rangeID    = 12
@@ -135,10 +119,9 @@ func runUnreplicatedTruncatedState(t *testing.T, tc unreplicatedTruncStateTest) 
 	)
 
 	evalCtx := mockEvalCtx{
-		clusterSettings: st,
-		desc:            &roachpb.RangeDescriptor{RangeID: rangeID},
-		term:            term,
-		firstIndex:      firstIndex,
+		desc:       &roachpb.RangeDescriptor{RangeID: rangeID},
+		term:       term,
+		firstIndex: firstIndex,
 	}
 
 	eng := engine.NewDefaultInMem()

@@ -447,14 +447,12 @@ DBString DBGetUserProperties(DBEngine* db);
 // Bulk adds the files at the given paths to a database, all atomically. See the
 // RocksDB documentation on `IngestExternalFile` for the various restrictions on
 // what can be added. If move_files is true, the files will be moved instead of
-// copied. If allow_file_modifications is false, RocksDB will return an error if
-// it would have tried to modify any of the files' sequence numbers rather than
-// editing the files in place. If write_global_seqno is false, it will skip
-// writing the seq_no to the SSTs -- this is only safe if this will only ever be
-// read by Rocks version >= 5.16 as older versions would still be looking for
-// the seqno.
-DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
-                               bool write_global_seqno, bool allow_file_modifications);
+// copied.
+//
+// Using this function is only safe if the data will only ever be read by Rocks
+// version >= 5.16 as older versions would be looking for seq_no in the SST and
+// we don't write it.
+DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files);
 
 typedef struct DBSstFileWriter DBSstFileWriter;
 
