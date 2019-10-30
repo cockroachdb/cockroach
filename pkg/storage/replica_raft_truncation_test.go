@@ -45,7 +45,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	datadriven.Walk(t, "testdata/truncated_state_migration", func(t *testing.T, path string) {
 		const rangeID = 12
 		loader := stateloader.Make(rangeID)
-		eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		eng := engine.NewDefaultInMem()
 		defer eng.Close()
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {

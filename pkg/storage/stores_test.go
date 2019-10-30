@@ -123,7 +123,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		rangeID := roachpb.RangeID(i)
 		replicaID := roachpb.ReplicaID(1)
 
-		memEngine := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		memEngine := engine.NewDefaultInMem()
 		stopper.AddCloser(memEngine)
 
 		cfg := TestStoreConfig(clock)
@@ -218,7 +218,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	stores := []*Store{}
 	for i := 0; i < count; i++ {
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-		eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		eng := engine.NewDefaultInMem()
 		stopper.AddCloser(eng)
 		s := NewStore(context.TODO(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++

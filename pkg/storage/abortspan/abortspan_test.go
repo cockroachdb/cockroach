@@ -44,7 +44,7 @@ var (
 func createTestAbortSpan(
 	t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper,
 ) (*AbortSpan, engine.Engine) {
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	return New(rangeID), eng
 }

@@ -60,7 +60,7 @@ func TestCmdRevertRange(t *testing.T) {
 	const keyCount = 10
 
 	ctx := context.Background()
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
 	baseTime := hlc.Timestamp{WallTime: 1000}

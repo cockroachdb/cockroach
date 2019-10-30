@@ -1021,7 +1021,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			db := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+			db := engine.NewDefaultInMem()
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()

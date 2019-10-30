@@ -211,7 +211,7 @@ func createTestStoreWithoutStart(
 	// and merge queues separately to cover event-driven splits and merges.
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
-	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	eng := engine.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
@@ -280,7 +280,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	stopper.AddCloser(eng)
 
 	seed := randutil.NewPseudoSeed()
@@ -409,7 +409,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
@@ -481,7 +481,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	stopper.AddCloser(eng)
 
 	// Put some random garbage into the engine.
@@ -2987,7 +2987,7 @@ func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID r
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<10)
+	e := engine.NewDefaultInMem()
 	defer e.Close()
 
 	ctx := context.Background()
