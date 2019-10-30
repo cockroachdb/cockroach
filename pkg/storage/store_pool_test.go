@@ -577,7 +577,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 	// Create store.
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	cfg := TestStoreConfig(clock)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)

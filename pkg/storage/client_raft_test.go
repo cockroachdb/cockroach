@@ -88,7 +88,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop(context.TODO())
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	engineStopper.AddCloser(eng)
 	var rangeID2 roachpb.RangeID
 
@@ -194,7 +194,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	// and trying to handle that complicates the test without providing any
 	// added benefit.
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
 	numIncrements := 0

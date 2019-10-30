@@ -232,7 +232,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 			return nil
 		}
-	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	eng := engine.NewDefaultInMem()
 	stopper.AddCloser(eng)
 	store := createTestStoreWithOpts(t,
 		testStoreOpts{eng: eng, cfg: &cfg},

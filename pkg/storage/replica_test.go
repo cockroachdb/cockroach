@@ -194,7 +194,8 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	}
 	if tc.engine == nil {
-		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		tc.engine = engine.NewInMem(engine.TestStorageEngine,
+			roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 		stopper.AddCloser(tc.engine)
 	}
 	if tc.transport == nil {
@@ -7923,7 +7924,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 				t.Fatalf("expected %d declared keys, found %d", expSpans, numSpans)
 			}
 
-			eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+			eng := engine.NewDefaultInMem()
 			defer eng.Close()
 
 			batch := eng.NewBatch()

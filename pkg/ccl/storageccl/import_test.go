@@ -66,7 +66,7 @@ func slurpSSTablesLatestKey(
 ) []engine.MVCCKeyValue {
 	start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
 
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	defer e.Close()
 	batch := e.NewBatch()
 	defer batch.Close()

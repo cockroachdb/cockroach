@@ -252,6 +252,25 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 	}, nil
 }
 
+func newPebbleInMem(attrs roachpb.Attributes, cacheSize int64) *Pebble {
+	opts := DefaultPebbleOptions()
+	opts.Cache = pebble.NewCache(cacheSize)
+	opts.FS = vfs.NewMem()
+	db, err := NewPebble(PebbleConfig{
+		StorageConfig: base.StorageConfig{
+			Attrs: attrs,
+			// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
+			// https://github.com/cockroachdb/cockroach/issues/16750
+			MaxSize: 512 << 20, /* 512 MiB */
+		},
+		Opts: opts,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return db
+}
+
 // Close implements the Engine interface.
 func (p *Pebble) Close() {
 	p.closed = true
