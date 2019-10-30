@@ -44,7 +44,7 @@ type wrappedEngine struct {
 
 func newWrappedEngine() *wrappedEngine {
 	return &wrappedEngine{
-		Engine: engine.NewInMem(roachpb.Attributes{}, 1<<20),
+		Engine: engine.NewDefaultInMem(),
 	}
 }
 

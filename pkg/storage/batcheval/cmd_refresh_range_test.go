@@ -53,7 +53,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	ts3 := hlc.Timestamp{WallTime: 3}
 	ts4 := hlc.Timestamp{WallTime: 4}
 
-	db := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	db := engine.NewDefaultInMem()
 	defer db.Close()
 
 	// Create an sstable containing an unresolved intent.
@@ -97,16 +97,19 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Double-check that we've created the SSTs we intended to.
-	userProps, err := db.GetUserProperties()
-	if err != nil {
-		t.Fatal(err)
+	// TODO(peter): Make this work for Pebble as well.
+	if rocksDB, ok := db.(*engine.RocksDB); ok {
+		// Double-check that we've created the SSTs we intended to.
+		userProps, err := rocksDB.GetUserProperties()
+		if err != nil {
+			t.Fatal(err)
+		}
+		require.Len(t, userProps.Sst, 2)
+		require.Equal(t, userProps.Sst[0].TsMin, &ts1)
+		require.Equal(t, userProps.Sst[0].TsMax, &ts4)
+		require.Equal(t, userProps.Sst[1].TsMin, &ts1)
+		require.Equal(t, userProps.Sst[1].TsMax, &ts1)
 	}
-	require.Len(t, userProps.Sst, 2)
-	require.Equal(t, userProps.Sst[0].TsMin, &ts1)
-	require.Equal(t, userProps.Sst[0].TsMax, &ts4)
-	require.Equal(t, userProps.Sst[1].TsMin, &ts1)
-	require.Equal(t, userProps.Sst[1].TsMax, &ts1)
 
 	// We should now have a committed value at k@ts1. Read it back to make sure.
 	// This represents real-world use of time-bound iterators where callers must
@@ -130,7 +133,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// not the second and incorrectly report the intent as pending,
 	// resulting in an error from RefreshRange.
 	var resp roachpb.RefreshRangeResponse
-	_, err = RefreshRange(ctx, db, CommandArgs{
+	_, err := RefreshRange(ctx, db, CommandArgs{
 		Args: &roachpb.RefreshRangeRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    k,

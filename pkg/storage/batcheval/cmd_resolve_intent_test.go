@@ -181,7 +181,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	engine := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engine := engine.NewDefaultInMem()
 	defer engine.Close()
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		for _, test := range tests {

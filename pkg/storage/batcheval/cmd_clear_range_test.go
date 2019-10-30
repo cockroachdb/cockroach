@@ -86,7 +86,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
-			eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+			eng := engine.NewDefaultInMem()
 			defer eng.Close()
 
 			var stats enginepb.MVCCStats

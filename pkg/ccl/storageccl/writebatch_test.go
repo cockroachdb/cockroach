@@ -111,7 +111,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	defer e.Close()
 
 	var batch engine.RocksDBBatchBuilder

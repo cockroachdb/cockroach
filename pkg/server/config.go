@@ -476,7 +476,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
-			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
+			engines = append(engines, engine.NewInMem(cfg.StorageEngine, spec.Attributes, sizeInBytes))
 		} else {
 			if spec.Size.Percent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}

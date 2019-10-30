@@ -205,7 +205,7 @@ func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	defer e.Close()
 	if _, err := bootstrapCluster(
 		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
@@ -261,7 +261,7 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	if _, err := bootstrapCluster(
 		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
 	); err != nil {
@@ -271,8 +271,8 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := Engines([]engine.Engine{
 		e,
-		engine.NewInMem(roachpb.Attributes{}, 1<<20),
-		engine.NewInMem(roachpb.Attributes{}, 1<<20),
+		engine.NewDefaultInMem(),
+		engine.NewDefaultInMem(),
 	})
 	defer engines.Close()
 	_, _, node, stopper := createAndStartTestNode(
@@ -314,7 +314,7 @@ func TestNodeJoin(t *testing.T) {
 	ctx := context.Background()
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop(ctx)
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	engineStopper.AddCloser(e)
 
 	if _, err := bootstrapCluster(
@@ -336,7 +336,7 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper1.Stop(ctx)
 
 	// Create a new node.
-	e2 := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e2 := engine.NewDefaultInMem()
 	engineStopper.AddCloser(e2)
 	engines2 := []engine.Engine{e2}
 	_, server2Addr, node2, stopper2 := createAndStartTestNode(
@@ -385,7 +385,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	e := engine.NewDefaultInMem()
 	defer e.Close()
 
 	if _, err := bootstrapCluster(
@@ -730,7 +730,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 	ctx := context.Background()
 
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
-		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		e := engine.NewDefaultInMem()
 		defer e.Close()
 		if _, err := bootstrapCluster(
 			ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
