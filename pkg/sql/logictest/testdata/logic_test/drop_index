@@ -230,3 +230,15 @@ CREATE SEQUENCE s
 
 statement error pgcode 42704 pq: index "nonexistent_index" does not exist
 DROP INDEX nonexistent_index
+
+statement ok
+CREATE TABLE tu (a INT UNIQUE)
+
+statement ok
+CREATE UNIQUE INDEX tu_a ON tu(a)
+
+statement error in use as unique constraint
+DROP INDEX tu_a_key
+
+statement ok
+DROP INDEX tu_a

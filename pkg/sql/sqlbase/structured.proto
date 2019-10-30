@@ -378,6 +378,10 @@ message IndexDescriptor {
 
   // Type is the type of index, inverted or forward.
   optional Type type = 16 [(gogoproto.nullable)=false];
+
+  // CreatedExplicitly specifies whether this index was created explicitly
+  // (i.e. via 'CREATE INDEX' statement).
+  optional bool created_explicitly = 17 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
