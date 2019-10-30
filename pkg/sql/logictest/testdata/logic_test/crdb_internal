@@ -581,3 +581,18 @@ query T
 SELECT crdb_internal.cluster_name()
 ----
 testclustername
+
+
+# Verify that privileged tables in zones cannot be seen by other users.
+subtest regression_40917
+
+user testuser
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0   RANGE default
+16  RANGE meta
+17  RANGE system
+18  RANGE timeseries
+22  RANGE liveness
