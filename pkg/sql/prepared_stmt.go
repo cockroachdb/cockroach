@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -20,6 +21,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+)
+
+// PreparedStatementOrigin is an enum representing the source of where
+// the prepare statement was made.
+type PreparedStatementOrigin int
+
+const (
+	// PreparedStatementOriginWire signifies the prepared statement was made
+	// over the wire.
+	PreparedStatementOriginWire PreparedStatementOrigin = iota + 1
+	// PreparedStatementOriginSQL signifies the prepared statement was made
+	// over a parsed SQL query.
+	PreparedStatementOriginSQL
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types
@@ -44,6 +58,13 @@ type PreparedStatement struct {
 	// statement.
 	refCount int
 	memAcc   mon.BoundAccount
+
+	// createdAt is the timestamp this prepare statement was made at.
+	// Used for reporting on `pg_prepared_statements`.
+	createdAt time.Time
+	// origin is the protocol in which this prepare statement was created.
+	// Used for reporting on `pg_prepared_statements`.
+	origin PreparedStatementOrigin
 }
 
 // MemoryEstimate returns a rough estimate of the PreparedStatement's memory
@@ -79,6 +100,9 @@ func (p *PreparedStatement) incRef(ctx context.Context) {
 // preparedStatementsAccessor gives a planner access to a session's collection
 // of prepared statements.
 type preparedStatementsAccessor interface {
+	// List returns all prepared statements as a map keyed by name.
+	// The map itself is a copy of the prepared statements.
+	List() map[string]*PreparedStatement
 	// Get returns the prepared statement with the given name. The returned bool
 	// is false if a statement with the given name doesn't exist.
 	Get(name string) (*PreparedStatement, bool)

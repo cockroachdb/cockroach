@@ -325,6 +325,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				},
 			},
 			typeHints,
+			PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
