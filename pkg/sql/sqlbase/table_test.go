@@ -109,7 +109,7 @@ func decodeIndex(
 	}
 	values := make([]EncDatum, len(index.ColumnIDs))
 	colDirs := index.ColumnDirections
-	_, ok, err := DecodeIndexKey(tableDesc, index, types, values, colDirs, key)
+	_, ok, _, err := DecodeIndexKey(tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +195,23 @@ func TestIndexKey(t *testing.T) {
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		tableDesc, colMap := makeTableDescForTest(test)
+		// Add the default family to each test, since secondary indexes support column families.
+		var (
+			colNames []string
+			colIDs   ColumnIDs
+		)
+		for _, c := range tableDesc.Columns {
+			colNames = append(colNames, c.Name)
+			colIDs = append(colIDs, c.ID)
+		}
+		tableDesc.Families = []ColumnFamilyDescriptor{{
+			Name:            "defaultFamily",
+			ID:              0,
+			ColumnNames:     colNames,
+			ColumnIDs:       colIDs,
+			DefaultColumnID: colIDs[0],
+		}}
+
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
 		primaryKeyPrefix := MakeIndexKeyPrefix(&tableDesc, tableDesc.PrimaryIndex.ID)
@@ -208,7 +225,6 @@ func TestIndexKey(t *testing.T) {
 
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
 			&tableDesc, &tableDesc.Indexes[0], colMap, testValues)
-
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
 		}

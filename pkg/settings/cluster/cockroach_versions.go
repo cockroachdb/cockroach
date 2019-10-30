@@ -48,6 +48,7 @@ const (
 	VersionStart20_1
 	VersionContainsEstimatesCounter
 	VersionChangeReplicasDemotion
+	VersionSecondaryIndexColumnFamilies
 
 	// Add new versions here (step one of two).
 
@@ -320,6 +321,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionChangeReplicasDemotion,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 3},
 	},
+	{
+		// VersionSecondaryIndexColumnFamilies is https://github.com/cockroachdb/cockroach/pull/42073.
+		//
+		// It allows secondary indexes to respect table level column family definitions.
+		Key:     VersionSecondaryIndexColumnFamilies,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 4},
+	},
+
 	// Add new versions here (step two of two).
 
 })

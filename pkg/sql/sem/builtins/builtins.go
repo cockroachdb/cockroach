@@ -3040,7 +3040,7 @@ may increase either contention or retry errors, or both.`,
 				}
 				// If EncodeSecondaryIndex returns more than one element then we have an inverted index,
 				// which this command does not support right now.
-				if len(res) > 1 {
+				if indexDesc.Type == sqlbase.IndexDescriptor_INVERTED {
 					return nil, unimplemented.NewWithIssue(41232, "inverted indexes not supported right now")
 				}
 				return tree.NewDBytes(tree.DBytes(res[0].Key)), err

@@ -480,10 +480,10 @@ func DecodeIndexKey(
 	vals []EncDatum,
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
-) (remainingKey []byte, matches bool, _ error) {
+) (remainingKey []byte, matches bool, foundNull bool, _ error) {
 	key, _, _, err := DecodeTableIDIndexID(key)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	return DecodeIndexKeyWithoutTableIDIndexIDPrefix(desc, index, types, vals, colDirs, key)
 }
@@ -498,7 +498,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 	vals []EncDatum,
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
-) (remainingKey []byte, matches bool, _ error) {
+) (remainingKey []byte, matches bool, foundNull bool, _ error) {
 	var decodedTableID ID
 	var decodedIndexID IndexID
 	var err error
@@ -510,62 +510,68 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 			if i != 0 {
 				key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
 				if err != nil {
-					return nil, false, err
+					return nil, false, false, err
 				}
 				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
-					return nil, false, nil
+					return nil, false, false, nil
 				}
 			}
 
 			length := int(ancestor.SharedPrefixLen)
-			key, err = DecodeKeyVals(types[:length], vals[:length], colDirs[:length], key)
+			var isNull bool
+			key, isNull, err = DecodeKeyVals(types[:length], vals[:length], colDirs[:length], key)
 			if err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
 			types, vals, colDirs = types[length:], vals[length:], colDirs[length:]
+			foundNull = foundNull || isNull
 
 			// Consume the interleaved sentinel.
 			var ok bool
 			key, ok = encoding.DecodeIfInterleavedSentinel(key)
 			if !ok {
-				return nil, false, nil
+				return nil, false, false, nil
 			}
 		}
 
 		key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		if decodedTableID != desc.ID || decodedIndexID != index.ID {
-			return nil, false, nil
+			return nil, false, false, nil
 		}
 	}
 
-	key, err = DecodeKeyVals(types, vals, colDirs, key)
+	var isNull bool
+	key, isNull, err = DecodeKeyVals(types, vals, colDirs, key)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
+	foundNull = foundNull || isNull
 
 	// We're expecting a column family id next (a varint). If
 	// interleavedSentinel is actually next, then this key is for a child
 	// table.
 	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 
-	return key, true, nil
+	return key, true, foundNull, nil
 }
 
 // DecodeKeyVals decodes the values that are part of the key. The decoded
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
+// DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
 	types []types.T, vals []EncDatum, directions []IndexDescriptor_Direction, key []byte,
-) ([]byte, error) {
+) ([]byte, bool, error) {
 	if directions != nil && len(directions) != len(vals) {
-		return nil, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
+		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
 	}
+	foundNull := false
 	for j := range vals {
 		enc := DatumEncoding_ASCENDING_KEY
 		if directions != nil && (directions[j] == IndexDescriptor_DESC) {
@@ -574,10 +580,13 @@ func DecodeKeyVals(
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(&types[j], enc, key)
 		if err != nil {
-			return nil, err
+			return nil, false, err
+		}
+		if vals[j].IsNull() {
+			foundNull = true
 		}
 	}
-	return key, nil
+	return key, foundNull, nil
 }
 
 // ExtractIndexKey constructs the index (primary) key for a row from any index
@@ -612,7 +621,7 @@ func ExtractIndexKey(
 		// find the index id so we can look up the descriptor, and once to extract
 		// the values. Only parse once.
 		var ok bool
-		_, ok, err = DecodeIndexKey(tableDesc, index, indexTypes, values, dirs, entry.Key)
+		_, ok, _, err = DecodeIndexKey(tableDesc, index, indexTypes, values, dirs, entry.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -620,7 +629,7 @@ func ExtractIndexKey(
 			return nil, errors.Errorf("descriptor did not match key")
 		}
 	} else {
-		key, err = DecodeKeyVals(indexTypes, values, dirs, key)
+		key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
 		if err != nil {
 			return nil, err
 		}
@@ -644,7 +653,7 @@ func ExtractIndexKey(
 			return nil, err
 		}
 	}
-	_, err = DecodeKeyVals(extraTypes, extraValues, dirs, extraKey)
+	_, _, err = DecodeKeyVals(extraTypes, extraValues, dirs, extraKey)
 	if err != nil {
 		return nil, err
 	}
@@ -776,65 +785,203 @@ func EncodeSecondaryIndex(
 		return []IndexEntry{}, err
 	}
 
-	var entries = make([]IndexEntry, len(secondaryKeys))
-	for i, key := range secondaryKeys {
-		entry := IndexEntry{Key: key}
-
+	// entries is the resulting array that we will return. We allocate upfront at least
+	// len(secondaryKeys) positions to avoid allocations from appending.
+	entries := make([]IndexEntry, 0, len(secondaryKeys))
+	for _, key := range secondaryKeys {
 		if !secondaryIndex.Unique || containsNull {
 			// If the index is not unique or it contains a NULL value, append
 			// extraKey to the key in order to make it unique.
-			entry.Key = append(entry.Key, extraKey...)
+			key = append(key, extraKey...)
 		}
 
-		// Index keys are considered "sentinel" keys in that they do not have a
-		// column ID suffix.
-		entry.Key = keys.MakeFamilyKey(entry.Key, 0)
+		// We do all computation that affects indexes with families in a separate code path to avoid performance
+		// regression for tables without column families.
+		if len(tableDesc.Families) == 1 ||
+			secondaryIndex.Type == IndexDescriptor_INVERTED ||
+			secondaryIndex.Version == BaseIndexFormatVersion {
+			entry, err := encodeSecondaryIndexNoFamilies(secondaryIndex, colMap, key, values, extraKey)
+			if err != nil {
+				return []IndexEntry{}, err
+			}
+			entries = append(entries, entry)
+		} else {
+			// This is only executed once as len(secondaryKeys) = 1 for non inverted secondary indexes.
+			// Create a mapping of family ID to stored columns.
+			// TODO (rohany): we want to share this information across calls to EncodeSecondaryIndex --
+			//  its not easy to do this right now. It would be nice if the index descriptor or table descriptor
+			//  had this information computed/cached for us.
+			familyToColumns := make(map[FamilyID][]valueEncodedColumn)
+			addToFamilyColMap := func(id FamilyID, column valueEncodedColumn) {
+				if _, ok := familyToColumns[id]; !ok {
+					familyToColumns[id] = []valueEncodedColumn{}
+				}
+				familyToColumns[id] = append(familyToColumns[id], column)
+			}
+			// Ensure that column family 0 always generates a k/v pair.
+			familyToColumns[0] = []valueEncodedColumn{}
+			// All composite columns are stored in family 0.
+			for _, id := range secondaryIndex.CompositeColumnIDs {
+				addToFamilyColMap(0, valueEncodedColumn{id: id, isComposite: true})
+			}
+			for _, family := range tableDesc.Families {
+				for _, id := range secondaryIndex.StoreColumnIDs {
+					for _, col := range family.ColumnIDs {
+						if id == col {
+							addToFamilyColMap(family.ID, valueEncodedColumn{id: id, isComposite: false})
+						}
+					}
+				}
+			}
+			entries, err = encodeSecondaryIndexWithFamilies(familyToColumns, secondaryIndex, colMap, key, values, extraKey, entries)
+			if err != nil {
+				return []IndexEntry{}, err
+			}
+		}
+	}
+	return entries, nil
+}
 
-		var entryValue []byte
-		if secondaryIndex.Unique {
+// encodeSecondaryIndexWithFamilies generates a k/v pair for each family/column pair in familyMap.
+// The row parameter will be modified by the function, so copy it before using.
+func encodeSecondaryIndexWithFamilies(
+	familyMap map[FamilyID][]valueEncodedColumn,
+	index *IndexDescriptor,
+	colMap map[ColumnID]int,
+	key []byte,
+	row []tree.Datum,
+	extraKeyCols []byte,
+	results []IndexEntry,
+) ([]IndexEntry, error) {
+	var (
+		value []byte
+		err   error
+	)
+	origKeyLen := len(key)
+	// TODO (rohany): is there a natural way of caching this information as well?
+	// We have to iterate over the map in sorted family order. Other parts of the code
+	// depend on a per-call consistent order of keys generated.
+	familyIDs := make([]int, 0, len(familyMap))
+	for familyID := range familyMap {
+		familyIDs = append(familyIDs, int(familyID))
+	}
+	sort.Ints(familyIDs)
+	for _, familyID := range familyIDs {
+		storedColsInFam := familyMap[FamilyID(familyID)]
+		// Ensure that future appends to key will cause a copy and not overwrite
+		// existing key values.
+		key = key[:origKeyLen:origKeyLen]
+
+		// If we aren't storing any columns in this family and we are not the first family,
+		// skip onto the next family. We need to write family 0 no matter what to ensure
+		// that each row has at least one entry in the DB.
+		if len(storedColsInFam) == 0 && familyID != 0 {
+			continue
+		}
+
+		sort.Sort(byID(storedColsInFam))
+
+		key = keys.MakeFamilyKey(key, uint32(familyID))
+		if index.Unique && familyID == 0 {
 			// Note that a unique secondary index that contains a NULL column value
 			// will have extraKey appended to the key and stored in the value. We
 			// require extraKey to be appended to the key in order to make the key
 			// unique. We could potentially get rid of the duplication here but at
 			// the expense of complicating scanNode when dealing with unique
 			// secondary indexes.
-			entryValue = extraKey
+			value = extraKeyCols
 		} else {
-			// The zero value for an index-key is a 0-length bytes value.
-			entryValue = []byte{}
+			// The zero value for an index-value is a 0-length bytes value.
+			value = []byte{}
 		}
 
-		var cols []valueEncodedColumn
-		for _, id := range secondaryIndex.StoreColumnIDs {
-			cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
+		value, err = writeColumnValues(value, colMap, row, storedColsInFam)
+		if err != nil {
+			return []IndexEntry{}, err
 		}
-		for _, id := range secondaryIndex.CompositeColumnIDs {
-			cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
+		entry := IndexEntry{Key: key}
+		// If we are looking at family 0, encode the data as BYTES, as it might
+		// include encoded primary key columns. For other families, use the
+		// tuple encoding for the value.
+		if familyID == 0 {
+			entry.Value.SetBytes(value)
+		} else {
+			entry.Value.SetTuple(value)
 		}
-		sort.Sort(byID(cols))
-
-		var lastColID ColumnID
-		// Composite columns have their contents at the end of the value.
-		for _, col := range cols {
-			val := findColumnValue(col.id, colMap, values)
-			if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
-				continue
-			}
-			if lastColID > col.id {
-				panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
-			}
-			colIDDiff := col.id - lastColID
-			lastColID = col.id
-			entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
-			if err != nil {
-				return []IndexEntry{}, err
-			}
-		}
-		entry.Value.SetBytes(entryValue)
-		entries[i] = entry
+		results = append(results, entry)
 	}
+	return results, nil
+}
 
-	return entries, nil
+// encodeSecondaryIndexNoFamilies takes a mostly constructed secondary index key (without the family/sentinel at
+// the end), and appends the 0 family sentinel to it, and constructs the value portion of the index. This function
+// performs the index encoding version before column families were introduced onto secondary indexes.
+func encodeSecondaryIndexNoFamilies(
+	index *IndexDescriptor,
+	colMap map[ColumnID]int,
+	key []byte,
+	row []tree.Datum,
+	extraKeyCols []byte,
+) (IndexEntry, error) {
+	var (
+		value []byte
+		err   error
+	)
+	// If we aren't encoding index keys with families, all index keys use the sentinel family 0.
+	key = keys.MakeFamilyKey(key, 0)
+	if index.Unique {
+		// Note that a unique secondary index that contains a NULL column value
+		// will have extraKey appended to the key and stored in the value. We
+		// require extraKey to be appended to the key in order to make the key
+		// unique. We could potentially get rid of the duplication here but at
+		// the expense of complicating scanNode when dealing with unique
+		// secondary indexes.
+		value = append(value, extraKeyCols...)
+	} else {
+		// The zero value for an index-value is a 0-length bytes value.
+		value = []byte{}
+	}
+	var cols []valueEncodedColumn
+	// Since we aren't encoding data with families, we just encode all stored and composite columns in the value.
+	for _, id := range index.StoreColumnIDs {
+		cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
+	}
+	for _, id := range index.CompositeColumnIDs {
+		cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
+	}
+	sort.Sort(byID(cols))
+	value, err = writeColumnValues(value, colMap, row, cols)
+	if err != nil {
+		return IndexEntry{}, err
+	}
+	entry := IndexEntry{Key: key}
+	entry.Value.SetBytes(value)
+	return entry, nil
+}
+
+// writeColumnValues writes the value encoded versions of the desired columns from the input
+// row of datums into the value byte slice.
+func writeColumnValues(
+	value []byte, colMap map[ColumnID]int, row []tree.Datum, columns []valueEncodedColumn,
+) ([]byte, error) {
+	var lastColID ColumnID
+	for _, col := range columns {
+		val := findColumnValue(col.id, colMap, row)
+		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
+			continue
+		}
+		if lastColID > col.id {
+			panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
+		}
+		colIDDiff := col.id - lastColID
+		lastColID = col.id
+		var err error
+		value, err = EncodeTableValue(value, colIDDiff, val, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return value, nil
 }
 
 // EncodeSecondaryIndexes encodes key/values for the secondary indexes. colMap
@@ -859,7 +1006,8 @@ func EncodeSecondaryIndexes(
 		secondaryIndexEntries[i] = entries[0]
 
 		// This is specifically for inverted indexes which can have more than one entry
-		// associated with them.
+		// associated with them, or secondary indexes which store columns from
+		// multiple column families.
 		if len(entries) > 1 {
 			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
 		}

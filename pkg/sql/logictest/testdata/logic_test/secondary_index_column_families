@@ -1,0 +1,220 @@
+# LogicTest: local local-vec
+
+# Test K/V operations on different types of indexes with column families.
+
+statement ok
+CREATE TABLE t1 (
+  x INT PRIMARY KEY, y INT, z INT, a INT, b INT,
+  FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (a, b),
+  INDEX nonuniqueidx (y), UNIQUE INDEX uniqueidx (y),
+  INDEX nonuniqueidxstoring (y) STORING (z, a, b),
+  UNIQUE INDEX uniqueidxstoring (y) STORING (z, a, b)
+)
+
+# Ensure that inserts into each index look like we expect them to.
+statement ok
+SET TRACING=on,kv,results; INSERT INTO t1 VALUES (1, 1, 1, 1, 1); SET TRACING=off;
+
+# Inserts into nonuniqueidx or uniqueidx (which don't store anything) should be a single kv pair of the old format.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'InitPut /Table/53/2/%' OR
+message LIKE 'InitPut /Table/53/3/%'
+ORDER BY message
+----
+InitPut /Table/53/2/1/1/0 -> /BYTES/
+InitPut /Table/53/3/1/0 -> /BYTES/0x89
+
+# Inserts into nonuniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'InitPut /Table/53/4/%'
+ORDER BY message
+----
+InitPut /Table/53/4/1/1/0 -> /BYTES/
+InitPut /Table/53/4/1/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/53/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+
+# Inserts into uniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'InitPut /Table/53/5/%'
+ORDER BY message
+----
+InitPut /Table/53/5/1/0 -> /BYTES/0x89
+InitPut /Table/53/5/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/53/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+
+# Deletions should delete all k/v pairs for each index.
+statement ok
+SET TRACING=on,kv,results; DELETE FROM t1 WHERE x = 1; SET TRACING=off;
+
+# Deletes on nonuniqueidx or uniqueidx (which don't store anything) should be a single kv pair of the old format.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/2/%' OR
+message LIKE 'Del /Table/53/3/%'
+ORDER BY message
+----
+Del /Table/53/2/1/1/0
+Del /Table/53/3/1/0
+
+# Deletes on nonuniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/4/%'
+ORDER BY message
+----
+Del /Table/53/4/1/1/0
+Del /Table/53/4/1/1/2/1
+Del /Table/53/4/1/1/3/1
+
+# Deletes on uniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/5/%'
+ORDER BY message
+----
+Del /Table/53/5/1/0
+Del /Table/53/5/1/2/1
+Del /Table/53/5/1/3/1
+
+# Put some data back into the table.
+statement ok
+INSERT INTO t1 VALUES (1, 1, 1, 1, 1)
+
+# Selects (as of now) should scan all of the K/V pairs for each index.
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t1@nonuniqueidx;
+SET TRACING=off
+----
+1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/nonuniqueidx/%'
+----
+fetched: /t1/nonuniqueidx/1/1 -> NULL
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t1@uniqueidx;
+SET TRACING=off
+----
+1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidx/%'
+----
+fetched: /t1/uniqueidx/1 -> /1
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@nonuniqueidxstoring;
+SET TRACING=off
+----
+1 1 1 1 1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/nonuniqueidxstoring/%'
+----
+fetched: /t1/nonuniqueidxstoring/1/1 -> NULL
+fetched: /t1/nonuniqueidxstoring/1/1/z -> /1
+fetched: /t1/nonuniqueidxstoring/1/1/a/b -> /1/1
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@uniqueidxstoring;
+SET TRACING=off
+----
+1 1 1 1 1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidxstoring/%'
+----
+fetched: /t1/uniqueidxstoring/1 -> /1
+fetched: /t1/uniqueidxstoring/1/z -> /1
+fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
+
+
+#Test some specific behavior with nulls on unique indexes.
+statement ok
+INSERT INTO t1 VALUES (3, NULL, 3, 3, 3), (4, NULL, 4, 4, 4)
+
+query IIIII
+SET TRACING=on,kv,results;
+SELECT * FROM t1@uniqueidxstoring ORDER BY x;
+SET TRACING=off
+----
+1 1 1 1 1
+3 NULL 3 3 3
+4 NULL 4 4 4
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t1/uniqueidxstoring/%'
+ORDER BY message
+----
+fetched: /t1/uniqueidxstoring/1 -> /1
+fetched: /t1/uniqueidxstoring/1/a/b -> /1/1
+fetched: /t1/uniqueidxstoring/1/z -> /1
+fetched: /t1/uniqueidxstoring/NULL -> /3
+fetched: /t1/uniqueidxstoring/NULL -> /4
+fetched: /t1/uniqueidxstoring/NULL/a/b -> /3/3
+fetched: /t1/uniqueidxstoring/NULL/a/b -> /4/4
+fetched: /t1/uniqueidxstoring/NULL/z -> /3
+fetched: /t1/uniqueidxstoring/NULL/z -> /4
+
+# Ensure that updates delete and insert all K/V pairs for each index.
+statement ok
+SET TRACING=on,kv,results;
+UPDATE t1 SET
+x = 2, y = 2, z = 2, a = 2, b = 2
+WHERE x = 1;
+SET TRACING=off;
+
+# Updates on nonuniqueidx or uniqueidx (which don't store anything) should be a single kv pair of the old format.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/2/%' OR
+message LIKE 'InitPut /Table/53/2/%' OR
+message LIKE 'Del /Table/53/3/%' OR
+message LIKE 'InitPut /Table/53/3/%'
+ORDER BY message
+----
+Del /Table/53/2/1/1/0
+Del /Table/53/3/1/0
+InitPut /Table/53/2/2/2/0 -> /BYTES/
+InitPut /Table/53/3/2/0 -> /BYTES/0x8a
+
+# Updates on nonuniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/4/%' OR
+message LIKE 'InitPut /Table/53/4/%'
+ORDER BY message
+----
+Del /Table/53/4/1/1/0
+Del /Table/53/4/1/1/2/1
+Del /Table/53/4/1/1/3/1
+InitPut /Table/53/4/2/2/0 -> /BYTES/
+InitPut /Table/53/4/2/2/2/1 -> /TUPLE/3:3:Int/2
+InitPut /Table/53/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
+
+# Updates on uniqueidxstoring should generate 3 K/V pairs.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Del /Table/53/5/%' OR
+message LIKE 'InitPut /Table/53/5/%'
+ORDER BY message
+----
+Del /Table/53/5/1/0
+Del /Table/53/5/1/2/1
+Del /Table/53/5/1/3/1
+InitPut /Table/53/5/2/0 -> /BYTES/0x8a
+InitPut /Table/53/5/2/2/1 -> /TUPLE/3:3:Int/2
+InitPut /Table/53/5/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
