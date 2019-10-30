@@ -48,10 +48,6 @@ func newWorkloadReader(
 func (w *workloadReader) start(ctx ctxgroup.Group) {
 }
 
-func (w *workloadReader) inputFinished(ctx context.Context) {
-	close(w.kvCh)
-}
-
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromColOffset(

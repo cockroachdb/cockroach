@@ -78,10 +78,6 @@ func newMysqldumpReader(
 func (m *mysqldumpReader) start(ctx ctxgroup.Group) {
 }
 
-func (m *mysqldumpReader) inputFinished(ctx context.Context) {
-	close(m.kvCh)
-}
-
 func (m *mysqldumpReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,

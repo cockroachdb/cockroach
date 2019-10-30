@@ -41,7 +41,9 @@ func TestMysqldumpDataReader(t *testing.T) {
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table}}
 
-	converter, err := newMysqldumpReader(make(chan row.KVBatch, 10), tables, testEvalCtx)
+	kvCh := make(chan row.KVBatch, 10)
+	converter, err := newMysqldumpReader(kvCh, tables, testEvalCtx)
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +63,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	if err := converter.readFile(ctx, wrapped, 1, "", nil); err != nil {
 		t.Fatal(err)
 	}
-	converter.inputFinished(ctx)
+	close(kvCh)
 
 	if expected, actual := len(simpleTestRows), len(res); expected != actual {
 		t.Fatalf("expected %d rows, got %d: %v", expected, actual, res)
