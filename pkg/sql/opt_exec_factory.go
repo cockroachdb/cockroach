@@ -1589,55 +1589,6 @@ func (ef *execFactory) ConstructUpsert(
 	return &rowCountNode{source: ups}, nil
 }
 
-// colsRequiredForDelete returns all the columns required to perform a delete
-// of a row on the table. This will include the returnColDescs columns that
-// are referenced in the RETURNING clause of the delete mutation. This
-// is different from the fetch columns of the delete mutation as the
-// fetch columns includes more columns. Specifically, the fetch columns also
-// include columns that are not part of index keys or the RETURNING columns
-// (columns, for example, referenced in the WHERE clause).
-func colsRequiredForDelete(
-	table cat.Table, tableColDescs, returnColDescs []sqlbase.ColumnDescriptor,
-) []sqlbase.ColumnDescriptor {
-	// Find all the columns that are part of the rows returned by the delete.
-	deleteDescs := make([]sqlbase.ColumnDescriptor, 0, len(tableColDescs))
-	var deleteCols util.FastIntSet
-	for i := 0; i < table.IndexCount(); i++ {
-		index := table.Index(i)
-		for j := 0; j < index.KeyColumnCount(); j++ {
-			col := *index.Column(j).Column.(*sqlbase.ColumnDescriptor)
-			if deleteCols.Contains(int(col.ID)) {
-				continue
-			}
-
-			deleteDescs = append(deleteDescs, col)
-			deleteCols.Add(int(col.ID))
-		}
-	}
-
-	// Add columns specified in the RETURNING clause.
-	for _, col := range returnColDescs {
-		if deleteCols.Contains(int(col.ID)) {
-			continue
-		}
-
-		deleteDescs = append(deleteDescs, col)
-		deleteCols.Add(int(col.ID))
-	}
-
-	// The order of the columns processed by the delete must be in the order they
-	// are present in the table.
-	tabDescs := make([]sqlbase.ColumnDescriptor, 0, len(deleteDescs))
-	for i := 0; i < len(tableColDescs); i++ {
-		col := tableColDescs[i]
-		if deleteCols.Contains(int(col.ID)) {
-			tabDescs = append(tabDescs, col)
-		}
-	}
-
-	return tabDescs
-}
-
 func (ef *execFactory) ConstructDelete(
 	input exec.Node,
 	table cat.Table,
@@ -1699,12 +1650,8 @@ func (ef *execFactory) ConstructDelete(
 		// order they are defined in the table.
 		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
 
-		// Find all the columns that the deleteNode receives. The returning
-		// columns of the mutation are a subset of this column set.
-		requiredDeleteColumns := colsRequiredForDelete(table, tabDesc.Columns, returnColDescs)
-
 		// Update the rowIdxToReturnIdx for the mutation.
-		rowIdxToRetIdx = mutationRowIdxToReturnIdx(requiredDeleteColumns, returnColDescs)
+		rowIdxToRetIdx = mutationRowIdxToReturnIdx(td.FetchCols, returnColDescs)
 	}
 
 	// Now make a delete node. We use a pool.
