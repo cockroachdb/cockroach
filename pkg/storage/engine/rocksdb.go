@@ -565,6 +565,10 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 		cache: cache.ref(),
 	}
 
+	// TODO(peter): This is bizarre. We're creating on on-disk temporary
+	// directory for an in-memory filesystem. The reason this is done is because
+	// various users of the auxiliary directory use the os.* routines (which is
+	// invalid!). This needs to be cleaned up.
 	auxDir, err := ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
 	if err != nil {
 		return nil, err
