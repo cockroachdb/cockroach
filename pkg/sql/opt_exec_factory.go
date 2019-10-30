@@ -1264,15 +1264,6 @@ func (ef *execFactory) ConstructInsert(
 	if rowsNeeded {
 		returnColDescs := makeColDescList(table, returnColOrdSet)
 
-		// Only return the columns that are part of the table descriptor.
-		// This is important when columns are added and being back-filled
-		// as part of the same transaction when the delete runs.
-		// In such cases, the newly added columns shouldn't be returned.
-		// See regression logic tests for #29494.
-		if len(tabDesc.Columns) < len(returnColDescs) {
-			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
-		}
-
 		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
 
 		// Update the tabColIdxToRetIdx for the mutation. Insert always
@@ -1391,15 +1382,6 @@ func (ef *execFactory) ConstructUpdate(
 	var rowIdxToRetIdx []int
 	if rowsNeeded {
 		returnColDescs := makeColDescList(table, returnColOrdSet)
-
-		// Only return the columns that are part of the table descriptor.
-		// This is important when columns are added and being back-filled
-		// as part of the same transaction when the update runs.
-		// In such cases, the newly added columns shouldn't be returned.
-		// See regression logic tests for #29494.
-		if len(tabDesc.Columns) < len(returnColDescs) {
-			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
-		}
 
 		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
 
@@ -1545,15 +1527,6 @@ func (ef *execFactory) ConstructUpsert(
 	var tabColIdxToRetIdx []int
 	if rowsNeeded {
 		returnColDescs = makeColDescList(table, returnColOrdSet)
-
-		// Only return the columns that are part of the table descriptor.
-		// This is important when columns are added and being back-filled
-		// as part of the same transaction when the delete runs.
-		// In such cases, the newly added columns shouldn't be returned.
-		// See regression logic tests for #29494.
-		if len(tabDesc.Columns) < len(returnColDescs) {
-			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
-		}
 
 		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
 
@@ -1721,15 +1694,6 @@ func (ef *execFactory) ConstructDelete(
 	var rowIdxToRetIdx []int
 	if rowsNeeded {
 		returnColDescs := makeColDescList(table, returnColOrdSet)
-
-		// Only return the columns that are part of the table descriptor.
-		// This is important when columns are added and being back-filled
-		// as part of the same transaction when the delete runs.
-		// In such cases, the newly added columns shouldn't be returned.
-		// See regression logic tests for #29494.
-		if len(tabDesc.Columns) < len(returnColDescs) {
-			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
-		}
 
 		// Delete returns the non-mutation columns specified, in the same
 		// order they are defined in the table.
