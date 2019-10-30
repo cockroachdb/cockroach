@@ -565,6 +565,10 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 		cache: cache.ref(),
 	}
 
+	// TODO(peter): This is bizarre. We're creating on on-disk temporary
+	// directory for an in-memory filesystem. The reason this is done is because
+	// various users of the auxiliary directory use the os.* routines (which is
+	// invalid!). This needs to be cleaned up.
 	auxDir, err := ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
 	if err != nil {
 		return nil, err
@@ -3089,7 +3093,9 @@ func (r *RocksDB) InMem() bool {
 // with the given filename, in this RocksDB's env.
 func (r *RocksDB) OpenFile(filename string) (DBFile, error) {
 	var file C.DBWritableFile
-	if err := statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(filename)), &file)); err != nil {
+	err := statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(filename)), &file))
+	log.Infof(context.Background(), "Create: %s -> %v", filename, err)
+	if err != nil {
 		return nil, notFoundErrOrDefault(err)
 	}
 	return &rocksdbFile{file: file, rdb: r.rdb}, nil

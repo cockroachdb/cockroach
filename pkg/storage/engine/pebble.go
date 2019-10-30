@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -220,6 +221,7 @@ type Pebble struct {
 
 	closed   bool
 	path     string
+	auxDir   string
 	maxSize  int64
 	attrs    roachpb.Attributes
 	settings *cluster.Settings
@@ -237,6 +239,26 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 	// cfg.FS and cfg.ReadOnly later on.
 	cfg.Opts.EnsureDefaults()
 
+	var auxDir string
+	if cfg.Dir == "" {
+		// TODO(peter): This is horribly hacky but matches what RocksDB does. For
+		// in-memory instances, we create an on-disk auxiliary directory. This is
+		// necessary because various tests expect the auxiliary directory to
+		// actually exist on disk even though they don't actually write files to
+		// the directory. See SSTSnapshotStorage for one example of this bad
+		// behavior.
+		var err error
+		auxDir, err = ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		auxDir = cfg.Opts.FS.PathJoin(cfg.Dir, "auxiliary")
+		if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
+			return nil, err
+		}
+	}
+
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
 		return nil, err
@@ -245,6 +267,7 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 	return &Pebble{
 		db:       db,
 		path:     cfg.Dir,
+		auxDir:   auxDir,
 		maxSize:  cfg.MaxSize,
 		attrs:    cfg.Attrs,
 		settings: cfg.Settings,
@@ -466,8 +489,7 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 
 // GetAuxiliaryDir implements the Engine interface.
 func (p *Pebble) GetAuxiliaryDir() string {
-	// Suggest an auxiliary subdirectory within the pebble data path.
-	return p.fs.PathJoin(p.path, "auxiliary")
+	return p.auxDir
 }
 
 // NewBatch implements the Engine interface.
@@ -544,9 +566,12 @@ func (p *Pebble) InMem() bool {
 
 // OpenFile implements the Engine interface.
 func (p *Pebble) OpenFile(filename string) (DBFile, error) {
-	// TODO(itsbilal): Create does not currently truncate the file if it already
-	// exists. OpenFile in RocksDB truncates a file if it already exists. Unify
-	// behavior by adding a CreateWithTruncate functionality to pebble's vfs.FS.
+	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
+	// directory does not exist. Various tests in the storage package depend on
+	// this because
+	if p.InMem() {
+		_ = p.fs.MkdirAll(p.fs.PathDir(filename), 0755)
+	}
 	return p.fs.Create(filename)
 }
 
