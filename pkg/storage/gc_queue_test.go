@@ -178,7 +178,7 @@ func (cws *cachedWriteSimulator) value(size int) roachpb.Value {
 func (cws *cachedWriteSimulator) multiKey(
 	numOps int, size int, txn *roachpb.Transaction, ms *enginepb.MVCCStats,
 ) {
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 	t, ctx := cws.t, context.Background()
 
@@ -196,7 +196,7 @@ func (cws *cachedWriteSimulator) multiKey(
 func (cws *cachedWriteSimulator) singleKeySteady(
 	qps int, duration time.Duration, size int, ms *enginepb.MVCCStats,
 ) {
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 	t, ctx := cws.t, context.Background()
 	cacheKey := fmt.Sprintf("%d-%s-%s", qps, duration, humanizeutil.IBytes(int64(size)))

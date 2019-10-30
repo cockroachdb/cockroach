@@ -12,6 +12,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,11 +36,13 @@ func init() {
 func NewTempEngine(
 	engine enginepb.EngineType, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
-	if engine == enginepb.EngineTypePebble {
+	switch engine {
+	case enginepb.EngineTypePebble:
 		return NewPebbleTempEngine(tempStorage, storeSpec)
+	case enginepb.EngineTypeRocksDB:
+		return NewRocksDBTempEngine(tempStorage, storeSpec)
 	}
-
-	return NewRocksDBTempEngine(tempStorage, storeSpec)
+	panic(fmt.Sprintf("unknown engine type: %d", engine))
 }
 
 type rocksDBTempEngine struct {
@@ -69,7 +72,7 @@ func NewRocksDBTempEngine(
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
-		db := newRocksDBInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */).RocksDB
+		db := newRocksDBInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */)
 		return &rocksDBTempEngine{db: db}, nil
 	}
 

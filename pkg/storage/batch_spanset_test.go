@@ -29,7 +29,7 @@ import (
 
 func TestSpanSetBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
 	var ss spanset.SpanSet
@@ -197,7 +197,7 @@ func TestSpanSetBatch(t *testing.T) {
 // See #20894.
 func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
 	ctx := context.Background()

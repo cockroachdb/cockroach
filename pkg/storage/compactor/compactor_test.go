@@ -43,9 +43,8 @@ type wrappedEngine struct {
 }
 
 func newWrappedEngine() *wrappedEngine {
-	inMem := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	return &wrappedEngine{
-		Engine: inMem.RocksDB,
+		Engine: engine.NewDefaultInMem(),
 	}
 }
 

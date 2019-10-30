@@ -116,7 +116,7 @@ func createTestStoreWithOpts(
 	}
 	eng := opts.eng
 	if eng == nil {
-		eng = engine.NewInMem(roachpb.Attributes{}, 10<<20)
+		eng = engine.NewDefaultInMem()
 		stopper.AddCloser(eng)
 	}
 
@@ -800,7 +800,7 @@ func (m *multiTestContext) addStore(idx int) {
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
-		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		eng = engine.NewDefaultInMem()
 		engineStopper.AddCloser(eng)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true

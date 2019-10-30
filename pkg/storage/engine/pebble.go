@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -249,6 +250,25 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 		settings: cfg.Settings,
 		fs:       cfg.Opts.FS,
 	}, nil
+}
+
+func newPebbleInMem(attrs roachpb.Attributes, cacheSize int64) *Pebble {
+	opts := DefaultPebbleOptions()
+	opts.Cache = pebble.NewCache(cacheSize)
+	opts.FS = vfs.NewMem()
+	db, err := NewPebble(PebbleConfig{
+		StorageConfig: base.StorageConfig{
+			Attrs: attrs,
+			// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
+			// https://github.com/cockroachdb/cockroach/issues/16750
+			MaxSize: 512 << 20, /* 512 MiB */
+		},
+		Opts: opts,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return db
 }
 
 // Close implements the Engine interface.
@@ -516,6 +536,12 @@ func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) erro
 	return p.db.Compact(bufStart, bufEnd)
 }
 
+// InMem returns true if the receiver is an in-memory engine and false
+// otherwise.
+func (p *Pebble) InMem() bool {
+	return p.path == ""
+}
+
 // OpenFile implements the Engine interface.
 func (p *Pebble) OpenFile(filename string) (DBFile, error) {
 	// TODO(itsbilal): Create does not currently truncate the file if it already
@@ -533,6 +559,18 @@ func (p *Pebble) ReadFile(filename string) ([]byte, error) {
 	defer file.Close()
 
 	return ioutil.ReadAll(file)
+}
+
+// WriteFile writes data to a file in this RocksDB's env.
+func (p *Pebble) WriteFile(filename string, data []byte) error {
+	file, err := p.fs.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, bytes.NewReader(data))
+	return err
 }
 
 // DeleteFile implements the Engine interface.

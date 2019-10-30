@@ -141,7 +141,7 @@ func runUnreplicatedTruncatedState(t *testing.T, tc unreplicatedTruncStateTest) 
 		firstIndex:      firstIndex,
 	}
 
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	eng := engine.NewDefaultInMem()
 	defer eng.Close()
 
 	truncState := roachpb.RaftTruncatedState{

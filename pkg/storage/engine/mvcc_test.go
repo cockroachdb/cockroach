@@ -6150,10 +6150,8 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 				}
 
 				if i == 1 {
-					if eng, ok := engine.(InMem); ok {
-						if err := eng.Compact(); err != nil {
-							t.Fatal(err)
-						}
+					if err := engine.Compact(); err != nil {
+						t.Fatal(err)
 					}
 				}
 
@@ -6165,10 +6163,8 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 				}
 
 				if i == 1 {
-					if eng, ok := engine.(InMem); ok {
-						if err := eng.Compact(); err != nil {
-							t.Fatal(err)
-						}
+					if err := engine.Compact(); err != nil {
+						t.Fatal(err)
 					}
 				}
 
