@@ -11,6 +11,7 @@
 package sqlbase
 
 import (
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -39,6 +40,10 @@ type PrepareMetadata struct {
 	// InferredTypes represents the inferred types for placeholder, using protocol
 	// identifiers. Used for reporting on Describe.
 	InferredTypes []oid.Oid
+
+	// CreatedAt is the timestamp this prepare statement was made.
+	// Used for reporting on `pg_prepared_statements`.
+	CreatedAt time.Time
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
@@ -57,5 +62,9 @@ func (pm *PrepareMetadata) MemoryEstimate() int64 {
 
 	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(ResultColumn{}))
 	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
+
+	// This is missing pm.CreatedAt.Location.
+	// TODO: confirm whether we should add it in.
+
 	return res
 }

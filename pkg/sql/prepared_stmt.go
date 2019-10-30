@@ -79,6 +79,8 @@ func (p *PreparedStatement) incRef(ctx context.Context) {
 // preparedStatementsAccessor gives a planner access to a session's collection
 // of prepared statements.
 type preparedStatementsAccessor interface {
+	// List returns all prepared statements as a map keyed by name.
+	List() map[string]*PreparedStatement
 	// Get returns the prepared statement with the given name. The returned bool
 	// is false if a statement with the given name doesn't exist.
 	Get(name string) (*PreparedStatement, bool)
