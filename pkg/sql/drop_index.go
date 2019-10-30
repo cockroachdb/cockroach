@@ -217,7 +217,7 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
-	if idx.Unique && behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
+	if idx.Unique && behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint && !idx.CreatedExplicitly {
 		return errors.Errorf("index %q is in use as unique constraint (use CASCADE if you really want to drop it)", idx.Name)
 	}
 
