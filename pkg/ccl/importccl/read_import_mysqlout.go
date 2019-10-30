@@ -50,10 +50,6 @@ func newMysqloutfileReader(
 func (d *mysqloutfileReader) start(ctx ctxgroup.Group) {
 }
 
-func (d *mysqloutfileReader) inputFinished(ctx context.Context) {
-	close(d.conv.KvCh)
-}
-
 func (d *mysqloutfileReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,

@@ -68,7 +68,6 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	defer tracing.FinishSpan(span)
 	defer cp.output.ProducerDone()
 
-	kvCh := make(chan row.KVBatch, 10)
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	var summary *roachpb.BulkOpSummary
@@ -77,7 +76,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	// which is closed only after the go routine returns.
 	go func() {
 		defer close(progCh)
-		summary, err = runImport(ctx, cp.flowCtx, &cp.spec, progCh, kvCh)
+		summary, err = runImport(ctx, cp.flowCtx, &cp.spec, progCh)
 	}()
 
 	for prog := range progCh {
