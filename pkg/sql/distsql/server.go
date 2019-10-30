@@ -303,8 +303,8 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:      nodeID,
 			ReCache:     ds.regexpCache,
 			Mon:         &monitor,
-			// TODO(andrei): This is wrong. Each processor should override Ctx with its
-			// own context.
+			// Most processors will override this Context with their own context in
+			// ProcessorBase. StartInternal().
 			Context:          ctx,
 			Planner:          &sqlbase.DummyEvalPlanner{},
 			SessionAccessor:  &sqlbase.DummySessionAccessor{},
