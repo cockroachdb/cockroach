@@ -41,43 +41,50 @@ func runImport(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-	kvCh chan row.KVBatch,
 	output execinfra.RowReceiver,
 ) (*roachpb.BulkOpSummary, error) {
-	group := ctxgroup.WithContext(ctx)
-
+	// Used to send ingested import rows to the KV layer.
+	kvCh := make(chan row.KVBatch, 10)
 	conv, err := makeInputConverter(spec, flowCtx.NewEvalCtx(), kvCh)
 	if err != nil {
 		return nil, err
 	}
-	conv.start(group)
 
+	// This group holds the go routines that are responsible for producing KV batches.
+	// After this group is done, we need to close kvCh.
+	// Depending on the import implementation both conv.start and conv.readFiles can
+	// produce KVs so we should close the channel only after *both* are finished.
+	producerGroup := ctxgroup.WithContext(ctx)
+	conv.start(producerGroup)
+
+	job, err := flowCtx.Cfg.JobRegistry.LoadJob(ctx, spec.Progress.JobID)
+	progFn := func(pct float32) error {
+		if spec.IngestDirectly {
+			return nil
+		}
+		return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			d := details.(*jobspb.Progress_Import).Import
+			slotpct := pct * spec.Progress.Contribution
+			if len(d.SamplingProgress) > 0 {
+				d.SamplingProgress[spec.Progress.Slot] = slotpct
+			} else {
+				d.ReadProgress[spec.Progress.Slot] = slotpct
+			}
+			return d.Completed()
+		})
+	}
 	// Read input files into kvs
-	group.GoCtx(func(ctx context.Context) error {
+	producerGroup.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
-		defer conv.inputFinished(ctx)
-		job, err := flowCtx.Cfg.JobRegistry.LoadJob(ctx, spec.Progress.JobID)
-		if err != nil {
-			return err
-		}
-
-		progFn := func(pct float32) error {
-			if spec.IngestDirectly {
-				return nil
-			}
-			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				d := details.(*jobspb.Progress_Import).Import
-				slotpct := pct * spec.Progress.Contribution
-				if len(d.SamplingProgress) > 0 {
-					d.SamplingProgress[spec.Progress.Slot] = slotpct
-				} else {
-					d.ReadProgress[spec.Progress.Slot] = slotpct
-				}
-				return d.Completed()
-			})
-		}
 		return conv.readFiles(ctx, spec.Uri, spec.Format, progFn, flowCtx.Cfg.Settings)
+	})
+
+	// This group links together the producers (via producerGroup) and the KV ingester.
+	group := ctxgroup.WithContext(ctx)
+	group.Go(func() error {
+		defer close(kvCh)
+		return producerGroup.Wait()
 	})
 
 	// Ingest the KVs that the producer emitted to the chan and the row result
@@ -338,8 +345,13 @@ type progressFn func(finished bool) error
 
 type inputConverter interface {
 	start(group ctxgroup.Group)
-	readFiles(ctx context.Context, dataFiles map[int32]string, format roachpb.IOFileFormat, progressFn func(float32) error, settings *cluster.Settings) error
-	inputFinished(ctx context.Context)
+	readFiles(
+		ctx context.Context,
+		dataFiles map[int32]string,
+		format roachpb.IOFileFormat,
+		progressFn func(float32) error,
+		settings *cluster.Settings,
+	) error
 }
 
 func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {

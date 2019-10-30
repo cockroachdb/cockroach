@@ -431,10 +431,6 @@ func newPgDumpReader(
 func (m *pgDumpReader) start(ctx ctxgroup.Group) {
 }
 
-func (m *pgDumpReader) inputFinished(ctx context.Context) {
-	close(m.kvCh)
-}
-
 func (m *pgDumpReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,

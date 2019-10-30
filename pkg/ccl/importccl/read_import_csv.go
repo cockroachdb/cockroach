@@ -66,16 +66,10 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 	group.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "convertcsv")
 		defer tracing.FinishSpan(span)
-
-		defer close(c.kvCh)
 		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
 			return c.convertRecordWorker(ctx)
 		})
 	})
-}
-
-func (c *csvInputReader) inputFinished(_ context.Context) {
-	close(c.recordCh)
 }
 
 func (c *csvInputReader) readFiles(
@@ -85,6 +79,7 @@ func (c *csvInputReader) readFiles(
 	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
+	defer close(c.recordCh)
 	return readInputFiles(ctx, dataFiles, format, c.readFile, progressFn, settings)
 }
 
@@ -107,7 +102,12 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn p
 }
 
 func (c *csvInputReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	progressFn progressFn,
+	rejected chan string,
 ) error {
 	cr := csv.NewReader(input)
 	if c.opts.Comma != 0 {
