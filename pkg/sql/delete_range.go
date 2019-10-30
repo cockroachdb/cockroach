@@ -244,7 +244,7 @@ func (d *deleteRangeNode) processResults(
 				continue
 			}
 
-			after, ok, err := d.fetcher.ReadIndexKey(keyBytes)
+			after, ok, _, err := d.fetcher.ReadIndexKey(keyBytes)
 			if err != nil {
 				return nil, err
 			}

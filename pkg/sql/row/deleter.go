@@ -134,18 +134,25 @@ func (rd *Deleter) DeleteRow(
 	checkFKs checkFKConstraints,
 	traceKV bool,
 ) error {
-	primaryIndexKey, secondaryIndexEntries, err := rd.Helper.encodeIndexes(rd.FetchColIDtoRowIndex, values)
-	if err != nil {
-		return err
-	}
 
 	// Delete the row from any secondary indices.
-	for i := range secondaryIndexEntries {
-		secondaryIndexEntry := &secondaryIndexEntries[i]
-		if traceKV {
-			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
+	for i := range rd.Helper.Indexes {
+		entries, err := sqlbase.EncodeSecondaryIndex(
+			rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i], rd.FetchColIDtoRowIndex, values)
+		if err != nil {
+			return err
 		}
-		b.Del(&secondaryIndexEntry.Key)
+		for _, e := range entries {
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], e.Key))
+			}
+			b.Del(&e.Key)
+		}
+	}
+
+	primaryIndexKey, err := rd.Helper.encodePrimaryIndex(rd.FetchColIDtoRowIndex, values)
+	if err != nil {
+		return err
 	}
 
 	// Delete the row.
