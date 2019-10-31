@@ -237,9 +237,128 @@ inner-join (hash)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7-10)
  │    └── filters
- │         └── (e.k > 1) AND (e.k < 10) [type=bool, outer=(6), constraints=(/6: [/2 - /9]; tight)]
+ │         └── (e.k < 10) AND (e.k > 1) [type=bool, outer=(6), constraints=(/6: [/2 - /9]; tight)]
  └── filters
       └── a.k = e.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# The duplicate filter i >= 5 should be eliminated.
+norm expect=ConsolidateSelectFilters
+SELECT * FROM (SELECT * FROM a WHERE i >= 5 AND i < 10) AS a, xy WHERE i >= 5
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── select
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── (i >= 5) AND (i < 10) [type=bool, outer=(2), constraints=(/2: [/5 - /9]; tight)]
+ ├── scan xy
+ │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters (true)
+
+norm expect=ConsolidateSelectFilters
+SELECT * FROM (SELECT * FROM a WHERE i < 10 AND i >= 5) AS a, xy WHERE i >= 5
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── select
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── (i < 10) AND (i >= 5) [type=bool, outer=(2), constraints=(/2: [/5 - /9]; tight)]
+ ├── scan xy
+ │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters (true)
+
+# Regression test for #43076.
+opt expect=ConsolidateSelectFilters
+SELECT
+    'a', 'b', 0.5, tab1.col2, 'c', tab3.col5
+FROM
+    (VALUES (0.4, 'X'), (0.1, 'g'), (1.5, 'h')) AS tab1 (col1, col2)
+    INNER JOIN (VALUES ('a'), ('b'), ('f')) AS tab2 (col3) ON true
+    JOIN (VALUES ('h', 2)) AS tab3 (col4, col5) ON tab1.col2 = tab3.col4
+    JOIN (VALUES ('h'), (NULL)) AS tab4 (col6) ON
+            tab1.col2 = tab4.col6
+            AND tab3.col4 = tab4.col6
+            AND tab2.col3 = tab4.col6
+ORDER BY
+    tab3.col4;
+----
+project
+ ├── columns: "?column?":7(string!null) "?column?":8(string!null) "?column?":9(decimal!null) col2:2(string!null) "?column?":10(string!null) col5:5(int!null)
+ ├── cardinality: [0 - 18]
+ ├── fd: ()-->(2,5,7-10)
+ ├── inner-join (hash)
+ │    ├── columns: column2:2(string!null) column1:3(string!null) column1:4(string!null) column2:5(int!null) column1:6(string!null)
+ │    ├── cardinality: [0 - 18]
+ │    ├── fd: ()-->(2-6), (2)==(3,4,6), (3)==(2,4,6), (4)==(2,3,6), (6)==(2-4)
+ │    ├── values
+ │    │    ├── columns: column1:3(string!null)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── ('a',) [type=tuple{string}]
+ │    │    ├── ('b',) [type=tuple{string}]
+ │    │    └── ('f',) [type=tuple{string}]
+ │    ├── inner-join (hash)
+ │    │    ├── columns: column2:2(string!null) column1:4(string!null) column2:5(int!null) column1:6(string!null)
+ │    │    ├── cardinality: [0 - 6]
+ │    │    ├── fd: ()-->(2,4-6), (2)==(4,6), (4)==(2,6), (6)==(2,4)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:4(string!null) column2:5(int!null)
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(4,5)
+ │    │    │    └── ('h', 2) [type=tuple{string, int}]
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: column2:2(string!null) column1:6(string!null)
+ │    │    │    ├── cardinality: [0 - 6]
+ │    │    │    ├── fd: ()-->(2,6), (2)==(6), (6)==(2)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:6(string)
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── ('h',) [type=tuple{string}]
+ │    │    │    │    └── (NULL,) [type=tuple{string}]
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: column2:2(string!null)
+ │    │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    │    ├── fd: ()-->(2)
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column2:2(string!null)
+ │    │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    │    ├── ('X',) [type=tuple{string}]
+ │    │    │    │    │    ├── ('g',) [type=tuple{string}]
+ │    │    │    │    │    └── ('h',) [type=tuple{string}]
+ │    │    │    │    └── filters
+ │    │    │    │         └── column2 = 'h' [type=bool, outer=(2), constraints=(/2: [/'h' - /'h']; tight), fd=()-->(2)]
+ │    │    │    └── filters
+ │    │    │         └── column2 = column1 [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ │    │    └── filters
+ │    │         └── column1 = column1 [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+ │    └── filters
+ │         └── column1 = column1 [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+ └── projections
+      ├── const: 'a' [type=string]
+      ├── const: 'b' [type=string]
+      ├── const: 0.5 [type=decimal]
+      └── const: 'c' [type=string]
 
 # --------------------------------------------------
 # EliminateSelect
