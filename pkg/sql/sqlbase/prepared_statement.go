@@ -57,5 +57,6 @@ func (pm *PrepareMetadata) MemoryEstimate() int64 {
 
 	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(ResultColumn{}))
 	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
+
 	return res
 }

@@ -18,6 +18,7 @@ import (
 	"hash"
 	"hash/fnv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -214,6 +215,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
 		sqlbase.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
 		sqlbase.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
+		sqlbase.PgCatalogPreparedStatementsTableID:  pgCatalogPreparedStatementsTable,
 		sqlbase.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
 		sqlbase.PgCatalogProcTableID:                pgCatalogProcTable,
 		sqlbase.PgCatalogRangeTableID:               pgCatalogRangeTable,
@@ -1754,6 +1756,63 @@ CREATE TABLE pg_catalog.pg_prepared_xacts (
   database NAME
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+// pgCatalogPreparedStatementsTable implements the pg_prepared_statements table.
+// The statement field differs in that it uses the parsed version
+// of the PREPARE statement.
+// The parameter_types field differs from postgres as the type names in
+// cockroach are slightly different.
+var pgCatalogPreparedStatementsTable = virtualSchemaTable{
+	comment: `prepared statements
+https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_prepared_statements (
+	name TEXT,
+	statement TEXT,
+	prepare_time TIMESTAMPTZ,
+	parameter_types REGTYPE[],
+	from_sql boolean
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for name, stmt := range p.preparedStatements.List() {
+			placeholderTypes := stmt.PrepareMetadata.PlaceholderTypesInfo.Types
+			paramTypes := tree.NewDArray(types.RegType)
+			paramTypes.Array = make(tree.Datums, len(placeholderTypes))
+			paramNames := make([]string, len(placeholderTypes))
+
+			for i, placeholderType := range placeholderTypes {
+				paramTypes.Array[i] = tree.NewDOidWithName(
+					tree.DInt(placeholderType.Oid()),
+					placeholderType,
+					placeholderType.SQLStandardName(),
+				)
+				paramNames[i] = placeholderType.Name()
+			}
+
+			// Only append arguments to string if required.
+			argumentsStr := ""
+			if len(paramNames) > 0 {
+				argumentsStr = fmt.Sprintf(" (%s)", strings.Join(paramNames, ", "))
+			}
+
+			fromSQL := tree.DBoolFalse
+			if stmt.origin == PreparedStatementOriginSQL {
+				fromSQL = tree.DBoolTrue
+			}
+
+			if err := addRow(
+				tree.NewDString(name),
+				tree.NewDString(fmt.Sprintf("PREPARE %s%s AS %s", name, argumentsStr, stmt.SQL)),
+				tree.MakeDTimestampTZ(stmt.createdAt, time.Microsecond),
+				paramTypes,
+				fromSQL,
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
 }

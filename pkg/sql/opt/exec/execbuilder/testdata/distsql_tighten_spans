@@ -305,7 +305,7 @@ query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 ----
 ·     distributed  true
-·     vectorized   false
+·     vectorized   true
 scan  ·            ·
 ·     table        p2@p2_id
 ·     spans        /1/#/55/2/NULL-
@@ -317,7 +317,7 @@ query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 ----
 ·     distributed  true
-·     vectorized   false
+·     vectorized   true
 scan  ·            ·
 ·     table        p2@p2_id
 ·     spans        /1/#/55/2/!NULL-

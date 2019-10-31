@@ -940,3 +940,54 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.query.is-vectorized' AND usage_count > 0
 ----
 sql.exec.query.is-vectorized
+
+# Test IS NULL (and alike) projections.
+query IBBIBB rowsort
+SELECT a, a IS NULL, a IS NOT NULL, b, b IS NOT DISTINCT FROM NULL, b IS DISTINCT FROM NULL FROM nulls
+----
+NULL  true   false  NULL  true   false
+NULL  true   false  1     false  true
+1     false  true   NULL  true   false
+1     false  true   1     false  true
+
+# Test IS NULL (and alike) selections.
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS NULL
+----
+NULL NULL
+NULL 1
+
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS NOT NULL
+----
+1 NULL
+1 1
+
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS NOT DISTINCT FROM NULL
+----
+NULL NULL
+NULL 1
+
+query II rowsort
+SELECT a, b FROM nulls WHERE a IS DISTINCT FROM NULL
+----
+1 NULL
+1 1
+
+query III rowsort
+SELECT
+	a,
+	b,
+	CASE
+	WHEN a IS NOT NULL AND b IS NULL THEN 0
+	WHEN a IS NULL THEN 1
+	WHEN b IS NOT NULL THEN 2
+	END
+FROM
+	nulls
+----
+NULL  NULL  1
+NULL  1     1
+1     NULL  0
+1     1     2
