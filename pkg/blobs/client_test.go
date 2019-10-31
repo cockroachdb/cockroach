@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func createTestResources(t *testing.T) (string, string, *stop.Stopper, func()) {
+func createTestResources(t testing.TB) (string, string, *stop.Stopper, func()) {
 	localExternalDir, cleanupFn := testutils.TempDir(t)
 	remoteExternalDir, cleanupFn2 := testutils.TempDir(t)
 	stopper := stop.NewStopper()
@@ -47,7 +47,7 @@ func createTestResources(t *testing.T) (string, string, *stop.Stopper, func()) {
 }
 
 func setUpService(
-	t *testing.T,
+	t testing.TB,
 	rpcContext *rpc.Context,
 	localNodeID roachpb.NodeID,
 	remoteNodeID roachpb.NodeID,
@@ -93,7 +93,7 @@ func setUpService(
 	)
 }
 
-func writeTestFile(t *testing.T, file string, content []byte) {
+func writeTestFile(t testing.TB, file string, content []byte) {
 	err := os.MkdirAll(filepath.Dir(file), 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -143,6 +143,13 @@ func TestBlobClientReadFile(t *testing.T) {
 			"",
 		},
 		{
+			"read-file-not-exist",
+			remoteNodeID,
+			"test/notexist.csv",
+			nil,
+			"no such file",
+		},
+		{
 			"read-dir-exists",
 			remoteNodeID,
 			"test",
@@ -173,16 +180,16 @@ func TestBlobClientReadFile(t *testing.T) {
 			}
 			reader, err := blobClient.ReadFile(ctx, tc.filename)
 			if err != nil {
-				if tc.err != "" && testutils.IsError(err, tc.err) {
-					// correct error was returned
-					return
-				}
 				t.Fatal(err)
 			}
 			// Check that fetched file content is correct
 			content, err := ioutil.ReadAll(reader)
 			if err != nil {
-				t.Fatal(err, "unable to read fetched file")
+				if testutils.IsError(err, tc.err) {
+					// correct error was returned
+					return
+				}
+				t.Fatal(err)
 			}
 			if !bytes.Equal(content, tc.fileContent) {
 				t.Fatal(fmt.Sprintf(`fetched file content incorrect, expected %s, got %s`, tc.fileContent, content))
@@ -209,6 +216,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 		filename           string
 		fileContent        string
 		destinationNodeDir string
+		err                string
 	}{
 		{
 			"write-remote-file",
@@ -216,6 +224,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 			"test/remote.csv",
 			"remotefile",
 			remoteExternalDir,
+			"",
 		},
 		{
 			"write-local-file",
@@ -223,6 +232,15 @@ func TestBlobClientWriteFile(t *testing.T) {
 			"test/local.csv",
 			"localfile",
 			localExternalDir,
+			"",
+		},
+		{
+			"write-outside-extern-dir",
+			remoteNodeID,
+			"/../../../outside.csv",
+			"remotefile",
+			remoteExternalDir,
+			"not allowed",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,6 +252,10 @@ func TestBlobClientWriteFile(t *testing.T) {
 			byteContent := []byte(tc.fileContent)
 			err = blobClient.WriteFile(ctx, tc.filename, bytes.NewReader(byteContent))
 			if err != nil {
+				if testutils.IsError(err, tc.err) {
+					// correct error was returned
+					return
+				}
 				t.Fatal(err)
 			}
 			// Check that file is now in correct node
@@ -344,7 +366,7 @@ func TestBlobClientList(t *testing.T) {
 			}
 			list, err := blobClient.List(ctx, tc.dirName)
 			if err != nil {
-				if tc.err != "" && testutils.IsError(err, tc.err) {
+				if testutils.IsError(err, tc.err) {
 					// correct error returned
 					return
 				}
@@ -426,7 +448,7 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 			}
 			err = blobClient.Delete(ctx, tc.filename)
 			if err != nil {
-				if tc.err != "" && testutils.IsError(err, tc.err) {
+				if testutils.IsError(err, tc.err) {
 					// the correct error was returned
 					return
 				}
