@@ -56,12 +56,58 @@ statement ok
 CREATE DATABASE db2; ALTER DATABASE db2 CONFIGURE ZONE USING num_replicas = 3;
 
 statement ok
-CREATE TABLE t3 (a INT PRIMARY KEY, b INT); CREATE INDEX myindex ON t3 (b); ALTER INDEX myindex CONFIGURE ZONE USING num_replicas = 5; ALTER TABLE t3 CONFIGURE ZONE USING num_replicas = 8
+CREATE TABLE t3 (a INT PRIMARY KEY, b INT); CREATE INDEX myt3index ON t3 (b); ALTER INDEX myt3index CONFIGURE ZONE USING num_replicas = 5; ALTER TABLE t3 CONFIGURE ZONE USING num_replicas = 8
 
 statement ok
-CREATE TABLE t4 (a INT PRIMARY KEY, b INT); ALTER TABLE t4 CONFIGURE ZONE USING num_replicas = 7; GRANT ALL ON t4 TO testuser
+CREATE TABLE t4 (a INT PRIMARY KEY, b INT); CREATE INDEX myt4index ON t4 (b); ALTER TABLE t4 CONFIGURE ZONE USING num_replicas = 7; ALTER INDEX myt4index CONFIGURE ZONE USING num_replicas = 5; GRANT ALL ON t4 TO testuser
 
 user testuser
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0   RANGE default
+16  RANGE meta
+17  RANGE system
+22  RANGE liveness
+57  TABLE test.public.t4
+57  INDEX test.public.t4@myt4index
+
+query TT
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] ORDER BY 1
+----
+INDEX test.public.t4@myt4index  ALTER INDEX test.public.t4@myt4index CONFIGURE ZONE USING
+                                num_replicas = 5
+RANGE default                   ALTER RANGE default CONFIGURE ZONE USING
+                                range_min_bytes = 16777216,
+                                range_max_bytes = 67108864,
+                                gc.ttlseconds = 90000,
+                                num_replicas = 3,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+RANGE liveness                  ALTER RANGE liveness CONFIGURE ZONE USING
+                                range_min_bytes = 16777216,
+                                range_max_bytes = 67108864,
+                                gc.ttlseconds = 600,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+RANGE meta                      ALTER RANGE meta CONFIGURE ZONE USING
+                                range_min_bytes = 16777216,
+                                range_max_bytes = 67108864,
+                                gc.ttlseconds = 3600,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+RANGE system                    ALTER RANGE system CONFIGURE ZONE USING
+                                range_min_bytes = 16777216,
+                                range_max_bytes = 67108864,
+                                gc.ttlseconds = 90000,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
+TABLE test.public.t4            ALTER TABLE test.public.t4 CONFIGURE ZONE USING
+                                num_replicas = 7
 
 query error pq: user testuser has no privileges on database db2
 SHOW ZONE CONFIGURATION FOR DATABASE db2
@@ -71,6 +117,20 @@ SHOW ZONE CONFIGURATION FOR TABLE t2
 
 query error pq: user testuser has no privileges on relation t3
 SHOW ZONE CONFIGURATION FOR TABLE t3
+
+query error pq: user testuser has no privileges on relation t3
+SHOW ZONE CONFIGURATION FOR INDEX myt3index
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX myt4index
+----
+INDEX test.public.t4@myt4index  ALTER INDEX test.public.t4@myt4index CONFIGURE ZONE USING
+                                range_min_bytes = 16777216,
+                                range_max_bytes = 67108864,
+                                gc.ttlseconds = 90000,
+                                num_replicas = 5,
+                                constraints = '[]',
+                                lease_preferences = '[]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE t4
