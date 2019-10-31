@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/errors"
+	"github.com/pkg/errors"
 )
 
 // RunNemesis runs a jepsen-style validation of whether a changefeed meets our
@@ -57,10 +57,10 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, omitPause bool) (Validator, err
 		eventPauseCount = 0
 	}
 	ns := &nemeses{
-maxTestColumnCount: 10,
-		rowCount:    4,
-		db:          db,
-		usingPoller: !usingRangeFeed,
+		maxTestColumnCount: 10,
+		rowCount:           4,
+		db:                 db,
+		usingPoller:        !usingRangeFeed,
 		// eventMix does not have to add to 100
 		eventMix: map[fsm.Event]int{
 			// We don't want `eventFinished` to ever be returned by `nextEvent` so we set
@@ -225,11 +225,11 @@ const (
 )
 
 type nemeses struct {
-	rowCount    int
+	rowCount           int
 	maxTestColumnCount int
-	eventMix    map[fsm.Event]int
-	mixTotal    int
-	usingPoller bool
+	eventMix           map[fsm.Event]int
+	mixTotal           int
+	usingPoller        bool
 
 	v  *CountValidator
 	db *gosql.DB
@@ -576,7 +576,7 @@ func addColumn(a fsm.Args) error {
 	ns := a.Extended.(*nemeses)
 
 	if ns.currentTestColumnCount >= ns.maxTestColumnCount {
-		return errors.AssertionFailedf(`addColumn should be called when`+
+		return errors.Errorf(`addColumn should be called when`+
 			`there are less than %d columns.`, ns.maxTestColumnCount)
 	}
 
@@ -600,7 +600,7 @@ func removeColumn(a fsm.Args) error {
 	ns := a.Extended.(*nemeses)
 
 	if ns.currentTestColumnCount == 0 {
-		return errors.AssertionFailedf(`removeColumn should be called with` +
+		return errors.Errorf(`removeColumn should be called with` +
 			`at least one test column.`)
 	}
 	if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo DROP COLUMN test%d`,
@@ -623,7 +623,7 @@ func noteFeedMessage(a fsm.Args) error {
 	ns := a.Extended.(*nemeses)
 
 	if ns.availableRows <= 0 {
-		return errors.AssertionFailedf(`noteFeedMessage should be called with at` +
+		return errors.Errorf(`noteFeedMessage should be called with at` +
 			`least one available row.`)
 	}
 
