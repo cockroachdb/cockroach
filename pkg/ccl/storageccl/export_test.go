@@ -211,19 +211,19 @@ func exportUsingGoIterator(
 	defer sst.Close()
 
 	var skipTombstones bool
-	var iterFn func(*MVCCIncrementalIterator)
+	var iterFn func(*engine.MVCCIncrementalIterator)
 	switch filter {
 	case roachpb.MVCCFilter_Latest:
 		skipTombstones = true
-		iterFn = (*MVCCIncrementalIterator).NextKey
+		iterFn = (*engine.MVCCIncrementalIterator).NextKey
 	case roachpb.MVCCFilter_All:
 		skipTombstones = false
-		iterFn = (*MVCCIncrementalIterator).Next
+		iterFn = (*engine.MVCCIncrementalIterator).Next
 	default:
 		return nil, nil
 	}
 
-	iter := NewMVCCIncrementalIterator(batch, IterOptions{
+	iter := engine.NewMVCCIncrementalIterator(batch, engine.MVCCIncrementalIterOptions{
 		StartTime:                           startTime,
 		EndTime:                             endTime,
 		UpperBound:                          endKey,
