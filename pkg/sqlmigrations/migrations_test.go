@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -118,7 +119,9 @@ func (f *fakeDB) Put(ctx context.Context, key, value interface{}) error {
 	if f.putErr != nil {
 		return f.putErr
 	}
-	f.kvs[string(key.(roachpb.Key))] = []byte(value.(string))
+	if f.kvs != nil {
+		f.kvs[string(key.(roachpb.Key))] = []byte(value.(string))
+	}
 	return nil
 }
 
@@ -201,7 +204,7 @@ func TestEnsureMigrations(t *testing.T) {
 			}
 			backwardCompatibleMigrations = tc.migrations
 
-			err := mgr.EnsureMigrations(context.Background(), AllMigrations)
+			err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */)
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
@@ -223,6 +226,40 @@ func TestEnsureMigrations(t *testing.T) {
 	if !fnGotCalled {
 		t.Errorf("expected fnGotCalledDescriptor to be run by the migration coordinator, but it wasn't")
 	}
+}
+
+func TestSkipMigrationsIncludedInBootstrap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	db := &fakeDB{}
+	mgr := Manager{
+		stopper:      stop.NewStopper(),
+		leaseManager: &fakeLeaseManager{},
+		db:           db,
+	}
+	defer mgr.stopper.Stop(ctx)
+	defer func(prev []migrationDescriptor) {
+		backwardCompatibleMigrations = prev
+	}(backwardCompatibleMigrations)
+
+	v := roachpb.MustParseVersion("19.1")
+	fnGotCalled := false
+	backwardCompatibleMigrations = []migrationDescriptor{{
+		name:                "got-called-verifier",
+		includedInBootstrap: v,
+		workFn: func(context.Context, runner) error {
+			fnGotCalled = true
+			return nil
+		},
+	}}
+	// If the cluster has been bootstrapped at an old version, the migration should run.
+	require.NoError(t, mgr.EnsureMigrations(ctx, roachpb.Version{} /* bootstrapVersion */))
+	require.True(t, fnGotCalled)
+	fnGotCalled = false
+	// If the cluster has been bootstrapped at a new version, the migration should
+	// not run.
+	require.NoError(t, mgr.EnsureMigrations(ctx, v /* bootstrapVersion */))
+	require.False(t, fnGotCalled)
 }
 
 func TestDBErrors(t *testing.T) {
@@ -264,7 +301,7 @@ func TestDBErrors(t *testing.T) {
 			db.scanErr = tc.scanErr
 			db.putErr = tc.putErr
 			db.kvs = make(map[string][]byte)
-			err := mgr.EnsureMigrations(context.Background(), AllMigrations)
+			err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */)
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
@@ -302,7 +339,7 @@ func TestLeaseErrors(t *testing.T) {
 	migration := noopMigration1
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{migration}
-	if err := mgr.EnsureMigrations(context.Background(), AllMigrations); err != nil {
+	if err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */); err != nil {
 		t.Error(err)
 	}
 	if _, ok := db.kvs[string(migrationKey(migration))]; !ok {
@@ -349,7 +386,7 @@ func TestLeaseExpiration(t *testing.T) {
 	}
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{waitForExitMigration}
-	if err := mgr.EnsureMigrations(context.Background(), AllMigrations); err != nil {
+	if err := mgr.EnsureMigrations(context.Background(), roachpb.Version{} /* bootstrapVersion */); err != nil {
 		t.Error(err)
 	}
 }

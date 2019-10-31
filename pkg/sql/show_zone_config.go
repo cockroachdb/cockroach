@@ -107,6 +107,24 @@ func getShowZoneConfigRow(
 		return nil, err
 	}
 
+	if zoneSpecifier.TableOrIndex.Table.TableName != "" {
+		if err = p.CheckAnyPrivilege(ctx, tblDesc); err != nil {
+			return nil, err
+		}
+	} else if zoneSpecifier.Database != "" {
+		database, err := p.ResolveUncachedDatabaseByName(
+			ctx,
+			string(zoneSpecifier.Database),
+			true, /* required */
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err = p.CheckAnyPrivilege(ctx, database); err != nil {
+			return nil, err
+		}
+	}
+
 	targetID, err := resolveZone(ctx, p.txn, &zoneSpecifier)
 	if err != nil {
 		return nil, err
