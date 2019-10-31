@@ -11,10 +11,7 @@
 package blobs
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,102 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
-
-func TestBlobServiceGetBlob(t *testing.T) {
-	tmpDir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
-
-	fileContent := []byte("file_content")
-	filename := "path/to/file/content.txt"
-	writeTestFile(t, filepath.Join(tmpDir, filename), fileContent)
-
-	service, err := NewBlobService(tmpDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.TODO()
-
-	t.Run("get-correct-file", func(t *testing.T) {
-		resp, err := service.GetBlob(ctx, &blobspb.GetRequest{
-			Filename: filename,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(resp.Payload, fileContent) {
-			t.Fatal(fmt.Sprintf(
-				`file content is incorrect. expected: %s got: %s`,
-				fileContent, resp.Payload,
-			))
-		}
-	})
-	t.Run("file-not-exist", func(t *testing.T) {
-		_, err := service.GetBlob(ctx, &blobspb.GetRequest{
-			Filename: "file/does/not/exist",
-		})
-		if err == nil {
-			t.Fatal("expected error but was not caught")
-		}
-		if !testutils.IsError(err, "no such file") {
-			t.Fatal("incorrect error message: " + err.Error())
-		}
-	})
-	t.Run("not-in-external-io-dir", func(t *testing.T) {
-		_, err := service.PutBlob(ctx, &blobspb.PutRequest{
-			Filename: "file/../../content.txt",
-		})
-		if err == nil {
-			t.Fatal("expected error but was not caught")
-		}
-		if !testutils.IsError(err, "outside of external-io-dir is not allowed") {
-			t.Fatal("incorrect error message: " + err.Error())
-		}
-	})
-}
-
-func TestBlobServicePutBlob(t *testing.T) {
-	tmpDir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
-
-	service, err := NewBlobService(tmpDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.TODO()
-
-	t.Run("put-correct-file", func(t *testing.T) {
-		fileContent := []byte("file_content")
-		filename := "path/to/file/content.txt"
-		_, err := service.PutBlob(ctx, &blobspb.PutRequest{
-			Filename: filename,
-			Payload:  fileContent,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		result, err := ioutil.ReadFile(filepath.Join(tmpDir, filename))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(result, fileContent) {
-			t.Fatal(fmt.Sprintf(
-				`file content is incorrect. expected: %s got: %s`,
-				fileContent, result,
-			))
-		}
-	})
-	t.Run("not-in-external-io-dir", func(t *testing.T) {
-		_, err := service.PutBlob(ctx, &blobspb.PutRequest{
-			Filename: "file/../../content.txt",
-		})
-		if err == nil {
-			t.Fatal("expected error but was not caught")
-		}
-		if !testutils.IsError(err, "outside of external-io-dir is not allowed") {
-			t.Fatal("incorrect error message: " + err.Error())
-		}
-	})
-}
 
 func TestBlobServiceList(t *testing.T) {
 	tmpDir, cleanupFn := testutils.TempDir(t)
