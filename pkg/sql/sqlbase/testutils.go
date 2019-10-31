@@ -399,6 +399,14 @@ func init() {
 
 		arrayContentsTypes = append(arrayContentsTypes, typ)
 	}
+
+	// Sort these so randomly chosen indexes always point to the same element.
+	sort.Slice(seedTypes, func(i, j int) bool {
+		return seedTypes[i].String() < seedTypes[j].String()
+	})
+	sort.Slice(arrayContentsTypes, func(i, j int) bool {
+		return arrayContentsTypes[i].String() < arrayContentsTypes[j].String()
+	})
 }
 
 // randInterestingDatum returns an interesting Datum of type typ. If there are

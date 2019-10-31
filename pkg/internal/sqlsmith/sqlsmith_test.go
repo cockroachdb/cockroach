@@ -27,13 +27,37 @@ import (
 )
 
 var (
-	flagExec        = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
-	flagNum         = flag.Int("num", 100, "number of statements to generate")
-	flagNoMutations = flag.Bool("no-mutations", false, "disables mutations during testing")
-	flagNoWiths     = flag.Bool("no-withs", false, "disables WITHs during testing")
-	flagVec         = flag.Bool("vec", false, "attempt to generate vectorized-friendly queries")
-	flagCheckVec    = flag.Bool("check-vec", false, "fail if a generated statement cannot be vectorized")
+	flagExec     = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
+	flagNum      = flag.Int("num", 100, "number of statements to generate")
+	flagSetup    = flag.String("setup", "", "setup for TestGenerateParse, empty for random")
+	flagSetting  = flag.String("setting", "", "setting for TestGenerateParse, empty for random")
+	flagCheckVec = flag.Bool("check-vec", false, "fail if a generated statement cannot be vectorized")
 )
+
+func init() {
+	flag.Parse()
+}
+
+// TestSetups verifies that all setups generate executable SQL.
+func TestSetups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for name, setup := range Setups {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+
+			rnd, _ := randutil.NewPseudoRand()
+
+			sql := setup(rnd)
+			if _, err := sqlDB.Exec(sql); err != nil {
+				t.Log(sql)
+				t.Fatal(err)
+			}
+		})
+	}
+}
 
 // TestGenerateParse verifies that statements produced by Generate can be
 // parsed. This is useful because since we make AST nodes directly we can
@@ -45,24 +69,35 @@ func TestGenerateParse(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	rnd, _ := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewPseudoRand()
+	t.Log("seed:", seed)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	var opts []SmitherOption
-	if *flagNoMutations {
-		opts = append(opts, DisableMutations())
-	}
-	if *flagNoWiths {
-		opts = append(opts, DisableWith())
-	}
-	if *flagVec {
-		opts = append(opts, Vectorizable())
-		db.Exec(t, VecSeedTable)
-	} else {
-		db.Exec(t, SeedTable)
-	}
 
-	smither, err := NewSmither(sqlDB, rnd, opts...)
+	setupName := *flagSetup
+	if setupName == "" {
+		setupName = RandSetup(rnd)
+	}
+	setup, ok := Setups[setupName]
+	if !ok {
+		t.Fatalf("unknown setup %s", setupName)
+	}
+	t.Log("setup:", setupName)
+	settingName := *flagSetting
+	if settingName == "" {
+		settingName = RandSetting(rnd)
+	}
+	setting, ok := Settings[settingName]
+	if !ok {
+		t.Fatalf("unknown setting %s", settingName)
+	}
+	settings := setting(rnd)
+	t.Log("setting:", settingName, settings.Options)
+	setupSQL := setup(rnd)
+	t.Log(setupSQL)
+	db.Exec(t, setupSQL)
+
+	smither, err := NewSmither(sqlDB, rnd, settings.Options...)
 	if err != nil {
 		t.Fatal(err)
 	}
