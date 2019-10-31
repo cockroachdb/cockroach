@@ -14,6 +14,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,8 +44,9 @@ type tpch struct {
 	seed        int64
 	scaleFactor int
 
-	distsql       bool
 	disableChecks bool
+	vectorize     string
+	verbose       bool
 
 	queriesRaw      string
 	selectedQueries []string
@@ -64,16 +67,21 @@ var tpchMeta = workload.Meta{
 			`queries`:        {RuntimeOnly: true},
 			`dist-sql`:       {RuntimeOnly: true},
 			`disable-checks`: {RuntimeOnly: true},
+			`vectorize`:      {RuntimeOnly: true},
 		}
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
 			`Linear scale of how much data to use (each SF is ~1GB)`)
-		g.flags.StringVar(&g.queriesRaw, `queries`, `1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
+		g.flags.StringVar(&g.queriesRaw, `queries`,
+			`1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
 			`Queries to run. Use a comma separated list of query numbers`)
-		g.flags.BoolVar(&g.distsql, `dist-sql`, true, `Use DistSQL for query execution`)
 		g.flags.BoolVar(&g.disableChecks, `disable-checks`, false,
 			"Disable checking the output against the expected rows (default false). "+
 				"Note that the checks are only supported for scale factor 1")
+		g.flags.StringVar(&g.vectorize, `vectorize`, `auto`,
+			`Set vectorize session variable`)
+		g.flags.BoolVar(&g.verbose, `verbose`, false,
+			`Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -193,12 +201,7 @@ func (w *worker) run(ctx context.Context) error {
 	queryName := w.config.selectedQueries[w.ops%len(w.config.selectedQueries)]
 	w.ops++
 
-	var query string
-	if w.config.distsql {
-		query = `SET DISTSQL = 'always'; ` + queriesByName[queryName]
-	} else {
-		query = `SET DISTSQL = 'off'; ` + queriesByName[queryName]
-	}
+	query := fmt.Sprintf("SET vectorize = '%s'; %s", w.config.vectorize, queriesByName[queryName])
 
 	vals := make([]interface{}, maxCols)
 	for i := range vals {
@@ -211,22 +214,39 @@ func (w *worker) run(ctx context.Context) error {
 		defer rows.Close()
 	}
 	if err != nil {
-		return err
+		return errors.Errorf("[q%s]: %s", queryName, err)
 	}
 	var numRows int
 	for rows.Next() {
 		if !w.config.disableChecks {
 			if !queriesToCheckOnlyNumRows[queryName] && !queriesToSkip[queryName] {
 				if err = rows.Scan(vals[:numColsByQueryName[queryName]]...); err != nil {
-					return err
+					return errors.Errorf("[q%s]: %s", queryName, err)
 				}
 
 				expectedRow := expectedRowsByQueryName[queryName][numRows]
 				for i, expectedValue := range expectedRow {
 					if val := *vals[i].(*interface{}); val != nil {
-						if strings.Compare(expectedValue, fmt.Sprint(val)) != 0 {
-							return errors.Errorf("wrong result on query %s in row %d in column %d: got %q, expected %q",
-								queryName, numRows, i, fmt.Sprint(val), expectedValue)
+						actualValue := fmt.Sprint(val)
+						if strings.Compare(expectedValue, actualValue) != 0 {
+							expectedFloat, err := strconv.ParseFloat(expectedValue, 64)
+							if err != nil {
+								return errors.Errorf("[q%s] failed parsing expected value as float64 with %s\n"+
+									"wrong result in row %d in column %d: got %q, expected %q",
+									queryName, err, numRows, i, actualValue, expectedValue)
+							}
+							actualFloat, err := strconv.ParseFloat(actualValue, 64)
+							if err != nil {
+								return errors.Errorf("[q%s] failed parsing actual value as float64 with %s\n"+
+									"wrong result in row %d in column %d: got %q, expected %q",
+									queryName, err, numRows, i, actualValue, expectedValue)
+							}
+							if math.Abs(expectedFloat-actualFloat) > 0.01 {
+								// We only fail the check if the difference is more than 0.01 -
+								// this is what TPC-H spec requires for DECIMALs.
+								return errors.Errorf("[q%s] wrong result in row %d in column %d: got %q, expected %q",
+									queryName, numRows, i, actualValue, expectedValue)
+							}
 						}
 					}
 				}
@@ -235,19 +255,27 @@ func (w *worker) run(ctx context.Context) error {
 		numRows++
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return errors.Errorf("[q%s]: %s", queryName, err)
 	}
 	if !w.config.disableChecks {
 		if !queriesToSkip[queryName] {
 			if numRows != numExpectedRowsByQueryName[queryName] {
-				return errors.Errorf("query %s returned wrong number of rows: got %d, expected %d", queryName, numRows, numExpectedRowsByQueryName[queryName])
+				return errors.Errorf("[q%s] returned wrong number of rows: got %d, expected %d",
+					queryName, numRows, numExpectedRowsByQueryName[queryName],
+				)
 			}
 		}
 	}
 	elapsed := timeutil.Since(start)
-	w.hists.Get(queryName).Record(elapsed)
-	log.Infof(ctx, "[%s] return %d rows after %4.2f seconds:\n  %s",
-		queryName, numRows, elapsed.Seconds(), query)
+	if w.config.verbose {
+		w.hists.Get(queryName).Record(elapsed)
+		log.Infof(ctx, "[q%s] returned %d rows after %4.2f seconds:\n %s",
+			queryName, numRows, elapsed.Seconds(), query)
+
+	} else {
+		log.Infof(ctx, "[q%s] returned %d rows after %4.2f seconds",
+			queryName, numRows, elapsed.Seconds())
+	}
 	return nil
 }
 
