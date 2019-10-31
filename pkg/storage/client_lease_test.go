@@ -14,18 +14,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // TestStoreRangeLease verifies that regular ranges (not some special ones at
@@ -300,4 +308,95 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestCannotTransferLeaseToVoterOutgoing ensures that the evaluation of lease
+// requests for nodes which are already in the VOTER_OUTGOING state will fail.
+func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	knobs, ltk := makeReplicationTestKnobs()
+	// Add a testing knob to allow us to block the change replicas command
+	// while it is being proposed. When we detect that the change replicas
+	// command to move n3 to VOTER_OUTGOING has been evaluated, we'll send
+	// the request to transfer the lease to n3. The hope is that it will
+	// get past the sanity above latch acquisition prior to change replicas
+	// command committing.
+	var scratchRangeID atomic.Value
+	scratchRangeID.Store(roachpb.RangeID(0))
+	changeReplicasChan := make(chan chan struct{}, 1)
+	shouldBlock := func(args storagebase.ProposalFilterArgs) bool {
+		// Block if a ChangeReplicas command is removing a node from our range.
+		return args.Req.RangeID == scratchRangeID.Load().(roachpb.RangeID) &&
+			args.Cmd.ReplicatedEvalResult.ChangeReplicas != nil &&
+			len(args.Cmd.ReplicatedEvalResult.ChangeReplicas.Removed()) > 0
+	}
+	blockIfShould := func(args storagebase.ProposalFilterArgs) {
+		if shouldBlock(args) {
+			ch := make(chan struct{})
+			changeReplicasChan <- ch
+			<-ch
+		}
+	}
+	knobs.Store.(*storage.StoreTestingKnobs).TestingProposalFilter = func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		blockIfShould(args)
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+	desc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
+	scratchRangeID.Store(desc.RangeID)
+	// Make sure n1 has the lease to start with.
+	err := tc.Server(0).DB().AdminTransferLease(context.TODO(),
+		scratchStartKey, tc.Target(0).StoreID)
+	require.NoError(t, err)
+
+	// The test proceeds as follows:
+	//
+	//  - Send an AdminChangeReplicasRequest to remove n3 and add n4
+	//  - Block the step that moves n3 to VOTER_OUTGOING on changeReplicasChan
+	//  - Send an AdminLeaseTransfer to make n3 the leaseholder
+	//  - Try really hard to make sure that at least gets to lease acquisition
+	//    before unblocking the ChangeReplicas.
+	//  - Unblock the ChangeReplicas.
+	//  - Make sure the lease transfer fails.
+
+	ltk.withStopAfterJointConfig(func() {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err = tc.Server(0).DB().AdminChangeReplicas(
+				client.ChangeReplicasCanMixAddAndRemoveContext(ctx),
+				scratchStartKey, desc, []roachpb.ReplicationChange{
+					{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
+					{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},
+				})
+			require.NoError(t, err)
+		}()
+		ch := <-changeReplicasChan
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := tc.Server(0).DB().AdminTransferLease(context.TODO(),
+				scratchStartKey, tc.Target(2).StoreID)
+			require.EqualError(t, err,
+				"replica (n3,s3):3VOTER_OUTGOING of type VOTER_OUTGOING cannot hold lease")
+		}()
+		// Try really hard to make sure that our request makes it to the
+		// latching stage.
+		for i := 0; i < 100; i++ {
+			runtime.Gosched()
+			time.Sleep(time.Microsecond)
+		}
+		close(ch)
+		wg.Wait()
+	})
+
 }
