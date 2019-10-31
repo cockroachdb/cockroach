@@ -37,7 +37,7 @@ func (m *GetRequest) Reset()         { *m = GetRequest{} }
 func (m *GetRequest) String() string { return proto.CompactTextString(m) }
 func (*GetRequest) ProtoMessage()    {}
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{0}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{0}
 }
 func (m *GetRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -71,7 +71,7 @@ func (m *GetResponse) Reset()         { *m = GetResponse{} }
 func (m *GetResponse) String() string { return proto.CompactTextString(m) }
 func (*GetResponse) ProtoMessage()    {}
 func (*GetResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{1}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{1}
 }
 func (m *GetResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -107,7 +107,7 @@ func (m *PutRequest) Reset()         { *m = PutRequest{} }
 func (m *PutRequest) String() string { return proto.CompactTextString(m) }
 func (*PutRequest) ProtoMessage()    {}
 func (*PutRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{2}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{2}
 }
 func (m *PutRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -140,7 +140,7 @@ func (m *PutResponse) Reset()         { *m = PutResponse{} }
 func (m *PutResponse) String() string { return proto.CompactTextString(m) }
 func (*PutResponse) ProtoMessage()    {}
 func (*PutResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{3}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{3}
 }
 func (m *PutResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -174,7 +174,7 @@ func (m *GlobRequest) Reset()         { *m = GlobRequest{} }
 func (m *GlobRequest) String() string { return proto.CompactTextString(m) }
 func (*GlobRequest) ProtoMessage()    {}
 func (*GlobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{4}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{4}
 }
 func (m *GlobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -208,7 +208,7 @@ func (m *GlobResponse) Reset()         { *m = GlobResponse{} }
 func (m *GlobResponse) String() string { return proto.CompactTextString(m) }
 func (*GlobResponse) ProtoMessage()    {}
 func (*GlobResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{5}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{5}
 }
 func (m *GlobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -243,7 +243,7 @@ func (m *DeleteRequest) Reset()         { *m = DeleteRequest{} }
 func (m *DeleteRequest) String() string { return proto.CompactTextString(m) }
 func (*DeleteRequest) ProtoMessage()    {}
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{6}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{6}
 }
 func (m *DeleteRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -276,7 +276,7 @@ func (m *DeleteResponse) Reset()         { *m = DeleteResponse{} }
 func (m *DeleteResponse) String() string { return proto.CompactTextString(m) }
 func (*DeleteResponse) ProtoMessage()    {}
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{7}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{7}
 }
 func (m *DeleteResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -311,7 +311,7 @@ func (m *StatRequest) Reset()         { *m = StatRequest{} }
 func (m *StatRequest) String() string { return proto.CompactTextString(m) }
 func (*StatRequest) ProtoMessage()    {}
 func (*StatRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{8}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{8}
 }
 func (m *StatRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -345,7 +345,7 @@ func (m *BlobStat) Reset()         { *m = BlobStat{} }
 func (m *BlobStat) String() string { return proto.CompactTextString(m) }
 func (*BlobStat) ProtoMessage()    {}
 func (*BlobStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_224b84178c4de3a4, []int{9}
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{9}
 }
 func (m *BlobStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -370,6 +370,73 @@ func (m *BlobStat) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_BlobStat proto.InternalMessageInfo
 
+// StreamChunk contains a chunk of the payload we are streaming
+type StreamChunk struct {
+	Payload []byte `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
+}
+
+func (m *StreamChunk) Reset()         { *m = StreamChunk{} }
+func (m *StreamChunk) String() string { return proto.CompactTextString(m) }
+func (*StreamChunk) ProtoMessage()    {}
+func (*StreamChunk) Descriptor() ([]byte, []int) {
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{10}
+}
+func (m *StreamChunk) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StreamChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StreamChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamChunk.Merge(dst, src)
+}
+func (m *StreamChunk) XXX_Size() int {
+	return m.Size()
+}
+func (m *StreamChunk) XXX_DiscardUnknown() {
+	xxx_messageInfo_StreamChunk.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StreamChunk proto.InternalMessageInfo
+
+// StreamResponse is used to acknowledge a stream ending.
+type StreamResponse struct {
+}
+
+func (m *StreamResponse) Reset()         { *m = StreamResponse{} }
+func (m *StreamResponse) String() string { return proto.CompactTextString(m) }
+func (*StreamResponse) ProtoMessage()    {}
+func (*StreamResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_blobs_b6e5ac0fef355370, []int{11}
+}
+func (m *StreamResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StreamResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *StreamResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamResponse.Merge(dst, src)
+}
+func (m *StreamResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *StreamResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_StreamResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StreamResponse proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*GetRequest)(nil), "cockroach.blobs.GetRequest")
 	proto.RegisterType((*GetResponse)(nil), "cockroach.blobs.GetResponse")
@@ -381,6 +448,8 @@ func init() {
 	proto.RegisterType((*DeleteResponse)(nil), "cockroach.blobs.DeleteResponse")
 	proto.RegisterType((*StatRequest)(nil), "cockroach.blobs.StatRequest")
 	proto.RegisterType((*BlobStat)(nil), "cockroach.blobs.BlobStat")
+	proto.RegisterType((*StreamChunk)(nil), "cockroach.blobs.StreamChunk")
+	proto.RegisterType((*StreamResponse)(nil), "cockroach.blobs.StreamResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -400,6 +469,8 @@ type BlobClient interface {
 	List(ctx context.Context, in *GlobRequest, opts ...grpc.CallOption) (*GlobResponse, error)
 	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
 	Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*BlobStat, error)
+	GetStream(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (Blob_GetStreamClient, error)
+	PutStream(ctx context.Context, opts ...grpc.CallOption) (Blob_PutStreamClient, error)
 }
 
 type blobClient struct {
@@ -455,6 +526,72 @@ func (c *blobClient) Stat(ctx context.Context, in *StatRequest, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *blobClient) GetStream(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (Blob_GetStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Blob_serviceDesc.Streams[0], "/cockroach.blobs.Blob/GetStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &blobGetStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Blob_GetStreamClient interface {
+	Recv() (*StreamChunk, error)
+	grpc.ClientStream
+}
+
+type blobGetStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *blobGetStreamClient) Recv() (*StreamChunk, error) {
+	m := new(StreamChunk)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *blobClient) PutStream(ctx context.Context, opts ...grpc.CallOption) (Blob_PutStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Blob_serviceDesc.Streams[1], "/cockroach.blobs.Blob/PutStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &blobPutStreamClient{stream}
+	return x, nil
+}
+
+type Blob_PutStreamClient interface {
+	Send(*StreamChunk) error
+	CloseAndRecv() (*StreamResponse, error)
+	grpc.ClientStream
+}
+
+type blobPutStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *blobPutStreamClient) Send(m *StreamChunk) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *blobPutStreamClient) CloseAndRecv() (*StreamResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(StreamResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // BlobServer is the server API for Blob service.
 type BlobServer interface {
 	GetBlob(context.Context, *GetRequest) (*GetResponse, error)
@@ -462,6 +599,8 @@ type BlobServer interface {
 	List(context.Context, *GlobRequest) (*GlobResponse, error)
 	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
 	Stat(context.Context, *StatRequest) (*BlobStat, error)
+	GetStream(*GetRequest, Blob_GetStreamServer) error
+	PutStream(Blob_PutStreamServer) error
 }
 
 func RegisterBlobServer(s *grpc.Server, srv BlobServer) {
@@ -558,6 +697,53 @@ func _Blob_Stat_Handler(srv interface{}, ctx context.Context, dec func(interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Blob_GetStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(BlobServer).GetStream(m, &blobGetStreamServer{stream})
+}
+
+type Blob_GetStreamServer interface {
+	Send(*StreamChunk) error
+	grpc.ServerStream
+}
+
+type blobGetStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *blobGetStreamServer) Send(m *StreamChunk) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Blob_PutStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(BlobServer).PutStream(&blobPutStreamServer{stream})
+}
+
+type Blob_PutStreamServer interface {
+	SendAndClose(*StreamResponse) error
+	Recv() (*StreamChunk, error)
+	grpc.ServerStream
+}
+
+type blobPutStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *blobPutStreamServer) SendAndClose(m *StreamResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *blobPutStreamServer) Recv() (*StreamChunk, error) {
+	m := new(StreamChunk)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 var _Blob_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "cockroach.blobs.Blob",
 	HandlerType: (*BlobServer)(nil),
@@ -583,7 +769,18 @@ var _Blob_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Blob_Stat_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "GetStream",
+			Handler:       _Blob_GetStream_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "PutStream",
+			Handler:       _Blob_PutStream_Handler,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "blobs/blobspb/blobs.proto",
 }
 
@@ -829,6 +1026,48 @@ func (m *BlobStat) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *StreamChunk) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StreamChunk) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Payload) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintBlobs(dAtA, i, uint64(len(m.Payload)))
+		i += copy(dAtA[i:], m.Payload)
+	}
+	return i, nil
+}
+
+func (m *StreamResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StreamResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
 func encodeVarintBlobs(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -962,6 +1201,28 @@ func (m *BlobStat) Size() (n int) {
 	if m.Filesize != 0 {
 		n += 1 + sovBlobs(uint64(m.Filesize))
 	}
+	return n
+}
+
+func (m *StreamChunk) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Payload)
+	if l > 0 {
+		n += 1 + l + sovBlobs(uint64(l))
+	}
+	return n
+}
+
+func (m *StreamResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	return n
 }
 
@@ -1733,6 +1994,137 @@ func (m *BlobStat) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *StreamChunk) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBlobs
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StreamChunk: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StreamChunk: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Payload", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowBlobs
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Payload = append(m.Payload[:0], dAtA[iNdEx:postIndex]...)
+			if m.Payload == nil {
+				m.Payload = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBlobs(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StreamResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowBlobs
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StreamResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StreamResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipBlobs(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthBlobs
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipBlobs(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1838,33 +2230,36 @@ var (
 	ErrIntOverflowBlobs   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("blobs/blobspb/blobs.proto", fileDescriptor_blobs_224b84178c4de3a4) }
+func init() { proto.RegisterFile("blobs/blobspb/blobs.proto", fileDescriptor_blobs_b6e5ac0fef355370) }
 
-var fileDescriptor_blobs_224b84178c4de3a4 = []byte{
-	// 386 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0xcf, 0x4e, 0xea, 0x40,
-	0x14, 0xc6, 0x67, 0x80, 0xcb, 0x9f, 0x03, 0xdc, 0x7b, 0x33, 0x61, 0x01, 0x55, 0x47, 0xd2, 0x18,
-	0x85, 0x98, 0x94, 0x44, 0x9f, 0x40, 0xa2, 0xb2, 0xd0, 0x05, 0xa9, 0x3b, 0x77, 0x2d, 0x8e, 0x48,
-	0xac, 0x4c, 0x65, 0x86, 0x85, 0x3e, 0x85, 0x8f, 0xc5, 0x92, 0x25, 0x4b, 0x2d, 0x6b, 0xdf, 0xc1,
-	0x74, 0xa6, 0x2d, 0x20, 0x90, 0xb0, 0x81, 0x39, 0xfd, 0xbe, 0xfe, 0xce, 0xe9, 0xf9, 0x32, 0x50,
-	0x73, 0x3d, 0xee, 0x8a, 0x96, 0xfa, 0xf5, 0x5d, 0xfd, 0x6f, 0xf9, 0x23, 0x2e, 0x39, 0xf9, 0xd7,
-	0xe3, 0xbd, 0xe7, 0x11, 0x77, 0x7a, 0x4f, 0x96, 0x7a, 0x6c, 0x54, 0xfa, 0xbc, 0xcf, 0x95, 0xd6,
-	0x0a, 0x4f, 0xda, 0x66, 0x36, 0x00, 0x3a, 0x4c, 0xda, 0xec, 0x75, 0xcc, 0x84, 0x24, 0x06, 0xe4,
-	0x1f, 0x07, 0x1e, 0x1b, 0x3a, 0x2f, 0xac, 0x8a, 0xeb, 0xb8, 0x51, 0xb0, 0x93, 0xda, 0x3c, 0x81,
-	0xa2, 0x72, 0x0a, 0x9f, 0x0f, 0x05, 0x23, 0x55, 0xc8, 0xf9, 0xce, 0x9b, 0xc7, 0x9d, 0x07, 0xe5,
-	0x2c, 0xd9, 0x71, 0x69, 0xb6, 0x01, 0xba, 0xe3, 0x5d, 0x90, 0xcb, 0x8c, 0xd4, 0x2a, 0xa3, 0x0c,
-	0x45, 0xc5, 0xd0, 0xcd, 0x54, 0x6f, 0x8f, 0xbb, 0x31, 0x53, 0xbd, 0x27, 0x25, 0x1b, 0x0d, 0x23,
-	0x64, 0x5c, 0x9a, 0x47, 0x50, 0xd2, 0xc6, 0x68, 0xca, 0x0a, 0xfc, 0x09, 0xbb, 0x89, 0x2a, 0xae,
-	0xa7, 0x1b, 0x05, 0x5b, 0x17, 0xe6, 0x29, 0x94, 0x2f, 0x99, 0xc7, 0x24, 0xdb, 0xe5, 0xbb, 0xff,
-	0xc3, 0xdf, 0xd8, 0x1c, 0x4d, 0xd3, 0x84, 0xe2, 0x9d, 0x74, 0x76, 0x5a, 0xda, 0x31, 0xe4, 0xdb,
-	0x1e, 0x77, 0x43, 0x7b, 0xec, 0x13, 0x83, 0x77, 0xed, 0x4b, 0xdb, 0x49, 0x7d, 0xf6, 0x9d, 0x82,
-	0x4c, 0x68, 0x24, 0xd7, 0x90, 0xeb, 0x30, 0xa9, 0x8e, 0x7b, 0xd6, 0xaf, 0x08, 0xad, 0x45, 0x52,
-	0xc6, 0xfe, 0x66, 0x31, 0x9a, 0x10, 0x85, 0x9c, 0xee, 0x78, 0x1b, 0x67, 0x11, 0xcf, 0x06, 0xce,
-	0xf2, 0xde, 0x11, 0xb9, 0x82, 0xcc, 0xed, 0x40, 0x48, 0xb2, 0xa1, 0xdf, 0x22, 0x10, 0xe3, 0x60,
-	0x8b, 0x9a, 0x60, 0x6e, 0x20, 0xab, 0x97, 0x48, 0xe8, 0x9a, 0x75, 0x25, 0x0a, 0xe3, 0x70, 0xab,
-	0x9e, 0xc0, 0x2e, 0x20, 0xa3, 0x16, 0xba, 0x3e, 0xd3, 0x52, 0x2c, 0x46, 0x6d, 0x4d, 0x8d, 0x93,
-	0x30, 0x51, 0xbb, 0x39, 0xf9, 0xa2, 0x68, 0x12, 0x50, 0x3c, 0x0d, 0x28, 0x9e, 0x05, 0x14, 0x7f,
-	0x06, 0x14, 0x7f, 0xcc, 0x29, 0x9a, 0xce, 0x29, 0x9a, 0xcd, 0x29, 0xba, 0xcf, 0x45, 0x97, 0xca,
-	0xcd, 0xaa, 0x8b, 0x72, 0xfe, 0x13, 0x00, 0x00, 0xff, 0xff, 0xa6, 0xfa, 0x0a, 0x8b, 0x6c, 0x03,
-	0x00, 0x00,
+var fileDescriptor_blobs_b6e5ac0fef355370 = []byte{
+	// 443 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x94, 0xcb, 0x6e, 0xd3, 0x40,
+	0x14, 0x86, 0x67, 0xa8, 0x69, 0xea, 0x93, 0xb6, 0x54, 0xa3, 0x2e, 0x52, 0x03, 0x43, 0x35, 0x42,
+	0xe0, 0x0a, 0xc9, 0x45, 0xf0, 0x04, 0x84, 0x4b, 0x24, 0x40, 0x28, 0x72, 0x77, 0xec, 0xec, 0x30,
+	0xb4, 0x51, 0x1d, 0x8f, 0xb1, 0xc7, 0x0b, 0x78, 0x03, 0x76, 0x3c, 0x56, 0x96, 0x59, 0x66, 0x09,
+	0xce, 0x8b, 0x20, 0xcf, 0x78, 0x1c, 0x87, 0x38, 0x51, 0xd8, 0x24, 0x73, 0x7c, 0x7e, 0x7f, 0xe7,
+	0xf2, 0xdb, 0x86, 0xb3, 0x30, 0x12, 0x61, 0x76, 0xa9, 0x7e, 0x93, 0x50, 0xff, 0x7b, 0x49, 0x2a,
+	0xa4, 0x20, 0xf7, 0x46, 0x62, 0x74, 0x9b, 0x8a, 0x60, 0x74, 0xe3, 0xa9, 0xcb, 0xce, 0xe9, 0xb5,
+	0xb8, 0x16, 0x2a, 0x77, 0x59, 0x9e, 0xb4, 0x8c, 0xb9, 0x00, 0x03, 0x2e, 0x7d, 0xfe, 0x2d, 0xe7,
+	0x99, 0x24, 0x0e, 0x1c, 0x7c, 0x1d, 0x47, 0x3c, 0x0e, 0x26, 0xbc, 0x87, 0xcf, 0xb1, 0x6b, 0xfb,
+	0x75, 0xcc, 0x9e, 0x42, 0x57, 0x29, 0xb3, 0x44, 0xc4, 0x19, 0x27, 0x3d, 0xe8, 0x24, 0xc1, 0xf7,
+	0x48, 0x04, 0x5f, 0x94, 0xf2, 0xd0, 0x37, 0x21, 0xeb, 0x03, 0x0c, 0xf3, 0x5d, 0x90, 0x4d, 0xc6,
+	0x9d, 0x55, 0xc6, 0x11, 0x74, 0x15, 0x43, 0x17, 0x53, 0xb5, 0x23, 0x11, 0x1a, 0xa6, 0xba, 0x4f,
+	0x4a, 0x9e, 0xc6, 0x15, 0xd2, 0x84, 0xec, 0x31, 0x1c, 0x6a, 0x61, 0xd5, 0xe5, 0x29, 0xdc, 0x2d,
+	0xab, 0x65, 0x3d, 0x7c, 0xbe, 0xe7, 0xda, 0xbe, 0x0e, 0xd8, 0x33, 0x38, 0x7a, 0xc3, 0x23, 0x2e,
+	0xf9, 0x2e, 0x73, 0x9f, 0xc0, 0xb1, 0x11, 0x57, 0xdd, 0x5c, 0x40, 0xf7, 0x4a, 0x06, 0x3b, 0x2d,
+	0xed, 0x09, 0x1c, 0xf4, 0x23, 0x11, 0x96, 0x72, 0xa3, 0xcb, 0xc6, 0x3f, 0xb4, 0x6e, 0xcf, 0xaf,
+	0xe3, 0x72, 0xc0, 0x2b, 0x99, 0xf2, 0x60, 0xf2, 0xfa, 0x26, 0x8f, 0x6f, 0xb7, 0x2c, 0xf7, 0x04,
+	0x8e, 0xb5, 0xd0, 0x74, 0xf3, 0xe2, 0xa7, 0x05, 0x56, 0x59, 0x83, 0xbc, 0x83, 0xce, 0x80, 0x4b,
+	0x75, 0xbc, 0xef, 0xfd, 0xe3, 0xbe, 0xb7, 0x34, 0xd9, 0x79, 0xd0, 0x9e, 0xac, 0x86, 0x43, 0x25,
+	0x67, 0x98, 0x6f, 0xe2, 0x2c, 0x9d, 0x6d, 0xe1, 0x34, 0x2d, 0x43, 0xe4, 0x2d, 0x58, 0x1f, 0xc7,
+	0x99, 0x24, 0x2d, 0xf5, 0x96, 0x5e, 0x3a, 0x0f, 0x37, 0x64, 0x6b, 0xcc, 0x07, 0xd8, 0xd7, 0xfb,
+	0x27, 0x74, 0x4d, 0xba, 0xe2, 0xa2, 0xf3, 0x68, 0x63, 0xbe, 0x86, 0xbd, 0x02, 0x4b, 0x79, 0xb1,
+	0xde, 0x53, 0xc3, 0x51, 0xe7, 0x6c, 0x2d, 0x6b, 0x4c, 0x64, 0x88, 0xbc, 0x07, 0x7b, 0xc0, 0xa5,
+	0x36, 0xe1, 0x7f, 0x17, 0xdd, 0xf0, 0x98, 0xa1, 0xe7, 0x98, 0x7c, 0x02, 0x7b, 0x98, 0x1b, 0xd6,
+	0x56, 0x79, 0xcb, 0x70, 0xab, 0xcf, 0x01, 0x43, 0x2e, 0xee, 0x5f, 0x4c, 0xff, 0x50, 0x34, 0x2d,
+	0x28, 0x9e, 0x15, 0x14, 0xcf, 0x0b, 0x8a, 0x7f, 0x17, 0x14, 0xff, 0x5a, 0x50, 0x34, 0x5b, 0x50,
+	0x34, 0x5f, 0x50, 0xf4, 0xb9, 0x53, 0x7d, 0x2b, 0xc2, 0x7d, 0xf5, 0xfe, 0xbf, 0xfc, 0x1b, 0x00,
+	0x00, 0xff, 0xff, 0x35, 0x4e, 0x41, 0x67, 0x43, 0x04, 0x00, 0x00,
 }

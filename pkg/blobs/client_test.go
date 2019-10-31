@@ -167,18 +167,15 @@ func TestBlobClientReadFile(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.TODO()
-			reader, err := blobClient.ReadFile(ctx, tc.nodeID, tc.filename)
+			reader, _ := blobClient.ReadFile(ctx, tc.nodeID, tc.filename)
+			// Check that fetched file content is correct
+			content, err := ioutil.ReadAll(reader)
 			if err != nil {
 				if tc.err != "" && testutils.IsError(err, tc.err) {
 					// correct error was returned
 					return
 				}
 				t.Fatal(err)
-			}
-			// Check that fetched file content is correct
-			content, err := ioutil.ReadAll(reader)
-			if err != nil {
-				t.Fatal(err, "unable to read fetched file")
 			}
 			if !bytes.Equal(content, tc.fileContent) {
 				t.Fatal(fmt.Sprintf(`fetched file content incorrect, expected %s, got %s`, tc.fileContent, content))
