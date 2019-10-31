@@ -386,9 +386,10 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 
 	for iterCount >= 0 && p.parent.Valid() && bytes.Equal(p.keyBuf, p.curKey) {
 		p.iterNext()
+		iterCount--
 	}
 
-	if bytes.Equal(p.keyBuf, p.curKey) {
+	if bytes.Equal(p.keyBuf, p.curKey) && p.parent.Valid() {
 		// We have to seek. Append a null byte to the current key.
 		p.keyBuf = append(p.keyBuf, 0x00)
 
