@@ -1881,7 +1881,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 	}
 
 	specifiedGCThreshold := hlc.Timestamp{
-		WallTime: 2E9,
+		WallTime: 2e9,
 	}
 	gcArgs := &roachpb.GCRequest{
 		RequestHeader: roachpb.RequestHeader{

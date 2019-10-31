@@ -219,5 +219,5 @@ func (tc *ToxiCluster) Measure(ctx context.Context, fromNode int, stmt string) t
 	if err != nil {
 		tc.cluster.t.Fatalf("unable to parse %s as float: %s", b, err)
 	}
-	return time.Duration(f * 1E9)
+	return time.Duration(f * 1e9)
 }

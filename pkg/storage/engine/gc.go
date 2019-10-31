@@ -28,7 +28,7 @@ type GarbageCollector struct {
 // MakeGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and policy.TTLSeconds.
 func MakeGarbageCollector(now hlc.Timestamp, policy config.GCPolicy) GarbageCollector {
-	ttlNanos := int64(policy.TTLSeconds) * 1E9
+	ttlNanos := int64(policy.TTLSeconds) * 1e9
 	return GarbageCollector{
 		Threshold: hlc.Timestamp{WallTime: now.WallTime - ttlNanos},
 		policy:    policy,
