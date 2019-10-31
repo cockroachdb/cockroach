@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -372,7 +372,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 //   }
 //
 //   // Next is part of the RowSource interface.
-//   func (p *concatProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+//   func (p *concatProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 //     // Loop while we haven't produced a row or a metadata record. We loop around
 //     // in several cases, including when the filtering rejected a row coming.
 //     for p.State == StateRunning {

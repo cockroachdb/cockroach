@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -34,17 +33,18 @@ var CTASPlanResultTypes = []types.T{
 }
 
 type bulkRowWriter struct {
+	execinfra.ProcessorBase
 	flowCtx        *execinfra.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
 	spec           execinfrapb.BulkRowWriterSpec
 	input          execinfra.RowSource
-	out            execinfra.ProcOutputHelper
 	output         execinfra.RowReceiver
 	summary        roachpb.BulkOpSummary
 }
 
 var _ execinfra.Processor = &bulkRowWriter{}
+var _ execinfra.RowSource = &bulkRowWriter{}
 
 func newBulkRowWriterProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -61,11 +61,60 @@ func newBulkRowWriterProcessor(
 		input:          input,
 		output:         output,
 	}
-	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, CTASPlanResultTypes,
-		flowCtx.NewEvalCtx(), output); err != nil {
+	if err := c.Init(
+		c, &execinfrapb.PostProcessSpec{}, CTASPlanResultTypes, flowCtx, processorID, output,
+		nil /* memMonitor */, execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{input}},
+	); err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+// Start is part of the RowSource interface.
+func (sp *bulkRowWriter) Start(ctx context.Context) context.Context {
+	sp.input.Start(ctx)
+	ctx = sp.StartInternal(ctx, "bulkRowWriter")
+	err := sp.work(ctx)
+	sp.MoveToDraining(err)
+	return ctx
+}
+
+// Next is part of the RowSource interface.
+func (sp *bulkRowWriter) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	// If there wasn't an error while processing, output the summary.
+	if sp.ProcessorBase.State == execinfra.StateRunning {
+		countsBytes, marshalErr := protoutil.Marshal(&sp.summary)
+		sp.MoveToDraining(marshalErr)
+		if marshalErr == nil {
+			// Output the summary.
+			return sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+			}, nil
+		}
+	}
+	return nil, sp.DrainHelper()
+}
+
+func (sp *bulkRowWriter) work(ctx context.Context) error {
+	kvCh := make(chan row.KVBatch, 10)
+	var g ctxgroup.Group
+
+	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, sp.EvalCtx, kvCh)
+	if err != nil {
+		return err
+	}
+	if conv.EvalCtx.SessionData == nil {
+		panic("uninitialized session data")
+	}
+
+	g = ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		return sp.ingestLoop(ctx, kvCh)
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		return sp.convertLoop(ctx, kvCh, conv)
+	})
+	return g.Wait()
 }
 
 func (sp *bulkRowWriter) OutputTypes() []types.T {
@@ -122,15 +171,18 @@ func (sp *bulkRowWriter) convertLoop(
 
 	done := false
 	alloc := &sqlbase.DatumAlloc{}
-	input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 	typs := sp.input.OutputTypes()
 
 	for {
 		var rows int64
 		for {
-			row, err := input.NextRow()
-			if err != nil {
-				return err
+			row, meta := sp.input.Next()
+			if meta != nil {
+				if meta.Err != nil {
+					return meta.Err
+				}
+				sp.AppendTrailingMeta(*meta)
+				continue
 			}
 			if row == nil {
 				done = true
@@ -177,52 +229,8 @@ func (sp *bulkRowWriter) convertLoop(
 	return nil
 }
 
-func (sp *bulkRowWriter) Run(ctx context.Context) {
-	ctx, span := tracing.ChildSpan(ctx, "bulkRowWriter")
-	defer tracing.FinishSpan(span)
-
-	kvCh := make(chan row.KVBatch, 10)
-	var g ctxgroup.Group
-
-	// Create a new evalCtx per converter so each go routine gets its own
-	// collationenv, which can't be accessed in parallel.
-	evalCtx := sp.flowCtx.EvalCtx.Copy()
-
-	sp.input.Start(ctx)
-
-	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, evalCtx, kvCh)
-	if err != nil {
-		execinfra.DrainAndClose(
-			ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
-		return
-	}
-	if conv.EvalCtx.SessionData == nil {
-		panic("uninitialized session data")
-	}
-
-	g = ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		return sp.ingestLoop(ctx, kvCh)
-	})
-	g.GoCtx(func(ctx context.Context) error {
-		return sp.convertLoop(ctx, kvCh, conv)
-	})
-	err = g.Wait()
-
-	// Emit a row with the BulkOpSummary from the processor after the rows in the
-	// new table have been written.
-	if err == nil {
-		if countsBytes, marshalErr := protoutil.Marshal(&sp.summary); marshalErr != nil {
-			err = marshalErr
-		} else if cs, emitErr := sp.out.EmitRow(ctx, sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
-		}); emitErr != nil {
-			err = emitErr
-		} else if cs != execinfra.NeedMoreRows {
-			err = errors.New("unexpected closure of consumer")
-		}
-	}
-
-	execinfra.DrainAndClose(
-		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+// ConsumerClosed is part of the RowSource interface.
+func (sp *bulkRowWriter) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	sp.InternalClose()
 }

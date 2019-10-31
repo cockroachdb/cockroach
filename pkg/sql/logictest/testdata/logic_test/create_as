@@ -1,7 +1,3 @@
-# LogicTest: local local-vec-off local-mixed-19.1-19.2 fakedist fakedist-vec-off fakedist-disk
-# TODO(radu): the test fails on fakedist-metadata config (#41816); remove this
-# directive once that is fixed.
-
 statement ok
 CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)
 
