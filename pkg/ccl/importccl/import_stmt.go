@@ -235,6 +235,8 @@ func importPlanHook(
 		case "CSV":
 			telemetry.Count("import.format.csv")
 			format.Format = roachpb.IOFileFormat_CSV
+			// Set the default CSV separator for the cases when it is not overwritten.
+			format.Csv.Comma = ','
 			if override, ok := opts[csvDelimiter]; ok {
 				comma, err := util.GetSingleRune(override)
 				if err != nil {
@@ -267,6 +269,11 @@ func importPlanHook(
 			}
 			if _, ok := opts[csvStrictQuotes]; ok {
 				format.Csv.StrictQuotes = true
+			}
+			// TODO(spaskob): Refactor so that the save rejected option
+			// is passed in all import formats not just CSV.
+			if _, ok := opts[importOptionSaveRejected]; ok {
+				format.Csv.SaveRejected = true
 			}
 		case "DELIMITED":
 			telemetry.Count("import.format.mysqlout")

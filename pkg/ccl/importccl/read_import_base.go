@@ -13,6 +13,7 @@ import (
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -163,19 +164,30 @@ func readInputFiles(
 			src.Reader = decompressed
 
 			var rejected chan string
-			if format.Format == roachpb.IOFileFormat_MysqlOutfile && format.MysqlOut.SaveRejected {
+			if (format.Format == roachpb.IOFileFormat_CSV && format.Csv.SaveRejected) ||
+				(format.Format == roachpb.IOFileFormat_MysqlOutfile && format.MysqlOut.SaveRejected) {
 				rejected = make(chan string)
 			}
 			if rejected != nil {
 				grp := ctxgroup.WithContext(ctx)
 				grp.GoCtx(func(ctx context.Context) error {
 					var buf []byte
-					atFirstLine := true
+					var countRejected int64
 					for s := range rejected {
+						countRejected++
+						if countRejected > 1000 { // TODO(spaskob): turn the magic constant into an option
+							return pgerror.New(
+								pgcode.DataCorrupted,
+								fmt.Sprintf(
+									"too many parsing errors (%d) encountered for file %s",
+									countRejected,
+									dataFile,
+								),
+							)
+						}
 						buf = append(buf, s...)
-						atFirstLine = false
 					}
-					if atFirstLine {
+					if countRejected == 0 {
 						// no rejected rows
 						return nil
 					}
@@ -212,7 +224,7 @@ func readInputFiles(
 					return errors.Wrap(err, dataFile)
 				}
 			} else {
-				if err := fileFunc(ctx, src, dataFileIndex, dataFile, rejected); err != nil {
+				if err := fileFunc(ctx, src, dataFileIndex, dataFile, nil /* rejected */); err != nil {
 					return errors.Wrap(err, dataFile)
 				}
 			}

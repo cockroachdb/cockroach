@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 )
@@ -135,16 +134,11 @@ func TestConverterFlushesBatches(t *testing.T) {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
 
-				group := ctxgroup.WithContext(ctx)
-
-				group.Go(func() error {
-					return conv.readFiles(ctx, testCase.inputs, converterSpec.Format, externalStorage)
-				})
-
-				conv.start(group)
 				go func() {
 					defer close(kvCh)
-					err = group.Wait()
+					if err := conv.readFiles(ctx, testCase.inputs, converterSpec.Format, externalStorage); err != nil {
+						t.Fatalf("Conversion failed: %v", err)
+					}
 				}()
 
 				lastBatch := 0
@@ -159,9 +153,6 @@ func TestConverterFlushesBatches(t *testing.T) {
 					lastBatch = len(batch.KVs)
 					testNumRecords = testNumRecords + lastBatch
 					testNumBatches++
-				}
-				if err != nil {
-					t.Fatalf("Conversion failed: %v", err)
 				}
 
 				if batchSize == 0 {
