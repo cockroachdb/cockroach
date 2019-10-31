@@ -525,6 +525,25 @@ func (c *cloudFeed) Partitions() []string {
 	return []string{cloudFeedPartition}
 }
 
+// ReformatJSON marshals a golang stdlib based JSON into a byte slice preserving
+// whitespace in accordance with the crdb json library.
+func ReformatJSON(j interface{}) ([]byte, error) {
+	printed, err := gojson.Marshal(j)
+	if err != nil {
+		return nil, err
+	}
+	// The golang stdlib json library prints whitespace differently than our
+	// internal one. Roundtrip through the crdb json library to get the
+	// whitespace back to where it started.
+	parsed, err := json.ParseJSON(string(printed))
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	parsed.Format(&buf)
+	return buf.Bytes(), nil
+}
+
 // extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
 // format=json, envelope=wrapped` value.
 func extractKeyFromJSONValue(wrapped []byte) (key []byte, value []byte, _ error) {
@@ -535,28 +554,11 @@ func extractKeyFromJSONValue(wrapped []byte) (key []byte, value []byte, _ error)
 	keyParsed := parsed[`key`]
 	delete(parsed, `key`)
 
-	reformatJSON := func(j interface{}) ([]byte, error) {
-		printed, err := gojson.Marshal(j)
-		if err != nil {
-			return nil, err
-		}
-		// The golang stdlib json library prints whitespace differently than our
-		// internal one. Roundtrip through the crdb json library to get the
-		// whitespace back to where it started.
-		parsed, err := json.ParseJSON(string(printed))
-		if err != nil {
-			return nil, err
-		}
-		var buf bytes.Buffer
-		parsed.Format(&buf)
-		return buf.Bytes(), nil
-	}
-
 	var err error
-	if key, err = reformatJSON(keyParsed); err != nil {
+	if key, err = ReformatJSON(keyParsed); err != nil {
 		return nil, nil, err
 	}
-	if value, err = reformatJSON(parsed); err != nil {
+	if value, err = ReformatJSON(parsed); err != nil {
 		return nil, nil, err
 	}
 	return key, value, nil
