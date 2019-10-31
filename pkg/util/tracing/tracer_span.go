@@ -578,6 +578,76 @@ func (s *span) Log(data opentracing.LogData) {
 	panic("unimplemented")
 }
 
+// getRecording returns the span's recording.
+func (s *span) getRecording() RecordedSpan {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rs := RecordedSpan{
+		TraceID:      s.TraceID,
+		SpanID:       s.SpanID,
+		ParentSpanID: s.parentSpanID,
+		Operation:    s.operation,
+		StartTime:    s.startTime,
+		Duration:     s.mu.duration,
+	}
+	switch rs.Duration {
+	case -1:
+		// -1 indicates an unfinished span.
+		// TODO(radu): depending how recording of in-progress spans is used, we
+		// may want to set this to (Now - StartTime).
+		rs.Duration = 0
+	case 0:
+		// 0 is a special value for unfinished spans. Change to 1ns.
+		rs.Duration = time.Nanosecond
+	}
+
+	if s.mu.stats != nil {
+		stats, err := types.MarshalAny(s.mu.stats)
+		if err != nil {
+			panic(err)
+		}
+		rs.Stats = stats
+	}
+
+	if len(s.mu.Baggage) > 0 {
+		rs.Baggage = make(map[string]string)
+		for k, v := range s.mu.Baggage {
+			rs.Baggage[k] = v
+		}
+	}
+	if s.startTags != nil {
+		rs.Tags = make(map[string]string)
+		tags := s.startTags.Get()
+		for i := range tags {
+			tag := &tags[i]
+			rs.Tags[tag.Key()] = tag.ValueStr()
+		}
+	}
+	if len(s.mu.tags) > 0 {
+		if rs.Tags == nil {
+			rs.Tags = make(map[string]string)
+		}
+		for k, v := range s.mu.tags {
+			// We encode the tag values as strings.
+			rs.Tags[k] = fmt.Sprint(v)
+		}
+	}
+	rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
+	for i, r := range s.mu.recordedLogs {
+		rs.Logs[i].Time = r.Timestamp
+		rs.Logs[i].Fields = make([]RecordedSpan_LogRecord_Field, len(r.Fields))
+		for j, f := range r.Fields {
+			rs.Logs[i].Fields[j] = RecordedSpan_LogRecord_Field{
+				Key:   f.Key(),
+				Value: fmt.Sprint(f.Value()),
+			}
+		}
+	}
+
+	return rs
+}
+
 // spanGroup keeps track of all the spans that are being recorded as a group (i.e.
 // the span for which recording was enabled and all direct or indirect child
 // spans since then).
@@ -589,7 +659,7 @@ type spanGroup struct {
 	spans []*span
 	// remoteSpans stores spans obtained from another host that we want to associate
 	// with the record for this group.
-	remoteSpans []RecordedSpan
+	remoteSpans Recording
 }
 
 func (ss *spanGroup) addSpan(s *span) {
@@ -601,77 +671,15 @@ func (ss *spanGroup) addSpan(s *span) {
 // getSpans returns all the local and remote spans accumulated in this group.
 // The first result is the first local span - i.e. the span originally passed to
 // StartRecording().
-func (ss *spanGroup) getSpans() []RecordedSpan {
+func (ss *spanGroup) getSpans() Recording {
 	ss.Lock()
 	spans := ss.spans
 	remoteSpans := ss.remoteSpans
 	ss.Unlock()
 
-	result := make([]RecordedSpan, 0, len(spans)+len(remoteSpans))
+	result := make(Recording, 0, len(spans)+len(remoteSpans))
 	for _, s := range spans {
-		s.mu.Lock()
-		rs := RecordedSpan{
-			TraceID:      s.TraceID,
-			SpanID:       s.SpanID,
-			ParentSpanID: s.parentSpanID,
-			Operation:    s.operation,
-			StartTime:    s.startTime,
-			Duration:     s.mu.duration,
-		}
-		switch rs.Duration {
-		case -1:
-			// -1 indicates an unfinished span.
-			// TODO(radu): depending how recording of in-progress spans is used, we
-			// may want to set this to (Now - StartTime).
-			rs.Duration = 0
-		case 0:
-			// 0 is a special value for unfinished spans. Change to 1ns.
-			rs.Duration = time.Nanosecond
-		}
-
-		if s.mu.stats != nil {
-			stats, err := types.MarshalAny(s.mu.stats)
-			if err != nil {
-				panic(err)
-			}
-			rs.Stats = stats
-		}
-
-		if len(s.mu.Baggage) > 0 {
-			rs.Baggage = make(map[string]string)
-			for k, v := range s.mu.Baggage {
-				rs.Baggage[k] = v
-			}
-		}
-		if s.startTags != nil {
-			rs.Tags = make(map[string]string)
-			tags := s.startTags.Get()
-			for i := range tags {
-				tag := &tags[i]
-				rs.Tags[tag.Key()] = tag.ValueStr()
-			}
-		}
-		if len(s.mu.tags) > 0 {
-			if rs.Tags == nil {
-				rs.Tags = make(map[string]string)
-			}
-			for k, v := range s.mu.tags {
-				// We encode the tag values as strings.
-				rs.Tags[k] = fmt.Sprint(v)
-			}
-		}
-		rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
-		for i, r := range s.mu.recordedLogs {
-			rs.Logs[i].Time = r.Timestamp
-			rs.Logs[i].Fields = make([]RecordedSpan_LogRecord_Field, len(r.Fields))
-			for j, f := range r.Fields {
-				rs.Logs[i].Fields[j] = RecordedSpan_LogRecord_Field{
-					Key:   f.Key(),
-					Value: fmt.Sprint(f.Value()),
-				}
-			}
-		}
-		s.mu.Unlock()
+		rs := s.getRecording()
 		result = append(result, rs)
 	}
 	return append(result, remoteSpans...)
