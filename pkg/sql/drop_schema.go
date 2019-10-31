@@ -163,13 +163,15 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	}
 
 	// Create the job to drop the schema.
-	p.createDropSchemaJob(
+	if err := p.createDropSchemaJob(
 		schemaIDs,
 		n.d.getDroppedTableDetails(),
 		n.d.typesToDelete,
 		n.d.functionsToDelete,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
-	)
+	); err != nil {
+		return err
+	}
 
 	// Log Drop Schema event. This is an auditable log event and is recorded
 	// in the same transaction as table descriptor update.
@@ -235,7 +237,11 @@ func (p *planner) createDropSchemaJob(
 	typesToDrop []*typedesc.Mutable,
 	functionsToDrop []*funcdesc.Mutable,
 	jobDesc string,
-) {
+) error {
+	if err := p.checkDDLAtomicity(); err != nil {
+		return err
+	}
+
 	typeIDs := make([]descpb.ID, 0, len(typesToDrop))
 	for _, t := range typesToDrop {
 		typeIDs = append(typeIDs, t.ID)
@@ -263,6 +269,7 @@ func (p *planner) createDropSchemaJob(
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
 	})
+	return nil
 }
 
 func (n *dropSchemaNode) Next(params runParams) (bool, error) { return false, nil }

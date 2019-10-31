@@ -3257,6 +3257,10 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 	m.data.SearchPath = m.data.SearchPath.UpdatePaths(paths)
 }
 
+func (m *sessionDataMutator) SetStrictDDLAtomicity(val bool) {
+	m.data.StrictDDLAtomicity = val
+}
+
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	oldLocation := sessionDataTimeZoneFormat(m.data.Location)
 	m.data.Location = loc

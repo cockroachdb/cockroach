@@ -150,6 +150,7 @@ sql_safe_updates                                           off
 standard_conforming_strings                                on
 statement_timeout                                          0
 streamer_enabled                                           on
+strict_ddl_atomicity                                       off
 stub_catalog_tables                                        on
 synchronize_seqscans                                       on
 synchronous_commit                                         on

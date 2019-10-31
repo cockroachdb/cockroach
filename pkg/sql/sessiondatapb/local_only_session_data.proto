@@ -424,6 +424,19 @@ message LocalOnlySessionData {
   // better performance.) Weaker isolation levels always use durable locking.
   bool durable_locking_for_serializable = 109;
 
+  // StrictDDLAtomicity causes errors when the client attempts DDL
+  // operations inside an explicit txn and CockroachDB cannot
+  // guarantee the DDL to be performed atomically.
+  //
+  // When this is not set, a transaction may commit its DML
+  // statements but fail its DDL statements, resulting
+  // in error XXA00 - TransactionCommittedWithSchemaChangeFailure.
+  //
+  // When this is set, that particular atomicity violation should
+  // not occur any more (at the expense of disabling certain
+  // forms of DDL inside explicit txns).
+  bool strict_ddl_atomicity = 110 [(gogoproto.customname) = "StrictDDLAtomicity"];
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
