@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -86,10 +88,12 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 			} else {
 				row, err := getShowZoneConfigRow(ctx, p, n.ZoneSpecifier)
 				if err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
-				if _, err := v.rows.AddRow(ctx, row); err != nil {
+					// If there are insufficient privileges, omit adding the row.
+					if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+						v.Close(ctx)
+						return nil, err
+					}
+				} else if _, err = v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)
 					return nil, err
 				}
@@ -105,6 +109,25 @@ func getShowZoneConfigRow(
 	tblDesc, err := p.resolveTableForZone(ctx, &zoneSpecifier)
 	if err != nil {
 		return nil, err
+	}
+
+	if zoneSpecifier.TableOrIndex.Table.TableName != "" {
+		if err = p.CheckAnyPrivilege(ctx, tblDesc); err != nil {
+			return nil, err
+		}
+	} else if zoneSpecifier.Database != "" {
+		database, err := p.LogicalSchemaAccessor().GetDatabaseDesc(
+			ctx,
+			p.txn,
+			string(zoneSpecifier.Database),
+			tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err = p.CheckAnyPrivilege(ctx, database); err != nil {
+			return nil, err
+		}
 	}
 
 	targetID, err := resolveZone(ctx, p.txn, &zoneSpecifier)
