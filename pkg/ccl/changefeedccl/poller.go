@@ -609,7 +609,7 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 		if desc.ModificationTime.Less(lastVersion.ModificationTime) {
 			return nil
 		}
-		if lastVersion.HasColumnBackfillMutation() && !desc.HasColumnBackfillMutation() {
+		if shouldAddScanBoundary(lastVersion, desc) {
 			boundaryTime := desc.GetModificationTime()
 			// Only mutations that happened after the changefeed started are
 			// interesting here.
@@ -642,6 +642,16 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 	}
 	p.mu.previousTableVersion[desc.ID] = desc
 	return nil
+}
+
+func shouldAddScanBoundary(
+	lastVersion *sqlbase.TableDescriptor, desc *sqlbase.TableDescriptor,
+) bool {
+	// Note that we check for pending mutations here since we do not want to trigger a
+	// changefeed-level backfill for schema changes that dont require a backfill (for
+	// instance, when adding a column without a default value).
+	return lastVersion.HasColumnBackfillMutation() &&
+		len(lastVersion.Columns) != len(desc.Columns)
 }
 
 func fetchSpansForTargets(
