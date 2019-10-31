@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -701,6 +702,13 @@ type tableCollectionModifier interface {
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
+	if !p.ExtendedEvalContext().TxnImplicit &&
+		p.SessionData().StrictDDLAtomicity {
+		return sqlbase.InvalidMutationID, unimplemented.NewWithIssueHint(42061,
+			"cannot run this DDL statement inside BEGIN..COMMIT as its atomicity cannot be guaranteed",
+			"You can set the session variable 'strict_ddl_atomicity' to false if you are willing to accept atomicity violations.")
+	}
+
 	mutationID := tableDesc.ClusterVersion.NextMutationID
 
 	// If the table being schema changed was created in the same txn, we do not

@@ -587,6 +587,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension (inspired by MySQL).
+	`strict_ddl_atomicity`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.StrictDDLAtomicity)
+		},
+		GetStringVal: makeBoolGetStringValFn("strict_ddl_atomicity"),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetStrictDDLAtomicity(b)
+			return nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// See https://www.postgresql.org/docs/10/static/ddl-schemas.html#DDL-SCHEMAS-PATH
 	// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`search_path`: {

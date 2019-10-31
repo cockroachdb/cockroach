@@ -1567,6 +1567,7 @@ session_user                         root                NULL      NULL        N
 sql_safe_updates                     off                 NULL      NULL        NULL        string
 standard_conforming_strings          on                  NULL      NULL        NULL        string
 statement_timeout                    0                   NULL      NULL        NULL        string
+strict_ddl_atomicity                 off                 NULL      NULL        NULL        string
 synchronize_seqscans                 on                  NULL      NULL        NULL        string
 timezone                             UTC                 NULL      NULL        NULL        string
 tracing                              off                 NULL      NULL        NULL        string
@@ -1623,6 +1624,7 @@ session_user                         root                NULL  user     NULL    
 sql_safe_updates                     off                 NULL  user     NULL      off                 off
 standard_conforming_strings          on                  NULL  user     NULL      on                  on
 statement_timeout                    0                   NULL  user     NULL      0                   0
+strict_ddl_atomicity                 off                 NULL  user     NULL      off                 off
 synchronize_seqscans                 on                  NULL  user     NULL      on                  on
 timezone                             UTC                 NULL  user     NULL      UTC                 UTC
 tracing                              off                 NULL  user     NULL      off                 off
@@ -1676,6 +1678,7 @@ session_user                         NULL    NULL     NULL     NULL        NULL
 sql_safe_updates                     NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings          NULL    NULL     NULL     NULL        NULL
 statement_timeout                    NULL    NULL     NULL     NULL        NULL
+strict_ddl_atomicity                 NULL    NULL     NULL     NULL        NULL
 synchronize_seqscans                 NULL    NULL     NULL     NULL        NULL
 timezone                             NULL    NULL     NULL     NULL        NULL
 tracing                              NULL    NULL     NULL     NULL        NULL
