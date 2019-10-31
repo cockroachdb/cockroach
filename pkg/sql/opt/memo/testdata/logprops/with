@@ -159,50 +159,7 @@ FROM
     (VALUES (1), (2)) AS v (x),
     LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
 ----
-inner-join-apply
- ├── columns: x:1(int!null) "?column?":3(int)
- ├── cardinality: [2 - 2]
- ├── prune: (3)
- ├── values
- │    ├── columns: column1:1(int!null)
- │    ├── cardinality: [2 - 2]
- │    ├── prune: (1)
- │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
- │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
- ├── with &1 (foo)
- │    ├── columns: "?column?":3(int)
- │    ├── outer: (1)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── prune: (3)
- │    ├── project
- │    │    ├── columns: "?column?":2(int)
- │    │    ├── outer: (1)
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(2)
- │    │    ├── prune: (2)
- │    │    ├── values
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    └── tuple [type=tuple]
- │    │    └── projections
- │    │         └── plus [type=int, outer=(1)]
- │    │              ├── const: 1 [type=int]
- │    │              └── variable: column1 [type=int]
- │    └── with-scan &1 (foo)
- │         ├── columns: "?column?":3(int)
- │         ├── mapping:
- │         │    └──  "?column?":2(int) => "?column?":3(int)
- │         ├── cardinality: [1 - 1]
- │         ├── key: ()
- │         ├── fd: ()-->(3)
- │         ├── prune: (3)
- │         └── cte-uses: map[1:1]
- └── filters (true)
+error (0A000): CTEs may not be correlated
 
 # Regression test for #40930.
 
@@ -236,3 +193,12 @@ project
  │    └── filters (true)
  └── projections
       └── null [type=unknown]
+
+build
+SELECT
+    *
+FROM
+    (VALUES (1), (2)) AS v (x),
+    LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
+----
+error (0A000): CTEs may not be correlated
