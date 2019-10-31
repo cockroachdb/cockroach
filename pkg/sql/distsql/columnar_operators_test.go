@@ -599,7 +599,9 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
 	for len(typs) < nCols {
 		typ := sqlbase.RandType(rng)
 		converted := typeconv.FromColumnType(typ)
-		if converted != coltypes.Unhandled {
+		if converted != coltypes.Unhandled && converted != coltypes.Bytes {
+			// TODO(yuzefovich): allow generating coltypes.Bytes once the issues with
+			// flat bytes implementation have been resolved.
 			typs = append(typs, *typ)
 		}
 	}
