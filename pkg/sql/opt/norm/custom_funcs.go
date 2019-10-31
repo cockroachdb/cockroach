@@ -753,8 +753,8 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 				// This is the first condition.
 				rangeItem.Condition = cond
 			} else {
-				// Build a left-deep tree of ANDs.
-				rangeItem.Condition = c.f.ConstructAnd(rangeItem.Condition, cond)
+				// Build a left-deep tree of ANDs sorted by ID.
+				rangeItem.Condition = c.mergeSortedAnds(rangeItem.Condition, cond)
 			}
 		} else {
 			newFilters = append(newFilters, filters[i])
@@ -768,6 +768,40 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 	}
 
 	return newFilters
+}
+
+// mergeSortedAnds merges two left-deep trees of nested AndExprs sorted by ID.
+// Returns a single sorted, left-deep tree of nested AndExprs, with any
+// duplicate expressions eliminated.
+func (c *CustomFuncs) mergeSortedAnds(left, right opt.ScalarExpr) opt.ScalarExpr {
+	if right == nil {
+		return left
+	}
+	if left == nil {
+		return right
+	}
+
+	// Since both trees are left-deep, perform a merge-sort from right to left.
+	nextLeft := left
+	nextRight := right
+	var remainingLeft, remainingRight opt.ScalarExpr
+	if and, ok := left.(*memo.AndExpr); ok {
+		remainingLeft = and.Left
+		nextLeft = and.Right
+	}
+	if and, ok := right.(*memo.AndExpr); ok {
+		remainingRight = and.Left
+		nextRight = and.Right
+	}
+
+	if nextLeft.ID() == nextRight.ID() {
+		// Eliminate duplicates.
+		return c.mergeSortedAnds(left, remainingRight)
+	}
+	if nextLeft.ID() < nextRight.ID() {
+		return c.f.ConstructAnd(c.mergeSortedAnds(left, remainingRight), nextRight)
+	}
+	return c.f.ConstructAnd(c.mergeSortedAnds(remainingLeft, right), nextLeft)
 }
 
 // AreFiltersSorted determines whether the expressions in a FiltersExpr are
