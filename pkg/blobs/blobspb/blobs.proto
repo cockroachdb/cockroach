@@ -69,13 +69,22 @@ message BlobStat {
   int64 filesize = 1;
 }
 
+// StreamChunk contains a chunk of the payload we are streaming
+message StreamChunk {
+  bytes payload = 1;
+}
+
+// StreamResponse is used to acknowledge a stream ending.
+message StreamResponse {
+}
+
 // Blob service allows for inter node file sharing.
 // It is used by ExternalStorage when interacting with
 // files that are stored on a node's local file system.
 service Blob {
-  rpc GetBlob(GetRequest) returns (GetResponse) {}
-  rpc PutBlob(PutRequest) returns (PutResponse) {}
   rpc List(GlobRequest) returns (GlobResponse) {}
   rpc Delete(DeleteRequest) returns (DeleteResponse) {}
   rpc Stat(StatRequest) returns (BlobStat) {}
+  rpc GetStream(GetRequest) returns (stream StreamChunk) {}
+  rpc PutStream(stream StreamChunk) returns (StreamResponse) {}
 }
