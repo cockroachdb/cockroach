@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v2"
 )
 
@@ -66,33 +67,20 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			v := p.newContainerValuesNode(showZoneConfigColumns, 0)
 
+			// This signifies SHOW ALL.
+			// However, SHOW ALL should be handled by the delegate.
 			if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
-				// SHOW ALL ZONE CONFIGURATIONS case.
-				rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-					ctx,
-					"show-all-zone-configurations",
-					p.txn,
-					`SELECT * FROM crdb_internal.zones`,
-				)
-				if err != nil {
-					return nil, err
-				}
-				for i := range rows {
-					if _, err := v.rows.AddRow(ctx, rows[i]); err != nil {
-						v.Close(ctx)
-						return nil, err
-					}
-				}
-			} else {
-				row, err := getShowZoneConfigRow(ctx, p, n.ZoneSpecifier)
-				if err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
-				if _, err := v.rows.AddRow(ctx, row); err != nil {
-					v.Close(ctx)
-					return nil, err
-				}
+				return nil, errors.AssertionFailedf("zone must be specified")
+			}
+
+			row, err := getShowZoneConfigRow(ctx, p, n.ZoneSpecifier)
+			if err != nil {
+				v.Close(ctx)
+				return nil, err
+			}
+			if _, err := v.rows.AddRow(ctx, row); err != nil {
+				v.Close(ctx)
+				return nil, err
 			}
 			return v, nil
 		},
