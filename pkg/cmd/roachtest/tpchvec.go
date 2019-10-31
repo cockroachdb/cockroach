@@ -38,8 +38,6 @@ func registerTPCHVec(r *testRegistry) {
 		13: "incorrect output: unknown",
 		15: "unsupported: create view",
 		16: "unsupported: distinct aggregation #39242",
-		// TODO(yuzefovich): triage this failure.
-		19: "error: likely not updating offsets in selectionBatch of bufferOp",
 		20: "incorrect output: #42047",
 		21: "unsupported: non-inner hash join with ON expression #38018",
 		// TODO(yuzefovich): triage this failure.
