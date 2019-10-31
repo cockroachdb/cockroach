@@ -5,16 +5,17 @@ package arrowserde
 import flatbuffers "github.com/google/flatbuffers/go"
 
 type SparseTensorIndex = byte
+
 const (
-	SparseTensorIndexNONE SparseTensorIndex = 0
+	SparseTensorIndexNONE                 SparseTensorIndex = 0
 	SparseTensorIndexSparseTensorIndexCOO SparseTensorIndex = 1
 	SparseTensorIndexSparseMatrixIndexCSR SparseTensorIndex = 2
 )
 
 var EnumNamesSparseTensorIndex = map[SparseTensorIndex]string{
-	SparseTensorIndexNONE:"NONE",
-	SparseTensorIndexSparseTensorIndexCOO:"SparseTensorIndexCOO",
-	SparseTensorIndexSparseMatrixIndexCSR:"SparseMatrixIndexCSR",
+	SparseTensorIndexNONE:                 "NONE",
+	SparseTensorIndexSparseTensorIndexCOO: "SparseTensorIndexCOO",
+	SparseTensorIndexSparseMatrixIndexCSR: "SparseMatrixIndexCSR",
 }
 
 /// ----------------------------------------------------------------------
@@ -76,6 +77,7 @@ func TensorDimAddName(builder *flatbuffers.Builder, name flatbuffers.UOffsetT) {
 func TensorDimEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Tensor struct {
 	_tab flatbuffers.Table
 }
@@ -204,6 +206,7 @@ func TensorAddData(builder *flatbuffers.Builder, data flatbuffers.UOffsetT) {
 func TensorEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// ----------------------------------------------------------------------
 /// EXPERIMENTAL: Data structures for sparse tensors
 /// Coodinate format of sparse tensor index.
@@ -297,6 +300,7 @@ func SparseTensorIndexCOOAddIndicesBuffer(
 func SparseTensorIndexCOOEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// Compressed Sparse Row format, that is matrix-specific.
 type SparseMatrixIndexCSR struct {
 	_tab flatbuffers.Table
@@ -418,6 +422,7 @@ func SparseMatrixIndexCSRAddIndicesBuffer(
 func SparseMatrixIndexCSREnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type SparseTensor struct {
 	_tab flatbuffers.Table
 }

@@ -135,7 +135,7 @@ func registerCopy(r *testRegistry) {
 		m.Wait()
 	}
 
-	const rows = int(1E7)
+	const rows = int(1e7)
 	const numNodes = 9
 
 	for _, inTxn := range []bool{true, false} {

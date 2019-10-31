@@ -75,7 +75,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
 			// Put a value.
 			value := roachpb.MakeValueFromString("value")
 			if err := MVCCPut(ctx, engine, aggMS, key, ts1, value, nil); err != nil {
@@ -93,12 +93,12 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 				KeyCount:        1,
 				ValBytes:        vValSize, // 10
 				ValCount:        1,
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 			}
 			assertEq(t, engine, "after put", aggMS, &expMS)
 
 			// Delete the value at ts=3. We'll commit this at ts=4 later.
-			ts3 := hlc.Timestamp{WallTime: 3 * 1E9}
+			ts3 := hlc.Timestamp{WallTime: 3 * 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts3},
 				OrigTimestamp: ts3,
@@ -109,7 +109,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 
 			// Now commit the value, but with a timestamp gap (i.e. this is a
 			// push-commit as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
+			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 			txn.Status = roachpb.COMMITTED
 			txn.Timestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
@@ -119,7 +119,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			}
 
 			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 4E9,
+				LastUpdateNanos: 4e9,
 				LiveBytes:       0,
 				LiveCount:       0,
 				KeyCount:        1,
@@ -153,7 +153,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
 				OrigTimestamp: ts1,
@@ -174,7 +174,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			vValSize := int64(len(value.RawBytes)) // 10
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+44+12+10 = 68
 				LiveCount:       1,
 				KeyBytes:        mKeySize + vKeySize, // 2+12 =14
@@ -189,7 +189,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 
 			// Now commit the intent, but with a timestamp gap (i.e. this is a
 			// push-commit as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
+			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 			txn.Status = roachpb.COMMITTED
 			txn.Timestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
@@ -199,7 +199,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			}
 
 			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 4E9,
+				LastUpdateNanos: 4e9,
 				LiveBytes:       mKeySize + vKeySize + vValSize, // 2+12+20 = 24
 				LiveCount:       1,
 				KeyCount:        1,
@@ -232,7 +232,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
 				OrigTimestamp: ts1,
@@ -253,7 +253,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			vValSize := int64(len(value.RawBytes)) // 10
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+44+12+10 = 68
 				LiveCount:       1,
 				KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
@@ -268,7 +268,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 
 			// Now push the value, but with a timestamp gap (i.e. this is a
 			// push as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
+			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 			txn.Timestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
 				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
@@ -277,7 +277,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			}
 
 			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 4E9,
+				LastUpdateNanos: 4e9,
 				LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+44+12+20 = 78
 				LiveCount:       1,
 				KeyCount:        1,
@@ -312,8 +312,8 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
@@ -351,7 +351,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			require.EqualValues(t, vValSize, 10)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				LiveBytes:       mKeySize + m1ValSize + vKeySize + vValSize, // 2+44+12+10 = 68
 				LiveCount:       1,
 				KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
@@ -388,7 +388,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			}
 
 			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 				LiveBytes:       0,
 				LiveCount:       0,
 				KeyCount:        1,
@@ -424,8 +424,8 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
@@ -464,7 +464,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			require.EqualValues(t, vValSize, 10)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				LiveBytes:       0,
 				LiveCount:       0,
 				KeyBytes:        mKeySize + vKeySize, // 2 + 12 = 24
@@ -502,7 +502,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			}
 
 			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 				LiveBytes:       mKeySize + m2ValSize + vKeySize + vValSize, // 2+46+12+10 = 70
 				LiveCount:       1,
 				KeyCount:        1,
@@ -542,9 +542,9 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
-			ts3 := hlc.Timestamp{WallTime: 3E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
+			ts3 := hlc.Timestamp{WallTime: 3e9}
 
 			// Write a non-transactional tombstone at t=1s.
 			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, nil /* txn */); err != nil {
@@ -557,7 +557,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 			require.EqualValues(t, vKeySize, 12)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				KeyBytes:        mKeySize + vKeySize,
 				KeyCount:        1,
 				ValBytes:        0,
@@ -583,7 +583,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 			require.EqualValues(t, mValSize, 46)
 
 			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 				KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
 				KeyCount:        1,
 				ValBytes:        mValSize, // 44
@@ -612,7 +612,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				}
 
 				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos: 3E9,
+					LastUpdateNanos: 3e9,
 					KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
 					KeyCount:        1,
 					ValBytes:        0,
@@ -641,7 +641,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				}
 
 				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos: 3E9,
+					LastUpdateNanos: 3e9,
 					KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
 					KeyCount:        1,
 					ValBytes:        0,
@@ -681,9 +681,9 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
-			ts3 := hlc.Timestamp{WallTime: 3E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
+			ts3 := hlc.Timestamp{WallTime: 3e9}
 
 			// Write a non-transactional value at t=1s.
 			value := roachpb.MakeValueFromString("value")
@@ -701,7 +701,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			require.EqualValues(t, vValSize, 10)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				KeyBytes:        mKeySize + vKeySize,
 				KeyCount:        1,
 				ValBytes:        vValSize,
@@ -729,7 +729,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			require.EqualValues(t, mValSize, 46)
 
 			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 				KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
 				KeyCount:        1,
 				ValBytes:        mValSize + vValSize, // 44+10 = 56
@@ -771,7 +771,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				}
 
 				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos: 3E9,
+					LastUpdateNanos: 3e9,
 					KeyBytes:        mKeySize + vKeySize,
 					KeyCount:        1,
 					ValBytes:        vValSize,
@@ -813,7 +813,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				require.EqualValues(t, m2ValSizeWithHistory, 54)
 
 				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos: 3E9,
+					LastUpdateNanos: 3e9,
 					KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
 					KeyCount:        1,
 					ValBytes:        m2ValSizeWithHistory + vValSize + vVal2Size,
@@ -849,8 +849,8 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			// Write tombstones at ts1 and ts2.
 			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, nil); err != nil {
@@ -864,7 +864,7 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 			vKeySize := MVCCVersionTimestampSize          // 12
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 				KeyBytes:        mKeySize + 2*vKeySize, // 26
 				KeyCount:        1,
 				ValCount:        2,
@@ -891,7 +891,7 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 			}
 
 			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 			}
 
 			assertEq(t, engine, "after GC", aggMS, &expAggMS)
@@ -925,8 +925,8 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts201 := hlc.Timestamp{WallTime: 2E9 + 1}
-			ts099 := hlc.Timestamp{WallTime: 1E9 - 1}
+			ts201 := hlc.Timestamp{WallTime: 2e9 + 1}
+			ts099 := hlc.Timestamp{WallTime: 1e9 - 1}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts201},
 				OrigTimestamp: ts099,
@@ -946,7 +946,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			vValSize := int64(len(value.RawBytes)) // 10
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2E9 + 1,
+				LastUpdateNanos: 2e9 + 1,
 				LiveBytes:       mKeySize + m1ValSize + vKeySize + vValSize, // 2+44+12+10 = 68
 				LiveCount:       1,
 				KeyBytes:        mKeySize + vKeySize, // 14
@@ -985,7 +985,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 				// will have been written at 2E9+1, so the age will be 0.
 				IntentAge: 0,
 
-				LastUpdateNanos: 2E9 + 1,
+				LastUpdateNanos: 2e9 + 1,
 				LiveBytes:       mKeySize + m2ValSize + vKeySize + vValSize, // 2+46+12+10 = 70
 				LiveCount:       1,
 				KeyBytes:        mKeySize + vKeySize, // 14
@@ -1017,8 +1017,8 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 
 			key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			// Write a value at ts1.
 			val1 := roachpb.MakeValueFromString("value")
@@ -1036,7 +1036,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 			require.EqualValues(t, vValSize, 10)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				KeyCount:        1,
 				KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
 				ValCount:        1,
@@ -1053,7 +1053,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 			}
 
 			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 				KeyCount:        1,
 				KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
 				ValBytes:        vValSize,              // 10
@@ -1073,7 +1073,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 			}
 
 			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 2E9,
+				LastUpdateNanos: 2e9,
 				KeyCount:        1,
 				KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
 				ValBytes:        0,
@@ -1104,8 +1104,8 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
@@ -1139,7 +1139,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			require.EqualValues(t, vVal2Size, 14)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+44+12+10 = 77
 				SysCount:        1,
 			}
@@ -1167,7 +1167,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			}
 
 			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				SysBytes:        mKeySize + mVal2Size + vKeySize + vVal2Size, // 11+46+12+14 = 83
 				SysCount:        1,
 			}
@@ -1194,7 +1194,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
 				OrigTimestamp: ts1,
@@ -1227,7 +1227,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 			require.EqualValues(t, vVal2Size, 14)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+44+12+10 = 77
 				SysCount:        1,
 			}
@@ -1242,7 +1242,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 			}
 
 			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 			}
 			assertEq(t, engine, "after aborting", aggMS, &expMS)
 		})
@@ -1265,8 +1265,8 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			// Write a value at ts1.
 			val1 := roachpb.MakeValueFromString("value")
@@ -1288,7 +1288,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 			require.EqualValues(t, vVal2Size, 14)
 
 			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				SysBytes:        mKeySize + vKeySize + vVal1Size, // 11+12+10 = 33
 				SysCount:        1,
 			}
@@ -1301,7 +1301,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 			}
 
 			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 1E9,
+				LastUpdateNanos: 1e9,
 				SysBytes:        mKeySize + 2*vKeySize + vVal1Size + vVal2Size,
 				SysCount:        1,
 			}
@@ -1373,7 +1373,7 @@ func (s *randomTest) step(t *testing.T) {
 		// Jump up to a few seconds into the future. In ~1% of cases, jump
 		// backwards instead (this exercises intactness on WriteTooOld, etc).
 		s.TS = hlc.Timestamp{
-			WallTime: s.TS.WallTime + int64((s.state.rng.Float32()-0.01)*4E9),
+			WallTime: s.TS.WallTime + int64((s.state.rng.Float32()-0.01)*4e9),
 			Logical:  int32(s.rng.Intn(10)),
 		}
 		if s.TS.WallTime < 0 {
