@@ -974,7 +974,7 @@ func (ts *TableStat) NullCount() uint64 {
 // Histogram is part of the cat.TableStatistic interface.
 func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	if ts.js.HistogramColumnType == "" {
+	if ts.js.HistogramColumnType == "" || ts.js.HistogramBuckets == nil {
 		return nil
 	}
 	colType, err := parser.ParseType(ts.js.HistogramColumnType)
