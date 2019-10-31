@@ -1057,7 +1057,7 @@ func TestReplicaLease(t *testing.T) {
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
-			}, &roachpb.RequestLeaseResponse{}); !testutils.IsError(err, "illegal lease") {
+			}, &roachpb.RequestLeaseResponse{}); !testutils.IsError(err, "replica \\(n0,s0\\):\\? not found in r1") {
 			t.Fatalf("unexpected error: %+v", err)
 		}
 	}
@@ -1462,7 +1462,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 		// Remove ambiguity about where the "replica not found" error comes from.
 		pErr = (<-ch).Err
 	}
-	if !testutils.IsPError(pErr, "replica not found") {
+	if !testutils.IsPError(pErr, "replica.*not found") {
 		t.Errorf("unexpected error obtaining lease for invalid store: %v", pErr)
 	}
 }
