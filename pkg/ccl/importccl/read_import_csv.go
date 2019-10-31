@@ -12,6 +12,7 @@ import (
 	"context"
 	"io"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -57,19 +59,11 @@ func newCSVInputReader(
 		expectedCols: len(tableDesc.VisibleColumns()),
 		tableDesc:    tableDesc,
 		targetCols:   targetCols,
-		recordCh:     make(chan csvRecord),
 		batchSize:    500,
 	}
 }
 
 func (c *csvInputReader) start(group ctxgroup.Group) {
-	group.GoCtx(func(ctx context.Context) error {
-		ctx, span := tracing.ChildSpan(ctx, "convertcsv")
-		defer tracing.FinishSpan(span)
-		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
-			return c.convertRecordWorker(ctx)
-		})
-	})
 }
 
 func (c *csvInputReader) readFiles(
@@ -79,7 +73,6 @@ func (c *csvInputReader) readFiles(
 	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	defer close(c.recordCh)
 	return readInputFiles(ctx, dataFiles, format, c.readFile, progressFn, settings)
 }
 
@@ -117,52 +110,79 @@ func (c *csvInputReader) readFile(
 	cr.LazyQuotes = !c.opts.StrictQuotes
 	cr.Comment = c.opts.Comment
 
+	c.recordCh = make(chan csvRecord)
 	c.batch = csvRecord{
 		file:      inputName,
 		fileIndex: inputIdx,
 		rowOffset: 1,
 		r:         make([][]string, 0, c.batchSize),
+		rejected:  rejected,
 	}
 
-	for i := 1; ; i++ {
-		record, err := cr.Read()
-		finished := err == io.EOF
-		if finished || len(c.batch.r) >= c.batchSize {
-			c.batch.progress = input.ReadFraction()
-			if err := c.flushBatch(ctx, finished, progressFn); err != nil {
-				return err
+	group := ctxgroup.WithContext(ctx)
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "convertcsv")
+		defer tracing.FinishSpan(span)
+		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
+			return c.convertRecordWorker(ctx)
+		})
+	})
+
+	group.GoCtx(func(ctx context.Context) error {
+		defer close(c.recordCh)
+		for i := int64(1); ; i++ {
+			record, err := cr.Read()
+			finished := err == io.EOF
+			if finished || len(c.batch.r) >= c.batchSize {
+				c.batch.progress = input.ReadFraction()
+				if err := c.flushBatch(ctx, finished, progressFn); err != nil {
+					return err
+				}
+				c.batch.rowOffset = i
 			}
-			c.batch.rowOffset = i
+			if finished {
+				break
+			}
+			if err != nil {
+				// TODO(spaskob): Find a way to report this row to rejected. The difficulty
+				// is that we can't really know how to get the line since it is being parsed
+				// internally by the csv reader `cr`.
+				return errors.Wrapf(err, "row %d: reading CSV record", i)
+			}
+			// Ignore the first N lines.
+			if uint32(i) <= c.opts.Skip {
+				continue
+			}
+			if len(record) == c.expectedCols {
+				// Expected number of columns.
+			} else if len(record) == c.expectedCols+1 && record[c.expectedCols] == "" {
+				// Line has the optional trailing comma, ignore the empty field.
+				record = record[:c.expectedCols]
+			} else {
+				err := makeRowErr(inputName, i, pgcode.Syntax, "expected %d fields, got %d: %#v", c.expectedCols, len(record), record)
+				if rejected != nil {
+					log.Error(ctx, err)
+					rejected <- strings.Join(record, string(cr.Comma)) + "\n"
+					continue
+				} else {
+					return err
+				}
+			}
+			c.batch.r = append(c.batch.r, record)
 		}
-		if finished {
-			break
-		}
-		if err != nil {
-			return errors.Wrapf(err, "row %d: reading CSV record", i)
-		}
-		// Ignore the first N lines.
-		if uint32(i) <= c.opts.Skip {
-			continue
-		}
-		if len(record) == c.expectedCols {
-			// Expected number of columns.
-		} else if len(record) == c.expectedCols+1 && record[c.expectedCols] == "" {
-			// Line has the optional trailing comma, ignore the empty field.
-			record = record[:c.expectedCols]
-		} else {
-			return errors.Errorf("row %d: expected %d fields, got %d", i, c.expectedCols, len(record))
-		}
-		c.batch.r = append(c.batch.r, record)
-	}
-	return nil
+		return nil
+	})
+	return group.Wait()
 }
 
 type csvRecord struct {
 	r         [][]string
 	file      string
 	fileIndex int32
-	rowOffset int
+	rowOffset int64
 	progress  float32
+	// Channel on which to report bad rows.
+	rejected chan string
 }
 
 // convertRecordWorker converts CSV records into KV pairs and sends them on the
@@ -191,24 +211,31 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 			conv.KvBatch.Source = batch.fileIndex
 		}
 		conv.KvBatch.Progress = batch.progress
+	ROW_LOOP:
 		for batchIdx, record := range batch.r {
-			rowNum := int64(batch.rowOffset + batchIdx)
+			rowNum := batch.rowOffset + int64(batchIdx)
 			datumIdx := 0
-			for i, v := range record {
+			for i, field := range record {
 				// Skip over record entries corresponding to columns not in the target
 				// columns specified by the user.
 				if _, ok := conv.IsTargetCol[i]; !ok {
 					continue
 				}
 				col := conv.VisibleCols[i]
-				if c.opts.NullEncoding != nil && v == *c.opts.NullEncoding {
+				if c.opts.NullEncoding != nil && field == *c.opts.NullEncoding {
 					conv.Datums[datumIdx] = tree.DNull
 				} else {
 					var err error
-					conv.Datums[datumIdx], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], v, conv.EvalCtx)
+					conv.Datums[datumIdx], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], field, conv.EvalCtx)
 					if err != nil {
-						return wrapRowErr(err, batch.file, rowNum, pgcode.Syntax,
+						err = wrapRowErr(err, batch.file, rowNum, pgcode.Syntax,
 							"parse %q as %s", col.Name, col.Type.SQLString())
+						if batch.rejected != nil {
+							log.Error(ctx, err)
+							batch.rejected <- strings.Join(record, string(c.opts.Comma)) + "\n"
+							continue ROW_LOOP
+						}
+						return err
 					}
 				}
 				datumIdx++

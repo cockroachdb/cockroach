@@ -13,6 +13,7 @@ import (
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -219,19 +220,30 @@ func readInputFiles(
 			}
 
 			var rejected chan string
-			if format.Format == roachpb.IOFileFormat_MysqlOutfile && format.MysqlOut.SaveRejected {
+			if (format.Format == roachpb.IOFileFormat_CSV && format.SaveRejected) ||
+				(format.Format == roachpb.IOFileFormat_MysqlOutfile && format.SaveRejected) {
 				rejected = make(chan string)
 			}
 			if rejected != nil {
 				grp := ctxgroup.WithContext(ctx)
 				grp.GoCtx(func(ctx context.Context) error {
 					var buf []byte
-					atFirstLine := true
+					var countRejected int64
 					for s := range rejected {
+						countRejected++
+						if countRejected > 1000 { // TODO(spaskob): turn the magic constant into an option
+							return pgerror.New(
+								pgcode.DataCorrupted,
+								fmt.Sprintf(
+									"too many parsing errors (%d) encountered for file %s",
+									countRejected,
+									dataFile,
+								),
+							)
+						}
 						buf = append(buf, s...)
-						atFirstLine = false
 					}
-					if atFirstLine {
+					if countRejected == 0 {
 						// no rejected rows
 						return nil
 					}
@@ -241,7 +253,7 @@ func readInputFiles(
 						return err
 					}
 					parsedURI.Path = parsedURI.Path + ".rejected"
-					conf, err := storageccl.ExportStorageConfFromURI(rejectedFile)
+					conf, err := storageccl.ExportStorageConfFromURI(parsedURI.String())
 					if err != nil {
 						return err
 					}
@@ -268,7 +280,7 @@ func readInputFiles(
 					return errors.Wrap(err, dataFile)
 				}
 			} else {
-				if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn, rejected); err != nil {
+				if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn, nil /* rejected */); err != nil {
 					return errors.Wrap(err, dataFile)
 				}
 			}

@@ -157,18 +157,20 @@ d
 			},
 		},
 		{
-			name:   "invalid byte",
-			create: `b bytes`,
-			typ:    "CSV",
-			data:   `\x0g`,
-			err:    "invalid byte",
+			name:     "invalid byte",
+			create:   `b bytes`,
+			typ:      "CSV",
+			data:     `\x0g`,
+			rejected: `\x0g` + "\n",
+			err:      "invalid byte",
 		},
 		{
-			name:   "bad bytes length",
-			create: `b bytes`,
-			typ:    "CSV",
-			data:   `\x0`,
-			err:    "odd length hex string",
+			name:     "bad bytes length",
+			create:   `b bytes`,
+			typ:      "CSV",
+			data:     `\x0`,
+			rejected: `\x0` + "\n",
+			err:      "odd length hex string",
 		},
 		{
 			name:   "oversample",
@@ -251,6 +253,24 @@ d
 			with:   `WITH strict_quotes`,
 			data:   `"abc"de"`,
 			err:    `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
+		},
+		{
+			name:     "too many imported columns",
+			create:   `i int8`,
+			typ:      "CSV",
+			data:     "1,2\n3\n11,22",
+			err:      "row 1: expected 1 fields, got 2",
+			rejected: "1,2\n11,22\n",
+			query:    map[string][][]string{`SELECT * from t`: {{"3"}}},
+		},
+		{
+			name:     "parsing error",
+			create:   `i int8, j int8`,
+			typ:      "CSV",
+			data:     "not_int,2\n3,4",
+			err:      `row 1: parse "i" as INT8: could not parse "not_int" as type int`,
+			rejected: "not_int,2\n",
+			query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
 		},
 
 		// MySQL OUTFILE
@@ -923,15 +943,8 @@ COPY t (a, b, c) FROM stdin;
 			}
 
 			for i, tc := range tests {
-				if tc.typ != "DELIMITED" && saveRejected {
+				if tc.typ != "CSV" && tc.typ != "DELIMITED" && saveRejected {
 					continue
-				}
-				if direct {
-					if tc.with == "" {
-						tc.with = "WITH experimental_direct_ingestion"
-					} else {
-						tc.with += ", experimental_direct_ingestion"
-					}
 				}
 				if saveRejected {
 					if tc.with == "" {
@@ -940,7 +953,14 @@ COPY t (a, b, c) FROM stdin;
 						tc.with += ", experimental_save_rejected"
 					}
 				}
-								t.Run(fmt.Sprintf("%s/%s: direct=%v save_rejected=%v", tc.typ, tc.name, direct, saveRejected), func(t *testing.T) {
+				if direct {
+					if tc.with == "" {
+						tc.with = "WITH experimental_direct_ingestion"
+					} else {
+						tc.with += ", experimental_direct_ingestion"
+					}
+				}
+				t.Run(fmt.Sprintf("%s/%s: direct=%v save_rejected=%v", tc.typ, tc.name, direct, saveRejected), func(t *testing.T) {
 					dbName := fmt.Sprintf("d%d", i)
 					sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
 					defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
@@ -950,7 +970,7 @@ COPY t (a, b, c) FROM stdin;
 					} else {
 						q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
 					}
-					t.Log(q, srv.URL, tc.data)
+					t.Log(q, srv.URL, "\nFile contents:\n", tc.data)
 					mockRecorder.dataString = tc.data
 					mockRecorder.rejectedString = ""
 					if !saveRejected || tc.rejected == "" {
@@ -963,7 +983,7 @@ COPY t (a, b, c) FROM stdin;
 							sqlDB.CheckQueryResults(t, query, res)
 						}
 						if tc.rejected != mockRecorder.rejectedString {
-							t.Errorf("expected:\n<%v>\ngot:\n<%v>\n", tc.rejected,
+							t.Errorf("expected:\n%v\ngot:\n%v\n", tc.rejected,
 								mockRecorder.rejectedString)
 						}
 					}
@@ -1984,7 +2004,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 		stripFilenameQuotes := testFiles.files[0][1 : len(testFiles.files[0])-1]
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("pq: %s: row 1: expected 3 fields, got 2", stripFilenameQuotes),
+			t, fmt.Sprintf("\"%s\": row 1: expected 3 fields, got 2", stripFilenameQuotes),
 			fmt.Sprintf(`IMPORT INTO t (a, b, c) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -1997,7 +2017,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 		stripFilenameQuotes := testFiles.files[0][1 : len(testFiles.files[0])-1]
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("pq: %s: row 1: expected 1 fields, got 2", stripFilenameQuotes),
+			t, fmt.Sprintf("\"%s\": row 1: expected 1 fields, got 2", stripFilenameQuotes),
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -2336,7 +2356,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 		if len(batch.r) > batchSize {
 			recordCh <- batch
 			batch.r = make([][]string, 0, batchSize)
-			batch.rowOffset = i
+			batch.rowOffset = int64(i)
 		}
 
 		batch.r = append(batch.r, tpchLineItemDataRows[i%len(tpchLineItemDataRows)])
@@ -2482,7 +2502,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	// TODO(mjibson): Although this test passes most of the time it still
 	// sometimes fails because not all kinds of failures caused by shutting a
 	// node down are detected and retried.
-	t.Skip("flakey due to undetected kinds of failures when the node is shutdown")
+	t.Skip("flaky due to undetected kinds of failures when the node is shutdown")
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
