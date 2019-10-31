@@ -95,63 +95,61 @@ with &1 (t0)
  │         ├── key: ()
  │         ├── fd: ()-->(5-8)
  │         └── (NULL, 0, '1970-09-08', NULL) [type=tuple{int, oid, date, string}]
- └── project
+ └── with &2 (t1)
       ├── columns: "?column?":27(unknown)
       ├── stats: [rows=10000]
       ├── fd: ()-->(27)
-      ├── inner-join (hash)
-      │    ├── columns: true_agg:25(bool!null)
-      │    ├── stats: [rows=10000]
-      │    ├── fd: ()-->(25)
-      │    ├── scan a
-      │    │    └── stats: [rows=5000]
-      │    ├── inner-join (hash)
-      │    │    ├── columns: true_agg:25(bool!null)
-      │    │    ├── cardinality: [0 - 2]
-      │    │    ├── stats: [rows=2]
-      │    │    ├── fd: ()-->(25)
-      │    │    ├── with-scan &1 (t0)
-      │    │    │    ├── mapping:
-      │    │    │    ├── cardinality: [1 - 2]
-      │    │    │    └── stats: [rows=2]
-      │    │    ├── select
-      │    │    │    ├── columns: true_agg:25(bool!null)
-      │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    ├── stats: [rows=1, distinct(25)=1, null(25)=0]
-      │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(25)
-      │    │    │    ├── scalar-group-by
-      │    │    │    │    ├── columns: true_agg:25(bool)
-      │    │    │    │    ├── cardinality: [1 - 1]
-      │    │    │    │    ├── stats: [rows=1, distinct(25)=1, null(25)=0]
-      │    │    │    │    ├── key: ()
-      │    │    │    │    ├── fd: ()-->(25)
-      │    │    │    │    ├── with &2 (t1)
-      │    │    │    │    │    ├── columns: true:24(bool!null)
-      │    │    │    │    │    ├── cardinality: [1 - 1]
-      │    │    │    │    │    ├── stats: [rows=1]
-      │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    ├── fd: ()-->(24)
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: "?column?":21(unknown)
-      │    │    │    │    │    │    ├── cardinality: [1 - 1]
-      │    │    │    │    │    │    ├── stats: [rows=1]
-      │    │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    │    ├── fd: ()-->(21)
-      │    │    │    │    │    │    └── (NULL,) [type=tuple{unknown}]
-      │    │    │    │    │    └── values
-      │    │    │    │    │         ├── columns: true:24(bool!null)
-      │    │    │    │    │         ├── cardinality: [1 - 1]
-      │    │    │    │    │         ├── stats: [rows=1]
-      │    │    │    │    │         ├── key: ()
-      │    │    │    │    │         ├── fd: ()-->(24)
-      │    │    │    │    │         └── (true,) [type=tuple{bool}]
-      │    │    │    │    └── aggregations
-      │    │    │    │         └── const-agg [type=bool, outer=(24)]
-      │    │    │    │              └── variable: true [type=bool]
-      │    │    │    └── filters
-      │    │    │         └── true_agg IS NOT NULL [type=bool, outer=(25), constraints=(/25: (/NULL - ]; tight)]
-      │    │    └── filters (true)
-      │    └── filters (true)
-      └── projections
-           └── null [type=unknown]
+      ├── values
+      │    ├── columns: "?column?":21(unknown)
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(21)
+      │    └── (NULL,) [type=tuple{unknown}]
+      └── project
+           ├── columns: "?column?":27(unknown)
+           ├── stats: [rows=10000]
+           ├── fd: ()-->(27)
+           ├── inner-join (hash)
+           │    ├── columns: true_agg:25(bool!null)
+           │    ├── stats: [rows=10000]
+           │    ├── fd: ()-->(25)
+           │    ├── scan a
+           │    │    └── stats: [rows=5000]
+           │    ├── inner-join (hash)
+           │    │    ├── columns: true_agg:25(bool!null)
+           │    │    ├── cardinality: [0 - 2]
+           │    │    ├── stats: [rows=2]
+           │    │    ├── fd: ()-->(25)
+           │    │    ├── with-scan &1 (t0)
+           │    │    │    ├── mapping:
+           │    │    │    ├── cardinality: [1 - 2]
+           │    │    │    └── stats: [rows=2]
+           │    │    ├── select
+           │    │    │    ├── columns: true_agg:25(bool!null)
+           │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    ├── stats: [rows=1, distinct(25)=1, null(25)=0]
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(25)
+           │    │    │    ├── scalar-group-by
+           │    │    │    │    ├── columns: true_agg:25(bool)
+           │    │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    │    ├── stats: [rows=1, distinct(25)=1, null(25)=0]
+           │    │    │    │    ├── key: ()
+           │    │    │    │    ├── fd: ()-->(25)
+           │    │    │    │    ├── values
+           │    │    │    │    │    ├── columns: true:24(bool!null)
+           │    │    │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    │    │    ├── stats: [rows=1]
+           │    │    │    │    │    ├── key: ()
+           │    │    │    │    │    ├── fd: ()-->(24)
+           │    │    │    │    │    └── (true,) [type=tuple{bool}]
+           │    │    │    │    └── aggregations
+           │    │    │    │         └── const-agg [type=bool, outer=(24)]
+           │    │    │    │              └── variable: true [type=bool]
+           │    │    │    └── filters
+           │    │    │         └── true_agg IS NOT NULL [type=bool, outer=(25), constraints=(/25: (/NULL - ]; tight)]
+           │    │    └── filters (true)
+           │    └── filters (true)
+           └── projections
+                └── null [type=unknown]
