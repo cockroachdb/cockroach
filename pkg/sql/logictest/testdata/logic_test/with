@@ -358,19 +358,20 @@ EXECUTE z5(3, 5)
 3
 5
 
-statement ok
-PREPARE z6(int) AS
-    SELECT * FROM
-    (VALUES (1), (2)) v(x),
-    LATERAL (SELECT * FROM
-      (WITH foo AS (SELECT $1 + x) SELECT * FROM foo)
-    )
+# TODO(justin): re-enable this, we don't allow WITHs having outer columns.
+# statement ok
+# PREPARE z6(int) AS
+#     SELECT * FROM
+#     (VALUES (1), (2)) v(x),
+#     LATERAL (SELECT * FROM
+#       (WITH foo AS (SELECT $1 + x) SELECT * FROM foo)
+#     )
 
-query II
-EXECUTE z6(3)
-----
-1 4
-2 5
+# query II
+# EXECUTE z6(3)
+# ----
+# 1 4
+# 2 5
 
 # Recursive CTE example from postgres docs.
 query T

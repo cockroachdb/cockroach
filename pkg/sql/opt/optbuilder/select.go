@@ -575,12 +575,16 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	return inScope
 }
 
-func (b *Builder) buildCTEs(
-	with *tree.With, inScope *scope,
-) (outScope *scope, addedCTEs []cteSource) {
+func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 	outScope = inScope.push()
 
-	addedCTEs = make([]cteSource, len(with.CTEList))
+	addedCTEs := make([]cteSource, len(with.CTEList))
+
+	// Make a fake subquery to ensure that no CTEs are correlated.
+	outer := b.subquery
+	defer func() { b.subquery = outer }()
+	b.subquery = &subquery{}
+
 	outScope.ctes = make(map[string]*cteSource)
 	for i, cte := range with.CTEList {
 		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
@@ -618,15 +622,36 @@ func (b *Builder) buildCTEs(
 				),
 			)
 		}
+
+		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
 
-	return outScope, addedCTEs
+	return outScope
 }
 
-// wrapWithCTEs adds With expressions on top of an expression.
-func (b *Builder) wrapWithCTEs(expr memo.RelExpr, ctes []cteSource) memo.RelExpr {
+// constructed within an EXPLAIN should not be hoisted above it, and so we need
+// to denote a boundary which blocks them.
+func (b *Builder) pushWithFrame() {
+	b.cteStack = append(b.cteStack, []cteSource{})
+}
+
+// popWithFrame wraps the given scope's expression in the CTEs that have been
+// queued up at this level.
+func (b *Builder) popWithFrame(s *scope) {
+	s.expr = b.flushCTEs(s.expr)
+}
+
+// flushCTEs adds With expressions on top of an expression.
+func (b *Builder) flushCTEs(expr memo.RelExpr) memo.RelExpr {
+	var ctes []cteSource
+	b.cteStack, ctes = b.cteStack[:len(b.cteStack)-1], b.cteStack[len(b.cteStack)-1]
+
+	if len(ctes) == 0 {
+		return expr
+	}
+
 	// Since later CTEs can refer to earlier ones, we want to add these in
 	// reverse order.
 	for i := len(ctes) - 1; i >= 0; i-- {
@@ -680,8 +705,7 @@ func (b *Builder) processWith(
 		return inScope, func(*scope) {}
 	}
 
-	var ctes []cteSource
-	inScope, ctes = b.buildCTEs(with, inScope)
+	inScope = b.buildCTEs(with, inScope)
 	prevAtRoot := inScope.atRoot
 	inScope.atRoot = false
 
@@ -692,7 +716,6 @@ func (b *Builder) processWith(
 			return
 		}
 		inScope.atRoot = prevAtRoot
-		outScope.expr = b.wrapWithCTEs(outScope.expr, ctes)
 	}
 }
 
