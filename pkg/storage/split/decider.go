@@ -15,6 +15,7 @@ package split
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -139,7 +140,12 @@ func (d *Decider) MaybeSplitKey(now time.Time) roachpb.Key {
 	d.mu.Lock()
 	d.recordLocked(now, 0, nil)
 	if d.mu.splitFinder != nil && d.mu.splitFinder.Ready(now) {
-		key = d.mu.splitFinder.Key()
+		// For example, the data key is /Table/68/1/10. The endkey boundary of the range
+		// is exactly /Table/68/1/10/0. The previous range does not contain /Table/68/1/10/0,
+		// the latter one. Range contains. But the scan request sends startKey /Table/68/1/10,
+		// endKey /Table/68/1/10/0 in the previous range. The key of the put request is /Table/68/1/10/0.
+		// In the next range, the read and write is separated.
+		key, _ = keys.EnsureSafeSplitKey(d.mu.splitFinder.Key())
 	}
 	d.mu.Unlock()
 
