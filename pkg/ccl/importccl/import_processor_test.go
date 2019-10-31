@@ -136,16 +136,10 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				group := ctxgroup.WithContext(ctx)
-
 				group.Go(func() error {
+					defer close(kvCh)
 					return conv.readFiles(ctx, testCase.inputs, converterSpec.Format, externalStorage)
 				})
-
-				conv.start(group)
-				go func() {
-					defer close(kvCh)
-					err = group.Wait()
-				}()
 
 				lastBatch := 0
 				testNumRecords := 0
@@ -160,7 +154,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 					testNumRecords = testNumRecords + lastBatch
 					testNumBatches++
 				}
-				if err != nil {
+				if err := group.Wait(); err != nil {
 					t.Fatalf("Conversion failed: %v", err)
 				}
 
