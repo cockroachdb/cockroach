@@ -589,7 +589,7 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 // check and does additional verification of the planner state.
 func (p *planner) prepareForDistSQLSupportCheck() {
 	// Trigger limit propagation.
-	p.setUnlimited(p.curPlan.plan)
+	p.propagateSoftLimits(p.curPlan.plan)
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current
