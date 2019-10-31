@@ -103,10 +103,12 @@ CREATE TABLE IF NOT EXISTS seed_vec AS
 		g::INT8 AS _int8,
 		g::FLOAT8 AS _float8,
 		'2001-01-01'::DATE + g AS _date,
+		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
 		g % 2 = 1 AS _bool,
 		g::DECIMAL AS _decimal,
 		g::STRING AS _string,
-		g::STRING::BYTES AS _bytes
+		g::STRING::BYTES AS _bytes,
+		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid
 	FROM
 		generate_series(1, 5) AS g;
 
