@@ -102,6 +102,10 @@ type Iterator interface {
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
+	// CheckForKeyCollisions checks whether any keys collide between the iterator
+	// and the encoded SST data specified, within the provided key range. Returns
+	// stats on skipped KVs, or an error if a collision is found.
+	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
 	//
