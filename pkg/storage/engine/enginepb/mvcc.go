@@ -99,7 +99,7 @@ func (ms *MVCCStats) AgeTo(nowNanos int64) {
 	// Seconds are counted every time each individual nanosecond timestamp
 	// crosses a whole second boundary (i.e. is zero mod 1E9). Thus it would
 	// be a mistake to use the (nonequivalent) expression (a-b)/1E9.
-	diffSeconds := nowNanos/1E9 - ms.LastUpdateNanos/1E9
+	diffSeconds := nowNanos/1e9 - ms.LastUpdateNanos/1e9
 
 	ms.GCBytesAge += ms.GCBytes() * diffSeconds
 	ms.IntentAge += ms.IntentCount * diffSeconds

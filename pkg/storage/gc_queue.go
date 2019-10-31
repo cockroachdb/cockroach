@@ -317,7 +317,7 @@ func makeGCQueueScoreImpl(
 	// Intent score. This computes the average age of outstanding intents and
 	// normalizes. Note that at the time of writing this criterion hasn't
 	// undergone a reality check yet.
-	r.IntentScore = ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
+	r.IntentScore = ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1e9)
 
 	// Randomly skew the score down a bit to cause decoherence of replicas with
 	// similar load. Note that we'll only ever reduce the score, never increase

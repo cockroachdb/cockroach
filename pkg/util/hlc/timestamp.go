@@ -32,7 +32,7 @@ func (t Timestamp) Less(s Timestamp) bool {
 }
 
 func (t Timestamp) String() string {
-	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
+	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1e9, t.WallTime%1e9, t.Logical)
 }
 
 // AsOfSystemTime returns a string to be used in an AS OF SYSTEM TIME query.

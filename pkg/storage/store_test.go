@@ -2660,7 +2660,7 @@ func TestStoreGCThreshold(t *testing.T) {
 	assertThreshold(hlc.Timestamp{})
 
 	threshold := hlc.Timestamp{
-		WallTime: 2E9,
+		WallTime: 2e9,
 	}
 
 	gcr := roachpb.GCRequest{
