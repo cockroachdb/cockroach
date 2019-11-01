@@ -421,15 +421,17 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 
 // backwardLatestVersion backs up the iterator to the latest version for the
 // specified key. The parameter i is used to maintain iteration count between
-// the loop here and the caller (usually prevKey). Returns false if the iterator
-// was exhausted.
+// the loop here and the caller (usually prevKey). Returns false if the
+// iterator was exhausted. Assumes that the iterator is currently positioned at
+// the oldest version of key.
 func (p *pebbleMVCCScanner) backwardLatestVersion(key []byte, i int) bool {
 	p.keyBuf = append(p.keyBuf[:0], key...)
 
 	for ; i < p.itersBeforeSeek; i++ {
 		peekedKey, ok := p.iterPeekPrev()
 		if !ok {
-			return false
+			// No previous entry exists, so we're at the latest version of key.
+			return true
 		}
 		if !bytes.Equal(peekedKey, p.keyBuf) {
 			p.incrementItersBeforeSeek()
@@ -445,19 +447,15 @@ func (p *pebbleMVCCScanner) backwardLatestVersion(key []byte, i int) bool {
 	return p.iterSeek(p.keyBuf)
 }
 
-// Advance to the newest iteration of the user key preceding the specified key.
+// Advance to the newest version of the user key preceding the specified
+// key. Assumes that the iterator is currently positioned at key or 1 record
+// after key.
 func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
 	p.keyBuf = append(p.keyBuf[:0], key...)
 
 	for i := 0; i < p.itersBeforeSeek; i++ {
 		peekedKey, ok := p.iterPeekPrev()
 		if !ok {
-			return false
-		}
-		if peekedKey == nil {
-			// iterPeekPrev() may return true even when it did not find a key. This
-			// case is indicated by peekedKey == nil. In that case there is not
-			// going to be any prev key, so we are done.
 			return false
 		}
 		if !bytes.Equal(peekedKey, p.keyBuf) {
@@ -609,6 +607,14 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 		// If we have peeked at the previous entry, we need to advance the iterator
 		// twice.
 		p.peeked = false
+		if !p.parent.Valid() {
+			// We were peeked off the beginning of iteration. Seek to the first
+			// entry, and then advance one step.
+			if !p.parent.First() {
+				return false
+			}
+			return p.updateCurrent(p.parent.Next())
+		}
 		if !p.parent.Next() {
 			return false
 		}
@@ -650,14 +656,13 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 		// With the current iterator state saved we can move the iterator to the
 		// previous entry.
 		if !p.parent.Prev() {
-			// Peeking at the previous key should never leave the iterator
-			// invalid. Instead, we seek back to the first key and return nil for the
-			// peeked key. Note that this prevents using reverse scan to scan to the
-			// empty key.
-			p.peeked = false
-			valid := p.parent.First()
-			return nil, p.updateCurrent(valid)
+			// The iterator is now invalid, but note that this case is handled in
+			// both iterNext and iterPrev. In the former case, we'll position the
+			// iterator at the first entry, and in the latter iteration will be done.
+			return nil, false
 		}
+	} else if !p.parent.Valid() {
+		return nil, false
 	}
 
 	peekedKey, _, ok := enginepb.SplitMVCCKey(p.parent.Key())
