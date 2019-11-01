@@ -1706,6 +1706,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
 
 	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
+	log.Infof(ctx, "The number of system ranges is %d\n", expectedSystemRanges)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1714,8 +1715,6 @@ func TestSystemZoneConfigs(t *testing.T) {
 	systemNumReplicas := int(*config.DefaultSystemZoneConfig().NumReplicas)
 	userNumReplicas := int(*config.DefaultZoneConfig().NumReplicas)
 	expectedReplicas := expectedSystemRanges*systemNumReplicas + expectedUserRanges*userNumReplicas
-	log.Infof(ctx, "TestSystemZoneConfig: expecting %d system ranges and %d user ranges",
-		expectedSystemRanges, expectedUserRanges)
 	log.Infof(ctx, "TestSystemZoneConfig: expected (%dx%d) + (%dx%d) = %d replicas total",
 		expectedSystemRanges, systemNumReplicas, expectedUserRanges, userNumReplicas, expectedReplicas)
 

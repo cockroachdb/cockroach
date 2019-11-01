@@ -2041,7 +2041,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		// Wait for the cache to reflect the dropped databases if any.
-		ex.extraTxnState.tables.waitForCacheToDropDatabases(ex.Ctx())
+		ex.extraTxnState.tables.waitForCacheToDropDatabases(ex.Ctx(), ex.server.cfg.Settings)
 
 		fallthrough
 	case txnRestart, txnAborted:

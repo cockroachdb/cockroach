@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -74,20 +75,20 @@ type SchemaAccessor interface {
 	// GetDatabaseDesc looks up a database by name and returns its
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
-	GetDatabaseDesc(ctx context.Context, txn *client.Txn, dbName string, flags tree.DatabaseLookupFlags) (*DatabaseDescriptor, error)
+	GetDatabaseDesc(ctx context.Context, txn *client.Txn, settings *cluster.Settings, dbName string, flags tree.DatabaseLookupFlags) (*DatabaseDescriptor, error)
 
-	// IsValidSchema returns true if the given schema name is valid for the given database.
-	IsValidSchema(db *DatabaseDescriptor, scName string) bool
+	// IsValidSchema returns true and the SchemaID if the given schema name is valid for the given database.
+	IsValidSchema(ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string) (bool, sqlbase.ID, error)
 
 	// GetObjectNames returns the list of all objects in the given
 	// database and schema.
 	// TODO(whomever): when separate schemas are supported, this
 	// API should be extended to use schema descriptors.
-	GetObjectNames(ctx context.Context, txn *client.Txn, db *DatabaseDescriptor, scName string, flags tree.DatabaseListFlags) (TableNames, error)
+	GetObjectNames(ctx context.Context, txn *client.Txn, settings *cluster.Settings, db *DatabaseDescriptor, scName string, flags tree.DatabaseListFlags) (TableNames, error)
 
 	// GetObjectDesc looks up an object by name and returns both its
 	// descriptor and that of its parent database. If the object is not
 	// found and flags.required is true, an error is returned, otherwise
 	// a nil reference is returned.
-	GetObjectDesc(ctx context.Context, txn *client.Txn, name *ObjectName, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
+	GetObjectDesc(ctx context.Context, txn *client.Txn, settings *cluster.Settings, name *ObjectName, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
 }

@@ -1432,7 +1432,7 @@ func forEachDatabaseDesc(
 	fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
 	var dbDescs []*sqlbase.DatabaseDescriptor
-	dbDescs, err := p.Tables().getAllDatabaseDescriptors(ctx, p.txn)
+	dbDescs, err := p.Tables().getAllDatabaseDescriptors(ctx, p.txn, p.ExecCfg().Settings)
 	if err != nil {
 		return err
 	}

@@ -68,6 +68,7 @@ message EvalContext {
   optional string location = 4 [(gogoproto.nullable) = false];
   optional string database = 5 [(gogoproto.nullable) = false];
   repeated string searchPath = 6;
+  optional string temporarySchema = 13 [(gogoproto.nullable) = false];
   optional string user = 7 [(gogoproto.nullable) = false];
   optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
   optional string application_name = 9 [(gogoproto.nullable) = false];

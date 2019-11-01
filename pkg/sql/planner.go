@@ -383,6 +383,16 @@ func (p *planner) User() string {
 	return p.SessionData().User
 }
 
+func (p *planner) TemporarySchema() string {
+	return fmt.Sprintf("pg_temp_%v%v",
+		p.ExtendedEvalContext().SessionID.Hi,
+		p.ExtendedEvalContext().SessionID.Lo)
+}
+
+func (p *planner) SetTemporarySchemaName(scName string) {
+	p.sessionDataMutator.SetTemporarySchemaName(scName)
+}
+
 // DistSQLPlanner returns the DistSQLPlanner
 func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner

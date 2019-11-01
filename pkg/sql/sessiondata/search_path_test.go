@@ -18,62 +18,190 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Tests the implied search path when no temporary schema has been created
+// by the session.
 func TestImpliedSearchPath(t *testing.T) {
+	testTempSchemaName := `test_temp_schema`
+
 	testCases := []struct {
-		explicitSearchPath                         []string
-		expectedSearchPath                         []string
-		expectedSearchPathWithoutImplicitPgCatalog []string
+		explicitSearchPath                                             []string
+		expectedSearchPath                                             []string
+		expectedSearchPathWithoutImplicitPgSchemas                     []string
+		expectedSearchPathWhenTemporarySchemaExists                    []string
+		expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists []string
 	}{
-		{[]string{}, []string{`pg_catalog`}, []string{}},
-		{[]string{`pg_catalog`}, []string{`pg_catalog`}, []string{`pg_catalog`}},
-		{[]string{`foobar`, `pg_catalog`}, []string{`foobar`, `pg_catalog`}, []string{`foobar`, `pg_catalog`}},
-		{[]string{`foobar`}, []string{`pg_catalog`, `foobar`}, []string{`foobar`}},
+		{[]string{}, /* explicitSearchPath */
+			[]string{`pg_catalog`}, /* expectedSearchPath */
+			[]string{},             /* expectedSearchPathWithoutImplicitPgSchemas */
+			[]string{testTempSchemaName, `pg_catalog`}, /* expectedSearchPathWhenTemporarySchemaExists */
+			[]string{}, /* expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists */
+		},
+		{[]string{`pg_catalog`}, /* explicitSearchPath */
+			[]string{`pg_catalog`},                     /* expectedSearchPath */
+			[]string{`pg_catalog`},                     /* expectedSearchPathWithoutImplicitPgSchemas */
+			[]string{testTempSchemaName, `pg_catalog`}, /* expectedSearchPathWhenTemporarySchemaExists */
+			[]string{`pg_catalog`},                     /* expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists */
+
+		},
+		{[]string{`pg_catalog`, `pg_temp`}, /* explicitSearchPath */
+			[]string{`pg_catalog`},                     /* expectedSearchPath */
+			[]string{`pg_catalog`},                     /* expectedSearchPathWithoutImplicitPgSchemas */
+			[]string{`pg_catalog`, testTempSchemaName}, /* expectedSearchPathWhenTemporarySchemaExists */
+			[]string{`pg_catalog`, testTempSchemaName}, /* expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists */
+		},
+		{[]string{`pg_temp`, `pg_catalog`}, /* explicitSearchPath */
+			[]string{`pg_catalog`},                     /* expectedSearchPath */
+			[]string{`pg_catalog`},                     /* expectedSearchPathWithoutImplicitPgSchemas */
+			[]string{testTempSchemaName, `pg_catalog`}, /* expectedSearchPathWhenTemporarySchemaExists */
+			[]string{testTempSchemaName, `pg_catalog`}, /* expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists */
+		},
+		{[]string{`foobar`, `pg_catalog`}, /* explicitSearchPath */
+			[]string{`foobar`, `pg_catalog`},                     /* expectedSearchPath */
+			[]string{`foobar`, `pg_catalog`},                     /* expectedSearchPathWithoutImplicitPgSchemas */
+			[]string{testTempSchemaName, `foobar`, `pg_catalog`}, /* expectedSearchPathWhenTemporarySchemaExists */
+			[]string{`foobar`, `pg_catalog`},                     /* expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists */
+
+		},
+		{[]string{`foobar`, `pg_temp`}, /* explicitSearchPath */
+			[]string{`pg_catalog`, `foobar`},                     /* expectedSearchPath */
+			[]string{`foobar`},                                   /* expectedSearchPathWithoutImplicitPgSchemas */
+			[]string{`pg_catalog`, `foobar`, testTempSchemaName}, /* expectedSearchPathWhenTemporarySchemaExists */
+			[]string{`foobar`, testTempSchemaName},               /* expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists */
+
+		},
+		{[]string{`foobar`}, /* explicitSearchPath */
+			[]string{`pg_catalog`, `foobar`},                     /* expectedSearchPath */
+			[]string{`foobar`},                                   /* expectedSearchPathWithoutImplicitPgSchemas */
+			[]string{testTempSchemaName, `pg_catalog`, `foobar`}, /* expectedSearchPathWhenTemporarySchemaExists */
+			[]string{`foobar`},                                   /* expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists */
+		},
 	}
 
-	for _, tc := range testCases {
+	for tcNum, tc := range testCases {
 		t.Run(strings.Join(tc.explicitSearchPath, ","), func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath)
+			searchPath := MakeSearchPath(tc.explicitSearchPath, DefaultTemporarySchema)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.Iter()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
 				actualSearchPath = append(actualSearchPath, p)
 			}
 			if !reflect.DeepEqual(tc.expectedSearchPath, actualSearchPath) {
-				t.Errorf(`Expected search path to be %#v, but was %#v.`, tc.expectedSearchPath, actualSearchPath)
+				t.Errorf(
+					`#%d: Expected search path to be %#v, but was %#v.`,
+					tcNum,
+					tc.expectedSearchPath,
+					actualSearchPath,
+				)
 			}
 		})
 
-		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/no-pg-catalog", func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath)
+		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/no-pg-schemas", func(t *testing.T) {
+			searchPath := MakeSearchPath(tc.explicitSearchPath, DefaultTemporarySchema)
 			actualSearchPath := make([]string, 0)
-			iter := searchPath.IterWithoutImplicitPGCatalog()
+			iter := searchPath.IterWithoutImplicitPGSchemas()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
 				actualSearchPath = append(actualSearchPath, p)
 			}
-			if !reflect.DeepEqual(tc.expectedSearchPathWithoutImplicitPgCatalog, actualSearchPath) {
-				t.Errorf(`Expected search path to be %#v, but was %#v.`, tc.expectedSearchPathWithoutImplicitPgCatalog, actualSearchPath)
+			if !reflect.DeepEqual(tc.expectedSearchPathWithoutImplicitPgSchemas, actualSearchPath) {
+				t.Errorf(
+					`#%d: Expected search path to be %#v, but was %#v.`,
+					tcNum,
+					tc.expectedSearchPathWithoutImplicitPgSchemas,
+					actualSearchPath,
+				)
+			}
+		})
+
+		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/temp-schema-exists", func(t *testing.T) {
+			searchPath := MakeSearchPath(tc.explicitSearchPath, testTempSchemaName)
+			actualSearchPath := make([]string, 0)
+			iter := searchPath.Iter()
+			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
+				actualSearchPath = append(actualSearchPath, p)
+			}
+			if !reflect.DeepEqual(tc.expectedSearchPathWhenTemporarySchemaExists, actualSearchPath) {
+				t.Errorf(
+					`#%d: Expected search path to be %#v, but was %#v.`,
+					tcNum,
+					tc.expectedSearchPathWhenTemporarySchemaExists,
+					actualSearchPath,
+				)
+			}
+		})
+
+		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/no-pg-schemas/temp-schema-exists", func(t *testing.T) {
+			searchPath := MakeSearchPath(tc.explicitSearchPath, testTempSchemaName)
+			actualSearchPath := make([]string, 0)
+			iter := searchPath.IterWithoutImplicitPGSchemas()
+			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
+				actualSearchPath = append(actualSearchPath, p)
+			}
+			if !reflect.DeepEqual(tc.expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists, actualSearchPath) {
+				t.Errorf(
+					`#%d: Expected search path to be %#v, but was %#v.`,
+					tcNum,
+					tc.expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists,
+					actualSearchPath,
+				)
 			}
 		})
 	}
 }
 
 func TestSearchPathEquals(t *testing.T) {
-	a1 := MakeSearchPath([]string{"x", "y", "z"})
-	a2 := MakeSearchPath([]string{"x", "y", "z"})
+	testTempSchemaName := `test_temp_schema`
+
+	a1 := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchema)
+	a2 := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchema)
 	assert.True(t, a1.Equals(&a1))
 	assert.True(t, a2.Equals(&a2))
 
 	assert.True(t, a1.Equals(&a2))
 	assert.True(t, a2.Equals(&a1))
 
-	b := MakeSearchPath([]string{"x", "z", "y"})
+	b := MakeSearchPath([]string{"x", "z", "y"}, DefaultTemporarySchema)
 	assert.False(t, a1.Equals(&b))
 
-	c1 := MakeSearchPath([]string{"x", "y", "pg_catalog"})
-	c2 := MakeSearchPath([]string{"x", "y", "pg_catalog"})
+	c1 := MakeSearchPath([]string{"x", "y", "z", "pg_catalog"}, DefaultTemporarySchema)
+	c2 := MakeSearchPath([]string{"x", "y", "z", "pg_catalog"}, DefaultTemporarySchema)
 	assert.True(t, c1.Equals(&c2))
 	assert.False(t, a1.Equals(&c1))
 
-	d := MakeSearchPath([]string{"x"})
+	d := MakeSearchPath([]string{"x"}, DefaultTemporarySchema)
 	assert.False(t, a1.Equals(&d))
+
+	e1 := MakeSearchPath([]string{"x", "y", "z"}, testTempSchemaName)
+	e2 := MakeSearchPath([]string{"x", "y", "z"}, testTempSchemaName)
+	assert.True(t, e1.Equals(&e1))
+	assert.True(t, e1.Equals(&e2))
+	assert.False(t, e1.Equals(&a1))
+
+	f := MakeSearchPath([]string{"x", "z", "y"}, testTempSchemaName)
+	assert.False(t, e1.Equals(&f))
+
+	g := MakeSearchPath([]string{"x", "y", "z", "pg_temp"}, DefaultTemporarySchema)
+	assert.False(t, e1.Equals(&g))
+	assert.False(t, g.Equals(&c1))
+
+	h := MakeSearchPath([]string{"x", "y", "z", "pg_temp"}, testTempSchemaName)
+	assert.False(t, g.Equals(&h))
+
+	i := MakeSearchPath([]string{"x", "y", "z", "pg_temp", "pg_catalog"}, testTempSchemaName)
+	assert.False(t, i.Equals(&h))
+	assert.False(t, i.Equals(&c1))
+}
+
+func TestUpdateSearchPath(t *testing.T) {
+	testTempSchemaName := `test_temp_schema`
+
+	sp := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchema)
+	sp.UpdatePaths([]string{"x", "pg_catalog"})
+	assert.True(t, sp.GetTemporarySchema() == DefaultTemporarySchema)
+
+	sp.UpdateTemporarySchemaName(testTempSchemaName)
+	sp.UpdatePaths([]string{"pg_catalog"})
+	assert.True(t, sp.GetTemporarySchema() == testTempSchemaName)
+
+	sp.UpdatePaths([]string{"x", "pg_temp"})
+	assert.True(t, sp.GetTemporarySchema() == testTempSchemaName)
 }

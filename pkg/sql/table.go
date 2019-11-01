@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -150,7 +151,11 @@ type dbCacheSubscriber interface {
 // return a nil descriptor and no error if the table does not exist.
 //
 func (tc *TableCollection) getMutableTableDescriptor(
-	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	tn *tree.TableName,
+	flags tree.ObjectLookupFlags,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
@@ -171,7 +176,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx,
+		dbID, err = tc.databaseCache.getDatabaseID(ctx, settings,
 			tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
@@ -187,7 +192,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	}
 
 	phyAccessor := UncachedPhysicalAccessor{}
-	obj, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
+	obj, err := phyAccessor.GetObjectDesc(ctx, txn, settings, tn, flags)
 	if obj == nil {
 		return nil, err
 	}
@@ -206,7 +211,11 @@ func (tc *TableCollection) getMutableTableDescriptor(
 // the validity window of the table descriptor version returned.
 //
 func (tc *TableCollection) getTableVersion(
-	ctx context.Context, txn *client.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	tn *tree.TableName,
+	flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
@@ -227,7 +236,7 @@ func (tc *TableCollection) getTableVersion(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx,
+		dbID, err = tc.databaseCache.getDatabaseID(ctx, settings,
 			tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
@@ -263,7 +272,7 @@ func (tc *TableCollection) getTableVersion(
 
 	readTableFromStore := func() (*sqlbase.ImmutableTableDescriptor, error) {
 		phyAccessor := UncachedPhysicalAccessor{}
-		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
+		obj, err := phyAccessor.GetObjectDesc(ctx, txn, settings, tn, flags)
 		if obj == nil {
 			return nil, err
 		}
@@ -447,7 +456,9 @@ func (tc *TableCollection) releaseTables(ctx context.Context) {
 // Wait until the database cache has been updated to properly
 // reflect all dropped databases, so that future commands on the
 // same gateway node observe the dropped databases.
-func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
+func (tc *TableCollection) waitForCacheToDropDatabases(
+	ctx context.Context, settings *cluster.Settings,
+) {
 	for _, uc := range tc.uncommittedDatabases {
 		if !uc.dropped {
 			continue
@@ -458,7 +469,7 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 		tc.dbCacheSubscriber.waitForCacheState(
 			func(dc *databaseCache) bool {
 				// Resolve the database name from the database cache.
-				dbID, err := dc.getCachedDatabaseID(uc.name)
+				dbID, err := dc.getCachedDatabaseID(uc.name, settings)
 				if err != nil || dbID == sqlbase.InvalidID {
 					// dbID can still be 0 if required is false and
 					// the database is not found. Swallowing error here
@@ -643,10 +654,10 @@ func (tc *TableCollection) getAllDescriptors(
 // validity before scanning system.namespace and looking up the descriptors
 // in the database cache, if necessary.
 func (tc *TableCollection) getAllDatabaseDescriptors(
-	ctx context.Context, txn *client.Txn,
+	ctx context.Context, txn *client.Txn, settings *cluster.Settings,
 ) ([]*sqlbase.DatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
-		dbDescIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn)
+		dbDescIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn, settings)
 		if err != nil {
 			return nil, err
 		}

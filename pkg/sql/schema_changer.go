@@ -835,7 +835,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 	case jobspb.Status_ROCKSDB_COMPACTION:
 		runningStatus = RunningStatusCompaction
 	case jobspb.Status_DONE:
-		return job.WithTxn(txn).Succeeded(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return job.WithTxn(txn).Succeeded(ctx, func(ctx context.Context, txn *client.Txn, _ *cluster.Settings) error {
 			return onSuccess(ctx, txn, job)
 		})
 	default:
@@ -875,7 +875,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 		func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
-				tbKey := sqlbase.NewTableKey(drain.ParentID, drain.Name).Key()
+				tbKey := sqlbase.NewPublicTableKey(drain.ParentID, drain.Name, sc.settings).Key()
 				b.Del(tbKey)
 			}
 

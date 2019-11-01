@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -140,9 +141,36 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
+		if parentID != keys.RootNamespaceID {
+			ret = append(ret, roachpb.KeyValue{
+				Key:   NewPublicTableKey(parentID, desc.GetName(), nil /* settings */).Key(),
+				Value: value,
+			})
+		} else {
+			// Initializing the system database. The database must be initialized with
+			// the public schema, as all tables are scoped under the public schema.
+			publicSchemaValue := roachpb.Value{}
+			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+			ret = append(
+				ret,
+				roachpb.KeyValue{
+					Key:   NewDatabaseKey(desc.GetName(), nil /* settings */).Key(),
+					Value: value,
+				},
+				roachpb.KeyValue{
+					Key:   NewPublicSchemaKey(desc.GetID()).Key(),
+					Value: publicSchemaValue,
+				})
+		}
+
+		// This function is called during bootstrapping, and the cluster settings are populated later.
+		// There is no way to ascertain what the cluster version is at this point. So, we populate both
+		// the older system.namespace (< 20.1) and the newer system.namespace (>= 20.1)
+		deprecatedValue := roachpb.Value{}
+		deprecatedValue.SetInt(int64(desc.GetID()))
 		ret = append(ret, roachpb.KeyValue{
-			Key:   NewTableKey(parentID, desc.GetName()).Key(),
-			Value: value,
+			Key:   NewDeprecatedTableKey(parentID, desc.GetName()).Key(),
+			Value: deprecatedValue,
 		})
 
 		// Create descriptor metadata key.
@@ -217,9 +245,16 @@ var systemTableIDCache = func() map[string]ID {
 
 // LookupSystemTableDescriptorID uses the lookup cache above
 // to bypass a KV lookup when resolving the name of system tables.
-func LookupSystemTableDescriptorID(dbID ID, tableName string) ID {
+func LookupSystemTableDescriptorID(dbID ID, tableName string, settings *cluster.Settings) ID {
 	if dbID != SystemDB.ID {
 		return InvalidID
+	}
+	// Pre 20.1 clusters use system.namespace to refer to
+	// system.namespace_deprecated.
+	if settings != nil &&
+		!settings.Version.IsActive(cluster.VersionNamespaceTableUngossip) &&
+		tableName == NamespaceTable.Name {
+		return DeprecatedNamespaceTable.ID
 	}
 	dbID, ok := systemTableIDCache[tableName]
 	if !ok {

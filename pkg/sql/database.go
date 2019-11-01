@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,10 +76,10 @@ func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 // getKeysForDatabaseDescriptor retrieves the KV keys corresponding to
 // the zone, name and descriptor of a database.
 func getKeysForDatabaseDescriptor(
-	dbDesc *sqlbase.DatabaseDescriptor,
+	dbDesc *sqlbase.DatabaseDescriptor, settings *cluster.Settings,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
 	zoneKey = config.MakeZoneKey(uint32(dbDesc.ID))
-	nameKey = sqlbase.NewDatabaseKey(dbDesc.GetName()).Key()
+	nameKey = sqlbase.NewDatabaseKey(dbDesc.GetName(), settings).Key()
 	descKey = sqlbase.MakeDescMetadataKey(dbDesc.ID)
 	return
 }
@@ -86,12 +87,12 @@ func getKeysForDatabaseDescriptor(
 // getDatabaseID resolves a database name into a database ID.
 // Returns InvalidID on failure.
 func getDatabaseID(
-	ctx context.Context, txn *client.Txn, name string, required bool,
+	ctx context.Context, txn *client.Txn, settings *cluster.Settings, name string, required bool,
 ) (sqlbase.ID, error) {
 	if name == sqlbase.SystemDB.Name {
 		return sqlbase.SystemDB.ID, nil
 	}
-	dbID, err := getDescriptorID(ctx, txn, sqlbase.NewDatabaseKey(name))
+	dbID, err := getDescriptorID(ctx, txn, sqlbase.NewDatabaseKey(name, settings))
 	if err != nil {
 		return sqlbase.InvalidID, err
 	}
@@ -132,8 +133,10 @@ func MustGetDatabaseDescByID(
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name. Returns nil and no error if the name is not present in the
 // cache.
-func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	dbID, err := dc.getCachedDatabaseID(name)
+func (dc *databaseCache) getCachedDatabaseDesc(
+	name string, settings *cluster.Settings,
+) (*sqlbase.DatabaseDescriptor, error) {
+	dbID, err := dc.getCachedDatabaseID(name, settings)
 	if dbID == sqlbase.InvalidID || err != nil {
 		return nil, err
 	}
@@ -176,6 +179,7 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *databaseCache) getDatabaseDesc(
 	ctx context.Context,
+	settings *cluster.Settings,
 	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
 	name string,
 	required bool,
@@ -184,14 +188,14 @@ func (dc *databaseCache) getDatabaseDesc(
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
 	// The cache lookup may fail.
-	desc, err := dc.getCachedDatabaseDesc(name)
+	desc, err := dc.getCachedDatabaseDesc(name, settings)
 	if err != nil {
 		return nil, err
 	}
 	if desc == nil {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
 			a := UncachedPhysicalAccessor{}
-			desc, err = a.GetDatabaseDesc(ctx, txn, name,
+			desc, err = a.GetDatabaseDesc(ctx, txn, settings, name,
 				tree.DatabaseLookupFlags{Required: required})
 			return err
 		}); err != nil {
@@ -224,18 +228,19 @@ func (dc *databaseCache) getDatabaseDescByID(
 // operations.
 func (dc *databaseCache) getDatabaseID(
 	ctx context.Context,
+	settings *cluster.Settings,
 	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
 	name string,
 	required bool,
 ) (sqlbase.ID, error) {
-	dbID, err := dc.getCachedDatabaseID(name)
+	dbID, err := dc.getCachedDatabaseID(name, settings)
 	if err != nil {
 		return dbID, err
 	}
 	if dbID == sqlbase.InvalidID {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			dbID, err = getDatabaseID(ctx, txn, name, required)
+			dbID, err = getDatabaseID(ctx, txn, settings, name, required)
 			return err
 		}); err != nil {
 			return sqlbase.InvalidID, err
@@ -249,7 +254,9 @@ func (dc *databaseCache) getDatabaseID(
 // from the cache. This method never goes to the store to resolve
 // the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
-func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
+func (dc *databaseCache) getCachedDatabaseID(
+	name string, settings *cluster.Settings,
+) (sqlbase.ID, error) {
 	if id := dc.getID(name); id != sqlbase.InvalidID {
 		return id, nil
 	}
@@ -258,7 +265,7 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 		return sqlbase.SystemDB.ID, nil
 	}
 
-	nameKey := sqlbase.NewDatabaseKey(name)
+	nameKey := sqlbase.NewDatabaseKey(name, settings)
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
 		return sqlbase.InvalidID, nil
@@ -270,7 +277,10 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 
 // renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
-	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
+	ctx context.Context,
+	settings *cluster.Settings,
+	oldDesc *sqlbase.DatabaseDescriptor,
+	newName string,
 ) error {
 	oldName := oldDesc.Name
 	oldDesc.SetName(newName)
@@ -278,8 +288,8 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	oldKey := sqlbase.NewDatabaseKey(oldName).Key()
-	newKey := sqlbase.NewDatabaseKey(newName).Key()
+	oldKey := sqlbase.NewDatabaseKey(oldName, settings).Key()
+	newKey := sqlbase.NewDatabaseKey(newName, settings).Key()
 	descID := oldDesc.GetID()
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(oldDesc)

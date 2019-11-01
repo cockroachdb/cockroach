@@ -528,7 +528,9 @@ func TestResolveTablePatternOrName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type spath = sessiondata.SearchPath
 
-	var mpath = func(args ...string) spath { return sessiondata.MakeSearchPath(args) }
+	var mpath = func(args ...string) spath {
+		return sessiondata.MakeSearchPath(args, sessiondata.DefaultTemporarySchema)
+	}
 
 	testCases := []struct {
 		// Test inputs.

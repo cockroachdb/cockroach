@@ -558,10 +558,10 @@ SELECT "hashedPassword" FROM system.users LIMIT 1
 ----
 ·
 
-query ITI
+query IITI
 SELECT * FROM system.namespace LIMIT 1
 ----
-0  defaultdb  50
+0  0 defaultdb  50
 
 # Regression test for issue with fetching from unique indexes with embedded
 # nulls.

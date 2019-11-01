@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -314,7 +315,9 @@ func (j *Job) resumed(ctx context.Context) error {
 // Canceled sets the status of the tracked job to canceled. It does not directly
 // cancel the job; like job.Paused, it expects the job to call job.Progressed
 // soon, observe a "job is canceled" error, and abort further work.
-func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
+func (j *Job) canceled(
+	ctx context.Context, fn func(context.Context, *client.Txn, *cluster.Settings) error,
+) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusCanceled {
 			// Already canceled - do nothing.
@@ -327,7 +330,7 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn
 			return fmt.Errorf("job with status %s cannot be canceled", md.Status)
 		}
 		if fn != nil {
-			if err := fn(ctx, txn); err != nil {
+			if err := fn(ctx, txn, j.registry.settings); err != nil {
 				return err
 			}
 		}
@@ -340,18 +343,18 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn
 
 // NoopFn is an empty function that can be used for Failed and Succeeded. It indicates
 // no transactional callback should be made during these operations.
-var NoopFn = func(context.Context, *client.Txn) error { return nil }
+var NoopFn = func(context.Context, *client.Txn, *cluster.Settings) error { return nil }
 
 // Failed marks the tracked job as having failed with the given error.
 func (j *Job) Failed(
-	ctx context.Context, err error, fn func(context.Context, *client.Txn) error,
+	ctx context.Context, err error, fn func(context.Context, *client.Txn, *cluster.Settings) error,
 ) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status.Terminal() {
 			// Already done - do nothing.
 			return nil
 		}
-		if err := fn(ctx, txn); err != nil {
+		if err := fn(ctx, txn, j.registry.settings); err != nil {
 			return err
 		}
 		ju.UpdateStatus(StatusFailed)
@@ -364,13 +367,15 @@ func (j *Job) Failed(
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
-func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
+func (j *Job) Succeeded(
+	ctx context.Context, fn func(context.Context, *client.Txn, *cluster.Settings) error,
+) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status.Terminal() {
 			// Already done - do nothing.
 			return nil
 		}
-		if err := fn(ctx, txn); err != nil {
+		if err := fn(ctx, txn, j.registry.settings); err != nil {
 			return err
 		}
 		ju.UpdateStatus(StatusSucceeded)

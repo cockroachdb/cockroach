@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -62,15 +63,37 @@ type createTableRun struct {
 }
 
 func (n *createTableNode) startExec(params runParams) error {
-	temporary := false
-	if n.n.Temporary {
+	temporary := n.n.Temporary || n.n.Table.SchemaName == sessiondata.PgTempSchemaName
+	tKey := sqlbase.NewPublicTableKey(n.dbDesc.ID, n.n.Table.Table(), params.ExecCfg().Settings)
+
+	// If a user specifies the pg_temp schema, even without the TEMPORARY keyword,
+	// a temporary table should be created.
+	if n.n.Temporary || n.n.Table.SchemaName == sessiondata.PgTempSchemaName {
+		// An explicit schema can only be provided in the CREATE TEMP TABLE statement
+		// iff it is pg_temp.
+		if n.n.Temporary && n.n.Table.ExplicitSchema && n.n.Table.SchemaName != sessiondata.PgTempSchemaName {
+			return pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema")
+		}
 		if !params.SessionData().TempTablesEnabled {
 			return unimplemented.NewWithIssuef(5807,
 				"temporary tables are unsupported")
 		}
-		temporary = true
+
+		tempSchemaName := params.p.TemporarySchema()
+		sKey := sqlbase.NewSchemaKey(n.dbDesc.ID, tempSchemaName)
+		schemaID, err := getDescriptorID(params.ctx, params.p.txn, sKey)
+		if err != nil {
+			return err
+		} else if schemaID == sqlbase.InvalidID {
+			// The temporary schema has not been created yet.
+			// TODO(arul): Add a job that does deletion for this session(temp schema)
+			if schemaID, err = createTempSchema(params, sKey); err != nil {
+				return err
+			}
+		}
+
+		tKey = sqlbase.NewTableKey(n.dbDesc.ID, schemaID, n.n.Table.Table(), params.ExecCfg().Settings)
 	}
-	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Table.Table())
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		if n.n.IfNotExists {

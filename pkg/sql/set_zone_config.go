@@ -320,11 +320,13 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// resolveZone determines the ID of the target object of the zone
 		// specifier. This ought to succeed regardless of whether there is
 		// already a zone config for the target object.
-		targetID, err := resolveZone(params.ctx, params.p.txn, &zs)
+		targetID, err := resolveZone(params.ctx, params.p.txn, params.p.ExecCfg().Settings, &zs)
 		if err != nil {
 			return err
 		}
-		if targetID != keys.SystemDatabaseID && sqlbase.IsSystemConfigID(targetID) {
+		// NamespaceTableID is not in the system gossip range, but users should not
+		// be allowed to set zone configs on it.
+		if targetID != keys.SystemDatabaseID && sqlbase.IsSystemConfigID(targetID) || targetID == keys.NamespaceTableID {
 			return pgerror.Newf(pgcode.CheckViolation,
 				`cannot set zone configs for system config tables; `+
 					`try setting your config on the entire "system" database instead`)

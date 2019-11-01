@@ -1571,7 +1571,7 @@ func (m *LeaseManager) AcquireByName(
 func (m *LeaseManager) resolveName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (sqlbase.ID, error) {
-	key := sqlbase.NewTableKey(dbID, tableName).Key()
+	key := sqlbase.NewPublicTableKey(dbID, tableName, m.settings).Key()
 	id := sqlbase.InvalidID
 	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, timestamp)

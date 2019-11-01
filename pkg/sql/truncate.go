@@ -208,7 +208,7 @@ func (p *planner) truncateTable(
 	//
 	// TODO(vivek): Fix properly along with #12123.
 	zoneKey := config.MakeZoneKey(uint32(tableDesc.ID))
-	nameKey := sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.GetName()).Key()
+	nameKey := sqlbase.NewPublicTableKey(tableDesc.ParentID, tableDesc.GetName(), p.ExecCfg().Settings).Key()
 	b := &client.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.
 	if traceKV {
@@ -267,7 +267,7 @@ func (p *planner) truncateTable(
 	newTableDesc.Mutations = nil
 	newTableDesc.GCMutations = nil
 	newTableDesc.ModificationTime = p.txn.CommitTimestamp()
-	key := sqlbase.NewTableKey(newTableDesc.ParentID, newTableDesc.Name).Key()
+	key := sqlbase.NewPublicTableKey(newTableDesc.ParentID, newTableDesc.Name, p.ExecCfg().Settings).Key()
 	if err := p.createDescriptorWithID(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err

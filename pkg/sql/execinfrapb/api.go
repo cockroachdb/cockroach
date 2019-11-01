@@ -49,6 +49,7 @@ func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 		TxnTimestampNanos:  evalCtx.TxnTimestamp.UnixNano(),
 		Location:           evalCtx.GetLocation().String(),
 		Database:           evalCtx.SessionData.Database,
+		TemporarySchema:    evalCtx.SessionData.SearchPath.GetTemporarySchema(),
 		User:               evalCtx.SessionData.User,
 		ApplicationName:    evalCtx.SessionData.ApplicationName,
 		BytesEncodeFormat:  be,

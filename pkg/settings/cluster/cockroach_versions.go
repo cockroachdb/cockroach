@@ -46,6 +46,7 @@ const (
 	VersionAtomicChangeReplicas
 	VersionTableDescModificationTimeFromMVCC
 	VersionPartitionedBackup
+	VersionNamespaceTableUngossip
 
 	// Add new versions here (step one of two).
 
@@ -550,6 +551,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionPartitionedBackup is https://github.com/cockroachdb/cockroach/pull/39250.
 		Key:     VersionPartitionedBackup,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 11},
+	},
+	{
+		// TODO(arul): fill this
+		// VersionNamespaceTableUngossip is
+		Key:     VersionNamespaceTableUngossip,
+		Version: roachpb.Version{Major: 20, Minor: 1},
 	},
 
 	// Add new versions here (step two of two).
