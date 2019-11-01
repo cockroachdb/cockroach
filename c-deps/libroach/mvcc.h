@@ -381,7 +381,9 @@ template <bool reverse> class mvccScanner {
     for (; i < iters_before_seek_; ++i) {
       rocksdb::Slice peeked_key;
       if (!iterPeekPrev(&peeked_key)) {
-        return false;
+        // No previous entry exists, so we're at the latest version of
+        // key.
+        return true;
       }
       if (peeked_key != key_buf_) {
         // The key changed which means the current key is the latest
@@ -408,12 +410,6 @@ template <bool reverse> class mvccScanner {
     for (int i = 0; i < iters_before_seek_; ++i) {
       rocksdb::Slice peeked_key;
       if (!iterPeekPrev(&peeked_key)) {
-        return false;
-      }
-      if (peeked_key.empty()) {
-        // `iterPeekPrev()` may return true even when it did not find a key. This
-        // case is indicated by `peeked_key.empty()`. In that case there is not
-        // going to be any prev key, so we are done.
         return false;
       }
       if (peeked_key != key_buf_) {
@@ -582,6 +578,15 @@ template <bool reverse> class mvccScanner {
       // If we had peeked at the previous entry, we need to advance
       // the iterator twice to get to the real next entry.
       peeked_ = false;
+      if (!iter_rep_->Valid()) {
+        // We were peeked off the beginning of iteration. Seek to the
+        // first entry, and then advance one step.
+        iter_rep_->SeekToFirst();
+        if (iter_rep_->Valid()) {
+          iter_rep_->Next();
+        }
+        return updateCurrent();
+      }
       iter_rep_->Next();
       if (!iter_rep_->Valid()) {
         return false;
@@ -623,16 +628,14 @@ template <bool reverse> class mvccScanner {
       // With the current iterator state saved we can move the
       // iterator to the previous entry.
       iter_rep_->Prev();
-      if (!iter_rep_->Valid()) {
-        // Peeking at the previous key should never leave the iterator
-        // invalid. Instead, we seek back to the first key and set the
-        // peeked_key to the empty key. Note that this prevents using
-        // reverse scan to scan to the empty key.
-        peeked_ = false;
-        *peeked_key = rocksdb::Slice();
-        iter_rep_->SeekToFirst();
-        return updateCurrent();
-      }
+    }
+
+    if (!iter_rep_->Valid()) {
+      // The iterator is now invalid, but note that this case is handled in
+      // both iterNext and iterPrev. In the former case, we'll position the
+      // iterator at the first entry, and in the latter iteration will be done.
+      *peeked_key = rocksdb::Slice();
+      return false;
     }
 
     rocksdb::Slice dummy_timestamp;
