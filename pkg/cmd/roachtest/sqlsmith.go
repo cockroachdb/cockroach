@@ -122,6 +122,7 @@ func registerSQLSmith(r *testRegistry) {
 
 	register := func(setup, setting string) {
 		r.Add(testSpec{
+			Skip:    "https://github.com/cockroachdb/cockroach/issues/42109",
 			Name:    fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Cluster: makeClusterSpec(4),
 			Timeout: time.Minute * 20,
