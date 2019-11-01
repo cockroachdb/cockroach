@@ -24,8 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const maxSettings = 256
-
 type dummy struct {
 	msg1       string
 	growsbyone string
@@ -617,8 +615,8 @@ func TestHide(t *testing.T) {
 }
 
 func TestOnChangeWithMaxSettings(t *testing.T) {
-	// Register maxSettings settings to ensure that no errors occur.
-	maxName, err := batchRegisterSettings(t, t.Name(), maxSettings-1-len(settings.Keys()))
+	// Register MaxSettings settings to ensure that no errors occur.
+	maxName, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-1-len(settings.Keys()))
 	if err != nil {
 		t.Errorf("expected no error to register 128 settings, but get error : %s", err)
 	}
@@ -653,8 +651,8 @@ func TestMaxSettingsPanics(t *testing.T) {
 	}()
 
 	// Register too many settings which will cause a panic which is caught and converted to an error.
-	_, err := batchRegisterSettings(t, t.Name(), maxSettings-len(settings.Keys()))
-	expectedErr := "too many settings; increase maxSettings"
+	_, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-len(settings.Keys()))
+	expectedErr := "too many settings; increase MaxSettings"
 	if err == nil || err.Error() != expectedErr {
 		t.Errorf("expected error %v, but got %v", expectedErr, err)
 	}
