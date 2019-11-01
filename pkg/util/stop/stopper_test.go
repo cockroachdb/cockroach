@@ -49,6 +49,7 @@ func TestStopper(t *testing.T) {
 	<-s.ShouldStop()
 	select {
 	case <-waiting:
+		close(cleanup)
 		t.Fatal("expected stopper to have blocked")
 	case <-time.After(100 * time.Millisecond):
 		// Expected.
@@ -58,6 +59,7 @@ func TestStopper(t *testing.T) {
 	case <-waiting:
 		// Success.
 	case <-time.After(time.Second):
+		close(cleanup)
 		t.Fatal("stopper should have finished waiting")
 	}
 	close(cleanup)
@@ -500,6 +502,7 @@ func TestStopperShouldQuiesce(t *testing.T) {
 	// yet.
 	select {
 	case <-s.ShouldStop():
+		close(cleanup)
 		t.Fatal("expected ShouldStop() to block until quiesceing complete")
 	default:
 		// Expected.
@@ -513,6 +516,7 @@ func TestStopperShouldQuiesce(t *testing.T) {
 	// use the "waiting" channel to detect this.
 	select {
 	case <-waiting:
+		close(cleanup)
 		t.Fatal("expected stopper to have blocked")
 	default:
 		// Expected.
