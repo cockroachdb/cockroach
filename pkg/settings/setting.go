@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-const maxSettings = 256
+// MaxSettings is the maximum number of settings that the system supports.
+// Exported for tests.
+const MaxSettings = 256
 
 // Values is a container that stores values for all registered settings.
-// Each setting is assigned a unique slot (up to maxSettings).
+// Each setting is assigned a unique slot (up to MaxSettings).
 // Note that slot indices are 1-based (this is to trigger panics if an
 // uninitialized slot index is used).
 type Values struct {
@@ -39,7 +41,7 @@ type Values struct {
 		syncutil.Mutex
 		// NB: any in place modification to individual slices must also hold the
 		// lock, e.g. if we ever add RemoveOnChange or something.
-		onChange [maxSettings][]func()
+		onChange [MaxSettings][]func()
 	}
 	// opaque is an arbitrary object that can be set by a higher layer to make it
 	// accessible from certain callbacks (like state machine transformers).
@@ -47,8 +49,8 @@ type Values struct {
 }
 
 type valuesContainer struct {
-	intVals     [maxSettings]int64
-	genericVals [maxSettings]atomic.Value
+	intVals     [MaxSettings]int64
+	genericVals [MaxSettings]atomic.Value
 }
 
 func (c *valuesContainer) setGenericVal(slotIdx int, newVal interface{}) {
@@ -212,8 +214,8 @@ func (i *common) setSlotIdx(slotIdx int) {
 	if slotIdx < 1 {
 		panic(fmt.Sprintf("Invalid slot index %d", slotIdx))
 	}
-	if slotIdx > maxSettings {
-		panic(fmt.Sprintf("too many settings; increase maxSettings"))
+	if slotIdx > MaxSettings {
+		panic(fmt.Sprintf("too many settings; increase MaxSettings"))
 	}
 	i.slotIdx = slotIdx
 }
