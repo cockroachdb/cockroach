@@ -21,7 +21,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -142,18 +141,13 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 			idx = int(sel[idx])
 		}
 		for colIdx := 0; colIdx < batch.Width(); colIdx++ {
-			colType := sourceTypes[colIdx]
-			col := batch.ColVec(colIdx)
-			memCol := col.Slice(colType, uint64(idx), uint64(idx+1))
-			switch colType {
-			// {{ range . }}
-			case _TYPES_T:
-				f.input.batch.ColVec(colOffset + colIdx).SetCol(memCol._TemplateType())
-				// {{ end }}
-			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
-			}
-			f.input.batch.ColVec(colOffset + colIdx).SetNulls(memCol.Nulls())
+			f.input.batch.ColVec(colOffset + colIdx).Append(coldata.SliceArgs{
+				Src:         batch.ColVec(colIdx),
+				ColType:     sourceTypes[colIdx],
+				DestIdx:     0,
+				SrcStartIdx: uint64(idx),
+				SrcEndIdx:   uint64(idx + 1),
+			})
 		}
 	}
 	if lBatch != nil {
