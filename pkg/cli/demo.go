@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -156,6 +158,121 @@ type transientCluster struct {
 	cleanup func()
 }
 
+// ShutdownNode will gracefully attempt to shut down a node in the cluster.
+// It will decommission (but will not block) and then drain the node.
+func (c *transientCluster) ShutdownNode(nodeID roachpb.NodeID) error {
+	nodeIndex := int(nodeID - 1)
+
+	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+		return errors.Errorf("node %d does not exist", nodeID)
+	}
+	// This is possible if we re-assign c.s and make the other nodes to the new
+	// base node.
+	if nodeIndex == 0 {
+		return errors.Errorf("cannot shutdown node %d", nodeID)
+	}
+	if c.servers[nodeIndex] == nil {
+		return errors.Errorf("node %d is already shut down", nodeID)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	adminClient, finish, err := getAdminClient(ctx, *(c.servers[nodeIndex].Cfg))
+	if err != nil {
+		return err
+	}
+	defer finish()
+
+	req := &serverpb.DecommissionRequest{
+		NodeIDs:         []roachpb.NodeID{roachpb.NodeID(nodeID)},
+		Decommissioning: true,
+	}
+
+	_, err = adminClient.Decommission(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, "while trying to mark as decommissioning")
+	}
+
+	onModes := make([]int32, len(server.GracefulDrainModes))
+	for i, m := range server.GracefulDrainModes {
+		onModes[i] = int32(m)
+	}
+
+	if err := doShutdown(ctx, adminClient, onModes); err != nil {
+		return err
+	}
+	c.servers[nodeIndex] = nil
+	return nil
+}
+
+// RestartNode will bring back a node in the cluster.
+// The node must have been shut down beforehand.
+// The node will restart, connecting to the same in memory node,
+// and be recommissioned to serve partitions again.
+func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
+	nodeIndex := int(nodeID - 1)
+
+	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+		return errors.Errorf("node %d does not exist", nodeID)
+	}
+	if c.servers[nodeIndex] != nil {
+		return errors.Errorf("node %d is already running", nodeID)
+	}
+
+	args := testServerArgsForTransientCluster(nodeID, c.s.ServingRPCAddr())
+	serv := server.TestServerFactory.New(args).(*server.TestServer)
+	if err := serv.Start(args); err != nil {
+		return err
+	}
+	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
+	c.servers[nodeIndex] = serv
+
+	// Recommission the node so it starts getting partitions again.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	adminClient, finish, err := getAdminClient(ctx, *(c.servers[nodeIndex].Cfg))
+	if err != nil {
+		return err
+	}
+	defer finish()
+
+	req := &serverpb.DecommissionRequest{
+		NodeIDs:         []roachpb.NodeID{nodeID},
+		Decommissioning: false,
+	}
+	_, err = adminClient.Decommission(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, "while trying to mark as decommissioning")
+	}
+	return nil
+}
+
+// testServerArgsForTransientCluster creates the test arguments for
+// a necessary server in the demo cluster.
+func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) base.TestServerArgs {
+	args := base.TestServerArgs{
+		PartOfCluster: true,
+		Insecure:      true,
+		Stopper: initBacktrace(
+			fmt.Sprintf("%s/demo-node%s", startCtx.backtraceOutputDir, nodeID),
+		),
+	}
+
+	if demoCtx.localities != nil {
+		args.Locality = demoCtx.localities[int(nodeID-1)]
+	}
+
+	// Assign a path to the store spec, to be saved.
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
+	args.StoreSpecs = []base.StoreSpec{storeSpec}
+	args.JoinAddr = joinAddr
+
+	return args
+}
+
 func setupTransientCluster(
 	ctx context.Context, cmd *cobra.Command, gen workload.Generator,
 ) (c transientCluster, err error) {
@@ -193,7 +310,10 @@ func setupTransientCluster(
 	if err != nil {
 		return c, err
 	}
-	c.cleanup = func() { c.stopper.Stop(ctx) }
+	c.cleanup = func() {
+		c.stopper.Stop(ctx)
+		engine.CloseAllStickyInMemEngines()
+	}
 
 	serverFactory := server.TestServerFactory
 	var servers []*server.TestServer
@@ -203,15 +323,17 @@ func setupTransientCluster(
 	waitCh := make(chan struct{})
 	errChs := make([]chan error, demoCtx.nodes)
 	for i := 0; i < demoCtx.nodes; i++ {
+		// All the nodes connect to the address of the first server created.
+		var joinAddr string
+		if c.s != nil {
+			joinAddr = c.s.ServingRPCAddr()
+		}
+		args := testServerArgsForTransientCluster(roachpb.NodeID(i+1), joinAddr)
+
 		// readyCh is used if latency simulation is requested to notify that a test server has
 		// successfully computed its RPC address.
 		readyCh := make(chan struct{})
 		errChs[i] = make(chan error, 1)
-		args := base.TestServerArgs{
-			PartOfCluster: true,
-			Insecure:      true,
-			Stopper:       c.stopper,
-		}
 
 		if demoCtx.simulateLatency {
 			args.Knobs = base.TestingKnobs{
@@ -225,13 +347,6 @@ func setupTransientCluster(
 			}
 		}
 
-		// All the nodes connect to the address of the first server created.
-		if c.s != nil {
-			args.JoinAddr = c.s.ServingRPCAddr()
-		}
-		if demoCtx.localities != nil {
-			args.Locality = demoCtx.localities[i]
-		}
 		serv := serverFactory.New(args).(*server.TestServer)
 
 		if i == 0 {
@@ -255,6 +370,8 @@ func setupTransientCluster(
 				return c, err
 			}
 		}
+
+		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 	}
 
 	c.servers = servers
@@ -571,6 +688,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	if err != nil {
 		return checkAndMaybeShout(err)
 	}
+	demoCtx.transientCluster = &c
 
 	checkInteractive()
 
