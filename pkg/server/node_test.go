@@ -179,6 +179,7 @@ func createAndStartTestNode(
 		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
 		nil, /*nodeDescriptorCallback */
 	); err != nil {
+		stopper.Stop(ctx)
 		t.Fatal(err)
 	}
 
