@@ -178,9 +178,13 @@ func TestGoMergeCorruption(t *testing.T) {
 		if err == nil {
 			t.Errorf("goMerge: %d: expected error", i)
 		}
-		_, err = merge(nil /* key */, c.existing, c.update, nil /* buf */)
+		_, err = mergeValuesPebble(false /* reverse */, [][]byte{c.existing, c.update})
 		if err == nil {
-			t.Fatalf("pebble merge: %d: expected error", i)
+			t.Fatalf("pebble merge forward: %d: expected error", i)
+		}
+		_, err = mergeValuesPebble(true /* reverse */, [][]byte{c.existing, c.update})
+		if err == nil {
+			t.Fatalf("pebble merge reverse: %d: expected error", i)
 		}
 	}
 }
@@ -222,17 +226,43 @@ func TestGoMergeAppend(t *testing.T) {
 	}
 }
 
-func MergeInternalTimeSeriesDataPebble(
-	sources ...roachpb.InternalTimeSeriesData,
+func mergeValuesPebble(reverse bool, srcBytes [][]byte) ([]byte, error) {
+	if reverse {
+		valueMerger, err := MVCCMerger.Merge(nil /* key */, srcBytes[len(srcBytes)-1])
+		if err != nil {
+			return nil, err
+		}
+		for i := len(srcBytes) - 2; i >= 0; i-- {
+			err := valueMerger.MergeOlder(srcBytes[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+		return valueMerger.Finish()
+	}
+	valueMerger, err := MVCCMerger.Merge(nil /* key */, srcBytes[0])
+	if err != nil {
+		return nil, err
+	}
+	for _, bytes := range srcBytes[1:] {
+		err := valueMerger.MergeNewer(bytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return valueMerger.Finish()
+}
+
+func mergeInternalTimeSeriesDataPebble(
+	reverse bool, sources ...roachpb.InternalTimeSeriesData,
 ) (roachpb.InternalTimeSeriesData, error) {
 	srcBytes, err := serializeMergeInputs(sources...)
 	if err != nil {
-		return roachpb.InternalTimeSeriesData{}, nil
+		return roachpb.InternalTimeSeriesData{}, err
 	}
-	merger := MVCCMerger
-	var mergedBytes = srcBytes[0]
-	for _, bytes := range srcBytes[1:] {
-		mergedBytes = merger.Merge(nil /* key */, mergedBytes, bytes, nil /* buf */)
+	mergedBytes, err := mergeValuesPebble(reverse, srcBytes)
+	if err != nil {
+		return roachpb.InternalTimeSeriesData{}, err
 	}
 	return deserializeMergeOutput(mergedBytes)
 }
@@ -539,17 +569,19 @@ func TestGoMergeTimeSeries(t *testing.T) {
 					}
 				}
 			}
-			if len(operands) < 2 {
-				// TODO(ajkr): Pebble merge operator isn't currently called with one operand,
-				// though maybe it should be to match RocksDB behavior.
-				return
-			}
-			resultTS, err := MergeInternalTimeSeriesDataPebble(operands...)
+			resultTS, err := mergeInternalTimeSeriesDataPebble(false /* reverse */, operands...)
 			if err != nil {
-				t.Errorf("MergeInternalTimeSeriesDataPebble error: %s", err.Error())
+				t.Errorf("pebble merge forward error: %s", err.Error())
 			}
 			if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
-				t.Errorf("MergeInternalTimeSeriesDataPebble returned wrong result got %v, wanted %v", a, e)
+				t.Errorf("pebble merge forward returned wrong result got %v, wanted %v", a, e)
+			}
+			resultTS, err = mergeInternalTimeSeriesDataPebble(true /* reverse */, operands...)
+			if err != nil {
+				t.Errorf("pebble merge reverse error: %s", err.Error())
+			}
+			if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
+				t.Errorf("pebble merge reverse returned wrong result got %v, wanted %v", a, e)
 			}
 		})
 	}
