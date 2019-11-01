@@ -798,8 +798,8 @@ func (p *planner) createDropTablesJob(
 	if !drainNames {
 		detailStatus = jobspb.Status_WAIT_FOR_GC_INTERVAL
 	}
-	for _, droppedDetail := range droppedDetails {
-		droppedDetail.Status = detailStatus
+	for i := range droppedDetails {
+		droppedDetails[i].Status = detailStatus
 	}
 
 	runningStatus := RunningStatusDrainingNames
