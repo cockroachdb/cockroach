@@ -65,6 +65,10 @@ type StateMachineSetting struct {
 
 var _ Setting = &StateMachineSetting{}
 
+func MakeStateMachineSetting(impl StateMachineSettingImpl) StateMachineSetting {
+	return StateMachineSetting{impl: impl}
+}
+
 // Decode takes in an encoded value and returns it as the native type of the
 // setting in question. For the Version setting, this is a ClusterVersion proto.
 func (s *StateMachineSetting) Decode(val []byte) (interface{}, error) {
@@ -96,6 +100,10 @@ func (s *StateMachineSetting) Get(sv *Values) string {
 		panic(fmt.Sprintf("missing value for state machine in slot %d", s.slotIdx))
 	}
 	return string(encV.([]byte))
+}
+
+func (s *StateMachineSetting) GetInternal(sv *Values) interface{} {
+	return sv.getGeneric(s.slotIdx)
 }
 
 // SettingsListDefault returns the value that should be presented by
@@ -142,14 +150,20 @@ func (s *StateMachineSetting) set(sv *Values, encodedVal []byte) error {
 // can go back to at any time.
 func (s *StateMachineSetting) setToDefault(_ *Values) {}
 
+func (s *StateMachineSetting) GetSlotIdx() int {
+	return s.getSlotIdx()
+}
+
 // RegisterStateMachineSetting registers a StateMachineSetting. See the comment
 // for StateMachineSetting for details.
 func RegisterStateMachineSetting(
 	key, desc string, impl StateMachineSettingImpl,
 ) *StateMachineSetting {
-	setting := &StateMachineSetting{
-		impl: impl,
-	}
+	setting := MakeStateMachineSetting(impl)
+	register(key, desc, &setting)
+	return &setting
+}
+
+func RegisterPrebuiltStateMachineSetting(key, desc string, setting *StateMachineSetting) {
 	register(key, desc, setting)
-	return setting
 }

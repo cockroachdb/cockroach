@@ -1325,7 +1325,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	bootstrappedEngines, _, _, err := inspectEngines(
 		ctx, s.engines,
-		s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
+		cluster.Version.BinaryMinSupportedVersion(), cluster.Version.BinaryVersion(),
+		// !!! s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
@@ -1447,7 +1448,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// we'll get the actual list of bootstrapped and empty engines.
 	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(
 		ctx, s.engines,
-		s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
+		cluster.Version.BinaryMinSupportedVersion(), cluster.Version.BinaryVersion(),
+		// !!! s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")

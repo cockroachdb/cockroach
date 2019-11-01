@@ -164,6 +164,12 @@ func (sv *Values) setGeneric(slotIdx int, newVal interface{}) {
 	sv.container.setGenericVal(slotIdx-1, newVal)
 	sv.settingChanged(slotIdx)
 }
+
+// !!! exported version
+func (sv *Values) SetGeneric(slotIdx int, newVal interface{}) {
+	sv.setGeneric(slotIdx, newVal)
+}
+
 func (sv *Values) getInt64(slotIdx int) int64 {
 	return sv.container.getInt64(slotIdx)
 }

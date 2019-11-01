@@ -210,7 +210,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	if tc.transport == nil {
 		tc.transport = NewDummyRaftTransport(cfg.Settings)
 	}
-	ctx := context.TODO()
+	ctx := context.Background()
 	if tc.store == nil {
 		cv := cluster.ClusterVersion{Version: bootstrapVersion}
 		cfg.Gossip = tc.gossip
@@ -230,7 +230,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			cv); err != nil {
 			t.Fatal(err)
 		}
-		if err := cfg.Settings.InitializeVersion(cv); err != nil {
+		if err := cfg.Settings.InitializeVersion(ctx, cv.Version); err != nil {
 			t.Fatal(err)
 		}
 		tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})

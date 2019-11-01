@@ -277,7 +277,7 @@ func NewNode(
 		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores: storage.NewStores(
 			cfg.AmbientCtx, cfg.Clock,
-			cfg.Settings.BinaryMinSupportedVersion(), cfg.Settings.BinaryVersion()),
+			cluster.Version.BinaryMinSupportedVersion(), cluster.Version.BinaryVersion()),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -352,7 +352,7 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := n.storeCfg.Settings.InitializeVersion(cv); err != nil {
+	if err := n.storeCfg.Settings.InitializeVersion(ctx, cv.Version); err != nil {
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
@@ -397,9 +397,10 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   n.storeCfg.Settings.BinaryVersion(),
-		BuildTag:        build.GetInfo().Tag,
-		StartedAt:       n.startedAt,
+		ServerVersion:   cluster.Version.BinaryVersion(),
+		// !!! ServerVersion:   n.storeCfg.Settings.BinaryVersion(),
+		BuildTag:  build.GetInfo().Tag,
+		StartedAt: n.startedAt,
 	}
 	// Invoke any passed in nodeDescriptorCallback as soon as it's available, to
 	// ensure that other components (currently the DistSQLPlanner) are initialized

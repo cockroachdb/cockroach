@@ -2913,13 +2913,15 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				v := "unknown"
-				// TODO(tschottdorf): we should always have a Settings, but there
-				// are many random places that create an ad-hoc EvalContext that
-				// they only partially populate.
-				if st := ctx.Settings; st != nil {
-					v = st.BinaryVersion().String()
-				}
+				v := cluster.Version.BinaryVersion().String()
+				// !!!
+				// v := "unknown"
+				//// TODO(tschottdorf): we should always have a Settings, but there
+				//// are many random places that create an ad-hoc EvalContext that
+				//// they only partially populate.
+				//if st := ctx.Settings; st != nil {
+				//	v = st.BinaryVersion().String()
+				//}
 				return tree.NewDString(v), nil
 			},
 			Info: "Returns the version of CockroachDB this node is running.",
