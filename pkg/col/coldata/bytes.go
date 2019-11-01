@@ -353,8 +353,7 @@ func (b *Bytes) Size() uintptr {
 var zeroInt32Slice = make([]int32, BatchSize())
 
 // Zero zeroes out the underlying bytes. Note that this doesn't change the
-// length. Use this instead of Reset if you need to be able to Get zeroed byte
-// slices.
+// length.
 func (b *Bytes) Zero() {
 	b.data = b.data[:0]
 	for n := 0; n < len(b.offsets); n += copy(b.offsets[n:], zeroInt32Slice) {
@@ -362,14 +361,14 @@ func (b *Bytes) Zero() {
 	b.maxSetIndex = 0
 }
 
-// Reset resets the underlying Bytes for reuse.
-// This is useful when the caller is going to overwrite the underlying bytes and
-// needs a quick way to Reset. Note that this doesn't change the length either.
+// Reset resets the underlying Bytes for reuse. Note that this zeroes out the
+// underlying bytes but doesn't change the length (see #42054 for the
+// discussion on why simply truncating b.data and setting b.maxSetIndex to 0 is
+// not sufficient).
 // TODO(asubiotto): Move towards removing Set in favor of AppendVal. At that
 //  point we can reset the length to 0.
 func (b *Bytes) Reset() {
-	b.data = b.data[:0]
-	b.maxSetIndex = 0
+	b.Zero()
 }
 
 // String is used for debugging purposes.
