@@ -516,7 +516,7 @@ type Resumer interface {
 	//
 	// Any work this function does must still be correct if the txn is aborted at
 	// a later time.
-	OnSuccess(ctx context.Context, txn *client.Txn) error
+	OnSuccess(ctx context.Context, txn *client.Txn, settings *cluster.Settings) error
 
 	// OnTerminal is called after a job has successfully been marked as
 	// terminal. It should be used to perform optional cleanup and return final
@@ -533,7 +533,7 @@ type Resumer interface {
 	// This method can be called during cancellation, which is not guaranteed to
 	// run on the node where the job is running. So it cannot assume that any
 	// other methods have been called on this Resumer object.
-	OnFailOrCancel(ctx context.Context, txn *client.Txn) error
+	OnFailOrCancel(ctx context.Context, txn *client.Txn, settings *cluster.Settings) error
 }
 
 // Constructor creates a resumable job of a certain type. The Resumer is

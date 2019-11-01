@@ -46,6 +46,7 @@ const (
 	VersionPartitionedBackup
 	Version19_2
 	VersionStart20_1
+	VersionNamespaceTableUngossip
 
 	// Add new versions here (step one of two).
 
@@ -264,6 +265,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
 		Key:     VersionStart20_1,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 1},
+	},
+	{
+		// VersionNamespaceTableUngossip is https://github.com/cockroachdb/cockroach/pull/41977
+		//
+		// It represents the migration to a new system.namespace table that has an
+		// added parentSchemaID column. In addition to the new column, the table is
+		// no longer in the system config range -- implying it is no longer gossiped.
+		Key:     VersionNamespaceTableUngossip,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).

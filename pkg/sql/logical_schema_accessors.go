@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -33,19 +34,22 @@ type LogicalSchemaAccessor struct {
 var _ SchemaAccessor = &LogicalSchemaAccessor{}
 
 // IsValidSchema implements the DatabaseLister interface.
-func (l *LogicalSchemaAccessor) IsValidSchema(dbDesc *DatabaseDescriptor, scName string) bool {
+func (l *LogicalSchemaAccessor) IsValidSchema(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
+) (bool, sqlbase.ID, error) {
 	if _, ok := l.vt.getVirtualSchemaEntry(scName); ok {
-		return true
+		return true, sqlbase.InvalidID, nil
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.IsValidSchema(dbDesc, scName)
+	return l.SchemaAccessor.IsValidSchema(ctx, txn, dbID, scName)
 }
 
 // GetObjectNames implements the DatabaseLister interface.
 func (l *LogicalSchemaAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *client.Txn,
+	settings *cluster.Settings,
 	dbDesc *DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
@@ -63,12 +67,16 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.GetObjectNames(ctx, txn, dbDesc, scName, flags)
+	return l.SchemaAccessor.GetObjectNames(ctx, txn, settings, dbDesc, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.
 func (l *LogicalSchemaAccessor) GetObjectDesc(
-	ctx context.Context, txn *client.Txn, name *ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	name *ObjectName,
+	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
 		tableName := name.Table()
@@ -90,5 +98,5 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.GetObjectDesc(ctx, txn, name, flags)
+	return l.SchemaAccessor.GetObjectDesc(ctx, txn, settings, name, flags)
 }

@@ -156,14 +156,14 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 	if err != nil {
 		return err
 	}
-	tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
+	tbNames, err := GetObjectNames(ctx, p.txn, p.ExecCfg().Settings, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
 	if err != nil {
 		return err
 	}
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		objDesc, err := p.LogicalSchemaAccessor().GetObjectDesc(ctx, p.txn,
+		objDesc, err := p.LogicalSchemaAccessor().GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings,
 			tableName, p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
 		if err != nil {
 			return err

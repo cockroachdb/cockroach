@@ -106,7 +106,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
-	newTbKey := sqlbase.NewTableKey(targetDbDesc.ID, newTn.Table()).Key()
+	newTbKey := sqlbase.NewPublicTableKey(targetDbDesc.ID, newTn.Table(), p.ExecCfg().Settings).Key()
 
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -258,12 +259,19 @@ func (p *planner) resolveTableForZone(
 // specifier points to a table, index or partition, the table part
 // must be properly normalized already. It is the caller's
 // responsibility to do this using e.g .resolveTableForZone().
-func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
+func resolveZone(
+	ctx context.Context, txn *client.Txn, settings *cluster.Settings, zs *tree.ZoneSpecifier,
+) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
-			tKey := sqlbase.NewTableKey(sqlbase.ID(parentID), name)
-			kv, err := txn.Get(ctx, tKey.Key())
+			var key sqlbase.DescriptorKey
+			if parentID == keys.RootNamespaceID {
+				key = sqlbase.NewDatabaseKey(name, settings)
+			} else {
+				key = sqlbase.NewPublicTableKey(sqlbase.ID(parentID), name, settings)
+			}
+			kv, err := txn.Get(ctx, key.Key())
 			if err != nil {
 				return 0, err
 			}

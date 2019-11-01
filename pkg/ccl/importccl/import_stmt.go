@@ -614,7 +614,7 @@ func prepareNewTableDescsForIngestion(
 ) ([]*sqlbase.TableDescriptor, error) {
 	var tableDescs []*sqlbase.TableDescriptor
 	for _, i := range tables {
-		if err := backupccl.CheckTableExists(ctx, txn, parentID, i.Desc.Name); err != nil {
+		if err := backupccl.CheckTableExists(ctx, txn, p.ExecCfg().Settings, parentID, i.Desc.Name); err != nil {
 			return nil, err
 		}
 		tableDescs = append(tableDescs, i.Desc)
@@ -865,7 +865,9 @@ func (r *importResumer) Resume(
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
+func (r *importResumer) OnFailOrCancel(
+	ctx context.Context, txn *client.Txn, settings *cluster.Settings,
+) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
 	// Needed to trigger the schema change manager.
@@ -921,7 +923,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			tableDesc.DropTime = 1
 			var existingIDVal roachpb.Value
 			existingIDVal.SetInt(int64(tableDesc.ID))
-			tKey := sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name)
+			tKey := sqlbase.NewPublicTableKey(tableDesc.ParentID, tableDesc.Name, settings)
 			b.CPut(tKey.Key(), nil, &existingIDVal)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
@@ -944,7 +946,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 }
 
 // OnSuccess is part of the jobs.Resumer interface.
-func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
+func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, _ *cluster.Settings) error {
 	log.Event(ctx, "making tables live")
 	details := r.job.Details().(jobspb.ImportDetails)
 

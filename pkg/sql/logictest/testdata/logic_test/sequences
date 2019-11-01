@@ -1,3 +1,9 @@
+# LogicTest: local local-vec-off fakedist fakedist-vec-off fakedist-disk fakedist-metadata
+# The local-mixed-19.1-19.2 configuration is excluded for this file because system.namespace
+# changed  in 20.1 .
+# The only tests affected by this are the tests involving KV Trace.
+# TODO(arul): Should those tests be put in a separate file like `system`?
+
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
 # USING THE `lastval` FUNCTION
@@ -884,6 +890,10 @@ BEGIN;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
+querying next range at /NamespaceTable/30/1/0/0/"test"/4/1
+r26: sending batch 1 Get to (n1,s1):1
+querying next range at /NamespaceTable/30/1/52/0
+r26: sending batch 1 Get to (n1,s1):1
 rows affected: 1
 
 statement ok

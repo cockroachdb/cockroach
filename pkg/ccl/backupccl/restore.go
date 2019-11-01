@@ -369,7 +369,7 @@ func allocateTableRewrites(
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			dKey := sqlbase.NewDatabaseKey(name)
+			dKey := sqlbase.NewDatabaseKey(name, p.ExecCfg().Settings)
 			existingDatabaseID, err := txn.Get(ctx, dKey.Key())
 			if err != nil {
 				return err
@@ -397,7 +397,7 @@ func allocateTableRewrites(
 			} else {
 				var parentID sqlbase.ID
 				{
-					dKey := sqlbase.NewDatabaseKey(targetDB)
+					dKey := sqlbase.NewDatabaseKey(targetDB, p.ExecCfg().Settings)
 					existingDatabaseID, err := txn.Get(ctx, dKey.Key())
 					if err != nil {
 						return err
@@ -416,7 +416,7 @@ func allocateTableRewrites(
 
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
-				if err := CheckTableExists(ctx, txn, parentID, table.Name); err != nil {
+				if err := CheckTableExists(ctx, txn, p.ExecCfg().Settings, parentID, table.Name); err != nil {
 					return err
 				}
 
@@ -486,9 +486,13 @@ func allocateTableRewrites(
 // CheckTableExists returns an error if a table already exists with given
 // parent and name.
 func CheckTableExists(
-	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	parentID sqlbase.ID,
+	name string,
 ) error {
-	tKey := sqlbase.NewTableKey(parentID, name)
+	tKey := sqlbase.NewPublicTableKey(parentID, name, settings)
 	res, err := txn.Get(ctx, tKey.Key())
 	if err != nil {
 		return err
@@ -1057,7 +1061,7 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.NewDatabaseKey(desc.Name).Key(), desc.ID, nil)
+			b.CPut(sqlbase.NewDatabaseKey(desc.Name, settings).Key(), desc.ID, nil)
 		}
 		for i := range tables {
 			if wrote, ok := wroteDBs[tables[i].ParentID]; ok {
@@ -1079,7 +1083,7 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.NewTableKey(tables[i].ParentID, tables[i].Name).Key(), tables[i].ID, nil)
+			b.CPut(sqlbase.NewPublicTableKey(tables[i].ParentID, tables[i].Name, settings).Key(), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
@@ -1770,7 +1774,9 @@ func (r *restoreResumer) Resume(
 // has been committed from a restore that has failed or been canceled. It does
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
-func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
+func (r *restoreResumer) OnFailOrCancel(
+	ctx context.Context, txn *client.Txn, settings *cluster.Settings,
+) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	// No need to mark the tables as dropped if they were not even created in the
@@ -1791,7 +1797,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		var existingIDVal roachpb.Value
 		existingIDVal.SetInt(int64(tableDesc.ID))
 		b.CPut(
-			sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
+			sqlbase.NewPublicTableKey(tableDesc.ParentID, tableDesc.Name, settings).Key(),
 			nil,
 			&existingIDVal,
 		)
@@ -1813,7 +1819,9 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 }
 
 // OnSuccess is part of the jobs.Resumer interface.
-func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
+func (r *restoreResumer) OnSuccess(
+	ctx context.Context, txn *client.Txn, _ *cluster.Settings,
+) error {
 	log.Event(ctx, "making tables live")
 
 	if err := stats.InsertNewStats(ctx, r.exec, txn, r.latestStats); err != nil {

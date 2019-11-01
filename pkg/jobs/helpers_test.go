@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -41,21 +42,21 @@ func (d FakeResumer) Resume(_ context.Context, _ interface{}, _ chan<- tree.Datu
 	return nil
 }
 
-func (d FakeResumer) OnFailOrCancel(_ context.Context, _ *client.Txn) error {
+func (d FakeResumer) OnFailOrCancel(_ context.Context, _ *client.Txn, _ *cluster.Settings) error {
 	if d.Fail != nil {
 		return d.Fail()
 	}
 	return nil
 }
 
-func (d FakeResumer) OnSuccess(_ context.Context, _ *client.Txn) error {
+func (d FakeResumer) OnSuccess(context.Context, *client.Txn, *cluster.Settings) error {
 	if d.Success != nil {
 		return d.Success()
 	}
 	return nil
 }
 
-func (d FakeResumer) OnTerminal(_ context.Context, _ Status, _ chan<- tree.Datums) {
+func (d FakeResumer) OnTerminal(context.Context, Status, chan<- tree.Datums) {
 	if d.Terminal != nil {
 		d.Terminal()
 	}

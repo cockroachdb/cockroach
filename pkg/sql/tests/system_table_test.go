@@ -12,6 +12,7 @@ package tests_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -29,8 +30,12 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const keysPerDesc = 2
-	const nonDescKeys = 9
+	// keysPerDesc before 20.1 was 2. This changes to 3, because during the initial
+	// value construction, we populate both the deprecated system.namespace table
+	// and the new system.namespace table. This is done because during bootstrap,
+	// cluster version isn't known.
+	const keysPerDesc = 3
+	const nonDescKeys = 10
 
 	ms := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
 	kv, _ /* splits */ := ms.GetInitialValues()
@@ -129,6 +134,8 @@ func TestSystemTableLiterals(t *testing.T) {
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)
 		}
+
+		fmt.Println(gen)
 
 		if !proto.Equal(&test.pkg, &gen) {
 			diff := strings.Join(pretty.Diff(&test.pkg, &gen), "\n")
