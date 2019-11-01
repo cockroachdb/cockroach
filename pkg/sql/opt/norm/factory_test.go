@@ -49,9 +49,9 @@ func TestSimplifyFilters(t *testing.T) {
 		Cols: opt.ColList{},
 		ID:   f.Metadata().NextValuesID(),
 	})
-	filters := memo.FiltersExpr{{Condition: eq}, {Condition: &memo.FalseFilter}, {Condition: eq}}
+	filters := memo.FiltersExpr{{Condition: eq}, {Condition: memo.FalseSingleton}, {Condition: eq}}
 	sel := f.ConstructSelect(vals, filters)
-	if sel.Relational().Cardinality.Max == 0 {
+	if sel.Relational().Cardinality.Max != 0 {
 		t.Fatalf("result should have been collapsed to zero cardinality rowset")
 	}
 
