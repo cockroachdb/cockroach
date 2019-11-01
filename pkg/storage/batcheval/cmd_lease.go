@@ -42,11 +42,14 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 	return trigger
 }
 
-func checkCanReceiveLease(rec EvalContext) error {
-	repDesc, ok := rec.Desc().GetReplicaDescriptor(rec.StoreID())
+func checkCanReceiveLease(newLease *roachpb.Lease, rec EvalContext) error {
+	repDesc, ok := rec.Desc().GetReplicaDescriptorByID(newLease.Replica.ReplicaID)
 	if !ok {
-		return errors.AssertionFailedf(
-			`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
+		if newLease.Replica.StoreID == rec.StoreID() {
+			return errors.AssertionFailedf(
+				`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
+		}
+		return errors.Errorf(`replica %s not found in %s`, newLease.Replica, rec.Desc())
 	} else if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
 		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
 		// but we disallow it anyway. On the other hand, transferring to
@@ -66,7 +69,7 @@ func checkCanReceiveLease(rec EvalContext) error {
 		// of minProposedTS needs to be "reversible" (tricky) or we make the
 		// lease evaluation succeed, though with a lease that's "invalid" so that
 		// a new lease can be requested right after.
-		return errors.Errorf(`replica of type %s cannot hold lease`, t)
+		return errors.Errorf(`replica %s of type %s cannot hold lease`, repDesc, t)
 	}
 	return nil
 }
