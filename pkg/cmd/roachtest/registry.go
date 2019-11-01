@@ -75,6 +75,7 @@ func registerTests(r *testRegistry) {
 	registerSyncTest(r)
 	registerSysbench(r)
 	registerTPCC(r)
+	registerTPCHVec(r)
 	registerTypeORM(r)
 	registerLoadSplits(r)
 	registerUpgrade(r)
