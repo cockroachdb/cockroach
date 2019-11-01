@@ -377,9 +377,21 @@ func partitionHistory(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 
 // replicateItem creates a covering "replicated index" for the item table for
 // each of the zones provided. The item table is immutable, so this comes at a
-// negligible cost and allows all lookups into it to be local.
-func replicateItem(db *gosql.DB, cfg zoneConfig) error {
-	for i, zone := range cfg.zones {
+// negligible cost and allows all lookups into it to be local. If there are no
+// zone it assumes that each partition corresponds to a rack.
+func replicateItem(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
+	var constraints []string
+	if len(cfg.zones) > 0 {
+		for _, zone := range cfg.zones {
+			constraints = append(constraints, "+zone="+zone)
+		}
+	} else {
+		// Assume we have parts number of racks which are zero indexed.
+		for i := 0; i < wPart.parts; i++ {
+			constraints = append(constraints, fmt.Sprintf("+rack=%d", i))
+		}
+	}
+	for i, constraint := range constraints {
 		idxName := fmt.Sprintf("replicated_idx_%d", i)
 
 		create := fmt.Sprintf(`
@@ -393,8 +405,8 @@ func replicateItem(db *gosql.DB, cfg zoneConfig) error {
 
 		configure := fmt.Sprintf(`
 			ALTER INDEX item@%s
-			CONFIGURE ZONE USING num_replicas = COPY FROM PARENT, constraints = '{"+zone=%s":1}', lease_preferences = '[[+zone=%s]]'`,
-			idxName, zone, zone)
+			CONFIGURE ZONE USING num_replicas = COPY FROM PARENT, constraints = '{"%s":1}', lease_preferences = '[[%s]]'`,
+			idxName, constraint, constraint)
 		if _, err := db.Exec(configure); err != nil {
 			return errors.Wrapf(err, "Couldn't exec %q", configure)
 		}
@@ -427,7 +439,7 @@ func partitionTables(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 	if err := partitionHistory(db, cfg, wPart); err != nil {
 		return err
 	}
-	return replicateItem(db, cfg)
+	return replicateItem(db, cfg, wPart)
 }
 
 func partitionCount(db *gosql.DB) (int, error) {
