@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -805,18 +806,19 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				return reply, pErr
 			}
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-			st := cluster.MakeClusterSettings()
-			st.InitializeVersion(
-				cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
-				cluster.BinaryMinimumSupportedVersion,
-				cluster.BinaryServerVersion)
+			// !!!
+			//st := cluster.MakeClusterSettings()
+			//st.InitializeVersion(
+			//	cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+			//	cluster.BinaryMinimumSupportedVersion,
+			//	cluster.BinaryServerVersion)
 
 			tsf := NewTxnCoordSenderFactory(
 				TxnCoordSenderFactoryConfig{
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
-					Settings:   st,
+					// !!! Settings:   st,
 				},
 				senderFn,
 			)

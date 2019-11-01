@@ -68,10 +68,9 @@ type Settings struct {
 
 	// !!! getting rid of this
 	Version ExposedClusterVersion
-	// !!!
-	//// Versions describing the range supported by this binary.
-	//binaryMinSupportedVersion roachpb.Version
-	//binaryMaxSupportedVersion roachpb.Version
+	// Versions describing the range supported by this binary.
+	binaryMinSupportedVersion roachpb.Version
+	binaryMaxSupportedVersion roachpb.Version
 
 	Tracer        *tracing.Tracer
 	ExternalIODir string
@@ -81,6 +80,14 @@ type Settings struct {
 	// Set to 1 if a profile is active (if the profile is being grabbed through
 	// the `pprofui` server as opposed to the raw endpoint).
 	cpuProfiling int32 // atomic
+}
+
+func (s *Settings) BinaryMinSupportedVersion() roachpb.Version {
+	return s.binaryMinSupportedVersion
+}
+
+func (s *Settings) BinaryServerVersion() roachpb.Version {
+	return s.binaryMaxSupportedVersion
 }
 
 // TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
@@ -282,9 +289,12 @@ func MakeTestingClusterSettingsWithVersion(minVersion, serverVersion roachpb.Ver
 // MakeClusterSettings makes a new ClusterSettings object for the given minimum
 // supported and server version, respectively.
 func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
-	s := &Settings{}
+	s := &Settings{
+		binaryMinSupportedVersion: minVersion,
+		binaryMaxSupportedVersion: serverVersion,
+	}
 
-	Version.SetBinaryLimits(minVersion, serverVersion)
+	// !!! Version.SetBinaryLimits(minVersion, serverVersion)
 	// !!!
 	//// Initialize the setting. Note that baseVersion starts out with the zero
 	//// cluster version, for which the transformer accepts any new version. After
@@ -357,27 +367,30 @@ func newClusterVersionSetting() *clusterVersionSetting {
 	return s
 }
 
-func (v *clusterVersionSetting) SetBinaryLimits(
-	binaryMinSupportedVersion,
-	binaryMaxSupportedVersion roachpb.Version,
-) {
-	log.Infof(context.TODO(), "!!! setting limits on %p", &v.impl)
-	v.impl.binaryMinSupportedVersion = binaryMinSupportedVersion
-	v.impl.binaryMaxSupportedVersion = binaryMaxSupportedVersion
+// !!!
+//func (v *clusterVersionSetting) SetBinaryLimits(
+//	binaryMinSupportedVersion,
+//	binaryMaxSupportedVersion roachpb.Version,
+//) {
+//	log.Infof(context.TODO(), "!!! setting limits on %p: %s->%s", &v.impl,
+//		binaryMinSupportedVersion, binaryMaxSupportedVersion)
+//	v.impl.binaryMinSupportedVersion = binaryMinSupportedVersion
+//	v.impl.binaryMaxSupportedVersion = binaryMaxSupportedVersion
+//}
+
+func (v *clusterVersionSetting) BinaryVersion(st *Settings) roachpb.Version {
+	return st.binaryMaxSupportedVersion
 }
 
-func (v *clusterVersionSetting) BinaryVersion() roachpb.Version {
-	return v.impl.binaryMaxSupportedVersion
-}
-
-func (v *clusterVersionSetting) BinaryMinSupportedVersion() roachpb.Version {
-	return v.impl.binaryMinSupportedVersion
+func (v *clusterVersionSetting) BinaryMinSupportedVersion(st *Settings) roachpb.Version {
+	return st.binaryMinSupportedVersion
 }
 
 func (v *clusterVersionSetting) Initialize(
 	ctx context.Context, version roachpb.Version, sv *settings.Values,
 ) error {
 	log.Infof(ctx, "!!! Initialize: %s", version)
+	// !!! debug.PrintStack() // !!!
 	if ver := v.GetVersionOrEmpty(ctx, sv); ver != (ClusterVersion{}) {
 		// Allow initializing a second time as long as it's setting the version to
 		// what it was already set. This is useful in tests that use
@@ -386,9 +399,10 @@ func (v *clusterVersionSetting) Initialize(
 		if version == ver.Version {
 			return nil
 		}
-		return errors.AssertionFailedf("cannot initialize version because already set to: %s", ver)
+		return errors.AssertionFailedf("cannot initialize version to %s because already set to: %s",
+			version, ver)
 	}
-	if err := v.impl.validateSupportedVersionInner(version); err != nil {
+	if err := v.impl.validateSupportedVersionInner(ctx, version, sv); err != nil {
 		return err
 	}
 
@@ -433,11 +447,13 @@ func (v *clusterVersionSetting) IsActive(
 }
 
 type clusterVersionSettingImpl struct {
-	// Versions describing the range supported by this binary.
-	binaryMinSupportedVersion roachpb.Version
-	binaryMaxSupportedVersion roachpb.Version
+	// !!!
+	//// Versions describing the range supported by this binary.
+	//binaryMinSupportedVersion roachpb.Version
+	//binaryMaxSupportedVersion roachpb.Version
 }
 
+// !!! turn implementation to value from pointer since I got rid of all the state
 var _ settings.StateMachineSettingImpl = &clusterVersionSettingImpl{}
 
 // Decode is part of the StateMachineSettingImpl interface.
@@ -460,13 +476,13 @@ func (cv clusterVersionSettingImpl) DecodeToString(val []byte) (string, error) {
 
 // ValidateLogical is part of the StateMachineSettingImpl interface.
 func (cv clusterVersionSettingImpl) ValidateLogical(
-	sv *settings.Values, curRawProto []byte, newVal string,
+	ctx context.Context, sv *settings.Values, curRawProto []byte, newVal string,
 ) ([]byte, error) {
 	newVersion, err := roachpb.ParseVersion(newVal)
 	if err != nil {
 		return nil, err
 	}
-	if err := cv.validateSupportedVersionInner(newVersion); err != nil {
+	if err := cv.validateSupportedVersionInner(ctx, newVersion, sv); err != nil {
 		return nil, err
 	}
 
@@ -496,29 +512,41 @@ func (cv clusterVersionSettingImpl) ValidateLogical(
 
 // ValidateGossipVersion is part of the StateMachineSettingImpl interface.
 func (cv *clusterVersionSettingImpl) ValidateGossipUpdate(
-	sv *settings.Values, rawProto []byte,
-) error {
+	ctx context.Context, sv *settings.Values, rawProto []byte,
+) (retErr error) {
+
+	defer func() {
+		// This implementation of ValidateGossipUpdate never returns errors. Instead,
+		// we crash. Not being able to update our version to what the rest of the cluster is running
+		// is a serious issue.
+		if retErr != nil {
+			log.Fatalf(ctx, "failed to validate version upgrade: %s", retErr)
+		}
+	}()
+
 	var ver ClusterVersion
 	if err := protoutil.Unmarshal(rawProto, &ver); err != nil {
 		return err
 	}
-	return cv.validateSupportedVersionInner(ver.Version)
+	return cv.validateSupportedVersionInner(ctx, ver.Version, sv)
 }
 
-func (cv *clusterVersionSettingImpl) validateSupportedVersionInner(ver roachpb.Version) error {
-	log.Infof(context.TODO(), "!!! validating %s. min: %s, (%p)", ver,
-		cv.binaryMinSupportedVersion, &cv)
-	if cv.binaryMinSupportedVersion == (roachpb.Version{}) {
+func (cv *clusterVersionSettingImpl) validateSupportedVersionInner(
+	ctx context.Context, ver roachpb.Version, sv *settings.Values,
+) error {
+	opaque := sv.Opaque()
+	st := opaque.(*Settings)
+	if st.BinaryMinSupportedVersion() == (roachpb.Version{}) {
 		panic("binaryMinSupportedVersion not set")
 	}
-	if cv.binaryMaxSupportedVersion.Less(ver) {
+	if st.BinaryServerVersion().Less(ver) {
 		// TODO(tschottdorf): also ask gossip about other nodes.
 		return errors.Errorf("cannot upgrade to %s: node running %s",
-			ver, cv.binaryMaxSupportedVersion)
+			ver, st.BinaryServerVersion())
 	}
-	if ver.Less(cv.binaryMinSupportedVersion) {
+	if ver.Less(st.BinaryMinSupportedVersion()) {
 		return errors.Errorf("node at %s cannot run %s (minimum version is %s)",
-			cv.binaryMaxSupportedVersion, ver, cv.binaryMinSupportedVersion)
+			st.BinaryServerVersion(), ver, st.BinaryMinSupportedVersion())
 	}
 	return nil
 }

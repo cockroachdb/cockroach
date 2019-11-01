@@ -2913,7 +2913,7 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				v := cluster.Version.BinaryVersion().String()
+				v := cluster.Version.BinaryVersion(ctx.Settings).String()
 				// !!!
 				// v := "unknown"
 				//// TODO(tschottdorf): we should always have a Settings, but there

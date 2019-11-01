@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -58,7 +57,7 @@ import (
 func createTestNode(
 	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
 ) (*grpc.Server, net.Addr, storage.StoreConfig, *Node, *stop.Stopper) {
-	cfg := storage.TestStoreConfig(nil)
+	cfg := storage.TestStoreConfig(nil /* clock */)
 	st := cfg.Settings
 
 	stopper := stop.NewStopper()
@@ -111,7 +110,6 @@ func createTestNode(
 		cfg.Settings,
 		cfg.HistogramWindowInterval,
 	)
-	cfg.ClosedTimestamp = container.NoopContainer()
 
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
@@ -164,8 +162,8 @@ func createAndStartTestNode(
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
 		ctx, engines,
-		cluster.BinaryMinimumSupportedVersion,
-		cluster.BinaryServerVersion,
+		cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
+		cluster.Version.BinaryVersion(cfg.Settings),
 		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
@@ -181,6 +179,7 @@ func createAndStartTestNode(
 		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
 		nil, /*nodeDescriptorCallback */
 	); err != nil {
+		stopper.Stop(ctx)
 		t.Fatal(err)
 	}
 
@@ -327,6 +326,7 @@ func TestNodeJoin(t *testing.T) {
 
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
+	log.Infof(context.TODO(), "!!! test about to start node 1")
 	_, server1Addr, node1, stopper1 := createAndStartTestNode(
 		ctx,
 		util.TestAddr,
@@ -341,6 +341,7 @@ func TestNodeJoin(t *testing.T) {
 	e2 := engine.NewDefaultInMem()
 	engineStopper.AddCloser(e2)
 	engines2 := []engine.Engine{e2}
+	log.Infof(context.TODO(), "!!! test about to start node 2")
 	_, server2Addr, node2, stopper2 := createAndStartTestNode(
 		ctx,
 		util.TestAddr,

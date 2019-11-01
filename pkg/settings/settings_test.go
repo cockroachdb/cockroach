@@ -11,6 +11,7 @@
 package settings_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -89,7 +90,7 @@ func (d *dummyTransformer) DecodeToString(val []byte) (string, error) {
 }
 
 func (d *dummyTransformer) ValidateLogical(
-	sv *settings.Values, old []byte, newV string,
+	ctx context.Context, sv *settings.Values, old []byte, newV string,
 ) ([]byte, error) {
 	var oldD dummy
 	if err := protoutil.Unmarshal(old, &oldD); err != nil {
@@ -106,7 +107,9 @@ func (d *dummyTransformer) ValidateLogical(
 	return b, err
 }
 
-func (d *dummyTransformer) ValidateGossipUpdate(sv *settings.Values, val []byte) error {
+func (d *dummyTransformer) ValidateGossipUpdate(
+	ctx context.Context, sv *settings.Values, val []byte,
+) error {
 	var updateVal dummy
 	return protoutil.Unmarshal(val, &updateVal)
 }
@@ -171,6 +174,7 @@ var iVal = settings.RegisterValidatedIntSetting(
 	})
 
 func TestCache(t *testing.T) {
+	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(settings.TestOpaque)
 
@@ -198,25 +202,28 @@ func TestCache(t *testing.T) {
 
 		growsTooFast := "grows too fast"
 		curVal := []byte(mB.Get(sv))
-		if _, err := mB.Validate(sv, curVal, growsTooFast); !testutils.IsError(err, "must grow by exactly one") {
+		if _, err := mB.Validate(ctx, sv, curVal, growsTooFast); !testutils.IsError(err,
+			"must grow by exactly one") {
 			t.Fatal(err)
 		}
 
 		hasDots := "a."
-		if _, err := mB.Validate(sv, curVal, hasDots); !testutils.IsError(err, "must not contain dots") {
+		if _, err := mB.Validate(ctx, sv, curVal, hasDots); !testutils.IsError(err,
+			"must not contain dots") {
 			t.Fatal(err)
 		}
 
 		ab := "ab"
-		if _, err := mB.Validate(sv, curVal, ab); err != nil {
+		if _, err := mB.Validate(ctx, sv, curVal, ab); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := mB.Validate(sv, []byte("takes.precedence"), ab); !testutils.IsError(err, "must grow by exactly one") {
+		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), ab); !testutils.IsError(err,
+			"must grow by exactly one") {
 			t.Fatal(err)
 		}
 		precedenceX := "precedencex"
-		if _, err := mB.Validate(sv, []byte("takes.precedence"), precedenceX); err != nil {
+		if _, err := mB.Validate(ctx, sv, []byte("takes.precedence"), precedenceX); err != nil {
 			t.Fatal(err)
 		}
 		if err := u.Set("local.m", "default.XX", "m"); err != nil {

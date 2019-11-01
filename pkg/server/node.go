@@ -277,7 +277,8 @@ func NewNode(
 		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
 		stores: storage.NewStores(
 			cfg.AmbientCtx, cfg.Clock,
-			cluster.Version.BinaryMinSupportedVersion(), cluster.Version.BinaryVersion()),
+			cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
+			cluster.Version.BinaryVersion(cfg.Settings)),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -397,7 +398,7 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   cluster.Version.BinaryVersion(),
+		ServerVersion:   cluster.Version.BinaryVersion(n.storeCfg.Settings),
 		// !!! ServerVersion:   n.storeCfg.Settings.BinaryVersion(),
 		BuildTag:  build.GetInfo().Tag,
 		StartedAt: n.startedAt,

@@ -12,6 +12,7 @@ package settings
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 )
 
@@ -32,13 +33,13 @@ type StateMachineSettingImpl interface {
 	// ValidateLogical checks whether an update is permitted. It takes in the old
 	// (encoded) value and the proposed new value (as a string to be parsed).
 	// This is called by SET CLUSTER SETTING.
-	ValidateLogical(sv *Values, old []byte, newV string) ([]byte, error)
+	ValidateLogical(ctx context.Context, sv *Values, old []byte, newV string) ([]byte, error)
 
 	// ValidateGossipUpdate performs fewer validations than ValidateLogical.
 	// For the cluster version setting, it only checks that the current binary
 	// supports the proposed version. This is called when the version is being
 	// communicated to us by a different node.
-	ValidateGossipUpdate(sv *Values, val []byte) error
+	ValidateGossipUpdate(ctx context.Context, sv *Values, val []byte) error
 
 	// SettingsListDefault returns the value that should be presented by
 	// `./cockroach gen settings-list`
@@ -124,13 +125,15 @@ func (s *StateMachineSetting) EncodedDefault() string {
 
 // Validate that the state machine accepts the user input. Returns new encoded
 // state.
-func (s *StateMachineSetting) Validate(sv *Values, old []byte, update string) ([]byte, error) {
-	return s.impl.ValidateLogical(sv, old, update)
+func (s *StateMachineSetting) Validate(
+	ctx context.Context, sv *Values, old []byte, update string,
+) ([]byte, error) {
+	return s.impl.ValidateLogical(ctx, sv, old, update)
 }
 
 // set is part of the Setting interface.
 func (s *StateMachineSetting) set(sv *Values, encodedVal []byte) error {
-	if err := s.impl.ValidateGossipUpdate(sv, encodedVal); err != nil {
+	if err := s.impl.ValidateGossipUpdate(context.TODO(), sv, encodedVal); err != nil {
 		return err
 	}
 	curVal := sv.getGeneric(s.slotIdx)
