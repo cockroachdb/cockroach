@@ -34,10 +34,6 @@ var (
 	flagCheckVec = flag.Bool("check-vec", false, "fail if a generated statement cannot be vectorized")
 )
 
-func init() {
-	flag.Parse()
-}
-
 // TestSetups verifies that all setups generate executable SQL.
 func TestSetups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
