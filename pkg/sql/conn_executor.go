@@ -2035,6 +2035,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 					newErr = errors.WithHint(newErr,
 						"Some of the non-DDL statements may have committed successfully, but some of the DDL statement(s) failed.\n"+
 							"Manual inspection may be required to determine the actual state of the database.")
+					newErr = errors.WithIssueLink(newErr,
+						errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/42061"})
 					res.SetError(newErr)
 				}
 			}
