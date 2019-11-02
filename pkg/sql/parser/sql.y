@@ -679,6 +679,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> copy_from_stmt
 
 %type <tree.Statement> create_stmt
+%type <tree.Statement> create_changefeed_sinkless_stmt
+%type <tree.Statement> create_changefeed_with_sink_stmt
 %type <tree.Statement> create_changefeed_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
@@ -939,7 +941,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
-%type <tree.Expr> opt_changefeed_sink
+%type <tree.Expr> changefeed_sink
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list
@@ -2379,13 +2381,12 @@ create_stats_option:
     }
   }
 
-create_changefeed_stmt:
-  CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
+create_changefeed_sinkless_stmt:
+  CREATE CHANGEFEED FOR changefeed_targets opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       Targets: $4.targetList(),
-      SinkURI: $5.expr(),
-      Options: $6.kvOptions(),
+      Options: $5.kvOptions(),
     }
   }
 | EXPERIMENTAL CHANGEFEED FOR changefeed_targets opt_with_options
@@ -2396,6 +2397,21 @@ create_changefeed_stmt:
       Options: $5.kvOptions(),
     }
   }
+
+create_changefeed_with_sink_stmt:
+  CREATE CHANGEFEED FOR changefeed_targets changefeed_sink opt_with_options
+  {
+    $$.val = &tree.CreateChangefeed{
+      Targets: $4.targetList(),
+      SinkURI: $5.expr(),
+      Options: $6.kvOptions(),
+    }
+  }
+
+create_changefeed_stmt:
+  create_changefeed_sinkless_stmt
+| create_changefeed_with_sink_stmt
+
 
 changefeed_targets:
   single_table_pattern_list
@@ -2418,15 +2434,10 @@ single_table_pattern_list:
   }
 
 
-opt_changefeed_sink:
+changefeed_sink:
   INTO string_or_placeholder
   {
     $$.val = $2.expr()
-  }
-| /* EMPTY */
-  {
-    /* SKIP DOC */
-    $$.val = nil
   }
 
 // %Help: DELETE - delete rows from a table
@@ -2694,6 +2705,8 @@ preparable_stmt:
 | truncate_stmt     // EXTEND WITH HELP: TRUNCATE
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
+// TODO(robertsami): Should create_changefeed_sinkless_stmt be here? If not,
+// we should update the comment below
 
 // These are statements that can be used as a data source using the special
 // syntax with brackets. These are a subset of preparable_stmt.
@@ -2705,9 +2718,10 @@ row_source_extension_stmt:
   {
     $$.val = $1.slct()
   }
-| show_stmt         // help texts in sub-rule
-| update_stmt       // EXTEND WITH HELP: UPDATE
-| upsert_stmt       // EXTEND WITH HELP: UPSERT
+| show_stmt                       // help texts in sub-rule
+| update_stmt                     // EXTEND WITH HELP: UPDATE
+| upsert_stmt                     // EXTEND WITH HELP: UPSERT
+| create_changefeed_sinkless_stmt // TODO(robertsami): What goes here?
 
 explain_option_list:
   explain_option_name
