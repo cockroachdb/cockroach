@@ -141,13 +141,14 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	var curIdx uint16
 	if usesSel {
 		sel := batch.Selection()
+		origSel := o.origSel[:origLen]
 		if leftCol.MaybeHasNulls() {
 			leftNulls := leftCol.Nulls()
-			for _, i := range o.origSel[:origLen] {
+			for _, i := range origSel {
 				_ADD_TUPLE_FOR_RIGHT(true)
 			}
 		} else {
-			for _, i := range o.origSel {
+			for _, i := range origSel {
 				_ADD_TUPLE_FOR_RIGHT(false)
 			}
 		}
