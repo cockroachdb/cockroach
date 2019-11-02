@@ -254,6 +254,7 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		case execinfrapb.WindowerSpec_ROW_NUMBER:
 		case execinfrapb.WindowerSpec_RANK:
 		case execinfrapb.WindowerSpec_DENSE_RANK:
+		case execinfrapb.WindowerSpec_PERCENT_RANK:
 		default:
 			return false, errors.Newf("window function %s is not supported", wf.String())
 		}
@@ -899,8 +900,13 @@ func NewColOperator(
 			if err != nil {
 				return result, err
 			}
-			tempPartitionColOffset, partitionColIdx := 0, -1
+			tempColOffset, partitionColIdx := uint32(0), columnOmitted
+			peersColIdx := columnOmitted
 			memMonitorsPrefix := "window-"
+			needsPeersInfo, supported := windowFnNeedsPeersInfo[*wf.Func.WindowFunc]
+			if !supported {
+				return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
+			}
 			if len(core.Windower.PartitionBy) > 0 {
 				// TODO(yuzefovich): add support for hashing partitioner (probably by
 				// leveraging hash routers once we can distribute). The decision about
@@ -911,6 +917,7 @@ func NewColOperator(
 						ctx, flowCtx, memMonitorsPrefix+"sorting-partitioner",
 					)
 				}
+				partitionColIdx = int(wf.OutputColIdx)
 				input, err = NewWindowSortingPartitioner(
 					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
 					core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
@@ -922,7 +929,7 @@ func NewColOperator(
 							&execinfrapb.PostProcessSpec{}, memMonitorsPrefix)
 					},
 				)
-				tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
+				tempColOffset++
 			} else {
 				if len(wf.Ordering.Columns) > 0 {
 					input, err = result.createDiskBackedSort(
@@ -934,6 +941,15 @@ func NewColOperator(
 			if err != nil {
 				return result, err
 			}
+			if needsPeersInfo {
+				peersColIdx = int(wf.OutputColIdx + tempColOffset)
+				input, err = NewWindowPeerGrouper(
+					NewAllocator(ctx, streamingMemAccount),
+					input, typs, wf.Ordering.Columns,
+					partitionColIdx, peersColIdx,
+				)
+				tempColOffset++
+			}
 
 			orderingCols := make([]uint32, len(wf.Ordering.Columns))
 			for i, col := range wf.Ordering.Columns {
@@ -941,22 +957,32 @@ func NewColOperator(
 			}
 			switch *wf.Func.WindowFunc {
 			case execinfrapb.WindowerSpec_ROW_NUMBER:
-				result.Op = NewRowNumberOperator(NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+				result.Op = NewRowNumberOperator(
+					NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+				)
 			case execinfrapb.WindowerSpec_RANK:
-				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+				result.Op, err = NewRankOperator(
+					NewAllocator(ctx, streamingMemAccount), input, typs, false, /* dense */
+					orderingCols, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+				)
 			case execinfrapb.WindowerSpec_DENSE_RANK:
-				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+				result.Op, err = NewRankOperator(
+					NewAllocator(ctx, streamingMemAccount), input, typs, true, /* dense */
+					orderingCols, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+				)
+			default:
+				return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
 			}
 
-			if partitionColIdx != -1 {
-				// Window partitioner will append a temporary column to the batch which
-				// we want to project out.
-				projection := make([]uint32, 0, wf.OutputColIdx+1)
+			if tempColOffset > 0 {
+				// We want to project out temporary columns (which have indices in the
+				// range [wf.OutputColIdx, wf.OutputColIdx+tempColOffset).
+				projection := make([]uint32, 0, wf.OutputColIdx+tempColOffset)
 				for i := uint32(0); i < wf.OutputColIdx; i++ {
 					projection = append(projection, i)
 				}
-				projection = append(projection, wf.OutputColIdx+1)
-				result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+1), projection)
+				projection = append(projection, wf.OutputColIdx+tempColOffset)
+				result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
 			}
 
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
