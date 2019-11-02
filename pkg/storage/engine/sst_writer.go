@@ -8,12 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bulk
+package engine
 
 import (
 	"io"
+	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/pkg/errors"
@@ -33,9 +37,9 @@ func MakeSSTWriter() SSTWriter {
 	opts := sstable.WriterOptions{
 		BlockSize:               32 * 1024,
 		TableFormat:             pebble.TableFormatLevelDB,
-		Comparer:                engine.MVCCComparer,
+		Comparer:                MVCCComparer,
 		MergerName:              "nullptr",
-		TablePropertyCollectors: engine.PebbleTablePropertyCollectors,
+		TablePropertyCollectors: PebbleTablePropertyCollectors,
 	}
 	f := &memFile{}
 	sst := sstable.NewWriter(f, opts)
@@ -45,12 +49,12 @@ func MakeSSTWriter() SSTWriter {
 // Add puts a kv entry into the sstable being built. An error is returned if it
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.
-func (fw *SSTWriter) Add(kv engine.MVCCKeyValue) error {
+func (fw *SSTWriter) Add(kv MVCCKeyValue) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
 	fw.DataSize += uint64(len(kv.Key.Key)) + uint64(len(kv.Value))
-	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[:0], kv.Key)
+	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], kv.Key)
 	return fw.fw.Set(fw.scratch, kv.Value)
 }
 
@@ -113,4 +117,47 @@ func (f *memFile) ReadAt(p []byte, off int64) (int, error) {
 func (f *memFile) Write(p []byte) (int, error) {
 	f.data = append(f.data, p...)
 	return len(p), nil
+}
+
+// MakeIntTableKVs creates mvcc key values.
+func MakeIntTableKVs(numKeys, valueSize, maxRevisions int) []MVCCKeyValue {
+	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
+	kvs := make([]MVCCKeyValue, numKeys)
+	r, _ := randutil.NewPseudoRand()
+
+	var k int
+	for i := 0; i < numKeys; {
+		k += 1 + rand.Intn(100)
+		key := encoding.EncodeVarintAscending(append([]byte{}, prefix...), int64(k))
+		buf := make([]byte, valueSize)
+		randutil.ReadTestdataBytes(r, buf)
+		revisions := 1 + r.Intn(maxRevisions)
+
+		ts := int64(maxRevisions * 100)
+		for j := 0; j < revisions && i < numKeys; j++ {
+			ts -= 1 + r.Int63n(99)
+			kvs[i].Key.Key = key
+			kvs[i].Key.Timestamp.WallTime = ts
+			kvs[i].Key.Timestamp.Logical = r.Int31()
+			kvs[i].Value = roachpb.MakeValueFromString(string(buf)).RawBytes
+			i++
+		}
+	}
+	return kvs
+}
+
+// MakeRocksSST creates RocksDB SST.
+func MakeRocksSST(kvs []MVCCKeyValue) ([]byte, error) {
+	w, err := MakeRocksDBSstFileWriter()
+	if err != nil {
+		return nil, err
+	}
+	defer w.Close()
+
+	for i := range kvs {
+		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
+			return nil, err
+		}
+	}
+	return w.Finish()
 }

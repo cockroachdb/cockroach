@@ -8,65 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bulk_test
+package engine_test
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-func makeIntTableKVs(t testing.TB, numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue {
-	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
-	kvs := make([]engine.MVCCKeyValue, numKeys)
-	r, _ := randutil.NewPseudoRand()
-
-	var k int
-	for i := 0; i < numKeys; {
-		k += 1 + rand.Intn(100)
-		key := encoding.EncodeVarintAscending(append([]byte{}, prefix...), int64(k))
-		buf := make([]byte, valueSize)
-		randutil.ReadTestdataBytes(r, buf)
-		revisions := 1 + r.Intn(maxRevisions)
-
-		ts := int64(maxRevisions * 100)
-		for j := 0; j < revisions && i < numKeys; j++ {
-			ts -= 1 + r.Int63n(99)
-			kvs[i].Key.Key = key
-			kvs[i].Key.Timestamp.WallTime = ts
-			kvs[i].Key.Timestamp.Logical = r.Int31()
-			kvs[i].Value = roachpb.MakeValueFromString(string(buf)).RawBytes
-			i++
-		}
-	}
-	return kvs
-}
-
-func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
-	w, err := engine.MakeRocksDBSstFileWriter()
-	require.NoError(t, err)
-	defer w.Close()
-
-	for i := range kvs {
-		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	sst, err := w.Finish()
-	require.NoError(t, err)
-	return sst
-}
-
 func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
-	w := bulk.MakeSSTWriter()
+	w := engine.MakeSSTWriter()
 	defer w.Close()
 
 	for i := range kvs {
@@ -102,8 +56,11 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 	r, _ := randutil.NewPseudoRand()
 	const numKeys, valueSize, revisions = 5000, 100, 100
 
-	kvs := makeIntTableKVs(t, numKeys, valueSize, revisions)
-	sstRocks := makeRocksSST(t, kvs)
+	kvs := engine.MakeIntTableKVs(numKeys, valueSize, revisions)
+	sstRocks, err := engine.MakeRocksSST(kvs)
+	if err != nil {
+		t.Fatal(err)
+	}
 	sstPebble := makePebbleSST(t, kvs)
 
 	itRocks, err := engine.NewMemSSTIterator(sstRocks, false)
@@ -145,7 +102,7 @@ func BenchmarkWriteSSTable(b *testing.B) {
 	b.StopTimer()
 	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
 	const valueSize, revisions, ssts = 100, 100, 10
-	kvs := makeIntTableKVs(b, b.N, valueSize, revisions)
+	kvs := engine.MakeIntTableKVs(b.N, valueSize, revisions)
 	approxUserDataSizePerKV := kvs[b.N/2].Key.EncodedSize() + valueSize
 	b.SetBytes(int64(approxUserDataSizePerKV * ssts))
 	b.ResetTimer()

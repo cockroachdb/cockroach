@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -240,12 +241,15 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	const numKeys, valueSize, splitEvery = 500, 5000, 1
 
 	// Make some KVs and grab [start,end). Generate one extra for exclusive `end`.
-	kvs := makeIntTableKVs(t, numKeys+1, valueSize, 1)
+	kvs := engine.MakeIntTableKVs(numKeys+1, valueSize, 1)
 	start, end := kvs[0].Key.Key, kvs[numKeys].Key.Key
 	kvs = kvs[:numKeys]
 
 	// Create a large SST.
-	sst := makeRocksSST(t, kvs)
+	sst, err := engine.MakeRocksSST(kvs)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var splits []roachpb.Key
 	for i := range kvs {
