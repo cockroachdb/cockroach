@@ -24,49 +24,44 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
-
-// Use execerror package to remove unused import warning.
-var _ = execerror.VectorizedInternalPanic
 
 // TODO(yuzefovich): add benchmarks.
 
 // NewRankOperator creates a new Operator that computes window function RANK or
-// DENSE_RANK. dense distinguishes between the two functions. input *must*
-// already be ordered on orderingCols (which should not be empty). outputColIdx
+// DENSE_RANK. dense distinguishes between the two functions. outputColIdx
 // specifies in which coldata.Vec the operator should put its output (if there
 // is no such column, a new column is appended).
 func NewRankOperator(
 	allocator *Allocator,
 	input Operator,
-	inputTyps []coltypes.T,
 	dense bool,
-	orderingCols []uint32,
+	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
 	partitionColIdx int,
+	peersColIdx int,
 ) (Operator, error) {
 	if len(orderingCols) == 0 {
 		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
 	}
-	op, outputCol, err := OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
-	if err != nil {
-		return nil, err
-	}
 	initFields := rankInitFields{
-		OneInputNode:    NewOneInputNode(op),
+		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
-		distinctCol:     outputCol,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
+		peersColIdx:     peersColIdx,
 	}
 	if dense {
-		if partitionColIdx != -1 {
+		if partitionColIdx != columnOmitted {
 			return &denseRankWithPartitionOp{rankInitFields: initFields}, nil
 		}
 		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil
 	}
-	if partitionColIdx != -1 {
+	if partitionColIdx != columnOmitted {
 		return &rankWithPartitionOp{rankInitFields: initFields}, nil
 	}
 	return &rankNoPartitionOp{rankInitFields: initFields}, nil
@@ -90,13 +85,11 @@ func _UPDATE_RANK_INCREMENT() {
 
 type rankInitFields struct {
 	OneInputNode
-	allocator *Allocator
-	// distinctCol is the output column of the chain of ordered distinct
-	// operators in which true will indicate that a new rank needs to be assigned
-	// to the corresponding tuple.
-	distinctCol     []bool
+
+	allocator       *Allocator
 	outputColIdx    int
 	partitionColIdx int
+	peersColIdx     int
 }
 
 // {{range .}}
@@ -125,7 +118,8 @@ func (r *_RANK_STRINGOp) Init() {
 
 func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
-	if batch.Length() == 0 {
+	n := batch.Length()
+	if n == 0 {
 		return coldata.ZeroBatch
 	}
 	// {{ if .HasPartition }}
@@ -133,32 +127,15 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	// {{ end }}
 	r.allocator.MaybeAddColumn(batch, coltypes.Int64, r.outputColIdx)
 
-	// {{ if .HasPartition }}
+	// {{if .HasPartition}}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
-	// {{ end }}
+	// {{end}}
+	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankCol := batch.ColVec(r.outputColIdx).Int64()
 	sel := batch.Selection()
 	// TODO(yuzefovich): template out sel vs non-sel cases.
 	if sel != nil {
-		for i := uint16(0); i < batch.Length(); i++ {
-			// {{ if .HasPartition }}
-			if partitionCol[sel[i]] {
-				r.rank = 1
-				r.rankIncrement = 1
-				rankCol[sel[i]] = 1
-				continue
-			}
-			// {{end}}
-			if r.distinctCol[sel[i]] {
-				_UPDATE_RANK()
-				rankCol[sel[i]] = r.rank
-			} else {
-				rankCol[sel[i]] = r.rank
-				_UPDATE_RANK_INCREMENT()
-			}
-		}
-	} else {
-		for i := uint16(0); i < batch.Length(); i++ {
+		for _, i := range sel[:n] {
 			// {{ if .HasPartition }}
 			if partitionCol[i] {
 				r.rank = 1
@@ -167,7 +144,25 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				continue
 			}
 			// {{end}}
-			if r.distinctCol[i] {
+			if peersCol[i] {
+				_UPDATE_RANK()
+				rankCol[i] = r.rank
+			} else {
+				rankCol[i] = r.rank
+				_UPDATE_RANK_INCREMENT()
+			}
+		}
+	} else {
+		for i := range rankCol[:n] {
+			// {{ if .HasPartition }}
+			if partitionCol[i] {
+				r.rank = 1
+				r.rankIncrement = 1
+				rankCol[i] = 1
+				continue
+			}
+			// {{end}}
+			if peersCol[i] {
 				_UPDATE_RANK()
 				rankCol[i] = r.rank
 			} else {

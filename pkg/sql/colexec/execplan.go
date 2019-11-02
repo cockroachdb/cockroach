@@ -951,10 +951,6 @@ func NewColOperator(
 				tempColOffset++
 			}
 
-			orderingCols := make([]uint32, len(wf.Ordering.Columns))
-			for i, col := range wf.Ordering.Columns {
-				orderingCols[i] = col.ColIdx
-			}
 			switch *wf.Func.WindowFunc {
 			case execinfrapb.WindowerSpec_ROW_NUMBER:
 				result.Op = NewRowNumberOperator(
@@ -962,13 +958,13 @@ func NewColOperator(
 				)
 			case execinfrapb.WindowerSpec_RANK:
 				result.Op, err = NewRankOperator(
-					NewAllocator(ctx, streamingMemAccount), input, typs, false, /* dense */
-					orderingCols, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+					NewAllocator(ctx, streamingMemAccount), input, false /* dense */, wf.Ordering.Columns,
+					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
 				)
 			case execinfrapb.WindowerSpec_DENSE_RANK:
 				result.Op, err = NewRankOperator(
-					NewAllocator(ctx, streamingMemAccount), input, typs, true, /* dense */
-					orderingCols, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+					NewAllocator(ctx, streamingMemAccount), input, true /* dense */, wf.Ordering.Columns,
+					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
 				)
 			default:
 				return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
