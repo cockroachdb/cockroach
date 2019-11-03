@@ -174,7 +174,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 		Ping:           "testManual",
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
-		ServerVersion:  hs.version.Version().Version,
+		ServerVersion:  hs.version.ServerVersion,
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
