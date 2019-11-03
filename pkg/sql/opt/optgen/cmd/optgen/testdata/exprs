@@ -393,6 +393,9 @@ func (m *Memo) MemoizeProject(
 	e.grp = grp
 	interned := m.interner.InternProject(e)
 	if interned == e {
+		if m.newGroupFn != nil {
+			m.newGroupFn(e)
+		}
 		m.logPropsBuilder.buildProjectProps(e, &grp.rel)
 		m.memEstimate += size
 		m.checkExpr(e)

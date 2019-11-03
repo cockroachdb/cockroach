@@ -625,6 +625,9 @@ func (g *exprsGen) genMemoizeFuncs() {
 		// Build relational props, track memory usage, and check consistency if
 		// expression was not already interned.
 		fmt.Fprintf(g.w, "  if interned == e {\n")
+		fmt.Fprintf(g.w, "  if m.newGroupFn != nil {\n")
+		fmt.Fprintf(g.w, "    m.newGroupFn(e)\n")
+		fmt.Fprintf(g.w, "  }\n")
 		if !define.Tags.Contains("Scalar") {
 			fmt.Fprintf(g.w, "  m.logPropsBuilder.build%sProps(e, &grp.rel)\n", define.Name)
 		}

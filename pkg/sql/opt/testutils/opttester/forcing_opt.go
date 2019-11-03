@@ -11,6 +11,8 @@
 package opttester
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -22,6 +24,8 @@ import (
 // part of the final expression.
 type forcingOptimizer struct {
 	o xform.Optimizer
+
+	groups memoGroups
 
 	coster forcingCoster
 
@@ -60,7 +64,7 @@ func newForcingOptimizer(
 		lastMatched: opt.InvalidRuleName,
 	}
 	fo.o.Init(&tester.evalCtx)
-	fo.coster.Init(&fo.o)
+	fo.coster.Init(&fo.o, &fo.groups)
 	fo.o.SetCoster(&fo.coster)
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
@@ -88,6 +92,10 @@ func newForcingOptimizer(
 		},
 	)
 
+	fo.o.Memo().NotifyOnNewGroup(func(expr opt.Expr) {
+		fo.groups.AddGroup(expr)
+	})
+
 	if err := tester.buildExpr(fo.o.Factory()); err != nil {
 		return nil, err
 	}
@@ -97,69 +105,57 @@ func newForcingOptimizer(
 func (fo *forcingOptimizer) Optimize() opt.Expr {
 	expr, err := fo.o.Optimize()
 	if err != nil {
+		// Print the full error (it might contain a stack trace).
+		fmt.Printf("%+v\n", err)
 		panic(err)
 	}
 	return expr
 }
 
 // LookupPath returns the path of the given node.
-func (fo *forcingOptimizer) LookupPath(target opt.Expr) exprPath {
-	return fo.coster.cache.lookupPath(fo.o.Memo().RootExpr(), target)
+func (fo *forcingOptimizer) LookupPath(target opt.Expr) []memoLoc {
+	return fo.groups.FindPath(fo.o.Memo().RootExpr(), target)
 }
 
 // RestrictToExpr sets up the optimizer to restrict the result to only those
 // expression trees which include the given expression path.
-func (fo *forcingOptimizer) RestrictToExpr(path exprPath) {
-	fo.coster.AddAllowedPath(path)
-}
-
-// RestrictToGroup sets up the optimizer to restrict the result to only those
-// expression trees which include the given expression path, or other expression
-// paths in the same group.
-func (fo *forcingOptimizer) RestrictToGroup(path exprPath) {
-	// Since the path points to an expression, remove the last path in order to
-	// allow any children from the expression's group.
-	fo.coster.AddAllowedPath(path.truncateLastStep())
+func (fo *forcingOptimizer) RestrictToExpr(path []memoLoc) {
+	for _, l := range path {
+		fo.coster.RestrictGroupToMember(l)
+	}
 }
 
 // forcingCoster implements the xform.Coster interface so that it can suppress
 // expressions in the memo that can't be part of the output tree.
 type forcingCoster struct {
-	o       *xform.Optimizer
-	inner   xform.Coster
-	allowed []exprPath
-	cache   pathCache
+	o      *xform.Optimizer
+	groups *memoGroups
+
+	inner xform.Coster
+
+	restricted map[groupID]memberOrd
 }
 
-func (fc *forcingCoster) Init(o *xform.Optimizer) {
+func (fc *forcingCoster) Init(o *xform.Optimizer, groups *memoGroups) {
 	fc.o = o
+	fc.groups = groups
 	fc.inner = o.Coster()
 }
 
-// AddAllowedPath adds an allowed path to the coster. Any expressions which do
-// not fall along an allowed path are suppressed by the coster.
-func (fc *forcingCoster) AddAllowedPath(path exprPath) {
-	fc.allowed = append(fc.allowed, path)
+// RestrictGroupToMember forces the expression in the given location to be the
+// best expression for its group.
+func (fc *forcingCoster) RestrictGroupToMember(loc memoLoc) {
+	if fc.restricted == nil {
+		fc.restricted = make(map[groupID]memberOrd)
+	}
+	fc.restricted[loc.group] = loc.member
 }
 
 // ComputeCost is part of the xform.Coster interface.
 func (fc *forcingCoster) ComputeCost(e memo.RelExpr, required *physical.Required) memo.Cost {
-	// If no allowed paths have been added, allow all expressions.
-	if len(fc.allowed) != 0 {
-		// Derive the path of the expression in the tree.
-		path := fc.cache.lookupPath(fc.o.Memo().RootExpr(), e)
-
-		// If none of the paths allow the expression, suppress it.
-		suppress := true
-		for _, restricted := range fc.allowed {
-			if !path.isSuppressedBy(restricted) {
-				suppress = false
-				break
-			}
-		}
-		if suppress {
-			// Suppressed expressions get assigned MaxCost so that they never have
-			// the lowest cost.
+	if fc.restricted != nil {
+		loc := fc.groups.MemoLoc(e)
+		if mIdx, ok := fc.restricted[loc.group]; ok && loc.member != mIdx {
 			return memo.MaxCost
 		}
 	}
