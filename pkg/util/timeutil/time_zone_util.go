@@ -68,7 +68,7 @@ func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, suc
 	return offset, strings.TrimSuffix(strings.TrimPrefix(origRepr, "("), ")"), true
 }
 
-// timeZoneOffsetStringConversion converts a string like GMT+08:00 or -08:00 to offset seconds
+// TimeZoneOffsetStringConversion converts a string like GMT+08:00 or -08:00 to offset seconds
 // Supported time zone strings :- UTC+08:00, GMT-12:00, +05:00, UTC+08:30
 // Unsupported time zone strings :- UTC+8:00, -8:00, -12:53, UTC+08:08
 func TimeZoneOffsetStringConversion(s string) (offset int64, ok bool) {
