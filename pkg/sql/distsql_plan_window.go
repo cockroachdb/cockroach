@@ -112,7 +112,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	for i, argIdx := range funcInProgress.argsIdxs {
 		argTypes[i] = s.plan.ResultTypes[argIdx]
 	}
-	_, outputType, err := rowexec.GetWindowFunctionInfo(funcSpec, argTypes...)
+	_, outputType, err := execinfrapb.GetWindowFunctionInfo(funcSpec, argTypes...)
 	if err != nil {
 		return execinfrapb.WindowerSpec_WindowFn{}, outputType, err
 	}

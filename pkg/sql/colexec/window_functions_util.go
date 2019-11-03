@@ -14,11 +14,19 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 
 const columnOmitted = -1
 
+// windowFnNeedsPeersInfo is a map from a window function to a boolean that
+// indicates whether the window function pays attention to the concept of
+// "peers" during its computation ("peers" are tuples within the same partition
+// - from PARTITION BY clause - that are not distinct on the columns in ORDER
+// BY clause). For most window functions, the result of computation should be
+// the same for "peers", so most window functions do need this information.
 var windowFnNeedsPeersInfo map[execinfrapb.WindowerSpec_WindowFunc]bool
 
 func init() {
 	windowFnNeedsPeersInfo = make(map[execinfrapb.WindowerSpec_WindowFunc]bool)
+	// row_number doesn't pay attention to the concept of "peers."
 	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_ROW_NUMBER] = false
 	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_RANK] = true
 	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_DENSE_RANK] = true
+	windowFnNeedsPeersInfo[execinfrapb.WindowerSpec_PERCENT_RANK] = true
 }
