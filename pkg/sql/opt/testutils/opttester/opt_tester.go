@@ -123,6 +123,10 @@ type Flags struct {
 	// of a specific rule.
 	ExploreTraceRule opt.RuleName
 
+	// ExploreTraceSkipNoop hides the ExploreTrace output for instances of rules
+	// that fire but don't add any new expressions to the memo.
+	ExploreTraceSkipNoop bool
+
 	// ExpectedRules is a set of rules which must be exercised for the test to
 	// pass.
 	ExpectedRules RuleSet
@@ -285,6 +289,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - rule: used with exploretrace; the value is the name of a rule. When
 //    specified, the exploretrace output is filtered to only show expression
 //    changes due to that specific rule.
+//
+//  - skip-no-op: used with exploretrace; hide instances of rules that don't
+//    generate any new expressions.
 //
 //  - colstat: requests the calculation of a column statistic on the top-level
 //    expression. The value is a column or a list of columns. The flag can
@@ -591,6 +598,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		if err != nil {
 			return err
 		}
+
+	case "skip-no-op":
+		f.ExploreTraceSkipNoop = true
 
 	case "expect":
 		var err error
@@ -993,7 +1003,11 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 
 	et := newExploreTracer(ot)
 
-	for {
+	for step := 0; ; step++ {
+		if step > 2000 {
+			ot.output("step limit reached\n")
+			break
+		}
 		err := et.Next()
 		if err != nil {
 			return "", err
@@ -1006,6 +1020,10 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 			et.LastRuleName() != ot.Flags.ExploreTraceRule {
 			continue
 		}
+		newNodes := et.NewExprs()
+		if ot.Flags.ExploreTraceSkipNoop && len(newNodes) == 0 {
+			continue
+		}
 
 		if ot.builder.Len() > 0 {
 			ot.output("\n")
@@ -1015,7 +1033,6 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		ot.separator("=")
 		ot.output("Source expression:\n")
 		ot.indent(memo.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat, ot.catalog))
-		newNodes := et.NewExprs()
 		if len(newNodes) == 0 {
 			ot.output("\nNo new expressions.\n")
 		}

@@ -97,7 +97,7 @@ func (et *exploreTracer) Next() error {
 	return nil
 }
 
-func (et *exploreTracer) restrictToExpr(path exprPath) opt.Expr {
+func (et *exploreTracer) restrictToExpr(path []memoLoc) opt.Expr {
 	fo2, err := newForcingOptimizer(et.tester, et.steps, true /* ignoreNormRules */)
 	if err != nil {
 		// We should have already built the query successfully once.
