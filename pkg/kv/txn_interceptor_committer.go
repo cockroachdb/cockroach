@@ -271,9 +271,7 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 	br.Txn = cloneWithStatus(br.Txn, status)
 
 	// Synthesize and append an EndTransaction response.
-	resp := &roachpb.EndTransactionResponse{}
-	resp.Txn = br.Txn
-	br.Add(resp)
+	br.Add(&roachpb.EndTransactionResponse{})
 	return br, nil
 }
 
