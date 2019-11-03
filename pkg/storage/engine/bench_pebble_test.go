@@ -13,9 +13,15 @@ package engine
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -139,6 +145,114 @@ func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
 	for _, valueSize := range []int{32} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 			runMVCCFindSplitKey(ctx, b, setupMVCCPebble, valueSize)
+		})
+	}
+}
+
+func BenchmarkMVCCPut_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize)
+		})
+	}
+}
+
+func BenchmarkMVCCBlindPut_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			runMVCCBlindPut(ctx, b, setupMVCCInMemPebble, valueSize)
+		})
+	}
+}
+
+func BenchmarkMVCCConditionalPut_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, createFirst := range []bool{false, true} {
+		prefix := "Create"
+		if createFirst {
+			prefix = "Replace"
+		}
+		b.Run(prefix, func(b *testing.B) {
+			for _, valueSize := range []int{10, 100, 1000, 10000} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					runMVCCConditionalPut(ctx, b, setupMVCCInMemPebble, valueSize, createFirst)
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkMVCCBlindConditionalPut_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			runMVCCBlindConditionalPut(ctx, b, setupMVCCInMemPebble, valueSize)
+		})
+	}
+}
+
+func BenchmarkMVCCInitPut_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			runMVCCInitPut(ctx, b, setupMVCCInMemPebble, valueSize)
+		})
+	}
+}
+
+func BenchmarkMVCCBlindInitPut_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			runMVCCBlindInitPut(ctx, b, setupMVCCInMemPebble, valueSize)
+		})
+	}
+}
+
+func BenchmarkMVCCPutDelete_Pebble(b *testing.B) {
+	ctx := context.Background()
+	db := setupMVCCInMemPebble(b, "put_delete")
+	defer db.Close()
+
+	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	value := roachpb.MakeValueFromBytes(randutil.RandBytes(r, 10))
+	var blockNum int64
+
+	for i := 0; i < b.N; i++ {
+		blockID := r.Int63()
+		blockNum++
+		key := encoding.EncodeVarintAscending(nil, blockID)
+		key = encoding.EncodeVarintAscending(key, blockNum)
+
+		if err := MVCCPut(ctx, db, nil, key, hlc.Timestamp{}, value, nil /* txn */); err != nil {
+			b.Fatal(err)
+		}
+		if err := MVCCDelete(ctx, db, nil, key, hlc.Timestamp{}, nil /* txn */); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkMVCCBatchPut_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, valueSize := range []int{10} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			for _, batchSize := range []int{1, 100, 10000, 100000} {
+				b.Run(fmt.Sprintf("batchSize=%d", batchSize), func(b *testing.B) {
+					runMVCCBatchPut(ctx, b, setupMVCCInMemPebble, valueSize, batchSize)
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkMVCCBatchTimeSeries_Pebble(b *testing.B) {
+	ctx := context.Background()
+	for _, batchSize := range []int{282} {
+		b.Run(fmt.Sprintf("batchSize=%d", batchSize), func(b *testing.B) {
+			runMVCCBatchTimeSeries(ctx, b, setupMVCCInMemPebble, batchSize)
 		})
 	}
 }
