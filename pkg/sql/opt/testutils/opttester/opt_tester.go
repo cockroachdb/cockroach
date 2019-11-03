@@ -259,7 +259,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    stats to the catalog. This allows commonly-used schemas such as TPC-C or
 //    TPC-H to be used by multiple test files without copying the schemas and
 //    stats multiple times. The file name must be provided with the file flag.
-//    The path of the file should be relative to testutils/opttester/testdata.
+//    The path of the file should be relative to
+//    testutils/opttester/testfixtures.
 //
 // Supported flags:
 //
@@ -1045,12 +1046,12 @@ func (ot *OptTester) Stats(d *datadriven.TestData) (string, error) {
 // TPC-C or TPC-H to be used by multiple test files without copying the schemas
 // and stats multiple times.
 func (ot *OptTester) Import(tb testing.TB) {
-	// Find the file to be imported in opttester/testdata.
+	// Find the file to be imported in opttester/testfixtures.
 	_, optTesterFile, _, ok := runtime.Caller(1)
 	if !ok {
 		tb.Fatalf("unable to find file %s", ot.Flags.File)
 	}
-	path := filepath.Join(filepath.Dir(optTesterFile), "testdata", ot.Flags.File)
+	path := filepath.Join(filepath.Dir(optTesterFile), "testfixtures", ot.Flags.File)
 	datadriven.RunTest(tb.(*testing.T), path, func(d *datadriven.TestData) string {
 		tester := New(ot.catalog, d.Input)
 		return tester.RunCommand(tb.(*testing.T), d)
