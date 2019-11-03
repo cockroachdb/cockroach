@@ -43,6 +43,7 @@ func TestRank(t *testing.T) {
 
 	rankFn := execinfrapb.WindowerSpec_RANK
 	denseRankFn := execinfrapb.WindowerSpec_DENSE_RANK
+	percentRankFn := execinfrapb.WindowerSpec_PERCENT_RANK
 	for _, tc := range []windowFnTestCase{
 		// With PARTITION BY, no ORDER BY.
 		{
@@ -66,6 +67,19 @@ func TestRank(t *testing.T) {
 				WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 					{
 						Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &denseRankFn},
+						OutputColIdx: 1,
+					},
+				},
+			},
+		},
+		{
+			tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
+			expected: tuples{{nil, 0}, {nil, 0}, {1, 0}, {1, 0}, {2, 0}, {3, 0}, {3, 0}},
+			windowerSpec: execinfrapb.WindowerSpec{
+				PartitionBy: []uint32{0},
+				WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+					{
+						Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &percentRankFn},
 						OutputColIdx: 1,
 					},
 				},
@@ -98,6 +112,19 @@ func TestRank(t *testing.T) {
 				},
 			},
 		},
+		{
+			tuples:   tuples{{3}, {1}, {2}, {1}, {nil}, {1}, {nil}, {3}},
+			expected: tuples{{nil, 0}, {nil, 0}, {1, 2.0 / 7}, {1, 2.0 / 7}, {1, 2.0 / 7}, {2, 5.0 / 7}, {3, 6.0 / 7}, {3, 6.0 / 7}},
+			windowerSpec: execinfrapb.WindowerSpec{
+				WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+					{
+						Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &percentRankFn},
+						Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
+						OutputColIdx: 1,
+					},
+				},
+			},
+		},
 		// With both PARTITION BY and ORDER BY.
 		{
 			tuples:   tuples{{3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {nil, nil}, {3, 1}},
@@ -121,6 +148,20 @@ func TestRank(t *testing.T) {
 				WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 					{
 						Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &denseRankFn},
+						Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
+						OutputColIdx: 2,
+					},
+				},
+			},
+		},
+		{
+			tuples:   tuples{{nil, 2}, {3, 2}, {1, nil}, {2, 1}, {nil, nil}, {1, 2}, {nil, 1}, {1, 3}, {nil, nil}, {3, 1}},
+			expected: tuples{{nil, nil, 0}, {nil, nil, 0}, {nil, 1, 2.0 / 3}, {nil, 2, 1}, {1, nil, 0}, {1, 2, 1.0 / 2}, {1, 3, 1}, {2, 1, 0}, {3, 1, 0}, {3, 2, 1}},
+			windowerSpec: execinfrapb.WindowerSpec{
+				PartitionBy: []uint32{0},
+				WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+					{
+						Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &percentRankFn},
 						Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 1}}},
 						OutputColIdx: 2,
 					},

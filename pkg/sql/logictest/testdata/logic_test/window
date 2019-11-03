@@ -1,4 +1,4 @@
-# LogicTest: local fakedist fakedist-metadata 5node-local 5node-dist 5node-dist-metadata 5node-dist-disk
+# LogicTest: local local-vec fakedist fakedist-metadata fakedist-vec 5node-local 5node-dist 5node-dist-metadata 5node-dist-disk
 
 statement ok
 CREATE TABLE kv (
