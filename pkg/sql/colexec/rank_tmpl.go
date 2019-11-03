@@ -28,43 +28,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(yuzefovich): add benchmarks.
 
-// NewRankOperator creates a new Operator that computes window function RANK or
-// DENSE_RANK. dense distinguishes between the two functions. outputColIdx
-// specifies in which coldata.Vec the operator should put its output (if there
-// is no such column, a new column is appended).
+// NewRankOperator creates a new Operator that computes window functions RANK,
+// DENSE_RANK, or PERCENT_RANK (depending on the passed in windowFn).
+// outputColIdx specifies in which coldata.Vec the operator should put its
+// output (if there is no such column, a new column is appended).
 func NewRankOperator(
 	allocator *Allocator,
 	input Operator,
-	dense bool,
+	inputTypes []coltypes.T,
+	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
 	partitionColIdx int,
 	peersColIdx int,
 ) (Operator, error) {
 	if len(orderingCols) == 0 {
+		if windowFn == execinfrapb.WindowerSpec_PERCENT_RANK {
+			return NewConstOp(allocator, input, coltypes.Float64, float64(0), outputColIdx)
+		}
 		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
 	}
 	initFields := rankInitFields{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
+		inputTypes:      inputTypes,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
 		peersColIdx:     peersColIdx,
 	}
-	if dense {
+	switch windowFn {
+	case execinfrapb.WindowerSpec_RANK:
+		if partitionColIdx != columnOmitted {
+			return &rankWithPartitionOp{rankInitFields: initFields}, nil
+		}
+		return &rankNoPartitionOp{rankInitFields: initFields}, nil
+	case execinfrapb.WindowerSpec_DENSE_RANK:
 		if partitionColIdx != columnOmitted {
 			return &denseRankWithPartitionOp{rankInitFields: initFields}, nil
 		}
 		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil
+	case execinfrapb.WindowerSpec_PERCENT_RANK:
+		if partitionColIdx != columnOmitted {
+			return &percentRankWithPartitionOp{rankInitFields: initFields}, nil
+		}
+		return &percentRankNoPartitionOp{rankInitFields: initFields}, nil
+	default:
+		return nil, errors.Errorf("unsupported rank type %s", windowFn)
 	}
-	if partitionColIdx != columnOmitted {
-		return &rankWithPartitionOp{rankInitFields: initFields}, nil
-	}
-	return &rankNoPartitionOp{rankInitFields: initFields}, nil
 }
 
 // {{/*
@@ -87,6 +102,7 @@ type rankInitFields struct {
 	OneInputNode
 
 	allocator       *Allocator
+	inputTypes      []coltypes.T
 	outputColIdx    int
 	partitionColIdx int
 	peersColIdx     int
@@ -100,8 +116,7 @@ type _RANK_STRINGOp struct {
 	// rank indicates which rank should be assigned to the next tuple.
 	rank int64
 	// rankIncrement indicates by how much rank should be incremented when a
-	// tuple distinct from the previous one on the ordering columns is seen. It
-	// is used only in case of a regular rank function (i.e. not dense).
+	// tuple distinct from the previous one on the ordering columns is seen.
 	rankIncrement int64
 }
 
@@ -109,7 +124,7 @@ var _ Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
 	r.Input().Init()
-	// RANK and DENSE_RANK start counting from 1. Before we assign the rank to a
+	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
 	// desired).
@@ -122,11 +137,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	// {{ if .HasPartition }}
-	r.allocator.MaybeAddColumn(batch, coltypes.Bool, r.partitionColIdx)
-	// {{ end }}
 	r.allocator.MaybeAddColumn(batch, coltypes.Int64, r.outputColIdx)
-
 	// {{if .HasPartition}}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	// {{end}}

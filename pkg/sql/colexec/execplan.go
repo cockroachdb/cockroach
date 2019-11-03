@@ -903,6 +903,7 @@ func NewColOperator(
 			tempColOffset, partitionColIdx := uint32(0), columnOmitted
 			peersColIdx := columnOmitted
 			memMonitorsPrefix := "window-"
+			windowFn := *wf.Func.WindowFunc
 			needsPeersInfo, supported := windowFnNeedsPeersInfo[*wf.Func.WindowFunc]
 			if !supported {
 				return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
@@ -929,7 +930,9 @@ func NewColOperator(
 							&execinfrapb.PostProcessSpec{}, memMonitorsPrefix)
 					},
 				)
+				// Window partitioner will append a boolean column.
 				tempColOffset++
+				typs = append(typs, coltypes.Bool)
 			} else {
 				if len(wf.Ordering.Columns) > 0 {
 					input, err = result.createDiskBackedSort(
@@ -948,22 +951,28 @@ func NewColOperator(
 					input, typs, wf.Ordering.Columns,
 					partitionColIdx, peersColIdx,
 				)
+				// Window peer grouper will append a boolean column.
 				tempColOffset++
+				typs = append(typs, coltypes.Bool)
 			}
 
-			switch *wf.Func.WindowFunc {
+			windowFnOpMemAccount := streamingMemAccount
+			if !useStreamingMemAccountForBuffering && windowFn == execinfrapb.WindowerSpec_PERCENT_RANK {
+				// Only percentRankOps are not streaming.
+				windowFnOpMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "percent-rank")
+			}
+			allocator := NewAllocator(ctx, windowFnOpMemAccount)
+			switch windowFn {
 			case execinfrapb.WindowerSpec_ROW_NUMBER:
 				result.Op = NewRowNumberOperator(
-					NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+					allocator, input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
 				)
-			case execinfrapb.WindowerSpec_RANK:
+			case
+				execinfrapb.WindowerSpec_RANK,
+				execinfrapb.WindowerSpec_DENSE_RANK,
+				execinfrapb.WindowerSpec_PERCENT_RANK:
 				result.Op, err = NewRankOperator(
-					NewAllocator(ctx, streamingMemAccount), input, false /* dense */, wf.Ordering.Columns,
-					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
-				)
-			case execinfrapb.WindowerSpec_DENSE_RANK:
-				result.Op, err = NewRankOperator(
-					NewAllocator(ctx, streamingMemAccount), input, true /* dense */, wf.Ordering.Columns,
+					allocator, input, typs, windowFn, wf.Ordering.Columns,
 					int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
 				)
 			default:
@@ -972,7 +981,7 @@ func NewColOperator(
 
 			if tempColOffset > 0 {
 				// We want to project out temporary columns (which have indices in the
-				// range [wf.OutputColIdx, wf.OutputColIdx+tempColOffset).
+				// range [wf.OutputColIdx, wf.OutputColIdx+tempColOffset)).
 				projection := make([]uint32, 0, wf.OutputColIdx+tempColOffset)
 				for i := uint32(0); i < wf.OutputColIdx; i++ {
 					projection = append(projection, i)
@@ -981,12 +990,15 @@ func NewColOperator(
 				result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+tempColOffset), projection)
 			}
 
-			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
-			// Window functions can run in auto mode because they are streaming
-			// operators and internally they use a sorter which can fall back to disk
-			// if needed.
-			// TODO(yuzefovich): currently disabled.
-			// result.CanRunInAutoMode = true
+			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *windowFnOutputType[windowFn])
+			if windowFn != execinfrapb.WindowerSpec_PERCENT_RANK {
+				// Window functions can run in auto mode because they are streaming
+				// operators (except for percent_rank) and internally they use a sorter
+				// which can fall back to disk if needed.
+				// TODO(yuzefovich): currently disabled.
+				// result.CanRunInAutoMode = true
+				// TODO(yuzefovich): add spilling to disk for percent_rank.
+			}
 
 		default:
 			return result, errors.Newf("unsupported processor core %q", core)

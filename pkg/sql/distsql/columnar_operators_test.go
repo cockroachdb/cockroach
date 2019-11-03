@@ -847,9 +847,9 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 
-	nRows := 10
+	nRows := 2 * int(coldata.BatchSize())
 	maxCols := 4
-	maxNum := 5
+	maxNum := 10
 	typs := make([]types.T, maxCols)
 	for i := range typs {
 		// TODO(yuzefovich): randomize the types of the columns once we support
@@ -860,6 +860,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 		execinfrapb.WindowerSpec_ROW_NUMBER,
 		execinfrapb.WindowerSpec_RANK,
 		execinfrapb.WindowerSpec_DENSE_RANK,
+		execinfrapb.WindowerSpec_PERCENT_RANK,
 	} {
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
@@ -875,7 +876,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					if len(partitionBy) > nCols || nOrderingCols > nCols {
 						continue
 					}
-					inputTypes := typs[:nCols]
+					inputTypes := typs[:nCols:nCols]
 					rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 
 					windowerSpec := &execinfrapb.WindowerSpec{
@@ -900,11 +901,15 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
 					}
+					outputType := types.Int
+					if windowFn == execinfrapb.WindowerSpec_PERCENT_RANK {
+						outputType = types.Float
+					}
 					args := verifyColOperatorArgs{
 						anyOrder:    true,
 						inputTypes:  [][]types.T{inputTypes},
 						inputs:      []sqlbase.EncDatumRows{rows},
-						outputTypes: append(inputTypes, *types.Int),
+						outputTypes: append(inputTypes, *outputType),
 						pspec:       pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
