@@ -12,6 +12,7 @@ package timeutil
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -65,4 +66,36 @@ func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, suc
 		return 0, "", false
 	}
 	return offset, strings.TrimSuffix(strings.TrimPrefix(origRepr, "("), ")"), true
+}
+
+// timeZoneOffsetStringConversion converts a string like GMT+08:00 or -08:00 to offset seconds
+// Supported time zone strings :- UTC+08:00, GMT-12:00, +05:00, UTC+08:30
+// Unsupported time zone strings :- UTC+8:00, -8:00, -12:53, UTC+08:08
+func TimeZoneOffsetStringConversion(s string) (offset int64, ok bool) {
+	pattern := `(?mi)(GMT|UTC)[+-](((12:00)|(11:(0|3)0))|(0([0-9]):(0|3)0))\b`
+	var re = regexp.MustCompile(pattern)
+
+	timeString := string(re.Find([]byte(s)))
+	if timeString == "" {
+		return 0, false
+	}
+	if !strings.ContainsAny(s, "+-") {
+		return 0, false
+	}
+	var prefix string = "+"
+	if strings.Contains(s, "-") {
+		prefix = "-"
+	} else {
+		prefix = "+"
+	}
+	parts := strings.Split(timeString, prefix)
+	offsets := strings.Split(parts[1], ":")
+	hoursString, minutesString := offsets[0], offsets[1]
+	hours, _ := strconv.ParseInt(hoursString, 10, 64)
+	minutes, _ := strconv.ParseInt(minutesString, 10, 64)
+	offset = (hours * 60 * 60) + (minutes * 60)
+	if prefix == "-" {
+		offset *= -1
+	}
+	return offset, true
 }

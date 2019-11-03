@@ -222,8 +222,12 @@ func timeZoneVarGetStringVal(
 			if err1 != nil {
 				loc, err1 = timeutil.LoadLocation(strings.ToTitle(location))
 				if err1 != nil {
-					return "", wrapSetVarError("timezone", values[0].String(),
-						"cannot find time zone %q: %v", location, err)
+					var ok bool
+					offset, ok = timeutil.TimeZoneOffsetStringConversion(location)
+					if !ok {
+						return "", wrapSetVarError("timezone", values[0].String(),
+							"cannot find time zone %q: %v", location, err)
+					}
 				}
 			}
 		}
