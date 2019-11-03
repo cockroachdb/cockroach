@@ -325,12 +325,15 @@ func evaluateBatch(
 		}
 
 		// If transactional, we use ba.Txn for each individual command and
-		// accumulate updates to it.
+		// accumulate updates to it. Once accumulated, we then remove the Txn
+		// from each individual response.
 		// TODO(spencer,tschottdorf): need copy-on-write behavior for the
 		//   updated batch transaction / timestamp.
 		if baHeader.Txn != nil {
-			if txn := reply.Header().Txn; txn != nil {
-				baHeader.Txn.Update(txn)
+			if header := reply.Header(); header.Txn != nil {
+				baHeader.Txn.Update(header.Txn)
+				header.Txn = nil
+				reply.SetHeader(header)
 			}
 		}
 	}
