@@ -145,6 +145,8 @@ type Memo struct {
 	// curWithID is the highest currently in-use WITH ID.
 	curWithID opt.WithID
 
+	newGroupFn func(opt.Expr)
+
 	// WARNING: if you add more members, add initialization code in Init.
 }
 
@@ -171,6 +173,12 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 
 	m.curID = 0
 	m.curWithID = 0
+}
+
+// NotifyOnNewGroup sets a callback function which is invoked each time we
+// create a new memo group.
+func (m *Memo) NotifyOnNewGroup(fn func(opt.Expr)) {
+	m.newGroupFn = fn
 }
 
 // IsEmpty returns true if there are no expressions in the memo.
