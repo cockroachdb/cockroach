@@ -198,7 +198,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	config.TestingSetupZoneConfigHook(stopper)
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(
-			cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock, stopper, &cfg.Settings.Version)
+			cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock, stopper, cfg.Settings)
 		server := rpc.NewServer(rpcContext) // never started
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	}

@@ -75,7 +75,7 @@ func NewInsecureTestingContextWithKnobs(
 		&base.Config{Insecure: true},
 		clock,
 		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
+		cluster.MakeTestingClusterSettings(),
 		knobs,
 	)
 }

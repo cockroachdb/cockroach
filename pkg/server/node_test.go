@@ -63,7 +63,7 @@ func createTestNode(
 	stopper := stop.NewStopper()
 	nodeRPCContext := rpc.NewContext(
 		log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper,
-		&cfg.Settings.Version)
+		cfg.Settings)
 	cfg.RPCContext = nodeRPCContext
 	cfg.ScanInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
@@ -326,7 +326,6 @@ func TestNodeJoin(t *testing.T) {
 
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
-	log.Infof(context.TODO(), "!!! test about to start node 1")
 	_, server1Addr, node1, stopper1 := createAndStartTestNode(
 		ctx,
 		util.TestAddr,
@@ -341,7 +340,6 @@ func TestNodeJoin(t *testing.T) {
 	e2 := engine.NewDefaultInMem()
 	engineStopper.AddCloser(e2)
 	engines2 := []engine.Engine{e2}
-	log.Infof(context.TODO(), "!!! test about to start node 2")
 	_, server2Addr, node2, stopper2 := createAndStartTestNode(
 		ctx,
 		util.TestAddr,

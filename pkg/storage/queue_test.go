@@ -510,7 +510,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	// bqNeedsSysCfg will not add the replica or process it without a system config.
 	rpcContext := rpc.NewContext(
 		tc.store.cfg.AmbientCtx, &base.Config{Insecure: true}, tc.store.cfg.Clock, stopper,
-		&cluster.MakeTestingClusterSettings().Version)
+		cluster.MakeTestingClusterSettings())
 	emptyGossip := gossip.NewTest(
 		tc.gossip.NodeID.Get(), rpcContext, rpc.NewServer(rpcContext), stopper, tc.store.Registry(), config.DefaultZoneConfigRef())
 	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, emptyGossip, queueConfig{

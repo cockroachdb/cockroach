@@ -125,7 +125,7 @@ func createTestStoreWithOpts(
 	storeCfg.AmbientCtx = ac
 
 	rpcContext := rpc.NewContext(
-		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, &storeCfg.Settings.Version)
+		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, storeCfg.Settings)
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
@@ -353,7 +353,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContextWithTestingKnobs(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
-			m.transportStopper, &st.Version, m.rpcTestingKnobs)
+			m.transportStopper, st, m.rpcTestingKnobs)
 		// Ensure that tests using this test context and restart/shut down
 		// their servers do not inadvertently start talking to servers from
 		// unrelated concurrent tests.

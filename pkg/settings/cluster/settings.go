@@ -166,7 +166,7 @@ var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
 // method has been called, usage of the Version field is illegal and leads to a
 // fatal error.
 func (s *Settings) InitializeVersion(ctx context.Context, v roachpb.Version) error {
-	if err := Version.Initialize(ctx, v, &s.SV); err != nil {
+	if err := Version.Initialize(ctx, v, s); err != nil {
 		return err
 	}
 
@@ -387,11 +387,11 @@ func (v *clusterVersionSetting) BinaryMinSupportedVersion(st *Settings) roachpb.
 }
 
 func (v *clusterVersionSetting) Initialize(
-	ctx context.Context, version roachpb.Version, sv *settings.Values,
+	ctx context.Context, version roachpb.Version, st *Settings,
 ) error {
-	log.Infof(ctx, "!!! Initialize: %s", version)
-	// !!! debug.PrintStack() // !!!
-	if ver := v.GetVersionOrEmpty(ctx, sv); ver != (ClusterVersion{}) {
+	log.Infof(ctx, "!!! Initialize: %s (%p)", version, st)
+	// debug.PrintStack() // !!!
+	if ver := v.GetVersionOrEmpty(ctx, st); ver != (ClusterVersion{}) {
 		// Allow initializing a second time as long as it's setting the version to
 		// what it was already set. This is useful in tests that use
 		// MakeTestingClusterSettings() which initializes the version, and the
@@ -402,7 +402,7 @@ func (v *clusterVersionSetting) Initialize(
 		return errors.AssertionFailedf("cannot initialize version to %s because already set to: %s",
 			version, ver)
 	}
-	if err := v.impl.validateSupportedVersionInner(ctx, version, sv); err != nil {
+	if err := v.impl.validateSupportedVersionInner(ctx, version, &st.SV); err != nil {
 		return err
 	}
 
@@ -412,14 +412,12 @@ func (v *clusterVersionSetting) Initialize(
 	if err != nil {
 		return err
 	}
-	sv.SetGeneric(v.GetSlotIdx(), encoded)
+	st.SV.SetGeneric(v.GetSlotIdx(), encoded)
 	return nil
 }
 
-func (v *clusterVersionSetting) GetVersion(
-	ctx context.Context, sv *settings.Values,
-) ClusterVersion {
-	ver := v.GetVersionOrEmpty(ctx, sv)
+func (v *clusterVersionSetting) GetVersion(ctx context.Context, st *Settings) ClusterVersion {
+	ver := v.GetVersionOrEmpty(ctx, st)
 	if ver == (ClusterVersion{}) {
 		log.Fatalf(ctx, "version not initialized")
 	}
@@ -427,9 +425,9 @@ func (v *clusterVersionSetting) GetVersion(
 }
 
 func (v *clusterVersionSetting) GetVersionOrEmpty(
-	ctx context.Context, sv *settings.Values,
+	ctx context.Context, st *Settings,
 ) ClusterVersion {
-	encoded := v.GetInternal(sv)
+	encoded := v.GetInternal(&st.SV)
 	if encoded == nil {
 		return ClusterVersion{}
 	}
@@ -441,9 +439,9 @@ func (v *clusterVersionSetting) GetVersionOrEmpty(
 }
 
 func (v *clusterVersionSetting) IsActive(
-	ctx context.Context, versionKey VersionKey, sv *settings.Values,
+	ctx context.Context, versionKey VersionKey, st *Settings,
 ) bool {
-	return v.GetVersion(ctx, sv).IsActive(versionKey)
+	return v.GetVersion(ctx, st).IsActive(versionKey)
 }
 
 type clusterVersionSettingImpl struct {

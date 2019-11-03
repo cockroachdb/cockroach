@@ -264,12 +264,11 @@ func newTestServer(
 	}
 	il := &interceptingListener{Listener: ln}
 	s := grpc.NewServer()
-	serverVersion := cluster.MakeTestingClusterSettings().Version.ServerVersion
 	var hb *heartbeatService
 	if useHeartbeat {
 		hb = &heartbeatService{
 			clock:         clock,
-			serverVersion: serverVersion,
+			serverVersion: cluster.BinaryServerVersion,
 		}
 		rpc.RegisterHeartbeatServer(s, hb)
 	}
@@ -293,7 +292,7 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 		cfg,
 		clock,
 		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
+		cluster.MakeTestingClusterSettings(),
 	)
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from

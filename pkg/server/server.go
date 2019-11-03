@@ -261,12 +261,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
 		s.rpcContext = rpc.NewContextWithTestingKnobs(
-			s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper, &cfg.Settings.Version,
+			s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper, cfg.Settings,
 			serverKnobs.ContextTestingKnobs,
 		)
 	} else {
 		s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper,
-			&cfg.Settings.Version)
+			cfg.Settings)
 	}
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {

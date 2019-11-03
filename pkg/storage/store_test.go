@@ -196,7 +196,7 @@ func createTestStoreWithoutStart(
 
 	rpcContext := rpc.NewContext(
 		cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock,
-		stopper, &cfg.Settings.Version)
+		stopper, cfg.Settings)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	cfg.StorePool = NewTestStorePool(*cfg)
@@ -1351,9 +1351,9 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		rangeID, splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	cv := store.ClusterSettings().Version.Version().Version
+	cv := cluster.Version.GetVersion(ctx, store.ClusterSettings()).Version
 	_, err = stateloader.WriteInitialState(
-		context.Background(), store.engine, enginepb.MVCCStats{}, *rhsDesc, roachpb.Lease{},
+		ctx, store.engine, enginepb.MVCCStats{}, *rhsDesc, roachpb.Lease{},
 		hlc.Timestamp{}, cv, stateloader.TruncatedStateUnreplicated,
 	)
 	require.NoError(t, err)
@@ -2886,7 +2886,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
-	cv := s.ClusterSettings().Version.Version().Version
+	cv := cluster.Version.GetVersion(ctx, s.ClusterSettings()).Version
 	if _, err := stateloader.WriteInitialState(
 		ctx, s.Engine(), enginepb.MVCCStats{}, uninitDesc, roachpb.Lease{},
 		hlc.Timestamp{}, cv, stateloader.TruncatedStateUnreplicated,

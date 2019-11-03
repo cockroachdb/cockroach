@@ -62,10 +62,6 @@ func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 	return v.Version.String()
 }
 
-func (th *testClusterWithHelpers) getVersionFromSetting(i int) *cluster.ExposedClusterVersion {
-	return &th.Servers[i].ClusterSettings().Version
-}
-
 func (th *testClusterWithHelpers) setVersion(i int, version string) error {
 	_, err := th.ServerConn(i).Exec("SET CLUSTER SETTING version = $1", version)
 	return err
@@ -296,13 +292,14 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			v := tc.getVersionFromSetting(i)
+			st := tc.Servers[i].ClusterSettings()
+			v := cluster.Version.GetVersion(ctx, st)
 			wantActive := isNoopUpdate
-			if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
+			if isActive := v.IsActiveVersion(newVersion); isActive != wantActive {
 				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
 
-			if tableV, curV := tc.getVersionFromSelect(i), v.Version().Version.String(); tableV != curV {
+			if tableV, curV := tc.getVersionFromSelect(i), v.String(); tableV != curV {
 				return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
 			}
 		}
@@ -332,8 +329,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// already in the table.
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			vers := tc.getVersionFromSetting(i)
-			if v := vers.Version().Version.String(); v == curVersion {
+			vers := cluster.Version.GetVersion(ctx, tc.Servers[i].ClusterSettings())
+			if v := vers.String(); v == curVersion {
 				if isNoopUpdate {
 					continue
 				}
@@ -381,7 +378,7 @@ func TestAllVersionsAgree(t *testing.T) {
 	// to get to BinaryServerVersion. Hence, we loop until that gossip comes.
 	testutils.SucceedsSoon(tc, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+			if version := cluster.Version.GetVersion(ctx, tc.Servers[i].ClusterSettings()); version.String() != exp {
 				return fmt.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {
@@ -461,7 +458,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
 		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+			if version := cluster.Version.GetVersion(ctx, tc.Servers[i].ClusterSettings()).String(); version != exp {
 				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {
