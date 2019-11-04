@@ -369,6 +369,7 @@ func updateIntentTxnStatus(
 		}
 		intent.Txn = pushee.TxnMeta
 		intent.Status = pushee.Status
+		intent.IgnoredSeqNums = pushee.IgnoredSeqNums
 		results = append(results, intent)
 	}
 	return results
@@ -707,6 +708,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				for i := range intents {
 					intents[i].Txn = txn.TxnMeta
 					intents[i].Status = txn.Status
+					intents[i].IgnoredSeqNums = txn.IgnoredSeqNums
 				}
 			}
 			var onCleanupComplete func(error)
