@@ -3702,3 +3702,40 @@ NULL  NULL
 
 statement ok
 DROP TABLE c, b, a;
+
+# Make sure the CHECK constraint is checked when a self-referencing cascade
+# modifies the original table (#42117).
+subtest SelfReferencingCheckFail
+
+# TODO(radu): remove the FAMILY when #42120 is fixed.
+statement ok
+CREATE TABLE self_ab (
+  a INT UNIQUE,
+  b INT DEFAULT 1 CHECK (b != 1),
+  INDEX (b),
+  FAMILY (a, b)
+)
+
+statement ok
+INSERT INTO self_ab VALUES (1, 2), (2, 2)
+
+statement ok
+ALTER TABLE self_ab ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES self_ab (a) ON UPDATE SET DEFAULT
+
+# This update would cause the references to 2 to get reset to the default,
+# which violates the check.
+statement error failed to satisfy CHECK constraint \(b != 1\)
+UPDATE self_ab SET a = 3 WHERE a = 2
+
+# Make sure the check fails when we apply the same update through a cascade.
+statement ok
+CREATE TABLE self_ab_parent (p INT PRIMARY KEY)
+
+statement ok
+INSERT INTO self_ab_parent VALUES (1), (2)
+
+statement ok
+ALTER TABLE self_ab ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES self_ab_parent (p) ON UPDATE CASCADE
+
+statement error failed to satisfy CHECK constraint \(b != 1\)
+UPDATE self_ab_parent SET p = 3 WHERE p = 2
