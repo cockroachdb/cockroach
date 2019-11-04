@@ -830,7 +830,11 @@ func runMVCCGarbageCollect(
 }
 
 func runBatchApplyBatchRepr(
-	ctx context.Context, b *testing.B, emk engineMaker, writeOnly bool, valueSize, batchSize int,
+	ctx context.Context,
+	b *testing.B,
+	emk engineMaker,
+	indexed, sequential bool,
+	valueSize, batchSize int,
 ) {
 	rng, _ := randutil.NewPseudoRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
@@ -841,16 +845,27 @@ func runBatchApplyBatchRepr(
 
 	var repr []byte
 	{
-		batch := eng.NewBatch()
+		order := make([]int, batchSize)
+		for i := range order {
+			order[i] = i
+		}
+		if !sequential {
+			rng.Shuffle(len(order), func(i, j int) {
+				order[i], order[j] = order[j], order[i]
+			})
+		}
+
+		batch := eng.NewWriteOnlyBatch()
+		defer batch.Close() // NB: hold open so batch.Repr() doesn't get reused
+
 		for i := 0; i < batchSize; i++ {
-			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(order[i])))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
+			if err := MVCCBlindPut(ctx, batch, nil, key, ts, value, nil); err != nil {
 				b.Fatal(err)
 			}
 		}
 		repr = batch.Repr()
-		batch.Close()
 	}
 
 	b.SetBytes(int64(len(repr)))
@@ -858,13 +873,17 @@ func runBatchApplyBatchRepr(
 
 	for i := 0; i < b.N; i++ {
 		var batch Batch
-		if writeOnly {
+		if !indexed {
 			batch = eng.NewWriteOnlyBatch()
 		} else {
 			batch = eng.NewBatch()
 		}
 		if err := batch.ApplyBatchRepr(repr, false /* sync */); err != nil {
 			b.Fatal(err)
+		}
+		if r, ok := batch.(*rocksDBBatch); ok {
+			// Ensure mutations are flushed for RocksDB indexed batches.
+			r.flushMutations()
 		}
 		batch.Close()
 	}

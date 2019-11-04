@@ -194,3 +194,28 @@ func BenchmarkMVCCGarbageCollect_Pebble(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkBatchApplyBatchRepr_Pebble(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	ctx := context.Background()
+	for _, indexed := range []bool{false, true} {
+		b.Run(fmt.Sprintf("indexed=%t", indexed), func(b *testing.B) {
+			for _, sequential := range []bool{false, true} {
+				b.Run(fmt.Sprintf("seq=%t", sequential), func(b *testing.B) {
+					for _, valueSize := range []int{10} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							for _, batchSize := range []int{10000} {
+								b.Run(fmt.Sprintf("batchSize=%d", batchSize), func(b *testing.B) {
+									runBatchApplyBatchRepr(ctx, b, setupMVCCInMemPebble,
+										indexed, sequential, valueSize, batchSize)
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
