@@ -2597,7 +2597,24 @@ func mvccResolveWriteIntent(
 	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
 	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
 	// and create new with proper timestamp-encoded key) if timestamp changed.
+	//
+	// We also use the commit path when the intent is being collapsed,
+	// to ensure the intent meta gets deleted and the stats updated.
 	if commit || pushed {
+		// Handle partial txn rollbacks. If the current txn sequence
+		// is part of a rolled back (ignored) seqnum range, we're going
+		// to erase that MVCC read and reveal the previous value.
+		// If _all_ the writes get removed in this way, the intent
+		// "collapses" and should be considered empty (i.e. can be removed altogether).
+		collapsedIntent := false
+		latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+		if len(intent.Txn.IgnoredSeqNums) > 0 {
+			collapsedIntent, err = mvccRewriteIntentHistory(ctx, engine, &intent.Txn, meta, latestKey)
+			if err != nil {
+				return false, err
+			}
+		}
+
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.Timestamp)
@@ -2620,8 +2637,10 @@ func mvccResolveWriteIntent(
 		}
 
 		// If we're moving the intent's timestamp, adjust stats and rewrite it.
+		// However this work needs not be done if the intent was collapsed
+		// (no new value any more).
 		var prevValSize int64
-		if buf.newMeta.Timestamp != meta.Timestamp {
+		if buf.newMeta.Timestamp != meta.Timestamp && !collapsedIntent {
 			// If there is a value under the intent as it moves timestamps, then
 			// that value may need an adjustment of its GCBytesAge. This is
 			// because it became non-live at orig.Timestamp originally, and now
@@ -2630,7 +2649,6 @@ func mvccResolveWriteIntent(
 			//
 			// Look for the first real versioned key, i.e. the key just below
 			// the (old) meta's timestamp.
-			latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 			_, unsafeNextValue, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
 			if err != nil {
 				return false, err
@@ -2737,6 +2755,70 @@ func mvccResolveWriteIntent(
 	}
 
 	return true, nil
+}
+
+// mvccRewriteIntentHistory rolls back the write from the intent, ignoring
+// all values from the history that have an ignored seqnum.
+func mvccRewriteIntentHistory(
+	ctx context.Context,
+	engine ReadWriter,
+	txn *enginepb.TxnMeta,
+	meta *enginepb.MVCCMetadata,
+	latestKey MVCCKey,
+) (clear bool, err error) {
+	if !seqNumIsIgnored(txn, meta.Txn.Sequence) {
+		// The latest write was not ignored. Nothing to do here.  We'll
+		// proceed with the intent as usual.
+		return false, nil
+	}
+	// Find the latest historical write before that that was not
+	// ignored.
+	var i int
+	for i = len(meta.IntentHistory) - 1; i >= 0; i-- {
+		e := &meta.IntentHistory[i]
+		if !seqNumIsIgnored(txn, e.Sequence) {
+			break
+		}
+	}
+
+	// If i < 0, we don't have an intent any more: everything
+	// has been rolled back.
+	if i < 0 {
+		err := engine.Clear(latestKey)
+		// For stats recomputation in the caller, flatten the
+		// value size so there's nothing left attributed to this intent.
+		meta.ValBytes = 0
+		return true, err
+	}
+
+	// Otherwise, we place back the write at that history entry
+	// back into the intent.
+	restoredVal := meta.IntentHistory[i].Value
+	meta.IntentHistory = meta.IntentHistory[:i]
+	meta.Deleted = len(restoredVal) == 0
+	meta.ValBytes = int64(len(restoredVal))
+	// And also overwrite whatever was there in storage.
+	err = engine.Put(latestKey, restoredVal)
+
+	return false, err
+}
+
+func seqNumIsIgnored(txn *enginepb.TxnMeta, sequence enginepb.TxnSeq) bool {
+	for i := len(txn.IgnoredSeqNums) - 1; i >= 0; i-- {
+		r := txn.IgnoredSeqNums[i]
+		if sequence > r.End {
+			// All ignored ranges lower than the current seqnum. Write is not ignored.
+			return false
+		}
+		if txn.Sequence < r.Start {
+			// Current ignored range higher than seqnum. Try next.
+			continue
+		}
+		// Splash: seqnum is inside ignored range.
+		return true
+	}
+	// Not in any ignored range: not ignored.
+	return false
 }
 
 // IterAndBuf used to pass iterators and buffers between MVCC* calls, allowing

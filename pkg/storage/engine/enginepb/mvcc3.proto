@@ -113,6 +113,20 @@ message TxnMeta {
   int32 sequence = 7 [(gogoproto.casttype) = "TxnSeq"];
 
   reserved 8;
+
+  message IgnoredSeqNumRange {
+    option (gogoproto.equal) = true;
+    option (gogoproto.populate) = true;
+	int32 start = 1 [(gogoproto.casttype) = "TxnSeq"];
+	int32 end = 2 [(gogoproto.casttype) = "TxnSeq"];
+  }
+  // A list of ignored seqnum ranges.
+  //
+  // The user code must guarantee this list to be non-overlapping,
+  // non-continuous (i.e. it must coalesce ranges to avoid situations
+  // where a range's end seqnum is equal to the next range's start
+  // seqnum), and sorted in seqnum order.
+  repeated IgnoredSeqNumRange ignored_seqnums = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
