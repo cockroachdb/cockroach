@@ -1001,6 +1001,7 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Sequence = o.Sequence
 		t.IntentSpans = o.IntentSpans
 		t.InFlightWrites = o.InFlightWrites
+		t.IgnoredSeqNums = o.IgnoredSeqNums
 	} else if t.Epoch == o.Epoch {
 		// Forward all epoch-scoped state.
 		switch t.Status {
@@ -1036,6 +1037,9 @@ func (t *Transaction) Update(o *Transaction) {
 		}
 		if len(o.InFlightWrites) > 0 {
 			t.InFlightWrites = o.InFlightWrites
+		}
+		if len(o.IgnoredSeqNums) > 0 {
+			t.IgnoredSeqNums = o.IgnoredSeqNums
 		}
 	} else /* t.Epoch > o.Epoch */ {
 		// Ignore epoch-specific state from previous epoch.
