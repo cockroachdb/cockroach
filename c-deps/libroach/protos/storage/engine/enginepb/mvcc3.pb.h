@@ -38,7 +38,7 @@ namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[11];
+  static const ::google::protobuf::internal::ParseTable schema[12];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -81,6 +81,9 @@ extern RangeAppliedStateDefaultTypeInternal _RangeAppliedState_default_instance_
 class TxnMeta;
 class TxnMetaDefaultTypeInternal;
 extern TxnMetaDefaultTypeInternal _TxnMeta_default_instance_;
+class TxnMeta_IgnoredSeqNumRange;
+class TxnMeta_IgnoredSeqNumRangeDefaultTypeInternal;
+extern TxnMeta_IgnoredSeqNumRangeDefaultTypeInternal _TxnMeta_IgnoredSeqNumRange_default_instance_;
 }  // namespace enginepb
 }  // namespace engine
 }  // namespace storage
@@ -98,6 +101,7 @@ template<> ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* Arena::Cre
 template<> ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCWriteValueOp>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::RangeAppliedState* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::RangeAppliedState>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::TxnMeta* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange>(Arena*);
 }  // namespace protobuf
 }  // namespace google
 namespace cockroach {
@@ -106,6 +110,112 @@ namespace engine {
 namespace enginepb {
 
 // ===================================================================
+
+class TxnMeta_IgnoredSeqNumRange : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange) */ {
+ public:
+  TxnMeta_IgnoredSeqNumRange();
+  virtual ~TxnMeta_IgnoredSeqNumRange();
+
+  TxnMeta_IgnoredSeqNumRange(const TxnMeta_IgnoredSeqNumRange& from);
+
+  inline TxnMeta_IgnoredSeqNumRange& operator=(const TxnMeta_IgnoredSeqNumRange& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  TxnMeta_IgnoredSeqNumRange(TxnMeta_IgnoredSeqNumRange&& from) noexcept
+    : TxnMeta_IgnoredSeqNumRange() {
+    *this = ::std::move(from);
+  }
+
+  inline TxnMeta_IgnoredSeqNumRange& operator=(TxnMeta_IgnoredSeqNumRange&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const TxnMeta_IgnoredSeqNumRange& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const TxnMeta_IgnoredSeqNumRange* internal_default_instance() {
+    return reinterpret_cast<const TxnMeta_IgnoredSeqNumRange*>(
+               &_TxnMeta_IgnoredSeqNumRange_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    0;
+
+  void Swap(TxnMeta_IgnoredSeqNumRange* other);
+  friend void swap(TxnMeta_IgnoredSeqNumRange& a, TxnMeta_IgnoredSeqNumRange& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline TxnMeta_IgnoredSeqNumRange* New() const final {
+    return CreateMaybeMessage<TxnMeta_IgnoredSeqNumRange>(NULL);
+  }
+
+  TxnMeta_IgnoredSeqNumRange* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<TxnMeta_IgnoredSeqNumRange>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const TxnMeta_IgnoredSeqNumRange& from);
+  void MergeFrom(const TxnMeta_IgnoredSeqNumRange& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(TxnMeta_IgnoredSeqNumRange* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_start();
+  static const int kStartFieldNumber = 1;
+  ::google::protobuf::int32 start() const;
+  void set_start(::google::protobuf::int32 value);
+
+  void clear_end();
+  static const int kEndFieldNumber = 2;
+  ::google::protobuf::int32 end() const;
+  void set_end(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::int32 start_;
+  ::google::protobuf::int32 end_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
 
 class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.TxnMeta) */ {
  public:
@@ -141,7 +251,7 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
                &_TxnMeta_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    0;
+    1;
 
   void Swap(TxnMeta* other);
   friend void swap(TxnMeta& a, TxnMeta& b) {
@@ -190,7 +300,20 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
 
   // nested types ----------------------------------------------------
 
+  typedef TxnMeta_IgnoredSeqNumRange IgnoredSeqNumRange;
+
   // accessors -------------------------------------------------------
+
+  int ignored_seqnums_size() const;
+  void clear_ignored_seqnums();
+  static const int kIgnoredSeqnumsFieldNumber = 10;
+  ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange >*
+      mutable_ignored_seqnums();
+  const ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange& ignored_seqnums(int index) const;
+  ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange* add_ignored_seqnums();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange >&
+      ignored_seqnums() const;
 
   void clear_id();
   static const int kIdFieldNumber = 1;
@@ -260,6 +383,7 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange > ignored_seqnums_;
   ::google::protobuf::internal::ArenaStringPtr id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
@@ -306,7 +430,7 @@ class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_MVCCStatsDelta_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    1;
+    2;
 
   void Swap(MVCCStatsDelta* other);
   friend void swap(MVCCStatsDelta& a, MVCCStatsDelta& b) {
@@ -497,7 +621,7 @@ class MVCCPersistentStats : public ::google::protobuf::MessageLite /* @@protoc_i
                &_MVCCPersistentStats_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    2;
+    3;
 
   void Swap(MVCCPersistentStats* other);
   friend void swap(MVCCPersistentStats& a, MVCCPersistentStats& b) {
@@ -688,7 +812,7 @@ class RangeAppliedState : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeAppliedState_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    3;
+    4;
 
   void Swap(RangeAppliedState* other);
   friend void swap(RangeAppliedState& a, RangeAppliedState& b) {
@@ -808,7 +932,7 @@ class MVCCWriteValueOp : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_MVCCWriteValueOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    4;
+    5;
 
   void Swap(MVCCWriteValueOp* other);
   friend void swap(MVCCWriteValueOp& a, MVCCWriteValueOp& b) {
@@ -944,7 +1068,7 @@ class MVCCWriteIntentOp : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_MVCCWriteIntentOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    5;
+    6;
 
   void Swap(MVCCWriteIntentOp* other);
   friend void swap(MVCCWriteIntentOp& a, MVCCWriteIntentOp& b) {
@@ -1091,7 +1215,7 @@ class MVCCUpdateIntentOp : public ::google::protobuf::MessageLite /* @@protoc_in
                &_MVCCUpdateIntentOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    6;
+    7;
 
   void Swap(MVCCUpdateIntentOp* other);
   friend void swap(MVCCUpdateIntentOp& a, MVCCUpdateIntentOp& b) {
@@ -1211,7 +1335,7 @@ class MVCCCommitIntentOp : public ::google::protobuf::MessageLite /* @@protoc_in
                &_MVCCCommitIntentOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    7;
+    8;
 
   void Swap(MVCCCommitIntentOp* other);
   friend void swap(MVCCCommitIntentOp& a, MVCCCommitIntentOp& b) {
@@ -1361,7 +1485,7 @@ class MVCCAbortIntentOp : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_MVCCAbortIntentOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(MVCCAbortIntentOp* other);
   friend void swap(MVCCAbortIntentOp& a, MVCCAbortIntentOp& b) {
@@ -1469,7 +1593,7 @@ class MVCCAbortTxnOp : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_MVCCAbortTxnOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(MVCCAbortTxnOp* other);
   friend void swap(MVCCAbortTxnOp& a, MVCCAbortTxnOp& b) {
@@ -1577,7 +1701,7 @@ class MVCCLogicalOp : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_MVCCLogicalOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(MVCCLogicalOp* other);
   friend void swap(MVCCLogicalOp& a, MVCCLogicalOp& b) {
@@ -1722,6 +1846,36 @@ class MVCCLogicalOp : public ::google::protobuf::MessageLite /* @@protoc_inserti
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif  // __GNUC__
+// TxnMeta_IgnoredSeqNumRange
+
+inline void TxnMeta_IgnoredSeqNumRange::clear_start() {
+  start_ = 0;
+}
+inline ::google::protobuf::int32 TxnMeta_IgnoredSeqNumRange::start() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange.start)
+  return start_;
+}
+inline void TxnMeta_IgnoredSeqNumRange::set_start(::google::protobuf::int32 value) {
+  
+  start_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange.start)
+}
+
+inline void TxnMeta_IgnoredSeqNumRange::clear_end() {
+  end_ = 0;
+}
+inline ::google::protobuf::int32 TxnMeta_IgnoredSeqNumRange::end() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange.end)
+  return end_;
+}
+inline void TxnMeta_IgnoredSeqNumRange::set_end(::google::protobuf::int32 value) {
+  
+  end_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange.end)
+}
+
+// -------------------------------------------------------------------
+
 // TxnMeta
 
 inline void TxnMeta::clear_id() {
@@ -1960,6 +2114,35 @@ inline void TxnMeta::set_sequence(::google::protobuf::int32 value) {
   
   sequence_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.sequence)
+}
+
+inline int TxnMeta::ignored_seqnums_size() const {
+  return ignored_seqnums_.size();
+}
+inline void TxnMeta::clear_ignored_seqnums() {
+  ignored_seqnums_.Clear();
+}
+inline ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange* TxnMeta::mutable_ignored_seqnums(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.ignored_seqnums)
+  return ignored_seqnums_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange >*
+TxnMeta::mutable_ignored_seqnums() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.storage.engine.enginepb.TxnMeta.ignored_seqnums)
+  return &ignored_seqnums_;
+}
+inline const ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange& TxnMeta::ignored_seqnums(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.ignored_seqnums)
+  return ignored_seqnums_.Get(index);
+}
+inline ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange* TxnMeta::add_ignored_seqnums() {
+  // @@protoc_insertion_point(field_add:cockroach.storage.engine.enginepb.TxnMeta.ignored_seqnums)
+  return ignored_seqnums_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange >&
+TxnMeta::ignored_seqnums() const {
+  // @@protoc_insertion_point(field_list:cockroach.storage.engine.enginepb.TxnMeta.ignored_seqnums)
+  return ignored_seqnums_;
 }
 
 // -------------------------------------------------------------------
@@ -3560,6 +3743,8 @@ inline void MVCCLogicalOp::set_allocated_abort_txn(::cockroach::storage::engine:
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

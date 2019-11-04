@@ -476,13 +476,14 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Key:          Key("foo"),
-		ID:           uuid.MakeV4(),
-		Epoch:        2,
-		Timestamp:    makeTS(20, 21),
-		MinTimestamp: makeTS(10, 11),
-		Priority:     957356782,
-		Sequence:     123,
+		Key:            Key("foo"),
+		ID:             uuid.MakeV4(),
+		Epoch:          2,
+		Timestamp:      makeTS(20, 21),
+		MinTimestamp:   makeTS(10, 11),
+		Priority:       957356782,
+		Sequence:       123,
+		IgnoredSeqNums: []enginepb.TxnMeta_IgnoredSeqNumRange{{Start: 888, End: 999}},
 	},
 	Name:                     "name",
 	Status:                   COMMITTED,
@@ -556,6 +557,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.Sequence = txn.Sequence - 10
 	expTxn5.IntentSpans = nil
 	expTxn5.InFlightWrites = nil
+	expTxn5.IgnoredSeqNums = nil
 	expTxn5.WriteTooOld = false
 	expTxn5.OrigTimestampWasObserved = false
 	require.Equal(t, expTxn5, txn5)
@@ -655,6 +657,7 @@ func TestTransactionClone(t *testing.T) {
 		"IntentSpans.EndKey",
 		"IntentSpans.Key",
 		"ObservedTimestamps",
+		"TxnMeta.IgnoredSeqNums",
 		"TxnMeta.Key",
 	}
 	if !reflect.DeepEqual(expFields, fields) {
@@ -678,6 +681,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.OrigTimestampWasObserved = false
 	expTxn.IntentSpans = nil
 	expTxn.InFlightWrites = nil
+	expTxn.IgnoredSeqNums = nil
 	require.Equal(t, expTxn, txn)
 }
 

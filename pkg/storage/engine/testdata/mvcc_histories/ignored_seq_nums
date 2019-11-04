@@ -1,0 +1,140 @@
+# Pebble does not support ignored seqnums for now.
+skip pebble
+----
+
+# Perform some writes at various sequence numbers.
+
+run ok
+with t=A
+  begin_txn ts=11
+  step_txn  seq=10
+  put       k=k  v=a
+  put       k=k/10 v=10
+  step_txn  seq=20
+  put       k=k  v=b
+  put       k=k/20 v=20
+  step_txn  seq=30
+  put       k=k  v=c
+  put       k=k/30 v=30
+  step_txn  seq=40
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=40} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false
+meta: "k"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "k"/0.000000011,0 -> /BYTES/c
+meta: "k/10"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/10"/0.000000011,0 -> /BYTES/10
+meta: "k/20"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=20} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/20"/0.000000011,0 -> /BYTES/20
+meta: "k/30"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
+data: "k/30"/0.000000011,0 -> /BYTES/30
+
+# Mask a single write.
+# The third write should be hidden now.
+
+run ok
+with t=A
+  ignore_seqs seqs=(25-35)
+  scan k=k end=-k
+  get  k=k
+----
+scan: "k" -> /BYTES/b
+scan: "k/10" -> /BYTES/10
+scan: "k/20" -> /BYTES/20
+get: "k" -> /BYTES/b
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=40} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false isn=1
+
+# Mask a write in the middle.
+
+run ok
+with t=A
+  ignore_seqs seqs=(15-25)
+  step_txn seq=40
+  scan k=k end=-k
+  get  k=k
+----
+scan: "k" -> /BYTES/c
+scan: "k/10" -> /BYTES/10
+scan: "k/30" -> /BYTES/30
+get: "k" -> /BYTES/c
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=40} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false isn=1
+
+# Mask all the writes.
+
+run ok
+with t=A
+  ignore_seqs seqs=(1-35)
+  step_txn seq=40
+  scan k=k end=-k
+  get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=40} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false isn=1
+
+# Disjoint masks.
+
+run ok
+with t=A
+  ignore_seqs seqs=(1-15,25-35)
+  step_txn seq=40
+  scan k=k end=-k
+  get  k=k
+----
+scan: "k" -> /BYTES/b
+scan: "k/20" -> /BYTES/20
+get: "k" -> /BYTES/b
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=40} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false isn=2
+
+# A historical read before the ignored range should retrieve the
+# historical value visible at that point.
+
+run ok
+with t=A
+  ignore_seqs seqs=(15-25)
+  step_txn    seq=12
+  scan        k=k end=-k
+  get         k=k
+----
+scan: "k" -> /BYTES/a
+scan: "k/10" -> /BYTES/10
+get: "k" -> /BYTES/a
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=12} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false isn=1
+
+# A historical read with an ignored range before it should hide
+# the historical value hidden at that point.
+
+run ok
+with t=A
+  ignore_seqs seqs=(5-15)
+  step_txn    seq=22
+  scan        k=k end=-k
+  get         k=k
+----
+scan: "k" -> /BYTES/b
+scan: "k/20" -> /BYTES/20
+get: "k" -> /BYTES/b
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=22} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false isn=1
+
+# A historical read with an ignored range that overlaps should hide
+# the historical value hidden at that point.
+
+run ok
+with t=A
+  ignore_seqs seqs=(25-35)
+  step_txn    seq=32
+  scan        k=k end=-k
+  get         k=k
+----
+scan: "k" -> /BYTES/b
+scan: "k/10" -> /BYTES/10
+scan: "k/20" -> /BYTES/20
+get: "k" -> /BYTES/b
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=32} rw=true stat=PENDING orig=0.000000011,0 max=0.000000000,0 rts=0.000000000,0 wto=false isn=1
