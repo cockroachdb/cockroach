@@ -706,7 +706,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			// 10k warehouses requires at least 20,000 connections, so add a
 			// bit of breathing room and check the warehouse count.
 			c.Run(ctx, loadNodes, "sed -i 's/maxconn [0-9]\\+/maxconn 21000/' haproxy.cfg")
-			if b.LoadWarehouses > 1E4 {
+			if b.LoadWarehouses > 1e4 {
 				t.Fatal("HAProxy config supports up to 10k warehouses")
 			}
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")

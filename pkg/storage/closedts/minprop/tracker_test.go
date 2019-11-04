@@ -48,18 +48,18 @@ func ExampleTracker_Close() {
 	ctx := context.Background()
 	tracker := NewTracker()
 	_, slow := tracker.Track(ctx)
-	_, _, _ = tracker.Close(hlc.Timestamp{WallTime: 1E9}, ep1)
+	_, _, _ = tracker.Close(hlc.Timestamp{WallTime: 1e9}, ep1)
 	_, fast := tracker.Track(ctx)
 
 	fmt.Println("Slow proposal finishes at LAI 2")
 	slow(ctx, ep1, 99, 2)
-	closed, m, ok := tracker.Close(hlc.Timestamp{WallTime: 2E9}, ep1)
+	closed, m, ok := tracker.Close(hlc.Timestamp{WallTime: 2e9}, ep1)
 	fmt.Println("Closed:", closed, m, ok)
 
 	fmt.Println("Fast proposal finishes at LAI 1")
 	fast(ctx, ep1, 99, 1)
 	fmt.Println(tracker)
-	closed, m, ok = tracker.Close(hlc.Timestamp{WallTime: 3E9}, ep1)
+	closed, m, ok = tracker.Close(hlc.Timestamp{WallTime: 3e9}, ep1)
 	fmt.Println("Closed:", closed, m, ok)
 	fmt.Println("Note how the MLAI has 'regressed' from 2 to 1. The consumer")
 	fmt.Println("needs to track the maximum over all deltas received.")
@@ -240,7 +240,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
 	}
 
 	newNext := func(i int) hlc.Timestamp {
-		return hlc.Timestamp{WallTime: int64(i) * 1E9}
+		return hlc.Timestamp{WallTime: int64(i) * 1e9}
 	}
 
 	run := func(i int) error {
@@ -325,9 +325,9 @@ func TestTrackerConcurrentUse(t *testing.T) {
 // ExampleTracker_EpochChanges tests the interactions between epoch values
 // passed to Close and epoch values of proposals being tracked.
 func ExampleTracker_Close_epochChange() {
-	ts1 := hlc.Timestamp{WallTime: 1E9}
-	ts2 := hlc.Timestamp{WallTime: 2E9}
-	ts3 := hlc.Timestamp{WallTime: 3E9}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
+	ts3 := hlc.Timestamp{WallTime: 3e9}
 
 	ctx := context.Background()
 	tracker := NewTracker()
@@ -489,9 +489,9 @@ func ExampleTracker_Close_epochChange() {
 // retained and reported.
 func TestTrackerMultipleEpochsReleased(t *testing.T) {
 	ts0 := hlc.Timestamp{Logical: 1}
-	ts1 := hlc.Timestamp{WallTime: 1E9}
-	ts2 := hlc.Timestamp{WallTime: 2E9}
-	ts3 := hlc.Timestamp{WallTime: 3E9}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
+	ts3 := hlc.Timestamp{WallTime: 3e9}
 
 	ctx := context.Background()
 	tracker := NewTracker()

@@ -32,6 +32,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+    "github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // MaxUint is the maximum value of an uint.

@@ -228,13 +228,13 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	}
 	delta := goldDelta
 
-	for i, ns := range []int64{1, 1e9 - 1001, 1e9 - 1000, 1E9 - 1, 1E9, 1E9 + 1, 2E9 - 1} {
+	for i, ns := range []int64{1, 1e9 - 1001, 1e9 - 1000, 1e9 - 1, 1e9, 1e9 + 1, 2e9 - 1} {
 		oldDelta := delta
 		delta.AgeTo(ns)
 		if delta.LastUpdateNanos < ns {
 			t.Fatalf("%d: expected LastUpdateNanos < %d, got %d", i, ns, delta.LastUpdateNanos)
 		}
-		shouldAge := ns/1E9-oldDelta.LastUpdateNanos/1E9 > 0
+		shouldAge := ns/1e9-oldDelta.LastUpdateNanos/1e9 > 0
 		didAge := delta.IntentAge != oldDelta.IntentAge &&
 			delta.GCBytesAge != oldDelta.GCBytesAge
 		if shouldAge != didAge {
@@ -243,13 +243,13 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	}
 
 	expDelta := goldDelta
-	expDelta.LastUpdateNanos = 2E9 - 1
+	expDelta.LastUpdateNanos = 2e9 - 1
 	expDelta.GCBytesAge = 42
 	expDelta.IntentAge = 11
 	cmp(delta, expDelta)
 
-	delta.AgeTo(2E9)
-	expDelta.LastUpdateNanos = 2E9
+	delta.AgeTo(2e9)
+	expDelta.LastUpdateNanos = 2e9
 	expDelta.GCBytesAge += 42
 	expDelta.IntentAge += 11
 	cmp(delta, expDelta)
@@ -260,27 +260,27 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		tmpDelta := delta
 		expDelta := expDelta
 
-		tmpDelta.AgeTo(2E9 - 1)
-		expDelta.LastUpdateNanos = 2E9 - 1
+		tmpDelta.AgeTo(2e9 - 1)
+		expDelta.LastUpdateNanos = 2e9 - 1
 		expDelta.GCBytesAge -= 42
 		expDelta.IntentAge -= 11
 		cmp(tmpDelta, expDelta)
 	}
 
-	delta.AgeTo(3E9 - 1)
+	delta.AgeTo(3e9 - 1)
 	delta.Forward(5) // should be noop
-	expDelta.LastUpdateNanos = 3E9 - 1
+	expDelta.LastUpdateNanos = 3e9 - 1
 	cmp(delta, expDelta)
 
 	// Check that Add calls Forward appropriately.
 	mss := []enginepb.MVCCStats{goldMS, goldMS}
 
-	mss[0].LastUpdateNanos = 2E9 - 1
-	mss[1].LastUpdateNanos = 10E9 + 1
+	mss[0].LastUpdateNanos = 2e9 - 1
+	mss[1].LastUpdateNanos = 10e9 + 1
 
 	expMS := goldMS
 	expMS.Add(goldMS)
-	expMS.LastUpdateNanos = 10E9 + 1
+	expMS.LastUpdateNanos = 10e9 + 1
 	expMS.IntentAge += 9  // from aging 9 ticks from 2E9-1 to 10E9+1
 	expMS.GCBytesAge += 9 // ditto
 
@@ -295,9 +295,9 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	neg.Subtract(goldMS)
 	exp := neg
 
-	neg.AgeTo(2E9)
+	neg.AgeTo(2e9)
 
-	exp.LastUpdateNanos = 2E9
+	exp.LastUpdateNanos = 2e9
 	exp.GCBytesAge = -3
 	exp.IntentAge = -3
 	cmp(neg, exp)
@@ -5505,9 +5505,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			ms := &enginepb.MVCCStats{}
 
 			bytes := []byte("value")
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
-			ts3 := hlc.Timestamp{WallTime: 3E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
+			ts3 := hlc.Timestamp{WallTime: 3e9}
 			val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
 			val2 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts2)
 			val3 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts3)
@@ -5618,8 +5618,8 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 			defer engine.Close()
 
 			s := "string"
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
 			val1 := mkVal(s, ts1)
 			val2 := mkVal(s, ts2)
 			valInline := mkVal(s, hlc.Timestamp{})
@@ -5665,8 +5665,8 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 			defer engine.Close()
 
 			bytes := []byte("value")
-			ts1 := hlc.Timestamp{WallTime: 1E9}
-			ts2 := hlc.Timestamp{WallTime: 2E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts2 := hlc.Timestamp{WallTime: 2e9}
 			key := roachpb.Key("a")
 			{
 				val1 := roachpb.MakeValueFromBytes(bytes)
@@ -5741,7 +5741,7 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			ts1 := hlc.Timestamp{WallTime: 1E9}
+			ts1 := hlc.Timestamp{WallTime: 1e9}
 
 			key := roachpb.Key("a")
 			value := roachpb.MakeValueFromString("first value")
@@ -5870,9 +5870,9 @@ func TestMVCCIntentHistory(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			ts0 := hlc.Timestamp{WallTime: 1E9}
-			ts1 := hlc.Timestamp{WallTime: 2 * 1E9}
-			ts2 := hlc.Timestamp{WallTime: 3 * 1E9}
+			ts0 := hlc.Timestamp{WallTime: 1e9}
+			ts1 := hlc.Timestamp{WallTime: 2 * 1e9}
+			ts2 := hlc.Timestamp{WallTime: 3 * 1e9}
 
 			key := roachpb.Key("a")
 			defaultValue := roachpb.MakeValueFromString("default")

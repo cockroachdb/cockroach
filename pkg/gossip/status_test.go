@@ -21,8 +21,8 @@ func TestGossipStatus(t *testing.T) {
 
 	ss := ServerStatus{
 		ConnStatus: []ConnStatus{
-			{NodeID: 1, Address: "localhost:1234", AgeNanos: 17E9},
-			{NodeID: 4, Address: "localhost:4567", AgeNanos: 18E9},
+			{NodeID: 1, Address: "localhost:1234", AgeNanos: 17e9},
+			{NodeID: 4, Address: "localhost:4567", AgeNanos: 18e9},
 		},
 		MaxConns: 3,
 		MetricSnap: MetricSnap{

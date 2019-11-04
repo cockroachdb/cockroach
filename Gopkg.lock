@@ -440,19 +440,27 @@
   version = "v1.2.3"
 
 [[projects]]
-  digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"
+  digest = "1:a44e537b3e080ff297315d166956dba9607f070644a89be78b59af6c54876b64"
   name = "github.com/cockroachdb/gostdlib"
   packages = [
     "cmd/gofmt",
     "go/format",
     "go/printer",
     "x/tools/cmd/goimports",
+    "x/tools/go/ast/astutil",
+    "x/tools/go/internal/packagesdriver",
+    "x/tools/go/packages",
     "x/tools/imports",
     "x/tools/internal/fastwalk",
+    "x/tools/internal/gopathwalk",
+    "x/tools/internal/imports",
+    "x/tools/internal/module",
+    "x/tools/internal/semver",
+    "x/tools/internal/span",
   ]
   pruneopts = "UT"
-  revision = "5ba2d4bf557f3a3d4518deb271dcf93244b39363"
-  version = "v1.11.0"
+  revision = "fbdd8f0abc9baea11b7bf52b6a19d5eab5e5af10"
+  version = "v1.13.0"
 
 [[projects]]
   branch = "master"
