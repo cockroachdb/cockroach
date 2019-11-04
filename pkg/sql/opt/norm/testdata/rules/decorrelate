@@ -3464,7 +3464,7 @@ project
            └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Multiple other conjuncts, including uncorrelated subquery (don't hoist).
-opt expect=HoistSelectSubquery
+opt expect=HoistSelectSubquery disable=InlineConstVar
 SELECT *
 FROM a
 WHERE k=10 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i AND (SELECT x FROM xy LIMIT 1) = 100

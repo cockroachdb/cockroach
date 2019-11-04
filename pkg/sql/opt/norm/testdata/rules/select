@@ -155,9 +155,9 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── (i IS NOT NULL) AND (i = 3) [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
       ├── (f > 5.0) AND (f < 15.0) [type=bool, outer=(3), constraints=(/3: [/5.000000000000001 - /14.999999999999998]; tight)]
-      └── (s >= 'bar') AND (s <= 'foo') [type=bool, outer=(4), constraints=(/4: [/'bar' - /'foo']; tight)]
+      ├── (s >= 'bar') AND (s <= 'foo') [type=bool, outer=(4), constraints=(/4: [/'bar' - /'foo']; tight)]
+      └── i = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
 
 opt expect=ConsolidateSelectFilters
 SELECT * FROM a WHERE i IS NULL AND i IS DISTINCT FROM 5
@@ -173,7 +173,7 @@ select
  └── filters
       └── (i IS NULL) AND (i IS DISTINCT FROM 5) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
 
-opt expect=ConsolidateSelectFilters
+opt expect=ConsolidateSelectFilters disable=InlineConstVar
 SELECT * FROM a WHERE s LIKE 'a%' AND s SIMILAR TO 'a_' AND s = 'aa'
 ----
 select
@@ -226,7 +226,7 @@ inner-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters
- │         └── ((a.k = 5) AND (a.k > 1)) AND (a.k < 10) [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │         └── a.k = 5 [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  ├── select
  │    ├── columns: e.k:6(int!null) e.i:7(int) t:8(timestamp) tz:9(timestamptz) d:10(date)
  │    ├── cardinality: [0 - 8]
@@ -313,7 +313,7 @@ inner-join (hash)
  └── filters (true)
 
 # Regression test for #42035.
-opt expect=ConsolidateSelectFilters
+opt expect=ConsolidateSelectFilters disable=InlineConstVar
 SELECT * FROM
       (VALUES ('x', 'x'), ('y', 'y')) AS vab (a, b)
     JOIN
@@ -1383,3 +1383,77 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
+
+# --------------------------------------------------
+# InlineConstVar
+# --------------------------------------------------
+
+opt expect=InlineConstVar
+SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4, 5)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan b
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+
+opt expect=InlineConstVar
+SELECT k FROM b WHERE i=8 AND 3 = MOD(i, 5)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan b
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i = 8 [type=bool, outer=(2), constraints=(/2: [/8 - /8]; tight), fd=()-->(2)]
+
+opt expect=InlineConstVar
+SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4)
+----
+values
+ ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Case that requires multiple iterations to fully inline.
+opt expect=InlineConstVar
+SELECT * FROM xy WHERE x=y AND y=4 AND x IN (1, 2, 3, 4)
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/4 - /4]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
+ └── filters
+      └── y = 4 [type=bool, outer=(2), constraints=(/2: [/4 - /4]; tight), fd=()-->(2)]
+
+opt expect=InlineConstVar
+SELECT * FROM xy WHERE x=y AND y=4 AND x=3
+----
+values
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
