@@ -66,7 +66,7 @@ type Settings struct {
 	Manual atomic.Value // bool
 
 	// !!! getting rid of this
-	Version ExposedClusterVersion
+	// !!! Version ExposedClusterVersion
 	// Versions describing the range supported by this binary.
 	binaryMinSupportedVersion roachpb.Version
 	binaryMaxSupportedVersion roachpb.Version
@@ -166,41 +166,41 @@ var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
 	},
 )
 
-// InitializeVersion initializes the Version field of this setting. Before this
-// method has been called, usage of the Version field is illegal and leads to a
-// fatal error.
-func (s *Settings) InitializeVersion(ctx context.Context, v roachpb.Version) error {
-	if err := Version.Initialize(ctx, v, s); err != nil {
-		return err
-	}
+//// InitializeVersion initializes the Version field of this setting. Before this
+//// method has been called, usage of the Version field is illegal and leads to a
+//// fatal error.
+//func (s *Settings) InitializeVersion(ctx context.Context, v roachpb.Version) error {
+//	if err := Version.Initialize(ctx, v, s); err != nil {
+//		return err
+//	}
+//
+//	// !!!
+//	//b, err := protoutil.Marshal(&cv)
+//	//if err != nil {
+//	//	return err
+//	//}
+//	//
+//	//// Note that we don't call `updater.ResetRemaining()`.
+//	//updater := settings.NewUpdater(&s.SV)
+//	//if err := updater.Set(KeyVersionSetting, string(b), Version.Typ()); err != nil {
+//	//	return err
+//	//}
+//
+//	// !!! delete this once s.Version goes away. In fact, get rid of this method on the Settings.
+//	cv := ClusterVersion{Version: v}
+//	s.Version.baseVersion.Store(&cv)
+//	return nil
+//}
 
-	// !!!
-	//b, err := protoutil.Marshal(&cv)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//// Note that we don't call `updater.ResetRemaining()`.
-	//updater := settings.NewUpdater(&s.SV)
-	//if err := updater.Set(KeyVersionSetting, string(b), Version.Typ()); err != nil {
-	//	return err
-	//}
-
-	// !!! delete this once s.Version goes away. In fact, get rid of this method on the Settings.
-	cv := ClusterVersion{Version: v}
-	s.Version.baseVersion.Store(&cv)
-	return nil
-}
-
-// An ExposedClusterVersion exposes a cluster-wide minimum version which is
-// assumed to be supported by all nodes. This in turn allows features which are
-// incompatible with older versions to be used safely.
-type ExposedClusterVersion struct {
-	// baseVersion track the value from Values, but after it has been written to
-	// all the local engines.
-	baseVersion atomic.Value // stores *ClusterVersion
-	// !!! cb          func(ClusterVersion)
-}
+//// An ExposedClusterVersion exposes a cluster-wide minimum version which is
+//// assumed to be supported by all nodes. This in turn allows features which are
+//// incompatible with older versions to be used safely.
+//type ExposedClusterVersion struct {
+//	// baseVersion track the value from Values, but after it has been written to
+//	// all the local engines.
+//	baseVersion atomic.Value // stores *ClusterVersion
+//	// !!! cb          func(ClusterVersion)
+//}
 
 // !!!
 //// IsInitialized returns true if the cluster version has been initialized and is
@@ -270,9 +270,14 @@ func MakeTestingClusterSettings() *Settings {
 func MakeTestingClusterSettingsWithVersion(minVersion, serverVersion roachpb.Version) *Settings {
 	st := MakeClusterSettings(minVersion, serverVersion)
 	// Initialize with all features enabled.
-	if err := st.InitializeVersion(context.TODO(), serverVersion); err != nil {
+	if err := Version.Initialize(context.TODO(), serverVersion, st); err != nil {
 		log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
 	}
+	// !!!
+	//// Initialize with all features enabled.
+	//if err := st.InitializeVersion(context.TODO(), serverVersion); err != nil {
+	//	log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
+	//}
 	return st
 }
 
@@ -300,28 +305,28 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 	s.Tracer = tracing.NewTracer()
 	s.Tracer.Configure(sv)
 
-	// !!! get rid of this once s.Version goes away
-	Version.SetOnChange(sv, func() {
-		ctx := context.Background()
-		proto, err := Version.Decode([]byte(Version.Get(sv)))
-		if err != nil {
-			log.Fatal(ctx, err)
-		}
-		clusterVersion := proto.(ClusterVersion)
-		if (clusterVersion == ClusterVersion{}) {
-			// Expected the version to be initialized by the time this callback is
-			// called.
-			log.Fatal(ctx, "unexpected empty version")
-		}
-
-		// !!!
-		//// Call callback before exposing the new version to callers of
-		//// IsActive() and Version().
-		//if s.Version.cb != nil {
-		//	s.Version.cb(clusterVersion)
-		//}
-		s.Version.baseVersion.Store(&clusterVersion)
-	})
+	//// !!! get rid of this once s.Version goes away
+	//Version.SetOnChange(sv, func() {
+	//	ctx := context.Background()
+	//	proto, err := Version.Decode([]byte(Version.Get(sv)))
+	//	if err != nil {
+	//		log.Fatal(ctx, err)
+	//	}
+	//	clusterVersion := proto.(ClusterVersion)
+	//	if (clusterVersion == ClusterVersion{}) {
+	//		// Expected the version to be initialized by the time this callback is
+	//		// called.
+	//		log.Fatal(ctx, "unexpected empty version")
+	//	}
+	//
+	//	// !!!
+	//	//// Call callback before exposing the new version to callers of
+	//	//// IsActive() and Version().
+	//	//if s.Version.cb != nil {
+	//	//	s.Version.cb(clusterVersion)
+	//	//}
+	//	s.Version.baseVersion.Store(&clusterVersion)
+	//})
 
 	s.Initialized = true
 

@@ -353,9 +353,13 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := n.storeCfg.Settings.InitializeVersion(ctx, cv.Version); err != nil {
-		return errors.Wrap(err, "while initializing cluster version")
+	if err := cluster.Version.Initialize(ctx, cv.Version, n.storeCfg.Settings); err != nil {
+		return err
 	}
+	// !!!
+	//if err := n.storeCfg.Settings.InitializeVersion(ctx, cv.Version); err != nil {
+	//	return errors.Wrap(err, "while initializing cluster version")
+	//}
 
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to

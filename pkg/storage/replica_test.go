@@ -230,9 +230,13 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			cv); err != nil {
 			t.Fatal(err)
 		}
-		if err := cfg.Settings.InitializeVersion(ctx, cv.Version); err != nil {
+		if err := cluster.Version.Initialize(ctx, cv.Version, cfg.Settings); err != nil {
 			t.Fatal(err)
 		}
+		// !!!
+		//if err := cfg.Settings.InitializeVersion(ctx, cv.Version); err != nil {
+		//	t.Fatal(err)
+		//}
 		tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
 		factory.setStore(tc.store)
