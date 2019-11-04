@@ -866,7 +866,6 @@ func inspectEngines(
 	_ cluster.ClusterVersion,
 	_ error,
 ) {
-	log.Infof(ctx, "!!! inspectEngines with limits: %s->%s", minVersion, serverVersion)
 	for _, engine := range engines {
 		storeIdent, err := storage.ReadStoreIdent(ctx, engine)
 		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
@@ -1328,7 +1327,6 @@ func (s *Server) Start(ctx context.Context) error {
 		ctx, s.engines,
 		cluster.Version.BinaryMinSupportedVersion(s.cfg.Settings),
 		cluster.Version.BinaryVersion(s.cfg.Settings),
-		// !!! s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
@@ -1452,12 +1450,10 @@ func (s *Server) Start(ctx context.Context) error {
 		ctx, s.engines,
 		cluster.Version.BinaryMinSupportedVersion(s.cfg.Settings),
 		cluster.Version.BinaryVersion(s.cfg.Settings),
-		// !!! s.cfg.Settings.BinaryMinSupportedVersion(), s.cfg.Settings.BinaryVersion(),
 		&s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
-	log.Infof(ctx, "!!! inspecting the engines returns version: %s", cv)
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current
 	// instance of the node can use. We do not use startTime because it is lower

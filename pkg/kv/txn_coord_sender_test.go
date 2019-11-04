@@ -806,19 +806,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				return reply, pErr
 			}
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-			// !!!
-			//st := cluster.MakeClusterSettings()
-			//st.InitializeVersion(
-			//	cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
-			//	cluster.BinaryMinimumSupportedVersion,
-			//	cluster.BinaryServerVersion)
-
 			tsf := NewTxnCoordSenderFactory(
 				TxnCoordSenderFactoryConfig{
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
-					// !!! Settings:   st,
 				},
 				senderFn,
 			)

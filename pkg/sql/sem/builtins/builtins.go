@@ -2914,14 +2914,6 @@ may increase either contention or retry errors, or both.`,
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				v := cluster.Version.BinaryVersion(ctx.Settings).String()
-				// !!!
-				// v := "unknown"
-				//// TODO(tschottdorf): we should always have a Settings, but there
-				//// are many random places that create an ad-hoc EvalContext that
-				//// they only partially populate.
-				//if st := ctx.Settings; st != nil {
-				//	v = st.BinaryVersion().String()
-				//}
 				return tree.NewDString(v), nil
 			},
 			Info: "Returns the version of CockroachDB this node is running.",
