@@ -80,7 +80,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 
 	entryAt := func(i int) ctpb.Entry {
 		return ctpb.Entry{
-			ClosedTimestamp: hlc.Timestamp{WallTime: int64(i) * 1E9},
+			ClosedTimestamp: hlc.Timestamp{WallTime: int64(i) * 1e9},
 			Epoch:           ctpb.Epoch(i),
 			MLAI: map[roachpb.RangeID]ctpb.LAI{
 				roachpb.RangeID(i): ctpb.LAI(10 * i),

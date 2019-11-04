@@ -2860,7 +2860,7 @@ func MVCCGarbageCollect(
 	var count int64
 	defer func(begin time.Time) {
 		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
-			len(keys), float64(len(keys))*1E9/float64(timeutil.Since(begin)), count)
+			len(keys), float64(len(keys))*1e9/float64(timeutil.Since(begin)), count)
 	}(timeutil.Now())
 
 	// Iterate through specified GC keys.
@@ -3190,7 +3190,7 @@ func ComputeStatsGo(
 					ms.LiveCount++
 				} else {
 					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
-					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
 				}
 				ms.KeyBytes += metaKeySize
 				ms.ValBytes += metaValSize
@@ -3214,12 +3214,12 @@ func ComputeStatsGo(
 					ms.LiveBytes += totalBytes
 				} else {
 					// First value is deleted, so it's GC'able; add key & value bytes to age stat.
-					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
 				}
 				if meta.Txn != nil {
 					ms.IntentBytes += totalBytes
 					ms.IntentCount++
-					ms.IntentAge += nowNanos/1E9 - meta.Timestamp.WallTime/1E9
+					ms.IntentAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
 				}
 				if meta.KeyBytes != MVCCVersionTimestampSize {
 					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d", MVCCVersionTimestampSize, meta.KeyBytes)
@@ -3233,11 +3233,11 @@ func ComputeStatsGo(
 				isTombstone := len(unsafeValue) == 0
 				if isTombstone {
 					// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
-					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - unsafeKey.Timestamp.WallTime/1E9)
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - unsafeKey.Timestamp.WallTime/1e9)
 				} else {
 					// The kv pair is an overwritten value, so it became non-live when the closest more
 					// recent value was written.
-					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - accrueGCAgeNanos/1E9)
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - accrueGCAgeNanos/1e9)
 				}
 				// Update for the next version we may end up looking at.
 				accrueGCAgeNanos = unsafeKey.Timestamp.WallTime

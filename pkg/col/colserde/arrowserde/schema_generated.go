@@ -5,6 +5,7 @@ package arrowserde
 import flatbuffers "github.com/google/flatbuffers/go"
 
 type MetadataVersion = int16
+
 const (
 	/// 0.1.0
 	MetadataVersionV1 MetadataVersion = 0
@@ -17,130 +18,137 @@ const (
 )
 
 var EnumNamesMetadataVersion = map[MetadataVersion]string{
-	MetadataVersionV1:"V1",
-	MetadataVersionV2:"V2",
-	MetadataVersionV3:"V3",
-	MetadataVersionV4:"V4",
+	MetadataVersionV1: "V1",
+	MetadataVersionV2: "V2",
+	MetadataVersionV3: "V3",
+	MetadataVersionV4: "V4",
 }
 
 type UnionMode = int16
+
 const (
 	UnionModeSparse UnionMode = 0
-	UnionModeDense UnionMode = 1
+	UnionModeDense  UnionMode = 1
 )
 
 var EnumNamesUnionMode = map[UnionMode]string{
-	UnionModeSparse:"Sparse",
-	UnionModeDense:"Dense",
+	UnionModeSparse: "Sparse",
+	UnionModeDense:  "Dense",
 }
 
 type Precision = int16
+
 const (
-	PrecisionHALF Precision = 0
+	PrecisionHALF   Precision = 0
 	PrecisionSINGLE Precision = 1
 	PrecisionDOUBLE Precision = 2
 )
 
 var EnumNamesPrecision = map[Precision]string{
-	PrecisionHALF:"HALF",
-	PrecisionSINGLE:"SINGLE",
-	PrecisionDOUBLE:"DOUBLE",
+	PrecisionHALF:   "HALF",
+	PrecisionSINGLE: "SINGLE",
+	PrecisionDOUBLE: "DOUBLE",
 }
 
 type DateUnit = int16
+
 const (
-	DateUnitDAY DateUnit = 0
+	DateUnitDAY         DateUnit = 0
 	DateUnitMILLISECOND DateUnit = 1
 )
 
 var EnumNamesDateUnit = map[DateUnit]string{
-	DateUnitDAY:"DAY",
-	DateUnitMILLISECOND:"MILLISECOND",
+	DateUnitDAY:         "DAY",
+	DateUnitMILLISECOND: "MILLISECOND",
 }
 
 type TimeUnit = int16
+
 const (
-	TimeUnitSECOND TimeUnit = 0
+	TimeUnitSECOND      TimeUnit = 0
 	TimeUnitMILLISECOND TimeUnit = 1
 	TimeUnitMICROSECOND TimeUnit = 2
-	TimeUnitNANOSECOND TimeUnit = 3
+	TimeUnitNANOSECOND  TimeUnit = 3
 )
 
 var EnumNamesTimeUnit = map[TimeUnit]string{
-	TimeUnitSECOND:"SECOND",
-	TimeUnitMILLISECOND:"MILLISECOND",
-	TimeUnitMICROSECOND:"MICROSECOND",
-	TimeUnitNANOSECOND:"NANOSECOND",
+	TimeUnitSECOND:      "SECOND",
+	TimeUnitMILLISECOND: "MILLISECOND",
+	TimeUnitMICROSECOND: "MICROSECOND",
+	TimeUnitNANOSECOND:  "NANOSECOND",
 }
 
 type IntervalUnit = int16
+
 const (
 	IntervalUnitYEAR_MONTH IntervalUnit = 0
-	IntervalUnitDAY_TIME IntervalUnit = 1
+	IntervalUnitDAY_TIME   IntervalUnit = 1
 )
 
 var EnumNamesIntervalUnit = map[IntervalUnit]string{
-	IntervalUnitYEAR_MONTH:"YEAR_MONTH",
-	IntervalUnitDAY_TIME:"DAY_TIME",
+	IntervalUnitYEAR_MONTH: "YEAR_MONTH",
+	IntervalUnitDAY_TIME:   "DAY_TIME",
 }
 
 /// ----------------------------------------------------------------------
 /// Top-level Type value, enabling extensible type-specific metadata. We can
 /// add new logical types to Type without breaking backwards compatibility
 type Type = byte
+
 const (
-	TypeNONE Type = 0
-	TypeNull Type = 1
-	TypeInt Type = 2
-	TypeFloatingPoint Type = 3
-	TypeBinary Type = 4
-	TypeUtf8 Type = 5
-	TypeBool Type = 6
-	TypeDecimal Type = 7
-	TypeDate Type = 8
-	TypeTime Type = 9
-	TypeTimestamp Type = 10
-	TypeInterval Type = 11
-	TypeList Type = 12
-	TypeStruct_ Type = 13
-	TypeUnion Type = 14
+	TypeNONE            Type = 0
+	TypeNull            Type = 1
+	TypeInt             Type = 2
+	TypeFloatingPoint   Type = 3
+	TypeBinary          Type = 4
+	TypeUtf8            Type = 5
+	TypeBool            Type = 6
+	TypeDecimal         Type = 7
+	TypeDate            Type = 8
+	TypeTime            Type = 9
+	TypeTimestamp       Type = 10
+	TypeInterval        Type = 11
+	TypeList            Type = 12
+	TypeStruct_         Type = 13
+	TypeUnion           Type = 14
 	TypeFixedSizeBinary Type = 15
-	TypeFixedSizeList Type = 16
-	TypeMap Type = 17
+	TypeFixedSizeList   Type = 16
+	TypeMap             Type = 17
 )
 
 var EnumNamesType = map[Type]string{
-	TypeNONE:"NONE",
-	TypeNull:"Null",
-	TypeInt:"Int",
-	TypeFloatingPoint:"FloatingPoint",
-	TypeBinary:"Binary",
-	TypeUtf8:"Utf8",
-	TypeBool:"Bool",
-	TypeDecimal:"Decimal",
-	TypeDate:"Date",
-	TypeTime:"Time",
-	TypeTimestamp:"Timestamp",
-	TypeInterval:"Interval",
-	TypeList:"List",
-	TypeStruct_:"Struct_",
-	TypeUnion:"Union",
-	TypeFixedSizeBinary:"FixedSizeBinary",
-	TypeFixedSizeList:"FixedSizeList",
-	TypeMap:"Map",
+	TypeNONE:            "NONE",
+	TypeNull:            "Null",
+	TypeInt:             "Int",
+	TypeFloatingPoint:   "FloatingPoint",
+	TypeBinary:          "Binary",
+	TypeUtf8:            "Utf8",
+	TypeBool:            "Bool",
+	TypeDecimal:         "Decimal",
+	TypeDate:            "Date",
+	TypeTime:            "Time",
+	TypeTimestamp:       "Timestamp",
+	TypeInterval:        "Interval",
+	TypeList:            "List",
+	TypeStruct_:         "Struct_",
+	TypeUnion:           "Union",
+	TypeFixedSizeBinary: "FixedSizeBinary",
+	TypeFixedSizeList:   "FixedSizeList",
+	TypeMap:             "Map",
 }
 
 /// ----------------------------------------------------------------------
 /// Endianness of the platform producing the data
 type Endianness = int16
+
 const (
 	EndiannessLittle Endianness = 0
-	EndiannessBig Endianness = 1
+	EndiannessBig    Endianness = 1
 )
 
 var EnumNamesEndianness = map[Endianness]string{
-	EndiannessLittle:"Little",
-	EndiannessBig:"Big",
+	EndiannessLittle: "Little",
+	EndiannessBig:    "Big",
 }
 
 /// These are stored in the flatbuffer in the Type union below
@@ -170,6 +178,7 @@ func NullStart(builder *flatbuffers.Builder) {
 func NullEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// A Struct_ in the flatbuffer metadata is the same as an Arrow Struct
 /// (according to the physical memory layout). We used Struct_ here as
 /// Struct is a reserved word in Flatbuffers
@@ -199,6 +208,7 @@ func Struct_Start(builder *flatbuffers.Builder) {
 func Struct_End(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type List struct {
 	_tab flatbuffers.Table
 }
@@ -225,6 +235,7 @@ func ListStart(builder *flatbuffers.Builder) {
 func ListEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type FixedSizeList struct {
 	_tab flatbuffers.Table
 }
@@ -268,6 +279,7 @@ func FixedSizeListAddListSize(builder *flatbuffers.Builder, listSize int32) {
 func FixedSizeListEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// A Map is a logical nested type that is represented as
 ///
 /// List<entry: Struct<key: K, value: V>>
@@ -335,6 +347,7 @@ func MapAddKeysSorted(builder *flatbuffers.Builder, keysSorted byte) {
 func MapEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// A union is a complex type with children in Field
 /// By default ids in the type vector refer to the offsets in the children
 /// optionally typeIds provides an indirection between the child offset and the type id
@@ -403,6 +416,7 @@ func UnionStartTypeIdsVector(builder *flatbuffers.Builder, numElems int) flatbuf
 func UnionEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Int struct {
 	_tab flatbuffers.Table
 }
@@ -459,6 +473,7 @@ func IntAddIsSigned(builder *flatbuffers.Builder, isSigned byte) {
 func IntEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type FloatingPoint struct {
 	_tab flatbuffers.Table
 }
@@ -500,6 +515,7 @@ func FloatingPointAddPrecision(builder *flatbuffers.Builder, precision int16) {
 func FloatingPointEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// Unicode with UTF-8 encoding
 type Utf8 struct {
 	_tab flatbuffers.Table
@@ -527,6 +543,7 @@ func Utf8Start(builder *flatbuffers.Builder) {
 func Utf8End(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Binary struct {
 	_tab flatbuffers.Table
 }
@@ -553,6 +570,7 @@ func BinaryStart(builder *flatbuffers.Builder) {
 func BinaryEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type FixedSizeBinary struct {
 	_tab flatbuffers.Table
 }
@@ -596,6 +614,7 @@ func FixedSizeBinaryAddByteWidth(builder *flatbuffers.Builder, byteWidth int32) 
 func FixedSizeBinaryEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Bool struct {
 	_tab flatbuffers.Table
 }
@@ -622,6 +641,7 @@ func BoolStart(builder *flatbuffers.Builder) {
 func BoolEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Decimal struct {
 	_tab flatbuffers.Table
 }
@@ -682,6 +702,7 @@ func DecimalAddScale(builder *flatbuffers.Builder, scale int32) {
 func DecimalEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// Date is either a 32-bit or 64-bit type representing elapsed time since UNIX
 /// epoch (1970-01-01), stored in either of two units:
 ///
@@ -729,6 +750,7 @@ func DateAddUnit(builder *flatbuffers.Builder, unit int16) {
 func DateEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// Time type. The physical storage type depends on the unit
 /// - SECOND and MILLISECOND: 32 bits
 /// - MICROSECOND and NANOSECOND: 64 bits
@@ -788,6 +810,7 @@ func TimeAddBitWidth(builder *flatbuffers.Builder, bitWidth int32) {
 func TimeEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// Time elapsed from the Unix epoch, 00:00:00.000 on 1 January 1970, excluding
 /// leap seconds, as a 64-bit integer. Note that UNIX time does not include
 /// leap seconds.
@@ -886,6 +909,7 @@ func TimestampAddTimezone(builder *flatbuffers.Builder, timezone flatbuffers.UOf
 func TimestampEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 type Interval struct {
 	_tab flatbuffers.Table
 }
@@ -927,6 +951,7 @@ func IntervalAddUnit(builder *flatbuffers.Builder, unit int16) {
 func IntervalEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// ----------------------------------------------------------------------
 /// user defined key value pairs to add custom metadata to arrow
 /// key namespacing is the responsibility of the user
@@ -978,6 +1003,7 @@ func KeyValueAddValue(builder *flatbuffers.Builder, value flatbuffers.UOffsetT) 
 func KeyValueEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// ----------------------------------------------------------------------
 /// Dictionary encoding metadata
 type DictionaryEncoding struct {
@@ -1070,6 +1096,7 @@ func DictionaryEncodingAddIsOrdered(builder *flatbuffers.Builder, isOrdered byte
 func DictionaryEncodingEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// ----------------------------------------------------------------------
 /// A field represents a named column in a record / row batch or child of a
 /// nested type.
@@ -1226,6 +1253,7 @@ func FieldStartCustomMetadataVector(
 func FieldEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
+
 /// ----------------------------------------------------------------------
 /// A Buffer represents a single contiguous memory segment
 type Buffer struct {
@@ -1246,6 +1274,7 @@ func (rcv *Buffer) Table() flatbuffers.Table {
 func (rcv *Buffer) Offset() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(0))
 }
+
 /// The relative offset into the shared memory page where the bytes for this
 /// buffer starts
 func (rcv *Buffer) MutateOffset(n int64) bool {
@@ -1257,6 +1286,7 @@ func (rcv *Buffer) MutateOffset(n int64) bool {
 func (rcv *Buffer) Length() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(8))
 }
+
 /// The absolute length (in bytes) of the memory buffer. The memory is found
 /// from offset (inclusive) to offset + length (non-inclusive).
 func (rcv *Buffer) MutateLength(n int64) bool {
@@ -1269,6 +1299,7 @@ func CreateBuffer(builder *flatbuffers.Builder, offset int64, length int64) flat
 	builder.PrependInt64(offset)
 	return builder.Offset()
 }
+
 /// ----------------------------------------------------------------------
 /// A Schema describes the columns in a row batch
 type Schema struct {

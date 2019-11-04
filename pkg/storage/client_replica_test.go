@@ -1111,7 +1111,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	preRestartLease, _ := mtc.stores[0].LookupReplica(key).GetLease()
 
-	mtc.manualClock.Increment(1E9)
+	mtc.manualClock.Increment(1e9)
 
 	// Restart the mtc. Before we do that, we're installing a callback used to
 	// assert that a new lease has been requested. The callback is installed

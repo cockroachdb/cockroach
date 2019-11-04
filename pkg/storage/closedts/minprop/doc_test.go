@@ -48,7 +48,7 @@ func Example() {
 	fmt.Println(tracker)
 
 	fmt.Println("The system closes out a timestamp (registering 1000 as the next timestamp to close out).")
-	closed1, mlai1, _ := tracker.Close(hlc.Timestamp{WallTime: 1E9}, ep1)
+	closed1, mlai1, _ := tracker.Close(hlc.Timestamp{WallTime: 1e9}, ep1)
 	fmt.Println("No problem: nothing is tracked on the left side; returns:", closed1, "and", mlaiString(mlai1))
 	fmt.Println("Note how the items on the right have moved to the left, as they are relevant for the")
 	fmt.Println("next call to Close.")
@@ -56,7 +56,7 @@ func Example() {
 
 	fmt.Println("Nothing happens for a while until the system tries to close out the next timestamp.")
 	fmt.Println("However, the very first proposal is still tracked and blocks progress.")
-	closed2, mlai2, _ := tracker.Close(hlc.Timestamp{WallTime: 2E9}, ep1)
+	closed2, mlai2, _ := tracker.Close(hlc.Timestamp{WallTime: 2e9}, ep1)
 	fmt.Println("The call returns a no-op in the form", closed2, mlaiString(mlai2), ".")
 	fmt.Println(tracker)
 
@@ -72,7 +72,7 @@ func Example() {
 	done1(ctx, ep1, 12, 79)
 	fmt.Println(tracker)
 
-	closed3, mlai3, _ := tracker.Close(hlc.Timestamp{WallTime: 3E9}, ep1)
+	closed3, mlai3, _ := tracker.Close(hlc.Timestamp{WallTime: 3e9}, ep1)
 	fmt.Println("The next call to Close() is successful and returns:", closed3, "and", mlaiString(mlai3))
 	fmt.Println(tracker)
 

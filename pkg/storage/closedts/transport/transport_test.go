@@ -139,7 +139,7 @@ func TestTransportClientReceivesEntries(t *testing.T) {
 
 	// Now the producer (to which the server should maintain a subscription for this client, and
 	// notifications from which it should relay) emits an Entry.
-	e1 := ctpb.Entry{ClosedTimestamp: hlc.Timestamp{WallTime: 1E9}, Epoch: 12, MLAI: map[roachpb.RangeID]ctpb.LAI{12: 7}}
+	e1 := ctpb.Entry{ClosedTimestamp: hlc.Timestamp{WallTime: 1e9}, Epoch: 12, MLAI: map[roachpb.RangeID]ctpb.LAI{12: 7}}
 	container.Producer.sendAll(e1)
 
 	// The client should see this entry soon thereafter. it responds with an empty
@@ -156,7 +156,7 @@ func TestTransportClientReceivesEntries(t *testing.T) {
 	// And again, but only after Request() is called (which should be reflected in the transcript).
 	const rangeID = 7
 	container.Clients.Request(nodeID, rangeID)
-	e2 := ctpb.Entry{ClosedTimestamp: hlc.Timestamp{WallTime: 2E9}, Epoch: 13, MLAI: map[roachpb.RangeID]ctpb.LAI{13: 8}}
+	e2 := ctpb.Entry{ClosedTimestamp: hlc.Timestamp{WallTime: 2e9}, Epoch: 13, MLAI: map[roachpb.RangeID]ctpb.LAI{13: 8}}
 	container.Producer.sendAll(e2)
 	testutils.SucceedsSoon(t, func() error {
 		expectedTranscript := []interface{}{
