@@ -45,3 +45,29 @@ explain
       │    └── key: (1-4)
       └── filters
            └── val = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+
+# Regression test for #42147.
+exec-ddl
+CREATE TABLE tab42147 (
+  id INT8 NOT NULL,
+  locality STRING,
+  CONSTRAINT pk PRIMARY KEY (locality ASC, id ASC),
+  CONSTRAINT id UNIQUE (id ASC)
+)
+  PARTITION BY LIST (locality)
+    (
+      PARTITION uswest VALUES IN ('us-west'),
+      PARTITION uscentral VALUES IN ('us-central'),
+      PARTITION asiasoutheast VALUES IN ('asia-southeast')
+    )
+----
+
+opt
+SELECT id FROM tab42147 WHERE id = 1
+----
+scan tab42147@id
+ ├── columns: id:1(int!null)
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)
