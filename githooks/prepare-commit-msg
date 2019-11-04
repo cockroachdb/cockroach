@@ -126,9 +126,12 @@ $cchar\\
 $cchar Things to keep in mind for release notes:\\
 $cchar   - past tense (this was changed...) or present tense (now possible to...)\\
 $cchar   - what has changed: narrow down the product area / feature\\
+$cchar     Note: for bug fixes, indicate since when the bug was present\\
 $cchar   - show what changed: how a user can see the change for themselves\\
 $cchar     Note: for bug fixes, show the symptom(s) to recognize the bug\\
 $cchar   - why the change: who does this impact, how and why should they care\\
+$cchar\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/73072807/Release+notes\\
 $cchar\\
 $cchar Example release notes:\\
 $cchar\\
@@ -139,7 +142,7 @@ $cchar   or more.\\
 $cchar\\
 $cchar   Release note (bug fix): The system.replication_stats report no longer\\
 $cchar   erroneously considers some ranges belonging to table partitions to be\\
-$cchar   over-replicated.\\
+$cchar   over-replicated. This bug was present since version 19.2.\\
 $cchar\\
 $cchar Categories for release notes:\\
 $cchar   - cli change\\
