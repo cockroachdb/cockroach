@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 type mockEvalCtx struct {
@@ -231,6 +232,135 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					t.Errorf("expected AbortSpan declared: %t, but got spans\n%s", test.expDeclares, s)
 				}
 			})
+		}
+	})
+}
+
+// TestResolveIntentAfterPartialRollback checks that the ResolveIntent
+// and ResolveIntentRange properly propagate their IgnoredSeqNums
+// parameter to the MVCC layer and only commit writes at non-ignored
+// seqnums.
+func TestResolveIntentAfterPartialRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	k := roachpb.Key("a")
+	ts := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	endKey := roachpb.Key("z")
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(k),
+		EndKey:   roachpb.RKey(endKey),
+	}
+
+	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
+		db := engine.NewDefaultInMem()
+		defer db.Close()
+		batch := db.NewBatch()
+		defer batch.Close()
+
+		var v roachpb.Value
+		// Write a first value at key.
+		v.SetString("a")
+		txn.Sequence = 0
+		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+			t.Fatal(err)
+		}
+		// Write another value.
+		v.SetString("b")
+		txn.Sequence = 1
+		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+			t.Fatal(err)
+		}
+		if err := batch.Commit(true); err != nil {
+			t.Fatal(err)
+		}
+
+		// Partially revert the 2nd store above.
+		ignoredSeqNums := []enginepb.IgnoredSeqNumRange{{Start: 1, End: 1}}
+
+		h := roachpb.Header{
+			RangeID:   desc.RangeID,
+			Timestamp: ts,
+		}
+
+		var spans spanset.SpanSet
+		rbatch := db.NewBatch()
+		rbatch = spanset.NewBatch(rbatch, &spans)
+		defer rbatch.Close()
+
+		if !ranged {
+			// Resolve a point intent.
+			ri := roachpb.ResolveIntentRequest{
+				IntentTxn:      txn.TxnMeta,
+				Status:         roachpb.COMMITTED,
+				IgnoredSeqNums: ignoredSeqNums,
+			}
+			ri.Key = k
+
+			declareKeysResolveIntent(&desc, h, &ri, &spans)
+
+			if _, err := ResolveIntent(ctx, rbatch,
+				CommandArgs{
+					Header:  h,
+					EvalCtx: &mockEvalCtx{},
+					Args:    &ri,
+				},
+				&roachpb.ResolveIntentResponse{},
+			); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			// Resolve an intent range.
+			rir := roachpb.ResolveIntentRangeRequest{
+				IntentTxn:      txn.TxnMeta,
+				Status:         roachpb.COMMITTED,
+				IgnoredSeqNums: ignoredSeqNums,
+			}
+			rir.Key = k
+			rir.EndKey = endKey
+
+			declareKeysResolveIntentRange(&desc, h, &rir, &spans)
+
+			if _, err := ResolveIntentRange(ctx, rbatch,
+				CommandArgs{
+					Header:  h,
+					EvalCtx: &mockEvalCtx{},
+					Args:    &rir,
+					MaxKeys: 10,
+				},
+				&roachpb.ResolveIntentRangeResponse{},
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if err := rbatch.Commit(true); err != nil {
+			t.Fatal(err)
+		}
+
+		batch = db.NewBatch()
+		defer batch.Close()
+
+		// The second write has been rolled back; verify that the remaining
+		// value is from the first write.
+		res, i, err := engine.MVCCGet(ctx, batch, k, ts2, engine.MVCCGetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i != nil {
+			t.Errorf("%s: found intent, expected none: %+v", k, i)
+		}
+		if res == nil {
+			t.Errorf("%s: no value found, expected one", k)
+		} else {
+			s, err := res.GetBytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.Equal(t, "a", string(s), "at key %s", k)
 		}
 	})
 }

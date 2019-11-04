@@ -490,6 +490,7 @@ var nonZeroTxn = Transaction{
 	IntentSpans:             []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:          []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
 	CommitTimestampFixed:    true,
+	IgnoredSeqNums:          []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -550,6 +551,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.Sequence = txn.Sequence - 10
 	expTxn5.IntentSpans = nil
 	expTxn5.InFlightWrites = nil
+	expTxn5.IgnoredSeqNums = nil
 	expTxn5.WriteTooOld = false
 	expTxn5.CommitTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
@@ -636,6 +638,7 @@ func TestTransactionClone(t *testing.T) {
 	// listed below. If this test fails, please update the list below and/or
 	// Transaction.Clone().
 	expFields := []string{
+		"IgnoredSeqNums",
 		"InFlightWrites",
 		"InFlightWrites.Key",
 		"IntentSpans",
@@ -666,6 +669,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.CommitTimestampFixed = false
 	expTxn.IntentSpans = nil
 	expTxn.InFlightWrites = nil
+	expTxn.IgnoredSeqNums = nil
 	require.Equal(t, expTxn, txn)
 }
 
@@ -688,19 +692,25 @@ func TestTransactionRecordRoundtrips(t *testing.T) {
 	txn := nonZeroTxn
 	txnRecord := txn.AsRecord()
 	if err := zerofields.NoZeroField(txnRecord); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 	if !reflect.DeepEqual(txnRecord.TxnMeta, txn.TxnMeta) {
-		t.Fatalf("txnRecord.TxnMeta = %v, txn.TxnMeta = %v", txnRecord.TxnMeta, txn.TxnMeta)
+		t.Errorf("txnRecord.TxnMeta = %v, txn.TxnMeta = %v", txnRecord.TxnMeta, txn.TxnMeta)
 	}
 	if !reflect.DeepEqual(txnRecord.Status, txn.Status) {
-		t.Fatalf("txnRecord.Status = %v, txn.Status = %v", txnRecord.Status, txn.Status)
+		t.Errorf("txnRecord.Status = %v, txn.Status = %v", txnRecord.Status, txn.Status)
 	}
 	if !reflect.DeepEqual(txnRecord.LastHeartbeat, txn.LastHeartbeat) {
-		t.Fatalf("txnRecord.LastHeartbeat = %v, txn.LastHeartbeat = %v", txnRecord.LastHeartbeat, txn.LastHeartbeat)
+		t.Errorf("txnRecord.LastHeartbeat = %v, txn.LastHeartbeat = %v", txnRecord.LastHeartbeat, txn.LastHeartbeat)
 	}
 	if !reflect.DeepEqual(txnRecord.IntentSpans, txn.IntentSpans) {
-		t.Fatalf("txnRecord.IntentSpans = %v, txn.IntentSpans = %v", txnRecord.IntentSpans, txn.IntentSpans)
+		t.Errorf("txnRecord.IntentSpans = %v, txn.IntentSpans = %v", txnRecord.IntentSpans, txn.IntentSpans)
+	}
+	if !reflect.DeepEqual(txnRecord.InFlightWrites, txn.InFlightWrites) {
+		t.Errorf("txnRecord.InFlightWrites = %v, txn.InFlightWrites = %v", txnRecord.InFlightWrites, txn.InFlightWrites)
+	}
+	if !reflect.DeepEqual(txnRecord.IgnoredSeqNums, txn.IgnoredSeqNums) {
+		t.Errorf("txnRecord.IgnoredSeqNums = %v, txn.IgnoredSeqNums = %v", txnRecord.IgnoredSeqNums, txn.IgnoredSeqNums)
 	}
 
 	// Verify that converting through a Transaction message and back
@@ -708,7 +718,7 @@ func TestTransactionRecordRoundtrips(t *testing.T) {
 	txn2 := txnRecord.AsTransaction()
 	txnRecord2 := txn2.AsRecord()
 	if !reflect.DeepEqual(txnRecord, txnRecord2) {
-		t.Fatalf("txnRecord = %v, txnRecord2 = %v", txnRecord, txnRecord2)
+		t.Errorf("txnRecord = %v, txnRecord2 = %v", txnRecord, txnRecord2)
 	}
 
 	// Verify that encoded Transaction messages can be decoded as
@@ -722,7 +732,7 @@ func TestTransactionRecordRoundtrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(txnRecord, txnRecord3) {
-		t.Fatalf("txnRecord = %v, txnRecord3 = %v", txnRecord, txnRecord3)
+		t.Errorf("txnRecord = %v, txnRecord3 = %v", txnRecord, txnRecord3)
 	}
 
 	// Verify that encoded TransactionRecord messages can be decoded
@@ -736,7 +746,7 @@ func TestTransactionRecordRoundtrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(txn2, txn3) {
-		t.Fatalf("txn2 = %v, txn3 = %v", txn2, txn3)
+		t.Errorf("txn2 = %v, txn3 = %v", txn2, txn3)
 	}
 }
 
@@ -1875,5 +1885,24 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 				require.EqualError(t, err, test.err)
 			}
 		})
+	}
+}
+
+// TestAsIntents verifies that AsIntents propagates all the important
+// fields from a txn to each intent.
+func TestAsIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ts := hlc.Timestamp{WallTime: 1}
+	txn := MakeTransaction("hello", Key("k"), 0, ts, 0)
+
+	txn.Status = COMMITTED
+	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}
+
+	spans := []Span{{Key: Key("a"), EndKey: Key("b")}}
+	for _, intent := range AsIntents(spans, &txn) {
+		require.Equal(t, intent.Status, txn.Status)
+		require.Equal(t, intent.IgnoredSeqNums, txn.IgnoredSeqNums)
+		require.Equal(t, intent.Txn, txn.TxnMeta)
 	}
 }

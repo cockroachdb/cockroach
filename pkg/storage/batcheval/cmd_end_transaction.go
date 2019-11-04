@@ -36,11 +36,6 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// TxnAutoGC controls whether Transaction entries are automatically gc'ed upon
-// EndTxn if they only have local intents (which can be resolved synchronously
-// with EndTxn). Certain tests become simpler with this being turned off.
-var TxnAutoGC = true
-
 func init() {
 	RegisterReadWriteCommand(roachpb.EndTxn, declareKeysEndTxn, EndTxn)
 }
@@ -483,7 +478,7 @@ func resolveLocalIntents(
 				externalIntents = append(externalIntents, span)
 				return nil
 			}
-			intent := roachpb.Intent{Span: span, Txn: txn.TxnMeta, Status: txn.Status}
+			intent := roachpb.MakeIntent(txn, span)
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
@@ -567,7 +562,7 @@ func updateFinalizedTxn(
 	txn *roachpb.Transaction,
 	externalIntents []roachpb.Span,
 ) error {
-	if TxnAutoGC && len(externalIntents) == 0 {
+	if txnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
 		}
@@ -1131,4 +1126,17 @@ func changeReplicasTrigger(
 	}
 
 	return pd
+}
+
+// txnAutoGC controls whether Transaction entries are automatically gc'ed upon
+// EndTxn if they only have local intents (which can be resolved synchronously
+// with EndTxn). Certain tests become simpler with this being turned off.
+var txnAutoGC = true
+
+// TestingSetTxnAutoGC is used in tests to temporarily enable/disable
+// txnAutoGC.
+func TestingSetTxnAutoGC(to bool) func() {
+	prev := txnAutoGC
+	txnAutoGC = to
+	return func() { txnAutoGC = prev }
 }

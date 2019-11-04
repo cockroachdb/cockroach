@@ -48,9 +48,9 @@ run ok
 with t=A
   txn_advance    ts=124
   resolve_intent k=k
+  txn_remove
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000124,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000123,0 wto=false max=0,0
 data: "k"/0.000000124,0 -> /BYTES/v3
 
 # Write value4 with an old timestamp without txn...should get a write
@@ -63,3 +63,47 @@ cput k=k v=v4 cond=v3 ts=123
 data: "k"/0.000000124,1 -> /BYTES/v4
 data: "k"/0.000000124,0 -> /BYTES/v3
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000123,0 too old; wrote at 0.000000124,1
+
+# Reset for next test
+
+run ok
+clear_range k=k end=-k
+----
+>> at end:
+<no data>
+
+# From TxnCoordSenderRetries,
+# "multi-range batch with forwarded timestamp and cput and delete range"
+
+# First txn attempt
+
+run ok
+# Before txn start:
+put k=c v=value ts=1
+with t=A
+  txn_begin ts=2
+  txn_step
+  cput k=c v=cput cond=value
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000002,0 wto=false max=0,0
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,0 min=0,0 seq=1} ts=0.000000002,0 del=false klen=12 vlen=9
+data: "c"/0.000000002,0 -> /BYTES/cput
+data: "c"/0.000000001,0 -> /BYTES/value
+
+# Restart and retry cput. It should succeed.
+
+run trace ok
+with t=A
+  txn_restart ts=3
+  txn_step
+  cput k=c v=cput cond=value
+----
+>> txn_restart ts=3 t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000003,0 wto=false max=0,0
+>> txn_step t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000003,0 wto=false max=0,0
+>> cput k=c v=cput cond=value t=A
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=1} ts=0.000000003,0 del=false klen=12 vlen=9
+data: "c"/0.000000003,0 -> /BYTES/cput
+data: "c"/0.000000001,0 -> /BYTES/value

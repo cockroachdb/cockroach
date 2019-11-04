@@ -63,6 +63,19 @@ typedef struct {
   DBStatus status;
 } DBIterState;
 
+// A DBIgnoredSeqNumRange is an alias for the Go struct
+// IgnoredSeqNumRange. It must have exactly the same memory
+// layout.
+typedef struct {
+  int32_t start_seqnum;
+  int32_t end_seqnum;
+} DBIgnoredSeqNumRange;
+
+typedef struct {
+  DBIgnoredSeqNumRange* ranges;
+  int len;
+} DBIgnoredSeqNums;
+
 typedef struct DBCache DBCache;
 typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
@@ -328,6 +341,7 @@ typedef struct {
   uint32_t epoch;
   int32_t sequence;
   DBTimestamp max_timestamp;
+  DBIgnoredSeqNums ignored_seqnums;
 } DBTxn;
 
 typedef struct {

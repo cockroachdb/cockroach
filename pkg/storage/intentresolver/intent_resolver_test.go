@@ -13,6 +13,7 @@ package intentresolver
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -147,14 +148,8 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		{
 			txn: txn1,
 			intents: []roachpb.Intent{
-				{
-					Span: roachpb.Span{Key: key},
-					Txn:  txn1.TxnMeta,
-				},
-				{
-					Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")},
-					Txn:  txn1.TxnMeta,
-				},
+				roachpb.MakeIntent(txn1, roachpb.Span{Key: key}),
+				roachpb.MakeIntent(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
@@ -173,9 +168,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		{
 			txn: txn1,
 			intents: []roachpb.Intent{
-				{Span: roachpb.Span{Key: key}, Txn: txn1.TxnMeta},
-				{Span: roachpb.Span{Key: roachpb.Key("aa")}, Txn: txn1.TxnMeta},
-				{Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, Txn: txn1.TxnMeta},
+				roachpb.MakeIntent(txn1, roachpb.Span{Key: key}),
+				roachpb.MakeIntent(txn1, roachpb.Span{Key: roachpb.Key("aa")}),
+				roachpb.MakeIntent(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -212,14 +207,8 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		{
 			txn: txn3,
 			intents: []roachpb.Intent{
-				{
-					Span: roachpb.Span{Key: key},
-					Txn:  txn3.TxnMeta,
-				},
-				{
-					Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")},
-					Txn:  txn3.TxnMeta,
-				},
+				roachpb.MakeIntent(txn3, roachpb.Span{Key: key}),
+				roachpb.MakeIntent(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
@@ -238,9 +227,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		{
 			txn: txn3,
 			intents: []roachpb.Intent{
-				{Span: roachpb.Span{Key: key}, Txn: txn3.TxnMeta},
-				{Span: roachpb.Span{Key: roachpb.Key("aa")}, Txn: txn3.TxnMeta},
-				{Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, Txn: txn3.TxnMeta},
+				roachpb.MakeIntent(txn3, roachpb.Span{Key: key}),
+				roachpb.MakeIntent(txn3, roachpb.Span{Key: roachpb.Key("aa")}),
+				roachpb.MakeIntent(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -432,10 +421,8 @@ func TestContendedIntent(t *testing.T) {
 		defer cancel()
 		testCases[i].cancelFunc = cancel
 		t.Run(tc.pusher.ID.String(), func(t *testing.T) {
-			wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{{
-				Txn:  origTxn.TxnMeta,
-				Span: roachpb.Span{Key: keyA},
-			}}}
+			wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{
+				roachpb.MakePendingIntent(&origTxn.TxnMeta, roachpb.Span{Key: keyA})}}
 			h := roachpb.Header{Txn: tc.pusher}
 			wg.Add(1)
 			go func(idx int) {
@@ -510,10 +497,8 @@ func TestContendedIntent(t *testing.T) {
 				"max priority": newTransaction("max-txn", keyA, roachpb.MaxUserPriority, clock),
 			} {
 				t.Run(name, func(t *testing.T) {
-					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{{
-						Txn:  origTxn.TxnMeta,
-						Span: roachpb.Span{Key: keyA},
-					}}}
+					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{
+						roachpb.MakePendingIntent(&origTxn.TxnMeta, roachpb.Span{Key: keyA})}}
 					h := roachpb.Header{Txn: pusher}
 					cleanupFunc, pErr := ir.ProcessWriteIntentError(ctx, roachpb.NewError(wiErr), h, roachpb.PUSH_ABORT)
 					if pErr != nil {
@@ -541,18 +526,14 @@ func TestContendedIntent(t *testing.T) {
 			// Call the CleanupFunc with a new WriteIntentError with a different
 			// transaction. This should lean to a new push on the new transaction and
 			// an intent resolution of the original intent.
-			f(&roachpb.WriteIntentError{Intents: []roachpb.Intent{{
-				Span: roachpb.Span{Key: keyA},
-				Txn:  unrelatedRWTxn.TxnMeta,
-			}}}, nil)
+			f(&roachpb.WriteIntentError{Intents: []roachpb.Intent{
+				roachpb.MakePendingIntent(&unrelatedRWTxn.TxnMeta, roachpb.Span{Key: keyA})}}, nil)
 			verifyPushTxn(<-reqChan, rwTxn2.ID, unrelatedRWTxn.ID)
 			verifyResolveIntent(<-reqChan, rwTxn1.Key)
 		case 5:
 			verifyPushTxn(<-reqChan, rwTxn3.ID, unrelatedRWTxn.ID)
-			f(&roachpb.WriteIntentError{Intents: []roachpb.Intent{{
-				Span: roachpb.Span{Key: keyB},
-				Txn:  rwTxn1.TxnMeta,
-			}}}, nil)
+			f(&roachpb.WriteIntentError{Intents: []roachpb.Intent{
+				roachpb.MakePendingIntent(&rwTxn1.TxnMeta, roachpb.Span{Key: keyB})}}, nil)
 		case 6:
 			f(nil, &testCases[idx].pusher.TxnMeta)
 		default:
@@ -593,7 +574,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	}
 	wg.Wait()
 	testIntents := []roachpb.Intent{
-		{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
+		roachpb.MakeIntent(txn, roachpb.Span{Key: roachpb.Key("a")}),
 	}
 	// Running with allowSyncProcessing = false should result in an error and no
 	// requests being sent.
@@ -618,7 +599,7 @@ func TestCleanupIntentsAsync(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	testIntents := []roachpb.Intent{
-		{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
+		roachpb.MakeIntent(txn, roachpb.Span{Key: roachpb.Key("a")}),
 	}
 	cases := []testCase{
 		{
@@ -769,6 +750,64 @@ func (sf *sendFuncs) drain(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		if l := sf.len(); l > 0 {
 			return errors.Errorf("still have %d funcs to send", l)
+		}
+		return nil
+	})
+}
+
+// TestTxnCleanupIntentsAsyncWithPartialRollback verifies that
+// CleanupIntentsAsync properly forwards the ignored seqnum list in
+// the resolve intent requests.
+func TestCleanupTxnIntentsAsyncWithPartialRollback(t *testing.T) {
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
+	txn.IntentSpans = []roachpb.Span{
+		{Key: roachpb.Key("a")},
+		{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+	}
+	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 1, End: 1}}
+
+	var gotResolveIntent, gotResolveIntentRange int32
+	check := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		for _, r := range ba.Requests {
+			if ri, ok := r.GetInner().(*roachpb.ResolveIntentRequest); ok {
+				atomic.StoreInt32(&gotResolveIntent, 1)
+				if !reflect.DeepEqual(ri.IgnoredSeqNums, txn.IgnoredSeqNums) {
+					t.Errorf("expected ignored list %v, got %v", txn.IgnoredSeqNums, ri.IgnoredSeqNums)
+				}
+			} else if rir, ok := r.GetInner().(*roachpb.ResolveIntentRangeRequest); ok {
+				atomic.StoreInt32(&gotResolveIntentRange, 1)
+				if !reflect.DeepEqual(rir.IgnoredSeqNums, txn.IgnoredSeqNums) {
+					t.Errorf("expected ignored list %v, got %v", txn.IgnoredSeqNums, rir.IgnoredSeqNums)
+				}
+			}
+		}
+		return respForResolveIntentBatch(t, ba), nil
+	}
+	sf := newSendFuncs(t,
+		sendFunc(check),
+		sendFunc(check),
+		gcSendFunc(t),
+	)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	cfg := Config{
+		Stopper: stopper,
+		Clock:   clock,
+	}
+	ir := newIntentResolverWithSendFuncs(cfg, sf)
+
+	intents := []result.EndTxnIntents{{Txn: txn}}
+
+	if err := ir.CleanupTxnIntentsAsync(context.Background(), 1, intents, true /*allowAsyncProcessing*/); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt32(&gotResolveIntent) == 0 {
+			return errors.New("still waiting for resolve intent req")
+		}
+		if atomic.LoadInt32(&gotResolveIntentRange) == 0 {
+			return errors.New("still waiting for resolve intent range req")
 		}
 		return nil
 	})
@@ -952,7 +991,7 @@ func TestCleanupIntents(t *testing.T) {
 	// Set txn.ID to a very small value so it's sorted deterministically first.
 	txn.ID = uuid.UUID{15: 0x01}
 	testIntents := []roachpb.Intent{
-		{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
+		roachpb.MakeIntent(txn, roachpb.Span{Key: roachpb.Key("a")}),
 	}
 	type testCase struct {
 		intents     []roachpb.Intent
@@ -1036,7 +1075,7 @@ func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.In
 	for i := 0; i < numIntents; i++ {
 		txn := newTransaction("test", roachpb.Key("a"), 1, clock)
 		ret = append(ret,
-			roachpb.Intent{Span: roachpb.Span{Key: txn.Key}, Txn: txn.TxnMeta})
+			roachpb.MakeIntent(txn, roachpb.Span{Key: txn.Key}))
 	}
 	return ret
 }

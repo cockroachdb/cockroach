@@ -1703,6 +1703,17 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >&
       in_flight_writes() const;
 
+  int ignored_seqnums_size() const;
+  void clear_ignored_seqnums();
+  static const int kIgnoredSeqnumsFieldNumber = 18;
+  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+      mutable_ignored_seqnums();
+  const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
+  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+      ignored_seqnums() const;
+
   // string name = 2;
   void clear_name();
   static const int kNameFieldNumber = 2;
@@ -1797,6 +1808,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp > observed_timestamps_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::google::protobuf::internal::ArenaStringPtr name_;
   ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
@@ -1918,6 +1930,17 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >&
       in_flight_writes() const;
 
+  int ignored_seqnums_size() const;
+  void clear_ignored_seqnums();
+  static const int kIgnoredSeqnumsFieldNumber = 18;
+  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+      mutable_ignored_seqnums();
+  const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
+  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+      ignored_seqnums() const;
+
   bool has_meta() const;
   void clear_meta();
   static const int kMetaFieldNumber = 1;
@@ -1952,6 +1975,7 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
   int status_;
@@ -2045,6 +2069,17 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
 
   // accessors -------------------------------------------------------
 
+  int ignored_seqnums_size() const;
+  void clear_ignored_seqnums();
+  static const int kIgnoredSeqnumsFieldNumber = 4;
+  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* mutable_ignored_seqnums(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+      mutable_ignored_seqnums();
+  const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& ignored_seqnums(int index) const;
+  ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* add_ignored_seqnums();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+      ignored_seqnums() const;
+
   bool has_span() const;
   void clear_span();
   static const int kSpanFieldNumber = 1;
@@ -2077,6 +2112,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange > ignored_seqnums_;
   ::cockroach::roachpb::Span* span_;
   ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
   int status_;
@@ -4546,6 +4582,32 @@ Transaction::in_flight_writes() const {
   return in_flight_writes_;
 }
 
+inline int Transaction::ignored_seqnums_size() const {
+  return ignored_seqnums_.size();
+}
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Transaction::mutable_ignored_seqnums(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.ignored_seqnums)
+  return ignored_seqnums_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+Transaction::mutable_ignored_seqnums() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.ignored_seqnums)
+  return &ignored_seqnums_;
+}
+inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& Transaction::ignored_seqnums(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.ignored_seqnums)
+  return ignored_seqnums_.Get(index);
+}
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Transaction::add_ignored_seqnums() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.ignored_seqnums)
+  return ignored_seqnums_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+Transaction::ignored_seqnums() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.ignored_seqnums)
+  return ignored_seqnums_;
+}
+
 // -------------------------------------------------------------------
 
 // TransactionRecord
@@ -4716,6 +4778,32 @@ TransactionRecord::in_flight_writes() const {
   return in_flight_writes_;
 }
 
+inline int TransactionRecord::ignored_seqnums_size() const {
+  return ignored_seqnums_.size();
+}
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* TransactionRecord::mutable_ignored_seqnums(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.ignored_seqnums)
+  return ignored_seqnums_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+TransactionRecord::mutable_ignored_seqnums() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionRecord.ignored_seqnums)
+  return &ignored_seqnums_;
+}
+inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& TransactionRecord::ignored_seqnums(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.ignored_seqnums)
+  return ignored_seqnums_.Get(index);
+}
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* TransactionRecord::add_ignored_seqnums() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionRecord.ignored_seqnums)
+  return ignored_seqnums_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+TransactionRecord::ignored_seqnums() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionRecord.ignored_seqnums)
+  return ignored_seqnums_;
+}
+
 // -------------------------------------------------------------------
 
 // Intent
@@ -4832,6 +4920,32 @@ inline void Intent::set_status(::cockroach::roachpb::TransactionStatus value) {
   
   status_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Intent.status)
+}
+
+inline int Intent::ignored_seqnums_size() const {
+  return ignored_seqnums_.size();
+}
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Intent::mutable_ignored_seqnums(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Intent.ignored_seqnums)
+  return ignored_seqnums_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >*
+Intent::mutable_ignored_seqnums() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Intent.ignored_seqnums)
+  return &ignored_seqnums_;
+}
+inline const ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange& Intent::ignored_seqnums(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.ignored_seqnums)
+  return ignored_seqnums_.Get(index);
+}
+inline ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange* Intent::add_ignored_seqnums() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Intent.ignored_seqnums)
+  return ignored_seqnums_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::IgnoredSeqNumRange >&
+Intent::ignored_seqnums() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Intent.ignored_seqnums)
+  return ignored_seqnums_;
 }
 
 // -------------------------------------------------------------------

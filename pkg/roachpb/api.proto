@@ -1039,6 +1039,11 @@ message ResolveIntentRequest {
   // Optionally poison the abort span for the transaction the intent's
   // range.
   bool poison = 4;
+  // The list of ignored seqnum ranges as per the Transaction record.
+  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "IgnoredSeqNums"
+  ];
 }
 
 // A ResolveIntentResponse is the return value from the
@@ -1066,6 +1071,11 @@ message ResolveIntentRangeRequest {
   // transaction. If present, this value can be used to optimize the
   // iteration over the span to find intents to resolve.
   util.hlc.Timestamp min_timestamp = 5 [(gogoproto.nullable) = false];
+  // The list of ignored seqnum ranges as per the Transaction record.
+  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 6 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "IgnoredSeqNums"
+  ];
 }
 
 // A ResolveIntentRangeResponse is the return value from the

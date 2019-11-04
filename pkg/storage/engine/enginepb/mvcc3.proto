@@ -116,6 +116,15 @@ message TxnMeta {
   reserved 8;
 }
 
+// IgnoredSeqNumRange describes a range of ignored seqnums.
+// The range is inclusive on both ends.
+message IgnoredSeqNumRange {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+  int32 start = 1 [(gogoproto.casttype) = "TxnSeq"];
+  int32 end = 2 [(gogoproto.casttype) = "TxnSeq"];
+}
+
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
 // encodings for most fields that make it more efficient to store negative
 // values. This makes the encodings incompatible.

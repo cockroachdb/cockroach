@@ -151,13 +151,24 @@ func CanCreateTxnRecord(rec EvalContext, txn *roachpb.Transaction) error {
 	return nil
 }
 
-// SynthesizeTxnFromMeta creates a synthetic transaction object from the
-// provided transaction metadata. The synthetic transaction is not meant to be
-// persisted, but can serve as a representation of the transaction for outside
-// observation. The function also checks whether it is possible for the
-// transaction to ever create a transaction record in the future. If not, the
-// returned transaction will be marked as ABORTED and it is safe to assume that
-// the transaction record will never be written in the future.
+// SynthesizeTxnFromMeta creates a synthetic transaction object from
+// the provided transaction metadata. The synthetic transaction is not
+// meant to be persisted, but can serve as a representation of the
+// transaction for outside observation. The function also checks
+// whether it is possible for the transaction to ever create a
+// transaction record in the future. If not, the returned transaction
+// will be marked as ABORTED and it is safe to assume that the
+// transaction record will never be written in the future.
+//
+// Note that the Transaction object returned by this function is
+// inadequate to perform further KV reads or to perform intent
+// resolution on its behalf, even if its state is PENDING. This is
+// because the original Transaction object may have been partially
+// rolled back and marked some of its intents as "ignored"
+// (txn.IgnoredSeqNums != nil), but this state is not stored in
+// TxnMeta. Proceeding to KV reads or intent resolution without this
+// information would cause a partial rollback, if any, to be reverted
+// and yield inconsistent data.
 func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transaction {
 	// Construct the transaction object.
 	synthTxnRecord := roachpb.TransactionRecord{

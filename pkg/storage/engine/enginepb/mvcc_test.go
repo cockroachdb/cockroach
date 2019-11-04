@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFormatMVCCMetadata(t *testing.T) {
@@ -69,5 +70,34 @@ func TestFormatMVCCMetadata(t *testing.T) {
 			"expected meta: %s\n"+
 				"got:           %s",
 			expV, str)
+	}
+}
+
+func TestTxnSeqIsIgnored(t *testing.T) {
+	type s = enginepb.TxnSeq
+	type r = enginepb.IgnoredSeqNumRange
+	mr := func(a, b s) r {
+		return r{Start: a, End: b}
+	}
+
+	testData := []struct {
+		list       []r
+		ignored    []s
+		notIgnored []s
+	}{
+		{[]r{}, nil, []s{0, 1, 10}},
+		{[]r{mr(1, 1)}, []s{1}, []s{0, 2, 10}},
+		{[]r{mr(1, 1), mr(2, 3)}, []s{1, 2, 3}, []s{0, 4, 10}},
+		{[]r{mr(1, 2), mr(4, 8), mr(9, 10)}, []s{1, 2, 5, 10}, []s{0, 3, 11}},
+		{[]r{mr(0, 10)}, []s{0, 1, 2, 3, 10}, []s{11, 100}},
+	}
+
+	for _, tc := range testData {
+		for _, ign := range tc.ignored {
+			assert.True(t, enginepb.TxnSeqIsIgnored(ign, tc.list))
+		}
+		for _, notIgn := range tc.notIgnored {
+			assert.False(t, enginepb.TxnSeqIsIgnored(notIgn, tc.list))
+		}
 	}
 }

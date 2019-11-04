@@ -42,11 +42,7 @@ func ResolveIntentRange(
 		return result.Result{}, ErrTransactionUnsupported
 	}
 
-	intent := roachpb.Intent{
-		Span:   args.Span(),
-		Txn:    args.IntentTxn,
-		Status: args.Status,
-	}
+	intent := args.AsIntent()
 
 	iterAndBuf := engine.GetIterAndBuf(readWriter, engine.IterOptions{UpperBound: args.EndKey})
 	defer iterAndBuf.Cleanup()
