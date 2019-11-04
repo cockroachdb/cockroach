@@ -241,11 +241,27 @@ func (w *worker) run(ctx context.Context) error {
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, err, numRows, i, actualValue, expectedValue)
 							}
-							if math.Abs(expectedFloat-actualFloat) > 0.01 {
+							// TPC-H spec requires 0.01 precision for DECIMALs, so we will
+							// first round the values to use in the comparison.
+							expectedFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.2f", expectedFloat), 64)
+							if err != nil {
+								return errors.Errorf("[q%s] failed parsing rounded expected value as float64 with %s\n"+
+									"wrong result in row %d in column %d: got %q, expected %q",
+									queryName, err, numRows, i, actualValue, expectedValue)
+							}
+							actualFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.2f", actualFloat), 64)
+							if err != nil {
+								return errors.Errorf("[q%s] failed parsing rounded actual value as float64 with %s\n"+
+									"wrong result in row %d in column %d: got %q, expected %q",
+									queryName, err, numRows, i, actualValue, expectedValue)
+							}
+							if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.01 {
 								// We only fail the check if the difference is more than 0.01 -
 								// this is what TPC-H spec requires for DECIMALs.
-								return errors.Errorf("[q%s] wrong result in row %d in column %d: got %q, expected %q",
-									queryName, numRows, i, actualValue, expectedValue)
+								return errors.Errorf("[q%s] %f and %f differ by more than 0.01\n"+
+									"wrong result in row %d in column %d: got %q, expected %q",
+									queryName, actualFloatRounded, expectedFloatRounded,
+									numRows, i, actualValue, expectedValue)
 							}
 						}
 					}
@@ -269,10 +285,13 @@ func (w *worker) run(ctx context.Context) error {
 	elapsed := timeutil.Since(start)
 	if w.config.verbose {
 		w.hists.Get(queryName).Record(elapsed)
-		log.Infof(ctx, "[q%s] returned %d rows after %4.2f seconds:\n %s",
+		// Note: if you are changing the output format here, please change the
+		// regex in roachtest/tpchvec.go accordingly.
+		log.Infof(ctx, "[q%s] returned %d rows after %4.2f seconds:\n%s",
 			queryName, numRows, elapsed.Seconds(), query)
-
 	} else {
+		// Note: if you are changing the output format here, please change the
+		// regex in roachtest/tpchvec.go accordingly.
 		log.Infof(ctx, "[q%s] returned %d rows after %4.2f seconds",
 			queryName, numRows, elapsed.Seconds())
 	}
