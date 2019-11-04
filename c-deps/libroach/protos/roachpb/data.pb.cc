@@ -26,13 +26,14 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ChangeReplicasTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_MergeTrigger;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_Transaction;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaDescriptor;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeDescriptor;
 }  // namespace protobuf_roachpb_2fmetadata_2eproto
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_IgnoredSeqNumRange;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
 }  // namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto {
@@ -322,13 +323,14 @@ static void InitDefaultsTransaction() {
   ::cockroach::roachpb::Transaction::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<5> scc_info_Transaction =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsTransaction}, {
+::google::protobuf::internal::SCCInfo<6> scc_info_Transaction =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 6, InitDefaultsTransaction}, {
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_ObservedTimestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
-      &protobuf_roachpb_2fdata_2eproto::scc_info_SequencedWrite.base,}};
+      &protobuf_roachpb_2fdata_2eproto::scc_info_SequencedWrite.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsTransactionRecord() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -341,12 +343,13 @@ static void InitDefaultsTransactionRecord() {
   ::cockroach::roachpb::TransactionRecord::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<4> scc_info_TransactionRecord =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsTransactionRecord}, {
+::google::protobuf::internal::SCCInfo<5> scc_info_TransactionRecord =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsTransactionRecord}, {
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
-      &protobuf_roachpb_2fdata_2eproto::scc_info_SequencedWrite.base,}};
+      &protobuf_roachpb_2fdata_2eproto::scc_info_SequencedWrite.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsIntent() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -359,10 +362,11 @@ static void InitDefaultsIntent() {
   ::cockroach::roachpb::Intent::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<2> scc_info_Intent =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsIntent}, {
+::google::protobuf::internal::SCCInfo<3> scc_info_Intent =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsIntent}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsSequencedWrite() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -3467,6 +3471,9 @@ void Transaction::clear_max_timestamp() {
   }
   max_timestamp_ = NULL;
 }
+void Transaction::clear_ignored_seqnums() {
+  ignored_seqnums_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Transaction::kMetaFieldNumber;
 const int Transaction::kNameFieldNumber;
@@ -3480,6 +3487,7 @@ const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
 const int Transaction::kIntentSpansFieldNumber;
 const int Transaction::kInFlightWritesFieldNumber;
+const int Transaction::kIgnoredSeqnumsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Transaction::Transaction()
@@ -3494,7 +3502,8 @@ Transaction::Transaction(const Transaction& from)
       _internal_metadata_(NULL),
       observed_timestamps_(from.observed_timestamps_),
       intent_spans_(from.intent_spans_),
-      in_flight_writes_(from.in_flight_writes_) {
+      in_flight_writes_(from.in_flight_writes_),
+      ignored_seqnums_(from.ignored_seqnums_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.name().size() > 0) {
@@ -3570,6 +3579,7 @@ void Transaction::Clear() {
   observed_timestamps_.Clear();
   intent_spans_.Clear();
   in_flight_writes_.Clear();
+  ignored_seqnums_.Clear();
   name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
     delete meta_;
@@ -3760,6 +3770,17 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
+      case 18: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(146u /* 146 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_ignored_seqnums()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -3861,6 +3882,14 @@ void Transaction::SerializeWithCachedSizes(
       output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->ignored_seqnums_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      18,
+      this->ignored_seqnums(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Transaction)
@@ -3899,6 +3928,16 @@ size_t Transaction::ByteSizeLong() const {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           this->in_flight_writes(static_cast<int>(i)));
+    }
+  }
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->ignored_seqnums_size());
+    total_size += 2UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->ignored_seqnums(static_cast<int>(i)));
     }
   }
 
@@ -3975,6 +4014,7 @@ void Transaction::MergeFrom(const Transaction& from) {
   observed_timestamps_.MergeFrom(from.observed_timestamps_);
   intent_spans_.MergeFrom(from.intent_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
+  ignored_seqnums_.MergeFrom(from.ignored_seqnums_);
   if (from.name().size() > 0) {
 
     name_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.name_);
@@ -4025,6 +4065,7 @@ void Transaction::InternalSwap(Transaction* other) {
   CastToBase(&observed_timestamps_)->InternalSwap(CastToBase(&other->observed_timestamps_));
   CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
   CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
+  CastToBase(&ignored_seqnums_)->InternalSwap(CastToBase(&other->ignored_seqnums_));
   name_.Swap(&other->name_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(meta_, other->meta_);
@@ -4063,12 +4104,16 @@ void TransactionRecord::clear_last_heartbeat() {
   }
   last_heartbeat_ = NULL;
 }
+void TransactionRecord::clear_ignored_seqnums() {
+  ignored_seqnums_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TransactionRecord::kMetaFieldNumber;
 const int TransactionRecord::kStatusFieldNumber;
 const int TransactionRecord::kLastHeartbeatFieldNumber;
 const int TransactionRecord::kIntentSpansFieldNumber;
 const int TransactionRecord::kInFlightWritesFieldNumber;
+const int TransactionRecord::kIgnoredSeqnumsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TransactionRecord::TransactionRecord()
@@ -4082,7 +4127,8 @@ TransactionRecord::TransactionRecord(const TransactionRecord& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
       intent_spans_(from.intent_spans_),
-      in_flight_writes_(from.in_flight_writes_) {
+      in_flight_writes_(from.in_flight_writes_),
+      ignored_seqnums_(from.ignored_seqnums_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_meta()) {
     meta_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.meta_);
@@ -4131,6 +4177,7 @@ void TransactionRecord::Clear() {
 
   intent_spans_.Clear();
   in_flight_writes_.Clear();
+  ignored_seqnums_.Clear();
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
     delete meta_;
   }
@@ -4218,6 +4265,17 @@ bool TransactionRecord::MergePartialFromCodedStream(
         break;
       }
 
+      case 18: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(146u /* 146 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_ignored_seqnums()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -4276,6 +4334,14 @@ void TransactionRecord::SerializeWithCachedSizes(
       output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->ignored_seqnums_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      18,
+      this->ignored_seqnums(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.TransactionRecord)
@@ -4304,6 +4370,16 @@ size_t TransactionRecord::ByteSizeLong() const {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           this->in_flight_writes(static_cast<int>(i)));
+    }
+  }
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->ignored_seqnums_size());
+    total_size += 2UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->ignored_seqnums(static_cast<int>(i)));
     }
   }
 
@@ -4344,6 +4420,7 @@ void TransactionRecord::MergeFrom(const TransactionRecord& from) {
 
   intent_spans_.MergeFrom(from.intent_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
+  ignored_seqnums_.MergeFrom(from.ignored_seqnums_);
   if (from.has_meta()) {
     mutable_meta()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.meta());
   }
@@ -4374,6 +4451,7 @@ void TransactionRecord::InternalSwap(TransactionRecord* other) {
   using std::swap;
   CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
   CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
+  CastToBase(&ignored_seqnums_)->InternalSwap(CastToBase(&other->ignored_seqnums_));
   swap(meta_, other->meta_);
   swap(last_heartbeat_, other->last_heartbeat_);
   swap(status_, other->status_);
@@ -4399,10 +4477,14 @@ void Intent::clear_txn() {
   }
   txn_ = NULL;
 }
+void Intent::clear_ignored_seqnums() {
+  ignored_seqnums_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Intent::kSpanFieldNumber;
 const int Intent::kTxnFieldNumber;
 const int Intent::kStatusFieldNumber;
+const int Intent::kIgnoredSeqnumsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Intent::Intent()
@@ -4414,7 +4496,8 @@ Intent::Intent()
 }
 Intent::Intent(const Intent& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      ignored_seqnums_(from.ignored_seqnums_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_span()) {
     span_ = new ::cockroach::roachpb::Span(*from.span_);
@@ -4461,6 +4544,7 @@ void Intent::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  ignored_seqnums_.Clear();
   if (GetArenaNoVirtual() == NULL && span_ != NULL) {
     delete span_;
   }
@@ -4526,6 +4610,17 @@ bool Intent::MergePartialFromCodedStream(
         break;
       }
 
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_ignored_seqnums()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -4568,6 +4663,14 @@ void Intent::SerializeWithCachedSizes(
       3, this->status(), output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->ignored_seqnums_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      4,
+      this->ignored_seqnums(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Intent)
@@ -4578,6 +4681,16 @@ size_t Intent::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->ignored_seqnums_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->ignored_seqnums(static_cast<int>(i)));
+    }
+  }
 
   if (this->has_span()) {
     total_size += 1 +
@@ -4614,6 +4727,7 @@ void Intent::MergeFrom(const Intent& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  ignored_seqnums_.MergeFrom(from.ignored_seqnums_);
   if (from.has_span()) {
     mutable_span()->::cockroach::roachpb::Span::MergeFrom(from.span());
   }
@@ -4642,6 +4756,7 @@ void Intent::Swap(Intent* other) {
 }
 void Intent::InternalSwap(Intent* other) {
   using std::swap;
+  CastToBase(&ignored_seqnums_)->InternalSwap(CastToBase(&other->ignored_seqnums_));
   swap(span_, other->span_);
   swap(txn_, other->txn_);
   swap(status_, other->status_);

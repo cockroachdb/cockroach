@@ -79,11 +79,7 @@ func ResolveIntent(
 		return result.Result{}, ErrTransactionUnsupported
 	}
 
-	intent := roachpb.Intent{
-		Span:   args.Span(),
-		Txn:    args.IntentTxn,
-		Status: args.Status,
-	}
+	intent := args.AsIntent()
 	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, intent)
 	if err != nil {
 		return result.Result{}, err

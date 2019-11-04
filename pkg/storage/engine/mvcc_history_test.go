@@ -368,13 +368,14 @@ const (
 
 // commands is the list of all supported script commands.
 var commands = map[string]cmd{
-	"txn_advance": {typTxnUpdate, cmdTxnAdvance},
-	"txn_begin":   {typTxnUpdate, cmdTxnBegin},
-	"txn_remove":  {typTxnUpdate, cmdTxnRemove},
-	"txn_restart": {typTxnUpdate, cmdTxnRestart},
-	"txn_status":  {typTxnUpdate, cmdTxnSetStatus},
-	"txn_step":    {typTxnUpdate, cmdTxnStep},
-	"txn_update":  {typTxnUpdate, cmdTxnUpdate},
+	"txn_advance":     {typTxnUpdate, cmdTxnAdvance},
+	"txn_begin":       {typTxnUpdate, cmdTxnBegin},
+	"txn_ignore_seqs": {typTxnUpdate, cmdTxnIgnoreSeqs},
+	"txn_remove":      {typTxnUpdate, cmdTxnRemove},
+	"txn_restart":     {typTxnUpdate, cmdTxnRestart},
+	"txn_status":      {typTxnUpdate, cmdTxnSetStatus},
+	"txn_step":        {typTxnUpdate, cmdTxnStep},
+	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
 
 	"resolve_intent": {typDataUpdate, cmdResolveIntent},
 	"check_intent":   {typReadOnly, cmdCheckIntent},
@@ -412,6 +413,30 @@ func cmdTxnBegin(e *evalCtx) error {
 	txn, err := e.newTxn(txnName, ts, key)
 	e.results.txn = txn
 	return err
+}
+
+func cmdTxnIgnoreSeqs(e *evalCtx) error {
+	txn := e.getTxn(mandatory)
+	seql := e.getList("seqs")
+	is := []enginepb.IgnoredSeqNumRange{}
+	for _, s := range seql {
+		parts := strings.Split(s, "-")
+		if len(parts) != 2 {
+			e.Fatalf("syntax error: expected 'a-b', got: '%s'", s)
+		}
+		a, err := strconv.ParseInt(parts[0], 10, 32)
+		if err != nil {
+			e.Fatalf("%v", err)
+		}
+		b, err := strconv.ParseInt(parts[1], 10, 32)
+		if err != nil {
+			e.Fatalf("%v", err)
+		}
+		is = append(is, enginepb.IgnoredSeqNumRange{Start: enginepb.TxnSeq(a), End: enginepb.TxnSeq(b)})
+	}
+	txn.IgnoredSeqNums = is
+	e.results.txn = txn
+	return nil
 }
 
 func cmdTxnRemove(e *evalCtx) error {
@@ -478,11 +503,9 @@ func cmdResolveIntent(e *evalCtx) error {
 func (e *evalCtx) resolveIntent(
 	rw ReadWriter, key roachpb.Key, txn *roachpb.Transaction, resolveStatus roachpb.TransactionStatus,
 ) error {
-	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, roachpb.Intent{
-		Span:   roachpb.Span{Key: key},
-		Status: resolveStatus,
-		Txn:    txn.TxnMeta,
-	})
+	intent := roachpb.MakeIntent(txn, roachpb.Span{Key: key})
+	intent.Status = resolveStatus
+	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent)
 	return err
 }
 
@@ -502,7 +525,7 @@ func cmdCheckIntent(e *evalCtx) error {
 		return errors.Newf("meta: %v -> expected intent, found none", key)
 	}
 	if ok {
-		fmt.Fprintf(e.results.buf, "meta: %v -> %s\n", key, &meta)
+		fmt.Fprintf(e.results.buf, "meta: %v -> %+v\n", key, &meta)
 		if !wantIntent {
 			return errors.Newf("meta: %v -> expected no intent, found one", key)
 		}
@@ -792,6 +815,16 @@ const (
 	optional optArg = iota
 	mandatory
 )
+
+func (e *evalCtx) getList(argName string) []string {
+	for _, c := range e.td.CmdArgs {
+		if c.Key == argName {
+			return c.Vals
+		}
+	}
+	e.Fatalf("missing argument: %s", argName)
+	return nil
+}
 
 func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
 	e.t.Helper()
