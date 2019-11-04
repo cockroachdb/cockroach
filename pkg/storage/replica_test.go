@@ -3185,9 +3185,10 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 
 	// Resolve the intent.
 	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: pArgs.Header(),
-		IntentTxn:     txn.TxnMeta,
-		Status:        roachpb.COMMITTED,
+		RequestHeader:             pArgs.Header(),
+		IntentTxn:                 txn.TxnMeta,
+		Status:                    roachpb.COMMITTED,
+		IgnoredSeqNumsInitialized: true,
 	}
 	if _, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: txn.WriteTimestamp}, rArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -5049,10 +5050,14 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	txn.Status = roachpb.COMMITTED
 	if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
 		[]roachpb.Intent{{
-			Span:   roachpb.Span{Key: key},
-			Txn:    txn.TxnMeta,
-			Status: txn.Status,
-		}}, intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */}); pErr != nil {
+			Span:                      roachpb.Span{Key: key},
+			Txn:                       txn.TxnMeta,
+			Status:                    txn.Status,
+			IgnoredSeqNums:            txn.IgnoredSeqNums,
+			IgnoredSeqNumsInitialized: true,
+		}},
+		intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */},
+	); pErr != nil {
 		t.Fatal(pErr)
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -6005,8 +6010,10 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 			Key:    roachpb.Key("a"),
 			EndKey: roachpb.Key("c"),
 		},
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
+		IntentTxn:                 txn.TxnMeta,
+		Status:                    roachpb.COMMITTED,
+		IgnoredSeqNums:            txn.IgnoredSeqNums,
+		IgnoredSeqNumsInitialized: true,
 	}
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -6119,8 +6126,10 @@ func TestRangeStatsComputation(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: pArgs.Key,
 		},
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
+		IntentTxn:                 txn.TxnMeta,
+		Status:                    roachpb.COMMITTED,
+		IgnoredSeqNums:            txn.IgnoredSeqNums,
+		IgnoredSeqNumsInitialized: true,
 	}
 
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
@@ -6520,8 +6529,10 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 				Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
 				EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
 			},
-			IntentTxn: txn.TxnMeta,
-			Status:    roachpb.COMMITTED,
+			IntentTxn:                 txn.TxnMeta,
+			Status:                    roachpb.COMMITTED,
+			IgnoredSeqNums:            txn.IgnoredSeqNums,
+			IgnoredSeqNumsInitialized: true,
 		}
 		if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 			t.Fatal(pErr)
@@ -8854,10 +8865,11 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		Force:     true,
 	}
 	resolveCommittedIntentReq := &roachpb.ResolveIntentRequest{
-		RequestHeader: rh,
-		IntentTxn:     txn.TxnMeta,
-		Status:        roachpb.COMMITTED,
-		Poison:        false,
+		RequestHeader:             rh,
+		IntentTxn:                 txn.TxnMeta,
+		Status:                    roachpb.COMMITTED,
+		Poison:                    false,
+		IgnoredSeqNumsInitialized: true,
 	}
 	resolveAbortedIntentReq := &roachpb.ResolveIntentRequest{
 		RequestHeader: rh,

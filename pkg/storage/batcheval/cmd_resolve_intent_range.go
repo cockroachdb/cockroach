@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {
@@ -42,10 +43,16 @@ func ResolveIntentRange(
 		return result.Result{}, ErrTransactionUnsupported
 	}
 
+	if (args.Status == roachpb.COMMITTED || args.Status == roachpb.STAGING) && !args.IgnoredSeqNumsInitialized {
+		log.Fatalf(ctx, "args ignore list not fully initialized: %+v", args)
+	}
+
 	intent := roachpb.Intent{
-		Span:   args.Span(),
-		Txn:    args.IntentTxn,
-		Status: args.Status,
+		Span:                      args.Span(),
+		Txn:                       args.IntentTxn,
+		Status:                    args.Status,
+		IgnoredSeqNums:            args.IgnoredSeqNums,
+		IgnoredSeqNumsInitialized: args.IgnoredSeqNumsInitialized,
 	}
 
 	iterAndBuf := engine.GetIterAndBuf(batch, engine.IterOptions{UpperBound: args.EndKey})

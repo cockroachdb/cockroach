@@ -490,6 +490,7 @@ var nonZeroTxn = Transaction{
 	IntentSpans:             []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:          []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
 	CommitTimestampFixed:    true,
+	IgnoredSeqNums:          []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -550,6 +551,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.Sequence = txn.Sequence - 10
 	expTxn5.IntentSpans = nil
 	expTxn5.InFlightWrites = nil
+	expTxn5.IgnoredSeqNums = nil
 	expTxn5.WriteTooOld = false
 	expTxn5.CommitTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
@@ -636,6 +638,7 @@ func TestTransactionClone(t *testing.T) {
 	// listed below. If this test fails, please update the list below and/or
 	// Transaction.Clone().
 	expFields := []string{
+		"IgnoredSeqNums",
 		"InFlightWrites",
 		"InFlightWrites.Key",
 		"IntentSpans",
@@ -666,6 +669,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.CommitTimestampFixed = false
 	expTxn.IntentSpans = nil
 	expTxn.InFlightWrites = nil
+	expTxn.IgnoredSeqNums = nil
 	require.Equal(t, expTxn, txn)
 }
 

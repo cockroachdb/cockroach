@@ -482,7 +482,13 @@ func resolveLocalIntents(
 				externalIntents = append(externalIntents, span)
 				return nil
 			}
-			intent := roachpb.Intent{Span: span, Txn: txn.TxnMeta, Status: txn.Status}
+			intent := roachpb.Intent{
+				Span:                      span,
+				Txn:                       txn.TxnMeta,
+				Status:                    txn.Status,
+				IgnoredSeqNums:            txn.IgnoredSeqNums,
+				IgnoredSeqNumsInitialized: true,
+			}
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
