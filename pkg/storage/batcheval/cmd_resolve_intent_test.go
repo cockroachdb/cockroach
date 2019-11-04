@@ -187,15 +187,17 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 		for _, test := range tests {
 			t.Run("", func(t *testing.T) {
 				ri := roachpb.ResolveIntentRequest{
-					IntentTxn: txnMeta,
-					Status:    test.status,
-					Poison:    test.poison,
+					IntentTxn:                 txnMeta,
+					Status:                    test.status,
+					Poison:                    test.poison,
+					IgnoredSeqNumsInitialized: true,
 				}
 				ri.Key = roachpb.Key("b")
 				rir := roachpb.ResolveIntentRangeRequest{
-					IntentTxn: ri.IntentTxn,
-					Status:    ri.Status,
-					Poison:    ri.Poison,
+					IntentTxn:                 ri.IntentTxn,
+					Status:                    ri.Status,
+					Poison:                    ri.Poison,
+					IgnoredSeqNumsInitialized: true,
 				}
 				rir.Key = ri.Key
 				rir.EndKey = roachpb.Key("c")

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1052,5 +1053,87 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPartialRollbackOnEndTransaction(t *testing.T) {
+	ctx := context.Background()
+	k := roachpb.Key("a")
+	ts := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	endKey := roachpb.Key("z")
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(k),
+		EndKey:   roachpb.RKey(endKey),
+	}
+	intents := []roachpb.Span{{Key: k}}
+
+	db := engine.NewDefaultInMem()
+	defer db.Close()
+	batch := db.NewBatch()
+	defer batch.Close()
+
+	var v roachpb.Value
+
+	// Write a first value at key.
+	v.SetString("a")
+	txn.Sequence = 0
+	if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		t.Fatal(err)
+	}
+	// Write another value.
+	v.SetString("b")
+	txn.Sequence = 1
+	if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Partially revert the store above.
+	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 1, End: 1}}
+
+	// Issue the end txn command.
+	req := roachpb.EndTransactionRequest{
+		RequestHeader:  roachpb.RequestHeader{Key: txn.Key},
+		Commit:         true,
+		NoRefreshSpans: true,
+		IntentSpans:    intents,
+	}
+	var resp roachpb.EndTransactionResponse
+	if _, err := EndTransaction(ctx, batch, CommandArgs{
+		EvalCtx: &mockEvalCtx{
+			desc: &desc,
+			canCreateTxnFn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+				//t.Fatal("CanCreateTxnRecord unexpectedly called")
+				return true, ts, 0
+			},
+		},
+		Args: &req,
+		Header: roachpb.Header{
+			Timestamp: ts,
+			Txn:       &txn,
+		},
+	}, &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// The second write has been rolled back; verify that the remaining
+	// value is from the first write.
+	res, i, err := engine.MVCCGet(ctx, batch, k, ts2, engine.MVCCGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i != nil {
+		t.Errorf("found intent, expected none: %+v", i)
+	}
+	if res == nil {
+		t.Errorf("no value found, expected one")
+	} else {
+		s, err := res.GetBytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		require.Equal(t, "a", string(s))
 	}
 }

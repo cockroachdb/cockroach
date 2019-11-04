@@ -958,7 +958,9 @@ func mvccGetInternal(
 		if !maxVisibleTimestamp.Less(metaTimestamp) {
 			return nil, nil, safeValue, &roachpb.WriteIntentError{
 				Intents: []roachpb.Intent{{
-					Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn,
+					Span:   roachpb.Span{Key: metaKey.Key},
+					Status: roachpb.PENDING,
+					Txn:    *meta.Txn,
 				}},
 			}
 		}
@@ -1323,35 +1325,38 @@ func replayTransactionalWrite(
 
 	// If the valueFn is specified, we must apply it to the would-be value at the key.
 	if valueFn != nil {
-		prevSeq, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence)
+		var exVal *roachpb.Value
+
+		// If there's an intent history, use that.
+		prevIntent, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
 		if prevValueWritten {
 			// If the previous value was found in the IntentHistory,
 			// simply apply the value function to the historic value
 			// to get the would-be value.
-			prevVal, _ := meta.GetIntentValue(prevSeq)
-			value, err = valueFn(&roachpb.Value{RawBytes: prevVal})
-			if err != nil {
-				return err
-			}
-		} else {
-			// If the previous value at the key wasn't written by this transaction,
-			// we must apply the value function to the last committed value on the key.
+			prevVal := prevIntent.Value
+
+			exVal = &roachpb.Value{RawBytes: prevVal}
+		}
+		if exVal == nil {
+			// If the previous value at the key wasn't written by this
+			// transaction, or it was hidden by a rolled back seqnum, we
+			// look at last committed value on the key.
 			getBuf := newGetBuffer()
 			defer getBuf.release()
 			getBuf.meta = buf.meta
-			var exVal *roachpb.Value
-			var err error
 
 			// Since we want the last committed value on the key, we must make
 			// an inconsistent read so we ignore our previous intents here.
-			if exVal, _, _, err = mvccGetInternal(
-				ctx, iter, metaKey, timestamp, false /* consistent */, unsafeValue, nil /* txn */, getBuf); err != nil {
-				return err
-			}
-			value, err = valueFn(exVal)
+			exVal, _, _, err = mvccGetInternal(
+				ctx, iter, metaKey, timestamp, false /* consistent */, unsafeValue, nil /* txn */, getBuf)
 			if err != nil {
 				return err
 			}
+		}
+
+		value, err = valueFn(exVal)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -1496,7 +1501,11 @@ func mvccPutInternal(
 			if txn == nil || meta.Txn.ID != txn.ID {
 				// The current Put operation does not come from the same
 				// transaction.
-				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Status: roachpb.PENDING, Txn: *meta.Txn}}}
+				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{
+					Span:   roachpb.Span{Key: key},
+					Status: roachpb.PENDING,
+					Txn:    *meta.Txn,
+				}}}
 			} else if txn.Epoch < meta.Txn.Epoch {
 				return errors.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
@@ -1508,29 +1517,65 @@ func mvccPutInternal(
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
-			// that though - we must record the older intent in the IntentHistory.
-			var prevIntentValBytes []byte
-			getBuf := newGetBuffer()
-			// Release the buffer after using the existing value.
-			defer getBuf.release()
-			getBuf.meta = buf.meta // initialize get metadata from what we've already read
+			// that though - we must record the older value in the IntentHistory.
 
-			existingVal, _, _, err := mvccGetInternal(
-				ctx, iter, metaKey, readTimestamp, true /* consistent */, safeValue, txn, getBuf)
-			if err != nil {
-				return err
+			// But where to find the older value? There are 4 cases:
+			// - last write inside txn, same epoch, seqnum of last write is not ignored: value at key.
+			//   => read the value associated with the intent with consistent mvccGetInternal().
+			//   (This is the common case.)
+			// - last write inside txn, same epoch, seqnum of last write is ignored: cannot use value at key.
+			//   => try reading from intent history.
+			//   => if all intent history entries are rolled back, fall back to last case below.
+			// - last write outside txn or at different epoch: use inconsistent mvccGetInternal,
+			//   which will find it outside.
+			//
+			// (Note that _some_ value is guaranteed to be found, as indicated by ok == true above.)
+
+			var existingVal *roachpb.Value
+			if txn.Epoch == meta.Txn.Epoch /* last write inside txn */ {
+				if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, txn.IgnoredSeqNums) {
+					// Seqnum of last write is not ignored. Retrieve the value
+					// using a consistent read.
+					getBuf := newGetBuffer()
+					// Release the buffer after using the existing value.
+					defer getBuf.release()
+					getBuf.meta = buf.meta // initialize get metadata from what we've already read
+
+					existingVal, _, _, err = mvccGetInternal(
+						ctx, iter, metaKey, readTimestamp, true /* consistent */, safeValue, txn, getBuf)
+					if err != nil {
+						return err
+					}
+				} else {
+					// Seqnum of last write was ignored. Try retrieving the value from the history.
+					prevIntent, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
+					if prevValueWritten {
+						existingVal = &roachpb.Value{RawBytes: prevIntent.Value}
+					}
+				}
+
 			}
-			// It's possible that the existing value is nil if the intent on the key
-			// has a lower epoch. We don't have to deal with this as a special case
-			// because in this case, the value isn't written to the intent history.
-			// Instead, the intent history is blown away completely.
-			if existingVal != nil {
-				prevIntentValBytes = existingVal.RawBytes
+			if existingVal == nil {
+
+				// "last write inside txn && seqnum of last write is not ignored"
+				// OR
+				// "last write outside txn"
+				// => use inconsistent mvccGetInternal to retrieve the last committed value at key.
+				getBuf := newGetBuffer()
+				defer getBuf.release()
+				getBuf.meta = buf.meta
+
+				// Since we want the last committed value on the key, we must make
+				// an inconsistent read so we ignore our previous intents here.
+				existingVal, _, _, err = mvccGetInternal(
+					ctx, iter, metaKey, readTimestamp, false /* consistent */, unsafeValue, nil /* txn */, getBuf)
+				if err != nil {
+					return err
+				}
 			}
-			prevIntentSequence := meta.Txn.Sequence
 
 			// Make sure we process valueFn before clearing any earlier
-			// version.  For example, a conditional put within same
+			// version. For example, a conditional put within same
 			// transaction should read previous write.
 			if valueFn != nil {
 				value, err = valueFn(existingVal)
@@ -1538,6 +1583,16 @@ func mvccPutInternal(
 					return err
 				}
 			}
+
+			// It's possible that the existing value is nil if the intent on the key
+			// has a lower epoch. We don't have to deal with this as a special case
+			// because in this case, the value isn't written to the intent history.
+			// Instead, the intent history is blown away completely.
+			var prevIntentValBytes []byte
+			if existingVal != nil {
+				prevIntentValBytes = existingVal.RawBytes
+			}
+			prevIntentSequence := meta.Txn.Sequence
 
 			// We are replacing our own write intent. If we are writing at
 			// the same timestamp (see comments in else block) we can
@@ -1581,10 +1636,11 @@ func mvccPutInternal(
 			// If the epoch of the transaction doesn't match the epoch of the
 			// intent, blow away the intent history.
 			if txn.Epoch == meta.Txn.Epoch {
-				// This case shouldn't pop up, but it is worth asserting
-				// that it doesn't. We shouldn't write invalid intents
-				// to the history
+
 				if existingVal == nil {
+					// This case shouldn't pop up, but it is worth asserting
+					// that it doesn't. We shouldn't write invalid intents
+					// to the history.
 					return errors.Errorf(
 						"previous intent of the transaction with the same epoch not found for %s (%+v)",
 						metaKey, txn)
@@ -1654,6 +1710,7 @@ func mvccPutInternal(
 			}
 		}
 	}
+
 	{
 		var txnMeta *enginepb.TxnMeta
 		if txn != nil {
@@ -2139,8 +2196,10 @@ func MVCCClearTimeRange(
 			ts := hlc.Timestamp(meta.Timestamp)
 			if meta.Txn != nil && startTime.Less(ts) && !endTime.Less(ts) {
 				err := &roachpb.WriteIntentError{
-					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, k.Key...)},
-						Status: roachpb.PENDING, Txn: *meta.Txn,
+					Intents: []roachpb.Intent{{
+						Span:   roachpb.Span{Key: append([]byte{}, k.Key...)},
+						Status: roachpb.PENDING,
+						Txn:    *meta.Txn,
 					}}}
 				return nil, err
 			}
@@ -2591,6 +2650,10 @@ func mvccResolveWriteIntent(
 	buf *putBuffer,
 	forRange bool,
 ) (bool, error) {
+	if (intent.Status == roachpb.COMMITTED || intent.Status == roachpb.STAGING) && !intent.IgnoredSeqNumsInitialized {
+		log.Fatalf(ctx, "ignore list not fully initialized: %+v", intent)
+	}
+
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, meta)
@@ -2705,11 +2768,29 @@ func mvccResolveWriteIntent(
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
 	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.WriteTimestamp)
+	collapsedIntent := false
+	var rolledBackVal []byte
+	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+
+	// Handle partial txn rollbacks. If the current txn sequence
+	// is part of a rolled back (ignored) seqnum range, we're going
+	// to erase that MVCC write and reveal the previous value.
+	// If _all_ the writes get removed in this way, the intent
+	// "collapses" and should be considered empty (i.e. can be removed altogether).
+	// If only part of the intent history was rolled back, but the intent still
+	// remains, updatedIntent is set to true.
+	if len(intent.IgnoredSeqNums) > 0 {
+		collapsedIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, rw, intent.IgnoredSeqNums, meta, latestKey)
+		if err != nil {
+			return false, err
+		}
+	}
 
 	// There's nothing to do if meta's epoch is greater than or equal txn's
 	// epoch and the state is still in progress but the intent was not pushed
-	// to a larger timestamp.
-	if inProgress && !pushed {
+	// to a larger timestamp, and if the rollback code did not modify or collapse
+	// the intent.
+	if inProgress && !pushed && rolledBackVal == nil && !collapsedIntent {
 		return false, nil
 	}
 
@@ -2717,15 +2798,21 @@ func mvccResolveWriteIntent(
 	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
 	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
 	// and create new with proper timestamp-encoded key) if timestamp changed.
-	if commit || pushed {
+	//
+	// We also use the commit path when the intent is being collapsed,
+	// to ensure the intent meta gets deleted and the stats updated.
+	if commit || pushed || (rolledBackVal != nil) {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.WriteTimestamp)
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
-		if pushed {
-			// Keep existing intent if we're pushing timestamp. We keep the
+		// Note that commit takes precedence over {updated, collapsed}Intent; as in,
+		// if we're committing, we don't care whether mvccMaybeRewriteIntentHistory
+		// updated the intent or collapsed it.
+		if pushed || (rolledBackVal != nil && !commit) {
+			// Keep existing intent if we're updating it. We keep the
 			// existing metadata instead of using the supplied intent meta
 			// to avoid overwriting a newer epoch (see comments above). The
 			// pusher's job isn't to do anything to update the intent but
@@ -2739,9 +2826,12 @@ func mvccResolveWriteIntent(
 			return false, err
 		}
 
-		// If we're moving the intent's timestamp, adjust stats and rewrite it.
+		// If we're moving the intent's timestamp, adjust stats and
+		// rewrite it.  However this work needs not be done if the intent
+		// was collapsed (mvccMaybeRewriteIntentHistory already rewrote
+		// the key at the correct timestamp and adjusted the stats).
 		var prevValSize int64
-		if buf.newMeta.Timestamp != meta.Timestamp {
+		if buf.newMeta.Timestamp != meta.Timestamp && !collapsedIntent {
 			oldKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
 
@@ -2752,7 +2842,16 @@ func mvccResolveWriteIntent(
 			} else if !valid || !iter.UnsafeKey().Equal(oldKey) {
 				return false, errors.Errorf("existing intent value missing: %s", oldKey)
 			}
-			if err = rw.Put(newKey, iter.UnsafeValue()); err != nil {
+			value := iter.UnsafeValue()
+			// Special case: If mvccMaybeRewriteIntentHistory rolled back to a value
+			// in the intent history and wrote that at oldKey, iter would not be able
+			// to "see" the value since it was created before that value was written
+			// to the engine. In this case, reuse the value returned by
+			// mvccMaybeRewriteIntentHistory.
+			if rolledBackVal != nil {
+				value = rolledBackVal
+			}
+			if err = rw.Put(newKey, value); err != nil {
 				return false, err
 			}
 			if err = rw.Clear(oldKey); err != nil {
@@ -2808,7 +2907,6 @@ func mvccResolveWriteIntent(
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
 	// First clear the intent value.
-	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 	if err := rw.Clear(latestKey); err != nil {
 		return false, err
 	}
@@ -2858,6 +2956,59 @@ func mvccResolveWriteIntent(
 	}
 
 	return true, nil
+}
+
+// mvccMaybeRewriteIntentHistory rewrites the intent to reveal the latest
+// stored value, ignoring all values from the history that have an
+// ignored seqnum.
+// The cleared return value, when true, indicates that
+// all the writes in the intent are ignored and the intent should
+// not be considered to exist any more.
+// The updated return value, when true, indicates that the intent was updated
+// and should be overwritten in engine.
+func mvccMaybeRewriteIntentHistory(
+	ctx context.Context,
+	engine ReadWriter,
+	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+	meta *enginepb.MVCCMetadata,
+	latestKey MVCCKey,
+) (cleared bool, updatedVal []byte, err error) {
+	if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, ignoredSeqNums) {
+		// The latest write was not ignored. Nothing to do here.  We'll
+		// proceed with the intent as usual.
+		return false, nil, nil
+	}
+	// Find the latest historical write before that that was not
+	// ignored.
+	var i int
+	for i = len(meta.IntentHistory) - 1; i >= 0; i-- {
+		e := &meta.IntentHistory[i]
+		if !enginepb.TxnSeqIsIgnored(e.Sequence, ignoredSeqNums) {
+			break
+		}
+	}
+
+	// If i < 0, we don't have an intent any more: everything
+	// has been rolled back.
+	if i < 0 {
+		err := engine.Clear(latestKey)
+		// For stats recomputation in the caller, flatten the
+		// value size so there's nothing left attributed to this intent.
+		meta.ValBytes = 0
+		return true, nil, err
+	}
+
+	// Otherwise, we place back the write at that history entry
+	// back into the intent.
+	restoredVal := meta.IntentHistory[i].Value
+	meta.Txn.Sequence = meta.IntentHistory[i].Sequence
+	meta.IntentHistory = meta.IntentHistory[:i]
+	meta.Deleted = len(restoredVal) == 0
+	meta.ValBytes = int64(len(restoredVal))
+	// And also overwrite whatever was there in storage.
+	err = engine.Put(latestKey, restoredVal)
+
+	return false, restoredVal, err
 }
 
 // IterAndBuf used to pass iterators and buffers between MVCC* calls, allowing

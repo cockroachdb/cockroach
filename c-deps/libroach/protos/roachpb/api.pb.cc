@@ -106,7 +106,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecoverTxnResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ResolveIntentRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ReverseScanResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RevertRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ScanResponse;
@@ -116,7 +115,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ExportResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_GCRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_RequestLeaseRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRangeRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResponseHeader;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_SubsumeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<42> scc_info_ResponseUnion;
@@ -126,6 +125,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_ExportRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_Header;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_PushTxnRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_ResolveIntentRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_EndTransactionRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_ImportRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_ExternalStorage;
@@ -137,7 +137,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_Lease;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_InternalCommitTrigger;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_Transaction;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2ferrors_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<31> scc_info_AmbiguousResultError;
@@ -148,6 +148,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::pr
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeDescriptor;
 }  // namespace protobuf_roachpb_2fmetadata_2eproto
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_IgnoredSeqNumRange;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStatsDelta;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
 }  // namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto
@@ -1759,10 +1760,11 @@ static void InitDefaultsResolveIntentRequest() {
   ::cockroach::roachpb::ResolveIntentRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<2> scc_info_ResolveIntentRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsResolveIntentRequest}, {
+::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsResolveIntentRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsResolveIntentResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1790,11 +1792,12 @@ static void InitDefaultsResolveIntentRangeRequest() {
   ::cockroach::roachpb::ResolveIntentRangeRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRangeRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsResolveIntentRangeRequest}, {
+::google::protobuf::internal::SCCInfo<4> scc_info_ResolveIntentRangeRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsResolveIntentRangeRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
-      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsResolveIntentRangeResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -17275,11 +17278,16 @@ void ResolveIntentRequest::clear_intent_txn() {
   }
   intent_txn_ = NULL;
 }
+void ResolveIntentRequest::clear_ignored_seqnums() {
+  ignored_seqnums_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResolveIntentRequest::kHeaderFieldNumber;
 const int ResolveIntentRequest::kIntentTxnFieldNumber;
 const int ResolveIntentRequest::kStatusFieldNumber;
 const int ResolveIntentRequest::kPoisonFieldNumber;
+const int ResolveIntentRequest::kIgnoredSeqnumsFieldNumber;
+const int ResolveIntentRequest::kIgnoredSeqnumsInitializedFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResolveIntentRequest::ResolveIntentRequest()
@@ -17291,7 +17299,8 @@ ResolveIntentRequest::ResolveIntentRequest()
 }
 ResolveIntentRequest::ResolveIntentRequest(const ResolveIntentRequest& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      ignored_seqnums_(from.ignored_seqnums_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
@@ -17304,15 +17313,15 @@ ResolveIntentRequest::ResolveIntentRequest(const ResolveIntentRequest& from)
     intent_txn_ = NULL;
   }
   ::memcpy(&status_, &from.status_,
-    static_cast<size_t>(reinterpret_cast<char*>(&poison_) -
-    reinterpret_cast<char*>(&status_)) + sizeof(poison_));
+    static_cast<size_t>(reinterpret_cast<char*>(&ignored_seqnums_initialized_) -
+    reinterpret_cast<char*>(&status_)) + sizeof(ignored_seqnums_initialized_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ResolveIntentRequest)
 }
 
 void ResolveIntentRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&poison_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(poison_));
+      reinterpret_cast<char*>(&ignored_seqnums_initialized_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(ignored_seqnums_initialized_));
 }
 
 ResolveIntentRequest::~ResolveIntentRequest() {
@@ -17340,6 +17349,7 @@ void ResolveIntentRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  ignored_seqnums_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
@@ -17349,8 +17359,8 @@ void ResolveIntentRequest::Clear() {
   }
   intent_txn_ = NULL;
   ::memset(&status_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&poison_) -
-      reinterpret_cast<char*>(&status_)) + sizeof(poison_));
+      reinterpret_cast<char*>(&ignored_seqnums_initialized_) -
+      reinterpret_cast<char*>(&status_)) + sizeof(ignored_seqnums_initialized_));
   _internal_metadata_.Clear();
 }
 
@@ -17421,6 +17431,30 @@ bool ResolveIntentRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_ignored_seqnums()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(48u /* 48 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &ignored_seqnums_initialized_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -17468,6 +17502,18 @@ void ResolveIntentRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->poison(), output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->ignored_seqnums_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5,
+      this->ignored_seqnums(static_cast<int>(i)),
+      output);
+  }
+
+  if (this->ignored_seqnums_initialized() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(6, this->ignored_seqnums_initialized(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ResolveIntentRequest)
@@ -17478,6 +17524,16 @@ size_t ResolveIntentRequest::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->ignored_seqnums_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->ignored_seqnums(static_cast<int>(i)));
+    }
+  }
 
   if (this->has_header()) {
     total_size += 1 +
@@ -17502,6 +17558,10 @@ size_t ResolveIntentRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  if (this->ignored_seqnums_initialized() != 0) {
+    total_size += 1 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -17519,6 +17579,7 @@ void ResolveIntentRequest::MergeFrom(const ResolveIntentRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  ignored_seqnums_.MergeFrom(from.ignored_seqnums_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
@@ -17530,6 +17591,9 @@ void ResolveIntentRequest::MergeFrom(const ResolveIntentRequest& from) {
   }
   if (from.poison() != 0) {
     set_poison(from.poison());
+  }
+  if (from.ignored_seqnums_initialized() != 0) {
+    set_ignored_seqnums_initialized(from.ignored_seqnums_initialized());
   }
 }
 
@@ -17550,10 +17614,12 @@ void ResolveIntentRequest::Swap(ResolveIntentRequest* other) {
 }
 void ResolveIntentRequest::InternalSwap(ResolveIntentRequest* other) {
   using std::swap;
+  CastToBase(&ignored_seqnums_)->InternalSwap(CastToBase(&other->ignored_seqnums_));
   swap(header_, other->header_);
   swap(intent_txn_, other->intent_txn_);
   swap(status_, other->status_);
   swap(poison_, other->poison_);
+  swap(ignored_seqnums_initialized_, other->ignored_seqnums_initialized_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -17771,12 +17837,17 @@ void ResolveIntentRangeRequest::clear_min_timestamp() {
   }
   min_timestamp_ = NULL;
 }
+void ResolveIntentRangeRequest::clear_ignored_seqnums() {
+  ignored_seqnums_.Clear();
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ResolveIntentRangeRequest::kHeaderFieldNumber;
 const int ResolveIntentRangeRequest::kIntentTxnFieldNumber;
 const int ResolveIntentRangeRequest::kStatusFieldNumber;
 const int ResolveIntentRangeRequest::kPoisonFieldNumber;
 const int ResolveIntentRangeRequest::kMinTimestampFieldNumber;
+const int ResolveIntentRangeRequest::kIgnoredSeqnumsFieldNumber;
+const int ResolveIntentRangeRequest::kIgnoredSeqnumsInitializedFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ResolveIntentRangeRequest::ResolveIntentRangeRequest()
@@ -17788,7 +17859,8 @@ ResolveIntentRangeRequest::ResolveIntentRangeRequest()
 }
 ResolveIntentRangeRequest::ResolveIntentRangeRequest(const ResolveIntentRangeRequest& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      ignored_seqnums_(from.ignored_seqnums_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
@@ -17806,15 +17878,15 @@ ResolveIntentRangeRequest::ResolveIntentRangeRequest(const ResolveIntentRangeReq
     min_timestamp_ = NULL;
   }
   ::memcpy(&status_, &from.status_,
-    static_cast<size_t>(reinterpret_cast<char*>(&poison_) -
-    reinterpret_cast<char*>(&status_)) + sizeof(poison_));
+    static_cast<size_t>(reinterpret_cast<char*>(&ignored_seqnums_initialized_) -
+    reinterpret_cast<char*>(&status_)) + sizeof(ignored_seqnums_initialized_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ResolveIntentRangeRequest)
 }
 
 void ResolveIntentRangeRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&poison_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(poison_));
+      reinterpret_cast<char*>(&ignored_seqnums_initialized_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(ignored_seqnums_initialized_));
 }
 
 ResolveIntentRangeRequest::~ResolveIntentRangeRequest() {
@@ -17843,6 +17915,7 @@ void ResolveIntentRangeRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  ignored_seqnums_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
@@ -17856,8 +17929,8 @@ void ResolveIntentRangeRequest::Clear() {
   }
   min_timestamp_ = NULL;
   ::memset(&status_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&poison_) -
-      reinterpret_cast<char*>(&status_)) + sizeof(poison_));
+      reinterpret_cast<char*>(&ignored_seqnums_initialized_) -
+      reinterpret_cast<char*>(&status_)) + sizeof(ignored_seqnums_initialized_));
   _internal_metadata_.Clear();
 }
 
@@ -17939,6 +18012,30 @@ bool ResolveIntentRangeRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_ignored_seqnums()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &ignored_seqnums_initialized_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -17991,6 +18088,18 @@ void ResolveIntentRangeRequest::SerializeWithCachedSizes(
       5, this->_internal_min_timestamp(), output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->ignored_seqnums_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      6,
+      this->ignored_seqnums(static_cast<int>(i)),
+      output);
+  }
+
+  if (this->ignored_seqnums_initialized() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->ignored_seqnums_initialized(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ResolveIntentRangeRequest)
@@ -18001,6 +18110,16 @@ size_t ResolveIntentRangeRequest::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->ignored_seqnums_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->ignored_seqnums(static_cast<int>(i)));
+    }
+  }
 
   if (this->has_header()) {
     total_size += 1 +
@@ -18031,6 +18150,10 @@ size_t ResolveIntentRangeRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  if (this->ignored_seqnums_initialized() != 0) {
+    total_size += 1 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -18048,6 +18171,7 @@ void ResolveIntentRangeRequest::MergeFrom(const ResolveIntentRangeRequest& from)
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  ignored_seqnums_.MergeFrom(from.ignored_seqnums_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
@@ -18062,6 +18186,9 @@ void ResolveIntentRangeRequest::MergeFrom(const ResolveIntentRangeRequest& from)
   }
   if (from.poison() != 0) {
     set_poison(from.poison());
+  }
+  if (from.ignored_seqnums_initialized() != 0) {
+    set_ignored_seqnums_initialized(from.ignored_seqnums_initialized());
   }
 }
 
@@ -18082,11 +18209,13 @@ void ResolveIntentRangeRequest::Swap(ResolveIntentRangeRequest* other) {
 }
 void ResolveIntentRangeRequest::InternalSwap(ResolveIntentRangeRequest* other) {
   using std::swap;
+  CastToBase(&ignored_seqnums_)->InternalSwap(CastToBase(&other->ignored_seqnums_));
   swap(header_, other->header_);
   swap(intent_txn_, other->intent_txn_);
   swap(min_timestamp_, other->min_timestamp_);
   swap(status_, other->status_);
   swap(poison_, other->poison_);
+  swap(ignored_seqnums_initialized_, other->ignored_seqnums_initialized_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
