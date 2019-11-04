@@ -330,8 +330,8 @@ func (n *Node) bootstrapCluster(
 	return nil
 }
 
-func (n *Node) onClusterVersionChange(cv cluster.ClusterVersion) {
-	ctx := n.AnnotateCtx(context.Background())
+func (n *Node) onClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) {
+	// !!! ctx := n.AnnotateCtx(context.Background())
 	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
 		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
 	}
@@ -498,11 +498,20 @@ func (n *Node) start(
 
 	// Now that we've created all our stores, install the gossip version update
 	// handler to write version updates to them.
-	n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
+	cluster.Version.BeforeChange(ctx, n.storeCfg.Settings, n.onClusterVersionChange)
 	// Invoke the callback manually once so that we persist the updated value that
 	// gossip might have already received.
-	clusterVersion := n.storeCfg.Settings.Version.Version()
-	n.onClusterVersionChange(clusterVersion)
+	clusterVersion := cluster.Version.GetVersion(ctx, n.storeCfg.Settings)
+	n.onClusterVersionChange(ctx, clusterVersion)
+
+	// !!!
+	//// Now that we've created all our stores, install the gossip version update
+	//// handler to write version updates to them.
+	//n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
+	//// Invoke the callback manually once so that we persist the updated value that
+	//// gossip might have already received.
+	//clusterVersion := cluster.Version.GetVersion(ctx, n.storeCfg.Settings)
+	//n.onClusterVersionChange(clusterVersion)
 
 	// Be careful about moving this line above `startStores`; store migrations rely
 	// on the fact that the cluster version has not been updated via Gossip (we

@@ -124,14 +124,15 @@ func importJobDescription(
 
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
-	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
 
-	if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionPartitionedBackup) {
+	if !cluster.Version.GetVersion(
+		ctx, p.ExecCfg().Settings).IsActive(cluster.VersionPartitionedBackup) {
 		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
 	}
 

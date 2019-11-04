@@ -16,11 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -79,7 +78,11 @@ type Settings struct {
 
 	// Set to 1 if a profile is active (if the profile is being grabbed through
 	// the `pprofui` server as opposed to the raw endpoint).
-	cpuProfiling int32 // atomic
+	cpuProfiling                 int32 // atomic
+	beforeClusterVersionChangeMu struct {
+		syncutil.Mutex
+		cb func(ctx context.Context, newVersion ClusterVersion)
+	}
 }
 
 func (s *Settings) BinaryMinSupportedVersion() roachpb.Version {
@@ -146,7 +149,8 @@ var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
 		}
 		opaque := sv.Opaque()
 		st := opaque.(*Settings)
-		clusterVersion := st.Version.Version().Version
+		clusterVersion := Version.GetVersion(context.TODO(), st).Version
+		// !!! clusterVersion := st.Version.Version().Version
 		downgradeVersion, err := roachpb.ParseVersion(s)
 		if err != nil {
 			return err
@@ -195,79 +199,65 @@ type ExposedClusterVersion struct {
 	// baseVersion track the value from Values, but after it has been written to
 	// all the local engines.
 	baseVersion atomic.Value // stores *ClusterVersion
-	cb          func(ClusterVersion)
+	// !!! cb          func(ClusterVersion)
 }
 
-// IsInitialized returns true if the cluster version has been initialized and is
-// ready for use.
-func (ecv *ExposedClusterVersion) IsInitialized() bool {
-	bv := ecv.baseVersion.Load()
-	if bv == nil {
-		return false
-	}
-	return *bv.(*ClusterVersion) != ClusterVersion{}
-}
+// !!!
+//// IsInitialized returns true if the cluster version has been initialized and is
+//// ready for use.
+//func (ecv *ExposedClusterVersion) IsInitialized() bool {
+//	bv := ecv.baseVersion.Load()
+//	if bv == nil {
+//		return false
+//	}
+//	return *bv.(*ClusterVersion) != ClusterVersion{}
+//}
 
-// OnChange registers (a single) callback that will be invoked whenever the
-// cluster version changes. The new cluster version will only become "visible"
-// after the callback has returned.
+// !!!
+//// OnChange registers (a single) callback that will be invoked whenever the
+//// cluster version changes. The new cluster version will only become "visible"
+//// after the callback has returned.
+////
+//// The callback can be set at most once.
+//func (ecv *ExposedClusterVersion) OnChange(f func(cv ClusterVersion)) {
+//	if ecv.cb != nil {
+//		log.Fatal(context.TODO(), "cannot set callback twice")
+//	}
+//	ecv.cb = f
+//}
+
+// !!!
+//// Version returns the minimum cluster version the caller may assume is in
+//// effect. It must not be called until the setting has been initialized.
+//func (ecv *ExposedClusterVersion) Version() ClusterVersion {
+//	v := ecv.baseVersion.Load()
+//	if v == nil {
+//		log.Fatal(context.Background(), "Version() was called before having been initialized")
+//	}
+//	return *v.(*ClusterVersion)
+//}
 //
-// The callback can be set at most once.
-func (ecv *ExposedClusterVersion) OnChange(f func(cv ClusterVersion)) {
-	if ecv.cb != nil {
-		log.Fatal(context.TODO(), "cannot set callback twice")
-	}
-	ecv.cb = f
-}
-
-// Version returns the minimum cluster version the caller may assume is in
-// effect. It must not be called until the setting has been initialized.
-func (ecv *ExposedClusterVersion) Version() ClusterVersion {
-	v := ecv.baseVersion.Load()
-	if v == nil {
-		log.Fatal(context.Background(), "Version() was called before having been initialized")
-	}
-	return *v.(*ClusterVersion)
-}
-
-// IsActive returns true if the features of the supplied version key are active
-// at the running version. In other words, if a particular version returns true
-// from this method, it means that you're guaranteed that all of the nodes in
-// the cluster have running binaries that are at least as new as that version,
-// and that you're guaranteed that those nodes will never be downgraded to an
-// older version.
-//
-// If this returns true then all nodes in the cluster will eventually see this
-// version. However, this is not atomic because versions are gossiped. Because
-// of this, nodes should not gate proper handling of remotely initiated requests
-// that their binary knows how to handle on this state. The following example
-// shows why this is important:
-//  The cluster restarts into the new version and the operator issues a SET
-//  VERSION, but node1 learns of the bump 10 seconds before node2, so during
-//  that window node1 might be receiving "old" requests that it itself wouldn't
-//  issue any more. Similarly, node2 might be receiving "new" requests that its
-//  binary must necessarily be able to handle (because the SET VERSION was
-//  successful) but that it itself wouldn't issue yet.
-func (ecv *ExposedClusterVersion) IsActive(versionKey VersionKey) bool {
-	return ecv.Version().IsActive(versionKey)
-}
-
-// CheckVersion is like IsActive but returns an appropriate error in the
-// case of a cluster version which is too low.
-func (ecv *ExposedClusterVersion) CheckVersion(versionKey VersionKey, feature string) error {
-	if !ecv.Version().IsActive(versionKey) {
-		return pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"cluster version does not support %s (>= %s required)",
-			feature,
-			VersionByKey(versionKey).String(),
-		)
-	}
-	return nil
-}
-
-// Silence unused warning.
-var _ = (*ExposedClusterVersion)(nil).CheckVersion
+//// IsActive returns true if the features of the supplied version key are active
+//// at the running version. In other words, if a particular version returns true
+//// from this method, it means that you're guaranteed that all of the nodes in
+//// the cluster have running binaries that are at least as new as that version,
+//// and that you're guaranteed that those nodes will never be downgraded to an
+//// older version.
+////
+//// If this returns true then all nodes in the cluster will eventually see this
+//// version. However, this is not atomic because versions are gossiped. Because
+//// of this, nodes should not gate proper handling of remotely initiated requests
+//// that their binary knows how to handle on this state. The following example
+//// shows why this is important:
+////  The cluster restarts into the new version and the operator issues a SET
+////  VERSION, but node1 learns of the bump 10 seconds before node2, so during
+////  that window node1 might be receiving "old" requests that it itself wouldn't
+////  issue any more. Similarly, node2 might be receiving "new" requests that its
+////  binary must necessarily be able to handle (because the SET VERSION was
+////  successful) but that it itself wouldn't issue yet.
+//func (ecv *ExposedClusterVersion) IsActive(versionKey VersionKey) bool {
+//	return ecv.Version().IsActive(versionKey)
+//}
 
 // MakeTestingClusterSettings returns a Settings object that has had its version
 // initialized to BinaryServerVersion.
@@ -324,11 +314,12 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 			log.Fatal(ctx, "unexpected empty version")
 		}
 
-		// Call callback before exposing the new version to callers of
-		// IsActive() and Version().
-		if s.Version.cb != nil {
-			s.Version.cb(clusterVersion)
-		}
+		// !!!
+		//// Call callback before exposing the new version to callers of
+		//// IsActive() and Version().
+		//if s.Version.cb != nil {
+		//	s.Version.cb(clusterVersion)
+		//}
 		s.Version.baseVersion.Store(&clusterVersion)
 	})
 
@@ -365,6 +356,17 @@ func newClusterVersionSetting() *clusterVersionSetting {
 	s := &clusterVersionSetting{}
 	s.StateMachineSetting = settings.MakeStateMachineSetting(&s.impl)
 	return s
+}
+
+// BeforeChange registers (a single) callback that will be invoked whenever the
+// cluster version changes. The new cluster version will only become "visible"
+// after the callback has returned.
+//
+// The callback can be set at most once.
+func (v *clusterVersionSetting) BeforeChange(
+	ctx context.Context, st *Settings, cb func(ctx context.Context, newVersion ClusterVersion),
+) {
+	v.impl.setBeforeChange(ctx, st, cb)
 }
 
 // !!!
@@ -438,6 +440,24 @@ func (v *clusterVersionSetting) GetVersionOrEmpty(
 	return curVer
 }
 
+// IsActive returns true if the features of the supplied version key are active
+// at the running version. In other words, if a particular version returns true
+// from this method, it means that you're guaranteed that all of the nodes in
+// the cluster have running binaries that are at least as new as that version,
+// and that you're guaranteed that those nodes will never be downgraded to an
+// older version.
+//
+// If this returns true then all nodes in the cluster will eventually see this
+// version. However, this is not atomic because versions are gossiped. Because
+// of this, nodes should not gate proper handling of remotely initiated requests
+// that their binary knows how to handle on this state. The following example
+// shows why this is important:
+//  The cluster restarts into the new version and the operator issues a SET
+//  VERSION, but node1 learns of the bump 10 seconds before node2, so during
+//  that window node1 might be receiving "old" requests that it itself wouldn't
+//  issue any more. Similarly, node2 might be receiving "new" requests that its
+//  binary must necessarily be able to handle (because the SET VERSION was
+//  successful) but that it itself wouldn't issue yet.
 func (v *clusterVersionSetting) IsActive(
 	ctx context.Context, versionKey VersionKey, st *Settings,
 ) bool {
@@ -453,6 +473,34 @@ type clusterVersionSettingImpl struct {
 
 // !!! turn implementation to value from pointer since I got rid of all the state
 var _ settings.StateMachineSettingImpl = &clusterVersionSettingImpl{}
+
+func (cv clusterVersionSettingImpl) BeforeChange(
+	ctx context.Context, encodedVal []byte, sv *settings.Values,
+) {
+	var clusterVersion ClusterVersion
+	if err := protoutil.Unmarshal(encodedVal, &clusterVersion); err != nil {
+		log.Fatalf(ctx, "failed to unmarshall version: %s", err)
+	}
+
+	opaque := sv.Opaque()
+	st := opaque.(*Settings)
+	st.beforeClusterVersionChangeMu.Lock()
+	if cb := st.beforeClusterVersionChangeMu.cb; cb != nil {
+		cb(ctx, clusterVersion)
+	}
+	st.beforeClusterVersionChangeMu.Unlock()
+}
+
+func (cv clusterVersionSettingImpl) setBeforeChange(
+	ctx context.Context, st *Settings, cb func(ctx context.Context, newVersion ClusterVersion),
+) {
+	st.beforeClusterVersionChangeMu.Lock()
+	defer st.beforeClusterVersionChangeMu.Unlock()
+	if st.beforeClusterVersionChangeMu.cb != nil {
+		log.Fatalf(ctx, "beforeClusterVersionChange already set")
+	}
+	st.beforeClusterVersionChangeMu.cb = cb
+}
 
 // Decode is part of the StateMachineSettingImpl interface.
 func (cv clusterVersionSettingImpl) Decode(val []byte) (interface{}, error) {

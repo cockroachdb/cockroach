@@ -493,6 +493,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"constraint %q does not exist", t.Constraint)
 			}
 			if err := n.tableDesc.DropConstraint(
+				params.ctx,
 				name, details,
 				func(desc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint) error {
 					return params.p.removeFKBackReference(params.ctx, desc, ref)
@@ -886,7 +887,9 @@ func applyColumnMutation(
 		col.Nullable = true
 		// In 19.2 and above, add a check constraint equivalent to the non-null
 		// constraint and drop it in the schema changer.
-		if params.ExecCfg().Settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+		if cluster.Version.GetVersion(
+			params.ctx, params.ExecCfg().Settings,
+		).IsActive(cluster.VersionTopLevelForeignKeys) {
 			check := sqlbase.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, sqlbase.ConstraintValidity_Dropping)
 			tableDesc.Checks = append(tableDesc.Checks, check)
 			tableDesc.AddNotNullMutation(check, sqlbase.DescriptorMutation_DROP)

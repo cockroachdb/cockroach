@@ -44,6 +44,10 @@ type StateMachineSettingImpl interface {
 	// SettingsListDefault returns the value that should be presented by
 	// `./cockroach gen settings-list`
 	SettingsListDefault() string
+
+	// BeforeChange is called before an updated value for this setting is about to
+	// be set on the values container.
+	BeforeChange(ctx context.Context, encodedVal []byte, sv *Values)
 }
 
 // A StateMachineSetting is a setting that keeps a state machine driven by user
@@ -143,6 +147,7 @@ func (s *StateMachineSetting) set(sv *Values, encodedVal []byte) error {
 			return nil
 		}
 	}
+	s.impl.BeforeChange(context.TODO(), encodedVal, sv)
 	sv.setGeneric(s.slotIdx, encodedVal)
 	return nil
 }

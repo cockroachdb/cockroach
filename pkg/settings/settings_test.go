@@ -118,6 +118,13 @@ func (d *dummyTransformer) SettingsListDefault() string {
 	panic("unimplemented")
 }
 
+// BeforeChange is part of the StateMachineSettingImpl interface.
+func (d *dummyTransformer) BeforeChange(
+	ctx context.Context, encodedVal []byte, sv *settings.Values,
+) {
+	// noop
+}
+
 const mb = int64(1024 * 1024)
 
 var changes = struct {

@@ -68,7 +68,9 @@ func (r *runParams) creationTimeForNewTableDescriptor() hlc.Timestamp {
 	// CreateAsOfTime and ModificationTime when creating a table descriptor and then
 	// upon reading use the MVCC timestamp to populate the values.
 	var ts hlc.Timestamp
-	if !r.ExecCfg().Settings.Version.IsActive(cluster.VersionTableDescModificationTimeFromMVCC) {
+	if !cluster.Version.GetVersion(r.ctx, r.ExecCfg().Settings).IsActive(
+		cluster.VersionTableDescModificationTimeFromMVCC,
+	) {
 		ts = r.p.txn.CommitTimestamp()
 	}
 	return ts

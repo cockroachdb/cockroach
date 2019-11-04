@@ -995,7 +995,8 @@ func maybeUpgradeForeignKeyRepOnIndex(
 func (desc *TableDescriptor) MaybeDowngradeForeignKeyRepresentation(
 	ctx context.Context, clusterSettings *cluster.Settings,
 ) (bool, *TableDescriptor, error) {
-	downgradeUnnecessary := clusterSettings.Version.IsActive(cluster.VersionTopLevelForeignKeys)
+	downgradeUnnecessary := cluster.Version.GetVersion(ctx, clusterSettings).IsActive(
+		cluster.VersionTopLevelForeignKeys)
 	if downgradeUnnecessary {
 		return false, desc, nil
 	}
@@ -1509,7 +1510,9 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 	//
 	// TODO(ajwerner): remove this check in 20.1.
 	var modTime hlc.Timestamp
-	if !settings.Version.IsActive(cluster.VersionTableDescModificationTimeFromMVCC) {
+	if !cluster.Version.GetVersion(ctx, settings).IsActive(
+		cluster.VersionTableDescModificationTimeFromMVCC,
+	) {
 		modTime = txn.CommitTimestamp()
 	}
 	desc.ModificationTime = modTime
@@ -2588,6 +2591,7 @@ func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 // DropConstraint drops a constraint, either by removing it from the table
 // descriptor or by queuing a mutation for a schema change.
 func (desc *MutableTableDescriptor) DropConstraint(
+	ctx context.Context,
 	name string,
 	detail ConstraintDetail,
 	removeFK func(*MutableTableDescriptor, *ForeignKeyConstraint) error,
@@ -2619,7 +2623,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 				// unless the cluster is fully upgraded to 19.2, for backward
 				// compatibility.
 				if detail.CheckConstraint.Validity == ConstraintValidity_Unvalidated ||
-					!settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+					!cluster.Version.GetVersion(ctx, settings).IsActive(cluster.VersionTopLevelForeignKeys) {
 					desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
 					return nil
 				}
@@ -2650,7 +2654,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 				// unless the cluster is fully upgraded to 19.2, for backward
 				// compatibility.
 				if detail.FK.Validity == ConstraintValidity_Unvalidated ||
-					!settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+					!cluster.Version.GetVersion(ctx, settings).IsActive(cluster.VersionTopLevelForeignKeys) {
 					// Remove the backreference.
 					if err := removeFK(desc, detail.FK); err != nil {
 						return err

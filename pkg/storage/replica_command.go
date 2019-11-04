@@ -116,6 +116,7 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 // right side is assigned rightRangeID and starts at splitKey. The supplied
 // expiration is the "sticky bit" stored on the right descriptor.
 func prepareSplitDescs(
+	ctx context.Context,
 	st *cluster.Settings,
 	rightRangeID roachpb.RangeID,
 	splitKey roachpb.RKey,
@@ -132,14 +133,14 @@ func prepareSplitDescs(
 	}
 
 	leftDesc.IncrementGeneration()
-	maybeMarkGenerationComparable(st, leftDesc)
+	maybeMarkGenerationComparable(ctx, st, leftDesc)
 	leftDesc.EndKey = splitKey
 
 	// Set the generation of the right hand side descriptor to match that of the
 	// (updated) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
-	maybeMarkGenerationComparable(st, rightDesc)
+	maybeMarkGenerationComparable(ctx, st, rightDesc)
 
 	setStickyBit(rightDesc, expiration)
 	return leftDesc, rightDesc
@@ -179,7 +180,8 @@ func splitTxnAttempt(
 	desc := oldDesc
 	oldDesc = nil // prevent accidental use
 
-	leftDesc, rightDesc := prepareSplitDescs(store.ClusterSettings(), rightRangeID, splitKey, expiration, desc)
+	leftDesc, rightDesc := prepareSplitDescs(
+		ctx, store.ClusterSettings(), rightRangeID, splitKey, expiration, desc)
 
 	// Update existing range descriptor for left hand side of
 	// split. Note that we mutate the descriptor for the left hand
@@ -300,7 +302,9 @@ func (r *Replica) adminSplitWithDescriptor(
 	delayable bool,
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
-	if !r.store.ClusterSettings().Version.IsActive(cluster.VersionStickyBit) {
+	if !cluster.Version.GetVersion(ctx, r.store.ClusterSettings()).IsActive(
+		cluster.VersionStickyBit,
+	) {
 		// If sticky bits aren't supported yet but we receive one anyway, ignore
 		// it. The callers are supposed to only pass hlc.Timestamp{} in that
 		// case, but this is violated in at least one case (and there are lots of
@@ -672,7 +676,7 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
-		maybeMarkGenerationComparable(r.ClusterSettings(), &updatedLeftDesc)
+		maybeMarkGenerationComparable(ctx, r.ClusterSettings(), &updatedLeftDesc)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
@@ -954,7 +958,7 @@ func (r *Replica) ChangeReplicas(
 	// We execute the change serially if we're not allowed to run atomic
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
-	unroll := !st.Version.IsActive(cluster.VersionAtomicChangeReplicas) ||
+	unroll := !cluster.Version.GetVersion(ctx, st).IsActive(cluster.VersionAtomicChangeReplicas) ||
 		!UseAtomicReplicationChanges.Get(&st.SV)
 
 	if unroll {
@@ -994,7 +998,9 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	settings := r.ClusterSettings()
-	if useLearners := settings.Version.IsActive(cluster.VersionLearnerReplicas); !useLearners {
+	if useLearners := cluster.Version.GetVersion(ctx, settings).IsActive(
+		cluster.VersionLearnerReplicas,
+	); !useLearners {
 		// NB: we will never use atomic replication changes while learners are not
 		// also active.
 		if len(chgs) != 1 {
@@ -1412,12 +1418,13 @@ func (c internalReplicationChanges) leaveJoint() bool { return len(c) == 0 }
 func (c internalReplicationChanges) useJoint() bool   { return len(c) > 1 }
 
 func prepareChangeReplicasTrigger(
-	store *Store, desc *roachpb.RangeDescriptor, chgs internalReplicationChanges,
+	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor, chgs internalReplicationChanges,
 ) (*roachpb.ChangeReplicasTrigger, error) {
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
-	generationComparableEnabled := store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable)
+	generationComparableEnabled := cluster.Version.GetVersion(ctx, store.ClusterSettings()).IsActive(
+		cluster.VersionGenerationComparable)
 	if generationComparableEnabled {
 		updatedDesc.IncrementGeneration()
 		updatedDesc.GenerationComparable = proto.Bool(true)
@@ -1500,7 +1507,9 @@ func prepareChangeReplicasTrigger(
 	}
 
 	var crt *roachpb.ChangeReplicasTrigger
-	if !store.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
+	if !cluster.Version.GetVersion(ctx, store.ClusterSettings()).IsActive(
+		cluster.VersionAtomicChangeReplicasTrigger,
+	) {
 		var deprecatedChangeType roachpb.ReplicaChangeType
 		var deprecatedRepDesc roachpb.ReplicaDescriptor
 		if len(added) > 0 {
@@ -1579,7 +1588,7 @@ func execChangeReplicasTxn(
 		}
 		// Note that we are now using the descriptor from KV, not the one passed
 		// into this method.
-		crt, err := prepareChangeReplicasTrigger(store, desc, chgs)
+		crt, err := prepareChangeReplicasTrigger(ctx, store, desc, chgs)
 		if err != nil {
 			return err
 		}
@@ -2000,7 +2009,8 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-	useAtomic := s.ClusterSettings().Version.IsActive(cluster.VersionAtomicChangeReplicas)
+	useAtomic := cluster.Version.GetVersion(ctx, s.ClusterSettings()).IsActive(
+		cluster.VersionAtomicChangeReplicas)
 	if useAtomic {
 		// AdminChangeReplicas will only allow atomic replication changes when
 		// this magic flag is set because we changed the corresponding request
@@ -2440,8 +2450,10 @@ func (r *Replica) adminScatter(
 
 // maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
 // a high enough version such that GenerationComparable won't be lost.
-func maybeMarkGenerationComparable(st *cluster.Settings, desc *roachpb.RangeDescriptor) {
-	if st.Version.IsActive(cluster.VersionGenerationComparable) {
+func maybeMarkGenerationComparable(
+	ctx context.Context, st *cluster.Settings, desc *roachpb.RangeDescriptor,
+) {
+	if cluster.Version.GetVersion(ctx, st).IsActive(cluster.VersionGenerationComparable) {
 		desc.GenerationComparable = proto.Bool(true)
 	}
 }
