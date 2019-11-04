@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,13 +59,15 @@ func init() {
 	}
 }
 
-func storeFromURI(ctx context.Context, t *testing.T, uri string) ExternalStorage {
+func storeFromURI(
+	ctx context.Context, t *testing.T, uri string, clientFactory blobs.BlobClientFactory,
+) ExternalStorage {
 	conf, err := ExternalStorageConfFromURI(uri)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := MakeExternalStorage(ctx, conf, testSettings)
+	s, err := MakeExternalStorage(ctx, conf, testSettings, clientFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +83,8 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	}
 
 	// Setup a sink for the given args.
-	s, err := MakeExternalStorage(ctx, conf, testSettings)
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	s, err := MakeExternalStorage(ctx, conf, testSettings, clientFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +171,7 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename))
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory)
 		defer singleFile.Close()
 
 		res, err := singleFile.ReadFile(ctx, "")
@@ -189,7 +193,7 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	})
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "B"
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename))
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory)
 		defer singleFile.Close()
 
 		if err := singleFile.WriteFile(ctx, "", bytes.NewReader([]byte("bbb"))); err != nil {
@@ -224,8 +228,9 @@ func testListFiles(t *testing.T, storeURI string) {
 	fileNames = append(fileNames, letterFiles...)
 	sort.Strings(fileNames)
 
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI)
+		file := storeFromURI(ctx, t, storeURI, clientFactory)
 		if err := file.WriteFile(ctx, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
@@ -284,7 +289,7 @@ func testListFiles(t *testing.T, storeURI string) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := storeFromURI(ctx, t, tc.URI)
+			s := storeFromURI(ctx, t, tc.URI, clientFactory)
 			filesList, err := s.ListFiles(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -302,7 +307,7 @@ func testListFiles(t *testing.T, storeURI string) {
 	}
 
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI)
+		file := storeFromURI(ctx, t, storeURI, clientFactory)
 		if err := file.Delete(ctx, fileName); err != nil {
 			t.Fatal(err)
 		}
@@ -317,13 +322,10 @@ func TestPutLocal(t *testing.T) {
 	defer cleanupFn()
 
 	testSettings.ExternalIODir = p
-	dest, err := MakeLocalStorageURI(p)
-	if err != nil {
-		t.Fatal(err)
-	}
+	dest := MakeLocalStorageURI(p)
 
 	testExportStore(t, dest, false)
-	testListFiles(t, fmt.Sprintf("nodelocal://%s/%s", p, "listing-test"))
+	testListFiles(t, fmt.Sprintf("nodelocal:///%s", "listing-test"))
 }
 
 func TestLocalIOLimits(t *testing.T) {
@@ -333,14 +335,15 @@ func TestLocalIOLimits(t *testing.T) {
 	const allowed = "/allowed"
 	testSettings.ExternalIODir = allowed
 
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
 		u := fmt.Sprintf("nodelocal://%s", dest)
-
-		conf, err := ExternalStorageConfFromURI(u)
+		e, err := ExternalStorageFromURI(ctx, u, testSettings, clientFactory)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := MakeExternalStorage(ctx, conf, testSettings); !testutils.IsError(err, expected) {
+		_, err = e.ListFiles(ctx)
+		if !testutils.IsError(err, expected) {
 			t.Fatal(err)
 		}
 	}
@@ -470,7 +473,7 @@ func TestPutHttp(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExternalStorage(ctx, conf, testSettings)
+		s, err := MakeExternalStorage(ctx, conf, testSettings, blobs.TestEmptyBlobClientFactory)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -514,7 +517,10 @@ func TestPutS3(t *testing.T) {
 
 	ctx := context.TODO()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"), testSettings)
+		_, err := ExternalStorageFromURI(
+			ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"),
+			testSettings, blobs.TestEmptyBlobClientFactory,
+		)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
 			AuthParam,
@@ -719,7 +725,9 @@ func TestWorkloadStorage(t *testing.T) {
 	ctx := context.Background()
 
 	{
-		s, err := ExternalStorageFromURI(ctx, bankURL().String(), settings)
+		s, err := ExternalStorageFromURI(
+			ctx, bankURL().String(), settings, blobs.TestEmptyBlobClientFactory,
+		)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -736,7 +744,9 @@ func TestWorkloadStorage(t *testing.T) {
 	{
 		params := map[string]string{
 			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
-		s, err := ExternalStorageFromURI(ctx, bankURL(params).String(), settings)
+		s, err := ExternalStorageFromURI(
+			ctx, bankURL(params).String(), settings, blobs.TestEmptyBlobClientFactory,
+		)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -748,16 +758,28 @@ func TestWorkloadStorage(t *testing.T) {
 		`), strings.TrimSpace(string(bytes)))
 	}
 
-	_, err := ExternalStorageFromURI(ctx, `workload:///nope`, settings)
+	_, err := ExternalStorageFromURI(
+		ctx, `workload:///nope`, settings, blobs.TestEmptyBlobClientFactory,
+	)
 	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = ExternalStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`, settings)
+	_, err = ExternalStorageFromURI(
+		ctx, `workload:///fmt/bank/bank?version=`, settings, blobs.TestEmptyBlobClientFactory,
+	)
 	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = ExternalStorageFromURI(ctx, `workload:///csv/nope/nope?version=`, settings)
+	_, err = ExternalStorageFromURI(
+		ctx, `workload:///csv/nope/nope?version=`, settings, blobs.TestEmptyBlobClientFactory,
+	)
 	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank`, settings)
+	_, err = ExternalStorageFromURI(
+		ctx, `workload:///csv/bank/bank`, settings, blobs.TestEmptyBlobClientFactory,
+	)
 	require.EqualError(t, err, `parameter version is required`)
-	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=`, settings)
+	_, err = ExternalStorageFromURI(
+		ctx, `workload:///csv/bank/bank?version=`, settings, blobs.TestEmptyBlobClientFactory,
+	)
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`, settings)
+	_, err = ExternalStorageFromURI(
+		ctx, `workload:///csv/bank/bank?version=nope`, settings, blobs.TestEmptyBlobClientFactory,
+	)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }

@@ -57,7 +57,7 @@ func TestImportChunking(t *testing.T) {
 	}
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := importccl.Load(ctx, tc.Conns[0], bankBuf(numAccounts), "data", "nodelocal://"+dir, ts, chunkSize, dir)
+	desc, err := importccl.Load(ctx, tc.Conns[0], bankBuf(numAccounts), "data", "nodelocal://"+dir, ts, chunkSize, dir, dir)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -90,7 +90,7 @@ func TestImportOutOfOrder(t *testing.T) {
 	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row1, `,`))
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	_, err := importccl.Load(ctx, tc.Conns[0], &buf, "data", "nodelocal:///foo", ts, 0, dir)
+	_, err := importccl.Load(ctx, tc.Conns[0], &buf, "data", "nodelocal:///foo", ts, 0, dir, dir)
 	if !testutils.IsError(err, "out of order row") {
 		t.Fatalf("expected out of order row, got: %+v", err)
 	}
@@ -117,7 +117,7 @@ func BenchmarkLoad(b *testing.B) {
 	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
 	b.ResetTimer()
-	if _, err := importccl.Load(ctx, tc.Conns[0], buf, "data", dir, ts, 0, dir); err != nil {
+	if _, err := importccl.Load(ctx, tc.Conns[0], buf, "data", dir, ts, 0, dir, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
 }
