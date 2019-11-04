@@ -75,18 +75,18 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			// Resolve all three intent.
 			txn1CommitTS := *txn1Commit
 			txn1CommitTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
-			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil, roachpb.Intent{
-				Span:   roachpb.Span{Key: testKey1, EndKey: testKey2.Next()},
-				Txn:    txn1CommitTS.TxnMeta,
-				Status: txn1CommitTS.Status,
-			}, math.MaxInt64); err != nil {
+			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
+				roachpb.MakeIntent(
+					&txn1CommitTS,
+					roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
+				math.MaxInt64); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil, roachpb.Intent{
-				Span:   roachpb.Span{Key: localKey, EndKey: localKey.Next()},
-				Txn:    txn1CommitTS.TxnMeta,
-				Status: txn1CommitTS.Status,
-			}, math.MaxInt64); err != nil {
+			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
+				roachpb.MakeIntent(
+					&txn1CommitTS,
+					roachpb.Span{Key: localKey, EndKey: localKey.Next()}),
+				math.MaxInt64); err != nil {
 				t.Fatal(err)
 			}
 
@@ -97,20 +97,16 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			}
 			txn2Pushed := *txn2
 			txn2Pushed.WriteTimestamp = hlc.Timestamp{Logical: 6}
-			if _, err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.Intent{
-				Span:   roachpb.Span{Key: testKey3},
-				Txn:    txn2Pushed.TxnMeta,
-				Status: txn2Pushed.Status,
-			}); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
+				roachpb.MakeIntent(&txn2Pushed, roachpb.Span{Key: testKey3}),
+			); err != nil {
 				t.Fatal(err)
 			}
 			txn2Abort := txn2Pushed
 			txn2Abort.Status = roachpb.ABORTED
-			if _, err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.Intent{
-				Span:   roachpb.Span{Key: testKey3},
-				Txn:    txn2Abort.TxnMeta,
-				Status: txn2Abort.Status,
-			}); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
+				roachpb.MakeIntent(&txn2Abort, roachpb.Span{Key: testKey3}),
+			); err != nil {
 				t.Fatal(err)
 			}
 

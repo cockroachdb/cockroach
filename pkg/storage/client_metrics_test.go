@@ -196,14 +196,18 @@ func TestStoreResolveMetrics(t *testing.T) {
 			endKey := span.EndKey
 			if i > n/2 {
 				req := &roachpb.ResolveIntentRangeRequest{
-					IntentTxn: txn.TxnMeta, Status: status, Poison: poison,
+					IntentTxn: txn.TxnMeta,
+					Status:    status,
+					Poison:    poison,
 				}
 				req.Key, req.EndKey = key, endKey
 				ba.Add(req)
 				continue
 			}
 			req := &roachpb.ResolveIntentRequest{
-				IntentTxn: txn.TxnMeta, Status: status, Poison: poison,
+				IntentTxn: txn.TxnMeta,
+				Status:    status,
+				Poison:    poison,
 			}
 			req.Key = key
 			ba.Add(req)

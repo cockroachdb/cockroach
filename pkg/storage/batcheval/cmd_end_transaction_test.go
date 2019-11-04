@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1055,4 +1056,120 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPartialRollbackOnEndTransaction verifies that the intent
+// resolution performed synchronously as a side effect of
+// EndTransaction request properly takes into account the ignored
+// seqnum list.
+func TestPartialRollbackOnEndTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	k := roachpb.Key("a")
+	ts := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	endKey := roachpb.Key("z")
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(k),
+		EndKey:   roachpb.RKey(endKey),
+	}
+	intents := []roachpb.Span{{Key: k}}
+
+	// We want to inspect the final txn record after EndTxn, to
+	// ascertain that it persists the ignore list.
+	defer TestingSetTxnAutoGC(false)()
+
+	testutils.RunTrueAndFalse(t, "withStoredTxnRecord", func(t *testing.T, storeTxnBeforeEndTxn bool) {
+		db := engine.NewDefaultInMem()
+		defer db.Close()
+		batch := db.NewBatch()
+		defer batch.Close()
+
+		var v roachpb.Value
+
+		// Write a first value at key.
+		v.SetString("a")
+		txn.Sequence = 1
+		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+			t.Fatal(err)
+		}
+		// Write another value.
+		v.SetString("b")
+		txn.Sequence = 2
+		if err := engine.MVCCPut(ctx, batch, nil, k, ts, v, &txn); err != nil {
+			t.Fatal(err)
+		}
+
+		// Partially revert the store above.
+		txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 2, End: 2}}
+
+		// We test with and without a stored txn record, so as to exercise
+		// the two branches of EndTxn() and verify that the ignored seqnum
+		// list is properly persisted in the stored transaction record.
+		txnKey := keys.TransactionKey(txn.Key, txn.ID)
+		if storeTxnBeforeEndTxn {
+			txnRec := txn.AsRecord()
+			if err := engine.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, nil, &txnRec); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Issue the end txn command.
+		req := roachpb.EndTxnRequest{
+			RequestHeader:  roachpb.RequestHeader{Key: txn.Key},
+			Commit:         true,
+			NoRefreshSpans: true,
+			IntentSpans:    intents,
+		}
+		var resp roachpb.EndTxnResponse
+		if _, err := EndTxn(ctx, batch, CommandArgs{
+			EvalCtx: &mockEvalCtx{
+				desc: &desc,
+				canCreateTxnFn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+					return true, ts, 0
+				},
+			},
+			Args: &req,
+			Header: roachpb.Header{
+				Timestamp: ts,
+				Txn:       &txn,
+			},
+		}, &resp); err != nil {
+			t.Fatal(err)
+		}
+
+		// The second write has been rolled back; verify that the remaining
+		// value is from the first write.
+		res, i, err := engine.MVCCGet(ctx, batch, k, ts2, engine.MVCCGetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i != nil {
+			t.Errorf("found intent, expected none: %+v", i)
+		}
+		if res == nil {
+			t.Errorf("no value found, expected one")
+		} else {
+			s, err := res.GetBytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.Equal(t, "a", string(s))
+		}
+
+		// Also verify that the txn record contains the ignore list.
+		var txnRec roachpb.TransactionRecord
+		hasRec, err := engine.MVCCGetProto(ctx, batch, txnKey, hlc.Timestamp{}, &txnRec, engine.MVCCGetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !hasRec {
+			t.Error("expected txn record remaining after test, found none")
+		} else {
+			require.Equal(t, txn.IgnoredSeqNums, txnRec.IgnoredSeqNums)
+		}
+	})
 }

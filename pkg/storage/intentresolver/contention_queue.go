@@ -221,11 +221,7 @@ func (cq *contentionQueue) add(
 					log.VEventf(ctx, 3, "%s exiting contention queue to push %s", txnID(curPusher.txn), txnMeta.ID.Short())
 					wiErrCopy := *wiErr
 					wiErrCopy.Intents = []roachpb.Intent{
-						{
-							Span:   intent.Span,
-							Txn:    *txnMeta,
-							Status: roachpb.PENDING,
-						},
+						roachpb.MakePendingIntent(txnMeta, intent.Span),
 					}
 					wiErr = &wiErrCopy
 				} else {
