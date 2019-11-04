@@ -5605,7 +5605,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 		&base.Config{Insecure: true},
 		clock,
 		stopper,
-		&st.Version,
+		st,
 	)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
@@ -5748,7 +5748,7 @@ func Example_rebalancing() {
 		&base.Config{Insecure: true},
 		clock,
 		stopper,
-		&st.Version,
+		st,
 	)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())

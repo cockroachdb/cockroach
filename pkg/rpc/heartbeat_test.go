@@ -44,17 +44,17 @@ func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	version := &cluster.MakeTestingClusterSettings().Version
+	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		version:            version,
+		settings:           st,
 	}
 
 	request := &PingRequest{
 		Ping:          "testPing",
-		ServerVersion: version.ServerVersion,
+		ServerVersion: cluster.Version.BinaryVersion(st),
 	}
 	response, err := heartbeat.Ping(context.Background(), request)
 	if err != nil {
@@ -74,7 +74,7 @@ func TestHeartbeatReply(t *testing.T) {
 type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
-	version            *cluster.ExposedClusterVersion
+	settings           *cluster.Settings
 	nodeID             *base.NodeIDContainer
 	// Heartbeats are processed when a value is sent here.
 	ready   chan error
@@ -98,7 +98,7 @@ func (mhs *ManualHeartbeatService) Ping(
 		clock:              mhs.clock,
 		remoteClockMonitor: mhs.remoteClockMonitor,
 		clusterID:          &base.ClusterIDContainer{},
-		version:            mhs.version,
+		settings:           mhs.settings,
 		nodeID:             mhs.nodeID,
 	}
 	return hs.Ping(ctx, args)
@@ -108,23 +108,23 @@ func TestManualHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	version := &cluster.MakeTestingClusterSettings().Version
+	st := cluster.MakeTestingClusterSettings()
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		ready:              make(chan error, 1),
-		version:            version,
+		settings:           st,
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		version:            version,
+		settings:           st,
 	}
 
 	request := &PingRequest{
 		Ping:          "testManual",
-		ServerVersion: version.ServerVersion,
+		ServerVersion: cluster.Version.BinaryVersion(st),
 	}
 	manualHeartbeat.ready <- nil
 	ctx := context.Background()
@@ -162,11 +162,12 @@ func TestClockOffsetMismatch(t *testing.T) {
 	ctx := context.Background()
 
 	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
+	st := cluster.MakeTestingClusterSettings()
 	hs := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		version:            &cluster.MakeTestingClusterSettings().Version,
+		settings:           st,
 	}
 	hs.clusterID.Set(ctx, uuid.Nil)
 
@@ -174,7 +175,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 		Ping:           "testManual",
 		Addr:           "test",
 		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
-		ServerVersion:  hs.version.Version().Version,
+		ServerVersion:  cluster.Version.BinaryVersion(st),
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
@@ -198,12 +199,12 @@ func TestClusterIDCompare(t *testing.T) {
 
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	version := &cluster.MakeTestingClusterSettings().Version
+	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		version:            version,
+		settings:           st,
 	}
 
 	for _, td := range testData {
@@ -212,7 +213,7 @@ func TestClusterIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				ClusterID:     &td.clientClusterID,
-				ServerVersion: version.ServerVersion,
+				ServerVersion: cluster.Version.BinaryVersion(st),
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
@@ -242,13 +243,13 @@ func TestNodeIDCompare(t *testing.T) {
 
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	version := &cluster.MakeTestingClusterSettings().Version
+	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		nodeID:             &base.NodeIDContainer{},
-		version:            version,
+		settings:           st,
 	}
 
 	for _, td := range testData {
@@ -257,7 +258,7 @@ func TestNodeIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				NodeID:        td.clientNodeID,
-				ServerVersion: version.ServerVersion,
+				ServerVersion: cluster.Version.BinaryVersion(st),
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {

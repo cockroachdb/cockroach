@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -937,11 +938,13 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		return br, nil
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		senderFn,
 	)
@@ -1310,6 +1313,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
+					Settings:   cluster.MakeTestingClusterSettings(),
 				},
 				senderFn,
 			)
@@ -1383,11 +1387,13 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1449,11 +1455,13 @@ func TestOnePCErrorTracking(t *testing.T) {
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1542,6 +1550,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1607,6 +1616,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1690,6 +1700,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1741,6 +1752,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 			TestingKnobs: ClientTestingKnobs{
 				// Disable span refresh, otherwise it kicks and retries batches by
 				// itself.
@@ -1822,6 +1834,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1870,11 +1883,13 @@ func TestSequenceNumbers(t *testing.T) {
 		br.Txn = ba.Txn
 		return br, nil
 	})
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1920,11 +1935,13 @@ func TestConcurrentTxnRequests(t *testing.T) {
 		}
 		return br, nil
 	})
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -1972,6 +1989,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -2040,11 +2058,13 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		}
 		return nil, nil
 	})
+
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
 	)
@@ -2187,6 +2207,7 @@ func TestAnchorKey(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
+			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		senderFn,
 	)

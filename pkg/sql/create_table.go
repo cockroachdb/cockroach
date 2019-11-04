@@ -559,7 +559,7 @@ func ResolveFK(
 
 	var validity sqlbase.ConstraintValidity
 	if ts != NewTable {
-		if settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+		if cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
 			if validationBehavior == tree.ValidationSkip {
 				validity = sqlbase.ConstraintValidity_Unvalidated
 			} else {
@@ -586,7 +586,7 @@ func ResolveFK(
 		LegacyReferencedIndex: legacyReferencedIndexID,
 	}
 
-	if !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+	if !cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
 		legacyUpgradedFromOriginReference := sqlbase.ForeignKeyReference{
 			Table:           target.ID,
 			Index:           legacyReferencedIndexID,
@@ -605,7 +605,9 @@ func ResolveFK(
 		ref.LegacyUpgradedFromReferencedReference = legacyUpgradedFromReferencedReference
 	}
 
-	if ts == NewTable || !settings.Version.IsActive(cluster.VersionTopLevelForeignKeys) {
+	if ts == NewTable || !cluster.Version.IsActive(
+		ctx, settings, cluster.VersionTopLevelForeignKeys,
+	) {
 		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
 		target.InboundFKs = append(target.InboundFKs, ref)
 	} else {

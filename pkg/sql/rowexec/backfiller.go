@@ -136,7 +136,8 @@ func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	if err != nil {
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
-	if !b.flowCtx.Cfg.Settings.Version.IsActive(cluster.VersionAtomicChangeReplicasTrigger) {
+	st := b.flowCtx.Cfg.Settings
+	if !cluster.Version.IsActive(ctx, st, cluster.VersionAtomicChangeReplicasTrigger) {
 		// There is a node of older version which could be the coordinator.
 		// So we communicate the finished work by writing to the jobs row.
 		err = WriteResumeSpan(ctx,

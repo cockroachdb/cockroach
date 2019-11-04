@@ -62,16 +62,13 @@ func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 	return v.Version.String()
 }
 
-func (th *testClusterWithHelpers) getVersionFromSetting(i int) *cluster.ExposedClusterVersion {
-	return &th.Servers[i].ClusterSettings().Version
-}
-
 func (th *testClusterWithHelpers) setVersion(i int, version string) error {
 	_, err := th.ServerConn(i).Exec("SET CLUSTER SETTING version = $1", version)
 	return err
 }
 
 func (th *testClusterWithHelpers) mustSetVersion(i int, version string) {
+	th.Helper()
 	if err := th.setVersion(i, version); err != nil {
 		th.Fatalf("%d: %s", i, err)
 	}
@@ -179,12 +176,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	// new version (and not the old one).
 	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
 
-	bootstrapVersion := cluster.ClusterVersion{Version: newVersion}
-
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
 		},
@@ -197,18 +189,15 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
-		testutils.SucceedsSoon(t, func() error {
-			for _, engine := range tc.TestCluster.Servers[i].Engines() {
-				cv, err := storage.ReadClusterVersion(ctx, engine)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if cv.Version != newVersion {
-					return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
-				}
+		for _, engine := range tc.TestCluster.Servers[i].Engines() {
+			cv, err := storage.ReadClusterVersion(ctx, engine)
+			if err != nil {
+				t.Fatal(err)
 			}
-			return nil
-		})
+			if cv.Version != newVersion {
+				t.Fatalf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+			}
+		}
 	}
 }
 
@@ -216,29 +205,27 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	dir, finish := testutils.TempDir(t)
-	defer finish()
-
 	var newVersion = cluster.BinaryServerVersion
 	var oldVersion = prev(newVersion)
 
-	// Starts 3 nodes that have cluster versions set to be oldVersion and
-	// self-declared binary version set to be newVersion. Expect cluster
-	// version to upgrade automatically from oldVersion to newVersion.
-	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
-
-	bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
-
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
 		Server: &server.TestingKnobs{
+			BootstrapVersionOverride:       oldVersion,
 			DisableAutomaticVersionUpgrade: 1,
 		},
 	}
-	tc := setupMixedCluster(t, knobs, versions, dir)
-	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	rawTC := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Knobs: knobs,
+		},
+	})
+	defer rawTC.Stopper().Stop(ctx)
+	tc := testClusterWithHelpers{
+		T:           t,
+		TestCluster: rawTC,
+	}
 
 	{
 		// Regression test for the fix for this issue:
@@ -280,13 +267,14 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			v := tc.getVersionFromSetting(i)
+			st := tc.Servers[i].ClusterSettings()
+			v := cluster.Version.ActiveVersion(ctx, st)
 			wantActive := isNoopUpdate
-			if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
+			if isActive := v.IsActiveVersion(newVersion); isActive != wantActive {
 				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
 
-			if tableV, curV := tc.getVersionFromSelect(i), v.Version().Version.String(); tableV != curV {
+			if tableV, curV := tc.getVersionFromSelect(i), v.String(); tableV != curV {
 				return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
 			}
 		}
@@ -316,8 +304,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// already in the table.
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			vers := tc.getVersionFromSetting(i)
-			if v := vers.Version().Version.String(); v == curVersion {
+			vers := cluster.Version.ActiveVersion(ctx, tc.Servers[i].ClusterSettings())
+			if v := vers.String(); v == curVersion {
 				if isNoopUpdate {
 					continue
 				}
@@ -365,7 +353,7 @@ func TestAllVersionsAgree(t *testing.T) {
 	// to get to BinaryServerVersion. Hence, we loop until that gossip comes.
 	testutils.SucceedsSoon(tc, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+			if version := cluster.Version.ActiveVersion(ctx, tc.Servers[i].ClusterSettings()); version.String() != exp {
 				return fmt.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {
@@ -414,16 +402,10 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	versions := [][2]string{{v0s, v1s}, {v0s, v1s}, {v0s, v1s}, {v0s, v0s}}
 
 	// Start by running v1.
-	bootstrapVersion := cluster.ClusterVersion{
-		Version: v0,
-	}
-
 	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
+			BootstrapVersionOverride:       v0,
 		},
 	}
 	tc := setupMixedCluster(t, knobs, versions, "")
@@ -446,7 +428,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
 		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
+			if version := cluster.Version.ActiveVersion(ctx, tc.Servers[i].ClusterSettings()).String(); version != exp {
 				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {

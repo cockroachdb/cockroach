@@ -55,7 +55,8 @@ func QueryTxn(
 	// TODO(nvanbenschoten): old clusters didn't attach header timestamps to
 	// QueryTxn requests, so only perform this check for clusters that will
 	// always attach a valid timestamps.
-	checkHeaderTS := cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionQueryTxnTimestamp)
+	checkHeaderTS := cluster.Version.IsActive(
+		ctx, cArgs.EvalCtx.ClusterSettings(), cluster.VersionQueryTxnTimestamp)
 	if h.Timestamp.Less(args.Txn.Timestamp) && checkHeaderTS {
 		// This condition must hold for the timestamp cache access to be safe.
 		return result.Result{}, errors.Errorf("request timestamp %s less than txn timestamp %s", h.Timestamp, args.Txn.Timestamp)

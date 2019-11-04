@@ -47,7 +47,7 @@ func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
 		&base.Config{Insecure: true},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
+		cluster.MakeTestingClusterSettings(),
 	)
 }
 
