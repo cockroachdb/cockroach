@@ -232,6 +232,12 @@ type Pebble struct {
 
 var _ Engine = &Pebble{}
 
+// NewEncryptedEnvFunc creates an encrypted environment and returns the vfs.FS to use for reading
+// and writing data. This should be initialized by calling engineccl.Init() before calling
+// NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
+// code does not depend on CCL code.
+var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, error)
+
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
@@ -257,6 +263,33 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 		if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
 			return nil, err
 		}
+	}
+
+	fileRegistry := &PebbleFileRegistry{FS: cfg.Opts.FS, DBDir: cfg.Dir, ReadOnly: cfg.Opts.ReadOnly}
+	if cfg.UseFileRegistry {
+		if err := fileRegistry.Load(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := fileRegistry.checkNoRegistryFile(); err != nil {
+			return nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
+				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
+		}
+	}
+
+	if len(cfg.ExtraOptions) > 0 {
+		// Encryption is enabled.
+		if !cfg.UseFileRegistry {
+			return nil, fmt.Errorf("file registry is needed to support encryption")
+		}
+		if NewEncryptedEnvFunc == nil {
+			return nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
+		}
+		fs, err := NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.ExtraOptions)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Opts.FS = fs
 	}
 
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)

@@ -83,8 +83,12 @@ func TestEncryptedFS(t *testing.T) {
 		"4c: f.readat 5 20 == uvwxy",
 		"4d: f.close",
 		"4e: open /bar/z fails",
-		// ReuseWAL /foo /baz
-		"5a: reuseWAL /foo /baz fails",
+		// ReuseForWrite /foo /baz
+		"5a: f = reuseForWrite /foo /baz",
+		"5b: f.write abc",
+		"5c: f.close",
+		"5d: f = open /baz",
+		"5e: f.read 3 == abc",
 	}
 
 	for _, tc := range testCases {
@@ -118,8 +122,8 @@ func TestEncryptedFS(t *testing.T) {
 			err = fs.Remove(s[1])
 		case "rename":
 			err = fs.Rename(s[1], s[2])
-		case "reuseWAL":
-			_, err = fs.ReuseWAL(s[1], s[2])
+		case "reuseForWrite":
+			g, err = fs.ReuseForWrite(s[1], s[2])
 		case "f.write":
 			_, err = f.Write([]byte(s[1]))
 		case "f.read":

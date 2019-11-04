@@ -57,6 +57,15 @@ const (
 	fileRegistryFilename = "COCKROACHDB_REGISTRY"
 )
 
+func (r *PebbleFileRegistry) checkNoRegistryFile() error {
+	r.registryFilename = r.FS.PathJoin(r.DBDir, fileRegistryFilename)
+	if f, err := r.FS.Open(r.registryFilename); err == nil {
+		f.Close()
+		return os.ErrExist
+	}
+	return nil
+}
+
 // Load loads the contents of the file registry from a file, if the file exists, else it is a noop.
 // It must be called at most once, before the other functions.
 func (r *PebbleFileRegistry) Load() error {
