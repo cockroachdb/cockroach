@@ -963,6 +963,7 @@ func (t *Transaction) Restart(
 	t.CommitTimestampFixed = false
 	t.IntentSpans = nil
 	t.InFlightWrites = nil
+	t.IgnoredSeqNums = nil
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place
@@ -1012,6 +1013,7 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Sequence = o.Sequence
 		t.IntentSpans = o.IntentSpans
 		t.InFlightWrites = o.InFlightWrites
+		t.IgnoredSeqNums = o.IgnoredSeqNums
 	} else if t.Epoch == o.Epoch {
 		// Forward all epoch-scoped state.
 		switch t.Status {
@@ -1047,6 +1049,9 @@ func (t *Transaction) Update(o *Transaction) {
 		}
 		if len(o.InFlightWrites) > 0 {
 			t.InFlightWrites = o.InFlightWrites
+		}
+		if len(o.IgnoredSeqNums) > 0 {
+			t.IgnoredSeqNums = o.IgnoredSeqNums
 		}
 	} else /* t.Epoch > o.Epoch */ {
 		// Ignore epoch-specific state from previous epoch.
@@ -1112,6 +1117,9 @@ func (t Transaction) String() string {
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
 		fmt.Fprintf(&buf, " ifw=%d", nw)
 	}
+	if ni := len(t.IgnoredSeqNums); ni > 0 {
+		fmt.Fprintf(&buf, " isn=%d", ni)
+	}
 	return buf.String()
 }
 
@@ -1131,6 +1139,9 @@ func (t Transaction) SafeMessage() string {
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
 		fmt.Fprintf(&buf, " ifw=%d", nw)
+	}
+	if ni := len(t.IgnoredSeqNums); ni > 0 {
+		fmt.Fprintf(&buf, " isn=%d", ni)
 	}
 	return buf.String()
 }
@@ -1800,11 +1811,8 @@ func (l *Lease) Equal(that interface{}) bool {
 func AsIntents(spans []Span, txn *Transaction) []Intent {
 	ret := make([]Intent, len(spans))
 	for i := range spans {
-		ret[i] = Intent{
-			Span:   spans[i],
-			Txn:    txn.TxnMeta,
-			Status: txn.Status,
-		}
+		ret[i] = Intent{Span: spans[i]}
+		ret[i].SetTxn(*txn)
 	}
 	return ret
 }
@@ -2144,4 +2152,29 @@ func init() {
 	// Inject the format dependency into the enginepb package.
 	enginepb.FormatBytesAsKey = func(k []byte) string { return Key(k).String() }
 	enginepb.FormatBytesAsValue = func(v []byte) string { return Value{RawBytes: v}.PrettyPrint() }
+}
+
+// MakeIntent makes an intent from the given span and txn.
+func MakeIntent(txn Transaction, span Span) Intent {
+	intent := Intent{Span: span}
+	intent.SetTxn(txn)
+	return intent
+}
+
+// MakeErrorIntent makes an intent in the pending state with the given
+// span and txn. This is suitable for use when constructing
+// WriteIntentError.
+func MakeErrorIntent(txn enginepb.TxnMeta, span Span) Intent {
+	return Intent{
+		Span:   span,
+		Txn:    txn,
+		Status: PENDING,
+	}
+}
+
+// SetTxn updates the transaction details in the intent.
+func (i *Intent) SetTxn(txn Transaction) {
+	i.Txn = txn.TxnMeta
+	i.Status = txn.Status
+	i.IgnoredSeqNums = txn.IgnoredSeqNums
 }
