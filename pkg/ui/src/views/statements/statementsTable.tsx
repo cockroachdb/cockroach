@@ -8,21 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Tooltip } from "antd";
+import * as docsURL from "oss/src/util/docs";
+import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router";
-
+import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
+import { Duration } from "src/util/format";
+import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { StatementStatistics } from "src/util/appStats";
-import { Duration } from "src/util/format";
-import { summarize, StatementSummary } from "src/util/sql/summarize";
-
-import { countBarChart, retryBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
-
+import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import "./statements.styl";
-import * as docsURL from "oss/src/util/docs";
-import { Tooltip } from "antd";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -37,9 +35,9 @@ export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
 function StatementLink(props: { statement: string, app: string, implicitTxn: boolean, search: string }) {
   const summary = summarize(props.statement);
-  const base = props.app ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
+  const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
-    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
+    // <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="statement__tooltip">
         <Tooltip overlayClassName="preset-black" placement="bottom" title={
           <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
@@ -49,7 +47,7 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
           </div>
         </Tooltip>
       </div>
-    </Link>
+    {/* </Link> */}
   );
 }
 
@@ -70,26 +68,6 @@ function calculateCumulativeTime(stats: StatementStatistics) {
   const latency = stats.service_lat.mean;
 
   return count * latency;
-}
-
-function getHighlightedText(text: string, highlight: string) {
-  if (highlight.length === 0) {
-    return text;
-  }
-  highlight = highlight.replace(/[°§%()\[\]{}\\?´`'#|;:+-]+/g, "highlightNotDefined");
-  const search = highlight.split(" ").map(val => val.toLowerCase()).join("|");
-  const parts = text.split(new RegExp(`(${search})`, "gi"));
-  return parts.map((part, i) => {
-    if (search.includes(part.toLowerCase())) {
-      return (
-        <span key={i} className="_text-bold">
-          {`${part}`}
-        </span>
-      );
-    } else {
-      return `${part}`;
-    }
-  });
 }
 
 export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string, search?: string)

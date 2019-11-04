@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import _ from "lodash";
 import classNames from "classnames";
-
+import _ from "lodash";
+import getHighlightedText from "oss/src/util/highlightedText";
+import React from "react";
+import { DrawerComponent } from "../drawer";
 import "./sortabletable.styl";
+import { Link } from "react-router";
 
 /**
  * SortableColumn describes the contents a single column of a
@@ -100,6 +102,14 @@ export class SortableTable extends React.Component<TableProps> {
     rowClass: (_rowIndex) => "",
   };
 
+  state = {
+    visible: false,
+    drawerData: {
+      statement: "",
+      search: "",
+    },
+  };
+
   clickSort(clickedSortKey: any) {
     const { sortSetting, onChangeSortSetting } = this.props;
 
@@ -147,7 +157,12 @@ export class SortableTable extends React.Component<TableProps> {
       <tr
         key={rowIndex}
         className={classes}
-        onClick={() => onClickExpand(rowIndex, !expanded)}
+        onClick={() => {
+          this.showDrawer(rowIndex);
+          if (onClickExpand) {
+            onClickExpand(rowIndex, !expanded);
+          }
+        }}
       >
         {expandableConfig ? this.expansionControl(expanded) : null}
         {_.map(columns, (c: SortableColumn, colIndex: number) => {
@@ -184,42 +199,71 @@ export class SortableTable extends React.Component<TableProps> {
     return output;
   }
 
+  showDrawer = (rowIndex: number) => {
+    this.setState({
+      visible: true,
+      drawerData: this.props.columns[0].cell(rowIndex).props,
+    });
+  }
+
+  onClose = () => {
+    this.setState({
+      visible: false,
+      drawerData: {
+        statement: "",
+        search: "",
+      },
+    });
+  }
+
+  onChange = (e: { target: { value: any; }; }) => {
+    this.setState({
+      placement: e.target.value,
+    });
+  }
+
   render() {
     const { sortSetting, columns, expandableConfig } = this.props;
+    const { visible, drawerData } = this.state;
     return (
-      <table className={classNames("sort-table", this.props.className)}>
-        <thead>
-          <tr className="sort-table__row sort-table__row--header">
-            {expandableConfig ? <th className="sort-table__cell" /> : null}
-            {_.map(columns, (c: SortableColumn, colIndex: number) => {
-              const classes = ["sort-table__cell"];
-              let onClick: (e: any) => void = undefined;
+      <React.Fragment>
+        <table className={classNames("sort-table", this.props.className)}>
+          <thead>
+            <tr className="sort-table__row sort-table__row--header">
+              {expandableConfig ? <th className="sort-table__cell" /> : null}
+              {_.map(columns, (c: SortableColumn, colIndex: number) => {
+                const classes = ["sort-table__cell"];
+                let onClick: (e: any) => void = undefined;
 
-              if (!_.isUndefined(c.sortKey)) {
-                classes.push("sort-table__cell--sortable");
-                onClick = () => {
-                  this.clickSort(c.sortKey);
-                };
-                if (c.sortKey === sortSetting.sortKey) {
-                  if (sortSetting.ascending) {
-                    classes.push(" sort-table__cell--ascending");
-                  } else {
-                    classes.push("sort-table__cell--descending");
+                if (!_.isUndefined(c.sortKey)) {
+                  classes.push("sort-table__cell--sortable");
+                  onClick = () => {
+                    this.clickSort(c.sortKey);
+                  };
+                  if (c.sortKey === sortSetting.sortKey) {
+                    if (sortSetting.ascending) {
+                      classes.push(" sort-table__cell--ascending");
+                    } else {
+                      classes.push("sort-table__cell--descending");
+                    }
                   }
                 }
-              }
-              return (
-                <th className={classNames(classes)} key={colIndex} onClick={onClick}>
-                  {c.title}
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {_.times(this.props.count, this.renderRow)}
-        </tbody>
-      </table>
+                return (
+                  <th className={classNames(classes)} key={colIndex} onClick={onClick}>
+                    {c.title}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {_.times(this.props.count, this.renderRow)}
+          </tbody>
+        </table>
+        <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
+          <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search)}</span>
+        </DrawerComponent>
+      </React.Fragment>
     );
   }
 }
