@@ -151,3 +151,17 @@ func TestFileRegistryOps(t *testing.T) {
 	require.Error(t, roRegistry.MaybeRenameEntry("file3", "file4"))
 	require.Error(t, roRegistry.MaybeLinkEntry("file3", "file4"))
 }
+
+func TestFileRegistryCheckNoFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mem := vfs.NewMem()
+	fileEntry :=
+		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}
+	registry := &PebbleFileRegistry{FS: mem}
+	require.NoError(t, registry.checkNoRegistryFile())
+	require.NoError(t, registry.Load())
+	require.NoError(t, registry.SetFileEntry("/foo", fileEntry))
+	registry = &PebbleFileRegistry{FS: mem}
+	require.Error(t, registry.checkNoRegistryFile())
+}
