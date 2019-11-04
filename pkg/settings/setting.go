@@ -165,7 +165,7 @@ func (sv *Values) setGeneric(slotIdx int, newVal interface{}) {
 	sv.settingChanged(slotIdx)
 }
 
-// !!! exported version
+// SetGeneric is the exported version of setGeneric. Used by the clusterVersionSetting.
 func (sv *Values) SetGeneric(slotIdx int, newVal interface{}) {
 	sv.setGeneric(slotIdx, newVal)
 }

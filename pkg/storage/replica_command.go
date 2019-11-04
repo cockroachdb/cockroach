@@ -302,9 +302,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	delayable bool,
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
-	if !cluster.Version.GetVersion(ctx, r.store.ClusterSettings()).IsActive(
-		cluster.VersionStickyBit,
-	) {
+	if !cluster.Version.IsActive(ctx, r.store.ClusterSettings(), cluster.VersionStickyBit) {
 		// If sticky bits aren't supported yet but we receive one anyway, ignore
 		// it. The callers are supposed to only pass hlc.Timestamp{} in that
 		// case, but this is violated in at least one case (and there are lots of
@@ -958,7 +956,7 @@ func (r *Replica) ChangeReplicas(
 	// We execute the change serially if we're not allowed to run atomic
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
-	unroll := !cluster.Version.GetVersion(ctx, st).IsActive(cluster.VersionAtomicChangeReplicas) ||
+	unroll := !cluster.Version.IsActive(ctx, st, cluster.VersionAtomicChangeReplicas) ||
 		!UseAtomicReplicationChanges.Get(&st.SV)
 
 	if unroll {
@@ -998,8 +996,8 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	settings := r.ClusterSettings()
-	if useLearners := cluster.Version.GetVersion(ctx, settings).IsActive(
-		cluster.VersionLearnerReplicas,
+	if useLearners := cluster.Version.IsActive(
+		ctx, settings, cluster.VersionLearnerReplicas,
 	); !useLearners {
 		// NB: we will never use atomic replication changes while learners are not
 		// also active.
@@ -1423,8 +1421,8 @@ func prepareChangeReplicasTrigger(
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
-	generationComparableEnabled := cluster.Version.GetVersion(ctx, store.ClusterSettings()).IsActive(
-		cluster.VersionGenerationComparable)
+	generationComparableEnabled := cluster.Version.IsActive(
+		ctx, store.ClusterSettings(), cluster.VersionGenerationComparable)
 	if generationComparableEnabled {
 		updatedDesc.IncrementGeneration()
 		updatedDesc.GenerationComparable = proto.Bool(true)
@@ -1507,8 +1505,8 @@ func prepareChangeReplicasTrigger(
 	}
 
 	var crt *roachpb.ChangeReplicasTrigger
-	if !cluster.Version.GetVersion(ctx, store.ClusterSettings()).IsActive(
-		cluster.VersionAtomicChangeReplicasTrigger,
+	if !cluster.Version.IsActive(
+		ctx, store.ClusterSettings(), cluster.VersionAtomicChangeReplicasTrigger,
 	) {
 		var deprecatedChangeType roachpb.ReplicaChangeType
 		var deprecatedRepDesc roachpb.ReplicaDescriptor
@@ -2009,8 +2007,8 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-	useAtomic := cluster.Version.GetVersion(ctx, s.ClusterSettings()).IsActive(
-		cluster.VersionAtomicChangeReplicas)
+	useAtomic := cluster.Version.IsActive(
+		ctx, s.ClusterSettings(), cluster.VersionAtomicChangeReplicas)
 	if useAtomic {
 		// AdminChangeReplicas will only allow atomic replication changes when
 		// this magic flag is set because we changed the corresponding request
@@ -2453,7 +2451,7 @@ func (r *Replica) adminScatter(
 func maybeMarkGenerationComparable(
 	ctx context.Context, st *cluster.Settings, desc *roachpb.RangeDescriptor,
 ) {
-	if cluster.Version.GetVersion(ctx, st).IsActive(cluster.VersionGenerationComparable) {
+	if cluster.Version.IsActive(ctx, st, cluster.VersionGenerationComparable) {
 		desc.GenerationComparable = proto.Bool(true)
 	}
 }

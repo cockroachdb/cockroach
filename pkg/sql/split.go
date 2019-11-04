@@ -41,7 +41,7 @@ type splitRun struct {
 
 func (n *splitNode) startExec(params runParams) error {
 	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.GetVersion(params.ctx, st).IsActive(cluster.VersionStickyBit)
+	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, cluster.VersionStickyBit)
 	// TODO(jeffreyxiao): Remove this error, splitNode.force, and
 	// experimental_force_split_at in v20.1.
 	// This check is not intended to be foolproof. The setting could be outdated
@@ -72,7 +72,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 	// TODO(jeffreyxiao): Remove this check in v20.1.
 	// Don't set the manual flag if the cluster is not up-to-date.
 	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.GetVersion(params.ctx, st).IsActive(cluster.VersionStickyBit)
+	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, cluster.VersionStickyBit)
 	expirationTime := hlc.Timestamp{}
 	if stickyBitEnabled {
 		expirationTime = n.expirationTime

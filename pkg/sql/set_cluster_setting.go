@@ -234,7 +234,6 @@ func toSettingString(
 				return "", errors.New("the existing value is not a string")
 			}
 			prevRawVal := []byte(string(*dStr))
-			log.Info(ctx, "!!! toSettingString validating: %s", s)
 			newBytes, err := setting.Validate(ctx, &st.SV, prevRawVal, string(*s))
 			if err != nil {
 				return "", err

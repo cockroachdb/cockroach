@@ -887,9 +887,9 @@ func applyColumnMutation(
 		col.Nullable = true
 		// In 19.2 and above, add a check constraint equivalent to the non-null
 		// constraint and drop it in the schema changer.
-		if cluster.Version.GetVersion(
-			params.ctx, params.ExecCfg().Settings,
-		).IsActive(cluster.VersionTopLevelForeignKeys) {
+		if cluster.Version.IsActive(
+			params.ctx, params.ExecCfg().Settings, cluster.VersionTopLevelForeignKeys,
+		) {
 			check := sqlbase.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, sqlbase.ConstraintValidity_Dropping)
 			tableDesc.Checks = append(tableDesc.Checks, check)
 			tableDesc.AddNotNullMutation(check, sqlbase.DescriptorMutation_DROP)

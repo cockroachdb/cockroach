@@ -502,7 +502,7 @@ func (n *Node) start(
 	cluster.Version.SetBeforeChange(ctx, n.storeCfg.Settings, n.onClusterVersionChange)
 	// Invoke the callback manually once so that we persist the updated value that
 	// gossip might have already received.
-	clusterVersion := cluster.Version.GetVersion(ctx, n.storeCfg.Settings)
+	clusterVersion := cluster.Version.ActiveVersion(ctx, n.storeCfg.Settings)
 	n.onClusterVersionChange(ctx, clusterVersion)
 
 	// Be careful about moving this line above `startStores`; store migrations rely

@@ -205,31 +205,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	// // !!! is this dir needed?
-	// dir, finish := testutils.TempDir(t)
-	// defer finish()
-
 	var newVersion = cluster.BinaryServerVersion
 	var oldVersion = prev(newVersion)
-
-	// !!!
-	// // Starts 3 nodes that have cluster versions set to be oldVersion and
-	// // self-declared binary version set to be newVersion. Expect cluster
-	// // version to upgrade automatically from oldVersion to newVersion.
-	// versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
-	//
-	// bootstrapVersion := cluster.ClusterVersion{Version: oldVersion}
-	//
-	// knobs := base.TestingKnobs{
-	//   Store: &storage.StoreTestingKnobs{
-	//     BootstrapVersion: &bootstrapVersion,
-	//   },
-	//   Server: &server.TestingKnobs{
-	//     DisableAutomaticVersionUpgrade: 1,
-	//   },
-	// }
-	// tc := setupMixedCluster(t, knobs, versions, dir)
-	// defer tc.TestCluster.Stopper().Stop(ctx)
 
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
@@ -239,12 +216,10 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	}
 
 	rawTC := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		// !!! remove this replication mode?
 		ReplicationMode: base.ReplicationManual, // speeds up test
 		ServerArgs: base.TestServerArgs{
 			Knobs: knobs,
 		},
-		// !!! 	ServerArgsPerNode: twh.args(),
 	})
 	defer rawTC.Stopper().Stop(ctx)
 	tc := testClusterWithHelpers{
@@ -293,7 +268,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
 			st := tc.Servers[i].ClusterSettings()
-			v := cluster.Version.GetVersion(ctx, st)
+			v := cluster.Version.ActiveVersion(ctx, st)
 			wantActive := isNoopUpdate
 			if isActive := v.IsActiveVersion(newVersion); isActive != wantActive {
 				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
@@ -329,7 +304,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// already in the table.
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			vers := cluster.Version.GetVersion(ctx, tc.Servers[i].ClusterSettings())
+			vers := cluster.Version.ActiveVersion(ctx, tc.Servers[i].ClusterSettings())
 			if v := vers.String(); v == curVersion {
 				if isNoopUpdate {
 					continue
@@ -378,7 +353,7 @@ func TestAllVersionsAgree(t *testing.T) {
 	// to get to BinaryServerVersion. Hence, we loop until that gossip comes.
 	testutils.SucceedsSoon(tc, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			if version := cluster.Version.GetVersion(ctx, tc.Servers[i].ClusterSettings()); version.String() != exp {
+			if version := cluster.Version.ActiveVersion(ctx, tc.Servers[i].ClusterSettings()); version.String() != exp {
 				return fmt.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {
@@ -422,7 +397,6 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	v0, v1 := v0v1()
 	v0s := v0.String()
 	v1s := v1.String()
-	log.Infof(ctx, "!!! v0: %s, v1: %s", v0s, v1s)
 
 	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
 	versions := [][2]string{{v0s, v1s}, {v0s, v1s}, {v0s, v1s}, {v0s, v0s}}
@@ -439,7 +413,6 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	exp := v1s
 
-	log.Infof(ctx, "!!! attempting to set on the last node to %s", exp)
 	// The last node refuses to perform an upgrade that would risk its own life.
 	if err := tc.setVersion(len(versions)-1, exp); !testutils.IsError(err,
 		fmt.Sprintf("cannot upgrade to %s: node running %s", v1s, v0s),
@@ -448,17 +421,14 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	}
 
 	// The other nodes are less careful.
-	log.Infof(ctx, "!!! attempting to set on the first node to %s", exp)
 	tc.mustSetVersion(0, exp)
 
-	log.Infof(ctx, "!!! test waiting for node to die")
 	<-exits // wait for fourth node to die
-	log.Infof(ctx, "!!! test waiting for node to die... done")
 
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
 		testutils.SucceedsSoon(tc, func() error {
-			if version := cluster.Version.GetVersion(ctx, tc.Servers[i].ClusterSettings()).String(); version != exp {
+			if version := cluster.Version.ActiveVersion(ctx, tc.Servers[i].ClusterSettings()).String(); version != exp {
 				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {

@@ -433,7 +433,7 @@ func (rq *replicateQueue) addOrReplace(
 		removeIdx = -1
 	}
 	st := rq.store.cfg.Settings
-	if !cluster.Version.GetVersion(ctx, st).IsActive(cluster.VersionAtomicChangeReplicas) {
+	if !cluster.Version.IsActive(ctx, st, cluster.VersionAtomicChangeReplicas) {
 		// If we can't swap yet, don't.
 		removeIdx = -1
 	}

@@ -47,8 +47,7 @@ type HeartbeatService struct {
 
 	clusterID *base.ClusterIDContainer
 	nodeID    *base.NodeIDContainer
-	// !!! version   *cluster.ExposedClusterVersion
-	settings *cluster.Settings
+	settings  *cluster.Settings
 
 	clusterName                    string
 	disableClusterNameVerification bool
@@ -79,16 +78,11 @@ func checkClusterName(clusterName string, peerName string) error {
 }
 
 func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb.Version) error {
-	activeVersion := cluster.Version.GetVersionOrEmpty(ctx, st)
+	activeVersion := cluster.Version.ActiveVersionOrEmpty(ctx, st)
 	if activeVersion == (cluster.ClusterVersion{}) {
 		// Cluster version has not yet been determined.
 		return nil
 	}
-	// !!!
-	//if !clusterVersion.IsInitialized() {
-	//	// Cluster version has not yet been determined.
-	//	return nil
-	//}
 	if peerVersion == (roachpb.Version{}) {
 		return errors.Errorf(
 			"cluster requires at least version %s, but peer did not provide a version", activeVersion)

@@ -38,7 +38,7 @@ type unsplitRun struct {
 
 func (n *unsplitNode) startExec(params runParams) error {
 	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.GetVersion(params.ctx, st).IsActive(cluster.VersionStickyBit)
+	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, cluster.VersionStickyBit)
 	// TODO(jeffreyxiao): Remove this error in v20.1.
 	if !stickyBitEnabled {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -98,7 +98,7 @@ type unsplitAllRun struct {
 
 func (n *unsplitAllNode) startExec(params runParams) error {
 	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.GetVersion(params.ctx, st).IsActive(cluster.VersionStickyBit)
+	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, cluster.VersionStickyBit)
 	// TODO(jeffreyxiao): Remove this error in v20.1.
 	if !stickyBitEnabled {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,

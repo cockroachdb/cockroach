@@ -995,8 +995,8 @@ func maybeUpgradeForeignKeyRepOnIndex(
 func (desc *TableDescriptor) MaybeDowngradeForeignKeyRepresentation(
 	ctx context.Context, clusterSettings *cluster.Settings,
 ) (bool, *TableDescriptor, error) {
-	downgradeUnnecessary := cluster.Version.GetVersion(ctx, clusterSettings).IsActive(
-		cluster.VersionTopLevelForeignKeys)
+	downgradeUnnecessary := cluster.Version.IsActive(
+		ctx, clusterSettings, cluster.VersionTopLevelForeignKeys)
 	if downgradeUnnecessary {
 		return false, desc, nil
 	}
@@ -1510,9 +1510,7 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 	//
 	// TODO(ajwerner): remove this check in 20.1.
 	var modTime hlc.Timestamp
-	if !cluster.Version.GetVersion(ctx, settings).IsActive(
-		cluster.VersionTableDescModificationTimeFromMVCC,
-	) {
+	if !cluster.Version.IsActive(ctx, settings, cluster.VersionTableDescModificationTimeFromMVCC) {
 		modTime = txn.CommitTimestamp()
 	}
 	desc.ModificationTime = modTime
@@ -2623,7 +2621,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 				// unless the cluster is fully upgraded to 19.2, for backward
 				// compatibility.
 				if detail.CheckConstraint.Validity == ConstraintValidity_Unvalidated ||
-					!cluster.Version.GetVersion(ctx, settings).IsActive(cluster.VersionTopLevelForeignKeys) {
+					!cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
 					desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
 					return nil
 				}
@@ -2654,7 +2652,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 				// unless the cluster is fully upgraded to 19.2, for backward
 				// compatibility.
 				if detail.FK.Validity == ConstraintValidity_Unvalidated ||
-					!cluster.Version.GetVersion(ctx, settings).IsActive(cluster.VersionTopLevelForeignKeys) {
+					!cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
 					// Remove the backreference.
 					if err := removeFK(desc, detail.FK); err != nil {
 						return err

@@ -148,7 +148,7 @@ var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
 		}
 		opaque := sv.Opaque()
 		st := opaque.(*Settings)
-		clusterVersion := Version.GetVersion(context.TODO(), st).Version
+		clusterVersion := Version.ActiveVersion(context.TODO(), st).Version
 		downgradeVersion, err := roachpb.ParseVersion(s)
 		if err != nil {
 			return err
@@ -401,7 +401,7 @@ func (cv clusterVersionSetting) Initialize(
 ) error {
 	log.Infof(ctx, "!!! Initialize: %s (%p)", version, st)
 	// debug.PrintStack() // !!!
-	if ver := cv.GetVersionOrEmpty(ctx, st); ver != (ClusterVersion{}) {
+	if ver := cv.ActiveVersionOrEmpty(ctx, st); ver != (ClusterVersion{}) {
 		// Allow initializing a second time as long as it's setting the version to
 		// what it was already set. This is useful in tests that use
 		// MakeTestingClusterSettings() which initializes the version, and the
@@ -426,15 +426,19 @@ func (cv clusterVersionSetting) Initialize(
 	return nil
 }
 
-func (cv *clusterVersionSetting) GetVersion(ctx context.Context, st *Settings) ClusterVersion {
-	ver := cv.GetVersionOrEmpty(ctx, st)
+// ActiveVersion returns the cluster's current active version.
+// ActiveVersion fatals is the version has not been initialized.
+func (cv *clusterVersionSetting) ActiveVersion(ctx context.Context, st *Settings) ClusterVersion {
+	ver := cv.ActiveVersionOrEmpty(ctx, st)
 	if ver == (ClusterVersion{}) {
 		log.Fatalf(ctx, "version not initialized")
 	}
 	return ver
 }
 
-func (cv *clusterVersionSetting) GetVersionOrEmpty(
+// ActiveVersionOrEmpty is like ActiveVersion, but returns an empty version if
+// the active version was not initialized.
+func (cv *clusterVersionSetting) ActiveVersionOrEmpty(
 	ctx context.Context, st *Settings,
 ) ClusterVersion {
 	encoded := cv.GetInternal(&st.SV)
@@ -467,9 +471,9 @@ func (cv *clusterVersionSetting) GetVersionOrEmpty(
 //  binary must necessarily be able to handle (because the SET VERSION was
 //  successful) but that it itself wouldn't issue yet.
 func (cv *clusterVersionSetting) IsActive(
-	ctx context.Context, versionKey VersionKey, st *Settings,
+	ctx context.Context, st *Settings, versionKey VersionKey,
 ) bool {
-	return cv.GetVersion(ctx, st).IsActive(versionKey)
+	return cv.ActiveVersion(ctx, st).IsActive(versionKey)
 }
 
 // BeforeChange is part of the StateMachineSettingImpl interface

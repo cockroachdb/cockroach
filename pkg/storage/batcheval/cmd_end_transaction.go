@@ -1009,11 +1009,10 @@ func splitTriggerHelper(
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
 
-		v := cluster.Version.GetVersion(ctx, rec.ClusterSettings()).Version
+		v := cluster.Version.ActiveVersion(ctx, rec.ClusterSettings()).Version
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*gcThreshold, v, truncStateType,
-			// !!! *gcThreshold, rec.ClusterSettings().Version.Version().Version, truncStateType,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")

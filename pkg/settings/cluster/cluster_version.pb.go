@@ -21,8 +21,9 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// !!! can I replace this with roachpb.Version if I change the tag on that one
-// to 2?
+// ClusterVersion represents a cluster's "active version". It is returned by the
+// Version cluster setting. Its IsActive() method can be used to determine if a
+// particular migration is to be considered enabled or disabled.
 type ClusterVersion struct {
 	// The version of functionality in use in the cluster. This value must
 	// monotonically increase.
@@ -32,7 +33,7 @@ type ClusterVersion struct {
 func (m *ClusterVersion) Reset()      { *m = ClusterVersion{} }
 func (*ClusterVersion) ProtoMessage() {}
 func (*ClusterVersion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_version_4c3a57744a91d848, []int{0}
+	return fileDescriptor_cluster_version_6bb8528e3c56dcd8, []int{0}
 }
 func (m *ClusterVersion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -305,10 +306,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("settings/cluster/cluster_version.proto", fileDescriptor_cluster_version_4c3a57744a91d848)
+	proto.RegisterFile("settings/cluster/cluster_version.proto", fileDescriptor_cluster_version_6bb8528e3c56dcd8)
 }
 
-var fileDescriptor_cluster_version_4c3a57744a91d848 = []byte{
+var fileDescriptor_cluster_version_6bb8528e3c56dcd8 = []byte{
 	// 216 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2b, 0x4e, 0x2d, 0x29,
 	0xc9, 0xcc, 0x4b, 0x2f, 0xd6, 0x4f, 0xce, 0x29, 0x2d, 0x2e, 0x49, 0x2d, 0x82, 0xd1, 0xf1, 0x65,

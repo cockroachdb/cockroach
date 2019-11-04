@@ -1393,11 +1393,6 @@ func TestNodeIDMismatch(t *testing.T) {
 
 func setVersion(c *Context, v roachpb.Version) error {
 	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
-	// !!!
-	//cv := cluster.ClusterVersion{Version: v}
-	//if err := settings.InitializeVersion(context.TODO(), cv); err != nil {
-	//	return err
-	//}
 	c.settings = st
 	return nil
 }
