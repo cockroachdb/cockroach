@@ -2530,6 +2530,17 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 
+	// Handle partial txn rollbacks. If the current txn sequence
+	// is part of a rolled back (ignored) seqnum range, we're going
+	// to erase that MVCC read and reveal the previous value.
+	if len(intent.Txn.IgnoredSeqNums) > 0 {
+		latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+		clear, err := mvccRewriteIntentHistory(ctx, engine, &intent.Txn, meta, latestKey)
+		if clear || err != nil {
+			return false, err
+		}
+	}
+
 	// A commit with a newer epoch than the intent effectively means that we
 	// wrote this intent before an earlier retry, but didn't write it again
 	// after. We treat such intents as uncommitted.
@@ -2733,6 +2744,66 @@ func mvccResolveWriteIntent(
 	}
 
 	return true, nil
+}
+
+// mvccRewriteIntentHistory rolls back the write from the intent, ignoring
+// all values from the history that have an ignored seqnum.
+func mvccRewriteIntentHistory(
+	ctx context.Context,
+	engine ReadWriter,
+	txn *enginepb.TxnMeta,
+	meta *enginepb.MVCCMetadata,
+	latestKey MVCCKey,
+) (clear bool, err error) {
+	if !seqNumIsIgnored(txn, meta.Txn.Sequence) {
+		// The latest write was not ignored. Nothing to do here.  We'll
+		// proceed with the intent as usual.
+		return false, nil
+	}
+	// Find the latest historical write before that that was not
+	// ignored.
+	var i int
+	for i = len(meta.IntentHistory) - 1; i >= 0; i-- {
+		e := &meta.IntentHistory[i]
+		if !seqNumIsIgnored(txn, e.Sequence) {
+			break
+		}
+	}
+
+	// If i < 0, we don't have an intent any more: everything
+	// has been rolled back.
+	if i < 0 {
+		err := engine.Clear(latestKey)
+		return true, err
+	}
+
+	// Otherwise, we place back the write at that history entry
+	// back into the intent.
+	meta.Deleted = len(meta.IntentHistory[i].Value) == 0
+	meta.ValBytes = int64(len(meta.IntentHistory[i].Value))
+	meta.RawBytes = meta.IntentHistory[i].Value
+	// And also overwrite whatever was there in storage.
+	err = engine.Put(latestKey, meta.RawBytes)
+
+	return false, err
+}
+
+func seqNumIsIgnored(txn *enginepb.TxnMeta, sequence enginepb.TxnSeq) bool {
+	for i := len(txn.IgnoredSeqNums) - 1; i >= 0; i-- {
+		r := txn.IgnoredSeqNums[i]
+		if sequence > r.End {
+			// All ignored ranges lower than the current seqnum. Write is not ignored.
+			return false
+		}
+		if txn.Sequence < r.Start {
+			// Current ignored range higher than seqnum. Try next.
+			continue
+		}
+		// Splash: seqnum is inside ignored range.
+		return true
+	}
+	// Not in any ignored range: not ignored.
+	return false
 }
 
 // IterAndBuf used to pass iterators and buffers between MVCC* calls, allowing

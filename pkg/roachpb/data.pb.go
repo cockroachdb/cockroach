@@ -3,18 +3,22 @@
 
 package roachpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	bytes "bytes"
+	fmt "fmt"
+	io "io"
+	math "math"
 
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-import github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	github_com_cockroachdb_cockroach_pkg_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	proto "github.com/gogo/protobuf/proto"
+)
 
-import bytes "bytes"
 
-import io "io"
+
+
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
