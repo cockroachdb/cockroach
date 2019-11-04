@@ -28,32 +28,9 @@ import (
 // node, there is a single instance of ClusterSetting which is shared across all
 // of its components.
 //
-// The Version setting deserves an individual explanantion. During the node
-// startup sequence, an initial version (persisted to the engines) is read and
-// passed to InitializeVersion(). It is only after that that the Version field
-// of this struct is ready for use (i.e. Version() and IsActive() can be
-// called). In turn, the node usually registers itself as a callback to be
-// notified of any further updates to the setting, which are then persisted.
-//
-// This dance is necessary because we cannot determine a safe default value for
-// the version setting without looking at what's been persisted: The setting
-// specifies the minimum binary version we have to expect to be in a mixed
-// cluster with. We can't assume this binary's MinimumSupportedVersion as we
-// could've started up earlier and enabled features that are not actually
-// compatible with that version; we can't assume it's our binary's ServerVersion
-// as that would enable features that may trip up older versions running in the
-// same cluster. Hence, only once we get word of the "safe" version to use can
-// we allow moving parts that actually need to know what's going on.
-//
-// Additionally, whenever the version changes, we want to persist that update to
-// wherever the caller to InitializeVersion() got the initial version from
-// (typically a collection of `engine.Engine`s), which the caller will do by
-// registering itself via `(*Setting).Version.OnChange()`, which is invoked
-// *before* exposing the new version to callers of `IsActive()` and `Version()`.
-//
 // For testing or one-off situations in which a ClusterSetting is needed, but
 // cluster settings don't play a crucial role, MakeTestingClusterSetting() is
-// provided; it is pre-initialized to the binary's ServerVersion.
+// provided; the version is pre-initialized to the binary's ServerVersion.
 type Settings struct {
 	SV settings.Values
 
@@ -124,7 +101,30 @@ const KeyVersionSetting = "version"
 // Version represents the cluster's "active version". The active version is a
 // cluster setting, but a special one. It can only advance to higher and higher
 // versions. The setting can be used to see if migrations are to be considered
-// enabled or disabled.
+// enabled or disabled through the IsActive() method.
+//
+// During the node startup sequence, an initial version (persisted to the
+// engines) is read and passed to InitializeVersion(). It is only after that
+// that the Version field of this struct is ready for use (i.e. Version() and
+// IsActive() can be called). In turn, the node usually registers itself as a
+// callback to be notified of any further updates to the setting, which are then
+// persisted.
+//
+// This dance is necessary because we cannot determine a safe default value for
+// the version setting without looking at what's been persisted: The setting
+// specifies the minimum binary version we have to expect to be in a mixed
+// cluster with. We can't assume this binary's MinimumSupportedVersion as we
+// could've started up earlier and enabled features that are not actually
+// compatible with that version; we can't assume it's our binary's ServerVersion
+// as that would enable features that may trip up older versions running in the
+// same cluster. Hence, only once we get word of the "safe" version to use can
+// we allow moving parts that actually need to know what's going on.
+//
+// Additionally, whenever the version changes, we want to persist that update to
+// wherever the caller to Initialize() got the initial version from
+// (typically a collection of `engine.Engine`s), which the caller will do by
+// registering itself via SetBeforeChange()`, which is invoked *before* exposing
+// the new version to callers of `IsActive()` and `Version()`.
 var Version = registerClusterVersionSetting()
 
 // registerClusterVersionSetting creates a clusterVersionSetting and registers
@@ -164,32 +164,6 @@ var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
 	},
 )
 
-//// InitializeVersion initializes the Version field of this setting. Before this
-//// method has been called, usage of the Version field is illegal and leads to a
-//// fatal error.
-//func (s *Settings) InitializeVersion(ctx context.Context, v roachpb.Version) error {
-//	if err := Version.Initialize(ctx, v, s); err != nil {
-//		return err
-//	}
-//
-//	// !!!
-//	//b, err := protoutil.Marshal(&cv)
-//	//if err != nil {
-//	//	return err
-//	//}
-//	//
-//	//// Note that we don't call `updater.ResetRemaining()`.
-//	//updater := settings.NewUpdater(&s.SV)
-//	//if err := updater.Set(KeyVersionSetting, string(b), Version.Typ()); err != nil {
-//	//	return err
-//	//}
-//
-//	// !!! delete this once s.Version goes away. In fact, get rid of this method on the Settings.
-//	cv := ClusterVersion{Version: v}
-//	s.Version.baseVersion.Store(&cv)
-//	return nil
-//}
-
 //// An ExposedClusterVersion exposes a cluster-wide minimum version which is
 //// assumed to be supported by all nodes. This in turn allows features which are
 //// incompatible with older versions to be used safely.
@@ -198,17 +172,6 @@ var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
 //	// all the local engines.
 //	baseVersion atomic.Value // stores *ClusterVersion
 //	// !!! cb          func(ClusterVersion)
-//}
-
-// !!!
-//// IsInitialized returns true if the cluster version has been initialized and is
-//// ready for use.
-//func (ecv *ExposedClusterVersion) IsInitialized() bool {
-//	bv := ecv.baseVersion.Load()
-//	if bv == nil {
-//		return false
-//	}
-//	return *bv.(*ClusterVersion) != ClusterVersion{}
 //}
 
 // !!!
@@ -396,11 +359,11 @@ func (cv clusterVersionSetting) BinaryMinSupportedVersion(st *Settings) roachpb.
 	return st.binaryMinSupportedVersion
 }
 
+// InitializeVersion initializes cluster version. Before this method has been
+// called, usage of the version is illegal and leads to a fatal error.
 func (cv clusterVersionSetting) Initialize(
 	ctx context.Context, version roachpb.Version, st *Settings,
 ) error {
-	log.Infof(ctx, "!!! Initialize: %s (%p)", version, st)
-	// debug.PrintStack() // !!!
 	if ver := cv.ActiveVersionOrEmpty(ctx, st); ver != (ClusterVersion{}) {
 		// Allow initializing a second time as long as it's setting the version to
 		// what it was already set. This is useful in tests that use
@@ -494,6 +457,11 @@ func (cv clusterVersionSetting) BeforeChange(
 	st.beforeClusterVersionChangeMu.Unlock()
 }
 
+// SetBeforeChange registers a callback to be called before the cluster version
+// is updated. The new cluster version will only become "visible" after the
+// callback has returned.
+//
+// The callback can be set at most once.
 func (cv clusterVersionSetting) SetBeforeChange(
 	ctx context.Context, st *Settings, cb func(ctx context.Context, newVersion ClusterVersion),
 ) {

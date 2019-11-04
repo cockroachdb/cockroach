@@ -277,13 +277,12 @@ func NewServerWithInterceptor(
 
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:                          ctx.LocalClock,
-		remoteClockMonitor:             ctx.RemoteClocks,
-		clusterName:                    ctx.clusterName,
-		disableClusterNameVerification: ctx.disableClusterNameVerification,
-		clusterID:                      &ctx.ClusterID,
-		nodeID:                         &ctx.NodeID,
-		// !!! version:                               ctx.version,
+		clock:                                 ctx.LocalClock,
+		remoteClockMonitor:                    ctx.RemoteClocks,
+		clusterName:                           ctx.clusterName,
+		disableClusterNameVerification:        ctx.disableClusterNameVerification,
+		clusterID:                             &ctx.ClusterID,
+		nodeID:                                &ctx.NodeID,
 		settings:                              ctx.settings,
 		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	})
@@ -398,8 +397,7 @@ type Context struct {
 
 	ClusterID base.ClusterIDContainer
 	NodeID    base.NodeIDContainer
-	// !!! version   *cluster.ExposedClusterVersion
-	settings *cluster.Settings
+	settings  *cluster.Settings
 
 	clusterName                    string
 	disableClusterNameVerification bool
@@ -438,7 +436,6 @@ func NewContext(
 	baseCtx *base.Config,
 	hlcClock *hlc.Clock,
 	stopper *stop.Stopper,
-	// !!! version *cluster.ExposedClusterVersion,
 	st *cluster.Settings,
 ) *Context {
 	return NewContextWithTestingKnobs(ambient, baseCtx, hlcClock, stopper, st,
@@ -451,7 +448,6 @@ func NewContextWithTestingKnobs(
 	baseCtx *base.Config,
 	hlcClock *hlc.Clock,
 	stopper *stop.Stopper,
-	// !!! version *cluster.ExposedClusterVersion,
 	st *cluster.Settings,
 	knobs ContextTestingKnobs,
 ) *Context {
@@ -465,8 +461,7 @@ func NewContextWithTestingKnobs(
 		breakerClock: breakerClock{
 			clock: hlcClock,
 		},
-		rpcCompression: enableRPCCompression,
-		// !!! version:                        version,
+		rpcCompression:                 enableRPCCompression,
 		settings:                       st,
 		clusterName:                    baseCtx.ClusterName,
 		disableClusterNameVerification: baseCtx.DisableClusterNameVerification,

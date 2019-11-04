@@ -74,9 +74,8 @@ func TestHeartbeatReply(t *testing.T) {
 type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
-	// !!! version            *cluster.ExposedClusterVersion
-	settings *cluster.Settings
-	nodeID   *base.NodeIDContainer
+	settings           *cluster.Settings
+	nodeID             *base.NodeIDContainer
 	// Heartbeats are processed when a value is sent here.
 	ready   chan error
 	stopper *stop.Stopper
