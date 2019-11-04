@@ -1301,8 +1301,7 @@ index-join  ·            ·
  │          key columns  a
  └── scan   ·            ·
 ·           table        t2@bc
-·           spans        /2/!NULL-/3
-·           filter       c != b
+·           spans        /2/!NULL-/2/2 /2/3-/3
 
 # We do NOT look up the table row for '22'.
 statement ok
@@ -1314,7 +1313,6 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t2/bc/2/1/4 -> NULL
-fetched: /t2/bc/2/2/5 -> NULL
 fetched: /t2/bc/2/3/6 -> NULL
 fetched: /t2/primary/4 -> NULL
 fetched: /t2/primary/4/b -> 2
@@ -1337,7 +1335,6 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /t2/bc/2/1/4 -> NULL
-fetched: /t2/bc/2/2/5 -> NULL
 fetched: /t2/bc/2/3/6 -> NULL
 fetched: /t2/primary/4 -> NULL
 fetched: /t2/primary/4/b -> 2

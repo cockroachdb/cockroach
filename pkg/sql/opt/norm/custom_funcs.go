@@ -848,6 +848,106 @@ func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
 	return result
 }
 
+func (c *CustomFuncs) extractVarEqualsConst(
+	e opt.Expr,
+) (ok bool, left *memo.VariableExpr, right *memo.ConstExpr) {
+	if eq, ok := e.(*memo.EqExpr); ok {
+		if l, ok := eq.Left.(*memo.VariableExpr); ok {
+			if r, ok := eq.Right.(*memo.ConstExpr); ok {
+				return true, l, r
+			}
+		}
+	}
+	return false, nil, nil
+}
+
+// CanInlineConstVar returns true if there is an opportunity in the filters to
+// inline a variable restricted to be a constant, as in:
+//   SELECT * FROM foo WHERE a = 4 AND a IN (1, 2, 3, 4).
+// =>
+//   SELECT * FROM foo WHERE a = 4 AND 4 IN (1, 2, 3, 4).
+func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
+	// usedIndices tracks the set of filter indices we've used to infer constant
+	// values, so we don't inline into them.
+	var usedIndices util.FastIntSet
+	// fixedCols is the set of columns that the filters restrict to be a constant
+	// value.
+	var fixedCols opt.ColSet
+	for i := range f {
+		if ok, l, _ := c.extractVarEqualsConst(f[i].Condition); ok {
+			colType := c.mem.Metadata().ColumnMeta(l.Col).Type
+			if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+				// TODO(justin): allow inlining if the check we're doing is oblivious
+				// to composite-ness.
+				continue
+			}
+			if !fixedCols.Contains(l.Col) {
+				fixedCols.Add(l.Col)
+				usedIndices.Add(i)
+			}
+		}
+	}
+	for i := range f {
+		if usedIndices.Contains(i) {
+			continue
+		}
+		if f[i].ScalarProps(c.mem).OuterCols.Intersects(fixedCols) {
+			return true
+		}
+	}
+	return false
+}
+
+// InlineConstVar performs the inlining detected by CanInlineConstVar.
+func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
+	// usedIndices tracks the set of filter indices we've used to infer constant
+	// values, so we don't inline into them.
+	var usedIndices util.FastIntSet
+	// fixedCols is the set of columns that the filters restrict to be a constant
+	// value.
+	var fixedCols opt.ColSet
+	// vals maps columns which are restricted to be constant to the value they
+	// are restricted to.
+	vals := make(map[opt.ColumnID]opt.ScalarExpr)
+	for i := range f {
+		if ok, v, e := c.extractVarEqualsConst(f[i].Condition); ok {
+			colType := c.mem.Metadata().ColumnMeta(v.Col).Type
+			if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+				continue
+			}
+			if _, ok := vals[v.Col]; !ok {
+				vals[v.Col] = e
+				fixedCols.Add(v.Col)
+				usedIndices.Add(i)
+			}
+		}
+	}
+
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		if t, ok := nd.(*memo.VariableExpr); ok {
+			if e, ok := vals[t.Col]; ok {
+				return e
+			}
+		}
+		return c.f.Replace(nd, replace)
+	}
+
+	result := make(memo.FiltersExpr, len(f))
+	for i := range f {
+		inliningNeeded := f[i].ScalarProps(c.mem).OuterCols.Intersects(fixedCols)
+		// Don't inline if we used this position to infer a constant value, or if
+		// the expression doesn't contain any fixed columns.
+		if usedIndices.Contains(i) || !inliningNeeded {
+			result[i] = f[i]
+		} else {
+			newCondition := replace(f[i].Condition).(opt.ScalarExpr)
+			result[i] = memo.FiltersItem{Condition: newCondition}
+		}
+	}
+	return result
+}
+
 // ----------------------------------------------------------------------
 //
 // Project functions
