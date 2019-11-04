@@ -84,6 +84,10 @@ message ResponseHeader {
   // txn is non-nil if the request specified a non-nil transaction.
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
+  //
+  // Once txn is merged into the BatchResponse_Header.Txn, it will be
+  // reset to nil to avoid sending superfluous information over the
+  // network.
   Transaction txn = 3;
   // The next span to resume from when the response doesn't cover the full span
   // requested. This can happen when a bound on the keys is set through
