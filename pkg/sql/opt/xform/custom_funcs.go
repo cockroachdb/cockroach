@@ -492,7 +492,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	checkFilters := c.checkConstraintFilters(scanPrivate.Table)
 
 	// Consider the checkFilters as well to constrain each of the indexes.
-	filters := append(explicitFilters, checkFilters...)
+	explicitAndCheckFilters := append(explicitFilters, checkFilters...)
 
 	// Iterate over all indexes.
 	var iter scanIndexIter
@@ -500,28 +500,29 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	tabMeta := md.TableMeta(scanPrivate.Table)
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
-		var isIndexPartitioned bool
+		filters := explicitAndCheckFilters
 		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
 		filterColumns := c.FilterOuterCols(filters)
 		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
-		var constrainedInBetweenFilters memo.FiltersExpr
 
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
 		// add no benefit as they don't really constrain anything.
 		// Furthermore, if the filters don't take advantage of the index (use any of the
 		// index columns), using the partition values add no benefit.
+		var constrainedInBetweenFilters memo.FiltersExpr
+		var isIndexPartitioned bool
 		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
 			// Add any partition filters if appropriate.
 			partitionFilters, inBetweenFilters := c.partitionValuesFilters(scanPrivate.Table, iter.index)
 
-			// We must add the filters so when we generate the inBetween spans, they are
-			// also constrained. This is also needed so the remaining filters are generated
-			// correctly using the in between spans (some remaining filters may be blown
-			// by the partition constraints).
-			constrainedInBetweenFilters = append(inBetweenFilters, filters...)
-			filters = append(filters, partitionFilters...)
 			if len(partitionFilters) > 0 {
+				// We must add the filters so when we generate the inBetween spans, they are
+				// also constrained. This is also needed so the remaining filters are generated
+				// correctly using the in between spans (some remaining filters may be blown
+				// by the partition constraints).
+				constrainedInBetweenFilters = append(inBetweenFilters, filters...)
+				filters = append(filters, partitionFilters...)
 				isIndexPartitioned = true
 			}
 		}
