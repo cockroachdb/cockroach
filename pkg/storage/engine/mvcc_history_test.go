@@ -96,6 +96,11 @@ func TestMVCCHistories(t *testing.T) {
 					e.td = d
 
 					switch d.Cmd {
+					case "skip":
+						if len(d.CmdArgs) == 0 || d.CmdArgs[0].Key == engineImpl.name {
+							t.Skip("skipped")
+						}
+						return d.Expected
 					case "run":
 						// Syntax: run [trace] [error]
 						// (other words - in particular "ok" - are accepted but ignored)
@@ -330,6 +335,7 @@ var commands = map[string]cmd{
 	"scan":           {false, false, cmdScan},
 	"increment":      {false, true, cmdIncrement},
 	"check_intent":   {false, false, cmdCheckIntent},
+	"ignore_seqs":    {true, false, cmdIgnoreSeqs},
 }
 
 func cmdClearRange(e *evalCtx) error {
@@ -441,7 +447,7 @@ func cmdCheckIntent(e *evalCtx) error {
 		return errors.Newf("meta: %v -> expected intent, found none", key)
 	}
 	if ok {
-		fmt.Fprintf(e.results.buf, "meta: %v -> %s\n", key, &meta)
+		fmt.Fprintf(e.results.buf, "meta: %v -> %+v\n", key, &meta)
 		if !wantIntent {
 			return errors.Newf("meta: %v -> expected no intent, found one", key)
 		}
@@ -632,6 +638,30 @@ func cmdAdvanceTxn(e *evalCtx) error {
 	return nil
 }
 
+func cmdIgnoreSeqs(e *evalCtx) error {
+	txn := e.getTxn(mandatory)
+	seql := e.getList("seqs")
+	is := []enginepb.TxnMeta_IgnoredSeqNumRange{}
+	for _, s := range seql {
+		parts := strings.Split(s, "-")
+		if len(parts) != 2 {
+			e.Fatalf("syntax error: expected 'a-b', got: '%s'", s)
+		}
+		a, err := strconv.ParseInt(parts[0], 10, 32)
+		if err != nil {
+			e.Fatalf("%v", err)
+		}
+		b, err := strconv.ParseInt(parts[1], 10, 32)
+		if err != nil {
+			e.Fatalf("%v", err)
+		}
+		is = append(is, enginepb.TxnMeta_IgnoredSeqNumRange{Start: enginepb.TxnSeq(a), End: enginepb.TxnSeq(b)})
+	}
+	txn.IgnoredSeqNums = is
+	e.results.txn = txn
+	return nil
+}
+
 func toKey(s string) roachpb.Key {
 	switch {
 	case len(s) > 0 && s[0] == '+':
@@ -739,6 +769,16 @@ const (
 	optional optArg = iota
 	mandatory
 )
+
+func (e *evalCtx) getList(argName string) []string {
+	for _, c := range e.td.CmdArgs {
+		if c.Key == argName {
+			return c.Vals
+		}
+	}
+	e.Fatalf("missing argument: %s", argName)
+	return nil
+}
 
 func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
 	e.t.Helper()

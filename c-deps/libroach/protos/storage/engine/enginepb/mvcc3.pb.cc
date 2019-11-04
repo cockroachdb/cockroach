@@ -20,6 +20,7 @@ namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCAbortIntentOp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCAbortTxnOp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCPersistentStats;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_TxnMeta_IgnoredSeqNumRange;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCCommitIntentOp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCUpdateIntentOp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MVCCWriteIntentOp;
@@ -32,6 +33,11 @@ namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
+class TxnMeta_IgnoredSeqNumRangeDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<TxnMeta_IgnoredSeqNumRange>
+      _instance;
+} _TxnMeta_IgnoredSeqNumRange_default_instance_;
 class TxnMetaDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<TxnMeta>
@@ -92,6 +98,20 @@ class MVCCLogicalOpDefaultTypeInternal {
 }  // namespace storage
 }  // namespace cockroach
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
+static void InitDefaultsTxnMeta_IgnoredSeqNumRange() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::storage::engine::enginepb::_TxnMeta_IgnoredSeqNumRange_default_instance_;
+    new (ptr) ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_TxnMeta_IgnoredSeqNumRange =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsTxnMeta_IgnoredSeqNumRange}, {}};
+
 static void InitDefaultsTxnMeta() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -103,9 +123,10 @@ static void InitDefaultsTxnMeta() {
   ::cockroach::storage::engine::enginepb::TxnMeta::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsTxnMeta}, {
-      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_TxnMeta =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsTxnMeta}, {
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta_IgnoredSeqNumRange.base,}};
 
 static void InitDefaultsMVCCStatsDelta() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -259,6 +280,7 @@ static void InitDefaultsMVCCLogicalOp() {
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_MVCCAbortTxnOp.base,}};
 
 void InitDefaults() {
+  ::google::protobuf::internal::InitSCC(&scc_info_TxnMeta_IgnoredSeqNumRange.base);
   ::google::protobuf::internal::InitSCC(&scc_info_TxnMeta.base);
   ::google::protobuf::internal::InitSCC(&scc_info_MVCCStatsDelta.base);
   ::google::protobuf::internal::InitSCC(&scc_info_MVCCPersistentStats.base);
@@ -277,6 +299,218 @@ namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
+
+// ===================================================================
+
+void TxnMeta_IgnoredSeqNumRange::InitAsDefaultInstance() {
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int TxnMeta_IgnoredSeqNumRange::kStartFieldNumber;
+const int TxnMeta_IgnoredSeqNumRange::kEndFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+TxnMeta_IgnoredSeqNumRange::TxnMeta_IgnoredSeqNumRange()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta_IgnoredSeqNumRange.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+}
+TxnMeta_IgnoredSeqNumRange::TxnMeta_IgnoredSeqNumRange(const TxnMeta_IgnoredSeqNumRange& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::memcpy(&start_, &from.start_,
+    static_cast<size_t>(reinterpret_cast<char*>(&end_) -
+    reinterpret_cast<char*>(&start_)) + sizeof(end_));
+  // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+}
+
+void TxnMeta_IgnoredSeqNumRange::SharedCtor() {
+  ::memset(&start_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&end_) -
+      reinterpret_cast<char*>(&start_)) + sizeof(end_));
+}
+
+TxnMeta_IgnoredSeqNumRange::~TxnMeta_IgnoredSeqNumRange() {
+  // @@protoc_insertion_point(destructor:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  SharedDtor();
+}
+
+void TxnMeta_IgnoredSeqNumRange::SharedDtor() {
+}
+
+void TxnMeta_IgnoredSeqNumRange::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const TxnMeta_IgnoredSeqNumRange& TxnMeta_IgnoredSeqNumRange::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta_IgnoredSeqNumRange.base);
+  return *internal_default_instance();
+}
+
+
+void TxnMeta_IgnoredSeqNumRange::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&start_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&end_) -
+      reinterpret_cast<char*>(&start_)) + sizeof(end_));
+  _internal_metadata_.Clear();
+}
+
+bool TxnMeta_IgnoredSeqNumRange::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &start_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &end_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  return false;
+#undef DO_
+}
+
+void TxnMeta_IgnoredSeqNumRange::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->start() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->start(), output);
+  }
+
+  if (this->end() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->end(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+}
+
+size_t TxnMeta_IgnoredSeqNumRange::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->start() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->start());
+  }
+
+  if (this->end() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->end());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void TxnMeta_IgnoredSeqNumRange::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const TxnMeta_IgnoredSeqNumRange*>(&from));
+}
+
+void TxnMeta_IgnoredSeqNumRange::MergeFrom(const TxnMeta_IgnoredSeqNumRange& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.start() != 0) {
+    set_start(from.start());
+  }
+  if (from.end() != 0) {
+    set_end(from.end());
+  }
+}
+
+void TxnMeta_IgnoredSeqNumRange::CopyFrom(const TxnMeta_IgnoredSeqNumRange& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool TxnMeta_IgnoredSeqNumRange::IsInitialized() const {
+  return true;
+}
+
+void TxnMeta_IgnoredSeqNumRange::Swap(TxnMeta_IgnoredSeqNumRange* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void TxnMeta_IgnoredSeqNumRange::InternalSwap(TxnMeta_IgnoredSeqNumRange* other) {
+  using std::swap;
+  swap(start_, other->start_);
+  swap(end_, other->end_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string TxnMeta_IgnoredSeqNumRange::GetTypeName() const {
+  return "cockroach.storage.engine.enginepb.TxnMeta.IgnoredSeqNumRange";
+}
+
 
 // ===================================================================
 
@@ -306,6 +540,7 @@ const int TxnMeta::kTimestampFieldNumber;
 const int TxnMeta::kMinTimestampFieldNumber;
 const int TxnMeta::kPriorityFieldNumber;
 const int TxnMeta::kSequenceFieldNumber;
+const int TxnMeta::kIgnoredSeqnumsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TxnMeta::TxnMeta()
@@ -317,7 +552,8 @@ TxnMeta::TxnMeta()
 }
 TxnMeta::TxnMeta(const TxnMeta& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      ignored_seqnums_(from.ignored_seqnums_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.id().size() > 0) {
@@ -378,6 +614,7 @@ void TxnMeta::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  ignored_seqnums_.Clear();
   id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
@@ -494,6 +731,17 @@ bool TxnMeta::MergePartialFromCodedStream(
         break;
       }
 
+      case 10: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(82u /* 82 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_ignored_seqnums()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -553,6 +801,14 @@ void TxnMeta::SerializeWithCachedSizes(
       9, this->_internal_min_timestamp(), output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->ignored_seqnums_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      10,
+      this->ignored_seqnums(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.TxnMeta)
@@ -563,6 +819,16 @@ size_t TxnMeta::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->ignored_seqnums_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->ignored_seqnums(static_cast<int>(i)));
+    }
+  }
 
   if (this->id().size() > 0) {
     total_size += 1 +
@@ -624,6 +890,7 @@ void TxnMeta::MergeFrom(const TxnMeta& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  ignored_seqnums_.MergeFrom(from.ignored_seqnums_);
   if (from.id().size() > 0) {
 
     id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.id_);
@@ -666,6 +933,7 @@ void TxnMeta::Swap(TxnMeta* other) {
 }
 void TxnMeta::InternalSwap(TxnMeta* other) {
   using std::swap;
+  CastToBase(&ignored_seqnums_)->InternalSwap(CastToBase(&other->ignored_seqnums_));
   id_.Swap(&other->id_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
@@ -3999,6 +4267,9 @@ void MVCCLogicalOp::InternalSwap(MVCCLogicalOp* other) {
 }  // namespace cockroach
 namespace google {
 namespace protobuf {
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange* Arena::CreateMaybeMessage< ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::storage::engine::enginepb::TxnMeta_IgnoredSeqNumRange >(arena);
+}
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::storage::engine::enginepb::TxnMeta* Arena::CreateMaybeMessage< ::cockroach::storage::engine::enginepb::TxnMeta >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::storage::engine::enginepb::TxnMeta >(arena);
 }

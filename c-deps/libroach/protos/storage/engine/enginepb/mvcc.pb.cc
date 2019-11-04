@@ -17,7 +17,7 @@
 // @@protoc_insertion_point(includes)
 
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_TxnMeta;
 }  // namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCMetadata_SequencedIntent;
