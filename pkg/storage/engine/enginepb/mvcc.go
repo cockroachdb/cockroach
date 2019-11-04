@@ -48,6 +48,39 @@ const (
 	MaxTxnPriority TxnPriority = math.MaxInt32
 )
 
+// TxnSeqIsIgnored returns true iff the sequence number overlaps with
+// any range in the ignored array.
+func TxnSeqIsIgnored(seq TxnSeq, ignored []IgnoredSeqNumRange) bool {
+	// The ignored seqnum ranges are guaranteed to be
+	// non-overlapping, non-contiguous, and guaranteed to be
+	// sorted in seqnum order. We're going to look from the end to
+	// see if the current intent seqnum is ignored.
+	for i := len(ignored) - 1; i >= 0; i-- {
+		if seq < ignored[i].Start {
+			// The history entry's sequence number is lower/older than
+			// the current ignored range. Go to the previous range
+			// and try again.
+			continue
+		}
+
+		// Here we have a range where the start seqnum is lower than the current
+		// intent seqnum. Does it include it?
+		if seq > ignored[i].End {
+			// Here we have a range where the current history entry's seqnum
+			// is higher than the range's end seqnum. Given that the
+			// ranges are sorted, we're guaranteed that there won't
+			// be any further overlapping range at a lower value of i.
+			return false
+		}
+		// Yes, it's included. We're going to skip over this
+		// intent seqnum and retry the search above.
+		return true
+	}
+
+	// Exhausted the ignore list. Not ignored.
+	return false
+}
+
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() string {
 	return t.ID.Short()
@@ -174,14 +207,34 @@ func (meta *MVCCMetadata) AddToIntentHistory(seq TxnSeq, val []byte) {
 
 // GetPrevIntentSeq goes through the intent history and finds the previous
 // intent's sequence number given the current sequence.
-func (meta *MVCCMetadata) GetPrevIntentSeq(seq TxnSeq) (TxnSeq, bool) {
-	index := sort.Search(len(meta.IntentHistory), func(i int) bool {
-		return meta.IntentHistory[i].Sequence >= seq
-	})
-	if index > 0 && index < len(meta.IntentHistory) {
-		return meta.IntentHistory[index-1].Sequence, true
+func (meta *MVCCMetadata) GetPrevIntentSeq(
+	seq TxnSeq, ignored []IgnoredSeqNumRange,
+) (MVCCMetadata_SequencedIntent, bool) {
+	end := len(meta.IntentHistory)
+	found := 0
+	for {
+		index := sort.Search(end, func(i int) bool {
+			return meta.IntentHistory[i].Sequence >= seq
+		})
+		if index == 0 {
+			// It is possible that no intent exists such that the sequence is less
+			// than the read sequence. In this case, we cannot read a value from the
+			// intent history.
+			return MVCCMetadata_SequencedIntent{}, false
+		}
+		candidate := index - 1
+		if TxnSeqIsIgnored(meta.IntentHistory[candidate].Sequence, ignored) {
+			// This entry was part of an ignored range. Skip it and
+			// try the search again, using the current position as new
+			// upper bound.
+			end = candidate
+			continue
+		}
+		// This history entry has not been ignored, so we're going to keep it.
+		found = candidate
+		break
 	}
-	return 0, false
+	return meta.IntentHistory[found], true
 }
 
 // GetIntentValue goes through the intent history and finds the value
