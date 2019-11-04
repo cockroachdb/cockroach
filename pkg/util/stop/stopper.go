@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -535,12 +536,18 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 		cancel()
 	}
 	if !s.mu.quiescing {
+		log.Infof(ctx, "quiescing")
 		s.mu.quiescing = true
 		close(s.quiescer)
 	}
 	for s.mu.numTasks > 0 {
-		log.Infof(ctx, "quiescing; tasks left:\n%s", s.runningTasksLocked())
+		t := time.AfterFunc(5*time.Second, func() {
+			// If we're waiting for 5+s without a task terminating, log the ones
+			// that remain.
+			log.Infof(ctx, "quiescing; tasks left:\n%s", s.RunningTasks())
+		})
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.mu.quiesce.Wait()
+		t.Stop()
 	}
 }
