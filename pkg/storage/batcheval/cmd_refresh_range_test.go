@@ -84,9 +84,10 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// timestamp, because if it were empty other than the deletion tombstone, it
 	// would not have any timestamp bounds and would be selected for every read.
 	if err := engine.MVCCResolveWriteIntent(ctx, db, nil, roachpb.Intent{
-		Span:   roachpb.Span{Key: k},
-		Txn:    txn.TxnMeta,
-		Status: roachpb.COMMITTED,
+		Span:                      roachpb.Span{Key: k},
+		Txn:                       txn.TxnMeta,
+		Status:                    roachpb.COMMITTED,
+		IgnoredSeqNumsInitialized: true,
 	}); err != nil {
 		t.Fatal(err)
 	}

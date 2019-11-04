@@ -369,6 +369,8 @@ func updateIntentTxnStatus(
 		}
 		intent.Txn = pushee.TxnMeta
 		intent.Status = pushee.Status
+		intent.IgnoredSeqNums = pushee.IgnoredSeqNums
+		intent.IgnoredSeqNumsInitialized = true
 		results = append(results, intent)
 	}
 	return results
@@ -707,6 +709,8 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				for i := range intents {
 					intents[i].Txn = txn.TxnMeta
 					intents[i].Status = txn.Status
+					intents[i].IgnoredSeqNums = txn.IgnoredSeqNums
+					intents[i].IgnoredSeqNumsInitialized = true
 				}
 			}
 			var onCleanupComplete func(error)
@@ -883,24 +887,33 @@ func (ir *IntentResolver) ResolveIntents(
 	var resolveRangeReqs []roachpb.Request
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
+
+		if (intent.Status == roachpb.COMMITTED || intent.Status == roachpb.STAGING) && !intent.IgnoredSeqNumsInitialized {
+			log.Fatalf(ctx, "intent ignore list not fully initialized: %+v", intent)
+		}
+
 		if len(intent.EndKey) == 0 {
 			resolveReqs = append(resolveReqs,
 				resolveReq{
 					rangeID: ir.lookupRangeID(ctx, intent.Key),
 					req: &roachpb.ResolveIntentRequest{
-						RequestHeader: roachpb.RequestHeaderFromSpan(intent.Span),
-						IntentTxn:     intent.Txn,
-						Status:        intent.Status,
-						Poison:        opts.Poison,
+						RequestHeader:             roachpb.RequestHeaderFromSpan(intent.Span),
+						IntentTxn:                 intent.Txn,
+						Status:                    intent.Status,
+						Poison:                    opts.Poison,
+						IgnoredSeqNums:            intent.IgnoredSeqNums,
+						IgnoredSeqNumsInitialized: intent.IgnoredSeqNumsInitialized,
 					},
 				})
 		} else {
 			resolveRangeReqs = append(resolveRangeReqs, &roachpb.ResolveIntentRangeRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:     intent.Txn,
-				Status:        intent.Status,
-				Poison:        opts.Poison,
-				MinTimestamp:  opts.MinTimestamp,
+				RequestHeader:             roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:                 intent.Txn,
+				Status:                    intent.Status,
+				Poison:                    opts.Poison,
+				MinTimestamp:              opts.MinTimestamp,
+				IgnoredSeqNums:            intent.IgnoredSeqNums,
+				IgnoredSeqNumsInitialized: intent.IgnoredSeqNumsInitialized,
 			})
 		}
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -77,10 +78,16 @@ func ResolveIntent(
 		return result.Result{}, ErrTransactionUnsupported
 	}
 
+	if (args.Status == roachpb.COMMITTED || args.Status == roachpb.STAGING) && !args.IgnoredSeqNumsInitialized {
+		log.Fatalf(ctx, "args ignore list not fully initialized: %+v", args)
+	}
+
 	intent := roachpb.Intent{
-		Span:   args.Span(),
-		Txn:    args.IntentTxn,
-		Status: args.Status,
+		Span:                      args.Span(),
+		Txn:                       args.IntentTxn,
+		Status:                    args.Status,
+		IgnoredSeqNums:            args.IgnoredSeqNums,
+		IgnoredSeqNumsInitialized: args.IgnoredSeqNumsInitialized,
 	}
 	if err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent); err != nil {
 		return result.Result{}, err

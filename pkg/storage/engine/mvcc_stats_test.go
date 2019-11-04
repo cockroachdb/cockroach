@@ -113,7 +113,11 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			txn.Status = roachpb.COMMITTED
 			txn.WriteTimestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
-				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+				Span:                      roachpb.Span{Key: key},
+				Status:                    txn.Status,
+				Txn:                       txn.TxnMeta,
+				IgnoredSeqNums:            txn.IgnoredSeqNums,
+				IgnoredSeqNumsInitialized: true,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -193,7 +197,11 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			txn.Status = roachpb.COMMITTED
 			txn.WriteTimestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
-				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+				Span:                      roachpb.Span{Key: key},
+				Status:                    txn.Status,
+				Txn:                       txn.TxnMeta,
+				IgnoredSeqNums:            txn.IgnoredSeqNums,
+				IgnoredSeqNumsInitialized: true,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -271,7 +279,11 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 			txn.WriteTimestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
-				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+				Span:                      roachpb.Span{Key: key},
+				Status:                    txn.Status,
+				Txn:                       txn.TxnMeta,
+				IgnoredSeqNums:            txn.IgnoredSeqNums,
+				IgnoredSeqNumsInitialized: true,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -606,7 +618,11 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				txnCommit.Status = roachpb.COMMITTED
 				txnCommit.WriteTimestamp.Forward(ts3)
 				if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
-					Span: roachpb.Span{Key: key}, Status: txnCommit.Status, Txn: txnCommit.TxnMeta,
+					Span:                      roachpb.Span{Key: key},
+					Status:                    txnCommit.Status,
+					Txn:                       txnCommit.TxnMeta,
+					IgnoredSeqNums:            txnCommit.IgnoredSeqNums,
+					IgnoredSeqNumsInitialized: true,
 				}); err != nil {
 					t.Fatal(err)
 				}
@@ -635,7 +651,9 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				txnAbort.Status = roachpb.ABORTED
 				txnAbort.WriteTimestamp.Forward(ts3)
 				if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
-					Span: roachpb.Span{Key: key}, Status: txnAbort.Status, Txn: txnAbort.TxnMeta,
+					Span:   roachpb.Span{Key: key},
+					Status: txnAbort.Status,
+					Txn:    txnAbort.TxnMeta,
 				}); err != nil {
 					t.Fatal(err)
 				}
@@ -765,7 +783,9 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				txnAbort := txn.Clone()
 				txnAbort.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
 				if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
-					Span: roachpb.Span{Key: key}, Status: txnAbort.Status, Txn: txnAbort.TxnMeta,
+					Span:   roachpb.Span{Key: key},
+					Status: txnAbort.Status,
+					Txn:    txnAbort.TxnMeta,
 				}); err != nil {
 					t.Fatal(err)
 				}
@@ -1236,7 +1256,11 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 			// Now abort the intent.
 			txn.Status = roachpb.ABORTED
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
-				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+				Span:                      roachpb.Span{Key: key},
+				Status:                    txn.Status,
+				Txn:                       txn.TxnMeta,
+				IgnoredSeqNums:            txn.IgnoredSeqNums,
+				IgnoredSeqNumsInitialized: true,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -1341,17 +1365,21 @@ type state struct {
 
 func (s *state) intent(status roachpb.TransactionStatus) roachpb.Intent {
 	return roachpb.Intent{
-		Span:   roachpb.Span{Key: s.key},
-		Txn:    s.Txn.TxnMeta,
-		Status: status,
+		Span:                      roachpb.Span{Key: s.key},
+		Txn:                       s.Txn.TxnMeta,
+		Status:                    status,
+		IgnoredSeqNums:            s.Txn.IgnoredSeqNums,
+		IgnoredSeqNumsInitialized: true,
 	}
 }
 
 func (s *state) intentRange(status roachpb.TransactionStatus) roachpb.Intent {
 	return roachpb.Intent{
-		Span:   roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
-		Txn:    s.Txn.TxnMeta,
-		Status: status,
+		Span:                      roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+		Txn:                       s.Txn.TxnMeta,
+		Status:                    status,
+		IgnoredSeqNums:            s.Txn.IgnoredSeqNums,
+		IgnoredSeqNumsInitialized: true,
 	}
 }
 
