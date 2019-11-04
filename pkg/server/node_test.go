@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -58,13 +57,13 @@ import (
 func createTestNode(
 	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
 ) (*grpc.Server, net.Addr, storage.StoreConfig, *Node, *stop.Stopper) {
-	cfg := storage.TestStoreConfig(nil)
+	cfg := storage.TestStoreConfig(nil /* clock */)
 	st := cfg.Settings
 
 	stopper := stop.NewStopper()
 	nodeRPCContext := rpc.NewContext(
 		log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper,
-		&cfg.Settings.Version)
+		cfg.Settings)
 	cfg.RPCContext = nodeRPCContext
 	cfg.ScanInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
@@ -111,7 +110,6 @@ func createTestNode(
 		cfg.Settings,
 		cfg.HistogramWindowInterval,
 	)
-	cfg.ClosedTimestamp = container.NoopContainer()
 
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
@@ -163,8 +161,10 @@ func createAndStartTestNode(
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines, cfg.Settings.Version.MinSupportedVersion,
-		cfg.Settings.Version.ServerVersion, node.clusterID)
+		ctx, engines,
+		cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
+		cluster.Version.BinaryVersion(cfg.Settings),
+		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +179,7 @@ func createAndStartTestNode(
 		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
 		nil, /*nodeDescriptorCallback */
 	); err != nil {
+		stopper.Stop(ctx)
 		t.Fatal(err)
 	}
 
@@ -407,11 +408,13 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
+	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	defer stopper.Stop(ctx)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines, cfg.Settings.Version.MinSupportedVersion,
-		cfg.Settings.Version.ServerVersion, node.clusterID)
+		ctx, engines,
+		cluster.BinaryMinimumSupportedVersion,
+		cluster.BinaryServerVersion,
+		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -164,6 +164,7 @@ func (sv *Values) setGeneric(slotIdx int, newVal interface{}) {
 	sv.container.setGenericVal(slotIdx-1, newVal)
 	sv.settingChanged(slotIdx)
 }
+
 func (sv *Values) getInt64(slotIdx int) int64 {
 	return sv.container.getInt64(slotIdx)
 }
@@ -190,6 +191,7 @@ type Setting interface {
 	// Typ returns the short (1 char) string denoting the type of setting.
 	Typ() string
 	String(sv *Values) string
+	// Encoded returns the encoded value of the current value of the setting.
 	Encoded(sv *Values) string
 
 	EncodedDefault() string

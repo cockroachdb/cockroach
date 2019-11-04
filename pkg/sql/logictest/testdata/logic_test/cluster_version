@@ -29,10 +29,10 @@ SET CLUSTER SETTING version = '1.0-0.0'
 statement error cannot upgrade to 2.0: node running 1.1
 SET CLUSTER SETTING version = '2.0'
 
-statement error cannot upgrade directly from 1.0 to 2.1
+statement error cannot upgrade to 2.1: node running 1.1
 SET CLUSTER SETTING version = '2.1'
 
-statement error versions cannot be downgraded \(attempting to downgrade from 1.0 to 0.9\)
+statement error node at 1\.1 cannot run 0\.9 \(minimum version is 1\.0\)
 SET CLUSTER SETTING version = '0.9'
 
 statement ok
@@ -52,7 +52,7 @@ SHOW CLUSTER SETTING version
 ----
 1.0-500
 
-statement error cannot upgrade directly from 1.0-500 to 1.2
+statement error cannot upgrade to 1.2: node running 1.1
 SET CLUSTER SETTING version = '1.2'
 
 statement ok
