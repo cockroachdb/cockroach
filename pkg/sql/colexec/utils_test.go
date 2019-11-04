@@ -829,7 +829,13 @@ func tupleEquals(expected tuple, actual tuple) bool {
 					}
 				}
 			}
-			if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
+			if !reflect.DeepEqual(
+				reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(),
+				expected[i],
+			) || !reflect.DeepEqual(
+				reflect.ValueOf(expected[i]).Convert(reflect.TypeOf(actual[i])).Interface(),
+				actual[i],
+			) {
 				return false
 			}
 		}

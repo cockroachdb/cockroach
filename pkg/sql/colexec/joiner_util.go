@@ -8,34 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// {{/*
-// +build execgen_template
-//
-// This file is the execgen template for joiner_util.eg.go. It's formatted in a
-// special way, so it's both valid Go and a valid text/template input. This
-// permits editing this file with editor support.
-//
-// */}}
-
 package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
-
-// {{/*
-// Declarations to make the template compile properly.
-
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
-
-// */}}
 
 // filterFeedOperator is used to feed the filter by manually setting the batch
 // to be returned on the first Next() call with zero-length batches returned on
@@ -142,18 +123,13 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 			idx = int(sel[idx])
 		}
 		for colIdx := 0; colIdx < batch.Width(); colIdx++ {
-			colType := sourceTypes[colIdx]
-			col := batch.ColVec(colIdx)
-			memCol := col.Slice(colType, uint64(idx), uint64(idx+1))
-			switch colType {
-			// {{ range . }}
-			case _TYPES_T:
-				f.input.batch.ColVec(colOffset + colIdx).SetCol(memCol._TemplateType())
-				// {{ end }}
-			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
-			}
-			f.input.batch.ColVec(colOffset + colIdx).SetNulls(memCol.Nulls())
+			f.input.batch.ColVec(colOffset + colIdx).Append(coldata.SliceArgs{
+				Src:         batch.ColVec(colIdx),
+				ColType:     sourceTypes[colIdx],
+				DestIdx:     0,
+				SrcStartIdx: uint64(idx),
+				SrcEndIdx:   uint64(idx + 1),
+			})
 		}
 	}
 	if lBatch != nil {
