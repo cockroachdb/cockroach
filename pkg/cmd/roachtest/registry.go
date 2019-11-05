@@ -76,6 +76,7 @@ func registerTests(r *testRegistry) {
 	registerSysbench(r)
 	registerTPCC(r)
 	registerTPCHVec(r)
+	registerKVBench(r)
 	registerTypeORM(r)
 	registerLoadSplits(r)
 	registerUpgrade(r)
@@ -92,5 +93,6 @@ func registerBenchmarks(r *testRegistry) {
 
 	registerIndexesBench(r)
 	registerTPCCBench(r)
+	registerKVBench(r)
 	registerTPCHBench(r)
 }
