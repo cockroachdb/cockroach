@@ -139,6 +139,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 				Key:    k,
 				EndKey: keys.MaxKey,
 			},
+			RefreshFrom: ts2,
 		},
 		Header: roachpb.Header{
 			Txn: &roachpb.Transaction{

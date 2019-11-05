@@ -66,9 +66,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RangeFeedValue;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RangeStatsRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RecomputeStatsRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RefreshRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RefreshRangeResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RefreshRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RefreshResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ReplicationChange;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RequestLeaseResponse;
@@ -108,6 +106,8 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecomputeStatsResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecoverTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecoverTxnResponse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRangeRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ResolveIntentRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ReverseScanResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RevertRangeRequest;
@@ -2392,9 +2392,10 @@ static void InitDefaultsRefreshRequest() {
   ::cockroach::roachpb::RefreshRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_RefreshRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsRefreshRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRefreshRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsRefreshResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2422,9 +2423,10 @@ static void InitDefaultsRefreshRangeRequest() {
   ::cockroach::roachpb::RefreshRangeRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_RefreshRangeRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsRefreshRangeRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRangeRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRefreshRangeRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsRefreshRangeResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -28010,10 +28012,19 @@ void AddSSTableResponse::InternalSwap(AddSSTableResponse* other) {
 void RefreshRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_RefreshRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
+  ::cockroach::roachpb::_RefreshRequest_default_instance_._instance.get_mutable()->refresh_from_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void RefreshRequest::clear_refresh_from() {
+  if (GetArenaNoVirtual() == NULL && refresh_from_ != NULL) {
+    delete refresh_from_;
+  }
+  refresh_from_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RefreshRequest::kHeaderFieldNumber;
 const int RefreshRequest::kWriteFieldNumber;
+const int RefreshRequest::kRefreshFromFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RefreshRequest::RefreshRequest()
@@ -28032,6 +28043,11 @@ RefreshRequest::RefreshRequest(const RefreshRequest& from)
   } else {
     header_ = NULL;
   }
+  if (from.has_refresh_from()) {
+    refresh_from_ = new ::cockroach::util::hlc::Timestamp(*from.refresh_from_);
+  } else {
+    refresh_from_ = NULL;
+  }
   write_ = from.write_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RefreshRequest)
 }
@@ -28049,6 +28065,7 @@ RefreshRequest::~RefreshRequest() {
 
 void RefreshRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete refresh_from_;
 }
 
 void RefreshRequest::SetCachedSize(int size) const {
@@ -28070,6 +28087,10 @@ void RefreshRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && refresh_from_ != NULL) {
+    delete refresh_from_;
+  }
+  refresh_from_ = NULL;
   write_ = false;
   _internal_metadata_.Clear();
 }
@@ -28115,6 +28136,17 @@ bool RefreshRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_refresh_from()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -28151,6 +28183,11 @@ void RefreshRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->write(), output);
   }
 
+  if (this->has_refresh_from()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_refresh_from(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RefreshRequest)
@@ -28166,6 +28203,12 @@ size_t RefreshRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  if (this->has_refresh_from()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *refresh_from_);
   }
 
   // bool write = 2;
@@ -28193,6 +28236,9 @@ void RefreshRequest::MergeFrom(const RefreshRequest& from) {
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
+  if (from.has_refresh_from()) {
+    mutable_refresh_from()->::cockroach::util::hlc::Timestamp::MergeFrom(from.refresh_from());
+  }
   if (from.write() != 0) {
     set_write(from.write());
   }
@@ -28216,6 +28262,7 @@ void RefreshRequest::Swap(RefreshRequest* other) {
 void RefreshRequest::InternalSwap(RefreshRequest* other) {
   using std::swap;
   swap(header_, other->header_);
+  swap(refresh_from_, other->refresh_from_);
   swap(write_, other->write_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
@@ -28417,10 +28464,19 @@ void RefreshResponse::InternalSwap(RefreshResponse* other) {
 void RefreshRangeRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_RefreshRangeRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
+  ::cockroach::roachpb::_RefreshRangeRequest_default_instance_._instance.get_mutable()->refresh_from_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void RefreshRangeRequest::clear_refresh_from() {
+  if (GetArenaNoVirtual() == NULL && refresh_from_ != NULL) {
+    delete refresh_from_;
+  }
+  refresh_from_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RefreshRangeRequest::kHeaderFieldNumber;
 const int RefreshRangeRequest::kWriteFieldNumber;
+const int RefreshRangeRequest::kRefreshFromFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RefreshRangeRequest::RefreshRangeRequest()
@@ -28439,6 +28495,11 @@ RefreshRangeRequest::RefreshRangeRequest(const RefreshRangeRequest& from)
   } else {
     header_ = NULL;
   }
+  if (from.has_refresh_from()) {
+    refresh_from_ = new ::cockroach::util::hlc::Timestamp(*from.refresh_from_);
+  } else {
+    refresh_from_ = NULL;
+  }
   write_ = from.write_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RefreshRangeRequest)
 }
@@ -28456,6 +28517,7 @@ RefreshRangeRequest::~RefreshRangeRequest() {
 
 void RefreshRangeRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete refresh_from_;
 }
 
 void RefreshRangeRequest::SetCachedSize(int size) const {
@@ -28477,6 +28539,10 @@ void RefreshRangeRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && refresh_from_ != NULL) {
+    delete refresh_from_;
+  }
+  refresh_from_ = NULL;
   write_ = false;
   _internal_metadata_.Clear();
 }
@@ -28522,6 +28588,17 @@ bool RefreshRangeRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_refresh_from()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -28558,6 +28635,11 @@ void RefreshRangeRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->write(), output);
   }
 
+  if (this->has_refresh_from()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_refresh_from(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RefreshRangeRequest)
@@ -28573,6 +28655,12 @@ size_t RefreshRangeRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  if (this->has_refresh_from()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *refresh_from_);
   }
 
   // bool write = 2;
@@ -28600,6 +28688,9 @@ void RefreshRangeRequest::MergeFrom(const RefreshRangeRequest& from) {
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
+  if (from.has_refresh_from()) {
+    mutable_refresh_from()->::cockroach::util::hlc::Timestamp::MergeFrom(from.refresh_from());
+  }
   if (from.write() != 0) {
     set_write(from.write());
   }
@@ -28623,6 +28714,7 @@ void RefreshRangeRequest::Swap(RefreshRangeRequest* other) {
 void RefreshRangeRequest::InternalSwap(RefreshRangeRequest* other) {
   using std::swap;
   swap(header_, other->header_);
+  swap(refresh_from_, other->refresh_from_);
   swap(write_, other->write_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
