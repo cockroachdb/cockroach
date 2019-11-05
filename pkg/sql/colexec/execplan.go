@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -215,8 +214,7 @@ func createJoiner(
 	result.setProjectedByJoinerColumnTypes(spec, leftOutCols, rightOutCols)
 
 	if onExpr != nil && joinType == sqlbase.JoinType_INNER {
-		remappedOnExpr := onExprPlanning.remapIVars(*onExpr)
-		err = result.planFilterExpr(flowCtx.NewEvalCtx(), remappedOnExpr)
+		err = result.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr, onExprPlanning.indexVarMap)
 		onExprPlanning.projectOutExtraCols(result)
 	}
 	return err
@@ -502,10 +500,10 @@ func NewColOperator(
 							Op:          op,
 							ColumnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
 						}
-						// We don't need to remap the indexed vars in onExpr because the
-						// filter will be run alongside the merge joiner, and it will have
-						// access to all of the columns from both sides.
-						err := r.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr)
+						// We don't need to specify indexVarMap because the filter will be
+						// run alongside the merge joiner, and it will have access to all
+						// of the columns from both sides.
+						err := r.planFilterExpr(flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */)
 						return r.Op, err
 					}
 				default:
@@ -692,8 +690,7 @@ func NewColOperator(
 	// legal for empty rows to be passed between processors).
 
 	if !post.Filter.Empty() {
-		filterExpr := planningState.postFilterPlanning.remapIVars(post.Filter)
-		if err = result.planFilterExpr(flowCtx.NewEvalCtx(), filterExpr); err != nil {
+		if err = result.planFilterExpr(flowCtx.NewEvalCtx(), post.Filter, planningState.postFilterPlanning.indexVarMap); err != nil {
 			return result, err
 		}
 		planningState.postFilterPlanning.projectOutExtraCols(&result)
@@ -774,11 +771,16 @@ func makeFilterPlanningState(numLeftInputCols, numRightInputCols int) filterPlan
 func (p *filterPlanningState) renderAllNeededCols(
 	filter execinfrapb.Expression, leftOutCols []uint32, rightOutCols []uint32,
 ) ([]uint32, []uint32) {
-	neededColumnsForFilter := findIVarsInRange(
+	neededColumnsForFilter, err := findIVarsInRange(
 		filter,
 		0, /* start */
 		p.numLeftInputCols+p.numRightInputCols,
 	)
+	if err != nil {
+		execerror.VectorizedInternalPanic(
+			errors.Errorf("error parsing filter expression %q: %s", filter, err),
+		)
+	}
 	if len(neededColumnsForFilter) > 0 {
 		// Store the original out columns to be restored later.
 		p.originalLeftOutCols = leftOutCols
@@ -849,59 +851,15 @@ func (p *filterPlanningState) renderAllNeededCols(
 // from the right side.
 func (p *filterPlanningState) isFilterOnlyOnLeft(filter execinfrapb.Expression) bool {
 	// Find all needed columns for filter only from the right side.
-	neededColumnsForFilter := findIVarsInRange(
+	neededColumnsForFilter, err := findIVarsInRange(
 		filter, p.numLeftInputCols, p.numLeftInputCols+p.numRightInputCols,
 	)
+	if err != nil {
+		execerror.VectorizedInternalPanic(
+			errors.Errorf("error parsing filter expression %q: %s", filter, err),
+		)
+	}
 	return len(neededColumnsForFilter) == 0
-}
-
-// remapIVars remaps tree.IndexedVars in expr using p.indexVarMap. Note that if
-// the remapping is needed, then a new remapped expression is returned, but if
-// the remapping is not needed (which is the case when all needed by the filter
-// columns were part of the projection), then the same expression is returned.
-func (p *filterPlanningState) remapIVars(expr execinfrapb.Expression) execinfrapb.Expression {
-	if p.indexVarMap == nil {
-		// If p.indexVarMap is nil, then there is no remapping to do.
-		return expr
-	}
-	ret := execinfrapb.Expression{}
-	if expr.LocalExpr != nil {
-		ret.LocalExpr = sqlbase.RemapIVarsInTypedExpr(expr.LocalExpr, p.indexVarMap)
-	} else {
-		ret.Expr = expr.Expr
-		// We iterate in the reverse order so that the multiple digit numbers are
-		// handled correctly (consider an expression like @1 AND @11).
-		//
-		// In order not to confuse the newly replaced ordinals with the original
-		// ones we first remap all ordinals using "custom" ordinal symbol first
-		// (namely, instead of using `@1` we will use `@#1`). Consider an example
-		// `@2 = @4` with p.idxVarMap = {-1, 0, -1, 1}. If we didn't do this custom
-		// ordinal remapping, then we would get into a situation of `@2 = @2` in
-		// which the first @2 is original and needs to be replaced whereas the
-		// second one should not be touched. After the first loop, we will have
-		// `@#1 = @#2`.
-		for idx := len(p.indexVarMap) - 1; idx >= 0; idx-- {
-			if p.indexVarMap[idx] != -1 {
-				// We need +1 below because the ordinals are counting from 1.
-				ret.Expr = strings.ReplaceAll(
-					ret.Expr,
-					fmt.Sprintf("@%d", idx+1),
-					fmt.Sprintf("@#%d", p.indexVarMap[idx]+1),
-				)
-			}
-		}
-		// Now we simply need to convert the "custom" ordinal symbol by removing
-		// the pound sign (in the example above, after this loop we will have
-		// `@1 = @2`).
-		for idx := len(p.indexVarMap); idx > 0; idx-- {
-			ret.Expr = strings.ReplaceAll(
-				ret.Expr,
-				fmt.Sprintf("@#%d", idx),
-				fmt.Sprintf("@%d", idx),
-			)
-		}
-	}
-	return ret
 }
 
 // projectOutExtraCols, possibly, adds a projection to remove all the extra
@@ -947,13 +905,13 @@ func (r *NewColOperatorResult) setProjectedByJoinerColumnTypes(
 }
 
 func (r *NewColOperatorResult) planFilterExpr(
-	evalCtx *tree.EvalContext, filter execinfrapb.Expression,
+	evalCtx *tree.EvalContext, filter execinfrapb.Expression, indexVarMap []int,
 ) error {
 	var (
 		helper       execinfra.ExprHelper
 		selectionMem int
 	)
-	err := helper.Init(filter, r.ColumnTypes, evalCtx)
+	err := helper.InitWithRemapping(filter, r.ColumnTypes, evalCtx, indexVarMap)
 	if err != nil {
 		return err
 	}
