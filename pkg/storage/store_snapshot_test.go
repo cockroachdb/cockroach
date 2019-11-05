@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -60,6 +61,10 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			firstIndex, err := (*replicaRaftStorage)(repl).FirstIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
 			eng := store.Engine()
 			snap := eng.NewSnapshot()
 			defer snap.Close()
@@ -74,7 +79,12 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 			outSnap := &OutgoingSnapshot{
 				Iter:       iter,
 				EngineSnap: snap,
-				snapType:   snapType,
+				State: storagebase.ReplicaState{
+					TruncatedState: &roachpb.RaftTruncatedState{
+						Index: firstIndex - 1,
+					},
+				},
+				snapType: snapType,
 				RaftSnap: raftpb.Snapshot{
 					Metadata: raftpb.SnapshotMetadata{
 						Index: lastIndex,

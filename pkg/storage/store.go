@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -4456,6 +4458,20 @@ func (s *Store) updateCommandQueueGauges() error {
 	s.metrics.CombinedCommandReadCount.Update(combinedCommandReadCount)
 
 	return nil
+}
+
+func (s *Store) checkpoint(ctx context.Context, tag string) string {
+	// We create RocksDB checkpoints whenever we run into missing raft log
+	// entries in the incoming snapshot.
+	checkpointBase := filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
+	_ = os.MkdirAll(checkpointBase, 0700)
+
+	checkpointDir := filepath.Join(checkpointBase, tag)
+	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {
+		log.Warningf(ctx, "unable to create checkpoint %s: %+v", checkpointDir, err)
+	}
+
+	return checkpointDir
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which
