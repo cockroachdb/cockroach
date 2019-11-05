@@ -1969,12 +1969,12 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 ) (plan PhysicalPlan, err error) {
 
 	tables := make([]sqlbase.TableDescriptor, len(n.sides))
-	indexIds := make([]uint32, len(n.sides))
+	indexOrdinals := make([]uint32, len(n.sides))
 	cols := make([]execinfrapb.Columns, len(n.sides))
 	numStreamCols := 0
 	for i, side := range n.sides {
 		tables[i] = *side.scan.desc.TableDesc()
-		indexIds[i], err = getIndexIdx(side.scan)
+		indexOrdinals[i], err = getIndexIdx(side.scan)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -1990,10 +1990,10 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	// The zigzag join node only represents inner joins, so hardcode Type to
 	// InnerJoin.
 	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
-		Tables:    tables,
-		IndexIds:  indexIds,
-		EqColumns: cols,
-		Type:      sqlbase.InnerJoin,
+		Tables:        tables,
+		IndexOrdinals: indexOrdinals,
+		EqColumns:     cols,
+		Type:          sqlbase.InnerJoin,
 	}
 	zigzagJoinerSpec.FixedValues = make([]*execinfrapb.ValuesCoreSpec, len(n.sides))
 
