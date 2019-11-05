@@ -396,11 +396,11 @@ func (z *zigzagJoiner) setupInfo(
 	info.alloc = &sqlbase.DatumAlloc{}
 	info.table = &spec.Tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
-	indexID := spec.IndexIds[side]
-	if indexID == 0 {
+	indexOrdinal := spec.IndexOrdinals[side]
+	if indexOrdinal == 0 {
 		info.index = &info.table.PrimaryIndex
 	} else {
-		info.index = &info.table.Indexes[indexID-1]
+		info.index = &info.table.Indexes[indexOrdinal-1]
 	}
 
 	var columnIDs []sqlbase.ColumnID
@@ -437,7 +437,7 @@ func (z *zigzagJoiner) setupInfo(
 	_, _, err := execinfra.InitRowFetcher(
 		&(info.fetcher),
 		info.table,
-		int(info.index.ID)-1,
+		int(indexOrdinal),
 		info.table.ColumnIdxMap(),
 		false, /* reverse */
 		neededCols,
