@@ -26,13 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/status"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -48,6 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 // AddTestingDialOpts adds extra dialing options to the rpc Context. This should
@@ -1082,6 +1081,65 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				t.Errorf("unexpected error: %s", err)
 			}
 		})
+	}
+}
+
+// This test ensures that clients cannot be left waiting on
+// `Connection.Connect()` calls in the rare case where a heartbeat loop
+// exits before attempting to send its first heartbeat. See #41521.
+func TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+
+	// This test reaches into low-level implementation details to recreate
+	// the hazardous scenario seen in #41521. In that isse we saw a runHeartbeat()
+	// loop exit prior to sending the first heartbeat. To recreate that scenario
+	// which seems difficult to create now that gRPC backs off redialing, we
+	// launch the runHeartbeat() loop with an already closed redial chan.
+	// In order to hit predictable errors we run an actual server on the other
+	// side of the Connection passed to runHeartbeat().
+	//
+	// At least half of the time this test will hit the case where the select
+	// in runHeartbeat detects the closed redial chan and returns. The
+	// correctness criteria we're trying to verify is that the Connect call
+	// below does not block.
+
+	rpcCtx := newTestContext(clock, stopper)
+	serverCtx := newTestContext(clock, stopper)
+
+	s := NewServer(serverCtx)
+	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	c := newConnection(stopper)
+
+	redialChan := make(chan struct{})
+	close(redialChan)
+
+	c.grpcConn, _, c.dialErr = rpcCtx.GRPCDialRaw(remoteAddr)
+	if err != nil {
+		t.Fatal(c.dialErr)
+	}
+	// It is possible that the redial chan being closed is not seen on the first
+	// pass through the loop.
+	err = rpcCtx.runHeartbeat(c, "", redialChan)
+	if !testutils.IsError(err, grpcutil.ErrCannotReuseClientConn.Error()) {
+		t.Fatalf("expected %v, got %v", grpcutil.ErrCannotReuseClientConn, err)
+	}
+	// Even when the runHeartbeat returns, we could have heartbeated successfully.
+	// If we did not, then we expect the `not yet heartbeated` error.
+	if _, err = c.Connect(ctx); err != nil && !testutils.IsError(err, "not yet heartbeated") {
+		t.Fatalf("expected either no error or \"not yet heartbeated\", got %v", err)
+	}
+	if err := c.grpcConn.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
