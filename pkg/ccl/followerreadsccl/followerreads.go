@@ -134,7 +134,7 @@ func newOracleFactory(cfg replicaoracle.Config) replicaoracle.OracleFactory {
 }
 
 func (f oracleFactory) Oracle(txn *client.Txn) replicaoracle.Oracle {
-	if txn != nil && canUseFollowerRead(f.clusterID.Get(), f.st, txn.OrigTimestamp()) {
+	if txn != nil && canUseFollowerRead(f.clusterID.Get(), f.st, txn.ReadTimestamp()) {
 		return f.closest.Oracle(txn)
 	}
 	return f.binPacking.Oracle(txn)

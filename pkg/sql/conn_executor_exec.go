@@ -386,9 +386,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if ts != nil {
-			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
+			if readTs := ex.state.getReadTimestamp(); *ts != readTs {
 				err = pgerror.Newf(pgcode.Syntax,
-					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", origTs)
+					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", readTs)
 				err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
 				return makeErrEvent(err)
 			}

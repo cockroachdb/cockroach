@@ -1165,11 +1165,13 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 	tc.mu.txn.Name = name
 }
 
-// OrigTimestamp is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) OrigTimestamp() hlc.Timestamp {
+// ReadTimestamp is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.mu.txn.OrigTimestamp
+	ts := tc.mu.txn.OrigTimestamp
+	ts.Forward(tc.mu.txn.RefreshedTimestamp)
+	return ts
 }
 
 // CommitTimestamp is part of the client.TxnSender interface.

@@ -100,7 +100,7 @@ func (s *Store) logSplit(
 		return nil
 	}
 	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
-		Timestamp:    selectEventTimestamp(s, txn.OrigTimestamp()),
+		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedDesc.RangeID,
 		EventType:    storagepb.RangeLogEventType_split,
 		StoreID:      s.StoreID(),
@@ -124,7 +124,7 @@ func (s *Store) logMerge(
 		return nil
 	}
 	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
-		Timestamp:    selectEventTimestamp(s, txn.OrigTimestamp()),
+		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedLHSDesc.RangeID,
 		EventType:    storagepb.RangeLogEventType_merge,
 		StoreID:      s.StoreID(),
@@ -177,7 +177,7 @@ func (s *Store) logChange(
 	}
 
 	return s.insertRangeLogEvent(ctx, txn, storagepb.RangeLogEvent{
-		Timestamp: selectEventTimestamp(s, txn.OrigTimestamp()),
+		Timestamp: selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:   desc.RangeID,
 		EventType: logType,
 		StoreID:   s.StoreID(),
