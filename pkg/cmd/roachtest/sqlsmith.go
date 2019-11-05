@@ -70,7 +70,7 @@ func registerSQLSmith(r *testRegistry) {
 		until := time.After(t.spec.Timeout / 2)
 		done := ctx.Done()
 		for i := 1; ; i++ {
-			if i%500 == 0 {
+			if i%10000 == 0 {
 				t.Status("smithing: ", i, " statements completed")
 			}
 			select {
@@ -122,7 +122,6 @@ func registerSQLSmith(r *testRegistry) {
 
 	register := func(setup, setting string) {
 		r.Add(testSpec{
-			Skip:    "https://github.com/cockroachdb/cockroach/issues/42109",
 			Name:    fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Cluster: makeClusterSpec(4),
 			Timeout: time.Minute * 20,

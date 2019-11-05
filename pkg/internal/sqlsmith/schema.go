@@ -144,6 +144,9 @@ ORDER BY
 		if lastSchema != "public" {
 			return
 		}
+		if len(currentCols) == 0 {
+			return fmt.Errorf("zero columns for %s.%s", lastCatalog.lastName)
+		}
 		tables = append(tables, &tableRef{
 			TableName: tree.NewTableName(lastCatalog, lastName),
 			Columns:   currentCols,
