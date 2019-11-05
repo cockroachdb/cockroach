@@ -809,7 +809,7 @@ query TTT
 EXPLAIN SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
 ----
 ·                      distributed  true
-·                      vectorized   false
+·                      vectorized   true
 group                  ·            ·
  │                     aggregate 0  count_rows()
  │                     scalar       ·
