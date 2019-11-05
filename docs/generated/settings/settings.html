@@ -100,6 +100,7 @@
 <tr><td><code>sql.defaults.serial_normalization</code></td><td>enumeration</td><td><code>rowid</code></td><td>default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2]</td></tr>
 <tr><td><code>sql.defaults.vectorize</code></td><td>enumeration</td><td><code>auto</code></td><td>default vectorize mode [off = 0, auto = 1, experimental_on = 2]</td></tr>
 <tr><td><code>sql.defaults.vectorize_row_count_threshold</code></td><td>integer</td><td><code>1000</code></td><td>default vectorize row count threshold</td></tr>
+<tr><td><code>sql.defaults.zigzag_join.enabled</code></td><td>boolean</td><td><code>true</code></td><td>default value for enable_zigzag_join session setting; allows use of zig-zag join by default</td></tr>
 <tr><td><code>sql.distsql.distribute_index_joins</code></td><td>boolean</td><td><code>true</code></td><td>if set, for index joins we instantiate a join reader on every node that has a stream; if not set, we use a single join reader</td></tr>
 <tr><td><code>sql.distsql.flow_stream_timeout</code></td><td>duration</td><td><code>10s</code></td><td>amount of time incoming streams wait for a flow to be set up before erroring out</td></tr>
 <tr><td><code>sql.distsql.interleaved_joins.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set we plan interleaved table joins instead of merge joins when possible</td></tr>
