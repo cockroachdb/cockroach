@@ -103,7 +103,7 @@ func (cr *checkResult) Error() error {
 	if cr.err != nil {
 		errs = append(errs, cr.err.Error())
 	}
-	if !cr.actMS.Equal(enginepb.MVCCStats{}) && !cr.actMS.Equal(cr.claimMS) && !cr.claimMS.ContainsEstimates {
+	if !cr.actMS.Equal(enginepb.MVCCStats{}) && !cr.actMS.Equal(cr.claimMS) && cr.claimMS.ContainsEstimates <= 0 {
 		err := fmt.Sprintf("stats inconsistency:\n- stored:\n%+v\n- recomputed:\n%+v\n- diff:\n%s",
 			cr.claimMS, cr.actMS, strings.Join(pretty.Diff(cr.claimMS, cr.actMS), ","),
 		)
@@ -192,7 +192,7 @@ func checkStoreRangeStats(
 			errS := err.Error()
 			println(errS)
 		} else {
-			if res.claimMS.ContainsEstimates {
+			if res.claimMS.ContainsEstimates > 0 {
 				cE++
 			}
 			total.Add(res.actMS)

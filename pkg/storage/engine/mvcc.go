@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -217,7 +218,10 @@ func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCS
 	var ms enginepb.MVCCStats
 	sys := isSysLocal(key)
 	ms.AgeTo(nowNanos)
-	ms.ContainsEstimates = true
+
+	_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+	ms.ContainsEstimates = 1
+
 	if sys {
 		ms.SysBytes += valSize
 	} else {

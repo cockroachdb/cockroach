@@ -583,8 +583,8 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   bool has_contains_estimates() const;
   void clear_contains_estimates();
   static const int kContainsEstimatesFieldNumber = 14;
-  bool contains_estimates() const;
-  void set_contains_estimates(bool value);
+  ::google::protobuf::int64 contains_estimates() const;
+  void set_contains_estimates(::google::protobuf::int64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCStats)
  private:
@@ -633,7 +633,7 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   ::google::protobuf::int64 intent_count_;
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
-  bool contains_estimates_;
+  ::google::protobuf::int64 contains_estimates_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::TableStruct;
 };
 // ===================================================================
@@ -1079,14 +1079,14 @@ inline void MVCCStats::clear_has_contains_estimates() {
   _has_bits_[0] &= ~0x00002000u;
 }
 inline void MVCCStats::clear_contains_estimates() {
-  contains_estimates_ = false;
+  contains_estimates_ = GOOGLE_LONGLONG(0);
   clear_has_contains_estimates();
 }
-inline bool MVCCStats::contains_estimates() const {
+inline ::google::protobuf::int64 MVCCStats::contains_estimates() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStats.contains_estimates)
   return contains_estimates_;
 }
-inline void MVCCStats::set_contains_estimates(bool value) {
+inline void MVCCStats::set_contains_estimates(::google::protobuf::int64 value) {
   set_has_contains_estimates();
   contains_estimates_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStats.contains_estimates)
