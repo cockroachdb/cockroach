@@ -179,7 +179,7 @@ func (s LeaseStore) acquire(
 ) (*tableVersionState, error) {
 	var table *tableVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		expiration := txn.OrigTimestamp()
+		expiration := txn.ReadTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
 		if !minExpiration.Less(expiration) {
 			// In the rare circumstances where expiration <= minExpiration

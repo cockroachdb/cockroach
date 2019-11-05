@@ -491,7 +491,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 		// to be equal *or greater* than previously inserted timestamps
 		// computed by now(). For now OrigTimestamp can only move forward
 		// and the assertion OrigTimestamp >= now() holds at all times.
-		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
+		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
 		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 		if err != nil {
 			return err
