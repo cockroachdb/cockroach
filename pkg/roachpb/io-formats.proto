@@ -38,6 +38,8 @@ message IOFileFormat {
     Bzip = 3;
   }
   optional Compression compression = 5 [(gogoproto.nullable) = false];
+  // If true, don't abort on failures but instead save the offending row and keep on.
+  optional bool save_rejected = 7 [(gogoproto.nullable) = false];
 }
 
 
@@ -80,8 +82,7 @@ message MySQLOutfileOptions {
   optional uint32 skip = 7 [(gogoproto.nullable) = false];
   // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
   optional string null_encoding = 8 [(gogoproto.nullable) = true];
-  // If true, don't abort on failures but instead save the offending row and keep on.
-  optional bool save_rejected = 9 [(gogoproto.nullable) = false];
+  reserved 9;
 }
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.

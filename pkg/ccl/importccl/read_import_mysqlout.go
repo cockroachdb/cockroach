@@ -65,7 +65,6 @@ func (d *mysqloutfileReader) readFile(
 	d.conv.KvBatch.Source = inputIdx
 	d.conv.FractionFn = input.ReadFraction
 	var count int64 = 1
-	var countRejected int64
 
 	var row []tree.Datum
 	var savedRow []rune
@@ -153,9 +152,8 @@ func (d *mysqloutfileReader) readFile(
 	}
 	addRow := func() error {
 		defer func() {
-			if gotOffendingRow && d.opts.SaveRejected {
+			if gotOffendingRow && rejected != nil {
 				rejected <- string(savedRow)
-				countRejected++
 			}
 			savedRow = savedRow[:0]
 			gotOffendingRow = false
@@ -207,7 +205,7 @@ func (d *mysqloutfileReader) readFile(
 
 		// First check that if we're done and everything looks good.
 		if finished {
-			if len(savedRow) > 0 || (d.opts.SaveRejected && gotOffendingRow) {
+			if len(savedRow) > 0 || (rejected != nil && gotOffendingRow) {
 				// flush the last row.
 				if err := addRow(); err != nil {
 					return false, err
@@ -318,12 +316,8 @@ func (d *mysqloutfileReader) readFile(
 			break
 		}
 		if err != nil {
-			if d.opts.SaveRejected {
+			if rejected != nil {
 				log.Error(ctx, err)
-				if countRejected > 1000 { // TODO(spaskob): turn the magic constant into an option
-					return makeRowErr(inputName, count, pgcode.Syntax,
-						"too many parsing errors encountered %d", countRejected)
-				}
 			} else {
 				return err
 			}
