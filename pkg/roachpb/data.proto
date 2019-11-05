@@ -357,15 +357,6 @@ message Transaction {
   // Additionally, it will present a good opportunity to rename the field to
   // read_timestamp.
   util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
-  // Deprecated min timestamp was used to keep track of the earliest timestamp
-  // that any epoch of the transaction used. This was set only if the
-  // transaction is restarted and the epoch is bumped. It was used during
-  // intent resolution to more efficiently scan for intents.
-  //
-  // The timestamp has since been replaced by TxnMeta.MinTimestamp.
-  //
-  // TODO(nvanbenschoten): remove in v20.1.
-  util.hlc.Timestamp deprecated_min_timestamp = 14 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
   // retry error, unless the node being read is listed in observed_timestamps
@@ -498,7 +489,7 @@ message Transaction {
   // slice.
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
 
-  reserved 3, 9, 13;
+  reserved 3, 9, 13, 14;
 }
 
 // A TransactionRecord message contains the subset of the fields in a
