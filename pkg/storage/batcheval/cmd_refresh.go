@@ -37,11 +37,20 @@ func Refresh(
 		return result.Result{}, errors.Errorf("no transaction specified to %s", args.Method())
 	}
 
+	// We're going to refresh up to the transaction's read timestamp.
+	if h.Timestamp != h.Txn.Timestamp {
+		// We're expecting the read and write timestamp to have converged before the
+		// Refresh request was sent.
+		log.Fatalf(ctx, "expected provisional commit ts %s == read ts %s. txn: %s", h.Timestamp,
+			h.Txn.Timestamp, h.Txn)
+	}
+	refreshTo := h.Timestamp
+
 	// Get the most recent committed value and return any intent by
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
-	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
-	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Txn.Timestamp, engine.MVCCGetOptions{
+	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, refreshTo)
+	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, refreshTo, engine.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
 	})
