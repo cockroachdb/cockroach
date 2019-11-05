@@ -135,6 +135,12 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	},
 )
 
+var zigzagJoinClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.zigzag_join.enabled",
+	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
+	true,
+)
+
 var optDrivenFKClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_optimizer_foreign_keys.enabled",
 	"enables optimizer-driven foreign key checks by default",
