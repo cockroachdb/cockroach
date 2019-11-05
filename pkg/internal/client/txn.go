@@ -237,18 +237,18 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// OrigTimestamp returns the transaction's starting timestamp.
+// ReadTimestamp returns the transaction's current read timestamp.
 // Note a transaction can be internally pushed forward in time before
 // committing so this is not guaranteed to be the commit timestamp.
 // Use CommitTimestamp() when needed.
-func (txn *Txn) OrigTimestamp() hlc.Timestamp {
+func (txn *Txn) ReadTimestamp() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.origTimestampLocked()
+	return txn.readTimestampLocked()
 }
 
-func (txn *Txn) origTimestampLocked() hlc.Timestamp {
-	return txn.mu.sender.OrigTimestamp()
+func (txn *Txn) readTimestampLocked() hlc.Timestamp {
+	return txn.mu.sender.ReadTimestamp()
 }
 
 // CommitTimestamp returns the transaction's start timestamp.
@@ -563,7 +563,7 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
-		if deadline.Less(txn.origTimestampLocked()) {
+		if deadline.Less(txn.readTimestampLocked()) {
 			log.Fatalf(ctx, "deadline below txn.OrigTimestamp() is nonsensical; "+
 				"txn has would have no change to commit. Deadline: %s", deadline)
 		}
