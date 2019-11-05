@@ -24,9 +24,8 @@ func init() {
 	RegisterCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
 }
 
-// Refresh checks the key for more recently written values than the
-// txn's original timestamp and less recently than the txn's current
-// timestamp.
+// Refresh checks whether the key has any values written in the interval
+// [args.RefreshFrom, header.Timestamp].
 func Refresh(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -46,10 +45,16 @@ func Refresh(
 	}
 	refreshTo := h.Timestamp
 
+	refreshFrom := args.RefreshFrom
+	if refreshFrom.IsEmpty() {
+		// Compatibility with 19.2 nodes, which didn't set the args.RefreshFrom field.
+		refreshFrom = h.Txn.OrigTimestamp
+	}
+
 	// Get the most recent committed value and return any intent by
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
-	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, refreshTo)
+	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
 	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, refreshTo, engine.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
@@ -58,20 +63,7 @@ func Refresh(
 	if err != nil {
 		return result.Result{}, err
 	} else if val != nil {
-		// TODO(nvanbenschoten): This is pessimistic. We only need to check
-		//   !ts.Less(h.Txn.PrevRefreshTimestamp)
-		// This could avoid failed refreshes due to requests performed after
-		// earlier refreshes (which read at the refresh ts) that already
-		// observed writes between the orig ts and the refresh ts. For example:
-		// - OrigTimestamp is 10
-		// - attempt to read k1@10. The read fails and we have to refresh to 20.
-		// - succeed in refreshing
-		// - read k1@20, succeeding this time. Let's say that the latest value is @15.
-		// - attempt to read k2@20. Need to refresh to 30.
-		// - the refresh checks k1@[10-30]. The value @15 is found, and it causes
-		//   the refresh to fail. But it shouldn't have, since we had already read
-		//   that value. We should have only verified [20-30].
-		if ts := val.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
+		if ts := val.Timestamp; !ts.Less(refreshFrom) {
 			return result.Result{}, errors.Errorf("encountered recently written key %s @%s", args.Key, ts)
 		}
 	}
