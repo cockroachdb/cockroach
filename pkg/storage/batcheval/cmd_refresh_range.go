@@ -65,6 +65,7 @@ func RefreshRange(
 			// This could avoid failed refreshes due to requests performed after
 			// earlier refreshes (which read at the refresh ts) that already
 			// observed writes between the orig ts and the refresh ts.
+			// See more info in similar comment in cmd_refresh.go.
 			if ts := kv.Value.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
 				return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
 			}
