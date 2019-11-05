@@ -140,14 +140,18 @@ ORDER BY
 	var lastCatalog, lastSchema, lastName tree.Name
 	var tables []*tableRef
 	var currentCols []*tree.ColumnTableDef
-	emit := func() {
+	emit := func() error {
 		if lastSchema != "public" {
-			return
+			return nil
+		}
+		if len(currentCols) == 0 {
+			return fmt.Errorf("zero columns for %s.%s", lastCatalog, lastName)
 		}
 		tables = append(tables, &tableRef{
 			TableName: tree.NewTableName(lastCatalog, lastName),
 			Columns:   currentCols,
 		})
+		return nil
 	}
 	for rows.Next() {
 		var catalog, schema, name, col tree.Name
@@ -168,7 +172,9 @@ ORDER BY
 		firstTime = false
 
 		if lastCatalog != catalog || lastSchema != schema || lastName != name {
-			emit()
+			if err := emit(); err != nil {
+				return nil, err
+			}
 			currentCols = nil
 		}
 
@@ -189,7 +195,9 @@ ORDER BY
 		lastName = name
 	}
 	if !firstTime {
-		emit()
+		if err := emit(); err != nil {
+			return nil, err
+		}
 	}
 	return tables, rows.Err()
 }
