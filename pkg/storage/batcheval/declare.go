@@ -21,12 +21,19 @@ import (
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
+	var access spanset.SpanAccess
 	if roachpb.IsReadOnly(req) {
-		spans.Add(spanset.SpanReadOnly, req.Header().Span())
+		access = spanset.SpanReadOnly
 	} else {
-		spans.Add(spanset.SpanReadWrite, req.Header().Span())
+		access = spanset.SpanReadWrite
+	}
+
+	if keys.IsLocal(req.Header().Span().Key) {
+		spans.AddNonMVCC(access, req.Header().Span())
+	} else {
+		spans.AddMVCC(access, req.Header().Span(), header.Timestamp)
 	}
 }
 
@@ -38,13 +45,13 @@ func DeclareKeysForBatch(
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
+		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
 	if header.ReturnRangeInfo {
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
+		spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 	}
 }
 

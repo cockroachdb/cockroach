@@ -30,8 +30,8 @@ func init() {
 func declareKeysSubsume(
 	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	// Subsume must not run concurrently with any other command. It declares that
-	// it reads and writes every addressable key in the range; this guarantees
+	// Subsume must not run concurrently with any other command. It declares a
+	// non-MVCC write over every addressable key in the range; this guarantees
 	// that it conflicts with any other command because every command must declare
 	// at least one addressable key. It does not, in fact, write any keys.
 	//
@@ -41,16 +41,16 @@ func declareKeysSubsume(
 	if args.RightDesc != nil {
 		desc = args.RightDesc
 	}
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
 	})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
 		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey).PrefixEnd(),
 	})
 	rangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(desc.RangeID)
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    rangeIDPrefix,
 		EndKey: rangeIDPrefix.PrefixEnd(),
 	})

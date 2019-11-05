@@ -33,7 +33,7 @@ func declareKeysWriteTransaction(
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{
+		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
 	}
@@ -43,7 +43,7 @@ func declareKeysBeginTransaction(
 	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{
+	spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 	})
 }

@@ -968,7 +968,7 @@ func (i *iterator) Valid() bool {
 }
 
 // Cur returns the latch at the iterator's current position. It is illegal
-// to call Latch if the iterator is not valid.
+// to call Cur if the iterator is not valid.
 func (i *iterator) Cur() *latch {
 	return i.n.latches[i.pos]
 }

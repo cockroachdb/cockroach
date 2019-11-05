@@ -155,14 +155,8 @@ func allocGuardAndLatches(nLatches int) (*Guard, []latch) {
 	return new(Guard), make([]latch, nLatches)
 }
 
-func newGuard(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
-	nLatches := 0
-	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
-		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
-			nLatches += len(spans.GetSpans(a, s))
-		}
-	}
-
+func newGuard(spans *spanset.SpanSet) *Guard {
+	nLatches := spans.Len()
 	guard, latches := allocGuardAndLatches(nLatches)
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
@@ -175,9 +169,9 @@ func newGuard(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
 			ssLatches := latches[:n]
 			for i := range ssLatches {
 				latch := &latches[i]
-				latch.span = ss[i]
-				latch.ts = ifGlobal(ts, s)
+				latch.span = ss[i].Span
 				latch.done = &guard.done
+				latch.ts = ss[i].Timestamp
 				// latch.setID() in Manager.insert, under lock.
 			}
 			guard.setLatches(s, a, ssLatches)
@@ -198,10 +192,8 @@ func newGuard(spans *spanset.SpanSet, ts hlc.Timestamp) *Guard {
 // acquired.
 //
 // It returns a Guard which must be provided to Release.
-func (m *Manager) Acquire(
-	ctx context.Context, spans *spanset.SpanSet, ts hlc.Timestamp,
-) (*Guard, error) {
-	lg, snap := m.sequence(spans, ts)
+func (m *Manager) Acquire(ctx context.Context, spans *spanset.SpanSet) (*Guard, error) {
+	lg, snap := m.sequence(spans)
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
@@ -216,8 +208,8 @@ func (m *Manager) Acquire(
 // for each of the specified spans into the manager's interval trees, and
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
-func (m *Manager) sequence(spans *spanset.SpanSet, ts hlc.Timestamp) (*Guard, snapshot) {
-	lg := newGuard(spans, ts)
+func (m *Manager) sequence(spans *spanset.SpanSet) (*Guard, snapshot) {
+	lg := newGuard(spans)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -316,18 +308,6 @@ type ignoreFn func(ts, other hlc.Timestamp) bool
 func ignoreLater(ts, other hlc.Timestamp) bool   { return !ts.IsEmpty() && ts.Less(other) }
 func ignoreEarlier(ts, other hlc.Timestamp) bool { return !other.IsEmpty() && other.Less(ts) }
 func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
-
-func ifGlobal(ts hlc.Timestamp, s spanset.SpanScope) hlc.Timestamp {
-	switch s {
-	case spanset.SpanGlobal:
-		return ts
-	case spanset.SpanLocal:
-		// All local latches interfere.
-		return hlc.Timestamp{}
-	default:
-		panic("unknown scope")
-	}
-}
 
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.

@@ -40,7 +40,7 @@ func declareKeysResolveIntentCombined(
 		txnID = t.IntentTxn.ID
 	}
 	if WriteAbortSpanOnResolve(status) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
+		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
 	}
 }
 
