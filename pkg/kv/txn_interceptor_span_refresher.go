@@ -271,12 +271,14 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 // tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all spans read
 // during the transaction to ensure that no writes were written more recently
-// than the original transaction timestamp. All implicated timestamp caches are
-// updated with the final transaction timestamp. Returns whether the refresh was
-// successful or not.
+// than the previous refresh timestamp (or the OrigTimestamp, if no previous
+// refreshes).
+// All implicated timestamp caches are updated with the final transaction
+// timestamp. Returns whether the refresh was successful or not.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
 ) bool {
+	prevRefreshedTS := sr.refreshedTimestamp
 	// Forward the refreshed timestamp under lock. This in conjunction with a
 	// check in appendRefreshSpans prevents a race where a concurrent request
 	// may add new refresh spans only "verified" up to its batch timestamp after
@@ -297,21 +299,19 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	refreshSpanBa.Txn = refreshTxn
 	addRefreshes := func(refreshes []roachpb.Span, write bool) {
 		for _, u := range refreshes {
-			// We're refreshing since the transaction's OrigTimestamp.
-			// TODO(nvanbenschoten, andrei): This is pessimistic. We only need to check
-			//   !ts.Less(h.Txn.PrevRefreshTimestamp)
-			// This would avoid failed refreshes due to requests performed after
-			// earlier refreshes (which read at the refresh ts) that already
-			// observed writes between the orig ts and the refresh ts. For example:
-			// - OrigTimestamp is 10
-			// - attempt to read k1@10. The read fails and we have to refresh to 20.
-			// - succeed in refreshing
-			// - read k1@20, succeeding this time. Let's say that the latest value is @15.
-			// - attempt to read k2@20. Need to refresh to 30.
-			// - the refresh checks k1@[10-30]. The value @15 is found, and it causes
-			//   the refresh to fail. But it shouldn't have, since we had already read
-			//   that value. We should have only verified [20-30].
-			refreshFrom := refreshTxn.OrigTimestamp
+			// We're going to check writes between the previous refreshed timestamp, if any,
+			// and the timestamp we want to bump the transaction to.
+			// Note that if we've already refreshed the transaction before, we don't
+			// need to check the key ranges x timestamp range that we've already
+			// checked - there's no values there for sure.
+			// More importantly, reads that have happened since we've previously
+			// refreshed don't need to be checked below below the timestamp at which
+			// they've been read (which is the timestamp to which we've previously
+			// refreshed). Checking below that timestamp (like we would, for example,
+			// if we simply used txn.OrigTimestamp here), could cause false-positives
+			// that would fail the refresh.
+			refreshFrom := prevRefreshedTS
+			refreshFrom.Forward(refreshTxn.OrigTimestamp)
 
 			var req roachpb.Request
 			if len(u.EndKey) == 0 {
