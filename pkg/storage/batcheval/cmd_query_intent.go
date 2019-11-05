@@ -16,11 +16,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
-	RegisterCommand(roachpb.QueryIntent, DefaultDeclareKeys, QueryIntent)
+	RegisterCommand(roachpb.QueryIntent, declareKeysQueryIntent, QueryIntent)
+}
+
+func declareKeysQueryIntent(
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	// QueryIntent requests read the specified keys at the maximum timestamp in
+	// order to read any intent present, if one exists, regardless of the
+	// timestamp it was written at.
+	spans.AddNonMVCC(spanset.SpanReadOnly, req.Header().Span())
 }
 
 // QueryIntent checks if an intent exists for the specified transaction at the

@@ -46,8 +46,8 @@ func declareKeysRecomputeStats(
 	// Note that we're also accessing the range stats key, but we don't declare it for the same
 	// reasons as above.
 	rdKey := keys.RangeDescriptorKey(desc.StartKey)
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rdKey, uuid.Nil)})
+	spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
+	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rdKey, uuid.Nil)})
 }
 
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
