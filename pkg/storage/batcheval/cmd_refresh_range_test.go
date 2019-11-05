@@ -147,6 +147,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 				},
 				OrigTimestamp: ts2,
 			},
+			Timestamp: ts3,
 		},
 	}, &resp)
 	if err != nil {
