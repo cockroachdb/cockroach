@@ -168,11 +168,11 @@ type TxnSender interface {
 	// like the transaction that merges ranges together.
 	DisablePipelining() error
 
-	// OrigTimestamp returns the transaction's starting timestamp.
+	// ReadTimestamp returns the transaction's current read timestamp.
 	// Note a transaction can be internally pushed forward in time before
 	// committing so this is not guaranteed to be the commit timestamp.
 	// Use CommitTimestamp() when needed.
-	OrigTimestamp() hlc.Timestamp
+	ReadTimestamp() hlc.Timestamp
 
 	// CommitTimestamp returns the transaction's start timestamp.
 	// The start timestamp can get pushed but the use of this
@@ -318,9 +318,11 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 	m.txn.Name = name
 }
 
-// OrigTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) OrigTimestamp() hlc.Timestamp {
-	return m.txn.OrigTimestamp
+// ReadTimestamp is part of the TxnSender interface.
+func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
+	ts := m.txn.OrigTimestamp
+	ts.Forward(m.txn.RefreshedTimestamp)
+	return ts
 }
 
 // CommitTimestamp is part of the TxnSender interface.
