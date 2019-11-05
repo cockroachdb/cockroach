@@ -26,10 +26,6 @@ type groupNode struct {
 	// The schema for this groupNode.
 	columns sqlbase.ResultColumns
 
-	// needOnlyOneRow determines whether aggregation should stop as soon
-	// as one result row can be computed.
-	needOnlyOneRow bool
-
 	// The source node (which returns values that feed into the aggregation).
 	plan planNode
 

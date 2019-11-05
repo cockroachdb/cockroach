@@ -112,6 +112,18 @@ func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
 	}
 }
 
+func BenchmarkMVCCScanTransactionalData_Pebble(b *testing.B) {
+	ctx := context.Background()
+	runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+		numRows: 10000,
+		benchDataOptions: benchDataOptions{
+			numVersions:   2,
+			valueBytes:    8,
+			transactional: true,
+		},
+	})
+}
+
 func BenchmarkMVCCGet_Pebble(b *testing.B) {
 	ctx := context.Background()
 	for _, numVersions := range []int{1, 10, 100} {
@@ -273,6 +285,44 @@ func BenchmarkMVCCGetMergedTimeSeries_Pebble(b *testing.B) {
 			}
 		})
 	}
+}
+
+// DeleteRange benchmarks below (using on-disk data).
+//
+// TODO(peter): Benchmark{MVCCDeleteRange,ClearRange,ClearIterRange}_Pebble
+// give nonsensical results (DeleteRange is absurdly slow and ClearRange
+// reports a processing speed of 481 million MB/s!). We need to take a look at
+// what these benchmarks are trying to measure, and fix them.
+
+func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	ctx := context.Background()
+	for _, valueSize := range []int{8, 32, 256} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			runMVCCDeleteRange(ctx, b, setupMVCCPebble, valueSize)
+		})
+	}
+}
+
+func BenchmarkClearRange_Pebble(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	ctx := context.Background()
+	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
+		return batch.ClearRange(start, end)
+	})
+}
+
+func BenchmarkClearIterRange_Pebble(b *testing.B) {
+	ctx := context.Background()
+	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		defer iter.Close()
+		return batch.ClearIterRange(iter, start.Key, end.Key)
+	})
 }
 
 func BenchmarkMVCCGarbageCollect_Pebble(b *testing.B) {

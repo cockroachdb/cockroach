@@ -13,50 +13,32 @@ package sql
 import (
 	"fmt"
 	"math"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// applyLimit tells this node to optimize things under the assumption that
-// we will only need the first `numRows` rows.
+// applySoftLimit tells this node to optimize things under the assumption that
+// only the first `numRows` rows of its output will be needed. This is a "soft"
+// limit and is only a hint; the node must still be able to produce all results
+// if required. applySoftLimit will propagate the soft limit information down
+// through the tree as far as possible. If it can be propagated all the way down
+// to a scanNode, it is used to set the node's `softLimit` (replacing any
+// existing `hardLimit` or `softLimit`).
 //
-// The special value math.MaxInt64 indicates "no limit".
-//
-// If soft is true, this is a "soft" limit and is only a hint; the node must
-// still be able to produce all results if requested.
-//
-// If soft is false, this is a "hard" limit and is a promise that Next will
-// never be called more than numRows times.
-//
-// The action of calling this method triggers limit-based query plan
-// optimizations, e.g. in expandSelectNode(). The primary user is
-// limitNode.Start(params) after it has fully evaluated the limit and
-// offset expressions. EXPLAIN also does this, see expandPlan() for
-// explainPlanNode.
-//
-// TODO(radu): Arguably, this interface has room for improvement.  A
-// limitNode may have a hard limit locally which is larger than the
-// soft limit propagated up by nodes downstream. We may want to
-// improve this API to pass both the soft and hard limit.
-func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
+// applySoftLimit should still be called on a node even if all rows of its output
+// will be needed, since a soft limit might be possible further down the tree.
+// The special value math.MaxInt64 indicates "no limit", and can be used to
+// call applySoftLimit in this case (see propagateSoftLimits).
+func (p *planner) applySoftLimit(plan planNode, numRows int64) {
 	switch n := plan.(type) {
 	case *scanNode:
-		// Either a limitNode or EXPLAIN is pushing a limit down onto this
-		// node. The special value math.MaxInt64 means "no limit".
+		// The special value math.MaxInt64 means "no limit".
 		if !n.disableBatchLimits && numRows != math.MaxInt64 {
-			if soft {
-				n.hardLimit = 0
-				n.softLimit = numRows
-			} else {
-				n.hardLimit = numRows
-				n.softLimit = 0
-			}
+			n.hardLimit = 0
+			n.softLimit = numRows
 		}
 
 	case *limitNode:
-		// A higher-level limitNode or EXPLAIN is pushing a limit down onto
-		// this node. Prefer the local "hard" limit, unless the limit pushed
-		// down is "hard" and smaller than the local limit.
+		// A higher-level limitNode is pushing a soft limit down onto this
+		// node. Prefer the local "hard" limit.
 		//
 		// TODO(radu): we may get a smaller "soft" limit from the upper node
 		// and we may have a larger "hard" limit locally. In general, it's
@@ -64,141 +46,126 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		if !n.evaluated {
 			n.estimateLimit()
 		}
-		count := n.count
-		if !soft && numRows < count {
-			count = numRows
-		}
-		p.applyLimit(n.plan, getLimit(count, n.offset), false /* soft */)
+		p.applySoftLimit(n.plan, getLimit(n.count, n.offset))
 
 	case *sortNode:
-		// We can't propagate the limit, because the sort potentially needs all
-		// rows.
-		p.setUnlimited(n.plan)
+		// We can't pass a soft limit through to the sortNode's input, because the
+		// sort potentially needs all rows.
+		p.propagateSoftLimits(n.plan)
 
 	case *groupNode:
-		if n.needOnlyOneRow {
-			// We have a single MIN/MAX function and the underlying plan's
-			// ordering matches the function. We only need to retrieve one row.
-			p.applyLimit(n.plan, 1, false /* soft */)
-		} else {
-			p.setUnlimited(n.plan)
-		}
+		p.propagateSoftLimits(n.plan)
 
 	case *indexJoinNode:
-		// If we have a limit in the table node (i.e. post-index-join), the
-		// limit in the index is soft.
-		p.applyLimit(n.input, numRows, soft || !isFilterTrue(n.table.filter))
-		p.setUnlimited(n.table)
+		p.applySoftLimit(n.input, numRows)
+		p.propagateSoftLimits(n.table)
 
 	case *unionNode:
 		if n.right != nil {
-			p.applyLimit(n.right, numRows, true)
+			p.applySoftLimit(n.right, numRows)
 		}
 		if n.left != nil {
-			p.applyLimit(n.left, numRows, true)
+			p.applySoftLimit(n.left, numRows)
 		}
 
 	case *distinctNode:
-		p.applyLimit(n.plan, numRows, true)
+		p.applySoftLimit(n.plan, numRows)
 
 	case *filterNode:
-		p.applyLimit(n.source.plan, numRows, soft || !isFilterTrue(n.filter))
+		p.applySoftLimit(n.source.plan, numRows)
 
 	case *renderNode:
-		p.applyLimit(n.source.plan, numRows, soft)
+		p.applySoftLimit(n.source.plan, numRows)
 
 	case *windowNode:
-		p.setUnlimited(n.plan)
+		p.propagateSoftLimits(n.plan)
 
 	case *max1RowNode:
-		p.setUnlimited(n.plan)
+		p.propagateSoftLimits(n.plan)
 
 	case *joinNode:
-		p.setUnlimited(n.left.plan)
-		p.setUnlimited(n.right.plan)
+		p.propagateSoftLimits(n.left.plan)
+		p.propagateSoftLimits(n.right.plan)
 
 	case *ordinalityNode:
-		p.applyLimit(n.source, numRows, soft)
+		p.applySoftLimit(n.source, numRows)
 
 	case *spoolNode:
-		if !soft {
-			n.hardLimit = numRows
-		}
-		p.applyLimit(n.source, numRows, soft)
+		p.propagateSoftLimits(n.source)
 
 	case *delayedNode:
 		if n.plan != nil {
-			p.applyLimit(n.plan, numRows, soft)
+			p.propagateSoftLimits(n.plan)
 		}
 
 	case *projectSetNode:
-		p.applyLimit(n.source, numRows, true)
+		p.applySoftLimit(n.source, numRows)
 
 	case *rowCountNode:
-		p.setUnlimited(n.source)
+		p.propagateSoftLimits(n.source)
 	case *serializeNode:
-		p.setUnlimited(n.source)
+		p.propagateSoftLimits(n.source)
 	case *deleteNode:
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if
 		// the surrounding query only uses parts of its results.
-		p.setUnlimited(n.source)
+		p.propagateSoftLimits(n.source)
 	case *updateNode:
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if
 		// the surrounding query only uses parts of its results.
-		p.setUnlimited(n.source)
+		p.propagateSoftLimits(n.source)
 	case *insertNode:
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if
 		// the surrounding query only uses parts of its results.
-		p.setUnlimited(n.source)
+		p.propagateSoftLimits(n.source)
 	case *upsertNode:
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if
 		// the surrounding query only uses parts of its results.
-		p.setUnlimited(n.source)
+		p.propagateSoftLimits(n.source)
 	case *createTableNode:
 		if n.sourcePlan != nil {
-			p.applyLimit(n.sourcePlan, numRows, soft)
+			p.propagateSoftLimits(n.sourcePlan)
 		}
 	case *explainDistSQLNode:
 		// EXPLAIN ANALYZE is special: it handles its own limit propagation, since
 		// it fully executes during startExec.
 		if !n.analyze {
-			p.setUnlimited(n.plan)
+			p.propagateSoftLimits(n.plan)
 		}
 	case *showTraceReplicaNode:
-		p.setUnlimited(n.plan)
+		p.propagateSoftLimits(n.plan)
 	case *explainPlanNode:
-		p.setUnlimited(n.plan)
+		p.propagateSoftLimits(n.plan)
 
 	case *splitNode:
-		p.setUnlimited(n.rows)
+		p.propagateSoftLimits(n.rows)
 
 	case *unsplitNode:
-		p.setUnlimited(n.rows)
+		p.propagateSoftLimits(n.rows)
 
 	case *relocateNode:
-		p.setUnlimited(n.rows)
+		p.propagateSoftLimits(n.rows)
 
 	case *cancelQueriesNode:
-		p.setUnlimited(n.rows)
+		p.propagateSoftLimits(n.rows)
 
 	case *cancelSessionsNode:
-		p.setUnlimited(n.rows)
+		p.propagateSoftLimits(n.rows)
 
 	case *controlJobsNode:
-		p.setUnlimited(n.rows)
+		p.propagateSoftLimits(n.rows)
 
 	case *errorIfRowsNode:
-		p.setUnlimited(n.plan)
+		p.propagateSoftLimits(n.plan)
 
 	case *bufferNode:
-		p.setUnlimited(n.plan)
+		p.propagateSoftLimits(n.plan)
 
 	case *exportNode:
-		p.setUnlimited(n.source)
+		p.propagateSoftLimits(n.source)
 
 	case *valuesNode:
 	case *virtualTableNode:
@@ -253,8 +220,11 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	}
 }
 
-func (p *planner) setUnlimited(plan planNode) {
-	p.applyLimit(plan, math.MaxInt64, true)
+// propagateSoftLimits triggers a recursion through a planNode's
+// children, introducing and passing down soft limit hinting where applicable.
+// See applySoftLimit for more detail.
+func (p *planner) propagateSoftLimits(plan planNode) {
+	p.applySoftLimit(plan, math.MaxInt64)
 }
 
 // getLimit computes the actual number of rows to request from the
@@ -266,8 +236,4 @@ func getLimit(count, offset int64) int64 {
 		count = math.MaxInt64 - offset
 	}
 	return count + offset
-}
-
-func isFilterTrue(expr tree.TypedExpr) bool {
-	return expr == nil || expr == tree.DBoolTrue
 }
