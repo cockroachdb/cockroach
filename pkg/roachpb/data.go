@@ -969,9 +969,6 @@ func (t *Transaction) Restart(
 // restart. This invalidates all write intents previously written at lower
 // epochs.
 func (t *Transaction) BumpEpoch() {
-	if t.Epoch == 0 {
-		t.DeprecatedMinTimestamp = t.OrigTimestamp
-	}
 	t.Epoch++
 }
 
@@ -981,15 +978,7 @@ func (t *Transaction) InclusiveTimeBounds() (hlc.Timestamp, hlc.Timestamp) {
 	min := t.MinTimestamp
 	max := t.Timestamp
 	if min.IsEmpty() {
-		// Backwards compatibility with pre-v19.2 nodes.
-		// TODO(nvanbenschoten): Remove in v20.1.
-		min = t.OrigTimestamp
-		if t.Epoch != 0 && t.DeprecatedMinTimestamp != (hlc.Timestamp{}) {
-			if min.Less(t.DeprecatedMinTimestamp) {
-				panic(fmt.Sprintf("orig timestamp %s less than deprecated min timestamp %s", min, t.DeprecatedMinTimestamp))
-			}
-			min = t.DeprecatedMinTimestamp
-		}
+		log.Fatalf(context.TODO(), "missing MinTimestamp on txn: %s", t)
 	}
 	return min, max
 }
@@ -1080,11 +1069,6 @@ func (t *Transaction) Update(o *Transaction) {
 		t.MinTimestamp = o.MinTimestamp
 	} else if o.MinTimestamp != (hlc.Timestamp{}) {
 		t.MinTimestamp.Backward(o.MinTimestamp)
-	}
-	if t.DeprecatedMinTimestamp == (hlc.Timestamp{}) {
-		t.DeprecatedMinTimestamp = o.DeprecatedMinTimestamp
-	} else if o.DeprecatedMinTimestamp != (hlc.Timestamp{}) {
-		t.DeprecatedMinTimestamp.Backward(o.DeprecatedMinTimestamp)
 	}
 
 	// Absorb the collected clock uncertainty information.
