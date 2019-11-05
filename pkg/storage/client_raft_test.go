@@ -2879,7 +2879,11 @@ func TestReplicaGCRace(t *testing.T) {
 	// Send the heartbeat. Boom. See #11591.
 	// We have to send this multiple times to protect against
 	// dropped messages (see #18355).
-	if sent := fromTransport.SendAsync(&hbReq, rpc.DefaultClass); !sent {
+	sendHeartbeat := func() (sent bool) {
+		r := hbReq
+		return fromTransport.SendAsync(&r, rpc.DefaultClass)
+	}
+	if sent := sendHeartbeat(); !sent {
 		t.Fatal("failed to send heartbeat")
 	}
 	heartbeatsSent := 1
@@ -2899,7 +2903,7 @@ func TestReplicaGCRace(t *testing.T) {
 			t.Fatal("did not get expected error")
 		}
 		heartbeatsSent++
-		if sent := fromTransport.SendAsync(&hbReq, rpc.DefaultClass); !sent {
+		if sent := sendHeartbeat(); !sent {
 			t.Fatal("failed to send heartbeat")
 		}
 	}
