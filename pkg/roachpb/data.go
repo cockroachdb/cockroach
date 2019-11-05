@@ -1253,9 +1253,10 @@ func PrepareTransactionForRetry(
 }
 
 // CanTransactionRetryAtRefreshedTimestamp returns whether the transaction
-// specified in the supplied error can be retried at a refreshed timestamp
-// to avoid a client-side transaction restart. If true, returns a cloned,
-// updated Transaction object with the refreshed timestamp set appropriately.
+// specified in the supplied error can be retried at a refreshed timestamp to
+// avoid a client-side transaction restart. If true, returns a cloned, updated
+// Transaction object with the provisional commit timestamp and refreshed
+// timestamp set appropriately.
 func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
