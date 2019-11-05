@@ -2163,6 +2163,25 @@ CREATE TABLE crdb_internal.zones (
 				return err
 			}
 
+			var table *TableDescriptor
+			if zs.Database != "" {
+				database, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, sqlbase.ID(id))
+				if err != nil {
+					return err
+				}
+				if p.CheckAnyPrivilege(ctx, database) != nil {
+					continue
+				}
+			} else if zoneSpecifier.TableOrIndex.Table.TableName != "" {
+				table, err = sqlbase.GetTableDescFromID(ctx, p.txn, sqlbase.ID(id))
+				if err != nil {
+					return err
+				}
+				if p.CheckAnyPrivilege(ctx, table) != nil {
+					continue
+				}
+			}
+
 			// Write down information about the zone in the table.
 			// TODO (rohany): We would like to just display information about these
 			//  subzone placeholders, but there are a few tests that depend on this
@@ -2189,10 +2208,14 @@ CREATE TABLE crdb_internal.zones (
 			}
 
 			if len(subzones) > 0 {
-				table, err := sqlbase.GetTableDescFromID(ctx, p.txn, sqlbase.ID(id))
-				if err != nil {
-					return err
+				if table == nil {
+					return errors.AssertionFailedf(
+						"object id %d with #subzones %d is not a table",
+						id,
+						len(subzones),
+					)
 				}
+
 				for i, s := range subzones {
 					index, err := table.FindIndexByID(sqlbase.IndexID(s.IndexID))
 					if err != nil {
