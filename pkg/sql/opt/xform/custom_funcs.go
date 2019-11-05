@@ -1452,18 +1452,22 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		if iter.indexOrdinal == cat.PrimaryIndex {
 			continue
 		}
+
+		leftFixed := c.indexConstrainedCols(iter.index, scanPrivate.Table, fixedCols)
 		// Short-circuit quickly if the first column in the index is not a fixed
 		// column.
-		if !fixedCols.Contains(scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)) {
+		if leftFixed.Len() == 0 {
 			continue
 		}
-
 		iter2.init(c.e.mem, scanPrivate)
 		// Only look at indexes after this one.
 		iter2.indexOrdinal = iter.indexOrdinal
 
 		for iter2.next() {
-			if !fixedCols.Contains(scanPrivate.Table.ColumnID(iter2.index.Column(0).Ordinal)) {
+			rightFixed := c.indexConstrainedCols(iter2.index, scanPrivate.Table, fixedCols)
+			// If neither side contributes a fixed column not contributed by the
+			// other, then there's no reason to zigzag on this pair of indexes.
+			if leftFixed.SubsetOf(rightFixed) || rightFixed.SubsetOf(leftFixed) {
 				continue
 			}
 			// Columns that are in both indexes are, by definition, equal.
@@ -1624,6 +1628,23 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 		}
 	}
+}
+
+// indexConstrainedCols computes the set of columns in allFixedCols which form
+// a prefix of the key columns in idx.
+func (c *CustomFuncs) indexConstrainedCols(
+	idx cat.Index, tab opt.TableID, allFixedCols opt.ColSet,
+) opt.ColSet {
+	var constrained opt.ColSet
+	for i, n := 0, idx.ColumnCount(); i < n; i++ {
+		col := tab.ColumnID(idx.Column(i).Ordinal)
+		if allFixedCols.Contains(col) {
+			constrained.Add(col)
+		} else {
+			break
+		}
+	}
+	return constrained
 }
 
 // GenerateInvertedIndexZigzagJoins generates zigzag joins for constraints on
