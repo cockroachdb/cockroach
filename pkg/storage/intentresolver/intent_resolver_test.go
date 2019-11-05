@@ -706,7 +706,8 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 		{
 			Txn: roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					ID: uuid.MakeV4(),
+					ID:           uuid.MakeV4(),
+					MinTimestamp: hlc.Timestamp{WallTime: 123},
 				},
 				IntentSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
