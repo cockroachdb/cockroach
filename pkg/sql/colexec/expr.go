@@ -11,36 +11,36 @@
 package colexec
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // findIVarsInRange searches Expr for presence of tree.IndexedVars with indices
 // in range [start, end). It returns a slice containing all such indices.
-func findIVarsInRange(expr execinfrapb.Expression, start int, end int) []uint32 {
+func findIVarsInRange(expr execinfrapb.Expression, start int, end int) ([]uint32, error) {
 	res := make([]uint32, 0)
 	if start >= end {
-		return res
+		return res, nil
 	}
+	var exprToWalk tree.Expr
 	if expr.LocalExpr != nil {
-		visitor := ivarExpressionVisitor{ivarSeen: make([]bool, end)}
-		_, _ = tree.WalkExpr(visitor, expr.LocalExpr)
-		for i := start; i < end; i++ {
-			if visitor.ivarSeen[i] {
-				res = append(res, uint32(i))
-			}
-		}
+		exprToWalk = expr.LocalExpr
 	} else {
-		for i := start; i < end; i++ {
-			if strings.Contains(expr.Expr, fmt.Sprintf("@%d", i+1)) {
-				res = append(res, uint32(i))
-			}
+		e, err := parser.ParseExpr(expr.Expr)
+		if err != nil {
+			return nil, err
+		}
+		exprToWalk = e
+	}
+	visitor := ivarExpressionVisitor{ivarSeen: make([]bool, end)}
+	_, _ = tree.WalkExpr(visitor, exprToWalk)
+	for i := start; i < end; i++ {
+		if visitor.ivarSeen[i] {
+			res = append(res, uint32(i))
 		}
 	}
-	return res
+	return res, nil
 }
 
 type ivarExpressionVisitor struct {
