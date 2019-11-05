@@ -318,21 +318,39 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	refreshSpanBa.Txn = refreshTxn
 	addRefreshes := func(refreshes []roachpb.Span, write bool) {
 		for _, u := range refreshes {
+			// We're refreshing since the transaction's OrigTimestamp.
+			// TODO(nvanbenschoten, andrei): This is pessimistic. We only need to check
+			//   !ts.Less(h.Txn.PrevRefreshTimestamp)
+			// This would avoid failed refreshes due to requests performed after
+			// earlier refreshes (which read at the refresh ts) that already
+			// observed writes between the orig ts and the refresh ts. For example:
+			// - OrigTimestamp is 10
+			// - attempt to read k1@10. The read fails and we have to refresh to 20.
+			// - succeed in refreshing
+			// - read k1@20, succeeding this time. Let's say that the latest value is @15.
+			// - attempt to read k2@20. Need to refresh to 30.
+			// - the refresh checks k1@[10-30]. The value @15 is found, and it causes
+			//   the refresh to fail. But it shouldn't have, since we had already read
+			//   that value. We should have only verified [20-30].
+			refreshFrom := refreshTxn.OrigTimestamp
+
 			var req roachpb.Request
 			if len(u.EndKey) == 0 {
 				req = &roachpb.RefreshRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(u),
 					Write:         write,
+					RefreshFrom:   refreshFrom,
 				}
 			} else {
 				req = &roachpb.RefreshRangeRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(u),
 					Write:         write,
+					RefreshFrom:   refreshFrom,
 				}
 			}
 			refreshSpanBa.Add(req)
 			log.VEventf(ctx, 2, "updating span %s @%s - @%s to avoid serializable restart",
-				req.Header().Span(), refreshTxn.OrigTimestamp, refreshTxn.Timestamp)
+				req.Header().Span(), refreshFrom, refreshTxn.Timestamp)
 		}
 	}
 	addRefreshes(sr.refreshReads, false)
