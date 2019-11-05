@@ -26,7 +26,7 @@ import (
 // SetActiveTimestamp sets the correct timestamp at which the request
 // is to be carried out. For transactional requests, ba.Timestamp must
 // be zero initially and it will be set to txn.OrigTimestamp (and
-// forwarded to txn.SafeTimestamp if non-zero). For non-transactional
+// forwarded to txn.RefreshedTimestamp if non-zero). For non-transactional
 // requests, if no timestamp is specified, nowFn is used to create and
 // set one.
 func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
@@ -38,16 +38,8 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		// The batch timestamp is the timestamp at which reads are performed. We set
 		// this to the txn's original timestamp, even if the txn's provisional
 		// commit timestamp has been forwarded, so that all reads within a txn
-		// observe the same snapshot of the database.
-		//
-		// In other words, we want to preserve the invariant that reading the same
-		// key multiple times in the same transaction will always return the same
-		// value. If we were to read at the latest provisional commit timestamp,
-		// txn.Timestamp, instead, reading the same key twice in the same txn might
-		// yield different results, e.g., if an intervening write caused the
-		// provisional commit timestamp to be advanced. Such a txn would fail to
-		// commit, as its reads would not successfully be refreshed, but only after
-		// confusing the client with spurious data.
+		// observe the same snapshot of the database regardless of how the
+		// provisional commit timestamp evolves..
 		//
 		// Note that writes will be performed at the provisional commit timestamp,
 		// txn.Timestamp, regardless of the batch timestamp.
