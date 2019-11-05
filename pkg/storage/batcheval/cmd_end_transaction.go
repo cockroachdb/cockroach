@@ -1035,14 +1035,10 @@ func splitTriggerHelper(
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
 
-	// HACK(tbg): ContainsEstimates isn't an additive group (there isn't a
-	// -true), and instead of "-true" we'll emit a "true". This will all be
-	// fixed when #37583 lands (and the version is active). For now hard-code
-	// false and there's also code below Raft that interprets this (coming from
-	// a split) as a signal to reset the ContainsEstimates field to false (see
-	// applyRaftCommand).
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
-	deltaPostSplitLeft.ContainsEstimates = false
+	if !cluster.Version.IsActive(ctx, rec.ClusterSettings(), cluster.VersionContainsEstimatesCounter) {
+		deltaPostSplitLeft.ContainsEstimates = 0
+	}
 	return deltaPostSplitLeft, pd, nil
 }
 

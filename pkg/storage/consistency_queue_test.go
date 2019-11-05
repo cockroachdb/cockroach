@@ -372,7 +372,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 // The upreplication here is immaterial and serves only to add realism to the test.
 func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutils.RunTrueAndFalse(t, "hadEstimates", testConsistencyQueueRecomputeStatsImpl)
+}
 
+func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	ctx := context.Background()
 
 	path, cleanup := testutils.TempDir(t)
@@ -482,7 +485,10 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		// not affected by the workload we run below and also does not influence the
 		// GC queue score.
 		ms.SysCount += sysCountGarbage
-		ms.ContainsEstimates = false
+		ms.ContainsEstimates = 0
+		if hadEstimates {
+			ms.ContainsEstimates = 123
+		}
 
 		// Overwrite with the new stats; remember that this range hasn't upreplicated,
 		// so the consistency checker won't see any replica divergence when it runs,
@@ -563,7 +569,8 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	case resp := <-ccCh:
 		assert.Contains(t, resp.Result[0].Detail, `KeyBytes`) // contains printed stats
 		assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT, resp.Result[0].Status)
+		assert.False(t, hadEstimates)
 	default:
-		t.Errorf("no response indicating the incorrect stats")
+		assert.True(t, hadEstimates)
 	}
 }

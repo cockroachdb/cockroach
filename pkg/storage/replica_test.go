@@ -35,7 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
@@ -9317,7 +9319,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	repl.mu.Lock()
 	ms := repl.mu.state.Stats // intentionally mutated below
 	disturbMS := enginepb.NewPopulatedMVCCStats(rnd, false)
-	disturbMS.ContainsEstimates = false
+	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
 	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.engine, ms)
 	repl.assertStateLocked(ctx, tc.engine)
@@ -11945,6 +11947,159 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	requeue, err := tc.store.replicateQueue.processOneChange(ctx, tc.repl, func() bool { return false }, true /* dryRun */)
 	require.Equal(t, errBoom, err)
 	require.False(t, requeue)
+}
+
+// TestContainsEstimatesClamp tests the massaging of ContainsEstimates
+// before proposing a raft command.
+// - If the proposing node's version is lower than the VersionContainsEstimatesCounter,
+// ContainsEstimates must be clamped to {0,1}.
+// - Otherwise, it should always be >1 and an even number.
+func TestContainsEstimatesClampProposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_ = cluster.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
+
+	someRequestToProposal := func(tc *testContext, ctx context.Context) *ProposalData {
+		cmdIDKey := storagebase.CmdIDKey("some-cmdid-key")
+		var ba roachpb.BatchRequest
+		ba.Timestamp = tc.Clock().Now()
+		req := putArgs(roachpb.Key("some-key"), []byte("some-value"))
+		ba.Add(&req)
+		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, &allSpans)
+		if err != nil {
+			t.Error(err)
+		}
+		return proposal
+	}
+
+	// Mock Put command so that it always adds 2 to ContainsEstimates. Could be
+	// any number >1.
+	defer setMockPutWithEstimates(2)()
+
+	t.Run("Pre-VersionContainsEstimatesCounter", func(t *testing.T) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		cfg := TestStoreConfig(nil)
+		version := cluster.VersionByKey(cluster.VersionContainsEstimatesCounter - 1)
+		cfg.Settings = cluster.MakeClusterSettings(version, version)
+		var tc testContext
+		tc.StartWithStoreConfigAndVersion(t, stopper, cfg, version)
+
+		proposal := someRequestToProposal(&tc, ctx)
+
+		if proposal.command.ReplicatedEvalResult.Delta.ContainsEstimates != 1 {
+			t.Error("Expected ContainsEstimates to be 1, was", proposal.command.ReplicatedEvalResult.Delta.ContainsEstimates)
+		}
+	})
+
+	t.Run("VersionContainsEstimatesCounter", func(t *testing.T) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		var tc testContext
+		tc.Start(t, stopper)
+
+		proposal := someRequestToProposal(&tc, ctx)
+
+		if proposal.command.ReplicatedEvalResult.Delta.ContainsEstimates != 4 {
+			t.Error("Expected ContainsEstimates to be 4, was", proposal.command.ReplicatedEvalResult.Delta.ContainsEstimates)
+		}
+	})
+
+}
+
+// TestContainsEstimatesClampApplication tests that if the ContainsEstimates
+// delta from a proposed command is 1 (and the replica state ContainsEstimates <= 1),
+// ContainsEstimates will be kept 1 in the replica state. This is because
+// ContainsEstimates==1 in a proposed command means that the proposer may run
+// with a version older than VersionContainsEstimatesCounter, in which ContainsEstimates
+// is a bool.
+func TestContainsEstimatesClampApplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_ = cluster.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc := testContext{}
+	tc.Start(t, stopper)
+
+	// We will stage and apply 2 batches with a command that has ContainsEstimates=1
+	// and expect that ReplicaState.Stats.ContainsEstimates will not become greater than 1.
+	applyBatch := func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		sm := tc.repl.getStateMachine()
+		batch := sm.NewBatch(false /* ephemeral */)
+		rAppbatch := batch.(*replicaAppBatch)
+
+		lease, _ := tc.repl.GetLease()
+
+		cmd := replicatedCmd{
+			ctx: ctx,
+			ent: &raftpb.Entry{
+				// Term:  1,
+				Index: rAppbatch.state.RaftAppliedIndex + 1,
+				Type:  raftpb.EntryNormal,
+			},
+			decodedRaftEntry: decodedRaftEntry{
+				idKey: makeIDKey(),
+				raftCmd: storagepb.RaftCommand{
+					ProposerLeaseSequence: rAppbatch.state.Lease.Sequence,
+					ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
+						Timestamp:      tc.Clock().Now(),
+						IsLeaseRequest: true,
+						State: &storagepb.ReplicaState{
+							Lease: &lease,
+						},
+						Delta: enginepb.MVCCStatsDelta{
+							ContainsEstimates: 1,
+						},
+					},
+				},
+			},
+		}
+
+		_, err := rAppbatch.Stage(apply.Command(&cmd))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := batch.ApplyToStateMachine(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	applyBatch()
+	assert.Equal(t, int64(1), tc.repl.State().ReplicaState.Stats.ContainsEstimates)
+
+	applyBatch()
+	assert.Equal(t, int64(1), tc.repl.State().ReplicaState.Stats.ContainsEstimates)
+}
+
+// setMockPutWithEstimates mocks the Put command (could be any) to simulate a command
+// that touches ContainsEstimates, in order to test request proposal behavior.
+func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
+	prev, _ := batcheval.LookupCommand(roachpb.Put)
+
+	mockPut := func(
+		ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+	) (result.Result, error) {
+		args := cArgs.Args.(*roachpb.PutRequest)
+		ms := cArgs.Stats
+		ms.ContainsEstimates += containsEstimatesDelta
+		ts := cArgs.Header.Timestamp
+		return result.Result{}, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, cArgs.Header.Txn)
+	}
+
+	batcheval.UnregisterCommand(roachpb.Put)
+	batcheval.RegisterCommand(roachpb.Put, batcheval.DefaultDeclareKeys, mockPut)
+	return func() {
+		batcheval.UnregisterCommand(roachpb.Put)
+		batcheval.RegisterCommand(roachpb.Put, prev.DeclareKeys, prev.Eval)
+	}
 }
 
 func enableTraceDebugUseAfterFree() (restore func()) {

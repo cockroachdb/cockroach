@@ -113,8 +113,9 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	// pre-addition state.
 	ms.Forward(oms.LastUpdateNanos)
 	oms.Forward(ms.LastUpdateNanos) // on local copy
-	// If either stats object contains estimates, their sum does too.
-	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
+
+	ms.ContainsEstimates += oms.ContainsEstimates
+
 	// Now that we've done that, we may just add them.
 	ms.IntentAge += oms.IntentAge
 	ms.GCBytesAge += oms.GCBytesAge
@@ -137,8 +138,9 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	// pre-subtraction state.
 	ms.Forward(oms.LastUpdateNanos)
 	oms.Forward(ms.LastUpdateNanos)
-	// If either stats object contains estimates, their difference does too.
-	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
+
+	ms.ContainsEstimates -= oms.ContainsEstimates
+
 	// Now that we've done that, we may subtract.
 	ms.IntentAge -= oms.IntentAge
 	ms.GCBytesAge -= oms.GCBytesAge
