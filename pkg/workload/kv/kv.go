@@ -39,6 +39,21 @@ const (
 		v BYTES NOT NULL,
 		INDEX (v)
 	)`
+	// TODO(ajwerner): Change this to use the "easier" hash sharded index syntax once that
+	// is in.
+	shardedKvSchema = `(
+		k BIGINT NOT NULL,
+		v BYTES NOT NULL,
+		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
+		PRIMARY KEY (shard, k)
+	)`
+	shardedKvSchemaWithIndex = `(
+		k BIGINT NOT NULL,
+		v BYTES NOT NULL,
+		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
+		PRIMARY KEY (shard, k),
+		INDEX (v)
+	)`
 )
 
 type kv struct {
@@ -56,6 +71,7 @@ type kv struct {
 	zipfian                              bool
 	splits                               int
 	secondaryIndex                       bool
+	shards                               int
 	targetCompressionRatio               float64
 }
 
@@ -109,6 +125,8 @@ var kvMeta = workload.Meta{
 			`Number of splits to perform before starting normal operations.`)
 		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
 			`Add a secondary index to the schema`)
+		g.flags.IntVar(&g.shards, `num-shards`, 0,
+			`Number of shards to create on the primary key.`)
 		g.flags.Float64Var(&g.targetCompressionRatio, `target-compression-ratio`, 1.0,
 			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -161,10 +179,27 @@ func (w *kv) Tables() []workload.Table {
 			},
 		),
 	}
-	if w.secondaryIndex {
-		table.Schema = kvSchemaWithIndex
+	if w.shards > 0 {
+		schema := shardedKvSchema
+		if w.secondaryIndex {
+			schema = shardedKvSchemaWithIndex
+		}
+		checkConstraint := strings.Builder{}
+		checkConstraint.WriteString(`shard IN (`)
+		for i := 0; i < w.shards; i++ {
+			if i != 0 {
+				checkConstraint.WriteString(",")
+			}
+			fmt.Fprintf(&checkConstraint, "%d", i)
+		}
+		checkConstraint.WriteString(")")
+		table.Schema = fmt.Sprintf(schema, w.shards, checkConstraint.String())
 	} else {
-		table.Schema = kvSchema
+		if w.secondaryIndex {
+			table.Schema = kvSchemaWithIndex
+		} else {
+			table.Schema = kvSchema
+		}
 	}
 	return []workload.Table{table}
 }
@@ -207,12 +242,27 @@ func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, er
 
 	// Read statement
 	var buf strings.Builder
-	buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
-	for i := 0; i < w.batchSize; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
+	if w.shards == 0 {
+		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
+		for i := 0; i < w.batchSize; i++ {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, `$%d`, i+1)
 		}
-		fmt.Fprintf(&buf, `$%d`, i+1)
+	} else {
+		// TODO(ajwerner): We're currently manually plumbing down the computed shard column
+		// since the optimizer doesn't yet support deriving values of computed columns
+		// when all the columns they reference are available. See
+		// https://github.com/cockroachdb/cockroach/issues/39340#issuecomment-535338071
+		// for details. Remove this once that functionality is added.
+		buf.WriteString(`SELECT k, v FROM kv WHERE (shard, k) in (`)
+		for i := 0; i < w.batchSize; i++ {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, `(mod($%d, %d), $%d)`, i+1, w.shards, i+1)
+		}
 	}
 	buf.WriteString(`)`)
 	readStmtStr := buf.String()
