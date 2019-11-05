@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/stickyengine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -476,7 +477,17 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
-			engines = append(engines, engine.NewInMem(cfg.StorageEngine, spec.Attributes, sizeInBytes))
+			if spec.StickyInMemoryEngineID != "" {
+				e, err := stickyengine.GetOrCreateStickyInMemEngine(
+					ctx, spec.StickyInMemoryEngineID, cfg.StorageEngine, spec.Attributes, sizeInBytes,
+				)
+				if err != nil {
+					return Engines{}, err
+				}
+				engines = append(engines, e)
+			} else {
+				engines = append(engines, engine.NewInMem(cfg.StorageEngine, spec.Attributes, sizeInBytes))
+			}
 		} else {
 			if spec.Size.Percent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
