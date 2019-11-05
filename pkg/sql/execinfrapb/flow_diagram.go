@@ -268,7 +268,9 @@ func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 	tables := zj.Tables
 	details := make([]string, 0, len(tables)+1)
 	for i, table := range tables {
-		details = append(details, fmt.Sprintf("Side %d: %s", i, indexDetails(zj.IndexIds[i], &table)[0]))
+		details = append(details, fmt.Sprintf(
+			"Side %d: %s", i, indexDetails(zj.IndexOrdinals[i], &table)[0],
+		))
 	}
 	if !zj.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", zj.OnExpr))

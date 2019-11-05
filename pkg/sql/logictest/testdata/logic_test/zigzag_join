@@ -47,6 +47,18 @@ SELECT n,a,b FROM a WHERE a = 5 AND b = 2
 ----
 5  5  2
 
+statement ok
+SET enable_zigzag_join = true
+
+# Regression test for 42164 ("invalid indexIdx" error).
+statement ok
+DROP INDEX a@a_idx;
+DROP INDEX a@b_idx;
+CREATE INDEX c_idx ON a(c);
+CREATE INDEX a_idx_2 ON a(a);
+CREATE INDEX b_idx_2 ON a(b);
+SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
+
 # ------------------------------------------------------------------------------
 # Zigzag join tests on inverted indexes.
 # ------------------------------------------------------------------------------
@@ -128,9 +140,6 @@ INSERT INTO d VALUES (31,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
 
 ## Multi-path contains queries with zigzag joins enabled.
 
-statement ok
-SET enable_zigzag_join = true;
-
 query IT
 SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
@@ -172,6 +181,3 @@ query IT
 SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
-
-statement ok
-SET enable_zigzag_join = false;

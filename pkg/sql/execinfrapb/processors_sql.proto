@@ -264,7 +264,9 @@ message ZigzagJoinerSpec {
   // equal length.
   repeated Columns eq_columns = 2 [(gogoproto.nullable) = false];
 
-  repeated uint32 index_ids = 3 [packed = true];
+  // Each value indicates an index: if 0, primary index; otherwise the n-th
+  // secondary index, i.e. tables[side_idx].indexes[index_ordinals[side_idx]].
+  repeated uint32 index_ordinals = 3 [packed = true];
 
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
