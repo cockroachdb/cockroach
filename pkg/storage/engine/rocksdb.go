@@ -1503,6 +1503,10 @@ func (r *batchIterator) FindSplitKey(
 	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
+func (r *batchIterator) MVCCOpsSpecialized() bool {
+	return r.iter.MVCCOpsSpecialized()
+}
+
 func (r *batchIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
@@ -2096,7 +2100,7 @@ var iterPool = sync.Pool{
 // iterator to free up resources.
 func newRocksDBIterator(
 	rdb *C.DBEngine, opts IterOptions, engine Reader, parent *RocksDB,
-) Iterator {
+) MVCCIterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
@@ -2313,6 +2317,12 @@ func (r *rocksDBIterator) FindSplitKey(
 		return MVCCKey{}, err
 	}
 	return MVCCKey{Key: cStringToGoBytes(splitKey)}, nil
+}
+
+func (r *rocksDBIterator) MVCCOpsSpecialized() bool {
+	// rocksDBIterator provides specialized implementations of MVCCGet and
+	// MVCCScan.
+	return true
 }
 
 func (r *rocksDBIterator) MVCCGet(
