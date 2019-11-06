@@ -24,17 +24,54 @@ run() {
   "$@"
 }
 
+# Returns the list of release branches from origin (origin/release-*), ordered
+# by version (bigger version numbers first).
+get_release_branches() {
+  git branch -r --format='%(refname)' \
+    | sed 's/^refs\/remotes\///' \
+    | grep 'origin\/release-*' \
+    | sort -t- -k2 -g -r
+}
+
+# Returns the number of commits in the curent branch that are not shared with
+# the given branch.
+get_branch_distance() {
+  git rev-list --count $1..HEAD
+}
+
+# Returns the closest branch between origin/master and origin/release-* branches.
+get_upstream_branch() {
+  local UPSTREAM DISTANCE D
+
+  UPSTREAM="origin/master"
+  DISTANCE=$(get_branch_distance origin/master)
+
+  # Check if we're closer to any release branches. The branches are ordered
+  # new-to-old, so stop as soon as the distance starts to increase.
+  for branch in $(get_release_branches); do
+    D=$(get_branch_distance $branch)
+    if [ $D -gt $DISTANCE ]; then
+      break
+    fi
+    UPSTREAM=$branch
+    DISTANCE=$D
+  done
+
+  echo "$UPSTREAM"
+}
+
 changed_go_pkgs() {
-  git fetch --quiet origin master
+  git fetch --quiet origin
+  upstream_branch=$(get_upstream_branch)
   # Find changed packages, minus those that have been removed entirely.
-  git diff --name-only origin/master... -- "pkg/**/*.go" ":!*/testdata/*" \
+  git diff --name-only "$upstream_branch..." -- "pkg/**/*.go" ":!*/testdata/*" \
     | xargs -rn1 dirname \
     | sort -u \
     | { while read path; do if ls "$path"/*.go &>/dev/null; then echo -n "./$path "; fi; done; }
 }
 
 tc_release_branch() {
-  [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* ]]
+  [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* || "$TC_BUILD_BRANCH" == provisional_* ]]
 }
 
 tc_start_block() {
