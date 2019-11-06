@@ -34,9 +34,8 @@ type IndexedVarContainer interface {
 // represents a dynamic value. It defers calls to TypeCheck, Eval, String to an
 // IndexedVarContainer.
 type IndexedVar struct {
-	Idx         int
-	Used        bool
-	bindInPlace bool
+	Idx  int
+	Used bool
 
 	col NodeFormatter
 
@@ -119,11 +118,33 @@ func NewTypedOrdinalReference(r int, typ *types.T) *IndexedVar {
 type IndexedVarHelper struct {
 	vars      []IndexedVar
 	container IndexedVarContainer
+
+	// indexVarMap is an optional mapping for indices of IndexedVars. If it is
+	// not nil, it will be used to determine the "actual index" of an IndexedVar
+	// before binding - instead of using ivar.Idx, a new IndexedVar will have
+	// indexVarMap[ivar.Idx] as its index.
+	indexVarMap []int
 }
 
 // Container returns the container associated with the helper.
 func (h *IndexedVarHelper) Container() IndexedVarContainer {
 	return h.container
+}
+
+// getIndex is a helper function that returns an "actual index" of the
+// IndexedVar.
+func (h *IndexedVarHelper) getIndex(ivar *IndexedVar) int {
+	if ivar.Used {
+		// ivar has already been bound, so the remapping step (if it was needed)
+		// has already occurred.
+		return ivar.Idx
+	}
+	if h.indexVarMap != nil {
+		// indexVarMap is non-nil, so we need to remap the index.
+		return h.indexVarMap[ivar.Idx]
+	}
+	// indexVarMap is nil, so we return the index as is.
+	return ivar.Idx
 }
 
 // BindIfUnbound ensures the IndexedVar is attached to this helper's container.
@@ -135,27 +156,34 @@ func (h *IndexedVarHelper) BindIfUnbound(ivar *IndexedVar) (*IndexedVar, error) 
 	// We perform the range check always, even if the ivar is already
 	// bound, as a form of safety assertion against misreuse of ivars
 	// across containers.
-	if ivar.Idx < 0 || ivar.Idx >= len(h.vars) {
+	ivarIdx := h.getIndex(ivar)
+	if ivarIdx < 0 || ivarIdx >= len(h.vars) {
 		return ivar, pgerror.Newf(
-			pgcode.UndefinedColumn, "invalid column ordinal: @%d", ivar.Idx+1)
+			pgcode.UndefinedColumn, "invalid column ordinal: @%d", ivarIdx+1)
 	}
 
 	if !ivar.Used {
-		if ivar.bindInPlace {
-			// This container must also remember it has "seen" the variable
-			// so that IndexedVarUsed() below returns the right results.
-			// The IndexedVar() method ensures this.
-			*ivar = *h.IndexedVar(ivar.Idx)
-			return ivar, nil
-		}
-		return h.IndexedVar(ivar.Idx), nil
+		return h.IndexedVar(ivarIdx), nil
 	}
 	return ivar, nil
 }
 
 // MakeIndexedVarHelper initializes an IndexedVarHelper structure.
 func MakeIndexedVarHelper(container IndexedVarContainer, numVars int) IndexedVarHelper {
-	return IndexedVarHelper{vars: make([]IndexedVar, numVars), container: container}
+	return MakeIndexedVarHelperWithRemapping(container, numVars, nil /* indexVarMap */)
+}
+
+// MakeIndexedVarHelperWithRemapping initializes an IndexedVarHelper structure.
+// An optional (it can be left nil) indexVarMap argument determines a mapping
+// for indices of IndexedVars (see comment above for more details).
+func MakeIndexedVarHelperWithRemapping(
+	container IndexedVarContainer, numVars int, indexVarMap []int,
+) IndexedVarHelper {
+	return IndexedVarHelper{
+		vars:        make([]IndexedVar, numVars),
+		container:   container,
+		indexVarMap: indexVarMap,
+	}
 }
 
 // AppendSlot expands the capacity of this IndexedVarHelper by one and returns
@@ -252,7 +280,8 @@ var _ Visitor = &IndexedVarHelper{}
 // VisitPre implements the Visitor interface.
 func (h *IndexedVarHelper) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if iv, ok := expr.(*IndexedVar); ok {
-		return false, h.IndexedVar(iv.Idx)
+		ivarIdx := h.getIndex(iv)
+		return false, h.IndexedVar(ivarIdx)
 	}
 	return true, expr
 }
