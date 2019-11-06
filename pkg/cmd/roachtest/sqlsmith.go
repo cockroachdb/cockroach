@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,6 +39,26 @@ func registerSQLSmith(r *testRegistry) {
 	}
 
 	runSQLSmith := func(ctx context.Context, t *test, c *cluster, setupName, settingName string) {
+		// Set up a statement logger for easy reproduction. We only
+		// want to log successful statements and statements that
+		// produced a final error or panic.
+		smithLog, err := os.Create(filepath.Join(t.artifactsDir, "sqlsmith.log"))
+		if err != nil {
+			t.Fatalf("could not create sqlsmith.log: %v", err)
+		}
+		defer smithLog.Close()
+		logStmt := func(stmt string) {
+			stmt = strings.TrimSpace(stmt)
+			if stmt == "" {
+				return
+			}
+			fmt.Fprint(smithLog, stmt)
+			if !strings.HasSuffix(stmt, ";") {
+				fmt.Fprint(smithLog, ";")
+			}
+			fmt.Fprint(smithLog, "\n\n")
+		}
+
 		rng, seed := randutil.NewPseudoRand()
 		c.l.Printf("seed: %d", seed)
 
@@ -60,6 +82,7 @@ func registerSQLSmith(r *testRegistry) {
 		if _, err := conn.Exec(setup); err != nil {
 			t.Fatal(err)
 		}
+		logStmt(setup)
 
 		smither, err := sqlsmith.NewSmither(conn, rng, setting.Options...)
 		if err != nil {
@@ -88,6 +111,9 @@ func registerSQLSmith(r *testRegistry) {
 					ctx, cancel := context.WithTimeout(ctx, timeout)
 					defer cancel()
 					_, err := conn.ExecContext(ctx, stmt)
+					if err != nil {
+						logStmt(stmt)
+					}
 					done <- err
 				}(ctx)
 				select {
@@ -101,10 +127,12 @@ func registerSQLSmith(r *testRegistry) {
 			if err != nil {
 				es := err.Error()
 				if strings.Contains(es, "internal error") {
+					logStmt(stmt)
 					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 				} else if strings.Contains(es, "communication error") {
 					// A communication error can be because
 					// a non-gateway node has crashed.
+					logStmt(stmt)
 					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 				}
 				// Ignore other errors because they happen so
@@ -115,6 +143,7 @@ func registerSQLSmith(r *testRegistry) {
 
 			// Ping the gateway to make sure it didn't crash.
 			if err := conn.PingContext(ctx); err != nil {
+				logStmt(stmt)
 				t.Fatalf("ping: %v\nprevious sql:\n%s;", err, stmt)
 			}
 		}
