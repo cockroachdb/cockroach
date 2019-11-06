@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -114,11 +115,12 @@ type txnSpanRefresher struct {
 	// encountered during this transaction that need to be refreshed
 	// to avoid serializable restart.
 	refreshSpansBytes int64
-	// refreshedTimestamp keeps track of the largest timestamp that a
-	// transaction was able to refresh all of its refreshable spans at.
+	// refreshedTimestamp keeps track of the largest timestamp that refreshed
+	// don't fail on (i.e. if we'll refresh, we'll refreshFrom timestamp onwards).
+	// After every epoch bump, it is initialized to the timestamp of the first
+	// batch. It is then bumped after every successful refresh.
 	// It is updated under lock and used to ensure that concurrent requests
 	// don't cause the refresh spans to get out of sync.
-	// See appendRefreshSpans.
 	refreshedTimestamp hlc.Timestamp
 
 	// canAutoRetry is set if the txnSpanRefresher is allowed to auto-retry.
@@ -132,6 +134,22 @@ type txnSpanRefresher struct {
 func (sr *txnSpanRefresher) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+
+	batchReadTimestamp := ba.Txn.RefreshedTimestamp
+	if sr.refreshedTimestamp.IsEmpty() {
+		// This must be the first batch we're sending for this epoch. Future
+		// refreshes shouldn't check values below batchReadTimestamp, so initialize
+		// sr.refreshedTimestamp.
+		sr.refreshedTimestamp = batchReadTimestamp
+	} else if sr.refreshedTimestamp != batchReadTimestamp {
+		// Sanity check: we're supposed to control the read timestamp. What we're
+		// tracking in sr.refreshedTimestamp is not supposed to get out of sync
+		// with what batches use (which comes from tc.mu.txn).
+		return nil, roachpb.NewError(errors.AssertionFailedf(
+			"unexpected batch read timestamp: %s. Expected refreshed timestamp: %s. ba: %s",
+			batchReadTimestamp, sr.refreshedTimestamp, ba))
+	}
+
 	if rArgs, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
 		et := rArgs.(*roachpb.EndTransactionRequest)
 		if !sr.refreshInvalid && len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
@@ -271,25 +289,19 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 // tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all spans read
 // during the transaction to ensure that no writes were written more recently
-// than the previous refresh timestamp (or the OrigTimestamp, if no previous
-// refreshes).
-// All implicated timestamp caches are updated with the final transaction
-// timestamp. Returns whether the refresh was successful or not.
+// than sr.refreshedTimestamp. All implicated timestamp caches are updated with
+// the final transaction timestamp. Returns whether the refresh was successful
+// or not.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
 ) bool {
-	prevRefreshedTS := sr.refreshedTimestamp
-	// Forward the refreshed timestamp under lock. This in conjunction with a
-	// check in appendRefreshSpans prevents a race where a concurrent request
-	// may add new refresh spans only "verified" up to its batch timestamp after
-	// we've refreshed past that timestamp.
-	sr.refreshedTimestamp.Forward(refreshTxn.RefreshedTimestamp)
 
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
 		return false
 	} else if len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
 		log.VEvent(ctx, 2, "there are no txn spans to refresh")
+		sr.refreshedTimestamp.Forward(refreshTxn.RefreshedTimestamp)
 		return true
 	}
 
@@ -298,42 +310,45 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	refreshSpanBa := roachpb.BatchRequest{}
 	refreshSpanBa.Txn = refreshTxn
 	addRefreshes := func(refreshes []roachpb.Span, write bool) {
+		// We're going to check writes between the previous refreshed timestamp, if
+		// any, and the timestamp we want to bump the transaction to. Note that if
+		// we've already refreshed the transaction before, we don't need to check
+		// the (key ranges x timestamp range) that we've already checked - there's
+		// no values there for sure.
+		// More importantly, reads that have happened since we've previously
+		// refreshed don't need to be checked below below the timestamp at which
+		// they've been read (which is the timestamp to which we've previously
+		// refreshed). Checking below that timestamp (like we would, for example, if
+		// we simply used txn.OrigTimestamp here), could cause false-positives that
+		// would fail the refresh.
 		for _, u := range refreshes {
-			// We're going to check writes between the previous refreshed timestamp, if any,
-			// and the timestamp we want to bump the transaction to.
-			// Note that if we've already refreshed the transaction before, we don't
-			// need to check the key ranges x timestamp range that we've already
-			// checked - there's no values there for sure.
-			// More importantly, reads that have happened since we've previously
-			// refreshed don't need to be checked below below the timestamp at which
-			// they've been read (which is the timestamp to which we've previously
-			// refreshed). Checking below that timestamp (like we would, for example,
-			// if we simply used txn.OrigTimestamp here), could cause false-positives
-			// that would fail the refresh.
-			refreshFrom := prevRefreshedTS
-			refreshFrom.Forward(refreshTxn.OrigTimestamp)
-
 			var req roachpb.Request
 			if len(u.EndKey) == 0 {
 				req = &roachpb.RefreshRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(u),
 					Write:         write,
-					RefreshFrom:   refreshFrom,
+					RefreshFrom:   sr.refreshedTimestamp,
 				}
 			} else {
 				req = &roachpb.RefreshRangeRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(u),
 					Write:         write,
-					RefreshFrom:   refreshFrom,
+					RefreshFrom:   sr.refreshedTimestamp,
 				}
 			}
 			refreshSpanBa.Add(req)
 			log.VEventf(ctx, 2, "updating span %s @%s - @%s to avoid serializable restart",
-				req.Header().Span(), refreshFrom, refreshTxn.Timestamp)
+				req.Header().Span(), sr.refreshedTimestamp, refreshTxn.Timestamp)
 		}
 	}
-	addRefreshes(sr.refreshReads, false)
-	addRefreshes(sr.refreshWrites, true)
+	addRefreshes(sr.refreshReads, false /* write */)
+	addRefreshes(sr.refreshWrites, true /* write */)
+
+	// Forward the refreshed timestamp under lock. This in conjunction with a
+	// check in appendRefreshSpans prevents a race where a concurrent request
+	// may add new refresh spans only "verified" up to its batch timestamp after
+	// we've refreshed past that timestamp.
+	sr.refreshedTimestamp.Forward(refreshTxn.RefreshedTimestamp)
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	if _, batchErr := sr.wrapped.SendLocked(ctx, refreshSpanBa); batchErr != nil {
@@ -359,10 +374,9 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) bool {
-	origTS := ba.Txn.OrigTimestamp
-	origTS.Forward(ba.Txn.RefreshedTimestamp)
+	batchReadTS := ba.Txn.RefreshedTimestamp
 	var concurrentRefresh bool
-	if origTS.Less(sr.refreshedTimestamp) {
+	if batchReadTS.Less(sr.refreshedTimestamp) {
 		// We'll return an error if any of the requests generate a refresh span.
 		concurrentRefresh = true
 	}
@@ -381,8 +395,8 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 		sr.refreshSpansBytes += int64(len(span.Key) + len(span.EndKey))
 		return true
 	}) {
-		log.VEventf(ctx, 2, "txn orig timestamp %s < sender refreshed timestamp %s",
-			origTS, sr.refreshedTimestamp)
+		log.VEventf(ctx, 2, "batch read timestamp %s < sender refreshed timestamp %s",
+			batchReadTS, sr.refreshedTimestamp)
 		return false
 	}
 	return true
@@ -436,6 +450,7 @@ func (sr *txnSpanRefresher) epochBumpedLocked() {
 	sr.refreshWrites = nil
 	sr.refreshInvalid = false
 	sr.refreshSpansBytes = 0
+	sr.refreshedTimestamp.Reset()
 }
 
 // closeLocked implements the txnInterceptor interface.

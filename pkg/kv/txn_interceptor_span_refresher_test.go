@@ -61,7 +61,7 @@ func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 	require.Equal(t, []roachpb.Span{delRangeArgs.Span()}, tsr.refreshWrites)
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, int64(3), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 
 	// Scan with limit. Only the scanned keys are added to the refresh spans.
 	ba.Requests = nil
@@ -86,7 +86,7 @@ func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 	require.Equal(t, []roachpb.Span{delRangeArgs.Span()}, tsr.refreshWrites)
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, int64(5), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 }
 
 // TestTxnSpanRefresherRefreshesTransactions tests that the txnSpanRefresher
@@ -183,7 +183,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			require.Equal(t, []roachpb.Span{delRangeArgs.Span()}, tsr.refreshWrites)
 			require.False(t, tsr.refreshInvalid)
 			require.Equal(t, int64(3), tsr.refreshSpansBytes)
-			require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+			require.Equal(t, ba.Txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 
 			// Hook up a chain of mocking functions.
 			onFirstSend := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -245,7 +245,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
-				require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+				require.Equal(t, ba.Txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 			}
 		})
 	}
@@ -279,7 +279,7 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshWrites)
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, int64(2), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 
 	// Hook up a chain of mocking functions.
 	onPut := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -355,7 +355,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshWrites)
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, int64(2), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 
 	// Send another batch that pushes us above the limit. The refresh spans
 	// should become invalid.
@@ -371,7 +371,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshWrites)
 	require.True(t, tsr.refreshInvalid)
 	require.Equal(t, int64(0), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 
 	// Once invalid, the refresh spans should stay invalid.
 	ba.Requests = nil
@@ -386,7 +386,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshWrites)
 	require.True(t, tsr.refreshInvalid)
 	require.Equal(t, int64(0), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 }
 
 // TestTxnSpanRefresherAssignsNoRefreshSpans tests that the txnSpanRefresher
@@ -511,7 +511,7 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshWrites)
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, int64(2), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 
 	// Incrementing the transaction epoch clears the spans.
 	tsr.epochBumpedLocked()
@@ -535,7 +535,7 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshWrites)
 	require.True(t, tsr.refreshInvalid)
 	require.Equal(t, int64(0), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
+	require.Equal(t, txn.RefreshedTimestamp, tsr.refreshedTimestamp)
 
 	// Incrementing the transaction epoch clears the invalid status.
 	tsr.epochBumpedLocked()
