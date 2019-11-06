@@ -1313,7 +1313,7 @@ func replayTransactionalWrite(
 // dictate the timestamp of the operation, and the timestamp parameter
 // is redundant. Specifically, the intent is written at the txn's
 // provisional commit timestamp, txn.Timestamp, unless it is
-// forwarded by an existing committed value beneath that timestamp.
+// forwarded by an existing committed value above that timestamp.
 // However, reads (e.g., for a ConditionalPut) are performed at the
 // txn's original timestamp, txn.OrigTimestamp, to ensure that the
 // client sees a consistent snapshot of the database. Any existing
@@ -1321,12 +1321,11 @@ func replayTransactionalWrite(
 // generate a WriteTooOld error. If txn.RefreshedTimestamp is set,
 // it is used in place of txn.OrigTimestamp.
 //
-// In an attempt to reduce confusion about which timestamp applies,
-// when writing transactionally, the timestamp parameter must be
-// equal to txn.OrigTimestamp. (One could imagine instead requiring
-// that the timestamp parameter be set to hlc.Timestamp{} when writing
-// transactionally, but hlc.Timestamp{} is already used as a sentinel
-// for inline puts.)
+// In an attempt to reduce confusion about which timestamp applies, when writing
+// transactionally, the timestamp parameter must be equal to the transaction's
+// read timestamp. (One could imagine instead requiring that the timestamp
+// parameter be set to hlc.Timestamp{} when writing transactionally, but
+// hlc.Timestamp{} is already used as a sentinel for inline puts.)
 func mvccPutInternal(
 	ctx context.Context,
 	engine Writer,
