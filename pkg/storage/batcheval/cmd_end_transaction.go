@@ -247,12 +247,6 @@ func EndTransaction(
 			if h.Txn.Epoch < reply.Txn.Epoch {
 				return result.Result{}, errors.AssertionFailedf(
 					"programming error: epoch regression: %d", h.Txn.Epoch)
-			} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
-				// The transaction record can only ever be pushed forward, so it's an
-				// error if somehow the transaction record has an earlier timestamp
-				// than the original transaction timestamp.
-				return result.Result{}, errors.AssertionFailedf(
-					"programming error: timestamp regression: %s", h.Txn.OrigTimestamp)
 			}
 
 		default:

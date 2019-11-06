@@ -3948,21 +3948,18 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
-	regressTS := tc.Clock().Now()
 	txn := newTransaction("test", roachpb.Key(""), 1, tc.Clock())
 
 	testCases := []struct {
 		key          roachpb.Key
 		existStatus  roachpb.TransactionStatus
 		existEpoch   enginepb.TxnEpoch
-		existTS      hlc.Timestamp
 		expErrRegexp string
 	}{
-		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "already committed"},
-		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp,
+		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, "already committed"},
+		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch,
 			regexp.QuoteMeta("TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)")},
-		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "epoch regression: 0"},
-		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, `timestamp regression: 0`},
+		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, "epoch regression: 0"},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -3971,7 +3968,6 @@ func TestEndTransactionWithErrors(t *testing.T) {
 			existTxn.Key = test.key
 			existTxn.Status = test.existStatus
 			existTxn.Epoch = test.existEpoch
-			existTxn.Timestamp = test.existTS
 			existTxnRecord := existTxn.AsRecord()
 			txnKey := keys.TransactionKey(test.key, txn.ID)
 			if err := engine.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
