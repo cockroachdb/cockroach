@@ -187,7 +187,7 @@ func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
 // StartWithStoreConfig initializes the test context with a single
 // range covering the entire keyspace.
 func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper, cfg StoreConfig) {
-	tc.StartWithStoreConfigAndVersion(t, stopper, cfg, cluster.BinaryServerVersion)
+	tc.StartWithStoreConfigAndVersion(t, stopper, cfg, cluster.Version.BinaryVersion(cfg.Settings))
 }
 
 // StartWithStoreConfigAndVersion is like StartWithStoreConfig but additionally
