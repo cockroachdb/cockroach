@@ -924,49 +924,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expError: "programming error: epoch regression",
 		},
 		{
-			name: "record pending, try rollback at lower timestamp",
-			// Replica state.
-			existingTxn: func() *roachpb.TransactionRecord {
-				record := *pendingRecord
-				record.Timestamp = hlc.Timestamp{Logical: 1}
-				return &record
-			}(),
-			// Request state.
-			headerTxn: headerTxn,
-			commit:    false,
-			// Expected result.
-			expError: "programming error: timestamp regression",
-		},
-		{
-			name: "record pending, try stage at lower timestamp",
-			// Replica state.
-			existingTxn: func() *roachpb.TransactionRecord {
-				record := *pendingRecord
-				record.Timestamp = hlc.Timestamp{Logical: 1}
-				return &record
-			}(),
-			// Request state.
-			headerTxn:      headerTxn,
-			commit:         true,
-			inFlightWrites: writes,
-			// Expected result.
-			expError: "programming error: timestamp regression",
-		},
-		{
-			name: "record pending, try commit at lower timestamp",
-			// Replica state.
-			existingTxn: func() *roachpb.TransactionRecord {
-				record := *pendingRecord
-				record.Timestamp = hlc.Timestamp{Logical: 1}
-				return &record
-			}(),
-			// Request state.
-			headerTxn: headerTxn,
-			commit:    true,
-			// Expected result.
-			expError: "programming error: timestamp regression",
-		},
-		{
 			name: "record committed, try rollback",
 			// Replica state.
 			existingTxn: committedRecord,
