@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -110,7 +111,7 @@ type encryptedFS struct {
 	streamCreator *FileCipherStreamCreator
 }
 
-// Create implements vfs.FS.Create. It must not be used for WAL reuse -- see ReuseWAL().
+// Create implements vfs.FS.Create.
 func (fs *encryptedFS) Create(name string) (vfs.File, error) {
 	f, err := fs.FS.Create(name)
 	if err != nil {
@@ -178,7 +179,7 @@ func (fs *encryptedFS) Remove(name string) error {
 	return fs.fileRegistry.MaybeDeleteEntry(name)
 }
 
-// Rename implements vfs.FS.Rename. It must not be used for WAL reuse -- see ReuseWAL().
+// Rename implements vfs.FS.Rename.
 func (fs *encryptedFS) Rename(oldname, newname string) error {
 	if err := fs.FS.Rename(oldname, newname); err != nil {
 		return err
@@ -186,14 +187,80 @@ func (fs *encryptedFS) Rename(oldname, newname string) error {
 	return fs.fileRegistry.MaybeRenameEntry(oldname, newname)
 }
 
-// ReuseWAL attempts to reuse the WAL file with oldname by renaming it to newname and opening
-// it for writing.
+// ReuseForWrite implements vfs.FS.ReuseForWrite.
 //
 // We cannot change any of the key/iv/nonce and reuse the same file since RocksDB does not
 // like non-empty WAL files with zero readable entries. There is a todo in env_encryption.cc
-// to change this RocksDB behavior.
+// to change this RocksDB behavior. We need to handle a user switching from Pebble to RocksDB,
+// so cannot generate WAL files that RocksDB will complain about.
+func (fs *encryptedFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+	// This is slower than simply calling Create(newname) since the Remove() and Create()
+	// will write and sync the file registry file twice. We can optimize this if needed.
+	if err := fs.Remove(oldname); err != nil {
+		return nil, err
+	}
+	return fs.Create(newname)
+}
+
+// Init initializes engine.NewEncryptedEncFunc.
+func init() {
+	engine.NewEncryptedEnvFunc = newEncryptedEnv
+}
+
+// newEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
+// writing data. The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
+// code does not depend on CCL code.
 //
-// TODO(sbhola): add this to Pebble's vfs.FS interface and change WAL reuse to use it.
-func (fs *encryptedFS) ReuseWAL(oldname, newname string) (vfs.File, error) {
-	return nil, fmt.Errorf("cannot reuse an encrypted WAL file")
+// See the comment at the top of this file for the structure of this environment.
+func newEncryptedEnv(
+	fs vfs.FS, fr *engine.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+) (vfs.FS, error) {
+	options := &baseccl.EncryptionOptions{}
+	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
+		return nil, err
+	}
+	if options.KeySource != baseccl.EncryptionKeySource_KeyFiles {
+		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
+	}
+	storeKeyManager := &StoreKeyManager{
+		fs:                fs,
+		activeKeyFilename: options.KeyFiles.CurrentKey,
+		oldKeyFilename:    options.KeyFiles.OldKey,
+	}
+	if err := storeKeyManager.Load(context.TODO()); err != nil {
+		return nil, err
+	}
+	storeFS := &encryptedFS{
+		FS:           fs,
+		fileRegistry: fr,
+		streamCreator: &FileCipherStreamCreator{
+			envType:    enginepb.EnvType_Store,
+			keyManager: storeKeyManager,
+		},
+	}
+	dataKeyManager := &DataKeyManager{
+		fs:             storeFS,
+		dbDir:          dbDir,
+		rotationPeriod: options.DataKeyRotationPeriod,
+	}
+	if err := dataKeyManager.Load(context.TODO()); err != nil {
+		return nil, err
+	}
+	dataFS := &encryptedFS{
+		FS:           fs,
+		fileRegistry: fr,
+		streamCreator: &FileCipherStreamCreator{
+			envType:    enginepb.EnvType_Data,
+			keyManager: dataKeyManager,
+		},
+	}
+
+	key, err := storeKeyManager.ActiveKey(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+	if err := dataKeyManager.SetActiveStoreKeyInfo(context.TODO(), key.Info); err != nil {
+		return nil, err
+	}
+	return dataFS, nil
 }
