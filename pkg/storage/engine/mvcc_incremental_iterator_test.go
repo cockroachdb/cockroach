@@ -36,9 +36,11 @@ func iterateExpectErr(
 	return func(t *testing.T) {
 		t.Helper()
 		iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-			StartTime:  startTime,
-			EndTime:    endTime,
-			UpperBound: endKey,
+			IterOptions: IterOptions{
+				UpperBound: endKey,
+			},
+			StartTime: startTime,
+			EndTime:   endTime,
 		})
 		defer iter.Close()
 		for iter.Seek(MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
@@ -63,9 +65,11 @@ func assertEqualKVs(
 	return func(t *testing.T) {
 		t.Helper()
 		iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-			StartTime:  startTime,
-			EndTime:    endTime,
-			UpperBound: endKey,
+			IterOptions: IterOptions{
+				UpperBound: endKey,
+			},
+			StartTime: startTime,
+			EndTime:   endTime,
 		})
 		defer iter.Close()
 		var kvs []MVCCKeyValue
@@ -298,9 +302,11 @@ func slurpKVsInTimeRange(
 ) ([]MVCCKeyValue, error) {
 	endKey := prefix.PrefixEnd()
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-		StartTime:  startTime,
-		EndTime:    endTime,
-		UpperBound: endKey,
+		IterOptions: IterOptions{
+			UpperBound: endKey,
+		},
+		StartTime: startTime,
+		EndTime:   endTime,
 	})
 	defer iter.Close()
 	var kvs []MVCCKeyValue

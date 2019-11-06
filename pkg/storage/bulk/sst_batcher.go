@@ -51,7 +51,7 @@ func (b sz) String() string {
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
-	db         sender
+	db         SSTSender
 	rc         *kv.RangeDescriptorCache
 	settings   *cluster.Settings
 	maxSize    uint64
@@ -90,7 +90,7 @@ type SSTBatcher struct {
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
-	sstWriter       SSTWriter
+	sstWriter       engine.SSTWriter
 	batchStartKey   []byte
 	batchEndKey     []byte
 	batchEndValue   []byte
@@ -99,11 +99,11 @@ type SSTBatcher struct {
 	// stores on-the-fly stats for the SST if disallowShadowing is true.
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
-	rowCounter RowCounter
+	rowCounter engine.RowCounter
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
-func MakeSSTBatcher(ctx context.Context, db sender, flushBytes uint64) (*SSTBatcher, error) {
+func MakeSSTBatcher(ctx context.Context, db SSTSender, flushBytes uint64) (*SSTBatcher, error) {
 	b := &SSTBatcher{db: db, maxSize: flushBytes, disallowShadowing: true}
 	err := b.Reset()
 	return b, err
@@ -173,7 +173,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset() error {
 	b.sstWriter.Close()
-	b.sstWriter = MakeSSTWriter()
+	b.sstWriter = engine.MakeSSTWriter()
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -338,7 +338,8 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 	return b.totalRows
 }
 
-type sender interface {
+// SSTSender is an interface to send SST data to an engine.
+type SSTSender interface {
 	AddSSTable(
 		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats, ingestAsWrites bool,
 	) error
@@ -357,7 +358,7 @@ type sstSpan struct {
 // for each side of the split in the error, and each are retried.
 func AddSSTable(
 	ctx context.Context,
-	db sender,
+	db SSTSender,
 	start, end roachpb.Key,
 	sstBytes []byte,
 	disallowShadowing bool,
@@ -458,12 +459,12 @@ func AddSSTable(
 // passed in is over the top level SST passed into AddSSTTable().
 func createSplitSSTable(
 	ctx context.Context,
-	db sender,
+	db SSTSender,
 	start, splitKey roachpb.Key,
 	disallowShadowing bool,
 	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
-	w := MakeSSTWriter()
+	w := engine.MakeSSTWriter()
 	defer w.Close()
 
 	split := false
@@ -491,7 +492,7 @@ func createSplitSSTable(
 				sstBytes:          res,
 				disallowShadowing: disallowShadowing,
 			}
-			w = MakeSSTWriter()
+			w = engine.MakeSSTWriter()
 			split = true
 			first = nil
 			last = nil

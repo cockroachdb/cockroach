@@ -71,11 +71,9 @@ var _ SimpleIterator = &MVCCIncrementalIterator{}
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
-	StartTime                           hlc.Timestamp
-	EndTime                             hlc.Timestamp
-	UpperBound                          roachpb.Key
-	WithStats                           bool
-	EnableTimeBoundIteratorOptimization bool
+	IterOptions IterOptions
+	StartTime   hlc.Timestamp
+	EndTime     hlc.Timestamp
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -83,20 +81,8 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	e Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
-	io := IterOptions{
-		UpperBound: opts.UpperBound,
-		WithStats:  opts.WithStats,
-	}
-
-	// Time-bound iterators only make sense to use if the start time is set.
 	var sanityIter Iterator
-	if opts.EnableTimeBoundIteratorOptimization && !opts.StartTime.IsEmpty() {
-		// The call to startTime.Next() converts our exclusive start bound into the
-		// inclusive start bound that MinTimestampHint expects. This is strictly a
-		// performance optimization; omitting the call would still return correct
-		// results.
-		io.MinTimestampHint = opts.StartTime.Next()
-		io.MaxTimestampHint = opts.EndTime
+	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
 		// It is necessary for correctness that sanityIter be created before iter.
 		// This is because the provided Reader may not be a consistent snapshot, so
 		// the two could end up observing different information. The hack around
@@ -105,14 +91,14 @@ func NewMVCCIncrementalIterator(
 		// the timestamp range **from iter's perspective**. This allows us to simply
 		// ignore discrepancies that we notice in advance(). See #34819.
 		sanityIter = e.NewIterator(IterOptions{
-			UpperBound: opts.UpperBound,
+			UpperBound: opts.IterOptions.UpperBound,
 		})
 	}
 
 	return &MVCCIncrementalIterator{
 		e:          e,
-		upperBound: opts.UpperBound,
-		iter:       e.NewIterator(io),
+		upperBound: opts.IterOptions.UpperBound,
+		iter:       e.NewIterator(opts.IterOptions),
 		startTime:  opts.StartTime,
 		endTime:    opts.EndTime,
 		sanityIter: sanityIter,

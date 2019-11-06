@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -76,7 +75,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 	var sst []byte
 	g.GoCtx(func(ctx context.Context) error {
 		sstTS := hlc.Timestamp{WallTime: ts.UnixNano()}
-		sw := bulk.MakeSSTWriter()
+		sw := engine.MakeSSTWriter()
 		defer sw.Close()
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {

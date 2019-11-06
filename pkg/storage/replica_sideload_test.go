@@ -754,7 +754,7 @@ func (mr *mockSender) Recv() (*SnapshotResponse, error) {
 
 func newEngine(t *testing.T) (func(), engine.Engine) {
 	dir, cleanup := testutils.TempDir(t)
-	eng, err := engine.NewEngine(
+	eng, err := engine.NewDefaultEngine(
 		1<<20,
 		base.StorageConfig{
 			Dir:       dir,

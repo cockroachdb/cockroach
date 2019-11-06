@@ -134,7 +134,7 @@ func evalExport(
 
 	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 
-	data, summary, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
+	data, summary, err := e.ExportToSst(start, end, exportAllRevisions, io)
 
 	if err != nil {
 		return result.Result{}, err

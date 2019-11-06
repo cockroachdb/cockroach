@@ -88,6 +88,13 @@ func (p *pebbleBatch) Closed() bool {
 	return p.closed
 }
 
+// ExportToSst is part of the engine.Reader interface.
+func (p *pebbleBatch) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	panic("unimplemented")
+}
+
 // Get implements the Batch interface.
 func (p *pebbleBatch) Get(key MVCCKey) ([]byte, error) {
 	r := pebble.Reader(p.batch)
