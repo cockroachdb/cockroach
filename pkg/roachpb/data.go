@@ -666,6 +666,9 @@ func (v Value) computeChecksum(key []byte) uint32 {
 // computed (i.e. not stored) actual column id, `Float` is the type, and `6.28`
 // is the encoded value.
 func (v Value) PrettyPrint() string {
+	if len(v.RawBytes) == 0 {
+		return "/<empty>"
+	}
 	var buf bytes.Buffer
 	t := v.GetTag()
 	buf.WriteRune('/')
@@ -1094,16 +1097,12 @@ func (t *Transaction) IsWriting() bool {
 //
 // NOTE: When updating String(), you probably want to also update SafeMessage().
 func (t Transaction) String() string {
-	var buf bytes.Buffer
-	// Compute priority as a floating point number from 0-100 for readability.
-	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
+	var buf strings.Builder
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f stat=%s epo=%d "+
-		"ts=%s orig=%s min=%s max=%s wto=%t seq=%d",
-		t.Short(), Key(t.Key), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MinTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
+	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s orig=%s max=%s rts=%s wto=%t",
+		t.TxnMeta, t.IsWriting(), t.Status, t.OrigTimestamp, t.MaxTimestamp, t.RefreshedTimestamp, t.WriteTooOld)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1118,16 +1117,12 @@ func (t Transaction) String() string {
 // This method should be kept largely synchronized with String(), except that it
 // can't include sensitive info (e.g. the transaction key).
 func (t Transaction) SafeMessage() string {
-	var buf bytes.Buffer
-	// Compute priority as a floating point number from 0-100 for readability.
-	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
+	var buf strings.Builder
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "id=%s rw=%t pri=%.8f stat=%s epo=%d "+
-		"ts=%s orig=%s min=%s max=%s wto=%t seq=%d",
-		t.Short(), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MinTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
+	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s orig=%s max=%s rts=%s wto=%t",
+		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.OrigTimestamp, t.MaxTimestamp, t.RefreshedTimestamp, t.WriteTooOld)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -2111,3 +2106,9 @@ func (s SequencedWriteBySeq) Find(seq enginepb.TxnSeq) int {
 
 // Silence unused warning.
 var _ = (SequencedWriteBySeq{}).Find
+
+func init() {
+	// Inject the format dependency into the enginepb package.
+	enginepb.FormatBytesAsKey = func(k []byte) string { return Key(k).String() }
+	enginepb.FormatBytesAsValue = func(v []byte) string { return Value{RawBytes: v}.PrettyPrint() }
+}
