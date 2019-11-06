@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -157,7 +158,7 @@ func EvalAddSSTable(
 	// sending an explicit recompute.
 	//
 	// There is a significant performance win to be achieved by ensuring that the
-	// stats computed are not estimates as it prevents recompuation on splits.
+	// stats computed are not estimates as it prevents recomputation on splits.
 	// Running AddSSTable with disallowShadowing=true gets us close to this as we
 	// do not allow colliding keys to be ingested. However, in the situation that
 	// two SSTs have KV(s) which "perfectly" shadow an existing key (equal ts and
@@ -170,8 +171,12 @@ func EvalAddSSTable(
 	// cumulative for this command. These stats can then be marked as accurate.
 	if args.DisallowShadowing {
 		stats.Subtract(skippedKVStats)
+		stats.ContainsEstimates = 0
+	} else {
+		_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+		stats.ContainsEstimates++
 	}
-	stats.ContainsEstimates = !args.DisallowShadowing
+
 	ms.Add(stats)
 
 	if args.IngestAsWrites {

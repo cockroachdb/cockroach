@@ -455,7 +455,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				return afterStats
 			}()
 			evaledStats.Add(delta)
-			evaledStats.ContainsEstimates = false
+			evaledStats.ContainsEstimates = 0
 			if !afterStats.Equal(evaledStats) {
 				t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(afterStats, evaledStats))
 			}
@@ -475,7 +475,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			if _, err := batcheval.EvalAddSSTable(ctx, e, cArgsWithStats, nil); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			expected := enginepb.MVCCStats{ContainsEstimates: true, KeyCount: 10}
+			expected := enginepb.MVCCStats{ContainsEstimates: 1, KeyCount: 10}
 			if got := *cArgsWithStats.Stats; got != expected {
 				t.Fatalf("expected %v got %v", expected, got)
 			}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -93,20 +94,18 @@ func RecomputeStats(
 	delta.Subtract(currentStats)
 
 	if !dryRun {
-		// NB: this will never clear the ContainsEstimates flag. To be able to do this,
-		// we would need to guarantee that no command that sets it is in-flight in
-		// parallel with this command. This can be achieved by blocking all of the range
-		// or by using our inside knowledge that dictates that ranges which contain no
-		// timeseries writes never have the flag reset, or by making ContainsEstimates
-		// a counter (and ensuring that we're the only one subtracting at any given
-		// time).
-		//
 		// TODO(tschottdorf): do we not want to run at all if we have estimates in
 		// this range? I think we want to as this would give us much more realistic
 		// stats for timeseries ranges (which go cold and the approximate stats are
 		// wildly overcounting) and this is paced by the consistency checker, but it
 		// means some extra engine churn.
 		cArgs.Stats.Add(delta)
+		if !cluster.Version.IsActive(ctx, cArgs.EvalCtx.ClusterSettings(), cluster.VersionContainsEstimatesCounter) {
+			// We are running with the older version of MVCCStats.ContainsEstimates
+			// which was a boolean, so we should keep it in {0,1} and not reset it
+			// to avoid racing with another command that sets it to true.
+			delta.ContainsEstimates = currentStats.ContainsEstimates
+		}
 	}
 
 	resp.(*roachpb.RecomputeStatsResponse).AddedDelta = enginepb.MVCCStatsDelta(delta)

@@ -2505,7 +2505,8 @@ func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStat
 	if err := statusToError(stats.status); err != nil {
 		return ms, err
 	}
-	ms.ContainsEstimates = false
+
+	ms.ContainsEstimates = 0
 	ms.LiveBytes = int64(stats.live_bytes)
 	ms.KeyBytes = int64(stats.key_bytes)
 	ms.ValBytes = int64(stats.val_bytes)
