@@ -755,10 +755,10 @@ func MVCCGetAsTxn(
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, engine, key, timestamp, MVCCGetOptions{
 		Txn: &roachpb.Transaction{
-			TxnMeta:       txnMeta,
-			Status:        roachpb.PENDING,
-			OrigTimestamp: txnMeta.Timestamp,
-			MaxTimestamp:  txnMeta.Timestamp,
+			TxnMeta:            txnMeta,
+			Status:             roachpb.PENDING,
+			RefreshedTimestamp: txnMeta.Timestamp,
+			MaxTimestamp:       txnMeta.Timestamp,
 		}})
 }
 
@@ -1315,11 +1315,10 @@ func replayTransactionalWrite(
 // provisional commit timestamp, txn.Timestamp, unless it is
 // forwarded by an existing committed value above that timestamp.
 // However, reads (e.g., for a ConditionalPut) are performed at the
-// txn's original timestamp, txn.OrigTimestamp, to ensure that the
+// txn's read timestamp (txn.RefreshedTimestamp) to ensure that the
 // client sees a consistent snapshot of the database. Any existing
-// committed writes that are newer than txn.OrigTimestamp will thus
-// generate a WriteTooOld error. If txn.RefreshedTimestamp is set,
-// it is used in place of txn.OrigTimestamp.
+// committed writes that are newer than the read timestamp will thus
+// generate a WriteTooOld error.
 //
 // In an attempt to reduce confusion about which timestamp applies, when writing
 // transactionally, the timestamp parameter must be equal to the transaction's
@@ -1395,8 +1394,10 @@ func mvccPutInternal(
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
 	if txn != nil {
-		readTimestamp = txn.OrigTimestamp
-		readTimestamp.Forward(txn.RefreshedTimestamp)
+		readTimestamp = txn.RefreshedTimestamp
+		// For compatibility with 19.2 nodes which might not have set
+		// RefreshedTimestamp, fallback to OrigTimestamp.
+		readTimestamp.Forward(txn.OrigTimestamp)
 		if readTimestamp != timestamp {
 			return errors.AssertionFailedf(
 				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",

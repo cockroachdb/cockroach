@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBatchIsCompleteTransaction(t *testing.T) {
@@ -440,4 +441,14 @@ func sp(start, end string) Span {
 		res.EndKey = Key(end)
 	}
 	return res
+}
+
+// Test that if ReadTimestamp is not set, we fall back to DeprecatedOrigTimestamp.
+func TestSetActiveTimestampFallbackFor19_2(t *testing.T) {
+	origTimestamp := hlc.Timestamp{WallTime: 123}
+	ba := BatchRequest{
+		Header: Header{Txn: &Transaction{DeprecatedOrigTimestamp: origTimestamp}},
+	}
+	require.NoError(t, ba.SetActiveTimestamp(nil /* nowFn */))
+	require.Equal(t, origTimestamp, ba.Timestamp)
 }

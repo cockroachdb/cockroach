@@ -217,6 +217,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr, hlc.Timestamp{}
 	}
 
+	readTS := ba.Txn.RefreshedTimestamp
 	// If a prefix of the batch was executed, collect refresh spans for
 	// that executed portion, and retry the remainder. The canonical
 	// case is a batch split between everything up to but not including
@@ -239,7 +240,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		retryBa, retryTxn.RefreshedTimestamp, pErr)
 
 	// Try updating the txn spans so we can retry.
-	if ok := sr.tryUpdatingTxnSpans(ctx, retryTxn); !ok {
+	if ok := sr.tryUpdatingTxnSpans(ctx, retryTxn, readTS); !ok {
 		return nil, pErr, hlc.Timestamp{}
 	}
 
@@ -271,14 +272,12 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 // tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all spans read
 // during the transaction to ensure that no writes were written more recently
-// than the previous refresh timestamp (or the OrigTimestamp, if no previous
-// refreshes).
+// than refreshFrom (which is expected to be the txn's current read timestamp).
 // All implicated timestamp caches are updated with the final transaction
 // timestamp. Returns whether the refresh was successful or not.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
-	ctx context.Context, refreshTxn *roachpb.Transaction,
+	ctx context.Context, refreshTxn *roachpb.Transaction, refreshFrom hlc.Timestamp,
 ) bool {
-	prevRefreshedTS := sr.refreshedTimestamp
 	// Forward the refreshed timestamp under lock. This in conjunction with a
 	// check in appendRefreshSpans prevents a race where a concurrent request
 	// may add new refresh spans only "verified" up to its batch timestamp after
@@ -299,20 +298,6 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	refreshSpanBa.Txn = refreshTxn
 	addRefreshes := func(refreshes []roachpb.Span, write bool) {
 		for _, u := range refreshes {
-			// We're going to check writes between the previous refreshed timestamp, if any,
-			// and the timestamp we want to bump the transaction to.
-			// Note that if we've already refreshed the transaction before, we don't
-			// need to check the key ranges x timestamp range that we've already
-			// checked - there's no values there for sure.
-			// More importantly, reads that have happened since we've previously
-			// refreshed don't need to be checked below below the timestamp at which
-			// they've been read (which is the timestamp to which we've previously
-			// refreshed). Checking below that timestamp (like we would, for example,
-			// if we simply used txn.OrigTimestamp here), could cause false-positives
-			// that would fail the refresh.
-			refreshFrom := prevRefreshedTS
-			refreshFrom.Forward(refreshTxn.OrigTimestamp)
-
 			var req roachpb.Request
 			if len(u.EndKey) == 0 {
 				req = &roachpb.RefreshRequest{
@@ -359,10 +344,9 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) bool {
-	origTS := ba.Txn.OrigTimestamp
-	origTS.Forward(ba.Txn.RefreshedTimestamp)
+	batchReadTS := ba.Txn.RefreshedTimestamp
 	var concurrentRefresh bool
-	if origTS.Less(sr.refreshedTimestamp) {
+	if batchReadTS.Less(sr.refreshedTimestamp) {
 		// We'll return an error if any of the requests generate a refresh span.
 		concurrentRefresh = true
 	}
@@ -381,8 +365,8 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 		sr.refreshSpansBytes += int64(len(span.Key) + len(span.EndKey))
 		return true
 	}) {
-		log.VEventf(ctx, 2, "txn orig timestamp %s < sender refreshed timestamp %s",
-			origTS, sr.refreshedTimestamp)
+		log.VEventf(ctx, 2, "batch read timestamp %s < sender refreshed timestamp %s",
+			batchReadTS, sr.refreshedTimestamp)
 		return false
 	}
 	return true
