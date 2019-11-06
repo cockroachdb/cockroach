@@ -124,3 +124,34 @@ x     y
 NULL  NULL
 NULL  42
 NULL  44
+
+# Regression test for #41407.
+statement ok
+CREATE TABLE t41407 AS
+	SELECT
+		g AS _float8,
+		g % 0 = 0 AS _bool,
+		g AS _decimal,
+		g AS _string,
+		g AS _bytes
+	FROM
+		generate_series(NULL, NULL) AS g;
+
+query TRTTRRBR
+SELECT
+  tab_1688._bytes,
+  tab_1688._float8,
+  tab_1689._string,
+  tab_1689._string,
+  tab_1688._float8,
+  tab_1688._float8,
+  tab_1689._bool,
+  tab_1690._decimal
+FROM
+  t41407 AS tab_1688
+  JOIN t41407 AS tab_1689
+    JOIN t41407 AS tab_1690 ON
+        tab_1689._bool = tab_1690._bool ON
+      tab_1688._float8 = tab_1690._float8
+      AND tab_1688._bool = tab_1689._bool;
+----
