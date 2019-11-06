@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -87,13 +86,7 @@ func createTestRocksDBEngine() Engine {
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() Engine {
-	peb, err := NewPebble(PebbleConfig{
-		Opts: testPebbleOptions(vfs.NewMem()),
-	})
-	if err != nil {
-		return nil
-	}
-	return peb
+	return newPebbleInMem(roachpb.Attributes{}, 1<<20)
 }
 
 var mvccEngineImpls = []struct {
