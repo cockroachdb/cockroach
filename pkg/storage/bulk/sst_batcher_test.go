@@ -13,6 +13,7 @@ package bulk_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"strings"
@@ -24,14 +25,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
+
+func makeIntTableKVs(t testing.TB, numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue {
+	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
+	kvs := make([]engine.MVCCKeyValue, numKeys)
+	r, _ := randutil.NewPseudoRand()
+
+	var k int
+	for i := 0; i < numKeys; {
+		k += 1 + rand.Intn(100)
+		key := encoding.EncodeVarintAscending(append([]byte{}, prefix...), int64(k))
+		buf := make([]byte, valueSize)
+		randutil.ReadTestdataBytes(r, buf)
+		revisions := 1 + r.Intn(maxRevisions)
+
+		ts := int64(maxRevisions * 100)
+		for j := 0; j < revisions && i < numKeys; j++ {
+			ts -= 1 + r.Int63n(99)
+			kvs[i].Key.Key = key
+			kvs[i].Key.Timestamp.WallTime = ts
+			kvs[i].Key.Timestamp.Logical = r.Int31()
+			kvs[i].Value = roachpb.MakeValueFromString(string(buf)).RawBytes
+			i++
+		}
+	}
+	return kvs
+}
+
+func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
+	w, err := engine.MakeRocksDBSstFileWriter()
+	require.NoError(t, err)
+	defer w.Close()
+
+	for i := range kvs {
+		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sst, err := w.Finish()
+	require.NoError(t, err)
+	return sst
+}
 
 func TestAddBatched(t *testing.T) {
 	defer leaktest.AfterTest(t)()

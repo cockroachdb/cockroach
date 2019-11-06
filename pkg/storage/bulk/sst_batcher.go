@@ -90,7 +90,7 @@ type SSTBatcher struct {
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
-	sstWriter       SSTWriter
+	sstWriter       engine.SSTWriter
 	batchStartKey   []byte
 	batchEndKey     []byte
 	batchEndValue   []byte
@@ -167,13 +167,13 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 		b.updateMVCCStats(key, value)
 	}
 
-	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
+	return b.sstWriter.Put(key, value)
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset() error {
 	b.sstWriter.Close()
-	b.sstWriter = MakeSSTWriter()
+	b.sstWriter = engine.MakeSSTWriter()
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -463,7 +463,7 @@ func createSplitSSTable(
 	disallowShadowing bool,
 	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
-	w := MakeSSTWriter()
+	w := engine.MakeSSTWriter()
 	defer w.Close()
 
 	split := false
@@ -491,7 +491,7 @@ func createSplitSSTable(
 				sstBytes:          res,
 				disallowShadowing: disallowShadowing,
 			}
-			w = MakeSSTWriter()
+			w = engine.MakeSSTWriter()
 			split = true
 			first = nil
 			last = nil
@@ -502,7 +502,7 @@ func createSplitSSTable(
 		}
 		last = append(last[:0], key.Key...)
 
-		if err := w.Add(engine.MVCCKeyValue{Key: key, Value: iter.UnsafeValue()}); err != nil {
+		if err := w.Put(key,iter.UnsafeValue()); err != nil {
 			return nil, nil, err
 		}
 
