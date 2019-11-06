@@ -169,7 +169,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 		b.updateMVCCStats(key, value)
 	}
 
-	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
+	return b.sstWriter.Put(key, value)
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
@@ -507,7 +507,7 @@ func createSplitSSTable(
 		}
 		last = append(last[:0], key.Key...)
 
-		if err := w.Add(engine.MVCCKeyValue{Key: key, Value: iter.UnsafeValue()}); err != nil {
+		if err := w.Put(key, iter.UnsafeValue()); err != nil {
 			return nil, nil, err
 		}
 
