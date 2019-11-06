@@ -1,0 +1,58 @@
+
+# Populate some values
+
+run ok
+with t=A
+  begin_txn ts=44
+  mvcc_put  k=a v=abc
+  mvcc_put  k=a/123 v=abc
+  mvcc_put  k=b v=abc
+  mvcc_put  k=b/123 v=abc
+  mvcc_put  k=c v=abc
+  commit_txn
+----
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000044,0 min=0.000000000,0 seq=1} rw=true stat=COMMITTED orig=0.000000044,0 max=0.000000000,0 rts=0.000000000,0 wto=false int=5
+data: "k/a"/0.000000044,0 -> /BYTES/abc
+data: "k/a/123"/0.000000044,0 -> /BYTES/abc
+data: "k/b"/0.000000044,0 -> /BYTES/abc
+data: "k/b/123"/0.000000044,0 -> /BYTES/abc
+data: "k/c"/0.000000044,0 -> /BYTES/abc
+
+
+run ok
+clear_range k=a end=+a
+----
+data: "k/a/123"/0.000000044,0 -> /BYTES/abc
+data: "k/b"/0.000000044,0 -> /BYTES/abc
+data: "k/b/123"/0.000000044,0 -> /BYTES/abc
+data: "k/c"/0.000000044,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=-a
+----
+data: "k/b"/0.000000044,0 -> /BYTES/abc
+data: "k/b/123"/0.000000044,0 -> /BYTES/abc
+data: "k/c"/0.000000044,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end==b
+----
+data: "k/b"/0.000000044,0 -> /BYTES/abc
+data: "k/b/123"/0.000000044,0 -> /BYTES/abc
+data: "k/c"/0.000000044,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=+b
+----
+data: "k/b/123"/0.000000044,0 -> /BYTES/abc
+data: "k/c"/0.000000044,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=-b
+----
+data: "k/c"/0.000000044,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=-c
+----
+<no data>

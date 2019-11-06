@@ -1,0 +1,28 @@
+## Simple txn that aborts.
+
+run trace ok
+with t=A
+  begin_txn ts=22
+  mvcc_put  k=a v=cde
+  abort_txn
+----
+>> begin_txn ts=22 t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000022,0 min=0.000000000,0 seq=1} rw=true stat=PENDING orig=0.000000022,0 max=0.000000000,0 rts=0.000000000,0 wto=false
+>> mvcc_put k=a v=cde t=A
+meta: "k/a"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000022,0 min=0.000000000,0 seq=1} ts=0.000000022,0 del=false klen=12 vlen=8
+data: "k/a"/0.000000022,0 -> /BYTES/cde
+>> abort_txn t=A
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000022,0 min=0.000000000,0 seq=1} rw=true stat=ABORTED orig=0.000000022,0 max=0.000000000,0 rts=0.000000000,0 wto=false int=1
+<no data>
+
+# Cannot read aborted value.
+
+run ok
+with t=A
+  begin_txn  ts=23
+  mvcc_get   k=a
+  commit_txn
+----
+get: "k/a" -> <no data>
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000023,0 min=0.000000000,0 seq=1} rw=true stat=COMMITTED orig=0.000000023,0 max=0.000000000,0 rts=0.000000000,0 wto=false
+<no data>

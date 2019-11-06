@@ -1,0 +1,35 @@
+## A simple txn that deletes.
+## The delete tombstone is placed alongside the previous value, at the newer timestamp.
+
+run ok
+with t=A
+  begin_txn  ts=44
+  mvcc_del   k=a
+  commit_txn
+----
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000044,0 min=0.000000000,0 seq=1} rw=true stat=COMMITTED orig=0.000000044,0 max=0.000000000,0 rts=0.000000000,0 wto=false int=1
+data: "k/a"/0.000000044,0 -> /<empty>
+
+# Show the value disappears from gets.
+
+run ok
+with t=A
+  begin_txn ts=45
+  mvcc_get k=a
+  commit_txn
+----
+get: "k/a" -> <no data>
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0.000000000,0 seq=1} rw=true stat=COMMITTED orig=0.000000045,0 max=0.000000000,0 rts=0.000000000,0 wto=false
+data: "k/a"/0.000000044,0 -> /<empty>
+
+# Show the tombstone.
+
+run ok
+with t=A
+  begin_txn ts=45
+  mvcc_get k=a tombstones
+  commit_txn
+----
+get: "k/a" -> /<empty>
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0.000000000,0 seq=1} rw=true stat=COMMITTED orig=0.000000045,0 max=0.000000000,0 rts=0.000000000,0 wto=false
+data: "k/a"/0.000000044,0 -> /<empty>
