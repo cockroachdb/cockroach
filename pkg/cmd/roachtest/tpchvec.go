@@ -40,8 +40,6 @@ func registerTPCHVec(r *testRegistry) {
 		16: "unsupported: distinct aggregation #39242",
 		20: "incorrect output: #42047",
 		21: "unsupported: non-inner hash join with ON expression #38018",
-		// TODO(yuzefovich): triage this failure.
-		22: "incorrect output: unknown",
 	}
 	var vecOffQueriesToSkip = map[int]string{
 		// TODO(yuzefovich): remove this once we're not skipping query 9 with vec
