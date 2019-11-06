@@ -938,7 +938,7 @@ func pebbleExportToSst(
 		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
 			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
-		if err := sstWriter.Add(MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+		if err := sstWriter.Put(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
 			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
 
