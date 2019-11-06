@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2800,6 +2801,114 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		close(blockRangeDescriptorReadChan)
 		wg.Wait()
 	})
+}
+
+// This test is designed to demonstrate that it is not possible to have pending
+// proposals concurrent with a TransferLeaseRequest. This property ensures that
+// we cannot possibly receive AmbiguousResultError due to an outgoing leaseholder
+// being removed while still having pending proposals for a lease which did not
+// expire (i.e. was transferred cooperatively using TransferLease rather than
+// being taken with a RequestLease).
+//
+// At the time of writing this test were three hazardous cases which are now
+// avoided:
+//
+//  (1) The outgoing leaseholder learns about its removal before applying the
+//      lease transfer. This could happen if it has a lot left to apply but it
+//      does indeed know in its log that it is either no longer the leaseholder
+//      or that some of its commands will apply successfully.
+//
+//  (2) The replica learns about its removal after applying the lease transfer
+//      but it potentially still has pending commands which it thinks might
+//      have been proposed. This can occur if there are commands which are
+//      proposed after the lease transfer has been proposed but before the lease
+//      transfer has applied. This can also occur if commands are re-ordered
+//      by raft due to a leadership change.
+//
+//  (3) The replica learns about its removal after applying the lease transfer
+//      but proposed a command evaluated under the old lease after the lease
+//      transfer has been applied. This can occur if there are commands evaluate
+//      before the lease transfer is proposed but are not inserted into the
+//      proposal buffer until after it has been applied.
+//
+// None of these cases are possible any longer as latches now prevent writes
+// from occurring concurrently with TransferLeaseRequests. (1) is prevented
+// because all proposals will need to apply before the TransferLeaseRequest
+// can be evaluated. (2) and (3) are not possible because either the commands
+// in question acquire their latches before the TransferLeaseRequest in which
+// case they'll apply before the TransferLease can be proposed or they acquire
+// their latches after the TransferLease applies in which case they will fail
+// due to NotLeaseHolderError prior to application.
+func TestTransferLeaseBlocksWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We want to verify that we will not propose a TransferLeaseRequest while
+	// there is an outstanding proposal.
+	var scratchRangeID atomic.Value
+	scratchRangeID.Store(roachpb.RangeID(0))
+	blockInc := make(chan chan struct{})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				TestingProposalFilter: storagebase.ReplicaProposalFilter(
+					func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+						if args.Req.RangeID != scratchRangeID.Load().(roachpb.RangeID) {
+							return nil
+						}
+						// Block increment requests on blockInc.
+						if _, isInc := args.Req.GetArg(roachpb.Increment); isInc {
+							unblock := make(chan struct{})
+							blockInc <- unblock
+							<-unblock
+						}
+						return nil
+					},
+				),
+			}},
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(context.TODO())
+
+	scratch := tc.ScratchRange(t)
+	makeKey := func() roachpb.Key {
+		return append(scratch[:len(scratch):len(scratch)], uuid.MakeV4().String()...)
+	}
+	desc := tc.AddReplicasOrFatal(t, scratch, tc.Target(1), tc.Target(2))
+	scratchRangeID.Store(desc.RangeID)
+	require.NoError(t, tc.WaitForVoters(scratch, tc.Target(1), tc.Target(2)))
+
+	// Launch a goroutine to increment a value, it will block in the proposal
+	// filter.
+	incErr := make(chan error)
+	go func() {
+		_, err := tc.Server(1).DB().Inc(context.TODO(), makeKey(), 1)
+		incErr <- err
+	}()
+
+	// Wait for the increment to be blocked on the proposal filter so we know
+	// it holds a write latch.
+	unblock := <-blockInc
+
+	// Launch a goroutine to transfer the lease to store 1.
+	transferErr := make(chan error)
+	go func() {
+		transferErr <- tc.TransferRangeLease(desc, tc.Target(1))
+	}()
+
+	// Ensure that the lease transfer doesn't succeed.
+	// We don't wait that long because we don't want this test to take too long.
+	// The theory is that if we weren't acquiring latches over the keyspace then
+	// the lease transfer could succeed before we unblocked the increment request.
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case err := <-transferErr:
+		t.Fatalf("did not expect transfer to complete, got %v", err)
+	}
+
+	close(unblock)
+	require.NoError(t, <-incErr)
+	require.NoError(t, <-transferErr)
 }
 
 // getRangeInfo retreives range info by performing a get against the provided
