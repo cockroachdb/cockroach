@@ -349,10 +349,7 @@ func writeSST(
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
 
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return err
-	}
+	sst := engine.MakeSSTWriter()
 	defer sst.Close()
 	for _, kv := range kvs {
 		kv.Key.Timestamp = ts
@@ -378,6 +375,6 @@ func writeSST(
 		},
 		Path: filename,
 	})
-	backup.EntryCounts.DataSize += sst.DataSize()
+	backup.EntryCounts.DataSize += int64(sst.DataSize)
 	return nil
 }

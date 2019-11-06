@@ -817,10 +817,7 @@ func (r *Replica) applySnapshot(
 			inSnap.SnapUUID.Short(), snap.Metadata.Index)
 	}(timeutil.Now())
 
-	unreplicatedSST, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return err
-	}
+	unreplicatedSST := engine.MakeSSTWriter()
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
@@ -999,10 +996,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
 	for _, sr := range subsumedRepls {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			return err
-		}
+		subsumedReplSST := engine.MakeSSTWriter()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RaftTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
@@ -1049,10 +1043,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// subsume both r1 and r2 in S1.
 	for i := range keyRanges {
 		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
-			subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				return err
-			}
+			subsumedReplSST := engine.MakeSSTWriter()
 			if err := engine.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
