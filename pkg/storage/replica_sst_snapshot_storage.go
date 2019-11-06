@@ -98,14 +98,12 @@ func (ssss *SSTSnapshotStorageScratch) NewFile() (*SSTSnapshotStorageFile, error
 	return sssf, nil
 }
 
-// WriteSST writes an entire RocksDBSstFileWriter to a file. The method closes
+// WriteSST writes an entire SST writer to a file. The method closes
 // the provided SST when it is finished using it. If the provided SST is empty,
 // then no file will be created and nothing will be written.
-func (ssss *SSTSnapshotStorageScratch) WriteSST(
-	ctx context.Context, sst engine.SstFileWriter,
-) error {
+func (ssss *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, sst *engine.SSTWriter) error {
 	defer sst.Close()
-	if sst.DataSize() == 0 {
+	if sst.DataSize == 0 {
 		return nil
 	}
 	data, err := sst.Finish()

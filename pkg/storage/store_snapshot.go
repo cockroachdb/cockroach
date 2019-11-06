@@ -118,7 +118,7 @@ type kvBatchSnapshotStrategy struct {
 // disk.
 type multiSSTWriter struct {
 	ssss        *SSTSnapshotStorageScratch
-	currSST     engine.RocksDBSstFileWriter
+	currSST     engine.SSTWriter
 	currSSTFile *SSTSnapshotStorageFile
 	keyRanges   []rditer.KeyRange
 	currRange   int
@@ -150,10 +150,7 @@ func (msstw *multiSSTWriter) initSST() error {
 		return errors.Wrap(err, "failed to create new sst file")
 	}
 	msstw.currSSTFile = newSSTFile
-	newSST, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return errors.Wrap(err, "failed to create sst file writer")
-	}
+	newSST := engine.MakeSSTWriter()
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
 		msstw.currSST.Close()
@@ -196,8 +193,8 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key engine.MVCCKey, value 
 	if err := msstw.currSST.Put(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
 	}
-	if msstw.currSST.DataSize()-msstw.truncatedSize > msstw.sstChunkSize {
-		msstw.truncatedSize = msstw.currSST.DataSize()
+	if int64(msstw.currSST.DataSize)-msstw.truncatedSize > msstw.sstChunkSize {
+		msstw.truncatedSize = int64(msstw.currSST.DataSize)
 		chunk, err := msstw.currSST.Truncate()
 		if err != nil {
 			return errors.Wrap(err, "failed to truncate sst")
