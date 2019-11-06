@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/pkg/errors"
 )
 
 // TxnAutoGC controls whether Transaction entries are automatically gc'ed
@@ -245,22 +245,18 @@ func EndTransaction(
 
 		case roachpb.PENDING, roachpb.STAGING:
 			if h.Txn.Epoch < reply.Txn.Epoch {
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-					"programming error: epoch regression: %d", h.Txn.Epoch,
-				))
+				return result.Result{}, errors.AssertionFailedf(
+					"programming error: epoch regression: %d", h.Txn.Epoch)
 			} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
 				// The transaction record can only ever be pushed forward, so it's an
 				// error if somehow the transaction record has an earlier timestamp
 				// than the original transaction timestamp.
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-					"programming error: timestamp regression: %s", h.Txn.OrigTimestamp,
-				))
+				return result.Result{}, errors.AssertionFailedf(
+					"programming error: timestamp regression: %s", h.Txn.OrigTimestamp)
 			}
 
 		default:
-			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("bad txn status: %s", reply.Txn),
-			)
+			return result.Result{}, errors.AssertionFailedf("bad txn status: %s", reply.Txn)
 		}
 
 		// Update the existing txn with the supplied txn.
