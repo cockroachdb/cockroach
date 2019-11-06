@@ -21,8 +21,8 @@ import (
 	"strings"
 )
 
-// Currently, we're running a version like 'v9.0.0-beta.15'.
-var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+)(?:-beta\.(?P<subpoint>\d+))?)?)?$`)
+// Currently, we're running a version like 'v9.0.1'.
+var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+))?)?$`)
 
 // This test runs gopg full test suite against a single cockroach node.
 func registerGopg(r *testRegistry) {
@@ -91,31 +91,6 @@ func registerGopg(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		// There is no environment variable to set the port correctly, so we simply
-		// replace in the code all Postgres's 5432 ports with 26257 for Cockroach.
-		if err := repeatRunE(
-			ctx, c, node, "update PSQL's 5432 to CRDB's 26257",
-			fmt.Sprintf(
-				`cd %s && grep -rlE '[^6]5432' * | xargs -i@ sed -i 's/5432/26257/g' @`,
-				destPath),
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		// Similarly, it is not clear on how to disable SSL, so we simply remove
-		// the default TLSConfig connection parameter from db_test.go (this way
-		// gopg will always think that we're running in insecure mode - which we
-		// are in this test).
-		if err := repeatRunE(
-			ctx, c, node, "remove TLSConfig default parameter",
-			fmt.Sprintf(
-				`cd %s &&
-				grep -v '"crypto/tls"' db_test.go | sed -e '/TLSConfig\: \&tls.Config/,/}\,/d' > tmp &&
-				mv tmp db_test.go`, destPath),
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		blacklistName, expectedFailures, ignorelistName, ignorelist := gopgBlacklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No gopg blacklist defined for cockroach version %s", version)
@@ -125,16 +100,6 @@ func registerGopg(r *testRegistry) {
 		}
 		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignorelist %s",
 			version, blacklistName, ignorelistName)
-
-		// Also, it is not clear on how to change the user and the database, so we
-		// roll with the default options ('postgres' user and 'postgres' database).
-		t.Status("creating user 'postgres' with ALL permissions on postgres db")
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-		if _, err := db.Exec("CREATE USER 'postgres'; " +
-			"GRANT ALL ON DATABASE postgres TO postgres;"); err != nil {
-			t.Fatal(err)
-		}
 
 		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath))
 		t.Status("running gopg test suite")
@@ -147,7 +112,7 @@ func registerGopg(r *testRegistry) {
 		// will fail. And it is safe to swallow it here.
 		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
 			fmt.Sprintf(
-				`cd %s && go test -v ./... 2>&1 | %s | tee %s`,
+				`cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -v ./... 2>&1 | %s | tee %s`,
 				destPath, removeColorCodes, resultsFilePath),
 		)
 
