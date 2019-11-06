@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"fmt"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -59,9 +58,9 @@ func PhysicalTypeColElemToDatum(
 	case types.StringFamily:
 		b := col.Bytes().Get(int(rowIdx))
 		if ct.Oid() == oid.T_name {
-			return da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
+			return da.NewDName(tree.DString(string(b)))
 		}
-		return da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
+		return da.NewDString(tree.DString(string(b)))
 	case types.BytesFamily:
 		return da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
 	case types.OidFamily:
