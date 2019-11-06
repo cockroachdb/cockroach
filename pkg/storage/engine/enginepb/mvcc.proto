@@ -21,6 +21,7 @@ import "gogoproto/gogo.proto";
 // An MVCCMetadata is stored for a versioned key while there is an intent on
 // that key.
 message MVCCMetadata {
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
@@ -50,6 +51,7 @@ message MVCCMetadata {
   // SequencedIntent stores a value at a given key and the sequence number it was
   // written at - to be stored in an IntentHistory of a key during a transaction.
   message SequencedIntent {
+    option (gogoproto.goproto_stringer) = false;
     option (gogoproto.equal) = true;
     option (gogoproto.populate) = true;
     // Sequence is a one-indexed number which is increased on each request
