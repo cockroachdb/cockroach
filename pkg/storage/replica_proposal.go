@@ -747,6 +747,28 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.Timestamp = ba.Timestamp
 		res.Replicated.Delta = ms.ToStatsDelta()
 
+		_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+		if cluster.Version.IsActive(ctx, r.ClusterSettings(), cluster.VersionContainsEstimatesCounter) {
+			// Encode that this command (and any that follow) uses regular arithmetic for ContainsEstimates
+			// by making sure ContainsEstimates is > 1.
+			// This will be interpreted during command application.
+			if res.Replicated.Delta.ContainsEstimates > 0 {
+				res.Replicated.Delta.ContainsEstimates *= 2
+			}
+		} else {
+			// This range may still need to have its commands processed by nodes which treat ContainsEstimates
+			// as a bool, so clamp it to {0,1}. This enables use of bool semantics in command application.
+			if res.Replicated.Delta.ContainsEstimates > 1 {
+				res.Replicated.Delta.ContainsEstimates = 1
+			} else if res.Replicated.Delta.ContainsEstimates < 0 {
+				// The caller should have checked the cluster version. At the
+				// time of writing, this is only RecomputeStats and the split
+				// trigger, which both have the check, but better safe than sorry.
+				return nil, false, roachpb.NewErrorf("cannot propose negative ContainsEstimates " +
+					"without VersionContainsEstimatesCounter")
+			}
+		}
+
 		// If the RangeAppliedState key is not being used and the cluster version is
 		// high enough to guarantee that all current and future binaries will
 		// understand the key, we send the migration flag through Raft. Because

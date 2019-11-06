@@ -86,6 +86,8 @@ func (b *Bytes) maybeBackfillOffsets(i int) {
 
 // Get returns the ith []byte in Bytes. Note that the returned byte slice is
 // unsafe for reuse if any write operation happens.
+// NOTE: if ith element was never set in any way, the behavior of Get is
+// undefined.
 func (b *Bytes) Get(i int) []byte {
 	return b.data[b.offsets[i]:b.offsets[i+1]]
 }

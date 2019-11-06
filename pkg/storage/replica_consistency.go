@@ -191,13 +191,14 @@ func (r *Replica) CheckConsistency(
 	if minoritySHA != "" {
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
 	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && haveDelta {
-		if delta.ContainsEstimates {
+		if delta.ContainsEstimates > 0 {
 			// When ContainsEstimates is set, it's generally expected that we'll get a different
 			// result when we recompute from scratch.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED
 		} else {
-			// When ContainsEstimates is set, it's generally expected that we'll get a different
-			// result when we recompute from scratch.
+			// When ContainsEstimates is unset, we expect the recomputation to agree with the stored stats.
+			// If that's not the case, that's a problem: it could be a bug in the stats computation
+			// or stats maintenance, but it could also hint at the replica having diverged from its peers.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT
 		}
 		res.Detail += fmt.Sprintf("stats - recomputation: %+v\n", enginepb.MVCCStats(results[0].Response.Delta))
@@ -227,10 +228,9 @@ func (r *Replica) CheckConsistency(
 			return resp, nil
 		}
 
-		if !delta.ContainsEstimates && fatalOnStatsMismatch {
-			// ContainsEstimates is true if the replica's persisted MVCCStats had ContainsEstimates set.
-			// If this was *not* the case, the replica believed it had accurate stats. But we just found
-			// out that this isn't true.
+		if delta.ContainsEstimates <= 0 && fatalOnStatsMismatch {
+			// We just found out that the recomputation doesn't match the persisted stats,
+			// so ContainsEstimates should have been strictly positive.
 
 			var v roachpb.Version
 			if err := r.store.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {

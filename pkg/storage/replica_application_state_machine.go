@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -715,22 +716,46 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	res := cmd.replicatedResult()
+
+	// Detect whether the incoming stats contain estimates that resulted from the
+	// evaluation of a command under the 19.1 cluster version. These were either
+	// evaluated on a 19.1 node (where ContainsEstimates is a bool, which maps
+	// to 0 and 1 in 19.2+) or on a 19.2 node which hadn't yet had its cluster
+	// version bumped.
+	//
+	// 19.2 nodes will never emit a ContainsEstimates outside of 0 or 1 until
+	// the cluster version is active (during command evaluation). When the
+	// version is active, they will never emit odd positive numbers (1, 3, ...).
+	//
+	// As a result, we can pinpoint exactly when the proposer of this command
+	// has used the old cluster version: it's when the incoming
+	// ContainsEstimates is 1. If so, we need to assume that an old node is processing
+	// the same commands (as `true + true = true`), so make sure that `1 + 1 = 1`.
+	_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+	deltaStats := res.Delta.ToStats()
+	if deltaStats.ContainsEstimates == 1 && b.state.Stats.ContainsEstimates == 1 {
+		deltaStats.ContainsEstimates = 0
+	}
+
 	// Special-cased MVCC stats handling to exploit commutativity of stats delta
 	// upgrades. Thanks to commutativity, the spanlatch manager does not have to
 	// serialize on the stats key.
-	b.state.Stats.Add(res.Delta.ToStats())
+	b.state.Stats.Add(deltaStats)
 	// Exploit the fact that a split will result in a full stats
 	// recomputation to reset the ContainsEstimates flag.
+	// If we were running the new VersionContainsEstimatesCounter cluster version,
+	// the consistency checker will be able to reset the stats itself, and splits
+	// will as a side effect also remove estimates from both the resulting left and right hand sides.
 	//
-	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
-	// machinery update our stats for the left-hand side. But there is no
-	// way to pass up an MVCCStats object that will clear out the
-	// ContainsEstimates flag. We should introduce one, but the migration
-	// makes this worth a separate effort (ContainsEstimates would need to
-	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
-	// Until then, we're left with this rather crude hack.
-	if res.Split != nil {
-		b.state.Stats.ContainsEstimates = false
+	// TODO(tbg): this can be removed in v20.2 and not earlier.
+	// Consider the following scenario:
+	// - all nodes are running 19.2
+	// - all nodes rebooted into 20.1
+	// - cluster version bumped, but node1 doesn't receive the gossip update for that
+	// node1 runs a split that should emit ContainsEstimates=-1, but it clamps it to 0/1 because it
+	// doesn't know that 20.1 is active.
+	if res.Split != nil && deltaStats.ContainsEstimates == 0 {
+		b.state.Stats.ContainsEstimates = 0
 	}
 	if res.State != nil && res.State.UsingAppliedStateKey && !b.state.UsingAppliedStateKey {
 		b.migrateToAppliedStateKey = true
