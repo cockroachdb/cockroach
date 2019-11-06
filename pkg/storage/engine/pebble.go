@@ -305,6 +305,13 @@ func (p *Pebble) Closed() bool {
 	return p.closed
 }
 
+// ExportToSst is part of the engine.Reader interface.
+func (p *Pebble) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+}
+
 // Get implements the Engine interface.
 func (p *Pebble) Get(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
@@ -682,6 +689,13 @@ func (p *pebbleReadOnly) Closed() bool {
 	return p.closed
 }
 
+// ExportToSst is part of the engine.Reader interface.
+func (p *pebbleReadOnly) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+}
+
 func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
@@ -793,6 +807,13 @@ func (p *pebbleSnapshot) Closed() bool {
 	return p.closed
 }
 
+// ExportToSst is part of the engine.Reader interface.
+func (p *pebbleSnapshot) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+}
+
 // Get implements the Reader interface.
 func (p *pebbleSnapshot) Get(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
@@ -835,4 +856,58 @@ func (p *pebbleSnapshot) Iterate(
 // NewIterator implements the Reader interface.
 func (p pebbleSnapshot) NewIterator(opts IterOptions) Iterator {
 	return newPebbleIterator(p.snapshot, opts)
+}
+
+func pebbleExportToSst(
+	e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	sstWriter := MakeSSTWriter()
+	defer sstWriter.Close()
+
+	var rows RowCounter
+	iter := NewMVCCIncrementalIterator(
+		e,
+		MVCCIncrementalIterOptions{
+			IterOptions: io,
+			StartTime:   start.Timestamp,
+			EndTime:     end.Timestamp,
+		})
+	defer iter.Close()
+	for iter.Seek(MakeMVCCMetadataKey(start.Key)); ; {
+		ok, err := iter.Valid()
+		if err != nil {
+			// The error may be a WriteIntentError. In which case, returning it will
+			// cause this command to be retried.
+			return []byte{}, roachpb.BulkOpSummary{}, err
+		}
+		if !ok || iter.UnsafeKey().Key.Compare(end.Key) >= 0 {
+			break
+		}
+
+		// Skip tombstone (len=0) records when startTime is zero
+		// (non-incremental) and we're not exporting all versions.
+		if !exportAllRevisions && start.Timestamp.IsEmpty() && len(iter.UnsafeValue()) == 0 {
+			continue
+		}
+
+		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
+			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
+		}
+		if err := sstWriter.Add(MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
+		}
+
+		if exportAllRevisions {
+			iter.Next()
+		} else {
+			iter.NextKey()
+		}
+	}
+
+	data, err := sstWriter.Finish()
+	if err != nil {
+		return []byte{}, roachpb.BulkOpSummary{}, err
+	}
+
+	return data, roachpb.BulkOpSummary{}, nil
 }

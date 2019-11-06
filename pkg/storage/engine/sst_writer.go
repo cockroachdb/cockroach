@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bulk
+package engine
 
 import (
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/pkg/errors"
@@ -33,9 +32,9 @@ func MakeSSTWriter() SSTWriter {
 	opts := sstable.WriterOptions{
 		BlockSize:               32 * 1024,
 		TableFormat:             pebble.TableFormatLevelDB,
-		Comparer:                engine.MVCCComparer,
+		Comparer:                MVCCComparer,
 		MergerName:              "nullptr",
-		TablePropertyCollectors: engine.PebbleTablePropertyCollectors,
+		TablePropertyCollectors: PebbleTablePropertyCollectors,
 	}
 	f := &memFile{}
 	sst := sstable.NewWriter(f, opts)
@@ -45,12 +44,12 @@ func MakeSSTWriter() SSTWriter {
 // Add puts a kv entry into the sstable being built. An error is returned if it
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.
-func (fw *SSTWriter) Add(kv engine.MVCCKeyValue) error {
+func (fw *SSTWriter) Add(kv MVCCKeyValue) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
 	fw.DataSize += uint64(len(kv.Key.Key)) + uint64(len(kv.Value))
-	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[:0], kv.Key)
+	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], kv.Key)
 	return fw.fw.Set(fw.scratch, kv.Value)
 }
 
