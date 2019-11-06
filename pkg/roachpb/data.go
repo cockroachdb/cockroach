@@ -812,12 +812,12 @@ func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
 }
 
 // LastActive returns the last timestamp at which client activity definitely
-// occurred, i.e. the maximum of OrigTimestamp and LastHeartbeat.
+// occurred, i.e. the maximum of OrigTimestamp, RefreshedTimestamp and
+// LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
-	if ts.Less(t.OrigTimestamp) {
-		ts = t.OrigTimestamp
-	}
+	ts.Forward(t.RefreshedTimestamp)
+	ts.Forward(t.OrigTimestamp)
 	return ts
 }
 
