@@ -80,7 +80,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
 				mvccKey := engine.MVCCKey{Timestamp: sstTS, Key: kv.Key}
-				if err := sw.Add(engine.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes}); err != nil {
+				if err := sw.Put(mvccKey, kv.Value.RawBytes); err != nil {
 					return err
 				}
 			}
