@@ -239,10 +239,16 @@ func (p *pebbleIterator) SeekReverse(key MVCCKey) {
 	// Do a SeekGE, not a SeekLT. This is because SeekReverse seeks to the
 	// greatest key that's less than or equal to the specified key.
 	p.Seek(key)
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+
+	// The seek key may have been past the last key. If so, position the
+	// iterator at the last key.
+	if !p.iter.Valid() && !p.iter.Last() {
+		return
+	}
 
 	// The new key could either be greater or equal to the supplied key.
 	// Backtrack one step if it is greater.
+	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
 	comp := MVCCKeyCompare(p.keyBuf, p.iter.Key())
 	if comp < 0 && p.iter.Valid() {
 		p.Prev()
