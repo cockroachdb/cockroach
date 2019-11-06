@@ -172,6 +172,7 @@ type mergeJoinInput struct {
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
 func NewMergeJoinOp(
+	allocator *Allocator,
 	joinType sqlbase.JoinType,
 	left Operator,
 	right Operator,
@@ -185,6 +186,7 @@ func NewMergeJoinOp(
 	filterOnlyOnLeft bool,
 ) (Operator, error) {
 	base, err := newMergeJoinBase(
+		allocator,
 		left,
 		right,
 		leftOutCols,
@@ -258,6 +260,7 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 }
 
 func newMergeJoinBase(
+	allocator *Allocator,
 	left Operator,
 	right Operator,
 	leftOutCols []uint32,
@@ -285,6 +288,7 @@ func newMergeJoinBase(
 
 	base := mergeJoinBase{
 		twoInputNode: newTwoInputNode(left, right),
+		allocator:    allocator,
 		left: mergeJoinInput{
 			source:      left,
 			outCols:     leftOutCols,
@@ -315,6 +319,7 @@ func newMergeJoinBase(
 	}
 	if filterConstructor != nil {
 		base.filter, err = newJoinerFilter(
+			base.allocator,
 			leftTypes,
 			rightTypes,
 			filterConstructor,
@@ -327,8 +332,10 @@ func newMergeJoinBase(
 // mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
 	twoInputNode
-	left  mergeJoinInput
-	right mergeJoinInput
+
+	allocator *Allocator
+	left      mergeJoinInput
+	right     mergeJoinInput
 
 	// Output buffer definition.
 	output          coldata.Batch
@@ -386,7 +393,11 @@ func (o *mergeJoinBase) Init() {
 }
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
-	o.output = coldata.NewMemBatchWithSize(o.getOutColTypes(), int(outBatchSize))
+	var err error
+	o.output, err = o.allocator.NewMemBatchWithSize(o.getOutColTypes(), int(outBatchSize))
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
@@ -429,7 +440,8 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	destStartIdx := bufferedGroup.length
 	groupEndIdx := groupStartIdx + groupLength
 	for cIdx, cType := range input.sourceTypes {
-		bufferedGroup.ColVec(cIdx).Append(
+		if err := o.allocator.Append(
+			bufferedGroup.ColVec(cIdx),
 			coldata.SliceArgs{
 				ColType:     cType,
 				Src:         batch.ColVec(cIdx),
@@ -438,7 +450,9 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 				SrcStartIdx: uint64(groupStartIdx),
 				SrcEndIdx:   uint64(groupEndIdx),
 			},
-		)
+		); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
 	}
 
 	// We've added groupLength number of tuples to bufferedGroup, so we need to

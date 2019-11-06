@@ -28,7 +28,9 @@ import (
 func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nBatches := 10
-	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize())))
+	source, err := makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize()))
+	require.NoError(t, err)
+	noop := NewNoop(source)
 	vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
 	vsc.Init()
 	for {
@@ -45,7 +47,9 @@ func TestNumTuples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
-		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
+		source, err := makeFiniteChunksSourceWithBatchSize(nBatches, batchSize)
+		require.NoError(t, err)
+		noop := NewNoop(source)
 		vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
 		vsc.Init()
 		for {
@@ -68,21 +72,26 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		timeSource := timeutil.NewTestTimeSource()
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
 
+		lSource, err := makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize()))
+		require.NoError(t, err)
 		leftSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize()))),
+			OneInputNode: NewOneInputNode(lSource),
 			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(leftSource, 0 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		leftInput.SetOutputWatch(mjInputWatch)
 
+		rSource, err := makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize()))
+		require.NoError(t, err)
 		rightSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, int(coldata.BatchSize()))),
+			OneInputNode: NewOneInputNode(rSource),
 			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(rightSource, 1 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
 		rightInput.SetOutputWatch(mjInputWatch)
 
 		mergeJoiner, err := NewMergeJoinOp(
+			testAllocator,
 			sqlbase.InnerJoin,
 			leftInput,
 			rightInput,
@@ -129,14 +138,17 @@ func TestVectorizedStatsCollector(t *testing.T) {
 	}
 }
 
-func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
-	batch := coldata.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
+func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) (Operator, error) {
+	batch, err := testAllocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
+	if err != nil {
+		return nil, err
+	}
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)
 	}
 	batch.SetLength(uint16(batchSize))
-	return newFiniteChunksSource(batch, nBatches, 1 /* matchLen */)
+	return newFiniteChunksSource(batch, nBatches, 1 /* matchLen */), nil
 }
 
 // timeAdvancingOperator is an Operator that advances the time source upon

@@ -94,9 +94,10 @@ func TestRouterOutputAddBatch(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				[]coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
+			o, err := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+				testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
 			)
+			require.NoError(t, err)
 			in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
 			out := newOpTestOutput(o, data[:len(tc.selection)])
 			in.Init()
@@ -176,7 +177,8 @@ func TestRouterOutputNext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var wg sync.WaitGroup
 			batchChan := make(chan coldata.Batch)
-			o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
+			o, err := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan)
+			require.NoError(t, err)
 			in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
 			in.Init()
 			wg.Add(1)
@@ -226,7 +228,8 @@ func TestRouterOutputNext(t *testing.T) {
 	}
 
 	t.Run("NextAfterZeroBatchDoesntBlock", func(t *testing.T) {
-		o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
+		o, err := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan)
+		require.NoError(t, err)
 		o.addBatch(o.zeroBatch, fullSelection)
 		o.Next(ctx)
 		o.Next(ctx)
@@ -254,9 +257,10 @@ func TestRouterOutputNext(t *testing.T) {
 		}
 
 		ch := make(chan struct{}, 2)
-		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-			[]coltypes.T{coltypes.Int64}, ch, blockThreshold, int(coldata.BatchSize()),
+		o, err := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+			testAllocator, []coltypes.T{coltypes.Int64}, ch, blockThreshold, int(coldata.BatchSize()),
 		)
+		require.NoError(t, err)
 		in := newOpTestInput(smallBatchSize, data, nil /* typs */)
 		out := newOpTestOutput(o, expected)
 		in.Init()
@@ -325,9 +329,10 @@ func TestRouterOutputRandom(t *testing.T) {
 		runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
 			var wg sync.WaitGroup
 			unblockedEventsChans := make(chan struct{}, 2)
-			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				typs, unblockedEventsChans, blockedThreshold, outputSize,
+			o, err := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+				testAllocator, typs, unblockedEventsChans, blockedThreshold, outputSize,
 			)
+			require.NoError(t, err)
 			inputs[0].Init()
 
 			expected := make(tuples, 0, len(data))
@@ -513,7 +518,8 @@ func TestHashRouterCancellation(t *testing.T) {
 	}
 
 	// Never-ending input of 0s.
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	require.NoError(t, err)
 	batch.SetLength(coldata.BatchSize())
 	in := NewRepeatableBatchSource(batch)
 
@@ -608,9 +614,10 @@ func TestHashRouterOneOutput(t *testing.T) {
 	data, _ := getDataAndFullSelection()
 	typs := []coltypes.T{coltypes.Int64}
 
-	r, routerOutputs := NewHashRouter(
-		newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
+	r, routerOutputs, err := NewHashRouter(
+		testAllocator, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
 	)
+	require.NoError(t, err)
 
 	if len(routerOutputs) != 1 {
 		t.Fatalf("expected 1 router output but got %d", len(routerOutputs))
@@ -694,9 +701,10 @@ func TestHashRouterRandom(t *testing.T) {
 			outputs := make([]routerOutput, numOutputs)
 			outputsAsOps := make([]Operator, numOutputs)
 			for i := range outputs {
-				op := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-					typs, unblockEventsChan, blockedThreshold, outputSize,
+				op, err := newRouterOutputOpWithBlockedThresholdAndBatchSize(
+					testAllocator, typs, unblockEventsChan, blockedThreshold, outputSize,
 				)
+				require.NoError(t, err)
 				outputs[i] = op
 				outputsAsOps[i] = op
 			}
@@ -776,7 +784,8 @@ func BenchmarkHashRouter(b *testing.B) {
 
 	// Use only one type. Note: the more types you use, the more you inflate the
 	// numbers.
-	batch := coldata.NewMemBatch(types)
+	batch, err := testAllocator.NewMemBatch(types)
+	require.NoError(b, err)
 	batch.SetLength(coldata.BatchSize())
 	input := NewRepeatableBatchSource(batch)
 
@@ -784,7 +793,8 @@ func BenchmarkHashRouter(b *testing.B) {
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				r, outputs := NewHashRouter(input, types, []int{0}, numOutputs)
+				r, outputs, err := NewHashRouter(testAllocator, input, types, []int{0}, numOutputs)
+				require.NoError(b, err)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.

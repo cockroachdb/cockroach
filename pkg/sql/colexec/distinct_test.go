@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSortedDistinct(t *testing.T) {
@@ -116,7 +117,8 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	require.NoError(b, err)
 	aCol := batch.ColVec(1).Int64()
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)

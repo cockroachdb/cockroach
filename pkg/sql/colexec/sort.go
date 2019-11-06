@@ -26,13 +26,19 @@ import (
 // given in orderingCols. The inputTypes must correspond 1-1 with the columns
 // in the input operator.
 func NewSorter(
-	input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column,
+	allocator *Allocator,
+	input Operator,
+	inputTypes []coltypes.T,
+	orderingCols []execinfrapb.Ordering_Column,
 ) (Operator, error) {
-	return newSorter(newAllSpooler(input, inputTypes), inputTypes, orderingCols)
+	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
 }
 
 func newSorter(
-	input spooler, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column,
+	allocator *Allocator,
+	input spooler,
+	inputTypes []coltypes.T,
+	orderingCols []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
@@ -50,6 +56,7 @@ func newSorter(
 	}
 
 	return &sortOp{
+		allocator:    allocator,
 		input:        input,
 		inputTypes:   inputTypes,
 		sorters:      make([]colSorter, len(orderingCols)),
@@ -84,6 +91,7 @@ type allSpooler struct {
 	OneInputNode
 	NonExplainable
 
+	allocator *Allocator
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []coltypes.T
 	// values stores all the values from the input after spooling. Each Vec in
@@ -97,9 +105,10 @@ type allSpooler struct {
 
 var _ spooler = &allSpooler{}
 
-func newAllSpooler(input Operator, inputTypes []coltypes.T) spooler {
+func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
 		inputTypes:   inputTypes,
 	}
 }
@@ -121,7 +130,8 @@ func (p *allSpooler) spool(ctx context.Context) {
 	var nTuples uint64
 	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
 		for i := 0; i < len(p.values); i++ {
-			p.values[i].Append(
+			if err := p.allocator.Append(
+				p.values[i],
 				coldata.SliceArgs{
 					ColType:   p.inputTypes[i],
 					Src:       batch.ColVec(i),
@@ -129,7 +139,9 @@ func (p *allSpooler) spool(ctx context.Context) {
 					DestIdx:   nTuples,
 					SrcEndIdx: uint64(batch.Length()),
 				},
-			)
+			); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
 		}
 		nTuples += uint64(batch.Length())
 	}
@@ -165,7 +177,8 @@ func (p *allSpooler) reset() {
 }
 
 type sortOp struct {
-	input spooler
+	allocator *Allocator
+	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []coltypes.T
@@ -211,7 +224,11 @@ type colSorter interface {
 
 func (p *sortOp) Init() {
 	p.input.init()
-	p.output = coldata.NewMemBatch(p.inputTypes)
+	var err error
+	p.output, err = p.allocator.NewMemBatch(p.inputTypes)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 }
 
 // sortState represents the state of the sort operator.

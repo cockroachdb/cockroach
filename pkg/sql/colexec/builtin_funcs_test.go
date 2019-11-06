@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // Mock typing context for the typechecker.
@@ -106,7 +107,8 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	require.NoError(b, err)
 	col := batch.ColVec(0).Int64()
 
 	for i := 0; i < int(coldata.BatchSize()); i++ {
@@ -173,7 +175,8 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes, coltypes.Int64, coltypes.Int64, coltypes.Bytes})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes, coltypes.Int64, coltypes.Int64, coltypes.Bytes})
+	require.NoError(b, err)
 	bCol := batch.ColVec(0).Bytes()
 	sCol := batch.ColVec(1).Int64()
 	eCol := batch.ColVec(2).Int64()
