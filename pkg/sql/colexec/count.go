@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
 // countOp is an operator that counts the number of input rows it receives,
@@ -32,11 +33,15 @@ type countOp struct {
 var _ StaticMemoryOperator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
-func NewCountOp(input Operator) Operator {
+func NewCountOp(allocator *Allocator, input Operator) Operator {
 	c := &countOp{
 		OneInputNode: NewOneInputNode(input),
 	}
-	c.internalBatch = coldata.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, 1)
+	var err error
+	c.internalBatch, err = allocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, 1)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	return c
 }
 

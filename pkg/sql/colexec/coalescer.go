@@ -15,7 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
+
+// TODO(yuzefovich): we actually seem to never use coalescerOp. Think through
+// whether we want to plan it in some cases.
 
 // coalescerOp consumes the input operator and coalesces the resulting batches
 // to return full batches of coldata.BatchSize().
@@ -23,6 +27,7 @@ type coalescerOp struct {
 	OneInputNode
 	NonExplainable
 
+	allocator  *Allocator
 	inputTypes []coltypes.T
 
 	group  coldata.Batch
@@ -33,9 +38,10 @@ var _ StaticMemoryOperator = &coalescerOp{}
 
 // NewCoalescerOp creates a new coalescer operator on the given input operator
 // with the given column types.
-func NewCoalescerOp(input Operator, colTypes []coltypes.T) Operator {
+func NewCoalescerOp(allocator *Allocator, input Operator, colTypes []coltypes.T) Operator {
 	return &coalescerOp{
 		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
 		inputTypes:   colTypes,
 	}
 }
@@ -46,8 +52,16 @@ func (p *coalescerOp) EstimateStaticMemoryUsage() int {
 
 func (p *coalescerOp) Init() {
 	p.input.Init()
-	p.group = coldata.NewMemBatch(p.inputTypes)
-	p.buffer = coldata.NewMemBatch(p.inputTypes)
+
+	var err error
+	p.group, err = p.allocator.NewMemBatchWithSize(p.inputTypes, int(coldata.BatchSize()))
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	p.buffer, err = p.allocator.NewMemBatchWithSize(p.inputTypes, int(coldata.BatchSize()))
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 }
 
 func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
@@ -75,7 +89,8 @@ func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
 			fromCol := batch.ColVec(i)
 
 			if batchSize <= leftover {
-				toCol.Append(
+				if err := p.allocator.Append(
+					toCol,
 					coldata.SliceArgs{
 						ColType:   t,
 						Src:       fromCol,
@@ -83,10 +98,13 @@ func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
 						DestIdx:   uint64(p.group.Length()),
 						SrcEndIdx: uint64(batchSize),
 					},
-				)
+				); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
 			} else {
 				bufferCol := p.buffer.ColVec(i)
-				toCol.Append(
+				if err := p.allocator.Append(
+					toCol,
 					coldata.SliceArgs{
 						ColType:   t,
 						Src:       fromCol,
@@ -94,7 +112,9 @@ func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
 						DestIdx:   uint64(p.group.Length()),
 						SrcEndIdx: uint64(leftover),
 					},
-				)
+				); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
 				bufferCol.Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{

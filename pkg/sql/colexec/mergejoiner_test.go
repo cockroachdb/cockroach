@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 type mjTestCase struct {
@@ -1665,6 +1666,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 				leftSource := newChunkingBatchSource(typs, colsLeft, uint64(nTuples))
 				rightSource := newChunkingBatchSource(typs, colsRight, uint64(nTuples))
 				a, err := NewMergeJoinOp(
+					testAllocator,
 					sqlbase.FullOuterJoin,
 					leftSource,
 					rightSource,
@@ -1743,6 +1745,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1808,6 +1811,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1877,6 +1881,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 						a, err := NewMergeJoinOp(
+							testAllocator,
 							sqlbase.InnerJoin,
 							leftSource,
 							rightSource,
@@ -1931,6 +1936,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -2049,6 +2055,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
 
 							a, err := NewMergeJoinOp(
+								testAllocator,
 								sqlbase.InnerJoin,
 								leftSource,
 								rightSource,
@@ -2139,7 +2146,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		sourceTypes[colIdx] = coltypes.Int64
 	}
 
-	batch := coldata.NewMemBatch(sourceTypes)
+	batch, err := testAllocator.NewMemBatch(sourceTypes)
+	require.NoError(b, err)
 
 	// 1:1 join.
 	for _, nBatches := range []int{1, 4, 16, 1024} {

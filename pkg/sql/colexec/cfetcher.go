@@ -237,8 +237,7 @@ type cFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *cFetcher) Init(
-	reverse,
-	returnRangeInfo bool, isCheck bool, tables ...row.FetcherTableArgs,
+	allocator *Allocator, reverse, returnRangeInfo bool, isCheck bool, tables ...row.FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
@@ -286,11 +285,15 @@ func (rf *cFetcher) Init(
 		extraValColOrdinals:    oldTable.extraValColOrdinals[:0],
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
-	rf.machine.batch = coldata.NewMemBatch(typs)
-	rf.machine.colvecs = rf.machine.batch.ColVecs()
-	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, int(coldata.BatchSize()))
 
 	var err error
+
+	rf.machine.batch, err = allocator.NewMemBatch(typs)
+	if err != nil {
+		return err
+	}
+	rf.machine.colvecs = rf.machine.batch.ColVecs()
+	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, int(coldata.BatchSize()))
 
 	var neededCols util.FastIntSet
 	// Scan through the entire columns map to see which columns are

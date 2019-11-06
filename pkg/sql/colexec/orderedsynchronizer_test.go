@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // Adapted from the same-named test in the rowflow package.
@@ -202,10 +203,12 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 func BenchmarkOrderedSynchronizer(b *testing.B) {
 	ctx := context.Background()
 
+	var err error
 	numInputs := int64(3)
 	batches := make([]coldata.Batch, numInputs)
 	for i := range batches {
-		batches[i] = coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+		batches[i], err = testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+		require.NoError(b, err)
 		batches[i].SetLength(coldata.BatchSize())
 	}
 	for i := int64(0); i < int64(coldata.BatchSize())*numInputs; i++ {

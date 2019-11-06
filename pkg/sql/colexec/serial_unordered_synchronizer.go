@@ -46,13 +46,14 @@ func (s *SerialUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
 func NewSerialUnorderedSynchronizer(
-	inputs []Operator, typs []coltypes.T,
-) *SerialUnorderedSynchronizer {
+	allocator *Allocator, inputs []Operator, typs []coltypes.T,
+) (*SerialUnorderedSynchronizer, error) {
+	zeroBatch, err := allocator.NewMemBatchWithSize(typs, 0 /* size */)
 	return &SerialUnorderedSynchronizer{
 		inputs:            inputs,
 		curSerialInputIdx: 0,
-		zeroBatch:         coldata.NewMemBatchWithSize(typs, 0),
-	}
+		zeroBatch:         zeroBatch,
+	}, err
 }
 
 // Init is part of the Operator interface.
@@ -66,6 +67,7 @@ func (s *SerialUnorderedSynchronizer) Init() {
 func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
+			s.zeroBatch.SetLength(0)
 			return s.zeroBatch
 		}
 		b := s.inputs[s.curSerialInputIdx].Next(ctx)

@@ -141,13 +141,19 @@ func RandomVec(
 	}
 }
 
+// testAllocator is an Allocator with an unlimited budget for use in tests.
+var testAllocator = NewAllocator()
+
 // RandomBatch returns a batch with a capacity of capacity and a number of
 // random elements equal to length (capacity if length is 0). The values will be
 // null with a probability of nullProbability.
 func RandomBatch(
 	rng *rand.Rand, typs []coltypes.T, capacity int, length int, nullProbability float64,
-) coldata.Batch {
-	batch := coldata.NewMemBatchWithSize(typs, capacity)
+) (coldata.Batch, error) {
+	batch, err := testAllocator.NewMemBatchWithSize(typs, capacity)
+	if err != nil {
+		return nil, err
+	}
 	if length == 0 {
 		length = capacity
 	}
@@ -155,7 +161,7 @@ func RandomBatch(
 		RandomVec(rng, typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
 	}
 	batch.SetLength(uint16(length))
-	return batch
+	return batch, nil
 }
 
 // randomSel creates a random selection vector up to a given batchSize in
@@ -189,15 +195,18 @@ var _ = randomTypes
 // to the length of the selection vector, unless selProbability is 0.
 func randomBatchWithSel(
 	rng *rand.Rand, typs []coltypes.T, n int, nullProbability float64, selProbability float64,
-) coldata.Batch {
-	batch := RandomBatch(rng, typs, n, 0 /* length */, nullProbability)
+) (coldata.Batch, error) {
+	batch, err := RandomBatch(rng, typs, n, 0 /* length */, nullProbability)
+	if err != nil {
+		return nil, err
+	}
 	if selProbability != 0 {
 		sel := randomSel(rng, uint16(n), 1-selProbability)
 		batch.SetSelection(true)
 		copy(batch.Selection(), sel)
 		batch.SetLength(uint16(len(sel)))
 	}
-	return batch
+	return batch, nil
 }
 
 const (
@@ -294,7 +303,10 @@ func (o *RandomDataOp) Init() {}
 func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
-		b := coldata.NewMemBatchWithSize(o.typs, 0)
+		b, err := testAllocator.NewMemBatchWithSize(o.typs, 0)
+		if err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
 		b.SetLength(0)
 		if o.batchAccumulator != nil {
 			o.batchAccumulator(b)
@@ -314,7 +326,10 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 			nullProbability = o.rng.Float64()
 		}
 
-		b := randomBatchWithSel(o.rng, o.typs, o.batchSize, nullProbability, selProbability)
+		b, err := randomBatchWithSel(o.rng, o.typs, o.batchSize, nullProbability, selProbability)
+		if err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
 		if !o.selection {
 			b.SetSelection(false)
 		}

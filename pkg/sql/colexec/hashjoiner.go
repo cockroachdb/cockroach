@@ -169,6 +169,7 @@ type hashJoinerSourceSpec struct {
 // all build table rows that have never been matched and stitching it together
 // with NULL values on the probe side.
 type hashJoinEqOp struct {
+	allocator *Allocator
 	// spec, if not nil, holds the specification for the current hash joiner
 	// process.
 	spec hashJoinerSpec
@@ -231,6 +232,7 @@ func (hj *hashJoinEqOp) Init() {
 	}
 
 	hj.ht = makeHashTable(
+		hj.allocator,
 		hashTableBucketSize,
 		build.sourceTypes,
 		build.eqCols,
@@ -244,6 +246,7 @@ func (hj *hashJoinEqOp) Init() {
 	)
 
 	hj.prober = makeHashJoinProber(
+		hj.allocator,
 		hj.ht, probe, build,
 		hj.spec.buildRightSide,
 		hj.spec.buildDistinct,
@@ -345,6 +348,7 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 // The table can then be probed in column batches to find at most one matching
 // row per column batch row.
 type hashTable struct {
+	allocator Allocator
 	// first stores the keyID of the first key that resides in each bucket. This
 	// keyID is used to determine the corresponding equality column key as well
 	// as output column values.
@@ -425,6 +429,7 @@ type hashTable struct {
 }
 
 func makeHashTable(
+	allocator *Allocator,
 	bucketSize uint64,
 	sourceTypes []coltypes.T,
 	eqCols []uint32,
@@ -510,7 +515,8 @@ func makeHashTable(
 func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	batchSize := batch.Length()
 	for i, colIdx := range ht.valCols {
-		ht.vals[i].Append(
+		if err := ht.allocator.Append(
+			ht.vals[i],
 			coldata.SliceArgs{
 				ColType:   ht.valTypes[i],
 				Src:       batch.ColVec(int(colIdx)),
@@ -518,7 +524,9 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 				DestIdx:   ht.size,
 				SrcEndIdx: uint64(batchSize),
 			},
-		)
+		); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
 	}
 
 	ht.size += uint64(batchSize)
@@ -750,6 +758,7 @@ type hashJoinProber struct {
 }
 
 func makeHashJoinProber(
+	allocator *Allocator,
 	ht *hashTable,
 	probe hashJoinerSourceSpec,
 	build hashJoinerSourceSpec,
@@ -784,10 +793,15 @@ func makeHashJoinProber(
 		probeRowUnmatched = make([]bool, coldata.BatchSize())
 	}
 
+	batch, err := allocator.NewMemBatch(outColTypes)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+
 	return &hashJoinProber{
 		ht: ht,
 
-		batch:           coldata.NewMemBatch(outColTypes),
+		batch:           batch,
 		outputBatchSize: outputBatchSize,
 
 		buildIdx: make([]uint64, coldata.BatchSize()),
@@ -1056,6 +1070,7 @@ func (ht *hashTable) distinctCheck(nToCheck uint16, sel []uint16) uint16 {
 // while leftOutCols and rightOutCols specifies the output columns. leftTypes
 // and rightTypes specify the input column types of the two sources.
 func NewEqHashJoinerOp(
+	allocator *Allocator,
 	leftSource Operator,
 	rightSource Operator,
 	leftEqCols []uint32,
@@ -1117,6 +1132,7 @@ func NewEqHashJoinerOp(
 	}
 
 	return &hashJoinEqOp{
+		allocator:       allocator,
 		spec:            spec,
 		outputBatchSize: coldata.BatchSize(),
 	}, nil

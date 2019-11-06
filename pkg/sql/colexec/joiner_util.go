@@ -30,10 +30,18 @@ type filterFeedOperator struct {
 
 var _ Operator = &filterFeedOperator{}
 
-func newFilterFeedOperator(inputTypes []coltypes.T) *filterFeedOperator {
+func newFilterFeedOperator(allocator *Allocator, inputTypes []coltypes.T) *filterFeedOperator {
+	batch, err := allocator.NewMemBatchWithSize(inputTypes, 1 /* size */)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	zeroBatch, err := allocator.NewMemBatchWithSize([]coltypes.T{}, 0 /* size */)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	return &filterFeedOperator{
-		batch:     coldata.NewMemBatchWithSize(inputTypes, 1 /* size */),
-		zeroBatch: coldata.NewMemBatchWithSize([]coltypes.T{}, 0 /* size */),
+		batch:     batch,
+		zeroBatch: zeroBatch,
 	}
 }
 
@@ -54,15 +62,17 @@ func (o *filterFeedOperator) reset() {
 }
 
 func newJoinerFilter(
+	allocator *Allocator,
 	leftSourceTypes []coltypes.T,
 	rightSourceTypes []coltypes.T,
 	filterConstructor func(Operator) (Operator, error),
 	filterOnlyOnLeft bool,
 ) (*joinerFilter, error) {
-	input := newFilterFeedOperator(append(leftSourceTypes, rightSourceTypes...))
+	input := newFilterFeedOperator(allocator, append(leftSourceTypes, rightSourceTypes...))
 	filter, err := filterConstructor(input)
 	return &joinerFilter{
 		Operator:         filter,
+		allocator:        allocator,
 		leftSourceTypes:  leftSourceTypes,
 		rightSourceTypes: rightSourceTypes,
 		input:            input,
@@ -74,6 +84,7 @@ func newJoinerFilter(
 type joinerFilter struct {
 	Operator
 
+	allocator        *Allocator
 	leftSourceTypes  []coltypes.T
 	rightSourceTypes []coltypes.T
 	input            *filterFeedOperator
@@ -123,13 +134,17 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 			idx = int(sel[idx])
 		}
 		for colIdx := 0; colIdx < batch.Width(); colIdx++ {
-			f.input.batch.ColVec(colOffset + colIdx).Append(coldata.SliceArgs{
-				Src:         batch.ColVec(colIdx),
-				ColType:     sourceTypes[colIdx],
-				DestIdx:     0,
-				SrcStartIdx: uint64(idx),
-				SrcEndIdx:   uint64(idx + 1),
-			})
+			if err := f.allocator.Append(
+				f.input.batch.ColVec(colOffset+colIdx),
+				coldata.SliceArgs{
+					Src:         batch.ColVec(colIdx),
+					ColType:     sourceTypes[colIdx],
+					DestIdx:     0,
+					SrcStartIdx: uint64(idx),
+					SrcEndIdx:   uint64(idx + 1),
+				}); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
 		}
 	}
 	if lBatch != nil {

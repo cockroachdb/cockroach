@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOrdinality(t *testing.T) {
@@ -54,7 +55,8 @@ func TestOrdinality(t *testing.T) {
 func BenchmarkOrdinality(b *testing.B) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	require.NoError(b, err)
 	batch.SetLength(coldata.BatchSize())
 	source := NewRepeatableBatchSource(batch)
 	source.Init()

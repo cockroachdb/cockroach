@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func randomBatch() ([]coltypes.T, coldata.Batch) {
+func randomBatch() ([]coltypes.T, coldata.Batch, error) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
@@ -43,8 +43,8 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 
 	capacity := rng.Intn(int(coldata.BatchSize())) + 1
 	length := rng.Intn(capacity)
-	b := colexec.RandomBatch(rng, typs, capacity, length, rng.Float64())
-	return typs, b
+	b, err := colexec.RandomBatch(rng, typs, capacity, length, rng.Float64())
+	return typs, b, err
 }
 
 // copyBatch copies the original batch. However, to increase test coverage, only
@@ -129,7 +129,8 @@ func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs, b := randomBatch()
+	typs, b, err := randomBatch()
+	require.NoError(t, err)
 	c, err := NewArrowBatchConverter(typs)
 	require.NoError(t, err)
 
@@ -176,7 +177,8 @@ func roundTripBatch(
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs, b := randomBatch()
+	typs, b, err := randomBatch()
+	require.NoError(t, err)
 	c, err := NewArrowBatchConverter(typs)
 	require.NoError(t, err)
 	r, err := NewRecordBatchSerializer(typs)
@@ -215,7 +217,8 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colexec.RandomBatch(rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
+		batch, err := colexec.RandomBatch(rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
+		require.NoError(b, err)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}

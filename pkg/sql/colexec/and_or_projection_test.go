@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 type andOrTestCase struct {
@@ -233,7 +234,8 @@ func benchmarkLogicalProjOp(
 	}
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bool, coltypes.Bool})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bool, coltypes.Bool})
+	require.NoError(b, err)
 	col1 := batch.ColVec(0).Bool()
 	col2 := batch.ColVec(0).Bool()
 	for i := 0; i < int(coldata.BatchSize()); i++ {
