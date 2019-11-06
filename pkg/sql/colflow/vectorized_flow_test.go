@@ -30,20 +30,23 @@ import (
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(colexec.Operator, []coltypes.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInboxFn  func(typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newOutboxFn func(*colexec.Allocator, colexec.Operator, []coltypes.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
+	newInboxFn  func(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
-	input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource,
+	_ *colexec.Allocator,
+	input colexec.Operator,
+	typs []coltypes.T,
+	metadataSources []execinfrapb.MetadataSource,
 ) (*colrpc.Outbox, error) {
-	return c.newOutboxFn(input, typs, metadataSources)
+	return c.newOutboxFn(testAllocator, input, typs, metadataSources)
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
-	return c.newInboxFn(typs, streamID)
+	return c.newInboxFn(allocator, typs, streamID)
 }
 
 func intCols(numCols int) []types.T {
@@ -53,6 +56,8 @@ func intCols(numCols int) []types.T {
 	}
 	return cols
 }
+
+var testAllocator = colexec.NewAllocator()
 
 // TestDrainOnlyInputDAG is a regression test for #39137 to ensure
 // that queries don't hang using the following scenario:
@@ -176,7 +181,12 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	inboxToNumInputTypes := make(map[*colrpc.Inbox][]coltypes.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
-		newOutboxFn: func(op colexec.Operator, typs []coltypes.T, sources []execinfrapb.MetadataSource) (*colrpc.Outbox, error) {
+		newOutboxFn: func(
+			_ *colexec.Allocator,
+			op colexec.Operator,
+			typs []coltypes.T,
+			sources []execinfrapb.MetadataSource,
+		) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
 			outboxCreated = true
 			// Verify that there is only one metadata source: the inbox that is the
@@ -185,10 +195,10 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// expect from the input DAG.
 			require.Len(t, sources, 1)
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
-			return colrpc.NewOutbox(op, typs, sources)
+			return colrpc.NewOutbox(testAllocator, op, typs, sources)
 		},
-		newInboxFn: func(typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(typs, streamID)
+		newInboxFn: func(_ *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
+			inbox, err := colrpc.NewInbox(testAllocator, typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
 		},

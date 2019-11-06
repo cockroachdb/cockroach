@@ -43,13 +43,16 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		source := NewRepeatableBatchSource(RandomBatch(rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64()))
+		batch, err := RandomBatch(rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
+		require.NoError(t, err)
+		source := NewRepeatableBatchSource(batch)
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, typs, &wg)
+	s, err := NewParallelUnorderedSynchronizer(testAllocator, inputs, typs, &wg)
+	require.NoError(t, err)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	var cancel bool
@@ -117,8 +120,9 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		ctx = context.Background()
 		wg  sync.WaitGroup
 	)
-	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
-	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	s, err := NewParallelUnorderedSynchronizer(testAllocator, inputs, []coltypes.T{coltypes.Int64}, &wg)
+	require.NoError(t, err)
+	err = execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 	require.True(t, testutils.IsError(err, expectedErr), err)
@@ -130,13 +134,15 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	typs := []coltypes.T{coltypes.Int64}
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		batch := coldata.NewMemBatchWithSize(typs, int(coldata.BatchSize()))
+		batch, err := testAllocator.NewMemBatchWithSize(typs, int(coldata.BatchSize()))
+		require.NoError(b, err)
 		batch.SetLength(coldata.BatchSize())
 		inputs[i] = NewRepeatableBatchSource(batch)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(inputs, typs, &wg)
+	s, err := NewParallelUnorderedSynchronizer(testAllocator, inputs, typs, &wg)
+	require.NoError(b, err)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

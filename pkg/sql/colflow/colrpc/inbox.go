@@ -118,7 +118,9 @@ type Inbox struct {
 var _ colexec.StaticMemoryOperator = &Inbox{}
 
 // NewInbox creates a new Inbox.
-func NewInbox(typs []coltypes.T, streamID execinfrapb.StreamID) (*Inbox, error) {
+func NewInbox(
+	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
 		return nil, err
@@ -127,9 +129,13 @@ func NewInbox(typs []coltypes.T, streamID execinfrapb.StreamID) (*Inbox, error) 
 	if err != nil {
 		return nil, err
 	}
+	zeroBatch, err := allocator.NewMemBatchWithSize(typs, 0)
+	if err != nil {
+		return nil, err
+	}
 	i := &Inbox{
 		typs:       typs,
-		zeroBatch:  coldata.NewMemBatchWithSize(typs, 0),
+		zeroBatch:  zeroBatch,
 		converter:  c,
 		serializer: s,
 		streamID:   streamID,
@@ -140,7 +146,11 @@ func NewInbox(typs []coltypes.T, streamID execinfrapb.StreamID) (*Inbox, error) 
 	}
 	i.zeroBatch.SetLength(0)
 	i.scratch.data = make([]*array.Data, len(typs))
-	i.scratch.b = coldata.NewMemBatch(typs)
+	b, err := allocator.NewMemBatch(typs)
+	if err != nil {
+		return nil, err
+	}
+	i.scratch.b = b
 	i.stateMu.bufferedMeta = make([]execinfrapb.ProducerMetadata, 0)
 	i.stateMu.nextExited = sync.NewCond(&i.stateMu)
 	return i, nil

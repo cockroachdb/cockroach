@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCoalescer(t *testing.T) {
@@ -54,7 +55,7 @@ func TestCoalescer(t *testing.T) {
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.tuples, orderedVerifier, func(input []Operator) (Operator, error) {
-			return NewCoalescerOp(input[0], tc.colTypes), nil
+			return NewCoalescerOp(testAllocator, input[0], tc.colTypes), nil
 		})
 	}
 }
@@ -70,7 +71,8 @@ func BenchmarkCoalescer(b *testing.B) {
 		sourceTypes[colIdx] = coltypes.Int64
 	}
 
-	batch := coldata.NewMemBatch(sourceTypes)
+	batch, err := testAllocator.NewMemBatch(sourceTypes)
+	require.NoError(b, err)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()

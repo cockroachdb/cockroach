@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLikeOperators(t *testing.T) {
@@ -101,7 +102,8 @@ func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes})
+	require.NoError(b, err)
 	col := batch.ColVec(0).Bytes()
 	width := 64
 	for i := 0; i < int(coldata.BatchSize()); i++ {

@@ -469,7 +469,11 @@ func (s *opTestInput) Init() {
 			}
 		}
 	}
-	s.batch = coldata.NewMemBatch(s.typs)
+	var err error
+	s.batch, err = testAllocator.NewMemBatch(s.typs)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 
 	s.selection = make([]uint16, coldata.BatchSize())
 	for i := range s.selection {
@@ -633,7 +637,11 @@ func (s *opFixedSelTestInput) Init() {
 	}
 
 	s.typs = typs
-	s.batch = coldata.NewMemBatch(typs)
+	var err error
+	s.batch, err = testAllocator.NewMemBatch(s.typs)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
@@ -908,19 +916,23 @@ type finiteBatchSource struct {
 	ZeroInputNode
 
 	repeatableBatch *RepeatableBatchSource
+	zeroBatch       coldata.Batch
 
 	usableCount int
 }
 
 var _ Operator = &finiteBatchSource{}
 
-var emptyBatch = coldata.NewMemBatchWithSize([]coltypes.T{}, 0)
-
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
+	zeroBatch, err := testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	return &finiteBatchSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
+		zeroBatch:       zeroBatch,
 		usableCount:     usableCount,
 	}
 }
@@ -934,7 +946,8 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 		f.usableCount--
 		return f.repeatableBatch.Next(ctx)
 	}
-	return emptyBatch
+	f.zeroBatch.SetLength(0)
+	return f.zeroBatch
 }
 
 // randomLengthBatchSource is an Operator that forever returns the same batch at
@@ -971,6 +984,7 @@ func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
 type finiteChunksSource struct {
 	ZeroInputNode
 	repeatableBatch *RepeatableBatchSource
+	zeroBatch       coldata.Batch
 
 	usableCount int
 	matchLen    int
@@ -980,8 +994,13 @@ type finiteChunksSource struct {
 var _ Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
+	zeroBatch, err := testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	return &finiteChunksSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
+		zeroBatch:       zeroBatch,
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -1016,7 +1035,8 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 		}
 		return batch
 	}
-	return coldata.NewMemBatch([]coltypes.T{})
+	f.zeroBatch.SetLength(0)
+	return f.zeroBatch
 }
 
 func TestOpTestInputOutput(t *testing.T) {
@@ -1040,7 +1060,8 @@ func TestOpTestInputOutput(t *testing.T) {
 
 func TestRepeatableBatchSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	require.NoError(t, err)
 	batchLen := uint16(10)
 	batch.SetLength(batchLen)
 	input := NewRepeatableBatchSource(batch)
@@ -1060,7 +1081,8 @@ func TestRepeatableBatchSource(t *testing.T) {
 
 func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch, err := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	require.NoError(t, err)
 	rng, _ := randutil.NewPseudoRand()
 	sel := randomSel(rng, 10 /* batchSize */, 0 /* probOfOmitting */)
 	batchLen := uint16(len(sel))
@@ -1133,7 +1155,11 @@ func newChunkingBatchSource(
 }
 
 func (c *chunkingBatchSource) Init() {
-	c.batch = coldata.NewMemBatch(c.typs)
+	var err error
+	c.batch, err = testAllocator.NewMemBatch(c.typs)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
 		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls())

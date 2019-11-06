@@ -100,7 +100,10 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // newColBatchScan creates a new colBatchScan operator.
 func newColBatchScan(
-	flowCtx *execinfra.FlowCtx, spec *execinfrapb.TableReaderSpec, post *execinfrapb.PostProcessSpec,
+	allocator *Allocator,
+	flowCtx *execinfra.FlowCtx,
+	spec *execinfrapb.TableReaderSpec,
+	post *execinfrapb.PostProcessSpec,
 ) (*colBatchScan, error) {
 	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
@@ -125,7 +128,7 @@ func newColBatchScan(
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	fetcher := cFetcher{}
 	if _, _, err := initCRowFetcher(
-		&fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
+		allocator, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, spec.Visibility,
 	); err != nil {
 		return nil, err
@@ -147,6 +150,7 @@ func newColBatchScan(
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
 func initCRowFetcher(
+	allocator *Allocator,
 	fetcher *cFetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
@@ -175,7 +179,7 @@ func initCRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		reverseScan, true /* returnRangeInfo */, isCheck, tableArgs,
+		allocator, reverseScan, true /* returnRangeInfo */, isCheck, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

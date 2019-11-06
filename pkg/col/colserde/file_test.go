@@ -25,7 +25,8 @@ import (
 
 func TestFileRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	typs, b := randomBatch()
+	typs, b, err := randomBatch()
+	require.NoError(t, err)
 
 	t.Run(`mem`, func(t *testing.T) {
 		// Make a copy of the original batch because the converter modifies and
