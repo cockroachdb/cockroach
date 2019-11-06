@@ -2903,11 +2903,14 @@ func TestRefreshNoFalsePositive(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	txn := db.NewTxn(ctx, "test")
-	origTimestamp := txn.OrigTimestamp()
+	origTimestamp := txn.ReadTimestamp()
 	log.Infof(ctx, "test txn starting @ %s", origTimestamp)
 	require.NoError(t, db.Put(ctx, "a", "test"))
 	// Attempt to overwrite b, which will result in a push.
 	require.NoError(t, txn.Put(ctx, "a", "test2"))
+	afterPush := txn.ReadTimestamp()
+	require.True(t, origTimestamp.Less(afterPush))
+	log.Infof(ctx, "txn pushed to %s", afterPush)
 
 	// Read a so that we have to refresh it when we're pushed again.
 	_, err := txn.Get(ctx, "a")
@@ -2919,6 +2922,8 @@ func TestRefreshNoFalsePositive(t *testing.T) {
 	// test is to check that this push succeeds in refreshing "a".
 	log.Infof(ctx, "test txn writing b")
 	require.NoError(t, txn.Put(ctx, "b", "test2"))
+	require.True(t, afterPush.Less(txn.ReadTimestamp()))
+	log.Infof(ctx, "txn pushed to %s", txn.ReadTimestamp())
 
 	require.NoError(t, txn.Commit(ctx))
 }

@@ -107,8 +107,7 @@ func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timest
 func canSendToFollower(clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest) bool {
 	return batchCanBeEvaluatedOnFollower(ba) &&
 		txnCanPerformFollowerRead(ba.Txn) &&
-		canUseFollowerRead(clusterID, st,
-			forward(forward(ba.Txn.OrigTimestamp, ba.Txn.RefreshedTimestamp), ba.Txn.MaxTimestamp))
+		canUseFollowerRead(clusterID, st, forward(ba.Txn.RefreshedTimestamp, ba.Txn.MaxTimestamp))
 }
 
 func forward(ts hlc.Timestamp, to hlc.Timestamp) hlc.Timestamp {
