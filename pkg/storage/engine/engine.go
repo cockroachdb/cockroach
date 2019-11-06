@@ -116,11 +116,23 @@ type Iterator interface {
 	// and the encoded SST data specified, within the provided key range. Returns
 	// stats on skipped KVs, or an error if a collision is found.
 	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
+	// SetUpperBound installs a new upper bound for this iterator.
+	SetUpperBound(roachpb.Key)
+	// Stats returns statistics about the iterator.
+	Stats() IteratorStats
+}
+
+// MVCCIterator is an interface that extends Iterator and provides concrete
+// implementations for MVCCGet and MVCCScan operations. It is used by instances
+// of the interface backed by RocksDB iterators to avoid cgo hops.
+type MVCCIterator interface {
+	Iterator
+	// MVCCOpsSpecialized returns whether the iterator has a specialized
+	// implementation of MVCCGet and MVCCScan. This is exposed as a method
+	// so that wrapper types can defer to their wrapped iterators.
+	MVCCOpsSpecialized() bool
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
-	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
-	// package-level MVCCGet, or one of its variants, instead.
 	MVCCGet(
 		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 	) (*roachpb.Value, *roachpb.Intent, error)
@@ -129,20 +141,9 @@ type Iterator interface {
 	// returned raw, as a series of buffers of length-prefixed slices,
 	// alternating from key to value, where numKVs specifies the number of pairs
 	// in the buffer.
-	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
-	// package-level MVCCScan, or one of its variants, instead. For correct
-	// operation, the caller must set the lower and upper bounds on the iterator
-	// before calling this method.
-	//
-	// TODO(peter): unexport this method.
 	MVCCScan(
 		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 	) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
-	// SetUpperBound installs a new upper bound for this iterator.
-	SetUpperBound(roachpb.Key)
-
-	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an Iterator.
