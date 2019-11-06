@@ -1462,8 +1462,9 @@ func mvccPutInternal(
 		readTimestamp = txn.OrigTimestamp
 		readTimestamp.Forward(txn.RefreshedTimestamp)
 		if readTimestamp != timestamp {
-			return errors.Errorf("mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
-				txn.OrigTimestamp, timestamp)
+			return errors.AssertionFailedf(
+				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
+				readTimestamp, timestamp)
 		}
 		writeTimestamp = txn.Timestamp
 	}
