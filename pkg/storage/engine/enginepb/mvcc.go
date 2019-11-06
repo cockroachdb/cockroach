@@ -11,8 +11,13 @@
 package enginepb
 
 import (
+	"fmt"
+	"io"
 	"math"
 	"sort"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TxnEpoch is a zero-indexed epoch for a transaction. When a transaction
@@ -189,4 +194,147 @@ func (meta *MVCCMetadata) GetIntentValue(seq TxnSeq) ([]byte, bool) {
 		return meta.IntentHistory[index].Value, true
 	}
 	return nil, false
+}
+
+// String implements the fmt.Stringer interface.
+func (m *MVCCMetadata_SequencedIntent) String() string {
+	var buf strings.Builder
+	m.FormatW(&buf, false /* expand */)
+	return buf.String()
+}
+
+// Format implements the fmt.Formatter interface.
+func (m *MVCCMetadata_SequencedIntent) Format(f fmt.State, r rune) {
+	m.FormatW(f, f.Flag('+'))
+}
+
+// FormatW enables grouping formatters around a single buffer while
+// avoiding copies.
+func (m *MVCCMetadata_SequencedIntent) FormatW(buf io.Writer, expand bool) {
+	fmt.Fprintf(buf,
+		"{%d %s}",
+		m.Sequence,
+		FormatBytesAsValue(m.Value))
+}
+
+// String implements the fmt.Stringer interface.
+func (meta *MVCCMetadata) String() string {
+	var buf strings.Builder
+	meta.FormatW(&buf, false /* expand */)
+	return buf.String()
+}
+
+// Format implements the fmt.Formatter interface.
+func (meta *MVCCMetadata) Format(f fmt.State, r rune) {
+	meta.FormatW(f, f.Flag('+'))
+}
+
+// FormatW enables grouping formatters around a single buffer while
+// avoiding copies.
+func (meta *MVCCMetadata) FormatW(buf io.Writer, expand bool) {
+	fmt.Fprintf(buf, "txn={%s} ts=%s del=%t klen=%d vlen=%d",
+		meta.Txn,
+		meta.Timestamp,
+		meta.Deleted,
+		meta.KeyBytes,
+		meta.ValBytes,
+	)
+	if len(meta.RawBytes) > 0 {
+		if expand {
+			fmt.Fprintf(buf, " raw=%s", FormatBytesAsValue(meta.RawBytes))
+		} else {
+			fmt.Fprintf(buf, " rawlen=%d", len(meta.RawBytes))
+		}
+	}
+	if nih := len(meta.IntentHistory); nih > 0 {
+		if expand {
+			fmt.Fprint(buf, " ih={")
+			for i := range meta.IntentHistory {
+				meta.IntentHistory[i].FormatW(buf, expand)
+			}
+			fmt.Fprint(buf, "}")
+		} else {
+			fmt.Fprintf(buf, " nih=%d", nih)
+		}
+	}
+}
+
+// SafeMessage implements the SafeMessager interface.
+//
+// This method should be kept largely synchronized with String(), except that it
+// can't include sensitive info (e.g. the transaction key).
+func (meta *MVCCMetadata) SafeMessage() string {
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "{%s} ts=%s del=%t klen=%d vlen=%d",
+		meta.Txn.SafeMessage(),
+		meta.Timestamp,
+		meta.Deleted,
+		meta.KeyBytes,
+		meta.ValBytes,
+	)
+	if len(meta.RawBytes) > 0 {
+		fmt.Fprintf(&buf, " rawlen=%d", len(meta.RawBytes))
+	}
+	if nih := len(meta.IntentHistory); nih > 0 {
+		fmt.Fprintf(&buf, " nih=%d", nih)
+	}
+	return buf.String()
+}
+
+// String implements the fmt.Stringer interface.
+// We implement by value as the object may not reside on the heap.
+func (t TxnMeta) String() string {
+	var buf strings.Builder
+	t.FormatW(&buf)
+	return buf.String()
+}
+
+// FormatW enables grouping formatters around a single buffer while
+// avoiding copies.
+// We implement by value as the object may not reside on the heap.
+func (t TxnMeta) FormatW(buf io.Writer) {
+	// Compute priority as a floating point number from 0-100 for readability.
+	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
+	fmt.Fprintf(buf,
+		"id=%s key=%s pri=%.8f epo=%d ts=%s min=%s seq=%d",
+		t.Short(),
+		FormatBytesAsKey(t.Key),
+		floatPri,
+		t.Epoch,
+		t.Timestamp,
+		t.MinTimestamp,
+		t.Sequence)
+}
+
+// SafeMessage implements the SafeMessager interface.
+//
+// This method should be kept largely synchronized with String(), except that it
+// can't include sensitive info (e.g. the transaction key).
+//
+// We implement by value as the object may not reside on the heap.
+func (t TxnMeta) SafeMessage() string {
+	var buf strings.Builder
+	// Compute priority as a floating point number from 0-100 for readability.
+	floatPri := 100 * float64(t.Priority) / float64(math.MaxInt32)
+	fmt.Fprintf(&buf,
+		"id=%s pri=%.8f epo=%d ts=%s min=%s seq=%d",
+		t.Short(),
+		floatPri,
+		t.Epoch,
+		t.Timestamp,
+		t.MinTimestamp,
+		t.Sequence)
+	return buf.String()
+}
+
+var _ log.SafeMessager = (*TxnMeta)(nil)
+
+// FormatBytesAsKey is injected by module roachpb as dependency upon initialization.
+var FormatBytesAsKey = func(k []byte) string {
+	return string(k)
+}
+
+// FormatBytesAsValue is injected by module roachpb as dependency upon initialization.
+var FormatBytesAsValue = func(v []byte) string {
+	return string(v)
 }
