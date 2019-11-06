@@ -25,6 +25,7 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name  'TYPE' typename 'COLLATE' collation_name 
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name  'TYPE' typename  'USING' a_expr
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name  'TYPE' typename  
+	| 'ALTER' 'TABLE' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'INDEX' table_index_name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'SET' 'DEFAULT' a_expr
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'DEFAULT'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'SET' 'DEFAULT' a_expr
@@ -51,3 +52,4 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name  'TYPE' typename 'COLLATE' collation_name 
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name  'TYPE' typename  'USING' a_expr
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name  'TYPE' typename  
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'INDEX' table_index_name
