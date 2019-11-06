@@ -36,19 +36,17 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		}
 
 		// The batch timestamp is the timestamp at which reads are performed. We set
-		// this to the txn's original timestamp, even if the txn's provisional
+		// this to the txn's read timestamp, even if the txn's provisional
 		// commit timestamp has been forwarded, so that all reads within a txn
 		// observe the same snapshot of the database regardless of how the
 		// provisional commit timestamp evolves..
 		//
 		// Note that writes will be performed at the provisional commit timestamp,
 		// txn.Timestamp, regardless of the batch timestamp.
-		ba.Timestamp = txn.OrigTimestamp
-		// If a refreshed timestamp is set for the transaction, forward
-		// the batch timestamp to it. The refreshed timestamp indicates a
-		// future timestamp at which the transaction would like to commit
-		// to safely avoid a serializable transaction restart.
-		ba.Timestamp.Forward(txn.RefreshedTimestamp)
+		ba.Timestamp = txn.RefreshedTimestamp
+		// For compatibility with 19.2 nodes which might not have set RefreshedTimestamp,
+		// fallback to OrigTimestamp.
+		ba.Timestamp.Forward(txn.OrigTimestamp)
 	} else {
 		// When not transactional, allow empty timestamp and use nowFn instead
 		if ba.Timestamp == (hlc.Timestamp{}) {

@@ -320,14 +320,12 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 
 // ReadTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
-	ts := m.txn.OrigTimestamp
-	ts.Forward(m.txn.RefreshedTimestamp)
-	return ts
+	return m.txn.RefreshedTimestamp
 }
 
 // CommitTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
-	return m.txn.OrigTimestamp
+	return m.txn.RefreshedTimestamp
 }
 
 // CommitTimestampFixed is part of the TxnSender interface.
@@ -338,9 +336,13 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 // SetFixedTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
 	m.txn.Timestamp = ts
-	m.txn.OrigTimestamp = ts
+	m.txn.RefreshedTimestamp = ts
 	m.txn.MaxTimestamp = ts
 	m.txn.OrigTimestampWasObserved = true
+
+	// For backwards compatibility with 19.2, set the OrigTimestamp too (although
+	// not really needed by this Mock sender).
+	m.txn.OrigTimestamp = ts
 }
 
 // ManualRestart is part of the TxnSender interface.

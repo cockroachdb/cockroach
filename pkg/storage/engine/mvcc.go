@@ -757,10 +757,10 @@ func MVCCGetAsTxn(
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, engine, key, timestamp, MVCCGetOptions{
 		Txn: &roachpb.Transaction{
-			TxnMeta:       txnMeta,
-			Status:        roachpb.PENDING,
-			OrigTimestamp: txnMeta.Timestamp,
-			MaxTimestamp:  txnMeta.Timestamp,
+			TxnMeta:            txnMeta,
+			Status:             roachpb.PENDING,
+			RefreshedTimestamp: txnMeta.Timestamp,
+			MaxTimestamp:       txnMeta.Timestamp,
 		}})
 }
 
@@ -1397,8 +1397,10 @@ func mvccPutInternal(
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
 	if txn != nil {
-		readTimestamp = txn.OrigTimestamp
-		readTimestamp.Forward(txn.RefreshedTimestamp)
+		readTimestamp = txn.RefreshedTimestamp
+		// For compatibility with 19.2 nodes which might not have set
+		// RefreshedTimestamp, fallback to OrigTimestamp.
+		readTimestamp.Forward(txn.OrigTimestamp)
 		if readTimestamp != timestamp {
 			return errors.AssertionFailedf(
 				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
