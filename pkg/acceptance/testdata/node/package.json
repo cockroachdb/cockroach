@@ -14,7 +14,7 @@
   "dependencies": {
     "pg": "7.3.0",
     "pg-error-codes": "1.0.0",
-    "sequelize": "^4.37.1",
+    "sequelize": "^5.15.1",
     "sequelize-cockroachdb": "^1.0.2"
   },
   "resolutions": {
