@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/pkg/errors"
 )
@@ -86,7 +87,8 @@ type aggregateFunc interface {
 type orderedAggregator struct {
 	OneInputNode
 
-	done bool
+	allocator coldata.BatchAllocator
+	done      bool
 
 	aggCols  [][]uint32
 	aggTypes [][]coltypes.T
@@ -137,6 +139,7 @@ var _ StaticMemoryOperator = &orderedAggregator{}
 // function. The slice at that index specifies the columns of the input batch
 // that the aggregate function should work on.
 func NewOrderedAggregator(
+	allocator coldata.BatchAllocator,
 	input Operator,
 	colTypes []coltypes.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
@@ -184,10 +187,11 @@ func NewOrderedAggregator(
 	*a = orderedAggregator{
 		OneInputNode: NewOneInputNode(op),
 
-		aggCols:  aggCols,
-		aggTypes: aggTypes,
-		groupCol: groupCol,
-		isScalar: isScalar,
+		allocator: allocator,
+		aggCols:   aggCols,
+		aggTypes:  aggTypes,
+		groupCol:  groupCol,
+		isScalar:  isScalar,
 	}
 
 	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns)
@@ -256,16 +260,23 @@ func (a *orderedAggregator) initWithOutputBatchSize(outputSize uint16) {
 func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSize int) {
 	a.input.Init()
 
+	var err error
 	// Twice the input batchSize is allocated to avoid having to check for
 	// overflow when outputting.
 	a.scratch.inputSize = inputSize * 2
 	a.scratch.outputSize = outputSize
-	a.scratch.Batch = coldata.NewMemBatchWithSize(a.outputTypes, a.scratch.inputSize)
+	a.scratch.Batch, err = a.allocator.NewMemBatchWithSize(a.outputTypes, a.scratch.inputSize)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 	for i := 0; i < len(a.outputTypes); i++ {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
-	a.unsafeBatch = coldata.NewMemBatchWithSize(a.outputTypes, outputSize)
+	a.unsafeBatch, err = a.allocator.NewMemBatchWithSize(a.outputTypes, outputSize)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 }
 
 func (a *orderedAggregator) Init() {
@@ -294,7 +305,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			// "truncation" behavior, i.e. we want to copy over the remaining tuples
 			// such the "lengths" of the vectors are equal to the number of copied
 			// elements.
-			vec.Append(
+			if err := a.allocator.Append(
+				vec,
 				coldata.SliceArgs{
 					Src:         vec,
 					ColType:     a.outputTypes[i],
@@ -302,7 +314,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 					SrcStartIdx: uint64(a.scratch.outputSize),
 					SrcEndIdx:   uint64(a.scratch.resumeIdx + 1),
 				},
-			)
+			); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
 			// Now we need to restore the desired length for the Vec.
 			vec.SetLength(a.scratch.inputSize)
 			a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)

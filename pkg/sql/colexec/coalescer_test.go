@@ -54,7 +54,7 @@ func TestCoalescer(t *testing.T) {
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.tuples, orderedVerifier, func(input []Operator) (Operator, error) {
-			return NewCoalescerOp(input[0], tc.colTypes), nil
+			return NewCoalescerOp(testAllocator, input[0], tc.colTypes), nil
 		})
 	}
 }

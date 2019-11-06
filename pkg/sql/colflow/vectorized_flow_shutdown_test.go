@@ -145,7 +145,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
 
-				hashRouter, hashRouterOutputs := colexec.NewHashRouter(hashRouterInput, typs, []int{0}, numHashRouterOutputs)
+				hashRouter, hashRouterOutputs := colexec.NewHashRouter(coldata.NewBatchAllocator(), hashRouterInput, typs, []int{0}, numHashRouterOutputs)
 				for i := 0; i < numInboxes; i++ {
 					inbox, err := colrpc.NewInbox(typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)

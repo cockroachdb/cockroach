@@ -54,6 +54,7 @@ func (o *filterFeedOperator) reset() {
 }
 
 func newJoinerFilter(
+	allocator coldata.BatchAllocator,
 	leftSourceTypes []coltypes.T,
 	rightSourceTypes []coltypes.T,
 	filterConstructor func(Operator) (Operator, error),
@@ -63,6 +64,7 @@ func newJoinerFilter(
 	filter, err := filterConstructor(input)
 	return &joinerFilter{
 		Operator:         filter,
+		allocator:        allocator,
 		leftSourceTypes:  leftSourceTypes,
 		rightSourceTypes: rightSourceTypes,
 		input:            input,
@@ -74,6 +76,7 @@ func newJoinerFilter(
 type joinerFilter struct {
 	Operator
 
+	allocator        coldata.BatchAllocator
 	leftSourceTypes  []coltypes.T
 	rightSourceTypes []coltypes.T
 	input            *filterFeedOperator
@@ -123,13 +126,17 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 			idx = int(sel[idx])
 		}
 		for colIdx := 0; colIdx < batch.Width(); colIdx++ {
-			f.input.batch.ColVec(colOffset + colIdx).Append(coldata.SliceArgs{
-				Src:         batch.ColVec(colIdx),
-				ColType:     sourceTypes[colIdx],
-				DestIdx:     0,
-				SrcStartIdx: uint64(idx),
-				SrcEndIdx:   uint64(idx + 1),
-			})
+			if err := f.allocator.Append(
+				f.input.batch.ColVec(colOffset+colIdx),
+				coldata.SliceArgs{
+					Src:         batch.ColVec(colIdx),
+					ColType:     sourceTypes[colIdx],
+					DestIdx:     0,
+					SrcStartIdx: uint64(idx),
+					SrcEndIdx:   uint64(idx + 1),
+				}); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
 		}
 	}
 	if lBatch != nil {

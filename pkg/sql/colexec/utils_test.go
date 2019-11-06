@@ -33,6 +33,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testAllocator is a coldata.BatchAllocator with an unlimited budget for use
+// in tests.
+var testAllocator = coldata.NewBatchAllocator()
+
 // tuple represents a row with any-type columns.
 type tuple []interface{}
 

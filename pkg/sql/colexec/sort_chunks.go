@@ -26,7 +26,11 @@ import (
 // the columns in the input operator. The input tuples must be sorted on first
 // matchLen columns.
 func NewSortChunks(
-	input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, matchLen int,
+	allocator coldata.BatchAllocator,
+	input Operator,
+	inputTypes []coltypes.T,
+	orderingCols []execinfrapb.Ordering_Column,
+	matchLen int,
 ) (Operator, error) {
 	if matchLen == len(orderingCols) {
 		// input is already ordered on all orderingCols, so there is nothing more
@@ -38,7 +42,7 @@ func NewSortChunks(
 			"already ordered on at least one column. matchLen = %d was given.",
 			matchLen))
 	}
-	chunker, err := newChunker(input, inputTypes, orderingCols[:matchLen])
+	chunker, err := newChunker(allocator, input, inputTypes, orderingCols[:matchLen])
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +157,8 @@ const (
 type chunker struct {
 	OneInputNode
 	NonExplainable
+
+	allocator coldata.BatchAllocator
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []coltypes.T
 	// inputDone indicates whether input has been fully consumed.
@@ -196,7 +202,10 @@ type chunker struct {
 var _ spooler = &chunker{}
 
 func newChunker(
-	input Operator, inputTypes []coltypes.T, alreadySortedCols []execinfrapb.Ordering_Column,
+	allocator coldata.BatchAllocator,
+	input Operator,
+	inputTypes []coltypes.T,
+	alreadySortedCols []execinfrapb.Ordering_Column,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))
@@ -209,6 +218,7 @@ func newChunker(
 	deselector := NewDeselectorOp(input, inputTypes)
 	return &chunker{
 		OneInputNode:      NewOneInputNode(deselector),
+		allocator:         allocator,
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,
 		partitioners:      partitioners,
@@ -361,7 +371,8 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 // buffered tuples.
 func (s *chunker) buffer(start uint16, end uint16) {
 	for i := 0; i < len(s.bufferedColumns); i++ {
-		s.bufferedColumns[i].Append(
+		if err := s.allocator.Append(
+			s.bufferedColumns[i],
 			coldata.SliceArgs{
 				ColType:     s.inputTypes[i],
 				Src:         s.batch.ColVec(i),
@@ -369,7 +380,9 @@ func (s *chunker) buffer(start uint16, end uint16) {
 				SrcStartIdx: uint64(start),
 				SrcEndIdx:   uint64(end),
 			},
-		)
+		); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
 	}
 	s.buffered += uint64(end - start)
 }

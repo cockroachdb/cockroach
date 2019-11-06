@@ -26,6 +26,7 @@ import (
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
+	allocator   coldata.BatchAllocator
 	inputs      []Operator
 	ordering    sqlbase.ColumnOrdering
 	columnTypes []coltypes.T
@@ -53,9 +54,13 @@ func (o *OrderedSynchronizer) Child(nth int) execinfra.OpNode {
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
-	inputs []Operator, typs []coltypes.T, ordering sqlbase.ColumnOrdering,
+	allocator coldata.BatchAllocator,
+	inputs []Operator,
+	typs []coltypes.T,
+	ordering sqlbase.ColumnOrdering,
 ) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
+		allocator:   allocator,
 		inputs:      inputs,
 		ordering:    ordering,
 		columnTypes: typs,
@@ -103,7 +108,8 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				srcStartIdx = sel[srcStartIdx]
 			}
-			o.output.ColVec(i).Append(
+			if err := o.allocator.Append(
+				o.output.ColVec(i),
 				coldata.SliceArgs{
 					ColType:     o.columnTypes[i],
 					Src:         vec,
@@ -111,7 +117,9 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 					SrcStartIdx: uint64(srcStartIdx),
 					SrcEndIdx:   uint64(srcStartIdx + 1),
 				},
-			)
+			); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
 		}
 
 		// Advance the input batch, fetching a new batch if necessary.

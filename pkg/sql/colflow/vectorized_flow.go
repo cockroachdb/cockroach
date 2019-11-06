@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -298,7 +299,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	for i := range hashCols {
 		hashCols[i] = int(output.HashColumns[i])
 	}
-	router, outputs := colexec.NewHashRouter(input, outputTyps, hashCols, len(output.Streams))
+	router, outputs := colexec.NewHashRouter(coldata.NewBatchAllocator(), input, outputTyps, hashCols, len(output.Streams))
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
 	}
@@ -410,7 +411,7 @@ func (s *vectorizedFlowCreator) setupInput(
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
-				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				coldata.NewBatchAllocator(), inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {

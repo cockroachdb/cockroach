@@ -1663,6 +1663,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1728,6 +1729,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1797,6 +1799,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 						a, err := NewMergeJoinOp(
+							testAllocator,
 							sqlbase.InnerJoin,
 							leftSource,
 							rightSource,
@@ -1851,6 +1854,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1969,6 +1973,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
 
 							a, err := NewMergeJoinOp(
+								testAllocator,
 								sqlbase.InnerJoin,
 								leftSource,
 								rightSource,

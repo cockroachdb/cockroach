@@ -182,6 +182,10 @@ func TestOutboxInbox(t *testing.T) {
 	serverStreamNotification := <-mockServer.InboundStreams
 	serverStream := serverStreamNotification.Stream
 
+	// testAllocator is a coldata.BatchAllocator with an unlimited budget for use
+	// in tests.
+	var testAllocator = coldata.NewBatchAllocator()
+
 	// Do the actual testing.
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
@@ -267,15 +271,18 @@ func TestOutboxInbox(t *testing.T) {
 			if cancellationScenario == noCancel {
 				// Accumulate batches to check for correctness.
 				// Copy batch since it's not safe to reuse after calling Next.
-				batchCopy := coldata.NewMemBatchWithSize(typs, int(outputBatch.Length()))
+				batchCopy, err := testAllocator.NewMemBatchWithSize(typs, int(outputBatch.Length()))
+				require.NoError(t, err)
 				for i := range typs {
-					batchCopy.ColVec(i).Append(
+					err = testAllocator.Append(
+						batchCopy.ColVec(i),
 						coldata.SliceArgs{
 							ColType:   typs[i],
 							Src:       outputBatch.ColVec(i),
 							SrcEndIdx: uint64(outputBatch.Length()),
 						},
 					)
+					require.NoError(t, err)
 				}
 				batchCopy.SetLength(outputBatch.Length())
 				outputBatches.Add(batchCopy)

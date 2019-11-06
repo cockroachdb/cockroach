@@ -931,6 +931,7 @@ func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
 		leftSource := newOpTestInput(1, tc.leftTuples, tc.leftTypes)
 		rightSource := newOpTestInput(1, tc.rightTuples, tc.rightTypes)
 		hjOp, err := NewEqHashJoinerOp(
+			testAllocator,
 			leftSource, rightSource,
 			tc.leftEqCols, tc.rightEqCols,
 			tc.leftOutCols, tc.rightOutCols,
@@ -1019,7 +1020,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 										}
 
 										hj := &hashJoinEqOp{
-											spec: spec,
+											allocator: testAllocator,
+											spec:      spec,
 										}
 
 										hj.Init()

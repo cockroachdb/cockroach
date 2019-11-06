@@ -30,9 +30,14 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, k uint16,
+	allocator coldata.BatchAllocator,
+	input Operator,
+	inputTypes []coltypes.T,
+	orderingCols []execinfrapb.Ordering_Column,
+	k uint16,
 ) Operator {
 	return &topKSorter{
+		allocator:    allocator,
 		OneInputNode: NewOneInputNode(input),
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
@@ -60,6 +65,8 @@ const (
 
 type topKSorter struct {
 	OneInputNode
+
+	allocator    coldata.BatchAllocator
 	orderingCols []execinfrapb.Ordering_Column
 	inputTypes   []coltypes.T
 	k            uint16 // TODO(solon): support larger k values
@@ -130,7 +137,8 @@ func (t *topKSorter) spool(ctx context.Context) {
 			destVec := t.topK.ColVec(i)
 			vec := inputBatch.ColVec(i)
 			colType := t.inputTypes[i]
-			destVec.Append(
+			if err := t.allocator.Append(
+				destVec,
 				coldata.SliceArgs{
 					ColType:   colType,
 					Src:       vec,
@@ -138,7 +146,9 @@ func (t *topKSorter) spool(ctx context.Context) {
 					DestIdx:   toLength,
 					SrcEndIdx: uint64(fromLength),
 				},
-			)
+			); err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
 		}
 		spooledRows += fromLength
 		remainingRows -= fromLength

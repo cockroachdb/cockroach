@@ -83,6 +83,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput.SetOutputWatch(mjInputWatch)
 
 		mergeJoiner, err := NewMergeJoinOp(
+			testAllocator,
 			sqlbase.InnerJoin,
 			leftInput,
 			rightInput,

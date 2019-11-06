@@ -55,7 +55,9 @@ type aggregatorTestCase struct {
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new func(input Operator,
+	new func(
+		allocator coldata.BatchAllocator,
+		input Operator,
 		colTypes []coltypes.T,
 		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
@@ -267,6 +269,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input, nil /* typs */)
 			a, err := NewOrderedAggregator(
+				testAllocator,
 				tupleSource,
 				tc.colTypes,
 				tc.aggFns,
@@ -293,6 +296,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 						runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
 							func(input []Operator) (Operator, error) {
 								return agg.new(
+									testAllocator,
 									input[0],
 									tc.colTypes,
 									tc.aggFns,
@@ -375,7 +379,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				}
 				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
 					func(input []Operator) (Operator, error) {
-						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+						return agg.new(testAllocator, input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
 		}
@@ -458,7 +462,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					tc.expected,
 					orderedVerifier,
 					func(input []Operator) (Operator, error) {
-						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+						return agg.new(testAllocator, input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
 		}
@@ -517,6 +521,7 @@ func TestAggregatorRandom(t *testing.T) {
 
 							source := newChunkingBatchSource(typs, cols, uint64(nTuples))
 							a, err := agg.new(
+								testAllocator,
 								source,
 								typs,
 								[]execinfrapb.AggregatorSpec_Func{
@@ -674,6 +679,7 @@ func BenchmarkAggregator(b *testing.B) {
 											nCols = 0
 										}
 										a, err := agg.new(
+											testAllocator,
 											source,
 											colTypes,
 											[]execinfrapb.AggregatorSpec_Func{aggFn},
@@ -826,7 +832,7 @@ func TestHashAggregator(t *testing.T) {
 			t.Fatal(err)
 		}
 		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []Operator) (Operator, error) {
-			return NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+			return NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 		})
 	}
 }
