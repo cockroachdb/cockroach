@@ -70,6 +70,12 @@ enum ReplicaType {
   // this type should be treated accordingly and no work should be assigned to
   // it.
   VOTER_OUTGOING = 3;
+  // VOTER_DEMOTING indicates a voting replica that will become a learner once
+  // the ongoing atomic replication change is finalized; that is, it is in the
+  // process of being demoted. Since learners are currently short-lived, this
+  // replica is really being removed, with an intermediate step, and no work
+  // should be assigned to it.
+  VOTER_DEMOTING = 4;
   // LEARNER indicates a replica that applies committed entries, but
   // does not count towards the quorum(s). Learners do not vote for leadership
   // nor do their acknowledged log entries get taken into account for

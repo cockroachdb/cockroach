@@ -45,6 +45,10 @@ func predOutgoing(rDesc roachpb.ReplicaDescriptor) bool {
 	return rDesc.GetType() == roachpb.VOTER_OUTGOING
 }
 
+func predDemoting(rDesc roachpb.ReplicaDescriptor) bool {
+	return rDesc.GetType() == roachpb.VOTER_DEMOTING
+}
+
 type replicationTestKnobs struct {
 	storeKnobs                       storage.StoreTestingKnobs
 	replicaAddStopAfterLearnerAtomic int64
@@ -705,7 +709,7 @@ func TestJointConfigLease(t *testing.T) {
 	// it's asked to do.
 	desc = tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
 	err = tc.TransferRangeLease(desc, tc.Target(1))
-	exp = `cannot transfer lease to replica of type VOTER_OUTGOING`
+	exp = `cannot transfer lease to replica of type VOTER_DEMOTING`
 	require.True(t, testutils.IsError(err, exp), err)
 }
 
@@ -776,17 +780,17 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	require.False(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
 	scratchDesc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 
-	// Re-adding the voter (and remaining in joint config) does.
+	// Re-add the voter and remain in joint config.
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
 	require.Len(t, scratchDesc.Replicas().Filter(predIncoming), 1)
 
 	// Can't serve follower read from the VOTER_INCOMING.
 	check()
 
-	// Removing the voter (and remaining in joint config) does.
+	// Remove the voter and remain in joint config.
 	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
-	require.Len(t, scratchDesc.Replicas().Filter(predOutgoing), 1)
+	require.Len(t, scratchDesc.Replicas().Filter(predDemoting), 1)
 
 	// Can't serve follower read from the VOTER_OUTGOING.
 	check()
@@ -836,13 +840,13 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 
 	// AdminRelocateRange should leave joint configs before doing its thing.
 	//
-	// Before: 1 (voter), 2 (voter), 4 (outgoing)
+	// Before: 1 (voter), 2 (voter), 4 (demoting)
 	// After: 1 (voter), 2 (voter), 3 (voter)
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
 	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
 	desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(3))
 	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-	require.Len(t, desc.Replicas().Filter(predOutgoing), 1)
+	require.Len(t, desc.Replicas().Filter(predDemoting), 1)
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 0)
 	check([]roachpb.ReplicationTarget{tc.Target(0), tc.Target(1), tc.Target(2)})
 }
@@ -906,29 +910,29 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	// desc{1,2,3} = (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL) (VOTER_FULL, VOTER_INCOMING)
 	checkFails()
 
-	// Turn the incoming voters on desc1 and desc3 into VOTER_OUTGOINGs.
-	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL) (VOTER_FULL, VOTER_OUTGOING)
+	// Turn the incoming voters on desc1 and desc3 into VOTER_DEMOTINGs.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL) (VOTER_FULL, VOTER_DEMOTING)
 	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
-	require.Len(t, desc1.Replicas().Filter(predOutgoing), 1)
+	require.Len(t, desc1.Replicas().Filter(predDemoting), 1)
 	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
-	require.Len(t, desc3.Replicas().Filter(predOutgoing), 1)
+	require.Len(t, desc3.Replicas().Filter(predDemoting), 1)
 
-	// VOTER_OUTGOING on the lhs or rhs should fail.
+	// VOTER_DEMOTING on the lhs or rhs should fail.
 	checkFails()
 
 	// Add a VOTER_INCOMING to desc2 to make sure it actually excludes this type
 	// of replicas from merges (rather than really just checking whether the
 	// replica sets are equal).
-	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_OUTGOING)
+	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_DEMOTING)
 	desc2 := tc.AddReplicasOrFatal(t, splitKey1, tc.Target(1))
 	require.Len(t, desc2.Replicas().Filter(predIncoming), 1)
 
 	checkFails()
 
-	// Ditto VOTER_OUTGOING.
-	// desc{1,2,3} = (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_OUTGOING) (VOTER_FULL, VOTER_OUTGOING)
+	// Ditto VOTER_DEMOTING.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_DEMOTING)
 	desc2 = tc.RemoveReplicasOrFatal(t, desc2.StartKey.AsRawKey(), tc.Target(1))
-	require.Len(t, desc2.Replicas().Filter(predOutgoing), 1)
+	require.Len(t, desc2.Replicas().Filter(predDemoting), 1)
 
 	checkFails()
 }
@@ -1025,7 +1029,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		desc = splitAndUnsplit()
 		ltk.withStopAfterJointConfig(func() {
 			descRight := tc.RemoveReplicasOrFatal(t, desc.EndKey.AsRawKey(), tc.Target(1))
-			require.Len(t, descRight.Replicas().Filter(predOutgoing), 1, desc)
+			require.Len(t, descRight.Replicas().Filter(predDemoting), 1, desc)
 		})
 
 		// This should transition out (i.e. remove the voter on s2 for the RHS)

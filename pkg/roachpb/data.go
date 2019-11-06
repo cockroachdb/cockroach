@@ -1398,6 +1398,50 @@ func confChangeImpl(
 		return nil
 	}
 
+	for _, rDesc := range removed {
+		sl = append(sl, raftpb.ConfChangeSingle{
+			Type:   raftpb.ConfChangeRemoveNode,
+			NodeID: uint64(rDesc.ReplicaID),
+		})
+
+		switch rDesc.GetType() {
+		case VOTER_OUTGOING:
+			// If a voter is removed through joint consensus, it will
+			// be turned into an outgoing voter first.
+			if err := checkExists(rDesc); err != nil {
+				return nil, err
+			}
+		case VOTER_DEMOTING:
+			// If a voter is demoted through joint consensus, it will
+			// be turned into a demoting voter first.
+			if err := checkExists(rDesc); err != nil {
+				return nil, err
+			}
+			// It's being re-added as a learner, not only removed.
+			sl = append(sl, raftpb.ConfChangeSingle{
+				Type:   raftpb.ConfChangeAddLearnerNode,
+				NodeID: uint64(rDesc.ReplicaID),
+			})
+		case LEARNER:
+			// A learner could in theory show up in the descriptor if the
+			// removal was really a demotion and no joint consensus is used.
+			// But etcd/raft currently forces us to go through joint consensus
+			// when demoting, so demotions will always have a VOTER_DEMOTING
+			// instead. We must be straight-up removing a voter or learner, so
+			// the target should be gone from the descriptor at this point.
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
+			}
+		case VOTER_FULL:
+			// A voter can't be in the descriptor if it's being removed.
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, errors.Errorf("can't remove replica in state %v", rDesc.GetType())
+		}
+	}
+
 	for _, rDesc := range added {
 		// The incoming descriptor must also be present in the set of all
 		// replicas, which is ultimately the authoritative one because that's
@@ -1415,40 +1459,22 @@ func confChangeImpl(
 			// We're adding a voter, but will transition into a joint config
 			// first.
 			changeType = raftpb.ConfChangeAddNode
+		case VOTER_DEMOTING:
+			// A voter is demoting, so it was just removed and re-added in the
+			// `removals` handler. We should not see it again here.
+			return nil, errors.Errorf("demoting voter should not be in `added`: %+v", added)
 		case LEARNER:
-			// We're adding a new learner. Note that we're guaranteed by
-			// virtue of the upstream ChangeReplicas txn that this learner
-			// is not currently a voter. If we wanted to support that (i.e.
-			// demotions) we'd need to introduce a new
-			// replica type VOTER_DEMOTING for that purpose.
+			// We're adding a learner.
+			// Note that we're guaranteed by virtue of the upstream
+			// ChangeReplicas txn that this learner is not currently a voter.
+			// Demotions (i.e. transitioning from voter to learner) are not
+			// represented in `added`; they're handled in `removed` above.
 			changeType = raftpb.ConfChangeAddLearnerNode
 		default:
 			return nil, errors.Errorf("can't add replica in state %v", rDesc.GetType())
 		}
 		sl = append(sl, raftpb.ConfChangeSingle{
 			Type:   changeType,
-			NodeID: uint64(rDesc.ReplicaID),
-		})
-	}
-
-	for _, rDesc := range removed {
-		switch rDesc.GetType() {
-		case VOTER_OUTGOING:
-			// If a voter is removed through joint consensus, it will
-			// be turned into an outgoing voter first.
-			if err := checkExists(rDesc); err != nil {
-				return nil, err
-			}
-		case VOTER_FULL, LEARNER:
-			// A learner or full voter can't be in the desc after.
-			if err := checkNotExists(rDesc); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, errors.Errorf("can't remove replica in state %v", rDesc.GetType())
-		}
-		sl = append(sl, raftpb.ConfChangeSingle{
-			Type:   raftpb.ConfChangeRemoveNode,
 			NodeID: uint64(rDesc.ReplicaID),
 		})
 	}
@@ -1460,7 +1486,7 @@ func confChangeImpl(
 	var enteringJoint bool
 	for _, rDesc := range replicas {
 		switch rDesc.GetType() {
-		case VOTER_INCOMING, VOTER_OUTGOING:
+		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING:
 			enteringJoint = true
 		default:
 		}
@@ -1538,9 +1564,10 @@ func (crt ChangeReplicasTrigger) String() string {
 			// TODO(tbg): could list the replicas that will actually leave the
 			// voter set.
 			fmt.Fprintf(&chgS, "LEAVE_JOINT")
-		}
-		if _, ok := ccv2.EnterJoint(); ok {
-			fmt.Fprintf(&chgS, "ENTER_JOINT ")
+		} else if _, ok := ccv2.EnterJoint(); ok {
+			fmt.Fprintf(&chgS, "ENTER_JOINT(%s) ", raftpb.ConfChangesToString(ccv2.Changes))
+		} else {
+			fmt.Fprintf(&chgS, "SIMPLE(%s) ", raftpb.ConfChangesToString(ccv2.Changes))
 		}
 	}
 	if len(added) > 0 {
