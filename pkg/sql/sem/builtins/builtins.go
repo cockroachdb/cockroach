@@ -4083,29 +4083,29 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 	return makeBuiltin(tree.FunctionProperties{NullableArgs: true},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
-			ReturnType: tree.FixedReturnType(types.Bytes),
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return hashBuiltinImpl(newHash, args)
+				h := newHash()
+				if ok, err := feedHash(h, args); !ok || err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info: info,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
-			ReturnType: tree.FixedReturnType(types.Bytes),
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return hashBuiltinImpl(newHash, args)
+				h := newHash()
+				if ok, err := feedHash(h, args); !ok || err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info: info,
 		},
 	)
-}
-
-func hashBuiltinImpl(newHash func() hash.Hash, args tree.Datums) (tree.Datum, error) {
-	h := newHash()
-	if ok, err := feedHash(h, args); !ok || err != nil {
-		return tree.DNull, err
-	}
-	return tree.NewDBytes(tree.DBytes(fmt.Sprintf("\\x%x", h.Sum(nil)))), nil
 }
 
 func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
