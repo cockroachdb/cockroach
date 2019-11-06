@@ -4310,8 +4310,9 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 func TestEndTransactionWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	regressTS := tc.Clock().Now()
@@ -4330,31 +4331,33 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "epoch regression: 0"},
 		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, `timestamp regression: 0`},
 	}
-	for i, test := range testCases {
-		// Establish existing txn state by writing directly to range engine.
-		existTxn := txn.Clone()
-		existTxn.Key = test.key
-		existTxn.Status = test.existStatus
-		existTxn.Epoch = test.existEpoch
-		existTxn.Timestamp = test.existTS
-		existTxnRecord := existTxn.AsRecord()
-		txnKey := keys.TransactionKey(test.key, txn.ID)
-		if err := engine.MVCCPutProto(context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
-			nil, &existTxnRecord); err != nil {
-			t.Fatal(err)
-		}
+	for _, test := range testCases {
+		t.Run("", func(t *testing.T) {
+			// Establish existing txn state by writing directly to range engine.
+			existTxn := txn.Clone()
+			existTxn.Key = test.key
+			existTxn.Status = test.existStatus
+			existTxn.Epoch = test.existEpoch
+			existTxn.Timestamp = test.existTS
+			existTxnRecord := existTxn.AsRecord()
+			txnKey := keys.TransactionKey(test.key, txn.ID)
+			if err := engine.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
+				nil, &existTxnRecord); err != nil {
+				t.Fatal(err)
+			}
 
-		// End the transaction, verify expected error.
-		txn.Key = test.key
-		args, h := endTxnArgs(txn, true)
-		args.Sequence = 2
+			// End the transaction, verify expected error.
+			txn.Key = test.key
+			args, h := endTxnArgs(txn, true)
+			args.Sequence = 2
 
-		if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
-			t.Errorf("%d: expected error:\n%s\nto match:\n%s", i, pErr, test.expErrRegexp)
-		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == (uuid.UUID{}) {
-			// Prevent regression of #5591.
-			t.Fatalf("%d: received empty Transaction proto in error", i)
-		}
+			if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
+				t.Fatalf("expected error:\n%s\nto match:\n%s", pErr, test.expErrRegexp)
+			} else if txn := pErr.GetTxn(); txn != nil && txn.ID == (uuid.UUID{}) {
+				// Prevent regression of #5591.
+				t.Fatalf("received empty Transaction proto in error")
+			}
+		})
 	}
 }
 
