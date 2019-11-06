@@ -37,14 +37,14 @@ func TestTransactionString(t *testing.T) {
 			Priority:     957356782,
 			Sequence:     15,
 		},
-		Name:          "name",
-		Status:        roachpb.COMMITTED,
-		LastHeartbeat: hlc.Timestamp{WallTime: 10, Logical: 11},
-		OrigTimestamp: hlc.Timestamp{WallTime: 30, Logical: 31},
-		MaxTimestamp:  hlc.Timestamp{WallTime: 40, Logical: 41},
+		Name:               "name",
+		Status:             roachpb.COMMITTED,
+		LastHeartbeat:      hlc.Timestamp{WallTime: 10, Logical: 11},
+		RefreshedTimestamp: hlc.Timestamp{WallTime: 30, Logical: 31},
+		MaxTimestamp:       hlc.Timestamp{WallTime: 40, Logical: 41},
 	}
 	expStr := `"name" meta={id=d7aa0f5e key="foo" pri=44.58039917 epo=2 ts=0.000000020,21 min=0.000000010,11 seq=15}` +
-		` rw=true stat=COMMITTED orig=0.000000030,31 max=0.000000040,41 rts=0.000000000,0 wto=false`
+		` rw=true stat=COMMITTED rts=0.000000030,31 wto=false max=0.000000040,41`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf(

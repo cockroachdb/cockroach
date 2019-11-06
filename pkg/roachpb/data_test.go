@@ -660,7 +660,8 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.Epoch++
 	expTxn.Sequence = 0
 	expTxn.Timestamp = makeTS(25, 1)
-	expTxn.OrigTimestamp = makeTS(25, 1)
+	expTxn.RefreshedTimestamp = makeTS(25, 1)
+	expTxn.OrigTimestamp = expTxn.RefreshedTimestamp
 	expTxn.WriteTooOld = false
 	expTxn.OrigTimestampWasObserved = false
 	expTxn.IntentSpans = nil

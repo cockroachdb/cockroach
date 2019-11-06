@@ -563,9 +563,11 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
+		readTimestamp := txn.readTimestampLocked()
 		if deadline.Less(txn.readTimestampLocked()) {
-			log.Fatalf(ctx, "deadline below txn.OrigTimestamp() is nonsensical; "+
-				"txn has would have no change to commit. Deadline: %s", deadline)
+			log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
+				"txn has would have no change to commit. Deadline: %s. Read timestamp: %s.",
+				deadline, readTimestamp)
 		}
 		txn.mu.deadline = new(hlc.Timestamp)
 		*txn.mu.deadline = deadline

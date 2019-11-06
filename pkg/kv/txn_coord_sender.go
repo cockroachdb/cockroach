@@ -691,11 +691,9 @@ func generateTxnDeadlineExceededErr(
 	txn *roachpb.Transaction, deadline hlc.Timestamp,
 ) *roachpb.Error {
 	exceededBy := txn.Timestamp.GoTime().Sub(deadline.GoTime())
-	fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
 	extraMsg := fmt.Sprintf(
-		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
-			"original timestamp %s ago (%s)",
-		exceededBy, txn.Timestamp, deadline, fromStart, txn.OrigTimestamp)
+		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
+		exceededBy, txn.Timestamp, deadline)
 	return roachpb.NewErrorWithTxn(
 		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
@@ -1169,9 +1167,7 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	ts := tc.mu.txn.OrigTimestamp
-	ts.Forward(tc.mu.txn.RefreshedTimestamp)
-	return ts
+	return tc.mu.txn.RefreshedTimestamp
 }
 
 // CommitTimestamp is part of the client.TxnSender interface.
@@ -1180,9 +1176,7 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	defer tc.mu.Unlock()
 	txn := &tc.mu.txn
 	tc.mu.txn.OrigTimestampWasObserved = true
-	commitTS := txn.OrigTimestamp
-	commitTS.Forward(txn.RefreshedTimestamp)
-	return commitTS
+	return txn.RefreshedTimestamp
 }
 
 // CommitTimestampFixed is part of the client.TxnSender interface.
@@ -1195,10 +1189,14 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 // SetFixedTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()
+	tc.mu.txn.RefreshedTimestamp = ts
 	tc.mu.txn.Timestamp = ts
-	tc.mu.txn.OrigTimestamp = ts
 	tc.mu.txn.MaxTimestamp = ts
 	tc.mu.txn.OrigTimestampWasObserved = true
+
+	// For backwards compatibility with 19.2, set the OrigTimestamp too.
+	tc.mu.txn.OrigTimestamp = ts
+
 	tc.mu.Unlock()
 }
 
@@ -1232,9 +1230,7 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	origTimestamp := tc.mu.txn.OrigTimestamp
-	origTimestamp.Forward(tc.mu.txn.RefreshedTimestamp)
-	isTxnPushed := tc.mu.txn.Timestamp != origTimestamp
+	isTxnPushed := tc.mu.txn.Timestamp != tc.mu.txn.RefreshedTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
 		tc.mu.txn.OrigTimestampWasObserved
 	// We check OrigTimestampWasObserved here because, if that's set, refreshing

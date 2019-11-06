@@ -90,7 +90,7 @@ func (x ValueType) String() string {
 	return proto.EnumName(ValueType_name, int32(x))
 }
 func (ValueType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{0}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{0}
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -114,7 +114,7 @@ func (x ReplicaChangeType) String() string {
 	return proto.EnumName(ReplicaChangeType_name, int32(x))
 }
 func (ReplicaChangeType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{1}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{1}
 }
 
 // TransactionStatus specifies possible states for a transaction.
@@ -166,7 +166,7 @@ func (x TransactionStatus) String() string {
 	return proto.EnumName(TransactionStatus_name, int32(x))
 }
 func (TransactionStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{2}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{2}
 }
 
 // Span is a key range with an inclusive start Key and an exclusive end Key.
@@ -183,7 +183,7 @@ type Span struct {
 func (m *Span) Reset()      { *m = Span{} }
 func (*Span) ProtoMessage() {}
 func (*Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{0}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{0}
 }
 func (m *Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -235,7 +235,7 @@ func (m *Value) Reset()         { *m = Value{} }
 func (m *Value) String() string { return proto.CompactTextString(m) }
 func (*Value) ProtoMessage()    {}
 func (*Value) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{1}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{1}
 }
 func (m *Value) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -271,7 +271,7 @@ func (m *KeyValue) Reset()         { *m = KeyValue{} }
 func (m *KeyValue) String() string { return proto.CompactTextString(m) }
 func (*KeyValue) ProtoMessage()    {}
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{2}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{2}
 }
 func (m *KeyValue) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -309,7 +309,7 @@ func (m *StoreIdent) Reset()         { *m = StoreIdent{} }
 func (m *StoreIdent) String() string { return proto.CompactTextString(m) }
 func (*StoreIdent) ProtoMessage()    {}
 func (*StoreIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{3}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{3}
 }
 func (m *StoreIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -349,7 +349,7 @@ func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
 func (m *SplitTrigger) String() string { return proto.CompactTextString(m) }
 func (*SplitTrigger) ProtoMessage()    {}
 func (*SplitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{4}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{4}
 }
 func (m *SplitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -397,7 +397,7 @@ func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
 func (m *MergeTrigger) String() string { return proto.CompactTextString(m) }
 func (*MergeTrigger) ProtoMessage()    {}
 func (*MergeTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{5}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{5}
 }
 func (m *MergeTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -467,7 +467,7 @@ type ChangeReplicasTrigger struct {
 func (m *ChangeReplicasTrigger) Reset()      { *m = ChangeReplicasTrigger{} }
 func (*ChangeReplicasTrigger) ProtoMessage() {}
 func (*ChangeReplicasTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{6}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{6}
 }
 func (m *ChangeReplicasTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -509,7 +509,7 @@ func (m *ModifiedSpanTrigger) Reset()         { *m = ModifiedSpanTrigger{} }
 func (m *ModifiedSpanTrigger) String() string { return proto.CompactTextString(m) }
 func (*ModifiedSpanTrigger) ProtoMessage()    {}
 func (*ModifiedSpanTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{7}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{7}
 }
 func (m *ModifiedSpanTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -555,7 +555,7 @@ func (m *StickyBitTrigger) Reset()         { *m = StickyBitTrigger{} }
 func (m *StickyBitTrigger) String() string { return proto.CompactTextString(m) }
 func (*StickyBitTrigger) ProtoMessage()    {}
 func (*StickyBitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{8}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{8}
 }
 func (m *StickyBitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -594,7 +594,7 @@ func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
 func (m *InternalCommitTrigger) String() string { return proto.CompactTextString(m) }
 func (*InternalCommitTrigger) ProtoMessage()    {}
 func (*InternalCommitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{9}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{9}
 }
 func (m *InternalCommitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -663,7 +663,7 @@ func (m *ObservedTimestamp) Reset()         { *m = ObservedTimestamp{} }
 func (m *ObservedTimestamp) String() string { return proto.CompactTextString(m) }
 func (*ObservedTimestamp) ProtoMessage()    {}
 func (*ObservedTimestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{10}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{10}
 }
 func (m *ObservedTimestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -708,43 +708,36 @@ type Transaction struct {
 	// coordinator to indicate client activity. Concurrent transactions will
 	// avoid aborting a transaction if it observes recent-enough activity.
 	LastHeartbeat hlc.Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat"`
-	// The timestamp at which the transaction's current epoch started. For
-	// serializable transactions, if the timestamp drifts from the original
-	// timestamp, the transaction will retry unless we manage to "refresh the
-	// reads" - see refreshed_timestamp.
-	//
-	// This timestamp is the one at which all reads occur, unless
-	// refreshed_timestamp is set. Intent writes do not occur at this timestamp;
-	// they instead occur at the provisional commit timestamp, meta.Timestamp.
+	// This field is deprecated.
+	// The timestamp at which the transaction's current epoch started. Up until
+	// version 19.2, this was used in conjunction with refreshed_timestamp to
+	// determine a transaction's read timestamp. In 20.1, refreshed_timestamp
+	// alone is sufficient. This is just maintained for compatibility with 19.2.
+	// TODO(andrei): Remove in 20.2.
 	OrigTimestamp hlc.Timestamp `protobuf:"bytes,6,opt,name=orig_timestamp,json=origTimestamp,proto3" json:"orig_timestamp"`
 	// This flag is set if the transaction's original timestamp was
 	// "leaked" beyond the transaction (i.e. if returned via NOW() or
 	// transaction_timestamp()). If true, this prevents optimizations
 	// which commit at a higher timestamp without resorting to a
 	// client-side retry.
+	// !!! rename to commit_timestamp_was_observed (or commit_timestamp_fixed).
 	OrigTimestampWasObserved bool `protobuf:"varint,16,opt,name=orig_timestamp_was_observed,json=origTimestampWasObserved,proto3" json:"orig_timestamp_was_observed,omitempty"`
-	// The refreshed timestamp is the timestamp at which the transaction
-	// can commit without necessitating a serializable restart. This
-	// value is forwarded to the transaction's current timestamp (meta.timestamp)
-	// if the transaction coordinator is able to refresh all refreshable spans
-	// encountered during the course of the txn. If set, this takes precedence
-	// over orig_timestamp and is the timestamp at which the transaction reads
-	// going forward.
-	//
-	// We need to keep track of both refresh_timestamp and orig_timestamp (instead
-	// of simply overwriting the orig_timestamp after refreshes) because the
-	// orig_timestamp needs to be used as a lower bound timestamp for the
-	// time-bound iterator used to resolve intents - i.e. there can be intents to
-	// resolve up to the timestamp that the txn started with.
-	//
-	// TODO(nvanbenschoten): this second paragraph is no longer true. The only
-	// place that relies on orig_timestamp being fixed over an entire epoch is
-	// v19.1 nodes use of Transaction.InclusiveTimeBounds. In v20.1 we can remove
-	// this field and update orig_timestamp in place, removing a lot of awkward
-	// code where we forward orig_timestamp by refreshed_timestamp. Doing so will
-	// also address the TODOs in cmd_refresh.go and cmd_refresh_range.go.
-	// Additionally, it will present a good opportunity to rename the field to
-	// read_timestamp.
+	// The refreshed timestamp is the transaction's read timestamp. All reads are
+	// performed at this timestamp, ensuring that the transaction runs on top of a
+	// consistent snapshot of the database.
+	// Writes are performed at the transaction's write timestamp (meta.timestamp).
+	// The write timestamp can diverge from the read timestamp when a write is
+	// "pushed": for example in case a write runs into the timestamp cache, we're
+	// forced to write at a higher timestamp. Being serializable, the transaction
+	// can't commit if the write timestamp diverged from the read timestamp unless
+	// we prove that the read timestamp can also be advanced to match the
+	// write timestamp; it can be advanced if the two timestamps are equivalent
+	// for everything that the transaction has read (meaning that there's no
+	// values in between the read timestamp and the write timestamp for any key in
+	// the txn's read set). We call checking whether the read timestamp can
+	// advance "refreshing the read set". So, the read timestamp advances after a
+	// successful refresh or, if the refresh is unsuccessful, after a transaction
+	// restart.
 	RefreshedTimestamp hlc.Timestamp `protobuf:"bytes,15,opt,name=refreshed_timestamp,json=refreshedTimestamp,proto3" json:"refreshed_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
 	// timestamps between timestamp and max_timestamp trigger a txn
@@ -882,7 +875,7 @@ type Transaction struct {
 func (m *Transaction) Reset()      { *m = Transaction{} }
 func (*Transaction) ProtoMessage() {}
 func (*Transaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{11}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{11}
 }
 func (m *Transaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -932,7 +925,7 @@ func (m *TransactionRecord) Reset()         { *m = TransactionRecord{} }
 func (m *TransactionRecord) String() string { return proto.CompactTextString(m) }
 func (*TransactionRecord) ProtoMessage()    {}
 func (*TransactionRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{12}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{12}
 }
 func (m *TransactionRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -968,7 +961,7 @@ func (m *Intent) Reset()         { *m = Intent{} }
 func (m *Intent) String() string { return proto.CompactTextString(m) }
 func (*Intent) ProtoMessage()    {}
 func (*Intent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{13}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{13}
 }
 func (m *Intent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1005,7 +998,7 @@ func (m *SequencedWrite) Reset()         { *m = SequencedWrite{} }
 func (m *SequencedWrite) String() string { return proto.CompactTextString(m) }
 func (*SequencedWrite) ProtoMessage()    {}
 func (*SequencedWrite) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{14}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{14}
 }
 func (m *SequencedWrite) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1069,7 +1062,7 @@ type Lease struct {
 func (m *Lease) Reset()      { *m = Lease{} }
 func (*Lease) ProtoMessage() {}
 func (*Lease) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{15}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{15}
 }
 func (m *Lease) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1114,7 +1107,7 @@ func (m *AbortSpanEntry) Reset()         { *m = AbortSpanEntry{} }
 func (m *AbortSpanEntry) String() string { return proto.CompactTextString(m) }
 func (*AbortSpanEntry) ProtoMessage()    {}
 func (*AbortSpanEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{16}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{16}
 }
 func (m *AbortSpanEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1177,7 +1170,7 @@ func (m *TxnCoordMeta) Reset()         { *m = TxnCoordMeta{} }
 func (m *TxnCoordMeta) String() string { return proto.CompactTextString(m) }
 func (*TxnCoordMeta) ProtoMessage()    {}
 func (*TxnCoordMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_183e2e836fbdf82b, []int{17}
+	return fileDescriptor_data_71dfbefc6c8b2b5a, []int{17}
 }
 func (m *TxnCoordMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -6248,9 +6241,9 @@ var (
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_183e2e836fbdf82b) }
+func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_71dfbefc6c8b2b5a) }
 
-var fileDescriptor_data_183e2e836fbdf82b = []byte{
+var fileDescriptor_data_71dfbefc6c8b2b5a = []byte{
 	// 2098 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x58, 0xcd, 0x6f, 0xdb, 0xc8,
 	0x15, 0x37, 0x4d, 0x4a, 0xa2, 0x9e, 0x3e, 0x4c, 0x4f, 0xe2, 0x44, 0x49, 0x50, 0x29, 0x55, 0x8a,
