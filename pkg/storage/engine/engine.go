@@ -12,6 +12,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 )
 
@@ -181,6 +183,18 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
+	// ExportToSst exports changes to the keyrange [start.Key, end.Key) over the
+	// interval (start.Timestamp, end.Timestamp]. Passing exportAllRevisions exports
+	// every revision of a key for the interval, otherwise only the latest value
+	// within the interval is exported. Deletions are included if all revisions are
+	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
+	// SSTable containing the exported keys, the size of exported data, or an error.
+	//
+	// TODO(hueypark): Separate MVCCKey into roachpb.Key and hlc.Timestamp.
+	// (https://github.com/cockroachdb/cockroach/pull/42134#pullrequestreview-311850163)
+	ExportToSst(
+		start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	) ([]byte, roachpb.BulkOpSummary, error)
 	// Get returns the value for the given key, nil otherwise.
 	//
 	// Deprecated: use MVCCGet instead.
@@ -508,14 +522,33 @@ type EncryptionRegistries struct {
 }
 
 // NewEngine creates a new storage engine.
-func NewEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	// TODO(hueypark): Support all engines like NewTempEngine.
-	cache := NewRocksDBCache(cacheSize)
-	defer cache.Release()
+func NewEngine(
+	engine enginepb.EngineType, cacheSize int64, storageConfig base.StorageConfig,
+) (Engine, error) {
+	switch engine {
+	case enginepb.EngineTypePebble:
+		pebbleConfig := PebbleConfig{
+			StorageConfig: storageConfig,
+			Opts:          DefaultPebbleOptions(),
+		}
+		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
 
-	return NewRocksDB(
-		RocksDBConfig{StorageConfig: storageConfig},
-		cache)
+		return NewPebble(pebbleConfig)
+	case enginepb.EngineTypeRocksDB:
+		cache := NewRocksDBCache(cacheSize)
+		defer cache.Release()
+
+		return NewRocksDB(
+			RocksDBConfig{StorageConfig: storageConfig},
+			cache)
+	}
+	panic(fmt.Sprintf("unknown engine type: %d", engine))
+}
+
+// NewDefaultEngine allocates and returns a new, opened engine with the default configuration.
+// The caller must call the engine's Close method when the engine is no longer needed.
+func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
+	return NewEngine(TestStorageEngine, cacheSize, storageConfig)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string

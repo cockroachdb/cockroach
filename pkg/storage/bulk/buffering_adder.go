@@ -71,7 +71,7 @@ var _ storagebase.BulkAdder = &BufferingAdder{}
 // encounter an error and need to be split and retired to be applied.
 func MakeBulkAdder(
 	ctx context.Context,
-	db sender,
+	db SSTSender,
 	rangeCache *kv.RangeDescriptorCache,
 	settings *cluster.Settings,
 	timestamp hlc.Timestamp,
