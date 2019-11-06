@@ -782,10 +782,11 @@ func MakeTransaction(
 			Priority:     MakePriority(userPriority),
 			Sequence:     0, // 1-indexed, incremented before each Request
 		},
-		Name:          name,
-		LastHeartbeat: now,
-		OrigTimestamp: now,
-		MaxTimestamp:  maxTS,
+		Name:               name,
+		LastHeartbeat:      now,
+		RefreshedTimestamp: now,
+		MaxTimestamp:       maxTS,
+		OrigTimestamp:      now, // For compatibility with 19.2.
 	}
 }
 
@@ -812,11 +813,13 @@ func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
 }
 
 // LastActive returns the last timestamp at which client activity definitely
-// occurred, i.e. the maximum of OrigTimestamp, RefreshedTimestamp and
-// LastHeartbeat.
+// occurred, i.e. the maximum of RefreshedTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
 	ts.Forward(t.RefreshedTimestamp)
+
+	// For compatibility with 19.2, handle the case where RefreshedTimestamp isn't
+	// set.
 	ts.Forward(t.OrigTimestamp)
 	return ts
 }
@@ -930,8 +933,8 @@ func (t *Transaction) Restart(
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
 	}
-	// Set original timestamp to current timestamp on restart.
-	t.OrigTimestamp = t.Timestamp
+	t.RefreshedTimestamp = t.Timestamp
+	t.OrigTimestamp = t.Timestamp // For 19.2 compatibility.
 	// Upgrade priority to the maximum of:
 	// - the current transaction priority
 	// - a random priority created from userPriority
@@ -1085,8 +1088,8 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s orig=%s max=%s rts=%s wto=%t",
-		t.TxnMeta, t.IsWriting(), t.Status, t.OrigTimestamp, t.MaxTimestamp, t.RefreshedTimestamp, t.WriteTooOld)
+	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
+		t.TxnMeta, t.IsWriting(), t.Status, t.RefreshedTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1105,8 +1108,8 @@ func (t Transaction) SafeMessage() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s orig=%s max=%s rts=%s wto=%t",
-		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.OrigTimestamp, t.MaxTimestamp, t.RefreshedTimestamp, t.WriteTooOld)
+	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
+		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.RefreshedTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
