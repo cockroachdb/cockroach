@@ -294,6 +294,18 @@ func newPebbleInMem(attrs roachpb.Attributes, cacheSize int64) *Pebble {
 	return db
 }
 
+func (p *Pebble) String() string {
+	dir := p.path
+	if dir == "" {
+		dir = "<in-mem>"
+	}
+	attrs := p.attrs.String()
+	if attrs == "" {
+		attrs = "<no-attributes>"
+	}
+	return fmt.Sprintf("%s=%s", attrs, dir)
+}
+
 // Close implements the Engine interface.
 func (p *Pebble) Close() {
 	p.closed = true
