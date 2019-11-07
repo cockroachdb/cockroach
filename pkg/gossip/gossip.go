@@ -177,7 +177,7 @@ var (
 )
 
 // KeyNotPresentError is returned by gossip when queried for a key that doesn't
-// exist of has expired.
+// exist or has expired.
 type KeyNotPresentError struct {
 	key string
 }
