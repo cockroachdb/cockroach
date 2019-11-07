@@ -43,11 +43,14 @@ func TestTransactionString(t *testing.T) {
 		OrigTimestamp: hlc.Timestamp{WallTime: 30, Logical: 31},
 		MaxTimestamp:  hlc.Timestamp{WallTime: 40, Logical: 41},
 	}
-	expStr := `"name" id=d7aa0f5e key="foo" rw=true pri=44.58039917 stat=COMMITTED ` +
-		`epo=2 ts=0.000000020,21 orig=0.000000030,31 min=0.000000010,11 max=0.000000040,41 wto=false seq=15`
+	expStr := `"name" meta={id=d7aa0f5e key="foo" pri=44.58039917 epo=2 ts=0.000000020,21 min=0.000000010,11 seq=15}` +
+		` rw=true stat=COMMITTED orig=0.000000030,31 max=0.000000040,41 rts=0.000000000,0 wto=false`
 
 	if str := txn.String(); str != expStr {
-		t.Errorf("expected txn %s; got %s", expStr, str)
+		t.Errorf(
+			"expected txn: %s\n"+
+				"got:          %s",
+			expStr, str)
 	}
 }
 
