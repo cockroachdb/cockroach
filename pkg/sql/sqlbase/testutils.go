@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -725,79 +726,20 @@ func RandCreateTable(rng *rand.Rand, tableIdx int) *tree.CreateTable {
 		defs[i] = columnDef
 	}
 
-	// Shuffle our column definitions in preparation for random partitioning into
-	// column families.
+	// Shuffle our column definitions.
 	rng.Shuffle(len(columnDefs), func(i, j int) {
 		columnDefs[i], columnDefs[j] = columnDefs[j], columnDefs[i]
 	})
 
-	// Partition into column families.
-	numColFams := randNumColFams(rng, len(columnDefs))
-
-	// Create a slice of indexes into the columnDefs slice. We'll use this to make
-	// the random partitioning by picking some indexes at random to use as
-	// partitions boundaries.
-	indexes := make([]int, len(columnDefs)-1)
-	for i := range indexes {
-		indexes[i] = i + 1
-	}
-	rng.Shuffle(len(indexes), func(i, j int) {
-		indexes[i], indexes[j] = indexes[j], indexes[i]
-	})
-
-	// Grab our random partition boundaries, and re-sort back into sorted index
-	// order.
-	numSeparators := numColFams - 1
-	indexes = indexes[:numSeparators]
-	sort.Slice(indexes, func(i, j int) bool {
-		return indexes[i] < indexes[j]
-	})
-
-	indexesWithZero := make([]int, len(indexes)+2)
-	copy(indexesWithZero[1:], indexes)
-	indexesWithZero[len(indexesWithZero)-1] = len(columnDefs)
-	indexes = indexesWithZero
-
-	// Now (finally), indexes is the list of partitions we're going to slice the
-	// column def list into. Create our column families by grabbing the slice of
-	// columns from the column list bounded by each partition index at the end.
-	// Also, save column family 0 for later as all primary keys have to be part of
-	// that column family.
-	var colFamZero []*tree.ColumnTableDef
-	for i := 0; i+1 < len(indexes); i++ {
-		start, end := indexes[i], indexes[i+1]
-
-		names := make(tree.NameList, end-start)
-		for j := start; j < end; j++ {
-			names[j-start] = columnDefs[j].Name
-		}
-		if colFamZero == nil {
-			for j := start; j < end; j++ {
-				colFamZero = append(colFamZero, columnDefs[j])
-			}
-		}
-
-		famDef := &tree.FamilyTableDef{
-			Name:    tree.Name(fmt.Sprintf("fam%d", i)),
-			Columns: names,
-		}
-		defs = append(defs, famDef)
-	}
-
 	// Make a random primary key with high likelihood.
 	if rng.Intn(8) != 0 {
-		indexDef := randIndexTableDefFromCols(rng, colFamZero)
+		indexDef := randIndexTableDefFromCols(rng, columnDefs)
 		if len(indexDef.Columns) > 0 {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				PrimaryKey:    true,
 				IndexTableDef: indexDef,
 			})
 		}
-	}
-
-	colNames := make(tree.NameList, len(columnDefs))
-	for i := range columnDefs {
-		colNames[i] = columnDefs[i].Name
 	}
 
 	// Make indexes.
@@ -817,11 +759,16 @@ func RandCreateTable(rng *rand.Rand, tableIdx int) *tree.CreateTable {
 		}
 	}
 
-	// We're done! Return a new table with all of the attributes we've made.
 	ret := &tree.CreateTable{
 		Table: tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("table%d", tableIdx))),
 		Defs:  defs,
 	}
+
+	// Create some random column families.
+	if rng.Intn(2) == 0 {
+		mutations.ColumnFamilyMutator(ret)
+	}
+
 	return ret
 }
 
@@ -858,13 +805,6 @@ func randIndexTableDefFromCols(
 		})
 	}
 	return tree.IndexTableDef{Columns: indexElemList}
-}
-
-func randNumColFams(rng *rand.Rand, nCols int) int {
-	if rng.Intn(3) == 0 {
-		return 1
-	}
-	return rng.Intn(nCols) + 1
 }
 
 // The following variables are useful for testing.
