@@ -1788,7 +1788,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				date := args[1].(*tree.DDate)
-				fromTSTZ, err := tree.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
+				fromTSTZ, err := tree.MakeDTimestampTZFromDate(time.UTC, date)
 				if err != nil {
 					return nil, err
 				}
@@ -1908,7 +1908,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				return tree.MakeDTimestamp(tsTZ.Time.In(ctx.GetLocation()), time.Microsecond), nil
+				return tree.MakeDTimestamp(tsTZ.Time, time.Microsecond), nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -1921,11 +1921,20 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				date := args[1].(*tree.DDate)
+				// Localize the timestamp into the given location.
 				fromTSTZ, err := tree.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
 				if err != nil {
 					return nil, err
 				}
-				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				// From the given time in the context location, we also have to subtract
+				// the offset.
+				// This is because we expect to truncate in the given timezone,
+				// but the date argument assumed no timezone, meaning converting it into
+				// the location's timestamp with the date library converts it into the
+				// wrong time locally.
+				_, offset := fromTSTZ.Time.Zone()
+				fromTSTZTime := fromTSTZ.Time.Add(time.Duration(-offset) * time.Second)
+				return truncateTimestamp(ctx, fromTSTZTime, timeSpan)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
