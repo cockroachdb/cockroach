@@ -355,6 +355,15 @@ func ingestKvs(
 		return nil, err
 	}
 
+	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	prog.ResumePos = make(map[int32]uint64)
+	prog.CompletedFraction = make(map[int32]float32)
+	for i := range spec.Uri {
+		prog.CompletedFraction[i] = 1.0
+		prog.ResumePos[i] = math.MaxUint64
+	}
+	progCh <- prog
+
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
 	return &addedSummary, nil
