@@ -36,13 +36,13 @@ type BufferingAdder struct {
 	timestamp hlc.Timestamp
 
 	// threshold at which buffered entries will be flushed to SSTBatcher.
-	curBufferSize uint64
+	curBufferSize int64
 
 	// ceiling till which we can grow curBufferSize if bulkMon permits.
-	maxBufferSize uint64
+	maxBufferSize func() int64
 
 	// unit by which we increment the curBufferSize.
-	incrementBufferSize uint64
+	incrementBufferSize int64
 
 	// currently buffered kvs.
 	curBuf kvBuf
@@ -81,19 +81,19 @@ func MakeBulkAdder(
 	if opts.MinBufferSize == 0 {
 		opts.MinBufferSize = 32 << 20
 	}
-	if opts.MaxBufferSize == 0 {
-		opts.MaxBufferSize = 128 << 20
+	if opts.MaxBufferSize == nil {
+		opts.MaxBufferSize = func() int64 { return 128 << 20 }
 	}
 	if opts.StepBufferSize == 0 {
 		opts.StepBufferSize = 32 << 20
 	}
-	if opts.SSTSize == 0 {
-		opts.SSTSize = 16 << 20
+	if opts.SSTSize == nil {
+		opts.SSTSize = func() int64 { return 16 << 20 }
 	}
-	if opts.SplitAndScatterAfter == 0 {
+	if opts.SplitAndScatterAfter == nil {
 		// splitting _before_ hitting max reduces chance of auto-splitting after the
 		// range is full and is more expensive to split/move.
-		opts.SplitAndScatterAfter = 48 << 20
+		opts.SplitAndScatterAfter = func() int64 { return 48 << 20 }
 	}
 
 	b := &BufferingAdder{
@@ -127,7 +127,7 @@ func MakeBulkAdder(
 	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
 	// it will store in-memory before sending it to RocksDB.
 	b.memAcc = bulkMon.MakeBoundAccount()
-	if err := b.memAcc.Grow(ctx, int64(b.curBufferSize)); err != nil {
+	if err := b.memAcc.Grow(ctx, b.curBufferSize); err != nil {
 		return nil, errors.Wrap(err, "Not enough memory available to create a BulkAdder. Try setting a higher --max-sql-memory.")
 	}
 
@@ -171,8 +171,8 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 		//
 		// To prevent a single import from growing its buffer indefinitely we check
 		// if it has exceeded its upper bound.
-		if b.bulkMon != nil && b.curBufferSize < b.maxBufferSize {
-			if err := b.memAcc.Grow(ctx, int64(b.incrementBufferSize)); err != nil {
+		if b.bulkMon != nil && b.curBufferSize < b.maxBufferSize() {
+			if err := b.memAcc.Grow(ctx, b.incrementBufferSize); err != nil {
 				// If we are unable to reserve the additional memory then flush the
 				// buffer, and continue as normal.
 				b.flushCounts.bufferSize++

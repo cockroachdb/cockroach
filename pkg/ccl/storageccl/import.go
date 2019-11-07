@@ -115,14 +115,14 @@ func MaxImportBatchSize(st *cluster.Settings) int64 {
 
 // ImportBufferConfigSizes determines the minimum, maximum and step size for the
 // BulkAdder buffer used in import.
-func ImportBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, int64, int64) {
+func ImportBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func() int64, int64) {
 	if isPKAdder {
 		return importPKAdderBufferSize.Get(&st.SV),
-			importPKAdderMaxBufferSize.Get(&st.SV),
+			func() int64 { return importPKAdderMaxBufferSize.Get(&st.SV) },
 			importBufferIncrementSize.Get(&st.SV)
 	}
 	return importIndexAdderBufferSize.Get(&st.SV),
-		importIndexAdderMaxBufferSize.Get(&st.SV),
+		func() int64 { return importIndexAdderMaxBufferSize.Get(&st.SV) },
 		importBufferIncrementSize.Get(&st.SV)
 }
 
@@ -191,7 +191,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		iters = append(iters, iter)
 	}
 
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, uint64(MaxImportBatchSize(cArgs.EvalCtx.ClusterSettings())))
+	batcher, err := bulk.MakeSSTBatcher(ctx, db, func() int64 { return MaxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) })
 	if err != nil {
 		return nil, err
 	}
