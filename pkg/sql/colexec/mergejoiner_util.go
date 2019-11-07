@@ -34,13 +34,18 @@ type circularGroupsBuffer struct {
 	rightGroups []group
 }
 
-func makeGroupsBuffer(cap int) circularGroupsBuffer {
+func makeGroupsBuffer(batchSize int) circularGroupsBuffer {
 	return circularGroupsBuffer{
-		cap: cap,
-		// Allocate twice the amount of space needed so that no additional
+		// The maximum number of possible groups per batch is achieved with FULL
+		// OUTER JOIN when none rows have matches, so there will be exactly
+		// batchSize x 2 groups. We add an additional element to the capacity in
+		// order to be able to distinguish between an "empty" (no groups) and a
+		// "full" (2*batchSize groups) buffers.
+		cap: 2*batchSize + 1,
+		// Allocate thrice the amount of space needed so that no additional
 		// allocations are needed to make the resulting slice contiguous.
-		leftGroups:  make([]group, cap*2),
-		rightGroups: make([]group, cap*2),
+		leftGroups:  make([]group, batchSize*3),
+		rightGroups: make([]group, batchSize*3),
 	}
 }
 
