@@ -1377,17 +1377,43 @@ select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz);
 2011-01-01 00:00:00 +0000 UTC
 
 statement ok
-SET TIME ZONE 'Africa/Nairobi';
+SET TIME ZONE 'Africa/Nairobi'
 
 query T
-select date_trunc('day', '2011-01-01 22:30:00'::date);
+select date_trunc('day', '2011-01-01 22:30:00'::date)
 ----
 2011-01-01 00:00:00 +0300 +0300
 
 query T
-select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz);
+select date_trunc('day', '2011-01-02 01:30:00'::timestamp)
+----
+2011-01-02 00:00:00 +0000 +0000
+
+query T
+select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz)
 ----
 2011-01-02 00:00:00 +0300 +0300
+
+statement ok
+SET TIME ZONE -5
+
+query TT
+select date_trunc('day', '2011-01-02 01:30:00'::date), pg_typeof(date_trunc('day', '2011-01-02 01:30:00'::date))
+----
+2011-01-02 00:00:00 -0500 -0500  timestamptz
+
+query TT
+select date_trunc('day', '2011-01-02 01:30:00'::timestamp), pg_typeof(date_trunc('day', '2011-01-02 01:30:00'::timestamp))
+----
+2011-01-02 00:00:00 +0000 +0000   timestamp
+
+query TT
+select date_trunc('day', '2011-01-02 01:30:00+00:00'::timestamptz), pg_typeof(date_trunc('day', '2011-01-02 01:30:00+00:00'::timestamptz))
+----
+2011-01-01 00:00:00 -0500 -0500   timestamptz
+
+statement ok
+SET TIME ZONE 0
 
 # Test negative years to ensure they can round-trip through the parser.
 # Also ensure that we don't trigger any of the "convenience" rules.
@@ -1482,3 +1508,17 @@ query T
 SET timezone = 'utc'; SHOW timezone
 ----
 UTC
+
+subtest regression_42244
+
+statement ok
+SET TIME ZONE -5
+
+# Check date is still configured correctly from day.
+query I
+select extract(day from '2019-01-15'::date) as final
+----
+15
+
+statement ok
+SET TIME ZONE 0
