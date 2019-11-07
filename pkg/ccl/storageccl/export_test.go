@@ -223,11 +223,17 @@ func exportUsingGoIterator(
 		return nil, nil
 	}
 
+	io := engine.IterOptions{
+		UpperBound: endKey,
+	}
+	if enableTimeBoundIteratorOptimization {
+		io.MaxTimestampHint = endTime
+		io.MinTimestampHint = startTime.Next()
+	}
 	iter := engine.NewMVCCIncrementalIterator(batch, engine.MVCCIncrementalIterOptions{
-		StartTime:                           startTime,
-		EndTime:                             endTime,
-		UpperBound:                          endKey,
-		EnableTimeBoundIteratorOptimization: enableTimeBoundIteratorOptimization,
+		IterOptions: io,
+		StartTime:   startTime,
+		EndTime:     endTime,
 	})
 	defer iter.Close()
 	for iter.Seek(engine.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
@@ -322,9 +328,9 @@ func assertEqualKVs(
 		}
 		if enableTimeBoundIteratorOptimization {
 			io.MaxTimestampHint = endTime
-			io.MinTimestampHint = startTime
+			io.MinTimestampHint = startTime.Next()
 		}
-		sst, _, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
+		sst, _, err := e.ExportToSst(start, end, exportAllRevisions, io)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -354,19 +360,16 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	rocksdb, err := engine.NewRocksDB(
-		engine.RocksDBConfig{
-			StorageConfig: base.StorageConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
-				Dir:      dir,
-			},
-		},
-		engine.RocksDBCache{},
-	)
+	e, err := engine.NewDefaultEngine(
+		0,
+		base.StorageConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rocksdb.Close()
+	defer e.Close()
 
 	rnd, _ := randutil.NewPseudoRand()
 
@@ -401,7 +404,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 		value.InitChecksum(key)
-		if err := engine.MVCCPut(ctx, rocksdb, nil, key, ts, value, nil); err != nil {
+		if err := engine.MVCCPut(ctx, e, nil, key, ts, value, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -412,7 +415,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 			ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
 			value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 			value.InitChecksum(key)
-			if err := engine.MVCCPut(ctx, rocksdb, nil, key, ts, value, nil); err != nil {
+			if err := engine.MVCCPut(ctx, e, nil, key, ts, value, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -425,26 +428,26 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	})
 
 	// Exercise min to max time and key ranges.
-	t.Run("ts (0-∞], latest, nontimebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, tsMin, tsMax, false, false))
-	t.Run("ts (0-∞], all, nontimebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, tsMin, tsMax, true, false))
-	t.Run("ts (0-∞], latest, timebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, tsMin, tsMax, false, true))
-	t.Run("ts (0-∞], all, timebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, tsMin, tsMax, true, true))
+	t.Run("ts (0-∞], latest, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, false))
+	t.Run("ts (0-∞], all, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, true, false))
+	t.Run("ts (0-∞], latest, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, true))
+	t.Run("ts (0-∞], all, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, true, true))
 
 	upperBound := randutil.RandIntInRange(rnd, 1, numKeys)
 	lowerBound := rnd.Intn(upperBound)
 
 	// Exercise random key ranges.
-	t.Run("kv [randLower, randUpper), latest, nontimebound", assertEqualKVs(ctx, rocksdb, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, false))
-	t.Run("kv [randLower, randUpper), all, nontimebound", assertEqualKVs(ctx, rocksdb, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, false))
-	t.Run("kv [randLower, randUpper), latest, timebound", assertEqualKVs(ctx, rocksdb, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, true))
-	t.Run("kv [randLower, randUpper), all, timebound", assertEqualKVs(ctx, rocksdb, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, true))
+	t.Run("kv [randLower, randUpper), latest, nontimebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, false))
+	t.Run("kv [randLower, randUpper), all, nontimebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, false))
+	t.Run("kv [randLower, randUpper), latest, timebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, true))
+	t.Run("kv [randLower, randUpper), all, timebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, true))
 
 	upperBound = randutil.RandIntInRange(rnd, 1, numKeys)
 	lowerBound = rnd.Intn(upperBound)
 
 	// Exercise random timestamps.
-	t.Run("kv (randLowerTime, randUpperTime], latest, nontimebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, false))
-	t.Run("kv (randLowerTime, randUpperTime], all, nontimebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, false))
-	t.Run("kv (randLowerTime, randUpperTime], latest, timebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, true))
-	t.Run("kv (randLowerTime, randUpperTime], all, timebound", assertEqualKVs(ctx, rocksdb, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, true))
+	t.Run("kv (randLowerTime, randUpperTime], latest, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, false))
+	t.Run("kv (randLowerTime, randUpperTime], all, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, false))
+	t.Run("kv (randLowerTime, randUpperTime], latest, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, true))
+	t.Run("kv (randLowerTime, randUpperTime], all, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, true))
 }

@@ -139,7 +139,7 @@ func Run(opts Options) error {
 
 	fmt.Printf("writing to %s\n", opts.Dir)
 
-	db, err := engine.NewEngine(
+	db, err := engine.NewDefaultEngine(
 		0,
 		base.StorageConfig{
 			Settings: cluster.MakeTestingClusterSettings(),

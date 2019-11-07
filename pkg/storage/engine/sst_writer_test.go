@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bulk_test
+package engine_test
 
 import (
 	"math/rand"
@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -24,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeIntTableKVs(t testing.TB, numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue {
+func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []engine.MVCCKeyValue {
 	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
 	kvs := make([]engine.MVCCKeyValue, numKeys)
 	r, _ := randutil.NewPseudoRand()
@@ -66,7 +65,7 @@ func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
 }
 
 func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
-	w := bulk.MakeSSTWriter()
+	w := engine.MakeSSTWriter()
 	defer w.Close()
 
 	for i := range kvs {
@@ -102,7 +101,7 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 	r, _ := randutil.NewPseudoRand()
 	const numKeys, valueSize, revisions = 5000, 100, 100
 
-	kvs := makeIntTableKVs(t, numKeys, valueSize, revisions)
+	kvs := makeIntTableKVs(numKeys, valueSize, revisions)
 	sstRocks := makeRocksSST(t, kvs)
 	sstPebble := makePebbleSST(t, kvs)
 
@@ -145,7 +144,7 @@ func BenchmarkWriteSSTable(b *testing.B) {
 	b.StopTimer()
 	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
 	const valueSize, revisions, ssts = 100, 100, 10
-	kvs := makeIntTableKVs(b, b.N, valueSize, revisions)
+	kvs := makeIntTableKVs(b.N, valueSize, revisions)
 	approxUserDataSizePerKV := kvs[b.N/2].Key.EncodedSize() + valueSize
 	b.SetBytes(int64(approxUserDataSizePerKV * ssts))
 	b.ResetTimer()
