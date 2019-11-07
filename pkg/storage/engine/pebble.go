@@ -906,7 +906,8 @@ func (p pebbleSnapshot) NewIterator(opts IterOptions) Iterator {
 func pebbleExportToSst(
 	e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	sstWriter := MakeSSTWriter()
+	sstFile := &MemFile{}
+	sstWriter := MakeSSTWriter(sstFile)
 	defer sstWriter.Close()
 
 	var rows RowCounter
@@ -949,10 +950,10 @@ func pebbleExportToSst(
 		}
 	}
 
-	data, err := sstWriter.Finish()
+	err := sstWriter.Finish()
 	if err != nil {
 		return []byte{}, roachpb.BulkOpSummary{}, err
 	}
 
-	return data, roachpb.BulkOpSummary{}, nil
+	return sstFile.Data(), roachpb.BulkOpSummary{}, nil
 }
