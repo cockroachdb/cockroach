@@ -11,6 +11,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,10 +22,12 @@ import (
 // must call the engine's Close method when the engine is no longer needed.
 //
 // FIXME(tschottdorf): make the signature similar to NewRocksDB (require a cfg).
-func NewInMem(engine enginepb.EngineType, attrs roachpb.Attributes, cacheSize int64) Engine {
+func NewInMem(
+	ctx context.Context, engine enginepb.EngineType, attrs roachpb.Attributes, cacheSize int64,
+) Engine {
 	switch engine {
 	case enginepb.EngineTypePebble:
-		return newPebbleInMem(attrs, cacheSize)
+		return newPebbleInMem(ctx, attrs, cacheSize)
 	case enginepb.EngineTypeRocksDB:
 		return newRocksDBInMem(attrs, cacheSize)
 	}
@@ -35,5 +38,6 @@ func NewInMem(engine enginepb.EngineType, attrs roachpb.Attributes, cacheSize in
 // the default configuration. The caller must call the engine's Close method
 // when the engine is no longer needed.
 func NewDefaultInMem() Engine {
-	return NewInMem(TestStorageEngine, roachpb.Attributes{}, 1<<20 /* 1 MB */)
+	return NewInMem(context.Background(),
+		TestStorageEngine, roachpb.Attributes{}, 1<<20 /* 1 MB */)
 }

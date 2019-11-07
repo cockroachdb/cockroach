@@ -485,7 +485,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, engine.NewInMem(cfg.StorageEngine, spec.Attributes, sizeInBytes))
+				engines = append(engines, engine.NewInMem(ctx, cfg.StorageEngine, spec.Attributes, sizeInBytes))
 			}
 		} else {
 			if spec.Size.Percent > 0 {
@@ -522,7 +522,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-				eng, err = engine.NewPebble(pebbleConfig)
+				eng, err = engine.NewPebble(ctx, pebbleConfig)
 			} else {
 				rocksDBConfig := engine.RocksDBConfig{
 					StorageConfig:           storageConfig,

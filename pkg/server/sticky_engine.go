@@ -95,7 +95,7 @@ func getOrCreateStickyInMemEngine(
 	engine := &stickyInMemEngine{
 		id:     id,
 		closed: false,
-		Engine: engine.NewInMem(engineType, attrs, cacheSize),
+		Engine: engine.NewInMem(ctx, engineType, attrs, cacheSize),
 	}
 	stickyInMemEnginesRegistry.entries[id] = engine
 	return engine, nil
