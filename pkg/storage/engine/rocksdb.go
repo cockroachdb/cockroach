@@ -775,6 +775,37 @@ func (r *RocksDB) Closed() bool {
 	return r.rdb == nil
 }
 
+// ExportToSst is part of the engine.Reader interface.
+func (r *RocksDB) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	var data C.DBString
+	var intentErr C.DBString
+	var bulkopSummary C.DBString
+
+	err := statusToError(C.DBExportToSst(goToCKey(start), goToCKey(end), C.bool(exportAllRevisions),
+		goToCIterOptions(io), r.rdb, &data, &intentErr, &bulkopSummary))
+
+	if err != nil {
+		if err.Error() == "WriteIntentError" {
+			var e roachpb.WriteIntentError
+			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
+				return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode write intent error")
+			}
+
+			return nil, roachpb.BulkOpSummary{}, &e
+		}
+		return nil, roachpb.BulkOpSummary{}, err
+	}
+
+	var summary roachpb.BulkOpSummary
+	if err := protoutil.Unmarshal(cStringToGoBytes(bulkopSummary), &summary); err != nil {
+		return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode BulkopSummary")
+	}
+
+	return cStringToGoBytes(data), summary, nil
+}
+
 // Attrs returns the list of attributes describing this engine. This
 // may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
 // and potentially other labels to identify important attributes of
@@ -959,6 +990,13 @@ func (r *rocksDBReadOnly) Close() {
 // Read-only batches are not committed
 func (r *rocksDBReadOnly) Closed() bool {
 	return r.isClosed
+}
+
+// ExportToSst is part of the engine.Reader interface.
+func (r *rocksDBReadOnly) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	return r.parent.ExportToSst(start, end, exportAllRevisions, io)
 }
 
 func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
@@ -1263,6 +1301,13 @@ func (r *rocksDBSnapshot) Close() {
 // Closed returns true if the engine is closed.
 func (r *rocksDBSnapshot) Closed() bool {
 	return r.handle == nil
+}
+
+// ExportToSst is part of the engine.Reader interface.
+func (r *rocksDBSnapshot) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	return r.parent.ExportToSst(start, end, exportAllRevisions, io)
 }
 
 // Get returns the value for the given key, nil otherwise using
@@ -1658,6 +1703,13 @@ func (r *rocksDBBatch) Close() {
 // Closed returns true if the engine is closed.
 func (r *rocksDBBatch) Closed() bool {
 	return r.closed || r.committed
+}
+
+// ExportToSst is part of the engine.Reader interface.
+func (r *rocksDBBatch) ExportToSst(
+	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, roachpb.BulkOpSummary, error) {
+	panic("unimplemented")
 }
 
 func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
@@ -3199,53 +3251,6 @@ func unlockFile(lock C.DBFileLock) error {
 func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
 	k, ts, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
 	return MVCCKey{k, ts}, value, orepr, err
-}
-
-// ExportToSst exports changes to the keyrange [start.Key, end.Key) over the
-// interval (start.Timestamp, end.Timestamp]. Passing exportAllRevisions exports
-// every revision of a key for the interval, otherwise only the latest value
-// within the interval is exported. Deletions are included if all revisions are
-// requested or if the start.Timestamp is non-zero. Returns the bytes of an
-// SSTable containing the exported keys, the size of exported data, or an error.
-func ExportToSst(
-	ctx context.Context, e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-
-	var cdbEngine *C.DBEngine
-	switch v := e.(type) {
-	case *RocksDB:
-		cdbEngine = v.rdb
-	case *rocksDBReadOnly:
-		cdbEngine = v.parent.rdb
-	default:
-		panic(errors.Errorf("Not a rocksdb or rocksdbReadOnly engine but a %T", e))
-	}
-
-	var data C.DBString
-	var intentErr C.DBString
-	var bulkopSummary C.DBString
-
-	err := statusToError(C.DBExportToSst(goToCKey(start), goToCKey(end), C.bool(exportAllRevisions),
-		goToCIterOptions(io), cdbEngine, &data, &intentErr, &bulkopSummary))
-
-	if err != nil {
-		if err.Error() == "WriteIntentError" {
-			var e roachpb.WriteIntentError
-			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
-				return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode write intent error")
-			}
-
-			return nil, roachpb.BulkOpSummary{}, &e
-		}
-		return nil, roachpb.BulkOpSummary{}, err
-	}
-
-	var summary roachpb.BulkOpSummary
-	if err := protoutil.Unmarshal(cStringToGoBytes(bulkopSummary), &summary); err != nil {
-		return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode BulkopSummary")
-	}
-
-	return cStringToGoBytes(data), summary, nil
 }
 
 func notFoundErrOrDefault(err error) error {
