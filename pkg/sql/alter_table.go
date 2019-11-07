@@ -301,6 +301,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"unsupported constraint: %T", t.ConstraintDef)
 			}
 
+		case *tree.AlterTableAlterPrimaryKey:
+			return unimplemented.NewWithIssue(19141, "primary key changes are unsupported")
+
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
 				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")

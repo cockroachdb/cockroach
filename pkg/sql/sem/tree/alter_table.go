@@ -53,6 +53,7 @@ type AlterTableCmd interface {
 func (*AlterTableAddColumn) alterTableCmd()          {}
 func (*AlterTableAddConstraint) alterTableCmd()      {}
 func (*AlterTableAlterColumnType) alterTableCmd()    {}
+func (*AlterTableAlterPrimaryKey) alterTableCmd()    {}
 func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
@@ -203,6 +204,17 @@ func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
 // GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableAlterColumnType) GetColumn() Name {
 	return node.Column
+}
+
+// AlterTableAlterPrimaryKey represents an ALTER TABLE ALTER PRIMARY KEY command.
+type AlterTableAlterPrimaryKey struct {
+	TableIndex TableIndexName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableAlterPrimaryKey) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER PRIMARY KEY USING INDEX ")
+	ctx.FormatNode(&node.TableIndex)
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.
