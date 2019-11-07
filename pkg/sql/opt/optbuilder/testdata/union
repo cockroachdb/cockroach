@@ -1017,3 +1017,11 @@ except
       │                   └── const: 1 [type=int]
       └── tuple [type=tuple{int}]
            └── const: 1 [type=int]
+
+# Regression test for #42216.
+norm
+  SELECT * FROM (VALUES (NULL)) AS t1(a)
+EXCEPT ALL
+  SELECT * FROM (VALUES ((NULL,))) AS t2(b)
+----
+error (42P16): value type unknown cannot be used for table columns
