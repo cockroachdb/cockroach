@@ -3441,7 +3441,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DTimestamp:
 			return MakeDTime(timeofday.FromTime(d.Time)), nil
 		case *DTimestampTZ:
-			return MakeDTime(timeofday.FromTime(d.Time)), nil
+			// Strip time zone. Times don't carry their location.
+			return MakeDTime(timeofday.FromTime(d.stripTimeZone(ctx).Time)), nil
 		case *DInterval:
 			return MakeDTime(timeofday.Min.Add(d.Duration)), nil
 		}
