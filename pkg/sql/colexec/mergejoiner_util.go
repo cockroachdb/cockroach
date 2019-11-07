@@ -34,13 +34,33 @@ type circularGroupsBuffer struct {
 	rightGroups []group
 }
 
-func makeGroupsBuffer(cap int) circularGroupsBuffer {
+func makeGroupsBuffer(batchSize int) circularGroupsBuffer {
 	return circularGroupsBuffer{
-		cap: cap,
-		// Allocate twice the amount of space needed so that no additional
-		// allocations are needed to make the resulting slice contiguous.
-		leftGroups:  make([]group, cap*2),
-		rightGroups: make([]group, cap*2),
+		// The maximum number of possible groups per batch is achieved with FULL
+		// OUTER JOIN when no rows have matches, so there will be exactly
+		// batchSize x 2 groups. We add an additional element to the capacity in
+		// order to be able to distinguish between an "empty" (no groups) and a
+		// "full" (2*batchSize groups) buffers.
+		cap: 2*batchSize + 1,
+		// Since we have a circular buffer, it is possible for groups to wrap when
+		// cap is reached. Consider an example when batchSize = 3 and startIdx = 6
+		// when maximum number of groups is present:
+		// buffer = [1, 2, 3, 4, 5, x, 0] (integers denote different groups and 'x'
+		// stands for a garbage).
+		// When getGroups() is called, for ease of usage we need to return the
+		// buffer "flattened out", and in order to reduce allocation, we actually
+		// reserve 4*batchSize. In the example above we will copy the buffer as:
+		// buffer = [1, 2, 3, 4, 5, x, 0, 1, 2, 3, 4, 5]
+		// and will return buffer[6:12] when getGroups is called.
+		// The calculations for why 4*batchSize is sufficient:
+		// - the largest position in which the first group can be placed is
+		//   2*batchSize (cap field enforces that)
+		// - the largest number of groups to copy from the "physical" start of the
+		//   buffer is 2*batchSize-1
+		// - adding those two numbers we arrive at 4*batchSize-1, but for
+		//   simplicity we will use 4*batchSize.
+		leftGroups:  make([]group, 4*batchSize),
+		rightGroups: make([]group, 4*batchSize),
 	}
 }
 
