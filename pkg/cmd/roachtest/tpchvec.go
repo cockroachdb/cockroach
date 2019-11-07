@@ -32,13 +32,9 @@ func registerTPCHVec(r *testRegistry) {
 	var vecOnQueriesToSkip = map[int]string{
 		// TODO(yuzefovich): remove this once we have memory monitoring.
 		9:  "can cause OOM",
-		10: "incorrect output: #42049",
 		12: "unsupported: sum_int #38845",
-		// TODO(yuzefovich): triage this failure.
-		13: "incorrect output: unknown",
 		15: "unsupported: create view",
 		16: "unsupported: distinct aggregation #39242",
-		20: "incorrect output: #42047",
 		21: "unsupported: non-inner hash join with ON expression #38018",
 	}
 	var vecOffQueriesToSkip = map[int]string{

@@ -3448,18 +3448,14 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 
 	case types.TimestampFamily:
 		// TODO(knz): Timestamp from float, decimal.
-		prec := time.Microsecond
-		if t.Precision() == 0 {
-			prec = time.Second
-		}
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestamp(ctx, string(*d), prec)
+			return ParseDTimestamp(ctx, string(*d), time.Microsecond)
 		case *DCollatedString:
-			return ParseDTimestamp(ctx, d.Contents, prec)
+			return ParseDTimestamp(ctx, d.Contents, time.Microsecond)
 		case *DDate:
 			t, err := d.ToTime()
-			return MakeDTimestamp(t, prec), err
+			return MakeDTimestamp(t, time.Microsecond), err
 		case *DInt:
 			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), time.Second), nil
 		case *DTimestamp:
@@ -3471,24 +3467,20 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 
 	case types.TimestampTZFamily:
 		// TODO(knz): TimestampTZ from float, decimal.
-		prec := time.Microsecond
-		if t.Precision() == 0 {
-			prec = time.Second
-		}
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestampTZ(ctx, string(*d), prec)
+			return ParseDTimestampTZ(ctx, string(*d), time.Microsecond)
 		case *DCollatedString:
-			return ParseDTimestampTZ(ctx, d.Contents, prec)
+			return ParseDTimestampTZ(ctx, d.Contents, time.Microsecond)
 		case *DDate:
 			t, err := d.ToTime()
 			_, before := t.Zone()
 			_, after := t.In(ctx.GetLocation()).Zone()
-			return MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), prec), err
+			return MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), time.Microsecond), err
 		case *DTimestamp:
 			_, before := d.Time.Zone()
 			_, after := d.Time.In(ctx.GetLocation()).Zone()
-			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), prec), nil
+			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), time.Microsecond), nil
 		case *DInt:
 			return MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), time.Second), nil
 		case *DTimestampTZ:

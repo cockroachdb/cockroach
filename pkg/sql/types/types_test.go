@@ -222,15 +222,17 @@ func TestTypes(t *testing.T) {
 		{MakeTime(6), MakeScalar(TimeFamily, oid.T_time, 6, 0, emptyLocale)},
 
 		// TIMESTAMP
+		{MakeTimestamp(0), Timestamp},
 		{MakeTimestamp(0), &T{InternalType: InternalType{
-			Family: TimestampFamily, Precision: 0, Oid: oid.T_timestamp, Locale: &emptyLocale}}},
+			Family: TimestampFamily, Oid: oid.T_timestamp, Locale: &emptyLocale}}},
 		{MakeTimestamp(6), &T{InternalType: InternalType{
 			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: 6, Locale: &emptyLocale}}},
 		{MakeTimestamp(6), MakeScalar(TimestampFamily, oid.T_timestamp, 6, 0, emptyLocale)},
 
 		// TIMESTAMPTZ
+		{MakeTimestampTZ(0), TimestampTZ},
 		{MakeTimestampTZ(0), &T{InternalType: InternalType{
-			Family: TimestampTZFamily, Precision: 0, Oid: oid.T_timestamptz, Locale: &emptyLocale}}},
+			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Locale: &emptyLocale}}},
 		{MakeTimestampTZ(6), &T{InternalType: InternalType{
 			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Precision: 6, Locale: &emptyLocale}}},
 		{MakeTimestampTZ(6), MakeScalar(TimestampTZFamily, oid.T_timestamptz, 6, 0, emptyLocale)},
