@@ -220,7 +220,7 @@ func _COLLECT_RIGHT_OUTER(
 		currentID := prober.ht.headID[i]
 
 		for {
-			if nResults >= coldata.BatchSize() {
+			if nResults >= prober.outputBatchSize {
 				prober.prevBatch = batch
 				return nResults
 			}
@@ -267,7 +267,7 @@ func _COLLECT_NO_OUTER(
 	for i := uint16(0); i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 		for currentID != 0 {
-			if nResults >= coldata.BatchSize() {
+			if nResults >= prober.outputBatchSize {
 				prober.prevBatch = batch
 				return nResults
 			}

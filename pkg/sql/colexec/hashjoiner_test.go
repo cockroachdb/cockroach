@@ -911,17 +911,22 @@ func TestHashJoiner(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 
-	for _, tc := range tcs {
-		inputs := []tuples{tc.leftTuples, tc.rightTuples}
-		typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
-		runTestsWithTyps(t, inputs, typs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
-			spec := createSpecForHashJoiner(tc)
-			result, err := NewColOperator(ctx, flowCtx, spec, sources)
-			if err != nil {
-				return nil, err
-			}
-			return result.Op, nil
-		})
+	for _, outputBatchSize := range []uint16{1, 17, coldata.BatchSize()} {
+		for _, tc := range tcs {
+			inputs := []tuples{tc.leftTuples, tc.rightTuples}
+			typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
+			runTestsWithTyps(t, inputs, typs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
+				spec := createSpecForHashJoiner(tc)
+				result, err := NewColOperator(ctx, flowCtx, spec, sources)
+				if err != nil {
+					return nil, err
+				}
+				if hj, ok := result.Op.(*hashJoinEqOp); ok {
+					hj.outputBatchSize = outputBatchSize
+				}
+				return result.Op, nil
+			})
+		}
 	}
 }
 
@@ -1019,7 +1024,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 										}
 
 										hj := &hashJoinEqOp{
-											spec: spec,
+											spec:            spec,
+											outputBatchSize: coldata.BatchSize(),
 										}
 
 										hj.Init()
