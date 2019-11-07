@@ -166,7 +166,10 @@ func (b *Builder) propagateTypes(dst, src *scope) *scope {
 		srcType := src.cols[i].typ
 		if dstType == types.Unknown && srcType != types.Unknown {
 			// Create a new column which casts the old column to the correct type.
-			colType, _ := coltypes.DatumTypeToColumnType(srcType)
+			colType, err := coltypes.DatumTypeToColumnType(srcType)
+			if err != nil {
+				panic(builderError{err})
+			}
 			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), colType)
 			b.synthesizeColumn(dst, string(dstCols[i].name), srcType, nil /* expr */, castExpr)
 		} else {
