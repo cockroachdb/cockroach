@@ -28,23 +28,23 @@ type BulkAdderOptions struct {
 	// SSTSize is the size at which an SST will be flushed and a new one started.
 	// SSTs are also split during a buffer flush to avoid spanning range bounds so
 	// they may be smaller than this limit.
-	SSTSize uint64
+	SSTSize func() int64
 
 	// SplitAndScatterAfter is the number of bytes which if added without hitting
 	// an existing split will cause the adder to split and scatter the next span.
-	SplitAndScatterAfter uint64
+	SplitAndScatterAfter func() int64
 
 	// MinBufferSize is the initial size of the BulkAdder buffer. It indicates the
 	// amount of memory we require to be able to buffer data before flushing for
 	// SST creation.
-	MinBufferSize uint64
+	MinBufferSize int64
 
 	// BufferSize is the maximum size we can grow the BulkAdder buffer to.
-	MaxBufferSize uint64
+	MaxBufferSize func() int64
 
 	// StepBufferSize is the increment in which we will attempt to grow the
 	// BulkAdder buffer if the memory monitor permits.
-	StepBufferSize uint64
+	StepBufferSize int64
 
 	// SkipLocalDuplicates configures handling of duplicate keys within a local
 	// sorted batch. When true if the same key/value pair is added more than once

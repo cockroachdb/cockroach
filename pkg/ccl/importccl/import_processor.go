@@ -163,7 +163,7 @@ func ingestKvs(
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 
-	flushSize := storageccl.MaxImportBatchSize(flowCtx.Cfg.Settings)
+	flushSize := func() int64 { return storageccl.MaxImportBatchSize(flowCtx.Cfg.Settings) }
 
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and
@@ -179,10 +179,10 @@ func ingestKvs(
 		Name:              "pkAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
-		MinBufferSize:     uint64(minBufferSize),
-		MaxBufferSize:     uint64(maxBufferSize),
-		StepBufferSize:    uint64(stepSize),
-		SSTSize:           uint64(flushSize),
+		MinBufferSize:     minBufferSize,
+		MaxBufferSize:     maxBufferSize,
+		StepBufferSize:    stepSize,
+		SSTSize:           flushSize,
 	})
 	if err != nil {
 		return nil, err
@@ -194,10 +194,10 @@ func ingestKvs(
 		Name:              "indexAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
-		MinBufferSize:     uint64(minBufferSize),
-		MaxBufferSize:     uint64(maxBufferSize),
-		StepBufferSize:    uint64(stepSize),
-		SSTSize:           uint64(flushSize),
+		MinBufferSize:     minBufferSize,
+		MaxBufferSize:     maxBufferSize,
+		StepBufferSize:    stepSize,
+		SSTSize:           flushSize,
 	})
 	if err != nil {
 		return nil, err

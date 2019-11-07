@@ -47,11 +47,13 @@ func TestAddBatched(t *testing.T) {
 	})
 }
 
-func runTestImport(t *testing.T, batchSize uint64) {
+func runTestImport(t *testing.T, batchSizeValue int64) {
 
 	ctx := context.Background()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+
+	batchSize := func() int64 { return batchSizeValue }
 
 	const split1, split2 = 3, 5
 
@@ -134,7 +136,7 @@ func runTestImport(t *testing.T, batchSize uint64) {
 
 			ts := hlc.Timestamp{WallTime: 100}
 			b, err := bulk.MakeBulkAdder(
-				ctx, kvDB, mockCache, s.ClusterSettings(), ts, storagebase.BulkAdderOptions{MinBufferSize: batchSize, SSTSize: batchSize}, nil, /* bulkMon */
+				ctx, kvDB, mockCache, s.ClusterSettings(), ts, storagebase.BulkAdderOptions{MinBufferSize: batchSize(), SSTSize: batchSize}, nil, /* bulkMon */
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -160,7 +162,7 @@ func runTestImport(t *testing.T, batchSize uint64) {
 					// if our adds is batching multiple keys and we've previously added
 					// a key prior to split2 and are now adding one after split2, then we
 					// should expect this batch to span split2 and thus cause a retry.
-					if batchSize > 1 && idx > 0 && batch[idx-1] < split2 && batch[idx-1] >= split1 && batch[idx] >= split2 {
+					if batchSize() > 1 && idx > 0 && batch[idx-1] < split2 && batch[idx-1] >= split1 && batch[idx] >= split2 {
 						expectedSplitRetries = 1
 					}
 					v := roachpb.MakeValueFromString(fmt.Sprintf("value-%d", x))

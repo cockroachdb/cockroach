@@ -87,14 +87,14 @@ func newIndexBackfiller(
 
 func (ib *indexBackfiller) prepare(ctx context.Context) error {
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
-	maxBufferSize := backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
-	sstSize := backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
+	sstSize := func() int64 { return backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	opts := storagebase.BulkAdderOptions{
-		SSTSize:        uint64(sstSize),
-		MinBufferSize:  uint64(minBufferSize),
-		MaxBufferSize:  uint64(maxBufferSize),
-		StepBufferSize: uint64(stepSize),
+		SSTSize:        sstSize,
+		MinBufferSize:  minBufferSize,
+		MaxBufferSize:  maxBufferSize,
+		StepBufferSize: stepSize,
 		SkipDuplicates: ib.ContainsInvertedIndex(),
 	}
 	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
