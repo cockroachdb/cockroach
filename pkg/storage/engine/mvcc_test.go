@@ -87,9 +87,11 @@ func createTestRocksDBEngine() Engine {
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() Engine {
-	peb, err := NewPebble(PebbleConfig{
-		Opts: testPebbleOptions(vfs.NewMem()),
-	})
+	peb, err := NewPebble(
+		context.Background(),
+		PebbleConfig{
+			Opts: testPebbleOptions(vfs.NewMem()),
+		})
 	if err != nil {
 		return nil
 	}

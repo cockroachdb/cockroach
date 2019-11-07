@@ -68,12 +68,14 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	}()
 
 	func() {
-		pebbleInMem, err := NewPebble(PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Attrs: inMemAttrs,
-			},
-			Opts: testPebbleOptions(vfs.NewMem()),
-		})
+		pebbleInMem, err := NewPebble(
+			context.Background(),
+			PebbleConfig{
+				StorageConfig: base.StorageConfig{
+					Attrs: inMemAttrs,
+				},
+				Opts: testPebbleOptions(vfs.NewMem()),
+			})
 		if err != nil {
 			t.Fatal(err)
 		}
