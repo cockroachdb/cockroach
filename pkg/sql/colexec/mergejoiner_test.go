@@ -1641,6 +1641,86 @@ func TestMergeJoiner(t *testing.T) {
 	}
 }
 
+// TestFullOuterMergeJoinWithMaximumNumberOfGroups will create two input
+// sources such that the left one contains rows with even numbers 0, 2, 4, ...
+// while the right contains one rows with odd numbers 1, 3, 5, ... The test
+// will perform FULL OUTER JOIN. Such setup will create the maximum number of
+// groups per batch.
+func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	nTuples := int(coldata.BatchSize()) * 4
+	for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize() - 1, coldata.BatchSize(), coldata.BatchSize() + 1} {
+		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
+			func(t *testing.T) {
+				typs := []coltypes.T{coltypes.Int64}
+				colsLeft := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+				colsRight := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+				groupsLeft := colsLeft[0].Int64()
+				groupsRight := colsRight[0].Int64()
+				for i := range groupsLeft {
+					groupsLeft[i] = int64(i * 2)
+					groupsRight[i] = int64(i*2 + 1)
+				}
+				leftSource := newChunkingBatchSource(typs, colsLeft, uint64(nTuples))
+				rightSource := newChunkingBatchSource(typs, colsRight, uint64(nTuples))
+				a, err := NewMergeJoinOp(
+					sqlbase.FullOuterJoin,
+					leftSource,
+					rightSource,
+					[]uint32{0},
+					[]uint32{0},
+					typs,
+					typs,
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					nil,   /* filterConstructor */
+					false, /* filterOnlyOnLeft */
+				)
+				if err != nil {
+					t.Fatal("error in merge join op constructor", err)
+				}
+				a.(*mergeJoinFullOuterOp).initWithOutputBatchSize(outBatchSize)
+				i, count, expVal := 0, 0, int64(0)
+				for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+					count += int(b.Length())
+					leftOutCol := b.ColVec(0).Int64()
+					leftNulls := b.ColVec(0).Nulls()
+					rightOutCol := b.ColVec(1).Int64()
+					rightNulls := b.ColVec(1).Nulls()
+					for j := uint16(0); j < b.Length(); j++ {
+						leftVal := leftOutCol[j]
+						leftNull := leftNulls.NullAt(j)
+						rightVal := rightOutCol[j]
+						rightNull := rightNulls.NullAt(j)
+						if expVal%2 == 0 {
+							// It is an even-numbered row, so the left value should contain
+							// expVal and the right value should be NULL.
+							if leftVal != expVal || leftNull || !rightNull {
+								t.Fatalf("found left = %d, left NULL? = %t, right NULL? = %t, "+
+									"expected left = %d, left NULL? = false, right NULL? = true, idx %d of batch %d",
+									leftVal, leftNull, rightNull, expVal, j, i)
+							}
+						} else {
+							// It is an odd-numbered row, so the right value should contain
+							// expVal and the left value should be NULL.
+							if rightVal != expVal || rightNull || !leftNull {
+								t.Fatalf("found right = %d, right NULL? = %t, left NULL? = %t, "+
+									"expected right = %d, right NULL? = false, left NULL? = true, idx %d of batch %d",
+									rightVal, rightNull, leftNull, expVal, j, i)
+							}
+						}
+						expVal++
+					}
+					i++
+				}
+				if count != 2*nTuples {
+					t.Fatalf("found count %d, expected count %d", count, 2*nTuples)
+				}
+			})
+	}
+}
+
 // TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps
 // track of the expected output to make sure the join output is batched
 // correctly.
