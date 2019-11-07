@@ -86,8 +86,8 @@ type hashJoinerSourceSpec struct {
 
 // hashJoinEqOp performs a hash join on the input tables equality columns.
 // It requires that the output for every input batch in the probe phase fits
-// within col.BatchSize(), otherwise the behavior is undefined. A join is performed
-// and there is no guarantee on the ordering of the output columns.
+// within coldata.BatchSize(), otherwise the behavior is undefined. A join is
+// performed and there is no guarantee on the ordering of the output columns.
 //
 // Before the build phase, all equality and output columns from the build table
 // are collected and stored.
@@ -262,7 +262,7 @@ func (hj *hashJoinEqOp) nextInternal(ctx context.Context) coldata.Batch {
 		hj.prober.exec(ctx)
 
 		if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
-			hj.initEmitting()
+			hj.runningState = hjEmittingUnmatched
 			return hj.nextInternal(ctx)
 		}
 		return hj.prober.batch
@@ -291,17 +291,13 @@ func (hj *hashJoinEqOp) build(ctx context.Context) {
 	hj.runningState = hjProbing
 }
 
-func (hj *hashJoinEqOp) initEmitting() {
-	hj.runningState = hjEmittingUnmatched
-
+func (hj *hashJoinEqOp) emitUnmatched() {
 	// Set all elements in the probe columns of the output batch to null.
 	for i := range hj.prober.spec.outCols {
 		outCol := hj.prober.batch.ColVec(i + hj.prober.probeColOffset)
 		outCol.Nulls().SetNulls()
 	}
-}
 
-func (hj *hashJoinEqOp) emitUnmatched() {
 	nResults := uint16(0)
 
 	for nResults < coldata.BatchSize() && hj.emittingUnmatchedState.rowIdx < hj.ht.size {
