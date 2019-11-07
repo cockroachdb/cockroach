@@ -3,8 +3,8 @@ Business Source License 1.1
 Parameters
 
 Licensor:             Cockroach Labs, Inc.
-Licensed Work:        CockroachDB 19.2
-                      The Licensed Work is (c) 2019 Cockroach Labs, Inc.
+Licensed Work:        CockroachDB 20.1
+                      The Licensed Work is (c) 2020 Cockroach Labs, Inc.
 Additional Use Grant: You may make use of the Licensed Work, provided that
                       you may not use the Licensed Work for a Database
                       Service.
@@ -15,7 +15,7 @@ Additional Use Grant: You may make use of the Licensed Work, provided that
                       Licensed Work by creating tables whose schemas are
                       controlled by such third parties.
 
-Change Date:          2022-10-01
+Change Date:          2023-04-01
 
 Change License:       Apache License, Version 2.0
 
