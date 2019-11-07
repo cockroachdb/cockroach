@@ -19,7 +19,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1902,7 +1902,10 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL := t.assignRandomFamily(stmt.sql)
+	execSQL, changed := mutations.ForAllStatements(stmt.sql, mutations.ColumnFamilyMutator)
+	for _, c := range changed {
+		t.outf("rewrote: %s;", c)
+	}
 	res, err := t.db.Exec(execSQL)
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
@@ -1930,106 +1933,6 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		t.finishOne("OK")
 	}
 	return cont, err
-}
-
-// assignRandomFamily modifies any CREATE TABLE statement without any FAMILY
-// definitions to have random FAMILY definitions. Any error encountered will
-// return the original sql string unchanged.
-func (t *logicTest) assignRandomFamily(sql string) string {
-	stmts, err := parser.Parse(sql)
-	if err != nil {
-		return sql
-	}
-	delim := ""
-	var sb strings.Builder
-	for _, stmt := range stmts {
-		sb.WriteString(delim)
-		delim = "\n"
-		ast, ok := stmt.AST.(*tree.CreateTable)
-		if !ok {
-			sb.WriteString(stmt.SQL)
-			sb.WriteString(";")
-			continue
-		}
-
-		hasFamily := false
-		var columns []tree.Name
-		isPKCol := map[tree.Name]bool{}
-		// Only mutate stmt.SQL if something changed.
-		create := stmt.SQL
-		for _, def := range ast.Defs {
-			switch def := def.(type) {
-			case *tree.FamilyTableDef:
-				hasFamily = true
-			case *tree.ColumnTableDef:
-				if def.HasColumnFamily() {
-					hasFamily = true
-					continue
-				}
-				// Primary keys must be in the first
-				// column family, so don't add them to
-				// the list.
-				if def.PrimaryKey {
-					continue
-				}
-				columns = append(columns, def.Name)
-			case *tree.UniqueConstraintTableDef:
-				// If there's an explicit PK index
-				// definition, save the columns from it
-				// and remove them later.
-				if def.PrimaryKey {
-					for _, col := range def.Columns {
-						isPKCol[col.Column] = true
-					}
-				}
-			}
-		}
-		// If there's no family definitions, randomly assign some.
-		if !hasFamily && len(columns) > 1 {
-			// Any columns not specified in column families
-			// are auto assigned to the first family, so
-			// there's no requirement to exhaust columns here.
-
-			// Remove columns specified in PK index
-			// definitions. We need to do this here because
-			// index defs and columns can appear in any
-			// order in the CREATE TABLE.
-			{
-				n := 0
-				for _, x := range columns {
-					if !isPKCol[x] {
-						columns[n] = x
-						n++
-					}
-				}
-				columns = columns[:n]
-			}
-			rand.Shuffle(len(columns), func(i, j int) {
-				columns[i], columns[j] = columns[j], columns[i]
-			})
-			fd := &tree.FamilyTableDef{}
-			for {
-				if len(columns) == 0 {
-					if len(fd.Columns) > 0 {
-						ast.Defs = append(ast.Defs, fd)
-					}
-					break
-				}
-				fd.Columns = append(fd.Columns, columns[0])
-				columns = columns[1:]
-				// 50% chance to make a new column family.
-				if rand.Intn(2) != 0 {
-					ast.Defs = append(ast.Defs, fd)
-					fd = &tree.FamilyTableDef{}
-				}
-			}
-			create = ast.String()
-			t.outf("rewrote: %s;", create)
-		}
-		sb.WriteString(create)
-		sb.WriteString(";")
-	}
-	return sb.String()
 }
 
 func (t *logicTest) hashResults(results []string) (string, error) {
