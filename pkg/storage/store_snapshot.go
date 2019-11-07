@@ -122,54 +122,47 @@ type multiSSTWriter struct {
 	currSSTFile *SSTSnapshotStorageFile
 	keyRanges   []rditer.KeyRange
 	currRange   int
-	// The size of the SST the last time the SST file writer was truncated. This
-	// size is used to determine the size of the SST chunk buffered in-memory.
-	truncatedSize int64
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
 }
 
 func newMultiSSTWriter(
-	ssss *SSTSnapshotStorageScratch, keyRanges []rditer.KeyRange, sstChunkSize int64,
+	ctx context.Context,
+	ssss *SSTSnapshotStorageScratch,
+	keyRanges []rditer.KeyRange,
+	sstChunkSize int64,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
 		ssss:         ssss,
 		keyRanges:    keyRanges,
 		sstChunkSize: sstChunkSize,
 	}
-	if err := msstw.initSST(); err != nil {
+	if err := msstw.initSST(ctx); err != nil {
 		return msstw, err
 	}
 	return msstw, nil
 }
 
-func (msstw *multiSSTWriter) initSST() error {
-	newSSTFile, err := msstw.ssss.NewFile()
+func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
+	newSSTFile, err := msstw.ssss.NewFile(ctx, msstw.sstChunkSize)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new sst file")
 	}
 	msstw.currSSTFile = newSSTFile
-	newSST := engine.MakeSSTWriter()
+	newSST := engine.MakeSSTWriter(newSSTFile)
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
-	msstw.truncatedSize = 0
 	return nil
 }
 
 func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
-	chunk, err := msstw.currSST.Finish()
+	err := msstw.currSST.Finish()
 	if err != nil {
 		return errors.Wrap(err, "failed to finish sst")
-	}
-	if err := msstw.currSSTFile.Write(ctx, chunk); err != nil {
-		return errors.Wrap(err, "failed to write to sst file")
-	}
-	if err := msstw.currSSTFile.Close(); err != nil {
-		return errors.Wrap(err, "failed to close sst file")
 	}
 	msstw.currRange++
 	msstw.currSST.Close()
@@ -183,7 +176,7 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key engine.MVCCKey, value 
 		if err := msstw.finalizeSST(ctx); err != nil {
 			return err
 		}
-		if err := msstw.initSST(); err != nil {
+		if err := msstw.initSST(ctx); err != nil {
 			return err
 		}
 	}
@@ -192,18 +185,6 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key engine.MVCCKey, value 
 	}
 	if err := msstw.currSST.Put(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
-	}
-	if int64(msstw.currSST.DataSize)-msstw.truncatedSize > msstw.sstChunkSize {
-		msstw.truncatedSize = int64(msstw.currSST.DataSize)
-		chunk, err := msstw.currSST.Truncate()
-		if err != nil {
-			return errors.Wrap(err, "failed to truncate sst")
-		}
-		// NOTE: Chunk may be empty due to the semantics of Truncate(), but Write()
-		// handles an empty chunk as a noop.
-		if err := msstw.currSSTFile.Write(ctx, chunk); err != nil {
-			return errors.Wrap(err, "failed to write to sst file")
-		}
 	}
 	return nil
 }
@@ -217,7 +198,7 @@ func (msstw *multiSSTWriter) Finish(ctx context.Context) error {
 			if msstw.currRange >= len(msstw.keyRanges) {
 				break
 			}
-			if err := msstw.initSST(); err != nil {
+			if err := msstw.initSST(ctx); err != nil {
 				return err
 			}
 		}
@@ -246,7 +227,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most three SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
-	msstw, err := newMultiSSTWriter(kvSS.ssss, keyRanges, kvSS.sstChunkSize)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.ssss, keyRanges, kvSS.sstChunkSize)
 	if err != nil {
 		return noSnap, err
 	}

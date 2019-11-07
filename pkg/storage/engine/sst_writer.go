@@ -11,6 +11,8 @@
 package engine
 
 import (
+	"io"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/pkg/errors"
@@ -19,38 +21,40 @@ import (
 // SSTWriter writes SSTables.
 type SSTWriter struct {
 	fw *sstable.Writer
-	f  *memFile
+	f  writeCloseSyncer
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
-	// lastTruncatedAt tracks the last byte of memFile at which Truncate() was
-	// called. Only return bytes in Finish after this point.
-	lastTruncatedAt uint64
+}
+
+// writeCloseSyncer interface copied from pebble.sstable.
+type writeCloseSyncer interface {
+	io.WriteCloser
+	Sync() error
 }
 
 // MakeSSTWriter creates a new SSTWriter.
-func MakeSSTWriter() SSTWriter {
+func MakeSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
 	opts.TableFormat = sstable.TableFormatLevelDB
 	opts.MergerName = "nullptr"
 	// Disable bloom filters to produce SSTs matching those from RocksDB.
 	opts.FilterPolicy = nil
-	f := &memFile{}
 	sst := sstable.NewWriter(f, opts)
 	return SSTWriter{fw: sst, f: f}
 }
 
 // Finish finalizes the writer and returns the constructed file's contents,
 // since the last call to Truncate (if any). At least one kv entry must have been added.
-func (fw *SSTWriter) Finish() ([]byte, error) {
+func (fw *SSTWriter) Finish() error {
 	if fw.fw == nil {
-		return nil, errors.New("cannot call Finish on a closed writer")
+		return errors.New("cannot call Finish on a closed writer")
 	}
 	if err := fw.fw.Close(); err != nil {
-		return nil, err
+		return err
 	}
 	fw.fw = nil
-	return fw.f.data[fw.lastTruncatedAt:], nil
+	return nil
 }
 
 // ClearRange implements the Writer interface.
@@ -73,14 +77,6 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
 	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Set(fw.scratch, value)
-}
-
-// Truncate returns the in-memory buffer from the previous call to Truncate
-// (or the start), until now.
-func (fw *SSTWriter) Truncate() ([]byte, error) {
-	oldData := fw.f.data[fw.lastTruncatedAt:]
-	fw.lastTruncatedAt = uint64(len(fw.f.data))
-	return oldData, nil
 }
 
 // ApplyBatchRepr implements the Writer interface.
@@ -165,19 +161,30 @@ func (fw *SSTWriter) Close() {
 	fw.fw = nil
 }
 
-type memFile struct {
+// MemFile is a file-like struct that buffers all data written to it in memory.
+// Implements the writeCloseSyncer interface and is intended for use with
+// SSTWriter.
+type MemFile struct {
 	data []byte
 }
 
-func (*memFile) Close() error {
+// Close implements the writeCloseSyncer interface.
+func (*MemFile) Close() error {
 	return nil
 }
 
-func (*memFile) Sync() error {
+// Sync implements the writeCloseSyncer interface.
+func (*MemFile) Sync() error {
 	return nil
 }
 
-func (f *memFile) Write(p []byte) (int, error) {
+// Write implements the writeCloseSyncer interface.
+func (f *MemFile) Write(p []byte) (int, error) {
 	f.data = append(f.data, p...)
 	return len(p), nil
+}
+
+// Data returns the in-memory buffer behind this MemFile.
+func (f *MemFile) Data() []byte {
+	return f.data
 }
