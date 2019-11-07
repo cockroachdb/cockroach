@@ -167,9 +167,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	}
 }
 
-// A MalformedSnapshotError indicates that the snapshot in question is
+// A errMalformedSnapshot indicates that the snapshot in question is
 // malformed, for e.g. missing raft log entries.
-var malformedSnapshotError = errors.New("malformed snapshot generated")
+var errMalformedSnapshot = errors.New("malformed snapshot generated")
 
 // Send implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Send(
@@ -296,7 +296,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
 			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
 			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
-		return malformedSnapshotError
+		return errMalformedSnapshot
 	}
 
 	// Inline the payloads for all sideloaded proposals.
