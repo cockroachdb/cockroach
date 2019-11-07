@@ -99,13 +99,13 @@ func RecomputeStats(
 		// stats for timeseries ranges (which go cold and the approximate stats are
 		// wildly overcounting) and this is paced by the consistency checker, but it
 		// means some extra engine churn.
-		cArgs.Stats.Add(delta)
 		if !cluster.Version.IsActive(ctx, cArgs.EvalCtx.ClusterSettings(), cluster.VersionContainsEstimatesCounter) {
 			// We are running with the older version of MVCCStats.ContainsEstimates
 			// which was a boolean, so we should keep it in {0,1} and not reset it
 			// to avoid racing with another command that sets it to true.
 			delta.ContainsEstimates = currentStats.ContainsEstimates
 		}
+		cArgs.Stats.Add(delta)
 	}
 
 	resp.(*roachpb.RecomputeStatsResponse).AddedDelta = enginepb.MVCCStatsDelta(delta)
