@@ -38,12 +38,14 @@ import (
 // createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
 // storage capacity.
 func createTestRocksDBEngine() engine.Engine {
-	return engine.NewInMem(enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
+	return engine.NewInMem(context.Background(),
+		enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
 }
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine() engine.Engine {
-	return engine.NewInMem(enginepb.EngineTypePebble, roachpb.Attributes{}, 1<<20)
+	return engine.NewInMem(context.Background(),
+		enginepb.EngineTypePebble, roachpb.Attributes{}, 1<<20)
 }
 
 var engineImpls = []struct {
