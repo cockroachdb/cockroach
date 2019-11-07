@@ -130,171 +130,181 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
 	kvs := func(kvs ...MVCCKeyValue) []MVCCKeyValue { return kvs }
 
-	runWithAllEngines(func(e Engine, t *testing.T) {
-		fn := (*MVCCIncrementalIterator).NextKey
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			e := engineImpl.create()
+			defer e.Close()
 
-		t.Run("empty", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, nil))
+			fn := (*MVCCIncrementalIterator).NextKey
 
-		for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
-			v := roachpb.Value{RawBytes: kv.Value}
-			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+			t.Run("empty", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, nil))
+
+			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
+				v := roachpb.Value{RawBytes: kv.Value}
+				if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Exercise time ranges.
+			t.Run("ts (0-0]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMin, nil))
+			t.Run("ts (0-1]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts1, kvs(kv1_1_1)))
+			t.Run("ts (0-∞]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv2_2_2)))
+			t.Run("ts (1-1]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts1, nil))
+			t.Run("ts (1-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts2, kvs(kv1_2_2, kv2_2_2)))
+			t.Run("ts (2-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts2, ts2, nil))
+
+			// Exercise key ranges.
+			t.Run("kv [1-1)", assertEqualKVs(e, fn, testKey1, testKey1, tsMin, tsMax, nil))
+			t.Run("kv [1-2)", assertEqualKVs(e, fn, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2)))
+
+			// Exercise deletion.
+			if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
 				t.Fatal(err)
 			}
-		}
+			t.Run("del", assertEqualKVs(e, fn, keyMin, keyMax, ts1, tsMax, kvs(kv1_3Deleted, kv2_2_2)))
 
-		// Exercise time ranges.
-		t.Run("ts (0-0]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMin, nil))
-		t.Run("ts (0-1]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts1, kvs(kv1_1_1)))
-		t.Run("ts (0-∞]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv2_2_2)))
-		t.Run("ts (1-1]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts1, nil))
-		t.Run("ts (1-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts2, kvs(kv1_2_2, kv2_2_2)))
-		t.Run("ts (2-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts2, ts2, nil))
-
-		// Exercise key ranges.
-		t.Run("kv [1-1)", assertEqualKVs(e, fn, testKey1, testKey1, tsMin, tsMax, nil))
-		t.Run("kv [1-2)", assertEqualKVs(e, fn, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2)))
-
-		// Exercise deletion.
-		if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
-			t.Fatal(err)
-		}
-		t.Run("del", assertEqualKVs(e, fn, keyMin, keyMax, ts1, tsMax, kvs(kv1_3Deleted, kv2_2_2)))
-
-		// Exercise intent handling.
-		txn1ID := uuid.MakeV4()
-		txn1 := roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Key:       testKey1,
-				ID:        txn1ID,
-				Epoch:     1,
-				Timestamp: ts4,
-			},
-			OrigTimestamp: ts4,
-		}
-		txn1Val := roachpb.Value{RawBytes: testValue4}
-		if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
-			t.Fatal(err)
-		}
-		txn2ID := uuid.MakeV4()
-		txn2 := roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Key:       testKey2,
-				ID:        txn2ID,
-				Epoch:     1,
-				Timestamp: ts4,
-			},
-			OrigTimestamp: ts4,
-		}
-		txn2Val := roachpb.Value{RawBytes: testValue4}
-		if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
-			t.Fatal(err)
-		}
-		t.Run("intents",
-			iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents",
-			iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents",
-			iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
-		// Intents above the upper time bound or beneath the lower time bound must
-		// be ignored (#28358). Note that the lower time bound is exclusive while
-		// the upper time bound is inclusive.
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv2_2_2)))
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
-
-		intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
-		if err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
-			t.Fatal(err)
-		}
-		intent2 := roachpb.Intent{Span: roachpb.Span{Key: testKey2}, Txn: txn2.TxnMeta, Status: roachpb.ABORTED}
-		if err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
-			t.Fatal(err)
-		}
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
-	}, t)
-
-	runWithAllEngines(func(e Engine, t *testing.T) {
-		fn := (*MVCCIncrementalIterator).Next
-
-		t.Run("empty", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, nil))
-
-		for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
-			v := roachpb.Value{RawBytes: kv.Value}
-			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+			// Exercise intent handling.
+			txn1ID := uuid.MakeV4()
+			txn1 := roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Key:       testKey1,
+					ID:        txn1ID,
+					Epoch:     1,
+					Timestamp: ts4,
+				},
+				OrigTimestamp: ts4,
+			}
+			txn1Val := roachpb.Value{RawBytes: testValue4}
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
-		}
+			txn2ID := uuid.MakeV4()
+			txn2 := roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Key:       testKey2,
+					ID:        txn2ID,
+					Epoch:     1,
+					Timestamp: ts4,
+				},
+				OrigTimestamp: ts4,
+			}
+			txn2Val := roachpb.Value{RawBytes: testValue4}
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
+				t.Fatal(err)
+			}
+			t.Run("intents",
+				iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+			t.Run("intents",
+				iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+			t.Run("intents",
+				iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
+			// Intents above the upper time bound or beneath the lower time bound must
+			// be ignored (#28358). Note that the lower time bound is exclusive while
+			// the upper time bound is inclusive.
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv2_2_2)))
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
 
-		// Exercise time ranges.
-		t.Run("ts (0-0]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMin, nil))
-		t.Run("ts (0-1]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts1, kvs(kv1_1_1)))
-		t.Run("ts (0-∞]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1, kv2_2_2)))
-		t.Run("ts (1-1]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts1, nil))
-		t.Run("ts (1-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts2, kvs(kv1_2_2, kv2_2_2)))
-		t.Run("ts (2-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts2, ts2, nil))
+			intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
+			if err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+				t.Fatal(err)
+			}
+			intent2 := roachpb.Intent{Span: roachpb.Span{Key: testKey2}, Txn: txn2.TxnMeta, Status: roachpb.ABORTED}
+			if err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+				t.Fatal(err)
+			}
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
+		})
+	}
 
-		// Exercise key ranges.
-		t.Run("kv [1-1)", assertEqualKVs(e, fn, testKey1, testKey1, tsMin, tsMax, nil))
-		t.Run("kv [1-2)", assertEqualKVs(e, fn, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1)))
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			e := engineImpl.create()
+			defer e.Close()
 
-		// Exercise deletion.
-		if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
-			t.Fatal(err)
-		}
-		t.Run("del", assertEqualKVs(e, fn, keyMin, keyMax, ts1, tsMax, kvs(kv1_3Deleted, kv1_2_2, kv2_2_2)))
+			fn := (*MVCCIncrementalIterator).Next
 
-		// Exercise intent handling.
-		txn1ID := uuid.MakeV4()
-		txn1 := roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Key:       testKey1,
-				ID:        txn1ID,
-				Epoch:     1,
-				Timestamp: ts4,
-			},
-			OrigTimestamp: ts4,
-		}
-		txn1Val := roachpb.Value{RawBytes: testValue4}
-		if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
-			t.Fatal(err)
-		}
-		txn2ID := uuid.MakeV4()
-		txn2 := roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Key:       testKey2,
-				ID:        txn2ID,
-				Epoch:     1,
-				Timestamp: ts4,
-			},
-			OrigTimestamp: ts4,
-		}
-		txn2Val := roachpb.Value{RawBytes: testValue4}
-		if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
-			t.Fatal(err)
-		}
-		t.Run("intents",
-			iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents",
-			iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
-		t.Run("intents",
-			iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
-		// Intents above the upper time bound or beneath the lower time bound must
-		// be ignored (#28358). Note that the lower time bound is exclusive while
-		// the upper time bound is inclusive.
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
+			t.Run("empty", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, nil))
 
-		intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
-		if err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
-			t.Fatal(err)
-		}
-		intent2 := roachpb.Intent{Span: roachpb.Span{Key: testKey2}, Txn: txn2.TxnMeta, Status: roachpb.ABORTED}
-		if err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
-			t.Fatal(err)
-		}
-		t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
-	}, t)
+			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
+				v := roachpb.Value{RawBytes: kv.Value}
+				if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Exercise time ranges.
+			t.Run("ts (0-0]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMin, nil))
+			t.Run("ts (0-1]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts1, kvs(kv1_1_1)))
+			t.Run("ts (0-∞]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1, kv2_2_2)))
+			t.Run("ts (1-1]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts1, nil))
+			t.Run("ts (1-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts2, kvs(kv1_2_2, kv2_2_2)))
+			t.Run("ts (2-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts2, ts2, nil))
+
+			// Exercise key ranges.
+			t.Run("kv [1-1)", assertEqualKVs(e, fn, testKey1, testKey1, tsMin, tsMax, nil))
+			t.Run("kv [1-2)", assertEqualKVs(e, fn, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1)))
+
+			// Exercise deletion.
+			if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
+				t.Fatal(err)
+			}
+			t.Run("del", assertEqualKVs(e, fn, keyMin, keyMax, ts1, tsMax, kvs(kv1_3Deleted, kv1_2_2, kv2_2_2)))
+
+			// Exercise intent handling.
+			txn1ID := uuid.MakeV4()
+			txn1 := roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Key:       testKey1,
+					ID:        txn1ID,
+					Epoch:     1,
+					Timestamp: ts4,
+				},
+				OrigTimestamp: ts4,
+			}
+			txn1Val := roachpb.Value{RawBytes: testValue4}
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
+				t.Fatal(err)
+			}
+			txn2ID := uuid.MakeV4()
+			txn2 := roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Key:       testKey2,
+					ID:        txn2ID,
+					Epoch:     1,
+					Timestamp: ts4,
+				},
+				OrigTimestamp: ts4,
+			}
+			txn2Val := roachpb.Value{RawBytes: testValue4}
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
+				t.Fatal(err)
+			}
+			t.Run("intents",
+				iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+			t.Run("intents",
+				iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+			t.Run("intents",
+				iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
+			// Intents above the upper time bound or beneath the lower time bound must
+			// be ignored (#28358). Note that the lower time bound is exclusive while
+			// the upper time bound is inclusive.
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
+
+			intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
+			if err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+				t.Fatal(err)
+			}
+			intent2 := roachpb.Intent{Span: roachpb.Span{Key: testKey2}, Txn: txn2.TxnMeta, Status: roachpb.ABORTED}
+			if err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+				t.Fatal(err)
+			}
+			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+		})
+	}
 }
 
 func slurpKVsInTimeRange(
@@ -328,65 +338,70 @@ func slurpKVsInTimeRange(
 func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	runWithAllEngines(func(e Engine, t *testing.T) {
-		// Create a DB containing a single intent.
-		ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			e := engineImpl.create()
+			defer e.Close()
 
-		kA := roachpb.Key("kA")
-		vA1 := roachpb.MakeValueFromString("vA1")
-		vA2 := roachpb.MakeValueFromString("vA2")
-		ts0 := hlc.Timestamp{WallTime: 0}
-		ts1 := hlc.Timestamp{WallTime: 1}
-		ts2 := hlc.Timestamp{WallTime: 2}
-		ts3 := hlc.Timestamp{WallTime: 3}
-		txn := &roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Key:       roachpb.Key("b"),
-				ID:        uuid.MakeV4(),
-				Epoch:     1,
-				Timestamp: ts1,
-				Sequence:  1,
-			},
-			OrigTimestamp: ts1,
-		}
-		if err := MVCCPut(ctx, e, nil, kA, ts1, vA1, txn); err != nil {
-			t.Fatal(err)
-		}
+			// Create a DB containing a single intent.
+			ctx := context.Background()
 
-		// Concurrently iterate over the intent using a time-bound iterator and move
-		// the intent out of the time-bound iterator's time range by writing to it
-		// again at a higher timestamp.
-		g, _ := errgroup.WithContext(ctx)
-		g.Go(func() error {
-			// Re-write the intent with a higher timestamp.
-			txn.Timestamp = ts3
-			txn.Sequence = 2
-			return MVCCPut(ctx, e, nil, kA, ts1, vA2, txn)
-		})
-		g.Go(func() error {
-			// Iterate with a time range that includes the initial intent but does
-			// not include the new intent.
-			kvs, err := slurpKVsInTimeRange(e, kA, ts0, ts2)
-
-			// There are two permissible outcomes from the scan. If the iteration
-			// wins the race with the put that moves the intent then it should
-			// observe the intent and return a write intent error. If the iteration
-			// loses the race with the put that moves the intent then it should
-			// observe and return nothing because there will be no committed or
-			// provisional keys in its time range.
-			if err != nil {
-				if !testutils.IsError(err, `conflicting intents on "kA"`) {
-					return err
-				}
-			} else {
-				if len(kvs) != 0 {
-					return errors.Errorf(`unexpected kvs: %v`, kvs)
-				}
+			kA := roachpb.Key("kA")
+			vA1 := roachpb.MakeValueFromString("vA1")
+			vA2 := roachpb.MakeValueFromString("vA2")
+			ts0 := hlc.Timestamp{WallTime: 0}
+			ts1 := hlc.Timestamp{WallTime: 1}
+			ts2 := hlc.Timestamp{WallTime: 2}
+			ts3 := hlc.Timestamp{WallTime: 3}
+			txn := &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Key:       roachpb.Key("b"),
+					ID:        uuid.MakeV4(),
+					Epoch:     1,
+					Timestamp: ts1,
+					Sequence:  1,
+				},
+				OrigTimestamp: ts1,
 			}
-			return nil
+			if err := MVCCPut(ctx, e, nil, kA, ts1, vA1, txn); err != nil {
+				t.Fatal(err)
+			}
+
+			// Concurrently iterate over the intent using a time-bound iterator and move
+			// the intent out of the time-bound iterator's time range by writing to it
+			// again at a higher timestamp.
+			g, _ := errgroup.WithContext(ctx)
+			g.Go(func() error {
+				// Re-write the intent with a higher timestamp.
+				txn.Timestamp = ts3
+				txn.Sequence = 2
+				return MVCCPut(ctx, e, nil, kA, ts1, vA2, txn)
+			})
+			g.Go(func() error {
+				// Iterate with a time range that includes the initial intent but does
+				// not include the new intent.
+				kvs, err := slurpKVsInTimeRange(e, kA, ts0, ts2)
+
+				// There are two permissible outcomes from the scan. If the iteration
+				// wins the race with the put that moves the intent then it should
+				// observe the intent and return a write intent error. If the iteration
+				// loses the race with the put that moves the intent then it should
+				// observe and return nothing because there will be no committed or
+				// provisional keys in its time range.
+				if err != nil {
+					if !testutils.IsError(err, `conflicting intents on "kA"`) {
+						return err
+					}
+				} else {
+					if len(kvs) != 0 {
+						return errors.Errorf(`unexpected kvs: %v`, kvs)
+					}
+				}
+				return nil
+			})
+			if err := g.Wait(); err != nil {
+				t.Fatal(err)
+			}
 		})
-		if err := g.Wait(); err != nil {
-			t.Fatal(err)
-		}
-	}, t)
+	}
 }

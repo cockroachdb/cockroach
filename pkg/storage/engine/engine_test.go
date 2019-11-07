@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,34 +53,6 @@ func ensureRangeEqual(
 	}
 }
 
-var (
-	inMemAttrs = roachpb.Attributes{Attrs: []string{"mem"}}
-)
-
-// runWithAllEngines creates a new engine of each supported type and
-// invokes the supplied test func with each instance.
-func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
-	func() {
-		rocksDBInMem := newRocksDBInMem(inMemAttrs, testCacheSize)
-		defer rocksDBInMem.Close()
-		test(rocksDBInMem, t)
-	}()
-
-	func() {
-		pebbleInMem, err := NewPebble(PebbleConfig{
-			StorageConfig: base.StorageConfig{
-				Attrs: inMemAttrs,
-			},
-			Opts: testPebbleOptions(vfs.NewMem()),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer pebbleInMem.Close()
-		test(pebbleInMem, t)
-	}()
-}
-
 // TestEngineBatchCommit writes a batch containing 10K rows (all the
 // same key) and concurrently attempts to read the value in a tight
 // loop. The test verifies that either there is no value for the key
@@ -92,53 +63,58 @@ func TestEngineBatchCommit(t *testing.T) {
 	key := mvccKey("a")
 	finalVal := []byte(strconv.Itoa(numWrites - 1))
 
-	runWithAllEngines(func(e Engine, t *testing.T) {
-		// Start a concurrent read operation in a busy loop.
-		readsBegun := make(chan struct{})
-		readsDone := make(chan error)
-		writesDone := make(chan struct{})
-		go func() {
-			readsDone <- func() error {
-				readsBegunAlias := readsBegun
-				for {
-					select {
-					case <-writesDone:
-						return nil
-					default:
-						val, err := e.Get(key)
-						if err != nil {
-							return err
-						}
-						if val != nil && !bytes.Equal(val, finalVal) {
-							return errors.Errorf("key value should be empty or %q; got %q", string(finalVal), string(val))
-						}
-						if readsBegunAlias != nil {
-							close(readsBegunAlias)
-							readsBegunAlias = nil
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			e := engineImpl.create()
+			defer e.Close()
+
+			// Start a concurrent read operation in a busy loop.
+			readsBegun := make(chan struct{})
+			readsDone := make(chan error)
+			writesDone := make(chan struct{})
+			go func() {
+				readsDone <- func() error {
+					readsBegunAlias := readsBegun
+					for {
+						select {
+						case <-writesDone:
+							return nil
+						default:
+							val, err := e.Get(key)
+							if err != nil {
+								return err
+							}
+							if val != nil && !bytes.Equal(val, finalVal) {
+								return errors.Errorf("key value should be empty or %q; got %q", string(finalVal), string(val))
+							}
+							if readsBegunAlias != nil {
+								close(readsBegunAlias)
+								readsBegunAlias = nil
+							}
 						}
 					}
-				}
+				}()
 			}()
-		}()
-		// Wait until we've succeeded with first read.
-		<-readsBegun
+			// Wait until we've succeeded with first read.
+			<-readsBegun
 
-		// Create key/values and put them in a batch to engine.
-		batch := e.NewBatch()
-		defer batch.Close()
-		for i := 0; i < numWrites; i++ {
-			if err := batch.Put(key, []byte(strconv.Itoa(i))); err != nil {
+			// Create key/values and put them in a batch to engine.
+			batch := e.NewBatch()
+			defer batch.Close()
+			for i := 0; i < numWrites; i++ {
+				if err := batch.Put(key, []byte(strconv.Itoa(i))); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := batch.Commit(false /* sync */); err != nil {
 				t.Fatal(err)
 			}
-		}
-		if err := batch.Commit(false /* sync */); err != nil {
-			t.Fatal(err)
-		}
-		close(writesDone)
-		if err := <-readsDone; err != nil {
-			t.Fatal(err)
-		}
-	}, t)
+			close(writesDone)
+			if err := <-readsDone; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }
 
 func TestEngineBatchStaleCachedIterator(t *testing.T) {
@@ -147,276 +123,294 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 	// invalid optimization which let an iterator return key-value pairs which
 	// had since been deleted from the underlying engine.
 	// Discovered in #6878.
-	runWithAllEngines(func(eng Engine, t *testing.T) {
-		// Focused failure mode: highlights the actual bug.
-		{
-			batch := eng.NewBatch()
-			defer batch.Close()
-			iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-			key := MVCCKey{Key: roachpb.Key("b")}
 
-			if err := batch.Put(key, []byte("foo")); err != nil {
-				t.Fatal(err)
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			eng := engineImpl.create()
+			defer eng.Close()
+
+			// Focused failure mode: highlights the actual bug.
+			{
+				batch := eng.NewBatch()
+				defer batch.Close()
+				iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				key := MVCCKey{Key: roachpb.Key("b")}
+
+				if err := batch.Put(key, []byte("foo")); err != nil {
+					t.Fatal(err)
+				}
+
+				iter.Seek(key)
+
+				if err := batch.Clear(key); err != nil {
+					t.Fatal(err)
+				}
+
+				// Iterator should not reuse its cached result.
+				iter.Seek(key)
+
+				if ok, err := iter.Valid(); err != nil {
+					t.Fatal(err)
+				} else if ok {
+					t.Fatalf("iterator unexpectedly valid: %v -> %v",
+						iter.UnsafeKey(), iter.UnsafeValue())
+				}
+
+				iter.Close()
 			}
 
-			iter.Seek(key)
+			// Higher-level failure mode. Mostly for documentation.
+			{
+				batch := eng.NewBatch()
+				defer batch.Close()
 
-			if err := batch.Clear(key); err != nil {
-				t.Fatal(err)
+				key := roachpb.Key("z")
+
+				// Put a value so that the deletion below finds a value to seek
+				// to.
+				if err := MVCCPut(context.Background(), batch, nil, key, hlc.Timestamp{},
+					roachpb.MakeValueFromString("x"), nil); err != nil {
+					t.Fatal(err)
+				}
+
+				// Seek the iterator to `key` and clear the value (but without
+				// telling the iterator about that).
+				if err := MVCCDelete(context.Background(), batch, nil, key,
+					hlc.Timestamp{}, nil); err != nil {
+					t.Fatal(err)
+				}
+
+				// Trigger a seek on the cached iterator by seeking to the (now
+				// absent) key.
+				// The underlying iterator will already be in the right position
+				// due to a seek in MVCCDelete (followed by a Clear, which does not
+				// invalidate the iterator's cache), and if it reports its cached
+				// result back, we'll see the (newly deleted) value (due to the
+				// failure mode above).
+				if v, _, err := MVCCGet(context.Background(), batch, key,
+					hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
+					t.Fatal(err)
+				} else if v != nil {
+					t.Fatalf("expected no value, got %+v", v)
+				}
 			}
-
-			// Iterator should not reuse its cached result.
-			iter.Seek(key)
-
-			if ok, err := iter.Valid(); err != nil {
-				t.Fatal(err)
-			} else if ok {
-				t.Fatalf("iterator unexpectedly valid: %v -> %v",
-					iter.UnsafeKey(), iter.UnsafeValue())
-			}
-
-			iter.Close()
-		}
-
-		// Higher-level failure mode. Mostly for documentation.
-		{
-			batch := eng.NewBatch()
-			defer batch.Close()
-
-			key := roachpb.Key("z")
-
-			// Put a value so that the deletion below finds a value to seek
-			// to.
-			if err := MVCCPut(context.Background(), batch, nil, key, hlc.Timestamp{},
-				roachpb.MakeValueFromString("x"), nil); err != nil {
-				t.Fatal(err)
-			}
-
-			// Seek the iterator to `key` and clear the value (but without
-			// telling the iterator about that).
-			if err := MVCCDelete(context.Background(), batch, nil, key,
-				hlc.Timestamp{}, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			// Trigger a seek on the cached iterator by seeking to the (now
-			// absent) key.
-			// The underlying iterator will already be in the right position
-			// due to a seek in MVCCDelete (followed by a Clear, which does not
-			// invalidate the iterator's cache), and if it reports its cached
-			// result back, we'll see the (newly deleted) value (due to the
-			// failure mode above).
-			if v, _, err := MVCCGet(context.Background(), batch, key,
-				hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
-				t.Fatal(err)
-			} else if v != nil {
-				t.Fatalf("expected no value, got %+v", v)
-			}
-		}
-	}, t)
+		})
+	}
 }
 
 func TestEngineBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		numShuffles := 100
-		key := mvccKey("a")
-		// Those are randomized below.
-		type data struct {
-			key   MVCCKey
-			value []byte
-			merge bool
-		}
-		batch := []data{
-			{key, appender("~ockroachDB"), false},
-			{key, appender("C~ckroachDB"), false},
-			{key, appender("Co~kroachDB"), false},
-			{key, appender("Coc~roachDB"), false},
-			{key, appender("Cock~oachDB"), false},
-			{key, appender("Cockr~achDB"), false},
-			{key, appender("Cockro~chDB"), false},
-			{key, appender("Cockroa~hDB"), false},
-			{key, appender("Cockroac~DB"), false},
-			{key, appender("Cockroach~B"), false},
-			{key, appender("CockroachD~"), false},
-			{key, nil, false},
-			{key, appender("C"), true},
-			{key, appender(" o"), true},
-			{key, appender("  c"), true},
-			{key, appender(" k"), true},
-			{key, appender("r"), true},
-			{key, appender(" o"), true},
-			{key, appender("  a"), true},
-			{key, appender(" c"), true},
-			{key, appender("h"), true},
-			{key, appender(" D"), true},
-			{key, appender("  B"), true},
-		}
 
-		apply := func(eng ReadWriter, d data) error {
-			if d.value == nil {
-				return eng.Clear(d.key)
-			} else if d.merge {
-				return eng.Merge(d.key, d.value)
-			}
-			return eng.Put(d.key, d.value)
-		}
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
 
-		get := func(eng ReadWriter, key MVCCKey) []byte {
-			b, err := eng.Get(key)
-			if err != nil {
-				t.Fatal(err)
+			numShuffles := 100
+			key := mvccKey("a")
+			// Those are randomized below.
+			type data struct {
+				key   MVCCKey
+				value []byte
+				merge bool
 			}
-			var m enginepb.MVCCMetadata
-			if err := protoutil.Unmarshal(b, &m); err != nil {
-				t.Fatal(err)
+			batch := []data{
+				{key, appender("~ockroachDB"), false},
+				{key, appender("C~ckroachDB"), false},
+				{key, appender("Co~kroachDB"), false},
+				{key, appender("Coc~roachDB"), false},
+				{key, appender("Cock~oachDB"), false},
+				{key, appender("Cockr~achDB"), false},
+				{key, appender("Cockro~chDB"), false},
+				{key, appender("Cockroa~hDB"), false},
+				{key, appender("Cockroac~DB"), false},
+				{key, appender("Cockroach~B"), false},
+				{key, appender("CockroachD~"), false},
+				{key, nil, false},
+				{key, appender("C"), true},
+				{key, appender(" o"), true},
+				{key, appender("  c"), true},
+				{key, appender(" k"), true},
+				{key, appender("r"), true},
+				{key, appender(" o"), true},
+				{key, appender("  a"), true},
+				{key, appender(" c"), true},
+				{key, appender("h"), true},
+				{key, appender(" D"), true},
+				{key, appender("  B"), true},
 			}
-			if !m.IsInline() {
-				return nil
-			}
-			valueBytes, err := MakeValue(m).GetBytes()
-			if err != nil {
-				t.Fatal(err)
-			}
-			return valueBytes
-		}
 
-		for i := 0; i < numShuffles; i++ {
-			// In each run, create an array of shuffled operations.
-			shuffledIndices := rand.Perm(len(batch))
-			currentBatch := make([]data, len(batch))
-			for k := range currentBatch {
-				currentBatch[k] = batch[shuffledIndices[k]]
-			}
-			// Reset the key
-			if err := engine.Clear(key); err != nil {
-				t.Fatal(err)
-			}
-			// Run it once with individual operations and remember the result.
-			for i, op := range currentBatch {
-				if err := apply(engine, op); err != nil {
-					t.Errorf("%d: op %v: %+v", i, op, err)
-					continue
+			apply := func(eng ReadWriter, d data) error {
+				if d.value == nil {
+					return eng.Clear(d.key)
+				} else if d.merge {
+					return eng.Merge(d.key, d.value)
 				}
+				return eng.Put(d.key, d.value)
 			}
-			expectedValue := get(engine, key)
-			// Run the whole thing as a batch and compare.
-			b := engine.NewBatch()
-			defer b.Close()
-			if err := b.Clear(key); err != nil {
-				t.Fatal(err)
-			}
-			for _, op := range currentBatch {
-				if err := apply(b, op); err != nil {
+
+			get := func(eng ReadWriter, key MVCCKey) []byte {
+				b, err := eng.Get(key)
+				if err != nil {
 					t.Fatal(err)
 				}
-			}
-			// Try getting the value from the batch.
-			actualValue := get(b, key)
-			if !bytes.Equal(actualValue, expectedValue) {
-				t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
-			}
-			// Try using an iterator to get the value from the batch.
-			iter := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-			iter.Seek(key)
-			if ok, err := iter.Valid(); !ok {
-				if currentBatch[len(currentBatch)-1].value != nil {
-					t.Errorf("%d: batch seek invalid, err=%v", i, err)
-				}
-			} else if !iter.Key().Equal(key) {
-				t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
-			} else {
 				var m enginepb.MVCCMetadata
-				if err := iter.ValueProto(&m); err != nil {
+				if err := protoutil.Unmarshal(b, &m); err != nil {
 					t.Fatal(err)
+				}
+				if !m.IsInline() {
+					return nil
 				}
 				valueBytes, err := MakeValue(m).GetBytes()
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !bytes.Equal(valueBytes, expectedValue) {
-					t.Errorf("%d: expected %s, but got %s", i, expectedValue, valueBytes)
+				return valueBytes
+			}
+
+			for i := 0; i < numShuffles; i++ {
+				// In each run, create an array of shuffled operations.
+				shuffledIndices := rand.Perm(len(batch))
+				currentBatch := make([]data, len(batch))
+				for k := range currentBatch {
+					currentBatch[k] = batch[shuffledIndices[k]]
+				}
+				// Reset the key
+				if err := engine.Clear(key); err != nil {
+					t.Fatal(err)
+				}
+				// Run it once with individual operations and remember the result.
+				for i, op := range currentBatch {
+					if err := apply(engine, op); err != nil {
+						t.Errorf("%d: op %v: %+v", i, op, err)
+						continue
+					}
+				}
+				expectedValue := get(engine, key)
+				// Run the whole thing as a batch and compare.
+				b := engine.NewBatch()
+				defer b.Close()
+				if err := b.Clear(key); err != nil {
+					t.Fatal(err)
+				}
+				for _, op := range currentBatch {
+					if err := apply(b, op); err != nil {
+						t.Fatal(err)
+					}
+				}
+				// Try getting the value from the batch.
+				actualValue := get(b, key)
+				if !bytes.Equal(actualValue, expectedValue) {
+					t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
+				}
+				// Try using an iterator to get the value from the batch.
+				iter := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter.Seek(key)
+				if ok, err := iter.Valid(); !ok {
+					if currentBatch[len(currentBatch)-1].value != nil {
+						t.Errorf("%d: batch seek invalid, err=%v", i, err)
+					}
+				} else if !iter.Key().Equal(key) {
+					t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
+				} else {
+					var m enginepb.MVCCMetadata
+					if err := iter.ValueProto(&m); err != nil {
+						t.Fatal(err)
+					}
+					valueBytes, err := MakeValue(m).GetBytes()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(valueBytes, expectedValue) {
+						t.Errorf("%d: expected %s, but got %s", i, expectedValue, valueBytes)
+					}
+				}
+				iter.Close()
+				// Commit the batch and try getting the value from the engine.
+				if err := b.Commit(false /* sync */); err != nil {
+					t.Errorf("%d: %+v", i, err)
+					continue
+				}
+				actualValue = get(engine, key)
+				if !bytes.Equal(actualValue, expectedValue) {
+					t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
 				}
 			}
-			iter.Close()
-			// Commit the batch and try getting the value from the engine.
-			if err := b.Commit(false /* sync */); err != nil {
-				t.Errorf("%d: %+v", i, err)
-				continue
-			}
-			actualValue = get(engine, key)
-			if !bytes.Equal(actualValue, expectedValue) {
-				t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
-			}
-		}
-	}, t)
+		})
+	}
 }
 
 func TestEnginePutGetDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		// Test for correct handling of empty keys, which should produce errors.
-		for i, err := range []error{
-			engine.Put(mvccKey(""), []byte("")),
-			engine.Put(NilKey, []byte("")),
-			func() error {
-				_, err := engine.Get(mvccKey(""))
-				return err
-			}(),
-			engine.Clear(NilKey),
-			func() error {
-				_, err := engine.Get(NilKey)
-				return err
-			}(),
-			engine.Clear(NilKey),
-			engine.Clear(mvccKey("")),
-		} {
-			if err == nil {
-				t.Fatalf("%d: illegal handling of empty key", i)
-			}
-		}
 
-		// Test for allowed keys, which should go through.
-		testCases := []struct {
-			key   MVCCKey
-			value []byte
-		}{
-			{mvccKey("dog"), []byte("woof")},
-			{mvccKey("cat"), []byte("meow")},
-			{mvccKey("emptyval"), nil},
-			{mvccKey("emptyval2"), []byte("")},
-			{mvccKey("server"), []byte("42")},
-		}
-		for _, c := range testCases {
-			val, err := engine.Get(c.key)
-			if err != nil {
-				t.Errorf("get: expected no error, but got %s", err)
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			// Test for correct handling of empty keys, which should produce errors.
+			for i, err := range []error{
+				engine.Put(mvccKey(""), []byte("")),
+				engine.Put(NilKey, []byte("")),
+				func() error {
+					_, err := engine.Get(mvccKey(""))
+					return err
+				}(),
+				engine.Clear(NilKey),
+				func() error {
+					_, err := engine.Get(NilKey)
+					return err
+				}(),
+				engine.Clear(NilKey),
+				engine.Clear(mvccKey("")),
+			} {
+				if err == nil {
+					t.Fatalf("%d: illegal handling of empty key", i)
+				}
 			}
-			if len(val) != 0 {
-				t.Errorf("expected key %q value.Bytes to be nil: got %+v", c.key, val)
+
+			// Test for allowed keys, which should go through.
+			testCases := []struct {
+				key   MVCCKey
+				value []byte
+			}{
+				{mvccKey("dog"), []byte("woof")},
+				{mvccKey("cat"), []byte("meow")},
+				{mvccKey("emptyval"), nil},
+				{mvccKey("emptyval2"), []byte("")},
+				{mvccKey("server"), []byte("42")},
 			}
-			if err := engine.Put(c.key, c.value); err != nil {
-				t.Errorf("put: expected no error, but got %s", err)
+			for _, c := range testCases {
+				val, err := engine.Get(c.key)
+				if err != nil {
+					t.Errorf("get: expected no error, but got %s", err)
+				}
+				if len(val) != 0 {
+					t.Errorf("expected key %q value.Bytes to be nil: got %+v", c.key, val)
+				}
+				if err := engine.Put(c.key, c.value); err != nil {
+					t.Errorf("put: expected no error, but got %s", err)
+				}
+				val, err = engine.Get(c.key)
+				if err != nil {
+					t.Errorf("get: expected no error, but got %s", err)
+				}
+				if !bytes.Equal(val, c.value) {
+					t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
+				}
+				if err := engine.Clear(c.key); err != nil {
+					t.Errorf("delete: expected no error, but got %s", err)
+				}
+				val, err = engine.Get(c.key)
+				if err != nil {
+					t.Errorf("get: expected no error, but got %s", err)
+				}
+				if len(val) != 0 {
+					t.Errorf("expected key %s value.Bytes to be nil: got %+v", c.key, val)
+				}
 			}
-			val, err = engine.Get(c.key)
-			if err != nil {
-				t.Errorf("get: expected no error, but got %s", err)
-			}
-			if !bytes.Equal(val, c.value) {
-				t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
-			}
-			if err := engine.Clear(c.key); err != nil {
-				t.Errorf("delete: expected no error, but got %s", err)
-			}
-			val, err = engine.Get(c.key)
-			if err != nil {
-				t.Errorf("get: expected no error, but got %s", err)
-			}
-			if len(val) != 0 {
-				t.Errorf("expected key %s value.Bytes to be nil: got %+v", c.key, val)
-			}
-		}
-	}, t)
+		})
+	}
 }
 
 // TestEngineMerge tests that the passing through of engine merge operations
@@ -424,67 +418,73 @@ func TestEnginePutGetDelete(t *testing.T) {
 // exhaustively in the merge tests themselves.
 func TestEngineMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		testcases := []struct {
-			testKey  MVCCKey
-			merges   [][]byte
-			expected []byte
-		}{
-			{
-				mvccKey("haste not in life"),
-				[][]byte{
-					appender("x"),
-					appender("y"),
-					appender("z"),
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			testcases := []struct {
+				testKey  MVCCKey
+				merges   [][]byte
+				expected []byte
+			}{
+				{
+					mvccKey("haste not in life"),
+					[][]byte{
+						appender("x"),
+						appender("y"),
+						appender("z"),
+					},
+					appender("xyz"),
 				},
-				appender("xyz"),
-			},
-			{
-				mvccKey("timeseriesmerged"),
-				[][]byte{
+				{
+					mvccKey("timeseriesmerged"),
+					[][]byte{
+						timeSeriesRow(testtime, 1000, []tsSample{
+							{1, 1, 5, 5, 5},
+						}...),
+						timeSeriesRow(testtime, 1000, []tsSample{
+							{2, 1, 5, 5, 5},
+							{1, 2, 10, 7, 3},
+						}...),
+						timeSeriesRow(testtime, 1000, []tsSample{
+							{10, 1, 5, 5, 5},
+						}...),
+						timeSeriesRow(testtime, 1000, []tsSample{
+							{5, 1, 5, 5, 5},
+							{3, 1, 5, 5, 5},
+						}...),
+					},
 					timeSeriesRow(testtime, 1000, []tsSample{
-						{1, 1, 5, 5, 5},
-					}...),
-					timeSeriesRow(testtime, 1000, []tsSample{
-						{2, 1, 5, 5, 5},
 						{1, 2, 10, 7, 3},
-					}...),
-					timeSeriesRow(testtime, 1000, []tsSample{
+						{2, 1, 5, 5, 5},
+						{3, 1, 5, 5, 5},
+						{5, 1, 5, 5, 5},
 						{10, 1, 5, 5, 5},
 					}...),
-					timeSeriesRow(testtime, 1000, []tsSample{
-						{5, 1, 5, 5, 5},
-						{3, 1, 5, 5, 5},
-					}...),
 				},
-				timeSeriesRow(testtime, 1000, []tsSample{
-					{1, 2, 10, 7, 3},
-					{2, 1, 5, 5, 5},
-					{3, 1, 5, 5, 5},
-					{5, 1, 5, 5, 5},
-					{10, 1, 5, 5, 5},
-				}...),
-			},
-		}
-		for _, tc := range testcases {
-			for i, update := range tc.merges {
-				if err := engine.Merge(tc.testKey, update); err != nil {
-					t.Fatalf("%d: %+v", i, err)
+			}
+			for _, tc := range testcases {
+				for i, update := range tc.merges {
+					if err := engine.Merge(tc.testKey, update); err != nil {
+						t.Fatalf("%d: %+v", i, err)
+					}
+				}
+				result, _ := engine.Get(tc.testKey)
+				var resultV, expectedV enginepb.MVCCMetadata
+				if err := protoutil.Unmarshal(result, &resultV); err != nil {
+					t.Fatal(err)
+				}
+				if err := protoutil.Unmarshal(tc.expected, &expectedV); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(resultV, expectedV) {
+					t.Errorf("unexpected append-merge result: %v != %v", resultV, expectedV)
 				}
 			}
-			result, _ := engine.Get(tc.testKey)
-			var resultV, expectedV enginepb.MVCCMetadata
-			if err := protoutil.Unmarshal(result, &resultV); err != nil {
-				t.Fatal(err)
-			}
-			if err := protoutil.Unmarshal(tc.expected, &expectedV); err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(resultV, expectedV) {
-				t.Errorf("unexpected append-merge result: %v != %v", resultV, expectedV)
-			}
-		}
-	}, t)
+		})
+	}
 }
 
 func TestEngineTimeBound(t *testing.T) {
@@ -651,93 +651,105 @@ func TestEngineTimeBound(t *testing.T) {
 
 func TestFlushWithSSTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		batch := engine.NewBatch()
-		for i := 0; i < 10000; i++ {
-			key := make([]byte, 4)
-			binary.BigEndian.PutUint32(key, uint32(i))
-			err := batch.Put(MVCCKey{Key: key}, []byte("foobar"))
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			batch := engine.NewBatch()
+			for i := 0; i < 10000; i++ {
+				key := make([]byte, 4)
+				binary.BigEndian.PutUint32(key, uint32(i))
+				err := batch.Put(MVCCKey{Key: key}, []byte("foobar"))
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err := batch.Commit(true)
 			if err != nil {
 				t.Fatal(err)
 			}
-		}
+			batch.Close()
 
-		err := batch.Commit(true)
-		if err != nil {
-			t.Fatal(err)
-		}
-		batch.Close()
+			err = engine.Flush()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		err = engine.Flush()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		ssts := engine.GetSSTables()
-		if len(ssts) == 0 {
-			t.Fatal("expected non-zero sstables, got 0")
-		}
-	}, t)
+			ssts := engine.GetSSTables()
+			if len(ssts) == 0 {
+				t.Fatal("expected non-zero sstables, got 0")
+			}
+		})
+	}
 }
 
 func TestEngineScan1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		testCases := []struct {
-			key   MVCCKey
-			value []byte
-		}{
-			{mvccKey("dog"), []byte("woof")},
-			{mvccKey("cat"), []byte("meow")},
-			{mvccKey("server"), []byte("42")},
-			{mvccKey("french"), []byte("Allô?")},
-			{mvccKey("german"), []byte("hallo")},
-			{mvccKey("chinese"), []byte("你好")},
-		}
-		keyMap := map[string][]byte{}
-		for _, c := range testCases {
-			if err := engine.Put(c.key, c.value); err != nil {
-				t.Errorf("could not put key %q: %+v", c.key, err)
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			testCases := []struct {
+				key   MVCCKey
+				value []byte
+			}{
+				{mvccKey("dog"), []byte("woof")},
+				{mvccKey("cat"), []byte("meow")},
+				{mvccKey("server"), []byte("42")},
+				{mvccKey("french"), []byte("Allô?")},
+				{mvccKey("german"), []byte("hallo")},
+				{mvccKey("chinese"), []byte("你好")},
 			}
-			keyMap[string(c.key.Key)] = c.value
-		}
-		sortedKeys := make([]string, len(testCases))
-		for i, t := range testCases {
-			sortedKeys[i] = string(t.key.Key)
-		}
-		sort.Strings(sortedKeys)
+			keyMap := map[string][]byte{}
+			for _, c := range testCases {
+				if err := engine.Put(c.key, c.value); err != nil {
+					t.Errorf("could not put key %q: %+v", c.key, err)
+				}
+				keyMap[string(c.key.Key)] = c.value
+			}
+			sortedKeys := make([]string, len(testCases))
+			for i, t := range testCases {
+				sortedKeys[i] = string(t.key.Key)
+			}
+			sort.Strings(sortedKeys)
 
-		keyvals, err := Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 0)
-		if err != nil {
-			t.Fatalf("could not run scan: %+v", err)
-		}
-		ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
-
-		// Check an end of range which does not equal an existing key.
-		keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german1"), 0)
-		if err != nil {
-			t.Fatalf("could not run scan: %+v", err)
-		}
-		ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
-
-		keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 2)
-		if err != nil {
-			t.Fatalf("could not run scan: %+v", err)
-		}
-		ensureRangeEqual(t, sortedKeys[1:3], keyMap, keyvals)
-
-		// Should return all key/value pairs in lexicographic order. Note that ""
-		// is the lowest key possible and is a special case in engine.scan, that's
-		// why we test it here.
-		startKeys := []roachpb.Key{roachpb.Key("cat"), roachpb.Key("")}
-		for _, startKey := range startKeys {
-			keyvals, err = Scan(engine, startKey, roachpb.KeyMax, 0)
+			keyvals, err := Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %+v", err)
 			}
-			ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
-		}
-	}, t)
+			ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
+
+			// Check an end of range which does not equal an existing key.
+			keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german1"), 0)
+			if err != nil {
+				t.Fatalf("could not run scan: %+v", err)
+			}
+			ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
+
+			keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 2)
+			if err != nil {
+				t.Fatalf("could not run scan: %+v", err)
+			}
+			ensureRangeEqual(t, sortedKeys[1:3], keyMap, keyvals)
+
+			// Should return all key/value pairs in lexicographic order. Note that ""
+			// is the lowest key possible and is a special case in engine.scan, that's
+			// why we test it here.
+			startKeys := []roachpb.Key{roachpb.Key("cat"), roachpb.Key("")}
+			for _, startKey := range startKeys {
+				keyvals, err = Scan(engine, startKey, roachpb.KeyMax, 0)
+				if err != nil {
+					t.Fatalf("could not run scan: %+v", err)
+				}
+				ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
+			}
+		})
+	}
 }
 
 func verifyScan(start, end roachpb.Key, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
@@ -760,60 +772,70 @@ func TestEngineScan2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// TODO(Tobias): Merge this with TestEngineScan1 and remove
 	// either verifyScan or the other helper function.
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := []MVCCKey{
-			mvccKey("a"),
-			mvccKey("aa"),
-			mvccKey("aaa"),
-			mvccKey("ab"),
-			mvccKey("abc"),
-			mvccKey(roachpb.RKeyMax),
-		}
 
-		insertKeys(keys, engine, t)
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
 
-		// Scan all keys (non-inclusive of final key).
-		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
-		verifyScan(roachpb.Key("a"), roachpb.KeyMax, 10, keys[:5], engine, t)
+			keys := []MVCCKey{
+				mvccKey("a"),
+				mvccKey("aa"),
+				mvccKey("aaa"),
+				mvccKey("ab"),
+				mvccKey("abc"),
+				mvccKey(roachpb.RKeyMax),
+			}
 
-		// Scan sub range.
-		verifyScan(roachpb.Key("aab"), roachpb.Key("abcc"), 10, keys[3:5], engine, t)
-		verifyScan(roachpb.Key("aa0"), roachpb.Key("abcc"), 10, keys[2:5], engine, t)
+			insertKeys(keys, engine, t)
 
-		// Scan with max values.
-		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 3, keys[:3], engine, t)
-		verifyScan(roachpb.Key("a0"), roachpb.KeyMax, 3, keys[1:4], engine, t)
+			// Scan all keys (non-inclusive of final key).
+			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
+			verifyScan(roachpb.Key("a"), roachpb.KeyMax, 10, keys[:5], engine, t)
 
-		// Scan with max value 0 gets all values.
-		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 0, keys[:5], engine, t)
-	}, t)
+			// Scan sub range.
+			verifyScan(roachpb.Key("aab"), roachpb.Key("abcc"), 10, keys[3:5], engine, t)
+			verifyScan(roachpb.Key("aa0"), roachpb.Key("abcc"), 10, keys[2:5], engine, t)
+
+			// Scan with max values.
+			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 3, keys[:3], engine, t)
+			verifyScan(roachpb.Key("a0"), roachpb.KeyMax, 3, keys[1:4], engine, t)
+
+			// Scan with max value 0 gets all values.
+			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 0, keys[:5], engine, t)
+		})
+	}
 }
 
 func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, end MVCCKey) error) {
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := []MVCCKey{
-			mvccKey("a"),
-			mvccKey("aa"),
-			mvccKey("aaa"),
-			mvccKey("ab"),
-			mvccKey("abc"),
-			mvccKey(roachpb.RKeyMax),
-		}
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
 
-		insertKeys(keys, engine, t)
+			keys := []MVCCKey{
+				mvccKey("a"),
+				mvccKey("aa"),
+				mvccKey("aaa"),
+				mvccKey("ab"),
+				mvccKey("abc"),
+				mvccKey(roachpb.RKeyMax),
+			}
 
-		// Scan all keys (non-inclusive of final key).
-		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
+			insertKeys(keys, engine, t)
 
-		// Delete a range of keys
-		if err := clearRange(engine, mvccKey("aa"), mvccKey("abc")); err != nil {
-			t.Fatal(err)
-		}
-		// Verify what's left
-		verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10,
-			[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
-	}, t)
+			// Scan all keys (non-inclusive of final key).
+			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10, keys[:5], engine, t)
 
+			// Delete a range of keys
+			if err := clearRange(engine, mvccKey("aa"), mvccKey("abc")); err != nil {
+				t.Fatal(err)
+			}
+			// Verify what's left
+			verifyScan(roachpb.KeyMin, roachpb.KeyMax, 10,
+				[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
+		})
+	}
 }
 
 func TestEngineDeleteRange(t *testing.T) {
@@ -851,133 +873,140 @@ func TestEngineDeleteIterRange(t *testing.T) {
 
 func TestSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		key := mvccKey("a")
-		val1 := []byte("1")
-		if err := engine.Put(key, val1); err != nil {
-			t.Fatal(err)
-		}
-		val, _ := engine.Get(key)
-		if !bytes.Equal(val, val1) {
-			t.Fatalf("the value %s in get result does not match the value %s in request",
-				val, val1)
-		}
 
-		snap := engine.NewSnapshot()
-		defer snap.Close()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
 
-		val2 := []byte("2")
-		if err := engine.Put(key, val2); err != nil {
-			t.Fatal(err)
-		}
-		val, _ = engine.Get(key)
-		valSnapshot, error := snap.Get(key)
-		if error != nil {
-			t.Fatalf("error : %s", error)
-		}
-		if !bytes.Equal(val, val2) {
-			t.Fatalf("the value %s in get result does not match the value %s in request",
-				val, val2)
-		}
-		if !bytes.Equal(valSnapshot, val1) {
-			t.Fatalf("the value %s in get result does not match the value %s in request",
-				valSnapshot, val1)
-		}
+			key := mvccKey("a")
+			val1 := []byte("1")
+			if err := engine.Put(key, val1); err != nil {
+				t.Fatal(err)
+			}
+			val, _ := engine.Get(key)
+			if !bytes.Equal(val, val1) {
+				t.Fatalf("the value %s in get result does not match the value %s in request",
+					val, val1)
+			}
 
-		keyvals, _ := Scan(engine, key.Key, roachpb.KeyMax, 0)
-		keyvalsSnapshot, error := Scan(snap, key.Key, roachpb.KeyMax, 0)
-		if error != nil {
-			t.Fatalf("error : %s", error)
-		}
-		if len(keyvals) != 1 || !bytes.Equal(keyvals[0].Value, val2) {
-			t.Fatalf("the value %s in get result does not match the value %s in request",
-				keyvals[0].Value, val2)
-		}
-		if len(keyvalsSnapshot) != 1 || !bytes.Equal(keyvalsSnapshot[0].Value, val1) {
-			t.Fatalf("the value %s in get result does not match the value %s in request",
-				keyvalsSnapshot[0].Value, val1)
-		}
-	}, t)
+			snap := engine.NewSnapshot()
+			defer snap.Close()
+
+			val2 := []byte("2")
+			if err := engine.Put(key, val2); err != nil {
+				t.Fatal(err)
+			}
+			val, _ = engine.Get(key)
+			valSnapshot, error := snap.Get(key)
+			if error != nil {
+				t.Fatalf("error : %s", error)
+			}
+			if !bytes.Equal(val, val2) {
+				t.Fatalf("the value %s in get result does not match the value %s in request",
+					val, val2)
+			}
+			if !bytes.Equal(valSnapshot, val1) {
+				t.Fatalf("the value %s in get result does not match the value %s in request",
+					valSnapshot, val1)
+			}
+
+			keyvals, _ := Scan(engine, key.Key, roachpb.KeyMax, 0)
+			keyvalsSnapshot, error := Scan(snap, key.Key, roachpb.KeyMax, 0)
+			if error != nil {
+				t.Fatalf("error : %s", error)
+			}
+			if len(keyvals) != 1 || !bytes.Equal(keyvals[0].Value, val2) {
+				t.Fatalf("the value %s in get result does not match the value %s in request",
+					keyvals[0].Value, val2)
+			}
+			if len(keyvalsSnapshot) != 1 || !bytes.Equal(keyvalsSnapshot[0].Value, val1) {
+				t.Fatalf("the value %s in get result does not match the value %s in request",
+					keyvalsSnapshot[0].Value, val1)
+			}
+		})
+	}
 }
 
 // TestSnapshotMethods verifies that snapshots allow only read-only
 // engine operations.
 func TestSnapshotMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := []MVCCKey{mvccKey("a"), mvccKey("b")}
-		vals := [][]byte{[]byte("1"), []byte("2")}
-		for i := range keys {
-			if err := engine.Put(keys[i], vals[i]); err != nil {
-				t.Fatal(err)
-			}
-			if val, err := engine.Get(keys[i]); err != nil {
-				t.Fatal(err)
-			} else if !bytes.Equal(vals[i], val) {
-				t.Fatalf("expected %s, but found %s", vals[i], val)
-			}
-		}
-		snap := engine.NewSnapshot()
-		defer snap.Close()
 
-		// Verify Attrs.
-		if !reflect.DeepEqual(engine.Attrs(), inMemAttrs) {
-			t.Errorf("attrs mismatch; expected %+v, got %+v", inMemAttrs, engine.Attrs())
-		}
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
 
-		// Verify Get.
-		for i := range keys {
-			valSnapshot, err := snap.Get(keys[i])
+			keys := []MVCCKey{mvccKey("a"), mvccKey("b")}
+			vals := [][]byte{[]byte("1"), []byte("2")}
+			for i := range keys {
+				if err := engine.Put(keys[i], vals[i]); err != nil {
+					t.Fatal(err)
+				}
+				if val, err := engine.Get(keys[i]); err != nil {
+					t.Fatal(err)
+				} else if !bytes.Equal(vals[i], val) {
+					t.Fatalf("expected %s, but found %s", vals[i], val)
+				}
+			}
+			snap := engine.NewSnapshot()
+			defer snap.Close()
+
+			// Verify Get.
+			for i := range keys {
+				valSnapshot, err := snap.Get(keys[i])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(vals[i], valSnapshot) {
+					t.Fatalf("the value %s in get result does not match the value %s in snapshot",
+						vals[i], valSnapshot)
+				}
+			}
+
+			// Verify Scan.
+			keyvals, _ := Scan(engine, roachpb.KeyMin, roachpb.KeyMax, 0)
+			keyvalsSnapshot, err := Scan(snap, roachpb.KeyMin, roachpb.KeyMax, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(vals[i], valSnapshot) {
-				t.Fatalf("the value %s in get result does not match the value %s in snapshot",
-					vals[i], valSnapshot)
+			if !reflect.DeepEqual(keyvals, keyvalsSnapshot) {
+				t.Fatalf("the key/values %v in scan result does not match the value %s in snapshot",
+					keyvals, keyvalsSnapshot)
 			}
-		}
 
-		// Verify Scan.
-		keyvals, _ := Scan(engine, roachpb.KeyMin, roachpb.KeyMax, 0)
-		keyvalsSnapshot, err := Scan(snap, roachpb.KeyMin, roachpb.KeyMax, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(keyvals, keyvalsSnapshot) {
-			t.Fatalf("the key/values %v in scan result does not match the value %s in snapshot",
-				keyvals, keyvalsSnapshot)
-		}
-
-		// Verify Iterate.
-		index := 0
-		if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) (bool, error) {
-			if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
-				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
-					index, keys[index], vals[index], kv.Key, kv.Value)
+			// Verify Iterate.
+			index := 0
+			if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) (bool, error) {
+				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
+					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
+						index, keys[index], vals[index], kv.Key, kv.Value)
+				}
+				index++
+				return false, nil
+			}); err != nil {
+				t.Fatal(err)
 			}
-			index++
-			return false, nil
-		}); err != nil {
-			t.Fatal(err)
-		}
 
-		// Write a new key to engine.
-		newKey := mvccKey("c")
-		newVal := []byte("3")
-		if err := engine.Put(newKey, newVal); err != nil {
-			t.Fatal(err)
-		}
+			// Write a new key to engine.
+			newKey := mvccKey("c")
+			newVal := []byte("3")
+			if err := engine.Put(newKey, newVal); err != nil {
+				t.Fatal(err)
+			}
 
-		// Verify NewIterator still iterates over original snapshot.
-		iter := snap.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-		iter.Seek(newKey)
-		if ok, err := iter.Valid(); err != nil {
-			t.Fatal(err)
-		} else if ok {
-			t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
-		}
-		iter.Close()
-	}, t)
+			// Verify NewIterator still iterates over original snapshot.
+			iter := snap.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter.Seek(newKey)
+			if ok, err := iter.Valid(); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
+			}
+			iter.Close()
+		})
+	}
 }
 
 func insertKeys(keys []MVCCKey, engine Engine, t *testing.T) {

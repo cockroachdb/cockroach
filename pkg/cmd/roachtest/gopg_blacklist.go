@@ -70,15 +70,14 @@ var gopgBlackList19_2 = blacklist{
 }
 
 var gopgIgnoreList19_2 = blacklist{
-	// TODO(yuzefovich): remove 'DB Prepare' and 'ORM slice model' tests from the
-	// list once the new version of gopg is released.
-	"pg | DB Prepare | returns an error when query can't be prepared": "41690",
-	"pg | ORM slice model | fetches Book relations":                   "41690",
-	"pg | ORM slice model | fetches Genre relations":                  "41690",
-	"pg | ORM slice model | fetches Translation relation":             "41690",
-	"pg | ORM struct model | fetches Author relations":                "41690",
-	"pg | ORM struct model | fetches Book relations":                  "41690",
-	"pg | ORM struct model | fetches Genre relations":                 "41690",
+	// These "fetching" tests assume a particular order when ORDER BY clause is
+	// omitted from the query by the ORM itself.
+	"pg | ORM slice model | fetches Book relations":       "41690",
+	"pg | ORM slice model | fetches Genre relations":      "41690",
+	"pg | ORM slice model | fetches Translation relation": "41690",
+	"pg | ORM struct model | fetches Author relations":    "41690",
+	"pg | ORM struct model | fetches Book relations":      "41690",
+	"pg | ORM struct model | fetches Genre relations":     "41690",
 	// This test assumes different transaction isolation level (READ COMMITTED).
 	"pg | Tx | supports CopyFrom and CopyIn": "41690",
 }
