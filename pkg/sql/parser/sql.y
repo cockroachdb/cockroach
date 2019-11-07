@@ -7306,8 +7306,8 @@ const_datetime:
 | TIMESTAMP '(' iconst32 ')' opt_timezone
   {
     prec := $3.int32()
-    if !(prec == 6 || prec == 0) {
-        return unimplementedWithIssue(sqllex, 32098)
+    if prec != 6 {
+         return unimplementedWithIssue(sqllex, 32098)
     }
     if $5.bool() {
       $$.val = types.MakeTimestampTZ(prec)
@@ -7322,7 +7322,7 @@ const_datetime:
 | TIMESTAMPTZ '(' iconst32 ')'
   {
     prec := $3.int32()
-    if !(prec == 6 || prec == 0) {
+    if prec != 6 {
          return unimplementedWithIssue(sqllex, 32098)
     }
     $$.val = types.MakeTimestampTZ(prec)
