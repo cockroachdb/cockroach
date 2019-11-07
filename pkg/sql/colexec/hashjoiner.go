@@ -259,11 +259,12 @@ func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 			hj.prober.exec(ctx)
 
 			if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
-				hj.initEmittingUnmatched()
+				hj.runningState = hjEmittingUnmatched
 				continue
 			}
 			return hj.prober.batch
 		case hjEmittingUnmatched:
+			hj.initEmittingUnmatched()
 			hj.emitUnmatched()
 			return hj.prober.batch
 		default:
@@ -290,8 +291,6 @@ func (hj *hashJoinEqOp) build(ctx context.Context) {
 }
 
 func (hj *hashJoinEqOp) initEmittingUnmatched() {
-	hj.runningState = hjEmittingUnmatched
-
 	// Set all elements in the probe columns of the output batch to null.
 	for i := range hj.prober.spec.outCols {
 		outCol := hj.prober.batch.ColVec(i + hj.prober.probeColOffset)
