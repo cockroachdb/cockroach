@@ -32,7 +32,7 @@ import (
 // for. The input key will also be mutated if matches is false.
 // See the analog in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
-	vecs []coldata.Vec,
+	vecs *coldata.TypedVecs,
 	idx uint16,
 	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -124,7 +124,7 @@ func DecodeIndexKeyToCols(
 // have been observed during decoding.
 // See the analog in sqlbase/index_encoding.go.
 func DecodeKeyValsToCols(
-	vecs []coldata.Vec,
+	vecs *coldata.TypedVecs,
 	idx uint16,
 	indexColIdx []int,
 	types []types.T,
@@ -146,7 +146,7 @@ func DecodeKeyValsToCols(
 			if unseen != nil {
 				unseen.Remove(i)
 			}
-			key, err = decodeTableKeyToCol(vecs[i], idx, &types[j], key, enc)
+			key, err = decodeTableKeyToCol(vecs, i, idx, &types[j], key, enc)
 		}
 		if err != nil {
 			return nil, err
@@ -159,18 +159,24 @@ func DecodeKeyValsToCols(
 // to the idx'th slot of the input colexec.Vec.
 // See the analog, DecodeTableKey, in sqlbase/column_type_encoding.go.
 func decodeTableKeyToCol(
-	vec coldata.Vec, idx uint16, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
+	vecs *coldata.TypedVecs,
+	colIdx int,
+	idx uint16,
+	valType *types.T,
+	key []byte,
+	dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
 		return nil, errors.AssertionFailedf("invalid direction: %d", log.Safe(dir))
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
-		vec.Nulls().SetNull(idx)
+		vecs.Vecs[colIdx].Nulls().SetNull(idx)
 		return key, nil
 	}
 	var rkey []byte
 	var err error
+	typedColIdx := vecs.ColIdxToTypeIdx[colIdx]
 	switch valType.Family() {
 	case types.BoolFamily:
 		var i int64
@@ -179,7 +185,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		vec.Bool()[idx] = i != 0
+		vecs.BoolVecs[typedColIdx][idx] = i != 0
 	case types.IntFamily:
 		var i int64
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -189,11 +195,11 @@ func decodeTableKeyToCol(
 		}
 		switch valType.Width() {
 		case 16:
-			vec.Int16()[idx] = int16(i)
+			vecs.Int16Vecs[typedColIdx][idx] = int16(i)
 		case 32:
-			vec.Int32()[idx] = int32(i)
+			vecs.Int32Vecs[typedColIdx][idx] = int32(i)
 		case 0, 64:
-			vec.Int64()[idx] = i
+			vecs.Int64Vecs[typedColIdx][idx] = i
 		}
 	case types.FloatFamily:
 		var f float64
@@ -202,7 +208,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
-		vec.Float64()[idx] = f
+		vecs.Float64Vecs[typedColIdx][idx] = f
 	case types.DecimalFamily:
 		var d apd.Decimal
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -210,7 +216,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
-		vec.Decimal()[idx] = d
+		vecs.DecimalVecs[typedColIdx][idx] = d
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var r []byte
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -218,7 +224,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
-		vec.Bytes().Set(int(idx), r)
+		vecs.BytesVecs[typedColIdx].Set(int(idx), r)
 	case types.DateFamily, types.OidFamily:
 		var t int64
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -226,7 +232,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
-		vec.Int64()[idx] = t
+		vecs.Int64Vecs[typedColIdx][idx] = t
 	case types.TimestampFamily:
 		var t time.Time
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -297,45 +303,46 @@ func skipTableKey(
 // not match the column's type.
 // See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
 func UnmarshalColumnValueToCol(
-	vec coldata.Vec, idx uint16, typ *types.T, value roachpb.Value,
+	vecs coldata.TypedVecs, colIdx int, idx uint16, typ *types.T, value roachpb.Value,
 ) error {
 	if value.RawBytes == nil {
-		vec.Nulls().SetNull(idx)
+		vecs.Vecs[colIdx].Nulls().SetNull(idx)
 	}
 
+	typedColIdx := vecs.ColIdxToTypeIdx[colIdx]
 	var err error
 	switch typ.Family() {
 	case types.BoolFamily:
 		var v bool
 		v, err = value.GetBool()
-		vec.Bool()[idx] = v
+		vecs.BoolVecs[typedColIdx][idx] = v
 	case types.IntFamily:
 		var v int64
 		v, err = value.GetInt()
 		switch typ.Width() {
 		case 16:
-			vec.Int16()[idx] = int16(v)
+			vecs.Int16Vecs[typedColIdx][idx] = int16(v)
 		case 32:
-			vec.Int32()[idx] = int32(v)
+			vecs.Int32Vecs[typedColIdx][idx] = int32(v)
 		default:
 			// Pre-2.1 BIT was using INT encoding with arbitrary sizes.
 			// We map these to 64-bit INT now. See #34161.
-			vec.Int64()[idx] = v
+			vecs.Int64Vecs[typedColIdx][idx] = v
 		}
 	case types.FloatFamily:
 		var v float64
 		v, err = value.GetFloat()
-		vec.Float64()[idx] = v
+		vecs.Float64Vecs[typedColIdx][idx] = v
 	case types.DecimalFamily:
-		err = value.GetDecimalInto(&vec.Decimal()[idx])
+		err = value.GetDecimalInto(&vecs.DecimalVecs[typedColIdx][idx])
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var v []byte
 		v, err = value.GetBytes()
-		vec.Bytes().Set(int(idx), v)
+		vecs.BytesVecs[typedColIdx].Set(int(idx), v)
 	case types.DateFamily, types.OidFamily:
 		var v int64
 		v, err = value.GetInt()
-		vec.Int64()[idx] = v
+		vecs.Int64Vecs[typedColIdx][idx] = v
 	default:
 		return errors.AssertionFailedf("unsupported column type: %s", log.Safe(typ.Family()))
 	}

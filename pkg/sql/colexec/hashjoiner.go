@@ -640,6 +640,8 @@ func (builder *hashJoinBuilder) exec(ctx context.Context) {
 		batchSize := uint16(batchEnd - batchStart)
 
 		for i := 0; i < nKeyCols; i++ {
+			// TODO(anyone): this causes cols * tablesize / batchsize allocations for
+			// every hash aggregation. This should be improved.
 			builder.ht.keys[i] = builder.ht.vals[builder.ht.keyCols[i]].Slice(builder.ht.valTypes[builder.ht.keyCols[i]], batchStart, batchEnd)
 		}
 

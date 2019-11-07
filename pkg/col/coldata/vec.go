@@ -131,6 +131,28 @@ type Vec interface {
 
 var _ Vec = &memColumn{}
 
+// Vecs is a slice of Vec.
+type Vecs []Vec
+
+// TypedVecs is a Vecs plus a slice for every type of Vec there is, to avoid
+// unnecessary typecasts during scans. The idea is that every Vec is stored both
+// in the embedded Vecs slice as well as in the typed slice, in order. Decoding
+// routines that know the type of the thing that's being decoded can then write
+// directly to the relevant typed slice, avoiding expensive typecasts.
+type TypedVecs struct {
+	Vecs
+
+	ColIdxToTypeIdx []int
+
+	BoolVecs    [][]bool
+	Int16Vecs   [][]int16
+	Int32Vecs   [][]int32
+	Int64Vecs   [][]int64
+	Float64Vecs [][]float64
+	BytesVecs   []*Bytes
+	DecimalVecs [][]apd.Decimal
+}
+
 // memColumn is a simple pass-through implementation of Vec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
