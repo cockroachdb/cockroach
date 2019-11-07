@@ -1357,6 +1357,22 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
+			LeftType:   types.String,
+			RightType:  types.Any,
+			ReturnType: types.String,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDString(string(MustBeDString(left)) + right.String()), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Any,
+			RightType:  types.String,
+			ReturnType: types.String,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDString(left.String() + string(MustBeDString(right))), nil
+			},
+		},
+		&BinOp{
 			LeftType:   types.Bytes,
 			RightType:  types.Bytes,
 			ReturnType: types.Bytes,
