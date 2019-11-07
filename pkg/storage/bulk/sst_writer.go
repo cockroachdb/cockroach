@@ -24,7 +24,7 @@ type SSTWriter struct {
 	fw *sstable.Writer
 	f  *memFile
 	// DataSize tracks the total key and value bytes added so far.
-	DataSize uint64
+	DataSize int64
 	scratch  []byte
 }
 
@@ -49,7 +49,7 @@ func (fw *SSTWriter) Add(kv engine.MVCCKeyValue) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
-	fw.DataSize += uint64(len(kv.Key.Key)) + uint64(len(kv.Value))
+	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
 	fw.scratch = engine.EncodeKeyToBuf(fw.scratch[:0], kv.Key)
 	return fw.fw.Set(fw.scratch, kv.Value)
 }

@@ -54,8 +54,8 @@ type SSTBatcher struct {
 	db         sender
 	rc         *kv.RangeDescriptorCache
 	settings   *cluster.Settings
-	maxSize    uint64
-	splitAfter uint64
+	maxSize    func() int64
+	splitAfter func() int64
 
 	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
 	disallowShadowing bool
@@ -85,7 +85,7 @@ type SSTBatcher struct {
 		splitWait time.Duration
 	}
 	// Tracking for if we have "filled" a range in case we want to split/scatter.
-	flushedToCurrentRange uint64
+	flushedToCurrentRange int64
 	lastFlushKey          []byte
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
@@ -103,7 +103,7 @@ type SSTBatcher struct {
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
-func MakeSSTBatcher(ctx context.Context, db sender, flushBytes uint64) (*SSTBatcher, error) {
+func MakeSSTBatcher(ctx context.Context, db sender, flushBytes func() int64) (*SSTBatcher, error) {
 	b := &SSTBatcher{db: db, maxSize: flushBytes, disallowShadowing: true}
 	err := b.Reset()
 	return b, err
@@ -220,7 +220,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		return b.Reset()
 	}
 
-	if b.sstWriter.DataSize >= b.maxSize {
+	if b.sstWriter.DataSize >= b.maxSize() {
 		if err := b.doFlush(ctx, sizeFlush, nextKey); err != nil {
 			return err
 		}
@@ -249,7 +249,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	size := b.sstWriter.DataSize
 	if reason == sizeFlush {
-		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize))
+		log.VEventf(ctx, 3, "flushing %s SST due to size > %s", sz(size), sz(b.maxSize()))
 		b.flushCounts.sstSize++
 
 		// On first flush, if it is due to size, we introduce one split at the start
@@ -304,7 +304,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 			b.lastFlushKey = append(b.lastFlushKey[:0], b.flushKey...)
 			b.flushedToCurrentRange = size
 		}
-		if b.splitAfter > 0 && b.flushedToCurrentRange > b.splitAfter && nextKey != nil {
+		if b.splitAfter != nil && b.flushedToCurrentRange > b.splitAfter() && nextKey != nil {
 			if splitAt, err := keys.EnsureSafeSplitKey(nextKey); err != nil {
 				log.Warning(ctx, err)
 			} else {
