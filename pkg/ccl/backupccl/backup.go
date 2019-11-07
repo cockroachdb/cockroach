@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/url"
 	"sort"
 	"time"
@@ -734,6 +735,18 @@ func backup(
 	for _, s := range spans {
 		allSpans = append(allSpans, spanAndTime{span: s, start: backupDesc.StartTime, end: backupDesc.EndTime})
 	}
+
+	// Sequential ranges may have clustered leaseholders, for example a
+	// geo-partitioned table likely has all the leaseholders for some contiguous
+	// span of the table (i.e. a partition) pinned to just the nodes in a region.
+	// In such cases, sending spans sequentially may under-utilize the rest of the
+	// cluster given that we have a limit on the number of spans we send out at
+	// a given time. Randomizing the order of spans should help ensure a more even
+	// distribution of work across the cluster regardless of how leaseholders may
+	// or may not be clustered.
+	rand.Shuffle(len(allSpans), func(i, j int) {
+		allSpans[i], allSpans[j] = allSpans[j], allSpans[i]
+	})
 
 	progressLogger := jobs.NewChunkProgressLogger(job, len(spans), job.FractionCompleted(), jobs.ProgressUpdateOnly)
 
