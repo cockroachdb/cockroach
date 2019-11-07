@@ -3353,7 +3353,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			s = lex.EncodeByteArrayToRawBytes(string(*t),
 				ctx.SessionData.DataConversion.BytesEncodeFormat, false /* skipHexPrefix */)
 		case *DOid:
-			s = t.name
+			s = t.String()
 		case *DJSON:
 			s = t.JSON.String()
 		}

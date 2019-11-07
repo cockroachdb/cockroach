@@ -312,6 +312,4 @@ var PostgresMode = multiOption(
 	IgnoreFNs("^sha"),
 	// #41707
 	IgnoreFNs("^to_hex"),
-	// #41708
-	IgnoreFNs("^quote_literal"),
 )
