@@ -664,27 +664,27 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Interval,
-			ReturnType: types.TimestampTZ,
+			ReturnType: types.Timestamp,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				leftTZ, err := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				leftTZ, err := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
 				if err != nil {
 					return nil, err
 				}
 				t := duration.Add(ctx, leftTZ.Time, right.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestamp(t, time.Microsecond), nil
 			},
 		},
 		&BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.Date,
-			ReturnType: types.TimestampTZ,
+			ReturnType: types.Timestamp,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				rightTZ, err := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				rightTZ, err := MakeDTimestampTZFromDate(time.UTC, right.(*DDate))
 				if err != nil {
 					return nil, err
 				}
 				t := duration.Add(ctx, rightTZ.Time, left.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestamp(t, time.Microsecond), nil
 			},
 		},
 		&BinOp{
@@ -893,15 +893,15 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		&BinOp{
 			LeftType:   types.Date,
 			RightType:  types.Interval,
-			ReturnType: types.TimestampTZ,
+			ReturnType: types.Timestamp,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				leftTZ, err := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				leftTZ, err := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
 				if err != nil {
 					return nil, err
 				}
 				t := duration.Add(ctx,
 					leftTZ.Time, right.(*DInterval).Duration.Mul(-1))
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestamp(t, time.Microsecond), nil
 			},
 		},
 		&BinOp{
