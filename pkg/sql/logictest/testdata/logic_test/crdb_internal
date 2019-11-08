@@ -581,3 +581,18 @@ query T
 SELECT crdb_internal.cluster_name()
 ----
 testclustername
+
+# Regression for 41834.
+statement ok
+CREATE TABLE table41834 ();
+SELECT
+	crdb_internal.encode_key(
+		-8912529861854991652,
+		0,
+		CASE
+		WHEN false THEN (NULL,)
+		ELSE (NULL,)
+		END
+	)
+FROM
+	table41834;
