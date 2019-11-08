@@ -85,12 +85,28 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 	// circular dependencies. Instead, add new ALTER TABLE commands to the
 	// end of a list of statements.
 
+	// Keep track of referencing columns since we have a limitation that a
+	// column can only be used by one FK.
+	usedCols := map[tree.TableName]map[tree.Name]bool{}
+
 	// Create some FKs.
 	for rng.Intn(2) == 0 {
 		// Choose a random table.
 		table := tables[rng.Intn(len(tables))]
+		if _, ok := usedCols[table.Table]; !ok {
+			usedCols[table.Table] = map[tree.Name]bool{}
+		}
 		// Choose a random column subset.
-		fkCols := append([]*tree.ColumnTableDef(nil), cols[table.Table]...)
+		var fkCols []*tree.ColumnTableDef
+		for _, c := range cols[table.Table] {
+			if usedCols[table.Table][c.Name] {
+				continue
+			}
+			fkCols = append(fkCols, c)
+		}
+		if len(fkCols) == 0 {
+			continue
+		}
 		rng.Shuffle(len(fkCols), func(i, j int) {
 			fkCols[i], fkCols[j] = fkCols[j], fkCols[i]
 		})
@@ -148,6 +164,9 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 			refColumns := make(tree.IndexElemList, len(usingCols))
 			for i, c := range usingCols {
 				refColumns[i].Column = c.Name
+			}
+			for _, c := range fkCols {
+				usedCols[table.Table][c.Name] = true
 			}
 			ref.Defs = append(ref.Defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: tree.IndexTableDef{
