@@ -32,6 +32,7 @@ var vn = (*ReplicaType)(nil) // should be treated like VoterFull
 var v = ReplicaTypeVoterFull()
 var vi = ReplicaTypeVoterIncoming()
 var vo = ReplicaTypeVoterOutgoing()
+var vd = ReplicaTypeVoterDemoting()
 var l = ReplicaTypeLearner()
 
 func TestVotersLearnersAll(t *testing.T) {
@@ -182,6 +183,11 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 		{
 			[]ReplicaDescriptor{rd(vo, 1), rd(vo, 2), rd(vi, 3), rd(vi, 4), rd(l, 5)},
 			"Voters:[3 4] VotersOutgoing:[1 2] Learners:[5] LearnersNext:[] AutoLeave:false",
+		},
+		// Throw in a voter demotion. The demoting voter should be treated as Outgoing and LearnersNext.
+		{
+			[]ReplicaDescriptor{rd(vo, 1), rd(vd, 2), rd(vi, 3), rd(vi, 4), rd(l, 5)},
+			"Voters:[3 4] VotersOutgoing:[1 2] Learners:[5] LearnersNext:[2] AutoLeave:false",
 		},
 	}
 

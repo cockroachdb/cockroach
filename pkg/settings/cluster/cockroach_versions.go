@@ -47,6 +47,7 @@ const (
 	Version19_2
 	VersionStart20_1
 	VersionContainsEstimatesCounter
+	VersionChangeReplicasDemotion
 
 	// Add new versions here (step one of two).
 
@@ -285,7 +286,40 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionContainsEstimatesCounter,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 2},
 	},
-
+	{
+		// VersionChangeReplicasDemotion enables the use of voter demotions
+		// during replication changes that remove (one or more) voters.
+		// When this version is active, voters that are being removed transition
+		// first into VOTER_DEMOTING (a joint configuration) and from there to
+		// LEARNER, before they are actually removed. This added intermediate
+		// step avoids losing quorum when the leaseholder crashes at an
+		// inopportune moment.
+		//
+		// For example, without this version active, with nodes n1-n4 and a
+		// range initially replicated on n1, n3, and n4, a rebalance operation
+		// that wants to swap n1 for n2 first transitions into the joint
+		// configuration `(n1 n3 n4) && (n2 n3 n4)`, that is, n2 is
+		// VOTER_OUTGOING. After this is committed and applied (say by
+		// everyone), the configuration entry for the final configuration
+		// `(n2 n3 n4)` is distributed:
+		//
+		//- the leader is n3
+		//- conf entry reaches n1, n2, n3 (so it is committed under the joint config)
+		//- n1 applies conf change and immediately disappears (via replicaGC,
+		//  since it's not a part of the latest config)
+		//- n3 crashes
+		//
+		// At this point, the remaining replicas n4 and n2 form a quorum of the
+		// latest committed configuration, but both still have the joint
+		// configuration active, which cannot reach quorum any more.
+		// The intermediate learner step added by this version makes sure that
+		// n1 is still available at this point to help n2 win an election, and
+		// due to the invariant that replicas never have more than one unappliable
+		// configuration change in their logs, the group won't lose availability
+		// when the leader instead crashes while removing the learner.
+		Key:     VersionChangeReplicasDemotion,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 3},
+	},
 	// Add new versions here (step two of two).
 
 })

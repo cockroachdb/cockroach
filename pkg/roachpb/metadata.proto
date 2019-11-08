@@ -38,21 +38,24 @@ message ReplicationTarget {
 // ReplicaType identifies which raft activities a replica participates in. In
 // normal operation, VOTER_FULL and LEARNER are the only used states. However,
 // atomic replication changes require a transition through a "joint config"; in
-// this joint config, the VOTER_OUTGOING and VOTER_INCOMING types are used as well
-// to denote voters which are being removed and newly added by the change,
-// respectively.
+// this joint config, the VOTER_DEMOTING and VOTER_INCOMING types are used as
+// well to denote voters which are being downgraded to learners and newly added
+// by the change, respectively. A demoting voter is turning into a learner,
+// which we prefer over a direct removal, which was used prior to v20.1 and
+// uses the VOTER_OUTGOING type instead (see VersionChangeReplicasDemotion for
+// details on why we're not doing that any more).
 //
 // All voter types indicate a replica that participates in all raft activities,
 // including voting for leadership and committing entries. Typically, this
-// requires a majority of voters to reach a decision. In a joint config,
-// two separate majorities are required: one from the set of replicas that
-// have either type VOTER or VOTER_OUTOING, as well as that of the set of
-// types VOTER and VOTER_INCOMING . For example, when type VOTER_FULL is assigned
-// to replicas 1 and 2, while 3 is VOTER_OUTGOING and 4 is VOTER_INCOMING, then
-// the two sets over which quorums need to be achieved are {1,2,3} and {1,2,4}.
-// Thus, {1,2} is a quorum of both, {1,3} is a quorum of the first but not the
-// second, {1,4} is a quorum of the second but not the first, and {3,4} is a
-// quorum of neither.
+// requires a majority of voters to reach a decision. In a joint config, two
+// separate majorities are required: one from the set of replicas that have
+// either type VOTER or VOTER_OUTOING or VOTER_DEMOTING, as well as that of the
+// set of types VOTER and VOTER_INCOMING . For example, when type VOTER_FULL is
+// assigned to replicas 1 and 2, while 3 is VOTER_OUTGOING and 4 is
+// VOTER_INCOMING, then the two sets over which quorums need to be achieved are
+// {1,2,3} and {1,2,4}. Thus, {1,2} is a quorum of both, {1,3} is a quorum of
+// the first but not the second, {1,4} is a quorum of the second but not the
+// first, and {3,4} is a quorum of neither.
 enum ReplicaType {
   option (gogoproto.goproto_enum_prefix) = false;
 
@@ -70,12 +73,19 @@ enum ReplicaType {
   // this type should be treated accordingly and no work should be assigned to
   // it.
   VOTER_OUTGOING = 3;
-  // LEARNER indicates a replica that applies committed entries, but
-  // does not count towards the quorum(s). Learners do not vote for leadership
-  // nor do their acknowledged log entries get taken into account for
-  // determining the committed index. At the time of writing, learners in
-  // CockroachDB are a short-term transient state: a replica being added and on
-  // its way to being a VOTER_FULL.
+  // VOTER_DEMOTING indicates a voting replica that will become a learner once
+  // the ongoing atomic replication change is finalized; that is, it is in the
+  // process of being demoted. Since learners are currently short-lived, this
+  // replica is really being removed, with an intermediate step, and no work
+  // should be assigned to it.
+  VOTER_DEMOTING = 4;
+  // LEARNER indicates a replica that applies committed entries, but does not
+  // count towards the quorum(s). Candidates will not ask for (or take into
+  // account) votes of (peers they consider) LEARNERs for leadership nor do
+  // their acknowledged log entries get taken into account for determining the
+  // committed index. At the time of writing, learners in CockroachDB are a
+  // short-term transient state: a replica being added and on its way to being a
+  // VOTER_{FULL,INCOMING}, or a VOTER_DEMOTING being removed.
   LEARNER = 1;
 }
 
