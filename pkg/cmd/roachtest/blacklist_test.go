@@ -114,8 +114,8 @@ var issueTitleMap = map[int]string{
 
 func TestBlacklists(t *testing.T) {
 	blacklists := []blacklist{
-		hibernateBlackList19_2, pgjdbcBlackList19_2, psycopgBlackList19_2, djangoBlacklist19_2, sqlAlchemyBlacklist,
-		libPQBlacklist19_2, gopgBlackList19_2,
+		hibernateBlackList20_1, pgjdbcBlackList20_1, psycopgBlackList20_1, djangoBlacklist20_1, sqlAlchemyBlacklist20_1,
+		libPQBlacklist20_1, gopgBlackList20_1,
 	}
 	var failureMap = make(map[string]int)
 	for _, bl := range blacklists {
