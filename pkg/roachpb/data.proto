@@ -157,12 +157,15 @@ enum ReplicaChangeType {
   REMOVE_REPLICA = 1;
 }
 
-// ChangeReplicasTrigger carries out a replication change. The Added() and Removed()
-// methods return the replicas being added and removed, respectively. If more than
-// one change is specified (i.e. len(Added())+len(Removed()) exceeds one), this
-// initiates an atomic replication change in which the "removed" replicas are
-// of type VOTER_OUTGOING. This joint configuration is left via another
-// ChangeReplicasTrigger which does not specify any additions nor removals.
+// ChangeReplicasTrigger carries out a replication change. The Added() and
+// Removed() methods return the replicas being added and removed, respectively.
+// If more than one change is specified (i.e. len(Added())+len(Removed())
+// exceeds one), this initiates an atomic replication change in which the
+// "removed" replicas are of type VOTER_OUTGOING or VOTER_DEMOTING (if they are
+// to be turned into learners instead); as a caveat a single demotion already
+// counts as two changes (and is tracked as a Removal() only). This joint
+// configuration is left via another ChangeReplicasTrigger which does not
+// specify any additions nor removals.
 message ChangeReplicasTrigger {
   option (gogoproto.equal) = true;
 
