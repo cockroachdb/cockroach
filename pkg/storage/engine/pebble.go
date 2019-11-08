@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
 )
@@ -199,7 +200,9 @@ func DefaultPebbleOptions() *pebble.Options {
 		L0StopWritesThreshold: 1000,
 		LBaseMaxBytes:         64 << 20, // 64 MB
 		Levels: []pebble.LevelOptions{{
-			BlockSize: 32 << 10, // 32 KB
+			BlockSize:    32 << 10, // 32 KB
+			FilterPolicy: bloom.FilterPolicy(10),
+			FilterType:   pebble.TableFilter,
 		}},
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
