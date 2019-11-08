@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -56,7 +57,7 @@ func stringSetup(s string) Setup {
 }
 
 func randTables(r *rand.Rand) string {
-	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1)
+	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1, mutations.ForeignKeyMutator)
 
 	var sb strings.Builder
 	for _, stmt := range stmts {
