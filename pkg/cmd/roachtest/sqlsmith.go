@@ -79,6 +79,7 @@ func registerSQLSmith(r *testRegistry) {
 
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")
+		c.l.Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
 			t.Fatal(err)
 		}
