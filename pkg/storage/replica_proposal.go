@@ -764,8 +764,8 @@ func (r *Replica) evaluateProposal(
 				// The caller should have checked the cluster version. At the
 				// time of writing, this is only RecomputeStats and the split
 				// trigger, which both have the check, but better safe than sorry.
-				return nil, false, roachpb.NewErrorf("cannot propose negative ContainsEstimates " +
-					"without VersionContainsEstimatesCounter")
+				log.Fatalf(ctx, "cannot propose negative ContainsEstimates "+
+					"without VersionContainsEstimatesCounter in %s", ba.Summary())
 			}
 		}
 
