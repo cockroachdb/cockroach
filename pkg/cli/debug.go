@@ -926,7 +926,6 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	deadStoreIDs := map[roachpb.StoreID]struct{}{}
 	for _, id := range removeDeadReplicasOpts.deadStoreIDs {

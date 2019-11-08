@@ -263,7 +263,6 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					defer db.Close()
 
 					batch, err := removeDeadReplicas(db, deadReplicas)
 					if err != nil {
