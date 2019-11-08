@@ -631,16 +631,16 @@ func Example_sql_watch() {
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{`sql`, `-e`, `create table d(x int); insert into d values(3)`})
-	c.RunWithArgs([]string{`sql`, `--watch`, `.1s`, `-e`, `update d set x=x-1 returning 1/x as dec`})
+	c.RunWithArgs([]string{`sql`, `--watch`, `.1s`, `-e`, `update d set x=x-1 returning 1.0/x as dec`})
 
 	// Output:
 	// sql -e create table d(x int); insert into d values(3)
 	// INSERT 1
-	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
+	// sql --watch .1s -e update d set x=x-1 returning 1.0/x as dec
 	// dec
 	// 0.5
 	// dec
-	// 1
+	// 1.0
 	// pq: division by zero
 }
 

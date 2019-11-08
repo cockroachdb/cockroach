@@ -125,7 +125,7 @@
 <tr><td><a href="decimal.html">decimal</a> <code>/</code> <a href="int.html">int</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="float.html">float</a> <code>/</code> <a href="float.html">float</a></td><td><a href="float.html">float</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>/</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
-<tr><td><a href="int.html">int</a> <code>/</code> <a href="int.html">int</a></td><td><a href="decimal.html">decimal</a></td></tr>
+<tr><td><a href="int.html">int</a> <code>/</code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>/</code> <a href="float.html">float</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>/</code> <a href="int.html">int</a></td><td><a href="interval.html">interval</a></td></tr>
 </tbody></table>

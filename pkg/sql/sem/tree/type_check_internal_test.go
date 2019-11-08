@@ -218,7 +218,6 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{nil, nil, exprs(ddecimal(1)), types.Decimal, nil},
 		// Mixing constants and resolved exprs.
 		{nil, nil, exprs(dint(1), intConst("1")), types.Int, nil},
-		{nil, nil, exprs(dint(1), decConst("1.0")), types.Int, nil}, // This is what the AST would look like after folding (0.6 + 0.4).
 		{nil, nil, exprs(dint(1), dint(1)), types.Int, nil},
 		{nil, nil, exprs(ddecimal(1), intConst("1")), types.Decimal, nil},
 		{nil, nil, exprs(ddecimal(1), decConst("1.1")), types.Decimal, nil},
@@ -228,7 +227,6 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{ptypesDecimal, nil, exprs(intConst("1"), placeholder(0)), types.Decimal, ptypesDecimal},
 		{ptypesDecimal, nil, exprs(decConst("1.1"), placeholder(0)), types.Decimal, ptypesDecimal},
 		{ptypesInt, nil, exprs(intConst("1"), placeholder(0)), types.Int, ptypesInt},
-		{ptypesInt, nil, exprs(decConst("1.0"), placeholder(0)), types.Int, ptypesInt},
 		{ptypesDecimalAndDecimal, nil, exprs(placeholder(1), placeholder(0)), types.Decimal, ptypesDecimalAndDecimal},
 		// Mixing unresolved placeholders with constants and resolved exprs.
 		{ptypesNone, nil, exprs(ddecimal(1), placeholder(0)), types.Decimal, ptypesDecimal},
@@ -248,12 +246,12 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		// Verify desired type when possible.
 		{nil, types.Int, exprs(intConst("1")), types.Int, nil},
 		{nil, types.Int, exprs(dint(1)), types.Int, nil},
-		{nil, types.Int, exprs(decConst("1.0")), types.Int, nil},
+		{nil, types.Int, exprs(decConst("1.0")), types.Decimal, nil},
 		{nil, types.Int, exprs(decConst("1.1")), types.Decimal, nil},
 		{nil, types.Int, exprs(ddecimal(1)), types.Decimal, nil},
 		{nil, types.Decimal, exprs(intConst("1")), types.Decimal, nil},
 		{nil, types.Decimal, exprs(dint(1)), types.Int, nil},
-		{nil, types.Int, exprs(intConst("1"), decConst("1.0")), types.Int, nil},
+		{nil, types.Int, exprs(intConst("1"), decConst("1.0")), types.Decimal, nil},
 		{nil, types.Int, exprs(intConst("1"), decConst("1.1")), types.Decimal, nil},
 		{nil, types.Decimal, exprs(intConst("1"), decConst("1.1")), types.Decimal, nil},
 		// Verify desired type when possible with unresolved placeholders.
@@ -281,7 +279,6 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 		{nil, nil, exprs(tuple(dint(1), ddecimal(1)), tuple(dint(1), ddecimal(1))), ttuple(types.Int, types.Decimal), nil},
 		// Mixing constants and resolved exprs.
 		{nil, nil, exprs(tuple(dint(1), decConst("1.1")), tuple(intConst("1"), ddecimal(1))), ttuple(types.Int, types.Decimal), nil},
-		{nil, nil, exprs(tuple(dint(1), decConst("1.0")), tuple(intConst("1"), dint(1))), ttuple(types.Int, types.Int), nil},
 		// Mixing resolved placeholders with constants and resolved exprs.
 		{ptypesDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder(0), placeholder(0))), ttuple(types.Decimal, types.Decimal), ptypesDecimal},
 		{ptypesDecimalAndDecimal, nil, exprs(tuple(placeholder(1), intConst("1")), tuple(placeholder(0), placeholder(0))), ttuple(types.Decimal, types.Decimal), ptypesDecimalAndDecimal},
@@ -305,6 +302,7 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	decimalIntMismatchErr := `expected .* to be of type (decimal|int), found type (decimal|int)`
+	tupleDecimalIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
 	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
 	tupleLenErr := `expected tuple .* to have a length of .*`
@@ -321,11 +319,14 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		{nil, nil, exprs(dint(1), decConst("1.1")), decimalIntMismatchErr},
 		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
 		{ptypesInt, nil, exprs(decConst("1.1"), placeholder(0)), decimalIntMismatchErr},
+		{nil, nil, exprs(dint(1), decConst("1.0")), decimalIntMismatchErr},
 		// Tuple type mismatches.
 		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleFloatIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1), dint(1))), tupleLenErr},
+		{nil, nil, exprs(tuple(dint(1), decConst("1.0")), tuple(intConst("1"), dint(1))), tupleDecimalIntMismatchErr},
 		// Placeholder ambiguity.
+		{ptypesInt, nil, exprs(decConst("1.0"), placeholder(0)), decimalIntMismatchErr},
 		{ptypesNone, nil, exprs(placeholder(1), placeholder(0)), placeholderErr},
 	}
 	for i, d := range testData {

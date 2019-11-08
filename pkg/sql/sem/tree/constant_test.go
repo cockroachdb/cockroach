@@ -34,7 +34,6 @@ import (
 func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	wantInt := tree.NumValAvailInteger
-	wantDecButCanBeInt := tree.NumValAvailDecimalNoFraction
 	wantDec := tree.NumValAvailDecimalWithFraction
 
 	testCases := []struct {
@@ -45,10 +44,10 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		{"0", wantInt},
 		{"-1", wantInt},
 		{"9223372036854775807", wantInt},
-		{"1.0", wantDecButCanBeInt},
-		{"-1234.0000", wantDecButCanBeInt},
-		{"1e10", wantDecButCanBeInt},
-		{"1E10", wantDecButCanBeInt},
+		{"1.0", wantDec},
+		{"-1234.0000", wantDec},
+		{"1e10", wantDec},
+		{"1E10", wantDec},
 		{"1.1", wantDec},
 		{"1e-10", wantDec},
 		{"1E-10", wantDec},
@@ -435,7 +434,8 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`1.2 * 2.3`, `2.76`},
 		{`1 * 2.3`, `2.3`},
 		{`123456789.987654321 * 987654321`, `1.21933e+17`},
-		{`9 / 4`, `2.25`},
+		{`9 / 4`, `2`}, // integer division rounds down
+		{`4 / 2.0`, `2`},
 		{`9.7 / 4`, `2.425`},
 		{`4.72 / 2.36`, `2`},
 		{`0 / 0`, `0 / 0`}, // Will be caught during evaluation.
@@ -499,14 +499,14 @@ func TestFoldNumericConstants(t *testing.T) {
 		// With parentheses.
 		{`(4)`, `4`},
 		{`(((4)))`, `4`},
-		{`(((9 / 3) * (1 / 3)))`, `1`},
-		{`(((9 / 3) % (1 / 3)))`, `((3 % 0.333333))`},
-		{`(1.0) << ((2) + 3 / (1/9))`, `1.0 << 29`},
+		{`(((9 / 3) * (1 / 3)))`, `0`},
+		{`(((9 / 3) % (1 / 3)))`, `((3 % 0))`},
+		{`(1.0) << ((2) + 3 / (11/9))`, `1.0 << 5`},
 		// With non-constants.
 		{`a + 5 * b`, `a + (5 * b)`},
 		{`a + 5 + b + 7`, `((a + 5) + b) + 7`},
 		{`a + 5 * 2`, `a + 10`},
-		{`a * b + 5 / 2`, `(a * b) + 2.5`},
+		{`a * b + 5 / 2`, `(a * b) + 2`},
 		{`a - b * 5 - 3`, `(a - (b * 5)) - 3`},
 		{`a - b + 5 * 3`, `(a - b) + 15`},
 	})

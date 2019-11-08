@@ -1,0 +1,52 @@
+subtest normalization_tests
+
+query I
+SELECT 1 / 2
+----
+0
+
+query R
+SELECT 1.0 / 2
+----
+0.5
+
+query R
+SELECT 1 / 2.0
+----
+0.5
+
+query R
+SELECT 1.0 / 2.0
+----
+0.5
+
+query I
+SELECT (6 / 4) * (5 % 3)
+----
+2
+
+query R
+SELECT (6.0 / 4) * (5 % 3)
+----
+3
+
+subtest table_tests
+
+statement ok
+CREATE TABLE div_test (int_val int PRIMARY KEY, float_val float, decimal_val decimal)
+
+statement ok
+INSERT INTO div_test VALUES (1, 1.0, 1.0), (2, 2.0, 2.0);
+
+query IR
+SELECT 1 / int_val, 1 / decimal_val FROM div_test ORDER BY int_val
+----
+1  1
+0  0.5
+
+# TODO(otan): test floats when float div works
+query RR
+SELECT 1.0 / int_val, 1.0 / decimal_val FROM div_test ORDER BY int_val
+----
+1.0  1
+0.5  0.5

@@ -1119,17 +1119,13 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
-			ReturnType: types.Decimal,
-			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			ReturnType: types.Int,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
-				div := ctx.getTmpDec().SetFinite(int64(rInt), 0)
-				dd := &DDecimal{}
-				dd.SetFinite(int64(MustBeDInt(left)), 0)
-				cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
-				if cond.DivisionByZero() {
-					return dd, ErrDivByZero
+				if rInt == 0 {
+					return nil, ErrDivByZero
 				}
-				return dd, err
+				return NewDInt(MustBeDInt(left) / rInt), nil
 			},
 		},
 		&BinOp{

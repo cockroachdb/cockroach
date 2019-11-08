@@ -31,17 +31,6 @@ type Constant interface {
 	// be resolved into. The order of the type slice provides a notion of precedence,
 	// with the first element in the ordering being the Constant's "natural type".
 	AvailableTypes() []*types.T
-	// DesirableTypes returns the ordered set of types that the constant would
-	// prefer to be resolved into. As in AvailableTypes, the order of the returned
-	// type slice provides a notion of precedence, with the first element in the
-	// ordering being the Constant's "natural type." The function is meant to be
-	// differentiated from AvailableTypes in that it will exclude certain types
-	// that are possible, but not desirable.
-	//
-	// An example of this is a floating point numeric constant without a value
-	// past the decimal point. It is possible to resolve this constant as a
-	// decimal, but it is not desirable.
-	DesirableTypes() []*types.T
 	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
 	// error if the Constant could not be resolved as that type. The method should only
 	// be passed a type returned from AvailableTypes and should never be called more than
@@ -167,23 +156,14 @@ func (expr *NumVal) Format(ctx *FmtCtx) {
 	ctx.WriteString(s)
 }
 
-// canBeInt64 checks if it's possible for the value to become an int64:
-//  1   = yes
-//  1.0 = yes
-//  1.1 = no
-//  123...overflow...456 = no
-func (expr *NumVal) canBeInt64() bool {
-	_, err := expr.AsInt64()
-	return err == nil
-}
-
 // ShouldBeInt64 checks if the value naturally is an int64:
 //  1   = yes
 //  1.0 = no
 //  1.1 = no
 //  123...overflow...456 = no
 func (expr *NumVal) ShouldBeInt64() bool {
-	return expr.Kind() == constant.Int && expr.canBeInt64()
+	_, err := expr.AsInt64()
+	return err == nil
 }
 
 // These errors are statically allocated, because they are returned in the
@@ -192,8 +172,9 @@ var errConstNotInt = pgerror.New(pgcode.NumericValueOutOfRange, "cannot represen
 var errConstOutOfRange64 = pgerror.New(pgcode.NumericValueOutOfRange, "numeric constant out of int64 range")
 var errConstOutOfRange32 = pgerror.New(pgcode.NumericValueOutOfRange, "numeric constant out of int32 range")
 
-// AsInt64 returns the value as a 64-bit integer if possible, or returns an
-// error if not possible. The method will set expr.resInt to the value of
+// AsInt64 returns the value as a 64-bit integer if the type matches exactly,
+// or returns an error if not possible.
+// The method will set expr.resInt to the value of
 // this int64 if it is successful, avoiding the need to call the method again.
 func (expr *NumVal) AsInt64() (int64, error) {
 	intVal, ok := expr.AsConstantInt()
@@ -208,10 +189,10 @@ func (expr *NumVal) AsInt64() (int64, error) {
 	return i, nil
 }
 
-// AsInt32 returns the value as 32-bit integer if possible, or returns
-// an error if not possible. The method will set expr.resInt to the
-// value of this int32 if it is successful, avoiding the need to call
-// the method again.
+// AsInt32 returns the value as a 32-bit integer if the type matches exactly,
+// or returns an error if not possible.
+// The method will set expr.resInt to the value of
+// this int32 if it is successful, avoiding the need to call the method again.
 func (expr *NumVal) AsInt32() (int32, error) {
 	intVal, ok := expr.AsConstantInt()
 	if !ok {
@@ -241,8 +222,13 @@ func (expr *NumVal) AsConstantValue() constant.Value {
 // AsConstantInt returns the value as an constant.Int if possible, along
 // with a flag indicating whether the conversion was possible.
 // The result contains the proper sign as per expr.negative.
+// NOTE: it is not possible to convert decimals to ints
+// (e.g. 1.0 cannot become 1).
 func (expr *NumVal) AsConstantInt() (constant.Value, bool) {
 	v := expr.AsConstantValue()
+	if v.Kind() != constant.Int {
+		return nil, false
+	}
 	intVal := constant.ToInt(v)
 	if intVal.Kind() == constant.Int {
 		return intVal, true
@@ -256,8 +242,6 @@ var (
 
 	// NumValAvailInteger is the set of available integer types.
 	NumValAvailInteger = append(intLikeTypes, decimalLikeTypes...)
-	// NumValAvailDecimalNoFraction is the set of available integral numeric types.
-	NumValAvailDecimalNoFraction = append(decimalLikeTypes, intLikeTypes...)
 	// NumValAvailDecimalWithFraction is the set of available fractional numeric types.
 	NumValAvailDecimalWithFraction = decimalLikeTypes
 )
@@ -265,22 +249,11 @@ var (
 // AvailableTypes implements the Constant interface.
 func (expr *NumVal) AvailableTypes() []*types.T {
 	switch {
-	case expr.canBeInt64():
-		if expr.Kind() == constant.Int {
-			return NumValAvailInteger
-		}
-		return NumValAvailDecimalNoFraction
+	case expr.ShouldBeInt64():
+		return NumValAvailInteger
 	default:
 		return NumValAvailDecimalWithFraction
 	}
-}
-
-// DesirableTypes implements the Constant interface.
-func (expr *NumVal) DesirableTypes() []*types.T {
-	if expr.ShouldBeInt64() {
-		return NumValAvailInteger
-	}
-	return NumValAvailDecimalWithFraction
 }
 
 // ResolveAsType implements the Constant interface.
@@ -379,7 +352,7 @@ func commonConstantType(vals []Expr, idxs []int) (*types.T, bool) {
 	var candidates []*types.T
 
 	for _, i := range idxs {
-		availableTypes := vals[i].(Constant).DesirableTypes()
+		availableTypes := vals[i].(Constant).AvailableTypes()
 		if candidates == nil {
 			candidates = availableTypes
 		} else {
@@ -502,11 +475,6 @@ func (expr *StrVal) AvailableTypes() []*types.T {
 	return StrValAvailAllParsable
 }
 
-// DesirableTypes implements the Constant interface.
-func (expr *StrVal) DesirableTypes() []*types.T {
-	return expr.AvailableTypes()
-}
-
 // ResolveAsType implements the Constant interface.
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error) {
 	if expr.scannedAsBytes {
@@ -570,6 +538,8 @@ var binaryOpToTokenIntOnly = map[BinaryOperator]token.Token{
 	Bitand:   token.AND,
 	Bitor:    token.OR,
 	Bitxor:   token.XOR,
+	// Divide for integers only round down.
+	Div: token.QUO_ASSIGN,
 }
 var comparisonOpToToken = map[ComparisonOperator]token.Token{
 	EQ: token.EQL,
@@ -582,8 +552,10 @@ var comparisonOpToToken = map[ComparisonOperator]token.Token{
 
 func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 	defer func() {
-		// go/constant operations can panic for a number of reasons (like division
-		// by zero), but it's difficult to preemptively detect when they will. It's
+		// go/constant operations can panic for a number of reasons, such as:
+		// * like division by zero
+		// * dividing different types (e.g. int and float)
+		// but it's difficult to preemptively detect when they will. It's
 		// safest to just recover here without folding the expression and let
 		// normalization or evaluation deal with error handling.
 		if r := recover(); r != nil {
@@ -612,15 +584,18 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 		switch l := t.Left.(type) {
 		case *NumVal:
 			if r, ok := t.Right.(*NumVal); ok {
-				if token, ok := binaryOpToToken[t.Operator]; ok {
-					return &NumVal{value: constant.BinaryOp(l.AsConstantValue(), token, r.AsConstantValue())}
-				}
+				// Perform integer operations first, as integer division
+				// should take precedence over floats.
 				if token, ok := binaryOpToTokenIntOnly[t.Operator]; ok {
 					if lInt, ok := l.AsConstantInt(); ok {
 						if rInt, ok := r.AsConstantInt(); ok {
 							return &NumVal{value: constant.BinaryOp(lInt, token, rInt)}
 						}
 					}
+				}
+
+				if token, ok := binaryOpToToken[t.Operator]; ok {
+					return &NumVal{value: constant.BinaryOp(l.AsConstantValue(), token, r.AsConstantValue())}
 				}
 				// Explicitly ignore shift operators so the expression is evaluated as a
 				// non-const. This is because 1 << 63 as a 64-bit int (which is a negative
