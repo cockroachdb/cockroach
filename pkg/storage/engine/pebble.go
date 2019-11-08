@@ -245,7 +245,8 @@ type Pebble struct {
 	settings *cluster.Settings
 
 	// Relevant options copied over from pebble.Options.
-	fs vfs.FS
+	fs     vfs.FS
+	logger pebble.Logger
 }
 
 var _ Engine = &Pebble{}
@@ -330,6 +331,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		attrs:    cfg.Attrs,
 		settings: cfg.Settings,
 		fs:       cfg.Opts.FS,
+		logger:   cfg.Opts.Logger,
 	}, nil
 }
 
@@ -368,7 +370,23 @@ func (p *Pebble) String() string {
 
 // Close implements the Engine interface.
 func (p *Pebble) Close() {
+	if p.closed {
+		p.logger.Infof("closing unopened pebble instance")
+		return
+	}
 	p.closed = true
+
+	if p.path == "" {
+		// Remove the temporary directory when the engine is in-memory. This
+		// matches the RocksDB behavior.
+		//
+		// TODO(peter): The aux-dir shouldn't be on-disk for in-memory
+		// engines. This is just a wart that needs to be removed.
+		if err := os.RemoveAll(p.auxDir); err != nil {
+			p.logger.Infof("%v", err)
+		}
+	}
+
 	_ = p.db.Close()
 }
 
