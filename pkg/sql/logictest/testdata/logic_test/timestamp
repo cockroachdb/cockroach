@@ -14,10 +14,8 @@ SELECT '2000-05-05 10:00:00+03':::TIMESTAMP FROM a
 ----
 2000-05-05 10:00:00 +0000 +0000
 
-query T
+query error syntax error: unimplemented
 select '1-1-18 1:00:00.001':::TIMESTAMP(0)
-----
-2001-01-18 01:00:00 +0000 +0000
 
 query T
 select '1-1-18 1:00:00.001':::TIMESTAMP(6)
@@ -29,10 +27,8 @@ select '1-1-18 1:00:00.001':::TIMESTAMP
 ----
 2001-01-18 01:00:00.001 +0000 +0000
 
-query T
+query error syntax error: unimplemented
 select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ(0)
-----
-2001-01-18 09:00:00 +0000 UTC
 
 query T
 select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ(6)
