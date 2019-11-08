@@ -111,10 +111,10 @@ message ReadImportDataSpec {
   // read. The map key must be unique across the entire IMPORT job.
   map<int32, string> uri = 7;
 
-  // resume_pos specifies is a map from an input ID to an offset in that
+  // resume_pos specifies a map from an input ID to an offset in that
   // input from which the processing should continue.
-  // The meaning of offset is format specific to each processor.
-  map<int32, uint64> resume_pos = 14;
+  // The meaning of offset is specific to each processor.
+  map<int32, int64> resume_pos = 14;
 
   optional JobProgress progress = 6 [(gogoproto.nullable) = false];
 
