@@ -435,14 +435,20 @@ func (m *pgDumpReader) start(ctx ctxgroup.Group) {
 func (m *pgDumpReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, m.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage)
 }
 
 func (m *pgDumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	var inserts, count int64
 	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
