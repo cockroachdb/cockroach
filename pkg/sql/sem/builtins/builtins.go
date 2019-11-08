@@ -2950,7 +2950,7 @@ may increase either contention or retry errors, or both.`,
 			Types: tree.ArgTypes{
 				{"table_id", types.Int},
 				{"index_id", types.Int},
-				{"row_tuple", types.AnyTuple},
+				{"row_tuple", types.Any},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2958,7 +2958,7 @@ may increase either contention or retry errors, or both.`,
 				indexID := int(tree.MustBeDInt(args[1]))
 				rowDatums, ok := tree.AsDTuple(args[2])
 				if !ok {
-					return nil, errors.AssertionFailedf("expected DTuple, found %s", args[2])
+					return nil, errors.AssertionFailedf("expected tuple argument for row_tuple, found %s", args[2])
 				}
 
 				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
@@ -2969,7 +2969,6 @@ may increase either contention or retry errors, or both.`,
 				if len(rowDatums.D) != len(tableDesc.Columns) {
 					return nil, pgerror.Newf(pgcode.Syntax, "number of values provided must equal number of columns in table")
 				}
-
 				// Check that all the input datums have types that line up with the columns.
 				var datums tree.Datums
 				for i, d := range rowDatums.D {
