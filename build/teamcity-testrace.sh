@@ -41,6 +41,9 @@ build/builder.sh go install ./pkg/cmd/github-pull-request-make
 build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
 tc_end_block "Maybe stressrace pull request"
 
+# Expect the timeout to come from the TC environment.
+TESTTIMEOUT=${TESTTIMEOUT:-45m}
+
 tc_start_block "Run Go tests under race detector"
 true >artifacts/testrace.log
 for pkg in $pkgspec; do
@@ -49,8 +52,8 @@ for pkg in $pkgspec; do
 		stdbuf -oL -eL \
 		make testrace \
 		PKG="$pkg" \
-		TESTTIMEOUT=45m \
-		TESTFLAGS='-v' \
+		TESTTIMEOUT=$TESTTIMEOUT \
+		TESTFLAGS="-v $TESTFLAGS" \
 		ENABLE_ROCKSDB_ASSERTIONS=1 2>&1 \
 		ENABLE_LIBROACH_ASSERTIONS=1 2>&1 \
 		| tee -a artifacts/testrace.log \
