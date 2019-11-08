@@ -93,11 +93,13 @@ func (s *initServer) awaitBootstrap() (initServerResult, error) {
 func (s *initServer) Bootstrap(
 	ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
-	if err := s.testOrSetRejectErr(errClusterInitialized); err != nil {
+	if err := s.testOrSetRejectErr(ErrClusterInitialized); err != nil {
 		return nil, err
 	}
 	close(s.bootstrapReqCh)
 	return &serverpb.BootstrapResponse{}, nil
 }
 
-var errClusterInitialized = fmt.Errorf("cluster has already been initialized")
+// ErrClusterInitialized is reported when the Boostrap RPC is ran on
+// a node already part of an initialized cluster.
+var ErrClusterInitialized = fmt.Errorf("cluster has already been initialized")
