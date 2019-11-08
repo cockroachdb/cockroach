@@ -21,6 +21,10 @@ import (
 // StatementMutator defines a func that can change a statement.
 type StatementMutator func(rng *rand.Rand, stmt tree.Statement) (changed bool)
 
+// MultiStatementMutation defines a func that returns additional statements,
+// but must not change any of the statements passed.
+type MultiStatementMutation func(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement)
+
 // ForAllStatements executes stmtMutator on all SQL statements of input. The
 // list of changed statements is returned.
 func ForAllStatements(
@@ -44,6 +48,128 @@ func ForAllStatements(
 		sb.WriteString(";\n")
 	}
 	return sb.String(), changed
+}
+
+// ForeignKeyMutator adds ALTER TABLE ADD FOREIGN KEY statements.
+func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
+	// Find columns in the tables.
+	cols := map[tree.TableName][]*tree.ColumnTableDef{}
+	byName := map[tree.TableName]*tree.CreateTable{}
+	var tables []*tree.CreateTable
+	for _, stmt := range stmts {
+		table, ok := stmt.(*tree.CreateTable)
+		if !ok {
+			continue
+		}
+		tables = append(tables, table)
+		byName[table.Table] = table
+		for _, def := range table.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				cols[table.Table] = append(cols[table.Table], def)
+			}
+		}
+	}
+
+	toNames := func(cols []*tree.ColumnTableDef) tree.NameList {
+		names := make(tree.NameList, len(cols))
+		for i, c := range cols {
+			names[i] = c.Name
+		}
+		return names
+	}
+
+	// We cannot mutate the table definitions themselves because 1) we
+	// don't know the order of dependencies (i.e., table 1 could reference
+	// table 4 which doesn't exist yet) and relatedly 2) we don't prevent
+	// circular dependencies. Instead, add new ALTER TABLE commands to the
+	// end of a list of statements.
+
+	// Create some FKs.
+	for rng.Intn(2) == 0 {
+		// Choose a random table.
+		table := tables[rng.Intn(len(tables))]
+		// Choose a random column subset.
+		fkCols := append([]*tree.ColumnTableDef(nil), cols[table.Table]...)
+		rng.Shuffle(len(fkCols), func(i, j int) {
+			fkCols[i], fkCols[j] = fkCols[j], fkCols[i]
+		})
+		// Pick some randomly short prefix. I'm sure there's a closed
+		// form solution to this with a single call to rng.Intn but I'm
+		// not sure what to search for.
+		i := 1
+		for len(fkCols) > i && rng.Intn(2) == 0 {
+			i++
+		}
+		fkCols = fkCols[:i]
+
+		// Check if a table has the needed column types.
+	LoopTable:
+		for refTable, refCols := range cols {
+			// Prevent self references.
+			// TODO(mjibson): Circular references are not
+			// prevented, but it would be nice to detect and
+			// prevent them.
+			if refTable == table.Table || len(refCols) < len(fkCols) {
+				continue
+			}
+
+			// We found a table with enough columns. Check if it
+			// has some columns that are needed types. In order
+			// to not use columns multiple times, keep track of
+			// available columns.
+			availCols := append([]*tree.ColumnTableDef(nil), refCols...)
+			var usingCols []*tree.ColumnTableDef
+			for len(availCols) > 0 && len(usingCols) < len(fkCols) {
+				fkCol := fkCols[len(usingCols)]
+				found := false
+				for refI, refCol := range availCols {
+					if fkCol.Type.Equivalent(refCol.Type) {
+						usingCols = append(usingCols, refCol)
+						availCols = append(availCols[:refI], availCols[refI+1:]...)
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue LoopTable
+				}
+			}
+			// If we didn't find enough columns, try another table.
+			if len(usingCols) != len(fkCols) {
+				continue
+			}
+
+			// Found a suitable table.
+			// TODO(mjibson): prevent the creation of unneeded
+			// unique indexes. One may already exist with the
+			// correct prefix.
+			ref := byName[refTable]
+			refColumns := make(tree.IndexElemList, len(usingCols))
+			for i, c := range usingCols {
+				refColumns[i].Column = c.Name
+			}
+			ref.Defs = append(ref.Defs, &tree.UniqueConstraintTableDef{
+				IndexTableDef: tree.IndexTableDef{
+					Columns: refColumns,
+				},
+			})
+
+			additional = append(additional, &tree.AlterTable{
+				Table: table.Table.ToUnresolvedObjectName(),
+				Cmds: tree.AlterTableCmds{&tree.AlterTableAddConstraint{
+					ConstraintDef: &tree.ForeignKeyConstraintTableDef{
+						Table:    ref.Table,
+						FromCols: toNames(fkCols),
+						ToCols:   toNames(usingCols),
+					},
+				}},
+			})
+			break
+		}
+	}
+
+	return additional
 }
 
 // ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
