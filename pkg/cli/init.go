@@ -14,8 +14,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +53,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	c := serverpb.NewInitClient(conn)
 
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
+		if strings.Contains(err.Error(), server.ErrClusterInitialized.Error()) {
+			// We really want to use errors.Is() here but this would require
+			// error serialization support in gRPC.
+			// This is not yet performed in CockroachDB even though
+			// the error library now has infrastructure to do so, see:
+			// https://github.com/cockroachdb/errors/pull/14
+			return errors.WithHint(err,
+				"Please ensure all your start commands are using --join.")
+		}
 		return err
 	}
 
