@@ -368,7 +368,7 @@ func (p *pebbleBatch) Repr() []byte {
 	// p.batch.Repr() is an unsafe byte slice owned by p.batch. Since we could be
 	// sending this slice over the wire, we need to make a copy.
 	repr := p.batch.Repr()
-	reprCopy := make([]byte, len(p.batch.Repr()))
+	reprCopy := make([]byte, len(repr))
 	copy(reprCopy, repr)
 	return reprCopy
 }

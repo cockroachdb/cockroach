@@ -570,7 +570,7 @@ func (expr *TupleStar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
-	// Alghough we're going to elide the tuple star, we need to ensure
+	// Although we're going to elide the tuple star, we need to ensure
 	// the expression is indeed a labeled tuple first.
 	if resolvedType.Family() != types.TupleFamily || len(resolvedType.TupleLabels()) == 0 {
 		return nil, NewTypeIsNotCompositeError(resolvedType)

@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
@@ -191,6 +193,7 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	return &pebble.Options{
+		Cleaner:               pebble.ArchiveCleaner{},
 		Comparer:              MVCCComparer,
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,
@@ -204,6 +207,18 @@ func DefaultPebbleOptions() *pebble.Options {
 		MinFlushRate:                4 << 20, // 4 MB/sec
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 	}
+}
+
+type pebbleLogger struct {
+	ctx context.Context
+}
+
+func (l pebbleLogger) Infof(format string, args ...interface{}) {
+	log.InfofDepth(l.ctx, 2, format, args...)
+}
+
+func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
+	log.FatalfDepth(l.ctx, 2, format, args...)
 }
 
 // PebbleConfig holds all configuration parameters and knobs used in setting up
@@ -239,7 +254,7 @@ var _ Engine = &Pebble{}
 var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, error)
 
 // NewPebble creates a new Pebble instance, at the specified path.
-func NewPebble(cfg PebbleConfig) (*Pebble, error) {
+func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
 	// cfg.FS and cfg.ReadOnly later on.
@@ -292,6 +307,13 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 		cfg.Opts.FS = fs
 	}
 
+	// The context dance here is done so that we have a clean context without
+	// timeouts that has a copy of the log tags.
+	cfg.Opts.Logger = pebbleLogger{
+		ctx: logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
+	}
+	cfg.Opts.EventListener = pebble.MakeLoggingEventListener(cfg.Opts.Logger)
+
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
 		return nil, err
@@ -308,19 +330,21 @@ func NewPebble(cfg PebbleConfig) (*Pebble, error) {
 	}, nil
 }
 
-func newPebbleInMem(attrs roachpb.Attributes, cacheSize int64) *Pebble {
+func newPebbleInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *Pebble {
 	opts := DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(cacheSize)
 	opts.FS = vfs.NewMem()
-	db, err := NewPebble(PebbleConfig{
-		StorageConfig: base.StorageConfig{
-			Attrs: attrs,
-			// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
-			// https://github.com/cockroachdb/cockroach/issues/16750
-			MaxSize: 512 << 20, /* 512 MiB */
-		},
-		Opts: opts,
-	})
+	db, err := NewPebble(
+		ctx,
+		PebbleConfig{
+			StorageConfig: base.StorageConfig{
+				Attrs: attrs,
+				// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
+				// https://github.com/cockroachdb/cockroach/issues/16750
+				MaxSize: 512 << 20, /* 512 MiB */
+			},
+			Opts: opts,
+		})
 	if err != nil {
 		panic(err)
 	}

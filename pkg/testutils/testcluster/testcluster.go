@@ -209,6 +209,13 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			disableLBS = true
 		}
 
+		// Note: uncomment to have the testcluster stored on disk which can aid
+		// post-mortem debugging.
+		//
+		// serverArgs.StoreSpecs = []base.StoreSpec{{
+		// 	Path: fmt.Sprintf("cluster/%d", i+1),
+		// }}
+
 		if args.ParallelStart {
 			go func() {
 				errCh <- tc.doAddServer(t, serverArgs)

@@ -533,7 +533,7 @@ func NewEngine(
 		}
 		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
 
-		return NewPebble(pebbleConfig)
+		return NewPebble(context.Background(), pebbleConfig)
 	case enginepb.EngineTypeRocksDB:
 		cache := NewRocksDBCache(cacheSize)
 		defer cache.Release()

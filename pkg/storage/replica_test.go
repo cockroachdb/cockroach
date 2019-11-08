@@ -205,7 +205,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	}
 	if tc.engine == nil {
-		tc.engine = engine.NewInMem(engine.TestStorageEngine,
+		tc.engine = engine.NewInMem(context.Background(), engine.TestStorageEngine,
 			roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 		stopper.AddCloser(tc.engine)
 	}
