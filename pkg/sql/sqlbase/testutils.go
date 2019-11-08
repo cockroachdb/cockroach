@@ -898,7 +898,7 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 
 	// Create some random column families.
 	if rng.Intn(2) == 0 {
-		mutations.ColumnFamilyMutator(ret)
+		mutations.ColumnFamilyMutator(rng, ret)
 	}
 
 	return ret

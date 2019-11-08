@@ -19,12 +19,12 @@ import (
 )
 
 // StatementMutator defines a func that can change a statement.
-type StatementMutator func(stmt tree.Statement) (changed bool)
+type StatementMutator func(rng *rand.Rand, stmt tree.Statement) (changed bool)
 
 // ForAllStatements executes stmtMutator on all SQL statements of input. The
 // list of changed statements is returned.
 func ForAllStatements(
-	input string, stmtMutator StatementMutator,
+	rng *rand.Rand, input string, stmtMutator StatementMutator,
 ) (output string, changed []string) {
 	parsed, err := parser.Parse(input)
 	if err != nil {
@@ -33,7 +33,7 @@ func ForAllStatements(
 
 	var sb strings.Builder
 	for _, p := range parsed {
-		stmtChanged := stmtMutator(p.AST)
+		stmtChanged := stmtMutator(rng, p.AST)
 		if !stmtChanged {
 			sb.WriteString(p.SQL)
 		} else {
@@ -48,7 +48,7 @@ func ForAllStatements(
 
 // ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
 // definitions to have random FAMILY definitions.
-func ColumnFamilyMutator(stmt tree.Statement) (changed bool) {
+func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	ast, ok := stmt.(*tree.CreateTable)
 	if !ok {
 		return false
@@ -105,7 +105,7 @@ func ColumnFamilyMutator(stmt tree.Statement) (changed bool) {
 		}
 		columns = columns[:n]
 	}
-	rand.Shuffle(len(columns), func(i, j int) {
+	rng.Shuffle(len(columns), func(i, j int) {
 		columns[i], columns[j] = columns[j], columns[i]
 	})
 	fd := &tree.FamilyTableDef{}
@@ -119,7 +119,7 @@ func ColumnFamilyMutator(stmt tree.Statement) (changed bool) {
 		fd.Columns = append(fd.Columns, columns[0])
 		columns = columns[1:]
 		// 50% chance to make a new column family.
-		if rand.Intn(2) != 0 {
+		if rng.Intn(2) != 0 {
 			ast.Defs = append(ast.Defs, fd)
 			fd = &tree.FamilyTableDef{}
 		}

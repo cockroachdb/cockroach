@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
@@ -68,6 +69,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 	}
 
 	// Set up a dummy logicTest structure to use that code.
+	rng, _ := randutil.NewPseudoRand()
 	l := &logicTest{
 		rootT:   t.T,
 		cluster: t.cluster,
@@ -75,6 +77,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		db:      db,
 		user:    security.RootUser,
 		verbose: testing.Verbose() || log.V(1),
+		rng:     rng,
 	}
 	if err := l.processTestFile(path, testClusterConfig{}); err != nil {
 		log.Errorf(context.Background(), "error processing %s: %s", path, err)
