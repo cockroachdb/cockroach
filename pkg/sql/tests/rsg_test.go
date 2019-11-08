@@ -503,7 +503,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		// Create some random tables for the smither's column references and INSERT.
 		for i := 0; i < len(tableStmts); i++ {
-			create := sqlbase.RandCreateTable(r.Rnd, i)
+			create := sqlbase.RandCreateTable(r.Rnd, "table", i)
 			stmt := create.String()
 			if err := db.exec(ctx, stmt); err != nil {
 				return err
