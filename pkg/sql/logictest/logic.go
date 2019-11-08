@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
@@ -864,6 +866,7 @@ type logicQuery struct {
 type logicTest struct {
 	rootT    *testing.T
 	subtestT *testing.T
+	rng      *rand.Rand
 	cfg      testClusterConfig
 	// the number of nodes in the cluster.
 	cluster serverutils.TestClusterInterface
@@ -1032,6 +1035,7 @@ func (t *logicTest) setUser(user string) func() {
 }
 
 func (t *logicTest) setup(cfg testClusterConfig) {
+	t.rng, _ = randutil.NewPseudoRand()
 	t.cfg = cfg
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
@@ -1902,7 +1906,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := mutations.ForAllStatements(stmt.sql, mutations.ColumnFamilyMutator)
+	execSQL, changed := mutations.ForAllStatements(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
 	for _, c := range changed {
 		t.outf("rewrote: %s;", c)
 	}
