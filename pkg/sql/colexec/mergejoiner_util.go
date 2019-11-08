@@ -57,8 +57,7 @@ func makeGroupsBuffer(batchSize int) circularGroupsBuffer {
 		//   2*batchSize (cap field enforces that)
 		// - the largest number of groups to copy from the "physical" start of the
 		//   buffer is 2*batchSize-1
-		// - adding those two numbers we arrive at 4*batchSize-1, but for
-		//   simplicity we will use 4*batchSize.
+		// - adding those two numbers we arrive at 4*batchSize.
 		leftGroups:  make([]group, 4*batchSize),
 		rightGroups: make([]group, 4*batchSize),
 	}
