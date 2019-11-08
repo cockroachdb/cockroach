@@ -14,9 +14,6 @@
 $dropdown-hover-color = darken($background-color, 2.5%)
 
 .dropdown
-  text-transform uppercase
-  letter-spacing 2px
-  line-height 17px
   padding 12px 24px
   vertical-align middle
   border 1px solid $button-border-color
@@ -26,6 +23,7 @@ $dropdown-hover-color = darken($background-color, 2.5%)
   padding-right 10px
   color $body-color
   cursor pointer
+  position relative
 
   &:hover
     background-color $dropdown-hover-color
@@ -37,6 +35,9 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     -moz-user-select none
     -ms-user-select: none;
     user-select: none;
+    text-transform uppercase
+    letter-spacing 2px
+    line-height 17px
 
 
   &__select
@@ -46,6 +47,9 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     -moz-user-select none
     -ms-user-select: none;
     user-select: none;
+    text-transform uppercase
+    letter-spacing 2px
+    line-height 17px
 
     &:hover
       background-color $dropdown-hover-color

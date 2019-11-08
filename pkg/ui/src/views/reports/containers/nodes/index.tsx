@@ -16,20 +16,16 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
-
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
+import { nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
 import { getFilters, localityToString, NodeFilterList } from "src/views/reports/components/nodeFilterList";
 
-interface NodesOwnProps {
-  nodesSummary: NodesSummary;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-}
+type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
 
 interface NodesTableRowParams {
   title: string;
@@ -38,7 +34,7 @@ interface NodesTableRowParams {
   cellTitle?: (ns: protos.cockroach.server.status.statuspb.INodeStatus) => string;
 }
 
-type NodesProps = NodesOwnProps & RouterState;
+type NodesProps = ReduxProps & RouterState;
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 const detailTimeFormat = "Y/MM/DD HH:mm:ss";
@@ -370,15 +366,17 @@ class Nodes extends React.Component<NodesProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    nodesSummary: nodesSummarySelector(state),
-  };
-}
+const mapStateToProps = (state: AdminUIState) => ({
+  nodesSummary: nodesSummarySelector(state),
+});
 
-const actions = {
-  refreshNodes,
-  refreshLiveness,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNodes,
+      refreshLiveness,
+    },
+    dispatch,
+  );
 
-export default connect(mapStateToProps, actions)(Nodes);
+export default connect(mapStateToProps, mapDispatchToProps)(Nodes);

@@ -16,8 +16,7 @@
 import _ from "lodash";
 import moment from "moment";
 import { createSelector } from "reselect";
-import { Store } from "redux";
-import { Dispatch } from "react-redux";
+import { Store, Dispatch } from "redux";
 import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
@@ -148,7 +147,7 @@ export const staggeredVersionWarningSelector = createSelector(
       text: `We have detected that multiple versions of CockroachDB are running
       in this cluster. This may be part of a normal rolling upgrade process, but
       should be investigated if this is unexpected.`,
-      dismiss: (dispatch) => {
+      dismiss: (dispatch: Dispatch<AdminUIState>) => {
         dispatch(staggeredVersionDismissedSetting.set(true));
         return Promise.resolve();
       },
@@ -213,7 +212,7 @@ export const newVersionNotificationSelector = createSelector(
       title: "New Version Available",
       text: "A new version of CockroachDB is available.",
       link: docsURL.upgradeCockroachVersion,
-      dismiss: (dispatch) => {
+      dismiss: (dispatch: any) => {
         const dismissedAt = moment();
         // Dismiss locally.
         dispatch(newVersionDismissedLocalSetting.set(dismissedAt));
@@ -250,7 +249,7 @@ export const disconnectedAlertSelector = createSelector(
     return {
       level: AlertLevel.CRITICAL,
       title: "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
-      dismiss: (dispatch) => {
+      dismiss: (dispatch: Dispatch<AdminUIState>) => {
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         return Promise.resolve();
       },

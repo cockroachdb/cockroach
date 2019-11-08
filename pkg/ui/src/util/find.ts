@@ -14,11 +14,11 @@ import React from "react";
  * findChildrenOfType performs a DFS of the supplied React children collection,
  * returning all children which are ReactElements of the supplied type.
  */
-export function findChildrenOfType<P>(children: React.ReactNode, type: string | React.ComponentClass<P> | React.SFC<P>): React.ReactElement<P>[] {
+export function findChildrenOfType<P>(children: React.ReactChild, type: string | React.ComponentClass<P> | React.SFC<P>): React.ReactElement<P>[] {
   const matchingChildren: React.ReactElement<P>[] = [];
   const childrenToSearch = React.Children.toArray(children);
   while (childrenToSearch.length > 0) {
-    const child = childrenToSearch.shift();
+    const child: React.ReactChild = childrenToSearch.shift();
     if (!isReactElement(child)) {
       continue;
     } else {

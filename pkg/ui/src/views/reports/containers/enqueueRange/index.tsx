@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React from "react";
+import React, { Fragment } from "react";
 import Helmet from "react-helmet";
 import { withRouter, WithRouterProps } from "react-router";
 import { connect } from "react-redux";
@@ -97,10 +97,10 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
 
   renderNodeResponse(details: EnqueueRangeResponse.IDetails) {
     return (
-      <React.Fragment>
+      <Fragment>
         <p>
           {details.error
-            ? <React.Fragment><b>Error:</b> {details.error}</React.Fragment>
+            ? <Fragment><b>Error:</b> {details.error}</Fragment>
             : "Call succeeded"}
         </p>
         <table className="enqueue-range-table">
@@ -123,7 +123,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
             ))}
           </tbody>
         </table>
-      </React.Fragment>
+      </Fragment>
     );
   }
 
@@ -135,7 +135,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
     }
 
     return (
-      <React.Fragment>
+      <Fragment>
         <h2>Enqueue Range Output</h2>
         {response.details.map((details) => (
           <div>
@@ -144,7 +144,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
             {this.renderNodeResponse(details)}
           </div>
         ))}
-      </React.Fragment>
+      </Fragment>
     );
   }
 
@@ -156,13 +156,13 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
     }
 
     return (
-      <React.Fragment>Error running EnqueueRange: { error.message }</React.Fragment>
+      <Fragment>Error running EnqueueRange: { error.message }</Fragment>
     );
   }
 
   render() {
     return (
-      <React.Fragment>
+      <Fragment>
         <Helmet>
           <title>Enqueue Range</title>
         </Helmet>
@@ -229,7 +229,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
           {this.renderResponse()}
           {this.renderError()}
         </section>
-      </React.Fragment>
+      </Fragment>
     );
   }
 }

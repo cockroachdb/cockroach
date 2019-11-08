@@ -8,20 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import * as docsURL from "oss/src/util/docs";
+import React, { Fragment } from "react";
 import { Link } from "react-router";
-
+import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
+import { Duration } from "src/util/format";
+import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { StatementStatistics } from "src/util/appStats";
-import { Duration } from "src/util/format";
-import { summarize, StatementSummary } from "src/util/sql/summarize";
-
-import { countBarChart, retryBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
-
+import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import "./statements.styl";
-import * as docsURL from "oss/src/util/docs";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -137,7 +134,7 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: (
-        <React.Fragment>
+        <Fragment>
           Node
           <div className="numeric-stats-table__tooltip">
             <ToolTipWrapper text="Statement statistics grouped by which node received the request for the statement.">
@@ -146,7 +143,7 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
               </div>
             </ToolTipWrapper>
           </div>
-        </React.Fragment>
+        </Fragment>
       ),
       cell: (stmt) => <NodeLink nodeId={ stmt.label } nodeNames={ nodeNames } />,
       sort: (stmt) => stmt.label,

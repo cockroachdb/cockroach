@@ -13,15 +13,14 @@ import _ from "lodash";
 import Long from "long";
 import moment from "moment";
 import React from "react";
-
 import * as protos from "src/js/protos";
+import { cockroach } from "src/js/protos";
+import { LongToMoment, NanoToMilli, SecondsToNano } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
-import {LongToMoment, NanoToMilli, SecondsToNano} from "src/util/convert";
 import { Bytes } from "src/util/format";
 import Lease from "src/views/reports/containers/range/lease";
 import Print from "src/views/reports/containers/range/print";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
-import {cockroach} from "src/js/protos";
 
 interface RangeTableProps {
   infos: protos.cockroach.server.serverpb.IRangeInfo[];
@@ -428,9 +427,10 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     const { infos, replicas } = this.props;
     const leader = _.head(infos);
     const rangeID = leader.state.state.desc.range_id;
+    const data = _.chain(infos);
 
     // We want to display ordered by store ID.
-    const sortedStoreIDs = _.chain(infos)
+    const sortedStoreIDs = data
       .map(info => info.source_store_id)
       .sortBy(id => id)
       .value();

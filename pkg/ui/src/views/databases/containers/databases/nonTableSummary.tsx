@@ -10,20 +10,13 @@
 
 import React from "react";
 import { connect } from "react-redux";
-
-import * as protos from "src/js/protos";
+import { bindActionCreators, Dispatch } from "redux";
 import { refreshNonTableStats } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { Bytes } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
+import { Bytes } from "src/util/format";
 
-interface TimeSeriesSummaryProps {
-  nonTableStats: protos.cockroach.server.serverpb.NonTableStatsResponse;
-  // Must be connected to react-redux in order to auto-refresh time series
-  // information.
-  nonTableStatsValid: boolean;
-  refreshNonTableStats: typeof refreshNonTableStats;
-}
+type TimeSeriesSummaryProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
 
 // NonTableSummary displays a summary section describing the current data
 // usage of the time series system.
@@ -106,16 +99,20 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
 // Base selectors to extract data from redux state.
 const nonTableStatsData = (state: AdminUIState) => state.cachedData.nonTableStats;
 
-function mapStateToProps(state: AdminUIState) {
+const mapStateToProps = (state: AdminUIState) => {
   const ntStats = nonTableStatsData(state);
   return {
     nonTableStats: ntStats && ntStats.data,
     nonTableStatsValid: ntStats && ntStats.valid,
   };
-}
-
-const mapDispatchToProps = {
-  refreshNonTableStats,
 };
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNonTableStats,
+    },
+    dispatch,
+  );
 
 export default connect(mapStateToProps, mapDispatchToProps)(NonTableSummary);

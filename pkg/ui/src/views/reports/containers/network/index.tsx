@@ -16,33 +16,17 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
+import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
-
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import {
-  LivenessStatus,
-  NodesSummary,
-  nodesSummarySelector,
-  selectLivenessRequestStatus,
-  selectNodeRequestStatus,
-} from "src/redux/nodes";
+import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
-import {
-  getFilters,
-  localityToString,
-  NodeFilterList,
-  NodeFilterListProps,
-} from "src/views/reports/components/nodeFilterList";
+import { getFilters, localityToString, NodeFilterList, NodeFilterListProps } from "src/views/reports/components/nodeFilterList";
 import Loading from "src/views/shared/components/loading";
 
-interface NetworkOwnProps {
-  nodesSummary: NodesSummary;
-  nodeSummaryErrors: Error[];
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-}
+type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
 
 interface Identity {
   nodeID: number;
@@ -56,7 +40,7 @@ interface NoConnection {
   to: Identity;
 }
 
-type NetworkProps = NetworkOwnProps & RouterState;
+type NetworkProps = ReduxProps & RouterState;
 
 // staleTable is a table of all stale nodes.
 function staleTable(staleIdentities: Identity[]) {
@@ -480,16 +464,18 @@ const nodeSummaryErrors = createSelector(
   (nodes, liveness) => [nodes.lastError, liveness.lastError],
 );
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    nodesSummary: nodesSummarySelector(state),
-    nodeSummaryErrors: nodeSummaryErrors(state),
-  };
-}
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  nodesSummary: nodesSummarySelector(state),
+  nodeSummaryErrors: nodeSummaryErrors(state),
+});
 
-const actions = {
-  refreshNodes,
-  refreshLiveness,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNodes,
+      refreshLiveness,
+    },
+    dispatch,
+  );
 
-export default connect(mapStateToProps, actions)(Network);
+export default connect(mapStateToProps, mapDispatchToProps)(Network);

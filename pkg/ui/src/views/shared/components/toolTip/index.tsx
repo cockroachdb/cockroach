@@ -17,6 +17,7 @@ import "./tooltip.styl";
 interface ToolTipWrapperProps {
   text: React.ReactNode;
   short?: boolean;
+  children?: React.ReactNode;
 }
 
 interface ToolTipWrapperState {
