@@ -1415,6 +1415,27 @@ select date_trunc('day', '2011-01-02 01:30:00+00:00'::timestamptz), pg_typeof(da
 statement ok
 SET TIME ZONE 0
 
+# Test casting timestamptz to time works in the presence of time zones.
+
+statement ok
+SET TIME ZONE 'UTC'
+
+statement ok
+CREATE TABLE django_37 (a TIMESTAMPTZ); INSERT INTO django_37 VALUES ('2018-09-28T12:42:10.234567-05:00'::TIMESTAMPTZ)
+
+query T
+SELECT a::TIME FROM django_37
+----
+0000-01-01 17:42:10.234567 +0000 UTC
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query T
+SELECT a::TIME FROM django_37
+----
+0000-01-01 12:42:10.234567 +0000 UTC
+
 # Test negative years to ensure they can round-trip through the parser.
 # Also ensure that we don't trigger any of the "convenience" rules.
 # Update: dates now have a much more limited range such that the original
