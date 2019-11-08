@@ -8,7 +8,11 @@ spawn $argv demo --geo-partitioned-replicas
 
 # wait for the shell to start up
 expect {
-  "Timeout exceeded" {
+  # We can't test a particular error string, because a license acquisition
+  # can fail in various ways (i.e. not just a timeout).
+  # So instead we use the specific error message shouted by `cockroach demo` when license
+  # acquisition fails.
+  "license acquisition was unsuccessful" {
       # The license server is unreachable. There's not much we can test here.
       # Simply ignore the test.
       report "License server could not be reached - skipping with no error"
