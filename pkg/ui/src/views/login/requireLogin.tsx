@@ -45,7 +45,7 @@ class RequireLogin extends React.Component<WithRouterProps & RequireLoginProps> 
       return null;
     }
 
-    return (<React.Fragment>{ this.props.children }</React.Fragment>);
+    return this.props.children;
   }
 }
 

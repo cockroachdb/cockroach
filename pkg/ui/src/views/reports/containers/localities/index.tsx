@@ -12,17 +12,15 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-
-import { refreshNodes, refreshLocations } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
-import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";
+import { bindActionCreators, Dispatch } from "redux";
+import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
+import { LocalityTier, LocalityTree, selectLocalityTree } from "src/redux/localities";
+import { LocationTree, selectLocationsRequestStatus, selectLocationTree } from "src/redux/locations";
 import { selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 import { getNodeLocalityTiers } from "src/util/localities";
+import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 import Loading from "src/views/shared/components/loading";
-
 import "./localities.styl";
 
 function formatCoord(coordinate: number) {
@@ -42,7 +40,7 @@ function renderLocation(locations: LocationTree, tiers: LocalityTier[]) {
 function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
   let rows: React.ReactNode[] = [];
   const leftIndentStyle = {
-    "padding-left": 20 * tree.tiers.length,
+    paddingLeft: `${20 * tree.tiers.length}px`,
   };
 
   tree.nodes.forEach((node) => {
@@ -77,15 +75,7 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
 
   return rows;
 }
-
-interface LocalitiesProps {
-  localityTree: LocalityTree;
-  localityStatus: CachedDataReducerState<any>;
-  locationTree: LocationTree;
-  locationStatus: CachedDataReducerState<any>;
-  refreshLocations: typeof refreshLocations;
-  refreshNodes: typeof refreshNodes;
-}
+type LocalitiesProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
 
 class Localities extends React.Component<LocalitiesProps, {}> {
   componentWillMount() {
@@ -130,18 +120,20 @@ class Localities extends React.Component<LocalitiesProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    localityTree: selectLocalityTree(state),
-    localityStatus: selectNodeRequestStatus(state),
-    locationTree: selectLocationTree(state),
-    locationStatus: selectLocationsRequestStatus(state),
-  };
-}
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  localityTree: selectLocalityTree(state),
+  localityStatus: selectNodeRequestStatus(state),
+  locationTree: selectLocationTree(state),
+  locationStatus: selectLocationsRequestStatus(state),
+});
 
-const actions = {
-  refreshLocations,
-  refreshNodes,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshLocations,
+      refreshNodes,
+    },
+    dispatch,
+  );
 
-export default connect(mapStateToProps, actions)(Localities);
+export default connect(mapStateToProps, mapDispatchToProps)(Localities);

@@ -25,7 +25,7 @@ export interface DropdownOption {
 }
 
 export enum ArrowDirection {
-  LEFT, RIGHT,
+  LEFT, RIGHT, CENTER,
 }
 
 interface DropdownOwnProps {
@@ -38,6 +38,7 @@ interface DropdownOwnProps {
   onArrowClick?: (direction: ArrowDirection) => void;
   // Disable any arrows in the arrow direction array.
   disabledArrows?: ArrowDirection[];
+  content?: any;
 }
 
 /**
@@ -68,7 +69,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   }
 
   render() {
-    const {selected, options, onChange, onArrowClick, disabledArrows} = this.props;
+    const {selected, options, onChange, onArrowClick, disabledArrows, content} = this.props;
 
     const className = classNames(
       "dropdown",
@@ -95,7 +96,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         ref={this.titleRef}>
           {this.props.title}{this.props.title ? ":" : ""}
       </span>
-      <Select
+      {content ? content : <Select
         className="dropdown__select"
         clearable={false}
         searchable={false}
@@ -103,7 +104,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         value={selected}
         onChange={onChange}
         ref={this.selectRef}
-      />
+      />}
       <span
         className={rightClassName}
         dangerouslySetInnerHTML={trustIcon(rightArrow)}

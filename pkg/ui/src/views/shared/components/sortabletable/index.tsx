@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import _ from "lodash";
 import classNames from "classnames";
-
+import _ from "lodash";
+import React from "react";
 import "./sortabletable.styl";
 
 /**

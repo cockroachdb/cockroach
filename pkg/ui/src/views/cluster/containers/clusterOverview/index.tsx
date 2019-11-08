@@ -149,14 +149,18 @@ const mapStateToReplicationStatusProps = createSelector(
   },
 );
 
-interface ClusterSummaryProps {
+interface ClusterSummaryStateProps {
   capacityUsage: CapacityUsageProps;
   nodeLiveness: NodeLivenessProps;
   replicationStatus: ReplicationStatusProps;
   loading: boolean;
-  refreshLiveness: typeof refreshLiveness;
-  refreshNodes: typeof refreshNodes;
 }
+interface ClusterSummaryActionsProps {
+  refreshLiveness: () => void;
+  refreshNodes: () => void;
+}
+
+type ClusterSummaryProps = ClusterSummaryStateProps & ClusterSummaryActionsProps;
 
 class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
   componentWillMount() {
@@ -204,7 +208,7 @@ const actions = {
 };
 
 // tslint:disable-next-line:variable-name
-const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(ClusterSummary);
+const ClusterSummaryConnected = connect<ClusterSummaryStateProps, ClusterSummaryActionsProps>(mapStateToClusterSummaryProps, actions)(ClusterSummary);
 
 /**
  * Renders the main content of the cluster visualization page.

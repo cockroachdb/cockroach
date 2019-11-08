@@ -11,14 +11,13 @@
 import _ from "lodash";
 import React from "react";
 import ReactPaginate from "react-paginate";
-import { Link } from "react-router";
 import { connect } from "react-redux";
-
+import { Link } from "react-router";
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
-
-import { AdminUIState } from "src/redux/state";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { AdminUIState } from "src/redux/state";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 /******************************
@@ -26,23 +25,6 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
  */
 
 const RANGES_PER_PAGE = 100;
-
-/**
- * RangesMainData are the data properties which should be passed to the RangesMain
- * container.
- */
-interface RangesMainData {
-  state: CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse>;
-}
-
-/**
- * RangesMainActions are the action dispatchers which should be passed to the
- * RangesMain container.
- */
-interface RangesMainActions {
-  // Call if the ranges statuses are stale and need to be refreshed.
-  refreshRaft: typeof refreshRaft;
-}
 
 interface RangesMainState {
   showState?: boolean;
@@ -57,7 +39,7 @@ interface RangesMainState {
  * RangesMainProps is the type of the props object that must be passed to
  * RangesMain component.
  */
-type RangesMainProps = RangesMainData & RangesMainActions;
+type RangesMainProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
 
 /**
  * Renders the main content of the raft ranges page, which is primarily a data
@@ -283,16 +265,22 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
 // Base selectors to extract data from redux state.
 const selectRaftState = (state: AdminUIState): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  state: selectRaftState(state),
+});
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshRaft,
+    },
+    dispatch,
+  );
+
 // Connect the RangesMain class with our redux store.
 const rangesMainConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      state: selectRaftState(state),
-    };
-  },
-  {
-    refreshRaft: refreshRaft,
-  },
+  mapStateToProps,
+  mapDispatchToProps,
 )(RangesMain);
 
 export { rangesMainConnected as default };
