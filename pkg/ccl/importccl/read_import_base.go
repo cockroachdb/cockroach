@@ -70,7 +70,7 @@ func runImport(
 			inputs = spec.Uri
 		}
 
-		return conv.readFiles(ctx, inputs, spec.Format, flowCtx.Cfg.ExternalStorage)
+		return conv.readFiles(ctx, inputs, nil, spec.Format, flowCtx.Cfg.ExternalStorage)
 	})
 
 	// This group links together the producers (via producerGroup) and the KV ingester.
@@ -105,7 +105,7 @@ func runImport(
 	return summary, nil
 }
 
-type readFileFunc func(context.Context, *fileReader, int32, string, chan string) error
+type readFileFunc func(context.Context, *fileReader, int32, string, int64, chan string) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -118,6 +118,7 @@ type readFileFunc func(context.Context, *fileReader, int32, string, chan string)
 func readInputFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
 	makeExternalStorage cloud.ExternalStorageFactory,
@@ -125,6 +126,7 @@ func readInputFiles(
 	done := ctx.Done()
 
 	fileSizes := make(map[int32]int64, len(dataFiles))
+
 	// Attempt to fetch total number of bytes for all files.
 	for id, dataFile := range dataFiles {
 		conf, err := cloud.ExternalStorageConfFromURI(dataFile)
@@ -226,7 +228,7 @@ func readInputFiles(
 
 				grp.GoCtx(func(ctx context.Context) error {
 					defer close(rejected)
-					if err := fileFunc(ctx, src, dataFileIndex, dataFile, rejected); err != nil {
+					if err := fileFunc(ctx, src, dataFileIndex, dataFile, resumePos[dataFileIndex], rejected); err != nil {
 						return errors.Wrap(err, dataFile)
 					}
 					return nil
@@ -236,7 +238,7 @@ func readInputFiles(
 					return errors.Wrap(err, dataFile)
 				}
 			} else {
-				if err := fileFunc(ctx, src, dataFileIndex, dataFile, nil /* rejected */); err != nil {
+				if err := fileFunc(ctx, src, dataFileIndex, dataFile, resumePos[dataFileIndex], nil /* rejected */); err != nil {
 					return errors.Wrap(err, dataFile)
 				}
 			}
@@ -318,6 +320,7 @@ type inputConverter interface {
 	readFiles(
 		ctx context.Context,
 		dataFiles map[int32]string,
+		resumePos map[int32]int64,
 		format roachpb.IOFileFormat,
 		makeExternalStorage cloud.ExternalStorageFactory,
 	) error
