@@ -892,7 +892,8 @@ func IsSnapshotError(err error) bool {
 //    Learner replicas receive the log, but do not have voting rights. They are
 //    used to catch up these new replicas before turning them into voters, which
 //    is important for the continued availability of the range throughout the
-//    replication change.
+//    replication change. Learners are added (and removed) one by one due to a
+//    technicality (see https://github.com/cockroachdb/cockroach/pull/40268).
 //
 //    The distributed transaction updates both copies of the range descriptor
 //    (the one on the range and that in the meta ranges) to that effect, and
@@ -916,17 +917,32 @@ func IsSnapshotError(err error) bool {
 //
 // 3. Carry out a distributed transaction similar to that which added the
 //    learner replicas, except this time it (atomically) changes all learners to
-//    voters and removes any replicas for which this was requested. If only one
-//    replica is being changed, raft can chose the simple configuration change
-//    protocol; otherwise it has to use joint consensus. In this latter mechanism,
-//    a first configuration change is made which results in a configuration ("joint
-//    configuration") in which a quorum of both the old replicas and the new
-//    replica sets is required for decision making. Transitioning into this joint
-//    configuration, the RangeDescriptor (which is the source of truth of
-//    the replication configuration) is updated with corresponding replicas of
-//    type VOTER_INCOMING and VOTER_OUTGOING.
+//    voters and removes any replicas for which this was requested; voters are
+//    demoted before actually being removed to avoid bug in etcd/raft:
+//    See https://github.com/cockroachdb/cockroach/pull/40268.
+//
+//    If only one replica is being added, raft can chose the simple
+//    configuration change protocol; otherwise it has to use joint consensus. In
+//    this latter mechanism, a first configuration change is made which results
+//    in a configuration ("joint configuration") in which a quorum of both the
+//    old replicas and the new replica sets is required for decision making.
+//    Transitioning into this joint configuration, the RangeDescriptor (which is
+//    the source of truth of the replication configuration) is updated with
+//    corresponding replicas of type VOTER_INCOMING and VOTER_OUTGOING.
 //    Immediately after committing this change, a second transition updates the
 //    descriptor with and activates the final configuration.
+//
+// Concretely, if the initial members of the range are s1/1, s2/2, and s3/3, and
+// an atomic membership change were to adds s4/4 and s5/5 while removing s1/1 and
+// s2/2, the following range descriptors would form the overall transition:
+//
+// 1. s1/1 s2/2 s3/3 (VOTER_FULL is implied)
+// 2. s1/1 s2/2 s3/3 s4/4LEARNER
+// 3. s1/1 s2/2 s3/3 s4/4LEARNER s5/5LEARNER
+// 4. s1/1VOTER_DEMOTING s2/2VOTER_DEMOTING s3/3 s4/4VOTER_INCOMING s5/5VOTER_INCOMING
+// 5. s1/1LEARNER s2/2LEARNER s3/3 s4/4 s5/5
+// 6. s2/2LEARNER s3/3 s4/4 s5/5
+// 7. s3/3 s4/4 s5/5
 //
 // A replica that learns that it was removed will queue itself for replicaGC.
 // Note that a removed replica may never apply the configuration change removing
@@ -1068,7 +1084,9 @@ func (r *Replica) changeReplicasImpl(
 
 // maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
 // the descriptor indicates one. This involves running a distributed transaction
-// updating said descriptor, the result of which will be returned.
+// updating said descriptor, the result of which will be returned. The
+// descriptor returned from this method will contain replicas of type LEARNER
+// and VOTER_FULL only.
 func maybeLeaveAtomicChangeReplicas(
 	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
@@ -1078,7 +1096,6 @@ func maybeLeaveAtomicChangeReplicas(
 	if !desc.Replicas().InAtomicReplicationChange() {
 		return desc, nil
 	}
-
 	// NB: this is matched on in TestMergeQueueSeesLearner.
 	log.Eventf(ctx, "transitioning out of joint configuration %s", desc)
 
@@ -1089,6 +1106,47 @@ func maybeLeaveAtomicChangeReplicas(
 	return execChangeReplicasTxn(
 		ctx, store, desc, storagepb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 	)
+}
+
+// maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
+// config (if there is one), and then removes all learners. After this function
+// returns, all remaining replicas will be of type VOTER_FULL.
+func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
+	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
+) (*roachpb.RangeDescriptor, error) {
+	desc, err := maybeLeaveAtomicChangeReplicas(ctx, store, desc)
+	if err != nil {
+		return nil, err
+	}
+	// Now the config isn't joint any more, but we may have demoted some voters
+	// into learners. These learners should go as well.
+
+	learners := desc.Replicas().Learners()
+	if len(learners) == 0 {
+		return desc, nil
+	}
+	targets := make([]roachpb.ReplicationTarget, len(learners))
+	for i := range learners {
+		targets[i].NodeID = learners[i].NodeID
+		targets[i].StoreID = learners[i].StoreID
+	}
+	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
+	// NB: unroll the removals because at the time of writing, we can't atomically
+	// remove multiple learners. This will be fixed in:
+	//
+	// https://github.com/cockroachdb/cockroach/pull/40268
+	origDesc := desc
+	for _, target := range targets {
+		var err error
+		desc, err = execChangeReplicasTxn(
+			ctx, store, desc, storagepb.ReasonAbandonedLearner, "",
+			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+		)
+		if err != nil {
+			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
+		}
+	}
+	return desc, nil
 }
 
 func validateReplicationChanges(
@@ -1202,13 +1260,26 @@ func (r *Replica) lockLearnerSnapshot(
 // finalizes the addition and/or removal of replicas. Any voters in the process
 // of being added (as reflected by the replication changes) must have been added
 // as learners already and will be caught up before being promoted to voters.
-// Any replica removals (from the replication changes) will be processed. All of
-// this occurs in one atomic raft membership change which is carried out across
-// two distributed transactions. On error, it is possible that the range is in
-// the intermediate ("joint") configuration in which a quorum of both the old
-// and new sets of voters is required. If a range is encountered in this state,
-// maybeLeaveAtomicReplicationChange can fix this, but it is the caller's
-// job to do this when necessary.
+// Cluster version permitting, voter removals (from the replication changes)
+// will preferably be carried out by first demoting to a learner instead of
+// outright removal (this avoids a [raft-bug] that can lead to unavailability).
+// All of this occurs in one atomic raft membership change which is carried out
+// across two phases. On error, it is possible that the range is in the
+// intermediate ("joint") configuration in which a quorum of both the old and
+// new sets of voters is required. If a range is encountered in this state,
+// maybeLeaveAtomicReplicationChange can fix this, but it is the caller's job to
+// do this when necessary.
+//
+// The atomic membership change is carried out chiefly via the construction of a
+// suitable ChangeReplicasTrigger, see prepareChangeReplicasTrigger for details.
+//
+// Contrary to the name, *all* membership changes go through this method, even
+// those that add/remove only a single voter, though the simple protocol is used
+// when this is opportune. Notably, demotions can never use the simple protocol,
+// even if only a single voter is being demoted, due to a (liftable) limitation
+// in etcd/raft.
+//
+// [raft-bug]: https://github.com/etcd-io/etcd/issues/11284
 func (r *Replica) atomicReplicationChange(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -1266,8 +1337,13 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
+	canUseDemotion := cluster.Version.IsActive(ctx, r.store.ClusterSettings(), cluster.VersionChangeReplicasDemotion)
 	for _, target := range chgs.Removals() {
-		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypeRemove})
+		typ := internalChangeTypeRemove
+		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL && canUseDemotion {
+			typ = internalChangeTypeDemote
+		}
+		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
 	}
 
 	var err error
@@ -1280,8 +1356,9 @@ func (r *Replica) atomicReplicationChange(
 		return desc, nil
 	}
 
-	// Leave the joint config if we entered one.
-	return maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
+	// Leave the joint config if we entered one. Also, remove any learners we
+	// might have picked up due to removal-via-demotion.
+	return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
 }
 
 // tryRollbackLearnerReplica attempts to remove a learner specified by the
@@ -1395,9 +1472,19 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 type internalChangeType byte
 
 const (
-	internalChangeTypeAddVoterViaPreemptiveSnap internalChangeType = iota
+	internalChangeTypeAddVoterViaPreemptiveSnap internalChangeType = iota + 1
 	internalChangeTypeAddLearner
 	internalChangeTypePromoteLearner
+	// internalChangeTypeDemote changes a voter to a learner. This will
+	// necessarily go through joint consensus since it requires two individual
+	// changes (only one changes the quorum, so we could allow it in a simple
+	// change too, with some work here and upstream). Demotions are treated like
+	// removals throughout (i.e. they show up in `ChangeReplicasTrigger.Removed()`,
+	// but not in `.Added()`).
+	internalChangeTypeDemote
+	// NB: can't remove multiple learners at once (need to remove at least one
+	// voter with them), see:
+	// https://github.com/cockroachdb/cockroach/pull/40268
 	internalChangeTypeRemove
 )
 
@@ -1413,10 +1500,22 @@ type internalReplicationChange struct {
 type internalReplicationChanges []internalReplicationChange
 
 func (c internalReplicationChanges) leaveJoint() bool { return len(c) == 0 }
-func (c internalReplicationChanges) useJoint() bool   { return len(c) > 1 }
+func (c internalReplicationChanges) useJoint() bool {
+	// NB: demotions require joint consensus because of limitations in etcd/raft.
+	// These could be lifted, but it doesn't seem worth it.
+	return len(c) > 1 || c[0].typ == internalChangeTypeDemote
+}
+
+type storeSettings interface {
+	ClusterSettings() *cluster.Settings
+	TestingKnobs() *StoreTestingKnobs
+}
 
 func prepareChangeReplicasTrigger(
-	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor, chgs internalReplicationChanges,
+	ctx context.Context,
+	store storeSettings,
+	desc *roachpb.RangeDescriptor,
+	chgs internalReplicationChanges,
 ) (*roachpb.ChangeReplicasTrigger, error) {
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
@@ -1462,17 +1561,35 @@ func prepareChangeReplicasTrigger(
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
 				}
-				if typ := rDesc.GetType(); !useJoint || typ == roachpb.LEARNER {
+				prevTyp := rDesc.GetType()
+				if !useJoint || prevTyp == roachpb.LEARNER {
 					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
+				} else if prevTyp != roachpb.VOTER_FULL {
+					// NB: prevTyp is already known to be VOTER_FULL because of
+					// !InAtomicReplicationChange() and the learner handling
+					// above. We check it anyway.
+					return nil, errors.Errorf("cannot transition from %s to VOTER_OUTGOING", prevTyp)
 				} else {
-					// NB: typ is already known to be VOTER_FULL because of !InAtomicReplicationChange() above.
-					// We check it anyway.
-					var prevTyp roachpb.ReplicaType
 					rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
-					if prevTyp != roachpb.VOTER_FULL {
-						return nil, errors.Errorf("cannot transition from %s to VOTER_OUTGOING", prevTyp)
-					}
 				}
+				removed = append(removed, rDesc)
+			case internalChangeTypeDemote:
+				// Demotion is similar to removal, except that a demotion
+				// cannot apply to a learner, and that the resulting type is
+				// different when entering a joint config.
+				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
+				if !ok {
+					return nil, errors.Errorf("target %s not found", chg.target)
+				}
+				if !useJoint {
+					// NB: this won't fire because cc.useJoint() is always true when
+					// there's a demotion. This is just a sanity check.
+					return nil, errors.Errorf("demotions require joint consensus")
+				}
+				if prevTyp := rDesc.GetType(); prevTyp != roachpb.VOTER_FULL {
+					return nil, errors.Errorf("cannot transition from %s to VOTER_DEMOTING", prevTyp)
+				}
+				rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_DEMOTING)
 				removed = append(removed, rDesc)
 			default:
 				return nil, errors.Errorf("unsupported internal change type %d", chg.typ)
@@ -1491,6 +1608,9 @@ func prepareChangeReplicasTrigger(
 				isJoint = true
 			case roachpb.VOTER_OUTGOING:
 				updatedDesc.RemoveReplica(rDesc.NodeID, rDesc.StoreID)
+				isJoint = true
+			case roachpb.VOTER_DEMOTING:
+				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.LEARNER)
 				isJoint = true
 			default:
 			}
@@ -2025,7 +2145,7 @@ func (s *Store) AdminRelocateRange(
 
 	// Step 0: Remove everything that's not a full voter so we don't have to think
 	// about them.
-	newDesc, err := removeNonFullVoters(ctx, s, &rangeDesc)
+	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, s, &rangeDesc)
 	if err != nil {
 		log.Warning(ctx, err)
 		return err
@@ -2346,41 +2466,6 @@ func (s *Store) relocateOne(
 	}
 
 	return ops, transferTarget, nil
-}
-
-func removeNonFullVoters(
-	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
-) (*roachpb.RangeDescriptor, error) {
-	origDesc := desc
-
-	desc, err := maybeLeaveAtomicChangeReplicas(ctx, store, desc)
-	if err != nil {
-		return nil, err
-	}
-
-	learners := desc.Replicas().Learners()
-	if len(learners) == 0 {
-		return desc, nil
-	}
-	targets := make([]roachpb.ReplicationTarget, len(learners))
-	for i := range learners {
-		targets[i].NodeID = learners[i].NodeID
-		targets[i].StoreID = learners[i].StoreID
-	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, targets...)
-	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
-	// NB: unroll the removals because at the time of writing, we can't atomically
-	// remove multiple learners. This will be fixed in:
-	//
-	// https://github.com/cockroachdb/cockroach/pull/40268
-	for i := range chgs {
-		var err error
-		desc, err = store.DB().AdminChangeReplicas(ctx, desc.StartKey, *desc, chgs[i:i+1])
-		if err != nil {
-			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
-		}
-	}
-	return desc, nil
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.

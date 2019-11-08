@@ -3596,18 +3596,25 @@ func TestRemovedReplicaError(t *testing.T) {
 	mtc.manualClock.Increment(mtc.storeConfig.LeaseExpiration())
 
 	// Expect to get a RangeNotFoundError. We have to allow for ambiguous result
-	// errors to avoid the occasional test flake.
+	// errors to avoid the occasional test flake. Since we use demotions to remove
+	// voters, the actual removal sees a learner, and so the learner is not in
+	// the commit quorum for the removal itself. That is to say, we will only
+	// start seeing the RangeNotFoundError after a little bit of time has passed.
 	getArgs := getArgs([]byte("a"))
-	for {
+	testutils.SucceedsSoon(t, func() error {
 		_, pErr := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{}, getArgs)
-		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); ok {
-			break
-		} else if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
-			continue
-		} else {
-			t.Fatalf("expected RangeNotFoundError; got %v", pErr)
+		switch pErr.GetDetail().(type) {
+		case *roachpb.AmbiguousResultError:
+			return pErr.GoError()
+		case *roachpb.NotLeaseHolderError:
+			return pErr.GoError()
+		case *roachpb.RangeNotFoundError:
+			return nil
+		default:
 		}
-	}
+		t.Fatal(pErr)
+		return errors.New("unreachable")
+	})
 }
 
 // TestRemoveRangeWithoutGC ensures that we do not panic when a

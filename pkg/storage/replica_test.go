@@ -12102,6 +12102,155 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 	}
 }
 
+type fakeStore struct {
+	*cluster.Settings
+	*StoreTestingKnobs
+}
+
+func (s fakeStore) ClusterSettings() *cluster.Settings {
+	return s.Settings
+}
+
+func (s fakeStore) TestingKnobs() *StoreTestingKnobs {
+	return s.StoreTestingKnobs
+}
+
+func TestPrepareChangeReplicasTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	s := fakeStore{
+		Settings:          cluster.MakeTestingClusterSettings(),
+		StoreTestingKnobs: &StoreTestingKnobs{},
+	}
+
+	type typOp struct {
+		roachpb.ReplicaType
+		internalChangeType // 0 for noop
+	}
+
+	type testCase struct {
+		desc       *roachpb.RangeDescriptor
+		chgs       internalReplicationChanges
+		expTrigger string
+	}
+
+	const noop = internalChangeType(0)
+	const none = roachpb.ReplicaType(-1)
+
+	mk := func(expTrigger string, typs ...typOp) testCase {
+		chgs := make([]internalReplicationChange, 0, len(typs))
+		rDescs := make([]roachpb.ReplicaDescriptor, 0, len(typs))
+		for i, typ := range typs {
+			typ := typ // local copy - we take addr below
+			rDesc := roachpb.ReplicaDescriptor{
+				ReplicaID: roachpb.ReplicaID(i + 1),
+				NodeID:    roachpb.NodeID(100 * (1 + i)),
+				StoreID:   roachpb.StoreID(100 * (1 + i)),
+				Type:      &(typ.ReplicaType),
+			}
+			if typ.ReplicaType != none {
+				rDescs = append(rDescs, rDesc)
+			}
+			if typ.internalChangeType != noop {
+				chgs = append(chgs, internalReplicationChange{
+					target: roachpb.ReplicationTarget{NodeID: rDesc.NodeID, StoreID: rDesc.StoreID},
+					typ:    typ.internalChangeType,
+				})
+			}
+		}
+		desc := roachpb.NewRangeDescriptor(roachpb.RangeID(10), roachpb.RKeyMin, roachpb.RKeyMax, roachpb.MakeReplicaDescriptors(rDescs))
+		return testCase{
+			desc:       desc,
+			chgs:       chgs,
+			expTrigger: expTrigger,
+		}
+	}
+
+	tcs := []testCase{
+		// Simple addition of learner.
+		mk(
+			"SIMPLE(l2) ADD_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{none, internalChangeTypeAddLearner},
+		),
+		// Simple addition of voter (necessarily via learner).
+		mk(
+			"SIMPLE(v2) ADD_REPLICA[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
+		),
+		// Simple removal of voter.
+		mk(
+			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2]: after=[(n100,s100):1] next=3",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+		),
+		// Simple removal of learner.
+		mk(
+			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{roachpb.LEARNER, internalChangeTypeRemove},
+		),
+
+		// All other cases below need to go through joint quorums (though some
+		// of them only due to limitations in etcd/raft).
+
+		// Addition of learner and removal of voter at same time.
+		mk(
+			"ENTER_JOINT(r2 l3) ADD_REPLICA[(n200,s200):3LEARNER], REMOVE_REPLICA[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{none, internalChangeTypeAddLearner},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+		),
+
+		// Promotion of two voters.
+		mk(
+			"ENTER_JOINT(v2 v3) ADD_REPLICA[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
+			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
+		),
+
+		// Removal of two voters.
+		mk(
+			"ENTER_JOINT(r2 r3) REMOVE_REPLICA[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+		),
+
+		// Demoting two voters.
+		mk(
+			"ENTER_JOINT(r2 l2 r3 l3) REMOVE_REPLICA[(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemote},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemote},
+		),
+		// Leave joint config entered via demotion.
+		mk(
+			"LEAVE_JOINT: after=[(n100,s100):1 (n200,s200):2LEARNER (n300,s300):3LEARNER] next=4",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{roachpb.VOTER_DEMOTING, noop},
+			typOp{roachpb.VOTER_DEMOTING, noop},
+		),
+	}
+
+	for _, tc := range tcs {
+		t.Run("", func(t *testing.T) {
+			trigger, err := prepareChangeReplicasTrigger(
+				ctx,
+				s,
+				tc.desc,
+				tc.chgs,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expTrigger, trigger.String())
+		})
+	}
+}
+
 func enableTraceDebugUseAfterFree() (restore func()) {
 	prev := trace.DebugUseAfterFinish
 	trace.DebugUseAfterFinish = true

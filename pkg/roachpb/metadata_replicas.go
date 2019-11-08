@@ -41,6 +41,13 @@ func ReplicaTypeVoterOutgoing() *ReplicaType {
 	return &t
 }
 
+// ReplicaTypeVoterDemoting returns a VOTER_DEMOTING pointer suitable
+// for use in a nullable proto field.
+func ReplicaTypeVoterDemoting() *ReplicaType {
+	t := VOTER_DEMOTING
+	return &t
+}
+
 // ReplicaTypeLearner returns a LEARNER pointer suitable for use in
 // a nullable proto field.
 func ReplicaTypeLearner() *ReplicaType {
@@ -278,12 +285,9 @@ func (d *ReplicaDescriptors) RemoveReplica(
 func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
 	for _, rDesc := range d.wrapped {
 		switch rDesc.GetType() {
-		case VOTER_FULL:
-		case VOTER_INCOMING:
+		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING:
 			return true
-		case VOTER_OUTGOING:
-			return true
-		case LEARNER:
+		case VOTER_FULL, LEARNER:
 		default:
 			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
 		}
@@ -297,10 +301,7 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 	joint := d.InAtomicReplicationChange()
 	// The incoming config is taken verbatim from the full voters when the
 	// config is not joint. If it is joint, slot the voters into the right
-	// category. We never need to populate LearnersNext because this would
-	// correspond to demoting a voter, which we don't do. If we wanted to add
-	// that, we'd add a replica type VOTER_DEMOTING and populate both
-	// VotersOutgoing and LearnersNext from it.
+	// category.
 	for _, rep := range d.wrapped {
 		id := uint64(rep.ReplicaID)
 		typ := rep.GetType()
@@ -314,6 +315,9 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 			cs.Voters = append(cs.Voters, id)
 		case VOTER_OUTGOING:
 			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
+		case VOTER_DEMOTING:
+			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
+			cs.LearnersNext = append(cs.LearnersNext, id)
 		case LEARNER:
 			cs.Learners = append(cs.Learners, id)
 		default:
