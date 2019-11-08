@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
@@ -864,6 +866,7 @@ type logicQuery struct {
 type logicTest struct {
 	rootT    *testing.T
 	subtestT *testing.T
+	rng      *rand.Rand
 	cfg      testClusterConfig
 	// the number of nodes in the cluster.
 	cluster serverutils.TestClusterInterface
@@ -1902,7 +1905,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := mutations.ForAllStatements(stmt.sql, mutations.ColumnFamilyMutator)
+	execSQL, changed := mutations.ForAllStatements(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
 	for _, c := range changed {
 		t.outf("rewrote: %s;", c)
 	}
@@ -2312,10 +2315,12 @@ func RunLogicTest(t *testing.T, globs ...string) {
 							t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
 						}
 					}
+					rng, _ := randutil.NewPseudoRand()
 					lt := logicTest{
 						rootT:           t,
 						verbose:         verbose,
 						perErrorSummary: make(map[string][]string),
+						rng:             rng,
 					}
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
