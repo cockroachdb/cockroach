@@ -924,8 +924,16 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			tableDesc.DropTime = 1
 			var existingIDVal roachpb.Value
 			existingIDVal.SetInt(int64(tableDesc.ID))
-			tKey := sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name)
-			b.CPut(tKey.Key(), nil, &existingIDVal)
+			var copyExistingValue roachpb.Value
+			copyExistingValue.SetInt(int64(tableDesc.ID))
+			// The (parentID, name) mapping could be in either the new system.namespace
+			// or the deprecated version. Thus we try to remove the mapping from both.
+			tKey := sqlbase.NewPublicTableKey(tableDesc.ParentID, tableDesc.Name)
+			b.CPutAllowingIfNotExists(tKey.Key(), nil, &existingIDVal)
+			// TODO(whomever): This can be removed in 20.2, and the above
+			//  CPutAllowingIfNotExists should change to CPut.
+			dtKey := sqlbase.NewDeprecatedTableKey(tableDesc.ParentID, tableDesc.Name)
+			b.CPutAllowingIfNotExists(dtKey.Key(), nil, &existingIDVal)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC

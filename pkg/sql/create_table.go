@@ -62,15 +62,42 @@ type createTableRun struct {
 }
 
 func (n *createTableNode) startExec(params runParams) error {
-	temporary := false
-	if n.n.Temporary {
+	isTemporary, err := n.n.Table.IsTemporary(n.n.Temporary)
+	if err != nil {
+		return err
+	}
+	// Creating a table during a cluster version upgrade is currently unsafe,
+	// because the following conditional can asynchronously change inside a
+	// transaction.
+	var tKey sqlbase.DescriptorKey = sqlbase.NewPublicTableKey(n.dbDesc.ID, n.n.Table.Table())
+	// TODO(whomever): This conditional can be removed in 20.2
+	if !cluster.Version.IsActive(params.ctx, params.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		tKey = sqlbase.NewDeprecatedTableKey(n.dbDesc.ID, n.n.Table.Table())
+	}
+
+	// If a user specifies the pg_temp schema, even without the TEMPORARY keyword,
+	// a temporary table should be created.
+	if isTemporary {
 		if !params.SessionData().TempTablesEnabled {
 			return unimplemented.NewWithIssuef(5807,
 				"temporary tables are unsupported")
 		}
-		temporary = true
+
+		tempSchemaName := params.p.TemporarySchemaName()
+		sKey := sqlbase.NewSchemaKey(n.dbDesc.ID, tempSchemaName)
+		schemaID, err := getDescriptorID(params.ctx, params.p.txn, sKey)
+		if err != nil {
+			return err
+		} else if schemaID == sqlbase.InvalidID {
+			// The temporary schema has not been created yet.
+			// TODO(arul): Add a job that does deletion for this session(temp schema)
+			if schemaID, err = createTempSchema(params, sKey); err != nil {
+				return err
+			}
+		}
+
+		tKey = sqlbase.NewTableKey(n.dbDesc.ID, schemaID, n.n.Table.Table())
 	}
-	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Table.Table())
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		if n.n.IfNotExists {
@@ -120,7 +147,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		desc, err = makeTableDescIfAs(params,
-			n.n, n.dbDesc.ID, id, creationTime, asCols, privs, params.p.EvalContext(), temporary)
+			n.n, n.dbDesc.ID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
 		if err != nil {
 			return err
 		}
@@ -132,7 +159,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected, temporary)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected, isTemporary)
 		if err != nil {
 			return err
 		}

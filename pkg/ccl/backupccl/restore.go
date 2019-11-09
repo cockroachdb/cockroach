@@ -11,6 +11,7 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"runtime"
 	"sort"
@@ -369,12 +370,22 @@ func allocateTableRewrites(
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			dKey := sqlbase.NewDatabaseKey(name)
-			existingDatabaseID, err := txn.Get(ctx, dKey.Key())
+			dKey := sqlbase.NewDatabaseKey(name).Key()
+			existingDatabaseID, err := txn.Get(ctx, dKey)
 			if err != nil {
 				return err
 			}
-			if existingDatabaseID.Value != nil {
+			if existingDatabaseID.Exists() {
+				return errors.Errorf("database %q already exists", name)
+			}
+			// Check the older system.namespace as well.
+			// TODO(whomever): This can be removed in 20.2
+			dKey = sqlbase.NewDeprecatedDatabaseKey(name).Key()
+			existingDatabaseID, err = txn.Get(ctx, dKey)
+			if err != nil {
+				return err
+			}
+			if existingDatabaseID.Exists() {
 				return errors.Errorf("database %q already exists", name)
 			}
 		}
@@ -397,14 +408,23 @@ func allocateTableRewrites(
 			} else {
 				var parentID sqlbase.ID
 				{
-					dKey := sqlbase.NewDatabaseKey(targetDB)
-					existingDatabaseID, err := txn.Get(ctx, dKey.Key())
+					dKey := sqlbase.NewDatabaseKey(targetDB).Key()
+					existingDatabaseID, err := txn.Get(ctx, dKey)
 					if err != nil {
 						return err
 					}
-					if existingDatabaseID.Value == nil {
-						return errors.Errorf("a database named %q needs to exist to restore table %q",
-							targetDB, table.Name)
+					if !existingDatabaseID.Exists() {
+						// Try the older system.namespace before throwing an error.
+						// TODO(whomever): This can be removed in 20.2
+						dKey = sqlbase.NewDatabaseKey(targetDB).Key()
+						existingDatabaseID, err = txn.Get(ctx, dKey)
+						if err != nil {
+							return err
+						}
+						if !existingDatabaseID.Exists() {
+							return errors.Errorf("a database named %q needs to exist to restore table %q",
+								targetDB, table.Name)
+						}
 					}
 
 					newParentID, err := existingDatabaseID.Value.GetInt()
@@ -488,12 +508,23 @@ func allocateTableRewrites(
 func CheckTableExists(
 	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
 ) error {
-	tKey := sqlbase.NewTableKey(parentID, name)
+	tKey := sqlbase.NewPublicTableKey(parentID, name)
 	res, err := txn.Get(ctx, tKey.Key())
 	if err != nil {
 		return err
 	}
 	if res.Exists() {
+		return sqlbase.NewRelationAlreadyExistsError(name)
+	}
+	// Check the deprecated system.namespace for mixed version clusters as well.
+	// TODO(whomever): This can be removed in 20.2
+	dtKey := sqlbase.NewDeprecatedTableKey(parentID, name)
+	res, err = txn.Get(ctx, dtKey.Key())
+	if err != nil {
+		return err
+	}
+	if res.Exists() {
+		fmt.Printf("!!! res.value is %v\n", res.Value)
 		return sqlbase.NewRelationAlreadyExistsError(name)
 	}
 	return nil
@@ -1057,7 +1088,15 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.NewDatabaseKey(desc.Name).Key(), desc.ID, nil)
+			dKey := sqlbase.NewDatabaseKey(desc.Name).Key()
+			// Depending on which cluster version we are restoring to, we decide which
+			// namespace table to write the descriptor into. This may cause wrong
+			// behavior if the cluster version is bumped DURING a restore.
+			// TODO(whomever): This if condition can be removed in 20.2
+			if !cluster.Version.IsActive(ctx, settings, cluster.VersionNamespaceTableWithSchemas) {
+				dKey = sqlbase.NewDeprecatedDatabaseKey(desc.Name).Key()
+			}
+			b.CPut(dKey, desc.ID, nil)
 		}
 		for i := range tables {
 			if wrote, ok := wroteDBs[tables[i].ParentID]; ok {
@@ -1079,7 +1118,15 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.NewTableKey(tables[i].ParentID, tables[i].Name).Key(), tables[i].ID, nil)
+			var tkey sqlbase.DescriptorKey = sqlbase.NewPublicTableKey(tables[i].ParentID, tables[i].Name)
+			// Depending on which cluster version we are restoring to, we decide which
+			// namespace table to write the descriptor into. This may cause wrong
+			// behavior if the cluster version is bumped DURING a restore.
+			// TODO(whomever): This if condition can be removed in 20.2
+			if !cluster.Version.IsActive(ctx, settings, cluster.VersionNamespaceTableWithSchemas) {
+				tkey = sqlbase.NewDeprecatedTableKey(tables[i].ParentID, tables[i].Name)
+			}
+			b.CPut(tkey.Key(), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
@@ -1790,8 +1837,17 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		tableDesc.State = sqlbase.TableDescriptor_DROP
 		var existingIDVal roachpb.Value
 		existingIDVal.SetInt(int64(tableDesc.ID))
-		b.CPut(
-			sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
+		// The (parentID, name) mapping could be in either the new system.namespace
+		// or the deprecated version. Thus we try to remove the mapping from both.
+		b.CPutAllowingIfNotExists(
+			sqlbase.NewPublicTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
+			nil,
+			&existingIDVal,
+		)
+		// TODO(whomever): This can be removed in 20.2, and the above
+		//  CPutAllowingIfNotExists should change to CPut.
+		b.CPutAllowingIfNotExists(
+			sqlbase.NewDeprecatedTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
 			nil,
 			&existingIDVal,
 		)

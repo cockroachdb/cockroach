@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -46,7 +47,15 @@ func (n *createViewNode) startExec(params runParams) error {
 	viewName := string(n.viewName)
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
-	tKey := sqlbase.NewTableKey(n.dbDesc.ID, viewName)
+	// Creating a view during a cluster version upgrade is currently unsafe,
+	// because the following conditional can asynchronously change inside a
+	// transaction.
+	var tKey sqlbase.DescriptorKey = sqlbase.NewPublicTableKey(n.dbDesc.ID, viewName)
+	// TODO(whomever): This conditional can be removed in 20.2
+	if !cluster.Version.IsActive(params.ctx, params.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		tKey = sqlbase.NewDeprecatedTableKey(n.dbDesc.ID, viewName)
+	}
+
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.

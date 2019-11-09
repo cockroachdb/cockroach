@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -208,7 +209,15 @@ func (p *planner) truncateTable(
 	//
 	// TODO(vivek): Fix properly along with #12123.
 	zoneKey := config.MakeZoneKey(uint32(tableDesc.ID))
-	nameKey := sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.GetName()).Key()
+	nameKey := sqlbase.NewPublicTableKey(tableDesc.ParentID, tableDesc.GetName()).Key()
+	key := sqlbase.NewPublicTableKey(newTableDesc.ParentID, newTableDesc.Name).Key()
+
+	// Truncate is not safe because the following conditional can
+	// TODO(whomever): This does not need to be done in 20.2
+	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		nameKey = sqlbase.NewDeprecatedTableKey(tableDesc.ParentID, tableDesc.GetName()).Key()
+		key = sqlbase.NewDeprecatedTableKey(newTableDesc.ParentID, newTableDesc.Name).Key()
+	}
 	b := &client.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.
 	if traceKV {
@@ -267,7 +276,6 @@ func (p *planner) truncateTable(
 	newTableDesc.Mutations = nil
 	newTableDesc.GCMutations = nil
 	newTableDesc.ModificationTime = p.txn.CommitTimestamp()
-	key := sqlbase.NewTableKey(newTableDesc.ParentID, newTableDesc.Name).Key()
 	if err := p.createDescriptorWithID(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err

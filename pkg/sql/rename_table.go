@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -106,7 +107,12 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
-	newTbKey := sqlbase.NewTableKey(targetDbDesc.ID, newTn.Table()).Key()
+	newTbKey := sqlbase.NewPublicTableKey(targetDbDesc.ID, newTn.Table()).Key()
+
+	// TODO(whomever): This can be removed in 20.2
+	if !cluster.Version.IsActive(params.ctx, params.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		newTbKey = sqlbase.NewDeprecatedTableKey(targetDbDesc.ID, newTn.Table()).Key()
+	}
 
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err

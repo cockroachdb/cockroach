@@ -1571,7 +1571,7 @@ func (m *LeaseManager) AcquireByName(
 func (m *LeaseManager) resolveName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (sqlbase.ID, error) {
-	key := sqlbase.NewTableKey(dbID, tableName).Key()
+	key := sqlbase.NewPublicTableKey(dbID, tableName).Key()
 	id := sqlbase.InvalidID
 	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, timestamp)
@@ -1580,7 +1580,18 @@ func (m *LeaseManager) resolveName(
 			return err
 		}
 		if !gr.Exists() {
-			return nil
+			// If the value does not exist, we try the deprecated namespace table
+			// before returning nil.
+			// TODO(whomever): This deprecated check can be removed in 20.2
+			//  and we can simply return nil.
+			dkey := sqlbase.NewDeprecatedTableKey(dbID, tableName).Key()
+			gr, err = txn.Get(ctx, dkey)
+			if err != nil {
+				return err
+			}
+			if !gr.Exists() {
+				return nil
+			}
 		}
 		id = sqlbase.ID(gr.ValueInt())
 		return nil

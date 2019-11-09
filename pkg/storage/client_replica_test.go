@@ -1711,6 +1711,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
 
 	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
+	log.Infof(ctx, "The number of system ranges is %d\n", expectedSystemRanges)
 	if err != nil {
 		t.Fatal(err)
 	}

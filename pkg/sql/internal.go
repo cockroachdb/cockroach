@@ -43,19 +43,23 @@ var _ sqlutil.InternalExecutor = &InternalExecutor{}
 // statements inside a higher-lever (KV) txn and inheriting session variables
 // from another session (for the latter see SessionBoundInternalExecutor).
 type InternalExecutor struct {
-	internalExecutorImpl
+	InternalExecutorImpl
+}
+
+func (ie *InternalExecutor) Settings() *cluster.Settings {
+	return ie.s.cfg.Settings
 }
 
 // SessionBoundInternalExecutor is like InternalExecutor, except that it is
 // initialized with values for session variables. Conversely, it doesn't offer
 // the *WithUser methods of the InternalExecutor.
 type SessionBoundInternalExecutor struct {
-	impl internalExecutorImpl
+	impl InternalExecutorImpl
 }
 
-// internalExecutorImpl supports the implementation of InternalExecutor and
+// InternalExecutorImpl supports the implementation of InternalExecutor and
 // SessionBoundInternalExecutor.
-type internalExecutorImpl struct {
+type InternalExecutorImpl struct {
 	s *Server
 
 	// mon is the monitor used by all queries executed through the
@@ -96,7 +100,7 @@ func MakeInternalExecutor(
 		settings,
 	)
 	return InternalExecutor{
-		internalExecutorImpl: internalExecutorImpl{
+		InternalExecutorImpl: InternalExecutorImpl{
 			s:          s,
 			mon:        &monitor,
 			memMetrics: memMetrics,
@@ -122,7 +126,7 @@ func NewSessionBoundInternalExecutor(
 		settings,
 	)
 	return &SessionBoundInternalExecutor{
-		impl: internalExecutorImpl{
+		impl: InternalExecutorImpl{
 			s:           s,
 			mon:         &monitor,
 			memMetrics:  memMetrics,
@@ -140,7 +144,7 @@ func NewSessionBoundInternalExecutor(
 // sargs, if not nil, is used to initialize the executor's session data. If nil,
 // then ie.sessionData must be set and it will be used (i.e. the executor must
 // be "session bound").
-func (ie *internalExecutorImpl) initConnEx(
+func (ie *InternalExecutorImpl) initConnEx(
 	ctx context.Context,
 	txn *client.Txn,
 	sargs SessionArgs,
@@ -240,7 +244,7 @@ func (ie *InternalExecutor) QueryWithCols(
 		stmt, qargs...)
 }
 
-func (ie *internalExecutorImpl) queryInternal(
+func (ie *InternalExecutorImpl) queryInternal(
 	ctx context.Context,
 	opName string,
 	txn *client.Txn,
@@ -425,7 +429,7 @@ const (
 // sargs, if not nil, is used to initialize the executor's session data. If nil,
 // then ie.sessionData must be set and it will be used (i.e. the executor must
 // be "session bound").
-func (ie *internalExecutorImpl) execInternal(
+func (ie *InternalExecutorImpl) execInternal(
 	ctx context.Context,
 	opName string,
 	txn *client.Txn,

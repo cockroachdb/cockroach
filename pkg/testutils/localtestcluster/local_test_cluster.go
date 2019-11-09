@@ -182,7 +182,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	if !ltc.DontCreateSystemRanges {
 		schema := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig)
 		var tableSplits []roachpb.RKey
-		initialValues, tableSplits = schema.GetInitialValues()
+		initialValues, tableSplits = schema.GetInitialValues(cfg.Settings.Version.BootstrapVersion())
 		splits = append(config.StaticSplits(), tableSplits...)
 		sort.Slice(splits, func(i, j int) bool {
 			return splits[i].Less(splits[j])

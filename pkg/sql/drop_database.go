@@ -106,11 +106,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	if err != nil {
 		return nil, err
 	}
-
 	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td}, nil
 }
 
 func (n *dropDatabaseNode) startExec(params runParams) error {
+	log.Info(params.ctx, "In here at the start of exec")
 	ctx := params.ctx
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))
@@ -161,14 +161,20 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
 
+	// We also delete the database from the older system.namespace table.
+	// TODO(whomever): This deletion from the older system.namespace can be
+	//  removed in 20.2
+	deprecatedNameKey := sqlbase.NewDeprecatedDatabaseKey(n.dbDesc.GetName()).Key()
+
 	b := &client.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
+		log.VEventf(ctx, 2, "Del %s", deprecatedNameKey)
 	}
 	b.Del(descKey)
 	b.Del(nameKey)
-
+	b.Del(deprecatedNameKey)
 	// No job was created because no tables were dropped, so zone config can be
 	// immediately removed.
 	if jobID == 0 {

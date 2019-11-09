@@ -875,8 +875,13 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 		func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
-				tbKey := sqlbase.NewTableKey(drain.ParentID, drain.Name).Key()
+				tbKey := sqlbase.NewPublicTableKey(drain.ParentID, drain.Name).Key()
 				b.Del(tbKey)
+				// Delete from both the new and deprecated system.namespace table,
+				// and if the key doesn't exist in one the Del will no-op.
+				// TODO(whomever): This can be removed in 20.2
+				dtbKey := sqlbase.NewDeprecatedTableKey(drain.ParentID, drain.Name).Key()
+				b.Del(dtbKey)
 			}
 
 			if dropJobID != 0 {

@@ -51,7 +51,15 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return unimplemented.NewWithIssuef(5807,
 			"temporary sequences are unsupported")
 	}
-	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Name.Table())
+	// Creating a sequence during a cluster version upgrade is currently unsafe,
+	// because the following conditional can asynchronously change inside a
+	// transaction.
+	var tKey sqlbase.DescriptorKey = sqlbase.NewPublicTableKey(n.dbDesc.ID, n.n.Name.Table())
+	// TODO(whomever): This conditional can be removed in 20.2
+	if !cluster.Version.IsActive(params.ctx, params.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		tKey = sqlbase.NewDeprecatedTableKey(n.dbDesc.ID, n.n.Name.Table())
+	}
+
 	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
 		if n.n.IfNotExists {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
@@ -91,7 +99,14 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateTable() needed here.
 
-	key := sqlbase.NewTableKey(dbDesc.ID, name.Table()).Key()
+	key := sqlbase.NewPublicTableKey(dbDesc.ID, name.Table()).Key()
+	// Creating a new descriptor when a cluster version is being updated is currently
+	// unsafe, because the following conditional can asynchronously change during
+	// a transaction.
+	// TODO(whomever): This conditional can be removed in 20.2
+	if !cluster.Version.IsActive(params.ctx, params.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		key = sqlbase.NewDeprecatedTableKey(dbDesc.ID, name.Table()).Key()
+	}
 	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}

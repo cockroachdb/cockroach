@@ -262,13 +262,34 @@ func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (
 	errMissingKey := errors.New("missing key")
 	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
-			tKey := sqlbase.NewTableKey(sqlbase.ID(parentID), name)
-			kv, err := txn.Get(ctx, tKey.Key())
+			var key sqlbase.DescriptorKey
+			if parentID == keys.RootNamespaceID {
+				key = sqlbase.NewDatabaseKey(name)
+			} else {
+				key = sqlbase.NewPublicTableKey(sqlbase.ID(parentID), name)
+			}
+			kv, err := txn.Get(ctx, key.Key())
 			if err != nil {
 				return 0, err
 			}
-			if kv.Value == nil {
-				return 0, errMissingKey
+			if !kv.Exists() {
+				// If the key is missing, we fallback to the deprecated system.namespace
+				// table.
+				// TODO(whomever): This can be removed in 20.2
+				if parentID == keys.RootNamespaceID {
+					key = sqlbase.NewDeprecatedDatabaseKey(name)
+				} else {
+					key = sqlbase.NewDeprecatedTableKey(sqlbase.ID(parentID), name)
+				}
+				kv, err = txn.Get(ctx, key.Key())
+				if err != nil {
+					return 0, err
+				}
+				if !kv.Exists() {
+					// We have checked both the deprecated and newer system.namespace table.
+					// The key definitely does not exist.
+					return 0, errMissingKey
+				}
 			}
 			id, err := kv.Value.GetInt()
 			if err != nil {

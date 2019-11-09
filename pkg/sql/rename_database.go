@@ -86,8 +86,8 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	}
 	lookupFlags.Required = false
 	for i := range tbNames {
-		objDesc, err := phyAccessor.GetObjectDesc(ctx, p.txn, &tbNames[i],
-			tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags})
+		objDesc, err := phyAccessor.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings,
+			&tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags})
 		if err != nil {
 			return err
 		}

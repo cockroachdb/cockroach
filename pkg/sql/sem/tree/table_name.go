@@ -10,6 +10,12 @@
 
 package tree
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+)
+
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement, etc.
 //
@@ -24,6 +30,15 @@ package tree
 // non-default value; this encourages the use of the constructors below.
 type TableName struct {
 	tblName
+}
+
+func (t *TableName) IsTemporary(tempStatus bool) (bool, error) {
+	// An explicit schema can only be provided in the CREATE TEMP TABLE statement
+	// iff it is pg_temp.
+	if tempStatus && t.ExplicitSchema && t.SchemaName != sessiondata.PgTempSchemaName {
+		return false, pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema")
+	}
+	return t.SchemaName == sessiondata.PgTempSchemaName || tempStatus, nil
 }
 
 type tblName struct {
