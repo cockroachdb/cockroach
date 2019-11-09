@@ -484,11 +484,13 @@ type metadataResultWriter interface {
 
 type metadataCallbackWriter struct {
 	rowResultWriter
-	fn func(ctx context.Context, meta *execinfrapb.ProducerMetadata)
+	fn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error
 }
 
 func (w *metadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) {
-	w.fn(ctx, meta)
+	if err := w.fn(ctx, meta); err != nil {
+		w.SetError(err)
+	}
 }
 
 // errOnlyResultWriter is a rowResultWriter that only supports receiving an

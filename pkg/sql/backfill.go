@@ -849,11 +849,12 @@ func (sc *SchemaChanger) distBackfill(
 						otherTableDescs = append(otherTableDescs, *table.TableDesc())
 					}
 				}
-				metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) {
+				metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 					if meta.BulkProcessorProgress != nil {
 						todoSpans = roachpb.SubtractSpans(todoSpans,
 							meta.BulkProcessorProgress.CompletedSpans)
 					}
+					return nil
 				}
 				cbw := metadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 				recv := MakeDistSQLReceiver(
