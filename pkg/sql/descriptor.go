@@ -60,7 +60,16 @@ func GenerateUniqueDescID(ctx context.Context, db *client.DB) (sqlbase.ID, error
 func (p *planner) createDatabase(
 	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
 ) (bool, error) {
-	plainKey := sqlbase.NewDatabaseKey(desc.Name)
+	shouldCreatePublicSchema := true
+	var plainKey sqlbase.DescriptorKey = sqlbase.NewDatabaseKey(desc.Name)
+	// TODO(whomever): This conditional can be removed in 20.2. Every database
+	// is created with a public schema for cluster version >= 20.1, so we can remove
+	// the `shouldCreatePublicSchema` logic as well. The key construction should
+	// also use the MakeDatabaseNameKey interface.
+	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		shouldCreatePublicSchema = false
+		plainKey = sqlbase.NewDeprecatedDatabaseKey(desc.Name)
+	}
 	idKey := plainKey.Key()
 
 	if exists, err := descExists(ctx, p.txn, idKey); err == nil && exists {
@@ -78,7 +87,20 @@ func (p *planner) createDatabase(
 		return false, err
 	}
 
-	return true, p.createDescriptorWithID(ctx, idKey, id, desc, nil)
+	if err := p.createDescriptorWithID(ctx, idKey, id, desc, nil); err != nil {
+		return true, err
+	}
+
+	// TODO(whomever): This check should be removed and a public schema should
+	// be created in every database in >= 20.2.
+	if shouldCreatePublicSchema {
+		// Every database must be initialized with the public schema.
+		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(), keys.PublicSchemaID); err != nil {
+			return true, err
+		}
+	}
+
+	return true, nil
 }
 
 func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, error) {
@@ -239,10 +261,26 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbas
 	if err != nil {
 		return nil, err
 	}
+	// See the comment in physical_schema_accessors.go,
+	// func (a UncachedPhysicalAccessor) GetObjectNames. Same concept
+	// applies here.
+	// TODO(whomever): This complexity can be removed in 20.2.
+	nameKey = sqlbase.NewDeprecatedDatabaseKey("" /* name */).Key()
+	dkvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+	kvs = append(kvs, dkvs...)
 
 	descIDs := make([]sqlbase.ID, 0, len(kvs))
+	alreadySeen := make(map[sqlbase.ID]bool)
 	for _, kv := range kvs {
-		descIDs = append(descIDs, sqlbase.ID(kv.ValueInt()))
+		ID := sqlbase.ID(kv.ValueInt())
+		if alreadySeen[ID] {
+			continue
+		}
+		alreadySeen[ID] = true
+		descIDs = append(descIDs, ID)
 	}
 	return descIDs, nil
 }

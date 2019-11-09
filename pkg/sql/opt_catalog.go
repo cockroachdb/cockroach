@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -104,7 +105,9 @@ func (os *optSchema) Name() *cat.SchemaName {
 // GetDataSourceNames is part of the cat.Schema interface.
 func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
 	return GetObjectNames(
-		ctx, os.planner.Txn(), os.planner, os.desc,
+		ctx, os.planner.Txn(),
+		os.planner,
+		os.desc,
 		os.name.Schema(),
 		true, /* explicitPrefix */
 	)
@@ -128,6 +131,24 @@ func (oc *optCatalog) ResolveSchema(
 	// more general error.
 	oc.tn.TableName = ""
 	oc.tn.TableNamePrefix = *name
+
+	// Scoping a table under pg_temp is equivalent to creating a temporary table
+	// through explicit syntax. `pg_temp` is merely an alias, so even if the
+	// temporary schema does not exist, it should be created as part of
+	// this transaction (expected PG behavior).
+	// Instead of searching if the temporary schema exists, we search for the
+	// public schema, which is guaranteed to exist in every database.
+	// Scoping under pg_temp is the only case where a table can be scoped under a
+	// schema that does not exist. Thus this code will not need to be extended
+	// even if/when CRDB supports user defined schemas.
+	// TODO(whomever): Once it is possible to drop schemas, it will no longer be
+	//  safe to search for public (as it may not exist). The above invariant will
+	//  need to be replaced then.
+	isTempScoped := false
+	if oc.tn.Schema() == sessiondata.PgTempSchemaName {
+		isTempScoped = true
+		oc.tn.SchemaName = tree.PublicSchemaName
+	}
 	found, desc, err := oc.tn.ResolveTarget(
 		ctx,
 		oc.planner,
@@ -146,6 +167,9 @@ func (oc *optCatalog) ResolveSchema(
 		return nil, cat.SchemaName{}, pgerror.Newf(
 			pgcode.InvalidSchemaName, "target database or schema does not exist",
 		)
+	}
+	if isTempScoped {
+		oc.tn.SchemaName = sessiondata.PgTempSchemaName
 	}
 	return &optSchema{
 		planner: oc.planner,

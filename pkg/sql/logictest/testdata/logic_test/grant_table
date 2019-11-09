@@ -162,23 +162,10 @@ SELECT * FROM [SHOW GRANTS]
  WHERE schema_name NOT IN ('crdb_internal', 'pg_catalog', 'information_schema')
 ----
 database_name  schema_name  table_name                       grantee    privilege_type
-system         public       NULL                             admin      GRANT
-system         public       NULL                             admin      SELECT
-system         public       NULL                             root       GRANT
-system         public       NULL                             root       SELECT
-defaultdb      public       NULL                             admin      ALL
-defaultdb      public       NULL                             root       ALL
-postgres       public       NULL                             admin      ALL
-postgres       public       NULL                             root       ALL
-test           public       NULL                             admin      ALL
-test           public       NULL                             root       ALL
-a              public       NULL                             admin      ALL
-a              public       NULL                             readwrite  ALL
-a              public       NULL                             root       ALL
-system         public       namespace                        admin      GRANT
-system         public       namespace                        admin      SELECT
-system         public       namespace                        root       GRANT
-system         public       namespace                        root       SELECT
+system         public       namespace_deprecated             admin      GRANT
+system         public       namespace_deprecated             admin      SELECT
+system         public       namespace_deprecated             root       GRANT
+system         public       namespace_deprecated             root       SELECT
 system         public       descriptor                       admin      GRANT
 system         public       descriptor                       admin      SELECT
 system         public       descriptor                       root       GRANT
@@ -358,6 +345,23 @@ system         public       reports_meta                     root       GRANT
 system         public       reports_meta                     root       INSERT
 system         public       reports_meta                     root       SELECT
 system         public       reports_meta                     root       UPDATE
+system         public       namespace                        admin      GRANT
+system         public       namespace                        admin      SELECT
+system         public       namespace                        root       GRANT
+system         public       namespace                        root       SELECT
+a              public       NULL                             admin      ALL
+a              public       NULL                             readwrite  ALL
+a              public       NULL                             root       ALL
+defaultdb      public       NULL                             admin      ALL
+defaultdb      public       NULL                             root       ALL
+postgres       public       NULL                             admin      ALL
+postgres       public       NULL                             root       ALL
+system         public       NULL                             admin      GRANT
+system         public       NULL                             admin      SELECT
+system         public       NULL                             root       GRANT
+system         public       NULL                             root       SELECT
+test           public       NULL                             admin      ALL
+test           public       NULL                             root       ALL
 
 query TTTTT colnames
 SHOW GRANTS FOR root
@@ -412,6 +416,8 @@ system         public              locations                        root     SEL
 system         public              locations                        root     UPDATE
 system         public              namespace                        root     GRANT
 system         public              namespace                        root     SELECT
+system         public              namespace_deprecated             root     GRANT
+system         public              namespace_deprecated             root     SELECT
 system         public              rangelog                         root     DELETE
 system         public              rangelog                         root     GRANT
 system         public              rangelog                         root     INSERT

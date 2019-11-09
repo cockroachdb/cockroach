@@ -222,6 +222,7 @@ func newInternalPlanner(
 	// leave it uninitialized.
 	tables := &TableCollection{
 		leaseMgr: execCfg.LeaseManager,
+		settings: execCfg.Settings,
 	}
 	dataMutator := &sessionDataMutator{
 		data: sd,
@@ -381,6 +382,16 @@ func (p *planner) Txn() *client.Txn {
 
 func (p *planner) User() string {
 	return p.SessionData().User
+}
+
+func (p *planner) TemporarySchemaName() string {
+	return fmt.Sprintf("pg_temp_%v%v",
+		p.ExtendedEvalContext().SessionID.Hi,
+		p.ExtendedEvalContext().SessionID.Lo)
+}
+
+func (p *planner) SetTemporarySchemaName(scName string) {
+	p.sessionDataMutator.SetTemporarySchemaName(scName)
 }
 
 // DistSQLPlanner returns the DistSQLPlanner
