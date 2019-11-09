@@ -214,6 +214,7 @@ form2 = r': *(?P<cat2>[^ ]+(?: +[^ ]+)?) *:'
 # Captures : yyy - no category
 form3 = r':(?P<cat3>)'
 relnote = re.compile(r'(?:^|[\n\r])[rR]elease [nN]otes? *(?:' + form1 + '|' + form2 + '|' + form3 + r') *(?P<note>.*)$', flags=re.S)
+revision = re.compile(r'(?:^|[\n\r])[rR]evised [rR]elease [nN]otes? *\[(?P<target>.*?)\] *' + form1 + r' *(?P<note>.*)$', flags=re.M)
 
 coauthor = re.compile(r'^Co-authored-by: (?P<name>[^<]*) <(?P<email>.*)>', flags=re.M)
 fixannot = re.compile(r'^([fF]ix(es|ed)?|[cC]lose(d|s)?) #', flags=re.M)
@@ -259,6 +260,8 @@ parser.add_option("--exclude-until", dest="exclude_until_commit",
                   help="exclude history ending at COMMIT", metavar="COMMIT")
 parser.add_option("--one-line", dest="one_line", action="store_true", default=False,
                   help="unwrap release notes on a single line")
+parser.add_option("--revisions-until", dest="revisions_until_commit", default='master', metavar="COMMIT",
+                  help="pick release note revisions until this commit")
 
 (options, args) = parser.parse_args()
 
@@ -342,6 +345,9 @@ if options.exclude_from_commit or options.exclude_until_commit:
 # Reading data from repository
 #
 
+revisionFirst, revisionLast = None, None
+if options.revisions_until_commit:
+    revisionFirst, revisionLast = find_commits(options.from_commit, options.revisions_until_commit)
 
 def identify_commit(c):
     return '%s ("%s", %s)' % (
@@ -375,7 +381,129 @@ def check_reachability(start, end):
 
 firstCommit, commit = check_reachability(firstCommit, commit)
 options.from_commit = firstCommit.hexsha
+if revisionFirst is not None:
+    revisionFirst, revisionLast = check_reachability(revisionFirst, revisionLast)
 
+spinner = itertools.cycle(['/', '-', '\\', '|'])
+spin_counter = 0
+
+
+def spin():
+    global spin_counter
+    # Display a progress bar
+    spin_counter += 1
+    if spin_counter % 10 == 0:
+        if spin_counter % 100 == 0:
+            print("\b..", end='', file=sys.stderr)
+        print("\b", end='', file=sys.stderr)
+        print(next(spinner), end='', file=sys.stderr)
+        sys.stderr.flush()
+    
+def get_direct_history(firstCommit, lastCommit):
+    history = []
+    for c in repo.iter_commits(firstCommit.hexsha + '..' + lastCommit.hexsha, first_parent=True):
+        history.append(c)
+    return history
+
+spinner = itertools.cycle(['/', '-', '\\', '|'])
+counter = 0
+def spin():
+    global counter
+    # Display a progress bar
+    counter += 1
+    if counter % 10 == 0:
+        if counter % 100 == 0:
+            print("\b..", end='', file=sys.stderr)
+        print("\b", end='', file=sys.stderr)
+        print(next(spinner),  end='', file=sys.stderr)
+        sys.stderr.flush()
+
+# note_revisions contains entries by-sha and by-PR.
+revisions = {}
+# Load all revisions from the repo until either firstCommit
+# or commit.
+if revisionFirst is not None:
+    print("Collecting release note revisions from\n%s\nuntil\n%s" % (identify_commit(revisionFirst), identify_commit(revisionLast)), file=sys.stderr)
+    for c in repo.iter_commits(revisionFirst.hexsha + '..' + revisionLast.hexsha, first_parent = False):
+        spin()
+        if c == firstCommit:
+            break
+        if revision.search(c.message) is None:
+            # Fast path
+            continue
+        msglines = c.message.split('\n')
+        curnote = []
+        innote = False
+        cat = None
+        target = None
+        notes = []
+        for line in msglines:
+            m = coauthor.search(line)
+            if m is not None:
+                # A Co-authored-line finishes the parsing of the commit message,
+                # because it's included at the end only.
+                break
+
+            m = fixannot.search(line)
+            if m is not None:
+                # Fix/Close etc. Ignore.
+                continue
+
+            m = norelnote.search(line)
+            if m is not None:
+                # Release note: None. Ignore.
+                continue
+
+            m = revision.search(line)
+            if m is None:
+                # Current line does not contain a revision separator.
+                # If we were already collecting a note, continue collecting it.
+                if innote:
+                    curnote.append(line)
+                continue
+
+            # We have a release note boundary. If we were collecting a
+            # note already, complete it.
+            if innote:
+                notes.append((target, cat, reformat_note(curnote)))
+                curnote = []
+                innote = False
+
+            # Start a new release note.
+
+            firstline = m.group('note').strip()
+            innote = True
+
+            # Capitalize the first line.
+            if firstline != "":
+                firstline = firstline[0].upper() + firstline[1:]
+
+            curnote = [firstline]
+            target = m.group('target')
+            if not target.startswith("#"):
+                # We're expecting a commit hash.
+                try:
+                    lc = repo.commit(target)
+                    target = lc.hexsha[:shamin]
+                except exc.ODBError:
+                    print("warning: commit", c.hexha, "amends release note on non-existent target commit", target, file=sys.stderr)
+
+            cat = m.group('cat1')
+            # Normalize to tolerate various capitalizations.
+            cat = cat.lower()
+            # If there is any misspell, correct it.
+            if cat in cat_misspells:
+                cat = cat_misspells[cat]
+
+        if innote:
+            notes.append((target, cat, reformat_note(curnote)))
+
+        for target, cat, note in notes:
+            rev = revisions.get((target, cat), [])
+            rev = [(note, c.hexsha[:shamin])] + rev
+            revisions[(target, cat)] = rev
+
+print('\b\n', file=sys.stderr)
 
 def extract_release_notes(currentCommit):
     msglines = currentCommit.message.split('\n')
@@ -404,6 +532,15 @@ def extract_release_notes(currentCommit):
             # a release note"), but we won't collect it.
             foundnote = True
             continue
+
+        m = revision.search(line)
+        if m is not None:
+            # Revision block. Ignore and stop the current note.
+            if innote:
+                notes.append((cat, reformat_note(curnote)))
+                innote = False
+                curnote = []
+                continue
 
         m = relnote.search(line)
         if m is None:
@@ -452,29 +589,6 @@ def extract_release_notes(currentCommit):
         notes.append((cat, reformat_note(curnote)))
 
     return foundnote, notes
-
-
-spinner = itertools.cycle(['/', '-', '\\', '|'])
-spin_counter = 0
-
-
-def spin():
-    global spin_counter
-    # Display a progress bar
-    spin_counter += 1
-    if spin_counter % 10 == 0:
-        if spin_counter % 100 == 0:
-            print("\b..", end='', file=sys.stderr)
-        print("\b", end='', file=sys.stderr)
-        print(next(spinner), end='', file=sys.stderr)
-        sys.stderr.flush()
-
-
-def get_direct_history(startCommit, lastCommit):
-    history = []
-    for c in repo.iter_commits(startCommit.hexsha + '..' + lastCommit.hexsha, first_parent=True):
-        history.append(c)
-    return history
 
 
 excluded_notes = set()
@@ -549,12 +663,13 @@ def process_release_notes(pr, title, commit):
     missing_item = None
     if not foundnote:
         # Missing release note. Keep track for later.
-        missing_item = makeitem(pr, title, commit.hexsha[:shamin], authors)
+        missing_item = makeitem(pr, '', title, commit.hexsha[:shamin], authors)
     return missing_item, authors
 
 
-def makeitem(pr, prtitle, sha, authors):
+def makeitem(pr, cat, prtitle, sha, authors):
     return {'authors': authors,
+            'cat': cat,
             'sha': sha,
             'pr': pr,
             'title': prtitle,
@@ -562,7 +677,7 @@ def makeitem(pr, prtitle, sha, authors):
 
 
 def completenote(commit, cat, notemsg, authors, pr, title):
-    item = makeitem(pr, title, commit.hexsha[:shamin], authors)
+    item = makeitem(pr, cat, title, commit.hexsha[:shamin], authors)
     item['note'] = notemsg
 
     # Now collect per category.
@@ -634,6 +749,7 @@ allprs = set()
 # C, E, F, and G will each be checked. F is an ancestor of B, so it will be
 # excluded. E starts with "Merge", so it will not be counted. Only C and G will
 # have statistics included.
+commit_to_pr = {}
 def analyze_pr(merge, pr):
     allprs.add(pr)
 
@@ -672,6 +788,7 @@ def analyze_pr(merge, pr):
             # already.
             continue
         seen_commits.add(commit)
+        commit_to_pr[commit.hexsha[:shamin]] = pr
 
         if not commit.message.startswith("Merge"):
             missing_item, prauthors = process_release_notes(pr, title, commit)
@@ -696,7 +813,7 @@ def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     individual_authors.update(authors)
     if len(authors) == 0:
         authors.add("Unknown Author")
-    item = makeitem(pr, prtitle, sha, authors)
+    item = makeitem(pr, '', prtitle, sha, authors)
     item.update({'ncommits': ncommits,
                  'insertions': stats['insertions'],
                  'deletions': stats['deletions'],
@@ -717,10 +834,11 @@ def analyze_standalone_commit(commit):
     # Some random out-of-branch commit. Let's not forget them.
     authors = collect_authors(commit)
     title = commit.message.split('\n', 1)[0].strip()
-    item = makeitem('#unknown', title, commit.hexsha[:shamin], authors)
+    sha = commit.hexsha[:shamin]
+    item = makeitem('#unknown', '', title, sha, authors)
     missing_release_notes.append(item)
-    collect_item('#unknown', title, commit.hexsha[:shamin], 1, authors, commit.stats.total, commit.committed_date)
-
+    collect_item('#unknown', title, sha, 1, authors, commit.stats.total, commit.committed_date)
+    commit_to_pr[sha] = '#unknown'
 
 # Collect all the merge points so we can report progress.
 mergepoints = get_direct_history(firstCommit, commit)
@@ -752,6 +870,47 @@ for commit in mergepoints:
         print("                                \r%s (%s) " % (commit.hexsha[:shamin], ctime), end='', file=sys.stderr)
         analyze_standalone_commit(commit)
 
+# For every tuple (PR/sha, cat) which does not have
+# a release note yet, but for which there is a revision
+# available, synthetize a release note from the revision
+# and don't consider it a revision any more.
+has_note = set()
+for cat, items in release_notes.items():
+    for item in items:
+        has_note.add((item['pr'], cat))
+        has_note.add((item['sha'], cat))
+changed_revisions = []
+for (target, cat), note_revisions in revisions.items():
+    if (target, cat) in has_note:
+        continue
+    maybe_pr = target
+    if target.startswith("#"):
+        # Is this PR in-scope for the release note report?
+        # If not, don't synthetize anything.
+        if target not in allprs:
+            continue
+    else:
+        # Is the commit in-scope for this report?
+        # If not, don't synthetize anything.
+        if target not in commit_to_pr:
+            continue
+        else:
+            # We really prefer a PR number.
+            maybe_pr = commit_to_pr[target]
+    l = release_notes.get(cat, [])
+    for note, sha in note_revisions:
+        item = makeitem(maybe_pr, cat, 'unknown', sha, 'unknown')
+        item['note'] = note
+        l.append(item)
+        # The remaining elements will be spelled out
+        # as "NOTE REVISION" below.
+        break
+    release_notes[cat] = l
+    changed_revisions.append((target, cat, note_revisions[1:]))
+    has_note.add((target, cat))
+    has_note.add((maybe_pr, cat))
+for t, c, r in changed_revisions:
+    revisions[(t, c)] = r
 
 print("\b\nAnalyzing authors...", file=sys.stderr)
 sys.stderr.flush()
@@ -850,6 +1009,17 @@ def renderlinks(item):
         seenshas.add(item['sha'])
     return ret
 
+def output_note(item):
+    res = item['note'].replace('\n', '\n  ')
+    revs = revisions.get((item['pr'], item['cat']), [])
+    revs += revisions.get((item['sha'], item['cat']), [])
+    for note, sha in revs:
+        res += '\n  - NOTE REVISION'
+        if not hideshas:
+            res += ' [%s][%s]' % (sha, sha)
+            seenshas.add(sha)
+        res += '\n    ' + note.replace('\n', '\n    ')
+    return res
 
 for sec in relnote_sec_order:
     r = release_notes.get(sec, None)
@@ -861,7 +1031,7 @@ for sec in relnote_sec_order:
     print()
 
     for item in reversed(r):
-        print("-", item['note'].replace('\n', '\n  '), renderlinks(item))
+        print("-", output_note(item), renderlinks(item))
 
     print()
 
@@ -880,7 +1050,7 @@ if len(extrasec) > 0:
         print("#### %s" % extrasec.capitalize())
         print()
         for item in release_notes[extrasec]:
-            print("-", item['note'].replace('\n', '\n  '), renderlinks(item))
+            print("-", output_note(item), renderlinks(item))
         print()
 
 if len(missing_release_notes) > 0:
