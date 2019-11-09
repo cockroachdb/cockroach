@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
@@ -1279,7 +1280,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			return err
 		}
 		descTablePrefix := keys.MakeTablePrefix(keys.DescriptorTableID)
-		kvs, _ /* splits */ := schema.GetInitialValues()
+		kvs, _ /* splits */ := schema.GetInitialValues(cluster.TestingClusterVersion)
 		for _, kv := range kvs {
 			if !bytes.HasPrefix(kv.Key, descTablePrefix) {
 				continue

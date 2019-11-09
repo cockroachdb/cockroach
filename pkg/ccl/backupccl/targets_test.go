@@ -104,7 +104,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		// {"", `TABLE system."FOO"`, []string{"system"}},
 		// {"system", `TABLE "FOO"`, []string{"system"}},
 	}
-	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
+	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"}, sessiondata.DefaultTemporarySchemaName)
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d/%s/%s", i, test.sessionDatabase, test.pattern), func(t *testing.T) {
 			sql := fmt.Sprintf(`GRANT ALL ON %s TO ignored`, test.pattern)

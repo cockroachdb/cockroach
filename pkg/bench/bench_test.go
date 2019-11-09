@@ -1090,3 +1090,64 @@ func BenchmarkSortJoinAggregation(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkNameResolution(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		defer func() {
+			db.Exec(b, `DROP TABLE IF EXISTS namespace`)
+		}()
+
+		db.Exec(b, `CREATE TABLE namespace (k INT PRIMARY KEY, v INT)`)
+		db.Exec(b, `INSERT INTO namespace VALUES(1, 2)`)
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, "SELECT * FROM namespace")
+		}
+		b.StopTimer()
+	})
+}
+
+func BenchmarkNameResolutionTempTablesExist(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		defer func() {
+			db.Exec(b, `DROP TABLE IF EXISTS namespace`)
+			db.Exec(b, `DROP TABLE IF EXISTS temp_table`)
+			db.Exec(b, `SET experimental_enable_temp_tables = false`)
+		}()
+
+		db.Exec(b, `CREATE TABLE namespace (k INT PRIMARY KEY, v INT)`)
+
+		// Hack for the 3 node multi-cluster. Seems like the queries are executed
+		// in a round robin fashion by nodes. There is no single gateway node
+		// that can do the temp tables enable check.
+		db.Exec(b, `SET experimental_enable_temp_tables = true`)
+		db.Exec(b, `SET experimental_enable_temp_tables = true`)
+		db.Exec(b, `SET experimental_enable_temp_tables = true`)
+
+		// Same reason as above, we create a temp table on all three nodes. This
+		// means every node has a temporary schema, which is the scenario we are
+		// trying to benchmark.
+		db.Exec(b, `CREATE TEMP TABLE temp_table1 (k INT PRIMARY KEY, v INT)`)
+		db.Exec(b, `CREATE TEMP TABLE temp_table2 (k INT PRIMARY KEY, v INT)`)
+		db.Exec(b, `CREATE TEMP TABLE temp_table3 (k INT PRIMARY KEY, v INT)`)
+
+		db.Exec(b, `INSERT INTO namespace VALUES(1, 2)`)
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, "SELECT * FROM namespace")
+		}
+		b.StopTimer()
+	})
+}

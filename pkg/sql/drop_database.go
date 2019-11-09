@@ -106,7 +106,6 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	if err != nil {
 		return nil, err
 	}
-
 	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td}, nil
 }
 
@@ -159,15 +158,20 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
-	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
+	descKey := sqlbase.MakeDescMetadataKey(n.dbDesc.ID)
 
 	b := &client.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
-		log.VEventf(ctx, 2, "Del %s", nameKey)
 	}
 	b.Del(descKey)
-	b.Del(nameKey)
+
+	err = sqlbase.RemoveDatabaseNamespaceEntry(
+		ctx, p.txn, n.dbDesc.Name, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+	)
+	if err != nil {
+		return err
+	}
 
 	// No job was created because no tables were dropped, so zone config can be
 	// immediately removed.

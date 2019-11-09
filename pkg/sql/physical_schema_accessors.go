@@ -15,6 +15,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -54,11 +56,10 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return &sysDB, nil
 	}
 
-	descID, err := getDescriptorID(ctx, txn, sqlbase.NewDatabaseKey(name))
+	found, descID, err := sqlbase.LookupDatabaseID(ctx, txn, name)
 	if err != nil {
 		return nil, err
-	}
-	if descID == sqlbase.InvalidID {
+	} else if !found {
 		if flags.Required {
 			return nil, sqlbase.NewUndefinedDatabaseError(name)
 		}
@@ -74,9 +75,22 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 }
 
 // IsValidSchema implements the SchemaAccessor interface.
-func (a UncachedPhysicalAccessor) IsValidSchema(dbDesc *DatabaseDescriptor, scName string) bool {
-	// At this point, only the public schema is recognized.
-	return scName == tree.PublicSchema
+func (a UncachedPhysicalAccessor) IsValidSchema(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
+) (bool, sqlbase.ID, error) {
+	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
+	// checking for public schema.
+	if scName == tree.PublicSchema {
+		return true, keys.PublicSchemaID, nil
+	}
+
+	sKey := sqlbase.NewSchemaKey(dbID, scName)
+	schemaID, err := getDescriptorID(ctx, txn, sKey)
+	if err != nil || schemaID == sqlbase.InvalidID {
+		return false, sqlbase.InvalidID, err
+	}
+
+	return true, schemaID, nil
 }
 
 // GetObjectNames implements the SchemaAccessor interface.
@@ -87,7 +101,8 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (TableNames, error) {
-	if ok := a.IsValidSchema(dbDesc, scName); !ok {
+	ok, schemaID, err := a.IsValidSchema(ctx, txn, dbDesc.ID, scName)
+	if !ok || err != nil {
 		if flags.Required {
 			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), "")
 			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.TableNamePrefix))
@@ -96,18 +111,60 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	}
 
 	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.Name)
-	prefix := sqlbase.NewTableKey(dbDesc.ID, "").Key()
+	prefix := sqlbase.NewTableKey(dbDesc.ID, schemaID, "").Key()
 	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
 	}
+	// We scan both the deprecated and new system.namespace table to get the
+	// complete list of tables. Duplicate entries may be present in both the tables,
+	// so we filter those out. If a duplicate entry is present, it doesn't matter
+	// which table it is read from -- system.namespace entries are never modified,
+	// they are only added/deleted. Entries are written to only one table, so
+	// duplicate entries must have been copied over during migration. Thus, it
+	// doesn't matter which table (newer/deprecated) the value is read from.
+	//
+	// It may seem counter-intuitive to read both tables if we have found data in
+	// the newer version. The migration copied all entries from the deprecated
+	// system.namespace and all new entries after the cluster version bump are added
+	// to the new system.namespace. Why do we do this then?
+	// This is to account the scenario where a table was created before
+	// the cluster version was bumped, but after the older system.namespace was
+	// copied into the newer system.namespace. Objects created in this window
+	// will only be present in the older system.namespace. To account for this
+	// scenario, we must do this filtering logic.
+	// TODO(whomever): This complexity can be removed in  20.2.
+	dprefix := sqlbase.NewDeprecatedTableKey(dbDesc.ID, "").Key()
+	dsr, err := txn.Scan(ctx, dprefix, dprefix.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
+	}
 
+	alreadySeen := make(map[string]bool)
 	var tableNames tree.TableNames
+
 	for _, row := range sr {
-		_, tableName, err := encoding.DecodeUnsafeStringAscending(
-			bytes.TrimPrefix(row.Key, prefix), nil)
+		_, tableName, err := encoding.DecodeUnsafeStringAscending(bytes.TrimPrefix(
+			row.Key, prefix), nil)
 		if err != nil {
 			return nil, err
+		}
+		alreadySeen[tableName] = true
+		tn := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(tableName))
+		tn.ExplicitCatalog = flags.ExplicitPrefix
+		tn.ExplicitSchema = flags.ExplicitPrefix
+		tableNames = append(tableNames, tn)
+	}
+
+	for _, row := range dsr {
+		// Decode using the deprecated key prefix.
+		_, tableName, err := encoding.DecodeUnsafeStringAscending(
+			bytes.TrimPrefix(row.Key, dprefix), nil)
+		if err != nil {
+			return nil, err
+		}
+		if alreadySeen[tableName] {
+			continue
 		}
 		tn := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(tableName))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
@@ -119,16 +176,12 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetObjectDesc(
-	ctx context.Context, txn *client.Txn, name *ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	name *ObjectName,
+	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
-	// At this point, only the public schema is recognized.
-	if name.Schema() != tree.PublicSchema {
-		if flags.Required {
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(name))
-		}
-		return nil, nil
-	}
-
 	// Look up the database ID.
 	dbID, err := getDatabaseID(ctx, txn, name.Catalog(), flags.Required)
 	if err != nil || dbID == sqlbase.InvalidID {
@@ -136,23 +189,32 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return nil, err
 	}
 
+	ok, schemaID, err := a.IsValidSchema(ctx, txn, dbID, name.Schema())
+	if !ok || err != nil {
+		if flags.Required {
+			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(name))
+		}
+		return nil, nil
+	}
+
 	// Try to use the system name resolution bypass. This avoids a hotspot.
 	// Note: we can only bypass name to ID resolution. The desc
 	// lookup below must still go through KV because system descriptors
 	// can be modified on a running cluster.
-	descID := sqlbase.LookupSystemTableDescriptorID(dbID, name.Table())
+	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, dbID, name.Table())
 	if descID == sqlbase.InvalidID {
-		descID, err = getDescriptorID(ctx, txn, sqlbase.NewTableKey(dbID, name.Table()))
+		var found bool
+		found, descID, err = sqlbase.LookupObjectID(ctx, txn, dbID, schemaID, name.Table())
 		if err != nil {
 			return nil, err
 		}
-	}
-	if descID == sqlbase.InvalidID {
-		// KV name resolution failed.
-		if flags.Required {
-			return nil, sqlbase.NewUndefinedRelationError(name)
+		if !found {
+			// KV name resolution failed.
+			if flags.Required {
+				return nil, sqlbase.NewUndefinedRelationError(name)
+			}
+			return nil, nil
 		}
-		return nil, nil
 	}
 
 	// Look up the table using the discovered database descriptor.
@@ -173,7 +235,13 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		// Immediately after a RENAME an old name still points to the
 		// descriptor during the drain phase for the name. Do not
 		// return a descriptor during draining.
-		if desc.Name == name.Table() {
+		//
+		// The second or condition ensures that clusters < 20.1 access the
+		// system.namespace_deprecated table when selecting from system.namespace.
+		// As this table can not be renamed by users, it is okay that the first
+		// check fails.
+		if desc.Name == name.Table() ||
+			name.Table() == sqlbase.NamespaceTable.Name && name.Catalog() == sqlbase.SystemDB.Name {
 			if flags.RequireMutable {
 				return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
 			}
@@ -215,8 +283,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 		// The database was not known in the uncommitted list. Have the db
 		// cache look it up by name for us.
-		return a.tc.databaseCache.getDatabaseDesc(ctx,
-			a.tc.leaseMgr.db.Txn, name, flags.Required)
+		return a.tc.databaseCache.getDatabaseDesc(ctx, a.tc.leaseMgr.db.Txn, name, flags.Required)
 	}
 
 	// We avoided the cache. Go lower.
@@ -225,8 +292,27 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetObjectDesc(
-	ctx context.Context, txn *client.Txn, name *ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	name *ObjectName,
+	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
+	// TODO(arul): Actually fix this to return the cached descriptor, by adding a
+	//  schema cache to table collection. Until this is fixed, public tables with
+	//  the same name as temporary tables might return the wrong data, as the wrong descriptor
+	//  might be cached.
+	if name.Schema() != tree.PublicSchema {
+		phyAccessor := UncachedPhysicalAccessor{}
+		obj, err := phyAccessor.GetObjectDesc(ctx, txn, settings, name, flags)
+		if obj == nil {
+			return nil, err
+		}
+		if flags.RequireMutable {
+			return obj.(*sqlbase.MutableTableDescriptor), err
+		}
+		return obj.(*sqlbase.ImmutableTableDescriptor), err
+	}
 	if flags.RequireMutable {
 		table, err := a.tc.getMutableTableDescriptor(ctx, txn, name, flags)
 		if table == nil {
