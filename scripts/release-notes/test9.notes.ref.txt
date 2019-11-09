@@ -1,0 +1,65 @@
+### Command-line changes
+
+- This was missing.
+  - NOTE REVISION [d6960940e][d6960940e]
+    This is visible. [#2][#2] [990a43f20][990a43f20]
+- Badly explained
+  - NOTE REVISION [cbd5be9c2][cbd5be9c2]
+    This is better explained.
+  - NOTE REVISION [cca538aca][cca538aca]
+    Wait I think this is even
+    better.
+  - NOTE REVISION [cca538aca][cca538aca]
+    One more detail. [#1][#1] [def86d750][def86d750]
+
+### Bug fixes
+
+- Something wrong!
+  - NOTE REVISION [cbd5be9c2][cbd5be9c2]
+    Something is fixed.
+    The explanation can even be lengthy. [#1][#1] [db1e8c072][db1e8c072]
+
+### Miscellaneous
+
+#### Extra
+
+- This was also missing. [#2][#2] [990a43f20][990a43f20]
+- This release note did not
+  exist before. [#1][#1] [0a0926ccb][0a0926ccb]
+
+### Doc updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 4 merged PRs by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
+
+- test9
+
+### PRs merged by contributors
+
+- test9:
+  - 2018-04-22 [#200  ][#200  ] [3905a9e95][3905a9e95] (+   0 -   0 ~   0/ 0) PR 2 title alternate format
+  - 2018-04-22 [#2    ][#2    ] [b6d311cae][b6d311cae] (+   0 -   0 ~   0/ 0) PR 2 title (4 commits)
+  - 2018-04-22 [#100  ][#100  ] [6286c37ea][6286c37ea] (+   0 -   0 ~   0/ 0) PR 1 title alternate format
+  - 2018-04-22 [#1    ][#1    ] [0b2581ed1][0b2581ed1] (+   0 -   0 ~   0/ 0) PR 1 title (2 commits)
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#2]: https://github.com/cockroachdb/cockroach/pull/2
+[#200]: https://github.com/cockroachdb/cockroach/pull/200
+[0a0926ccb]: https://github.com/cockroachdb/cockroach/commit/0a0926ccb
+[0b2581ed1]: https://github.com/cockroachdb/cockroach/commit/0b2581ed1
+[3905a9e95]: https://github.com/cockroachdb/cockroach/commit/3905a9e95
+[6286c37ea]: https://github.com/cockroachdb/cockroach/commit/6286c37ea
+[990a43f20]: https://github.com/cockroachdb/cockroach/commit/990a43f20
+[b6d311cae]: https://github.com/cockroachdb/cockroach/commit/b6d311cae
+[cbd5be9c2]: https://github.com/cockroachdb/cockroach/commit/cbd5be9c2
+[cca538aca]: https://github.com/cockroachdb/cockroach/commit/cca538aca
+[d6960940e]: https://github.com/cockroachdb/cockroach/commit/d6960940e
+[db1e8c072]: https://github.com/cockroachdb/cockroach/commit/db1e8c072
+[def86d750]: https://github.com/cockroachdb/cockroach/commit/def86d750
+
