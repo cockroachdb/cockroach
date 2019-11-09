@@ -696,10 +696,8 @@ Also, if you use equal signs in the file path to a store, you must use the
 	StorageEngine = FlagInfo{
 		Name: "storage-engine",
 		Description: `
-Storage engine to use for all stores on this cockroach node. Options are rocksdb
-(default), or pebble.
-`,
-		EnvVar: "COCKROACH_STORAGE_ENGINE",
+Storage engine to use for all stores on this cockroach node. Options are rocksdb,
+or pebble.`,
 	}
 
 	Size = FlagInfo{

@@ -18,18 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
-
-// TestStorageEngine represents an engine type for testing.
-var TestStorageEngine enginepb.EngineType
-
-func init() {
-	_ = TestStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_TEST_STORAGE_ENGINE", "rocksdb"))
-}
 
 // NewTempEngine creates a new engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.

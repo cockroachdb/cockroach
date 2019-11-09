@@ -20,12 +20,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 )
+
+// DefaultStorageEngine represents the default storage engine to use.
+var DefaultStorageEngine enginepb.EngineType
+
+func init() {
+	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "rocksdb"))
+}
 
 // SimpleIterator is an interface for iterating over key/value pairs in an
 // engine. SimpleIterator implementations are thread safe unless otherwise
@@ -548,7 +556,7 @@ func NewEngine(
 // NewDefaultEngine allocates and returns a new, opened engine with the default configuration.
 // The caller must call the engine's Close method when the engine is no longer needed.
 func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine, error) {
-	return NewEngine(TestStorageEngine, cacheSize, storageConfig)
+	return NewEngine(DefaultStorageEngine, cacheSize, storageConfig)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string

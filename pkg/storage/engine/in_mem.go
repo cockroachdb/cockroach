@@ -39,5 +39,5 @@ func NewInMem(
 // when the engine is no longer needed.
 func NewDefaultInMem() Engine {
 	return NewInMem(context.Background(),
-		TestStorageEngine, roachpb.Attributes{}, 1<<20 /* 1 MB */)
+		DefaultStorageEngine, roachpb.Attributes{}, 1<<20 /* 1 MB */)
 }
