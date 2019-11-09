@@ -324,7 +324,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if targetID != keys.SystemDatabaseID && sqlbase.IsSystemConfigID(targetID) {
+		// NamespaceTableID is not in the system gossip range, but users should not
+		// be allowed to set zone configs on it.
+		if targetID != keys.SystemDatabaseID && sqlbase.IsSystemConfigID(targetID) || targetID == keys.NamespaceTableID {
 			return pgerror.Newf(pgcode.CheckViolation,
 				`cannot set zone configs for system config tables; `+
 					`try setting your config on the entire "system" database instead`)

@@ -325,6 +325,11 @@ func (ie *InternalExecutor) ExecWithUser(
 	return res.rowsAffected, res.err
 }
 
+// Settings returns the cluster settings.
+func (ie *InternalExecutor) Settings() *cluster.Settings {
+	return ie.s.cfg.Settings
+}
+
 // Query executes the supplied SQL statement and returns the resulting rows.
 // The statement is executed as the root user.
 //

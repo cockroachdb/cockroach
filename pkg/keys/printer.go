@@ -126,6 +126,9 @@ var (
 				PSFunc: parseUnsupported,
 			},
 		}},
+		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
+			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
+		}},
 		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse},
 		}},

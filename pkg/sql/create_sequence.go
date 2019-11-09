@@ -50,7 +50,8 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return unimplemented.NewWithIssuef(5807,
 			"temporary sequences are unsupported")
 	}
-	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Name.Table())
+	tKey := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings, n.dbDesc.ID, n.n.Name.Table())
+
 	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
 		if n.n.IfNotExists {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
@@ -90,7 +91,8 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateTable() needed here.
 
-	key := sqlbase.NewTableKey(dbDesc.ID, name.Table()).Key()
+	key := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings,
+		dbDesc.ID, name.Table()).Key()
 	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
