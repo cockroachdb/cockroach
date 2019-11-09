@@ -499,7 +499,7 @@ func TestCreateSystemTable(t *testing.T) {
 	sqlbase.SystemAllowedPrivileges[table.ID] = sqlbase.SystemAllowedPrivileges[keys.NamespaceTableID]
 
 	table.Name = "dummy"
-	nameKey := sqlbase.NewTableKey(table.ParentID, table.Name).Key()
+	nameKey := sqlbase.NewPublicTableKey(table.ParentID, table.Name).Key()
 	descKey := sqlbase.MakeDescMetadataKey(table.ID)
 	descVal := sqlbase.WrapDescriptor(&table)
 

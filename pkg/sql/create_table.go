@@ -62,15 +62,34 @@ type createTableRun struct {
 }
 
 func (n *createTableNode) startExec(params runParams) error {
-	temporary := false
-	if n.n.Temporary {
+	isTemporary := n.n.Temporary
+
+	tKey := sqlbase.MakePublicTableNameKey(params.ctx,
+		params.ExecCfg().Settings, n.dbDesc.ID, n.n.Table.Table())
+
+	// If a user specifies the pg_temp schema, even without the TEMPORARY keyword,
+	// a temporary table should be created.
+	if isTemporary {
 		if !params.SessionData().TempTablesEnabled {
 			return unimplemented.NewWithIssuef(5807,
 				"temporary tables are unsupported")
 		}
-		temporary = true
+
+		tempSchemaName := params.p.TemporarySchemaName()
+		sKey := sqlbase.NewSchemaKey(n.dbDesc.ID, tempSchemaName)
+		schemaID, err := getDescriptorID(params.ctx, params.p.txn, sKey)
+		if err != nil {
+			return err
+		} else if schemaID == sqlbase.InvalidID {
+			// The temporary schema has not been created yet.
+			// TODO(arul): Add a job that does deletion for this session(temp schema)
+			if schemaID, err = createTempSchema(params, sKey); err != nil {
+				return err
+			}
+		}
+
+		tKey = sqlbase.NewTableKey(n.dbDesc.ID, schemaID, n.n.Table.Table())
 	}
-	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Table.Table())
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		if n.n.IfNotExists {
@@ -120,7 +139,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		desc, err = makeTableDescIfAs(params,
-			n.n, n.dbDesc.ID, id, creationTime, asCols, privs, params.p.EvalContext(), temporary)
+			n.n, n.dbDesc.ID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
 		if err != nil {
 			return err
 		}
@@ -132,7 +151,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected, temporary)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected, isTemporary)
 		if err != nil {
 			return err
 		}

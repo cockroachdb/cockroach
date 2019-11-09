@@ -641,6 +641,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL
 3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL
 3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL
 
 # From #26504
@@ -692,6 +693,9 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 3752917847  0                           1
 3752917847  0                           2
 3966258450  0                           1
+4012654114  0                           1
+4012654114  0                           2
+4012654114  0                           3
 4225994721  0                           1
 4225994721  0                           2
 

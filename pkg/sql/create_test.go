@@ -40,7 +40,6 @@ func TestDatabaseDescriptor(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
-
 	expectedCounter := int64(keys.MinNonPredefinedUserDescID)
 
 	// Test values before creating the database.
@@ -97,7 +96,13 @@ func TestDatabaseDescriptor(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if e, a := len(descriptorIDs), len(kvs); a != e {
+		// TODO(arul): Revert this back to to len(descriptorIDs) once the migration
+		//  to the new system.namespace is done.
+		// Every database is initialized with a public schema, which does not have
+		// a descriptor associated with it. There are 3 databases: defaultdb,
+		// system, and postgres.
+		e := len(descriptorIDs) + 3
+		if a := len(kvs); a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}
 	}

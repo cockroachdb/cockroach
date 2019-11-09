@@ -265,7 +265,10 @@ func databaseIDs(names ...string) func(ctx context.Context, db db) ([]sqlbase.ID
 	return func(ctx context.Context, db db) ([]sqlbase.ID, error) {
 		var ids []sqlbase.ID
 		for _, name := range names {
-			kv, err := db.Get(ctx, sqlbase.NewTableKey(keys.RootNamespaceID, name).Key())
+			// This runs as part of an older migration (introduced in 2.1). We use
+			// the DeprecatedDatabaseKey, and let the 20.1 migration handle moving
+			// from the old namespace table into the new one.
+			kv, err := db.Get(ctx, sqlbase.NewDeprecatedDatabaseKey(name).Key())
 			if err != nil {
 				return nil, err
 			}
@@ -576,7 +579,8 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.CPut(sqlbase.NewTableKey(desc.GetParentID(), desc.GetName()).Key(), desc.GetID(), nil)
+		tKey := sqlbase.MakePublicTableNameKey(ctx, r.sqlExecutor.Settings(), desc.GetParentID(), desc.GetName())
+		b.CPut(tKey.Key(), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
