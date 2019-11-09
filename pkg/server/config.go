@@ -359,6 +359,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
+		StorageEngine: engine.DefaultStorageEngine,
 		TempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
 	}

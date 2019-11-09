@@ -293,7 +293,7 @@ func TestSorter(t *testing.T) {
 					t.Run(name, func(t *testing.T) {
 						ctx := context.Background()
 						st := cluster.MakeTestingClusterSettings()
-						tempEngine, err := engine.NewTempEngine(engine.TestStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+						tempEngine, err := engine.NewTempEngine(engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 						if err != nil {
 							t.Fatal(err)
 						}

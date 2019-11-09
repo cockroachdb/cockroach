@@ -50,7 +50,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	tempEngine, err := engine.NewTempEngine(engine.TestStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	tempEngine, err := engine.NewTempEngine(engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
