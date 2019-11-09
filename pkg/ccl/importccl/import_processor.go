@@ -222,18 +222,18 @@ func ingestKvs(
 	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
 	// can treat it as flushed as well (in case we're not adding anything to it).
 	pkIndexAdder.SetOnFlush(func() {
-		for _, i := range writtenRow {
-			atomic.StoreInt64(&pkFlushedRow[i], writtenRow[i])
+		for i, emitted := range writtenRow {
+			atomic.StoreInt64(&pkFlushedRow[i], emitted)
 		}
 		if indexAdder.IsEmpty() {
-			for _, i := range writtenRow {
-				atomic.StoreInt64(&idxFlushedRow[i], writtenRow[i])
+			for i, emitted := range writtenRow {
+				atomic.StoreInt64(&idxFlushedRow[i], emitted)
 			}
 		}
 	})
 	indexAdder.SetOnFlush(func() {
-		for _, i := range writtenRow {
-			atomic.StoreInt64(&idxFlushedRow[i], writtenRow[i])
+		for i, emitted := range writtenRow {
+			atomic.StoreInt64(&idxFlushedRow[i], emitted)
 		}
 	})
 
@@ -243,6 +243,25 @@ func ingestKvs(
 	for i := range spec.Uri {
 		offsets[i] = offset
 		offset++
+	}
+
+	pushProgress := func() {
+		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+		prog.ResumePos = make(map[int32]int64)
+		prog.CompletedFraction = make(map[int32]float32)
+		for file, offset := range offsets {
+			pk := atomic.LoadInt64(&pkFlushedRow[offset])
+			idx := atomic.LoadInt64(&idxFlushedRow[offset])
+			// On resume we'll be able to skip up the last row for which both the
+			// PK and index adders have flushed KVs.
+			if idx > pk {
+				prog.ResumePos[file] = pk
+			} else {
+				prog.ResumePos[file] = idx
+			}
+			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+		}
+		progCh <- prog
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -259,22 +278,7 @@ func ingestKvs(
 			case <-stopProgress:
 				return nil
 			case <-tick.C:
-				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-				prog.ResumePos = make(map[int32]int64)
-				prog.CompletedFraction = make(map[int32]float32)
-				for file, offset := range offsets {
-					pk := atomic.LoadInt64(&pkFlushedRow[offset])
-					idx := atomic.LoadInt64(&idxFlushedRow[offset])
-					// On resume we'll be able to skip up the last row for which both the
-					// PK and index adders have flushed KVs.
-					if idx > pk {
-						prog.ResumePos[file] = pk
-					} else {
-						prog.ResumePos[file] = idx
-					}
-					prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
-				}
-				progCh <- prog
+				pushProgress()
 			}
 		}
 	})
@@ -333,6 +337,11 @@ func ingestKvs(
 			offset := offsets[kvBatch.Source]
 			writtenRow[offset] = kvBatch.LastRow
 			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
+			if flowCtx.Cfg.TestingKnobs.BulkAdderFlushesEveryBatch {
+				_ = pkIndexAdder.Flush(ctx)
+				_ = indexAdder.Flush(ctx)
+				pushProgress()
+			}
 		}
 		return nil
 	})

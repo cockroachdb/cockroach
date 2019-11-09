@@ -603,7 +603,8 @@ type importResumer struct {
 	statsRefresher *stats.Refresher
 
 	testingKnobs struct {
-		afterImport func() error
+		afterImport            func(summary roachpb.BulkOpSummary) error
+		alwaysFlushJobProgress bool
 	}
 }
 
@@ -849,12 +850,12 @@ func (r *importResumer) Resume(
 	files := details.URIs
 	format := details.Format
 
-	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, walltime)
+	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, walltime, r.testingKnobs.alwaysFlushJobProgress)
 	if err != nil {
 		return err
 	}
 	if r.testingKnobs.afterImport != nil {
-		if err := r.testingKnobs.afterImport(); err != nil {
+		if err := r.testingKnobs.afterImport(res); err != nil {
 			return err
 		}
 	}

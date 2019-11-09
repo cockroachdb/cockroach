@@ -61,8 +61,7 @@ func runImport(
 			// Filter out files that were completely processed.
 			inputs = make(map[int32]string)
 			for id, name := range spec.Uri {
-				// TODO(yevgeniy): Support offsets into the file, not just full file skipping.
-				if seek, ok := spec.ResumePos[id]; !ok || seek != math.MaxInt64 {
+				if seek, ok := spec.ResumePos[id]; !ok || seek < math.MaxInt64 {
 					inputs[id] = name
 				}
 			}
@@ -70,7 +69,7 @@ func runImport(
 			inputs = spec.Uri
 		}
 
-		return conv.readFiles(ctx, inputs, nil, spec.Format, flowCtx.Cfg.ExternalStorage)
+		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage)
 	})
 
 	// This group links together the producers (via producerGroup) and the KV ingester.
@@ -98,6 +97,7 @@ func runImport(
 		progCh <- prog
 		return nil
 	})
+
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
@@ -147,9 +147,7 @@ func readInputFiles(
 		fileSizes[id] = sz
 	}
 
-	currentFile := 0
 	for dataFileIndex, dataFile := range dataFiles {
-		currentFile++
 		select {
 		case <-done:
 			return ctx.Err()
