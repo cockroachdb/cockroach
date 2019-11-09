@@ -9,7 +9,7 @@
 
 #### Changes without release note annotation
 
-- [#unknown][#unknown] [4f4329fdc][4f4329fdc] master update (test3)
+- [#unknown][#unknown] [4f4329fdc][4f4329fdc] master update (test3 <test3@example.com>)
 
 ### Doc updates
 

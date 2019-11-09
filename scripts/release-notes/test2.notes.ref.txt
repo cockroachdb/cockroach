@@ -7,7 +7,7 @@
 
 #### Changes without release note annotation
 
-- [#unknown][#unknown] [f872999e8][f872999e8] master update (test2)
+- [#unknown][#unknown] [f872999e8][f872999e8] master update (test2 <test2@example.com>)
 
 ### Doc updates
 
