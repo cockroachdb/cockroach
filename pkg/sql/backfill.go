@@ -600,7 +600,10 @@ func (sc *SchemaChanger) truncateIndexes(
 					defer fn()
 				}
 
-				tc := &TableCollection{leaseMgr: sc.leaseMgr}
+				tc := &TableCollection{
+					leaseMgr: sc.leaseMgr,
+					settings: sc.settings,
+				}
 				defer tc.releaseTables(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
@@ -811,7 +814,10 @@ func (sc *SchemaChanger) distBackfill(
 					}
 				}
 
-				tc := &TableCollection{leaseMgr: sc.leaseMgr}
+				tc := &TableCollection{
+					leaseMgr: sc.leaseMgr,
+					settings: sc.settings,
+				}
 				// Use a leased table descriptor for the backfill.
 				defer tc.releaseTables(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
@@ -1183,7 +1189,10 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			tc := &TableCollection{leaseMgr: sc.leaseMgr}
+			tc := &TableCollection{
+				leaseMgr: sc.leaseMgr,
+				settings: sc.settings,
+			}
 			// pretend that the schema has been modified.
 			if err := tc.addUncommittedTable(*desc); err != nil {
 				return err
@@ -1301,15 +1310,13 @@ func runSchemaChangesInTxn(
 	if len(tableDesc.DrainingNames) > 0 {
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.
-		b := planner.Txn().NewBatch()
 		for _, drain := range tableDesc.DrainingNames {
-			tbKey := sqlbase.NewTableKey(drain.ParentID, drain.Name).Key()
-			b.Del(tbKey)
+			err := sqlbase.RemovePublicTableNamespaceEntry(ctx, planner.Txn(), drain.ParentID, drain.Name)
+			if err != nil {
+				return err
+			}
 		}
 		tableDesc.DrainingNames = nil
-		if err := planner.Txn().Run(ctx, b); err != nil {
-			return err
-		}
 	}
 
 	if tableDesc.Dropped() {
@@ -1490,7 +1497,10 @@ func validateCheckInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{leaseMgr: leaseMgr}
+		newTc := &TableCollection{
+			leaseMgr: leaseMgr,
+			settings: evalCtx.Settings,
+		}
 		// pretend that the schema has been modified.
 		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
 			return err
@@ -1527,7 +1537,10 @@ func validateFkInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{leaseMgr: leaseMgr}
+		newTc := &TableCollection{
+			leaseMgr: leaseMgr,
+			settings: evalCtx.Settings,
+		}
 		// pretend that the schema has been modified.
 		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
 			return err

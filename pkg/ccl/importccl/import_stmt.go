@@ -922,10 +922,10 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			tableDesc.DropTime = 1
-			var existingIDVal roachpb.Value
-			existingIDVal.SetInt(int64(tableDesc.ID))
-			tKey := sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name)
-			b.CPut(tKey.Key(), nil, &existingIDVal)
+			err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tableDesc.ParentID, tableDesc.Name)
+			if err != nil {
+				return err
+			}
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC

@@ -35,4 +35,3 @@ query I
 SELECT * FROM unrelated
 ----
 1
-

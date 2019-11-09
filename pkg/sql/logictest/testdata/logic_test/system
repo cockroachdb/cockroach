@@ -16,6 +16,7 @@ jobs
 lease
 locations
 namespace
+namespace_deprecated
 rangelog
 replication_constraint_stats
 replication_critical_localities
@@ -28,33 +29,6 @@ ui
 users
 web_sessions
 zones
-
-query ITI rowsort
-SELECT * FROM system.namespace
-----
-0  defaultdb                        50
-0  postgres                         51
-0  system                           1
-0  test                             52
-1  comments                         24
-1  descriptor                       3
-1  eventlog                         12
-1  jobs                             15
-1  lease                            11
-1  locations                        21
-1  namespace                        2
-1  rangelog                         13
-1  replication_constraint_stats     25
-1  replication_critical_localities  26
-1  replication_stats                27
-1  reports_meta                     28
-1  role_members                     23
-1  settings                         6
-1  table_statistics                 20
-1  ui                               14
-1  users                            4
-1  web_sessions                     19
-1  zones                            5
 
 query I rowsort
 SELECT id FROM system.descriptor
@@ -79,6 +53,7 @@ SELECT id FROM system.descriptor
 26
 27
 28
+30
 50
 51
 52
@@ -89,13 +64,6 @@ SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
 ----
 0
 
-# Verify format of system tables.
-query TTBTTTB
-SHOW COLUMNS FROM system.namespace
-----
-parentID  INT8    false  NULL  ·  {primary}  false
-name      STRING  false  NULL  ·  {primary}  false
-id        INT8    true   NULL  ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.descriptor
@@ -201,189 +169,193 @@ system  public              root   SELECT
 query TTTTT
 SHOW GRANTS ON system.*
 ----
-system  public  comments                            admin   DELETE
-system  public  comments                            admin   GRANT
-system  public  comments                            admin   INSERT
-system  public  comments                            admin   SELECT
-system  public  comments                            admin   UPDATE
-system  public  comments                            public  DELETE
-system  public  comments                            public  GRANT
-system  public  comments                            public  INSERT
-system  public  comments                            public  SELECT
-system  public  comments                            public  UPDATE
-system  public  comments                            root    DELETE
-system  public  comments                            root    GRANT
-system  public  comments                            root    INSERT
-system  public  comments                            root    SELECT
-system  public  comments                            root    UPDATE
-system  public  descriptor                          admin   GRANT
-system  public  descriptor                          admin   SELECT
-system  public  descriptor                          root    GRANT
-system  public  descriptor                          root    SELECT
-system  public  eventlog                            admin   DELETE
-system  public  eventlog                            admin   GRANT
-system  public  eventlog                            admin   INSERT
-system  public  eventlog                            admin   SELECT
-system  public  eventlog                            admin   UPDATE
-system  public  eventlog                            root    DELETE
-system  public  eventlog                            root    GRANT
-system  public  eventlog                            root    INSERT
-system  public  eventlog                            root    SELECT
-system  public  eventlog                            root    UPDATE
-system  public  jobs                                admin   DELETE
-system  public  jobs                                admin   GRANT
-system  public  jobs                                admin   INSERT
-system  public  jobs                                admin   SELECT
-system  public  jobs                                admin   UPDATE
-system  public  jobs                                root    DELETE
-system  public  jobs                                root    GRANT
-system  public  jobs                                root    INSERT
-system  public  jobs                                root    SELECT
-system  public  jobs                                root    UPDATE
-system  public  lease                               admin   DELETE
-system  public  lease                               admin   GRANT
-system  public  lease                               admin   INSERT
-system  public  lease                               admin   SELECT
-system  public  lease                               admin   UPDATE
-system  public  lease                               root    DELETE
-system  public  lease                               root    GRANT
-system  public  lease                               root    INSERT
-system  public  lease                               root    SELECT
-system  public  lease                               root    UPDATE
-system  public  locations                           admin   DELETE
-system  public  locations                           admin   GRANT
-system  public  locations                           admin   INSERT
-system  public  locations                           admin   SELECT
-system  public  locations                           admin   UPDATE
-system  public  locations                           root    DELETE
-system  public  locations                           root    GRANT
-system  public  locations                           root    INSERT
-system  public  locations                           root    SELECT
-system  public  locations                           root    UPDATE
-system  public  namespace                           admin   GRANT
-system  public  namespace                           admin   SELECT
-system  public  namespace                           root    GRANT
-system  public  namespace                           root    SELECT
-system  public  rangelog                            admin   DELETE
-system  public  rangelog                            admin   GRANT
-system  public  rangelog                            admin   INSERT
-system  public  rangelog                            admin   SELECT
-system  public  rangelog                            admin   UPDATE
-system  public  rangelog                            root    DELETE
-system  public  rangelog                            root    GRANT
-system  public  rangelog                            root    INSERT
-system  public  rangelog                            root    SELECT
-system  public  rangelog                            root    UPDATE
-system  public  replication_constraint_stats        admin   DELETE
-system  public  replication_constraint_stats        admin   GRANT
-system  public  replication_constraint_stats        admin   INSERT
-system  public  replication_constraint_stats        admin   SELECT
-system  public  replication_constraint_stats        admin   UPDATE
-system  public  replication_constraint_stats        root    DELETE
-system  public  replication_constraint_stats        root    GRANT
-system  public  replication_constraint_stats        root    INSERT
-system  public  replication_constraint_stats        root    SELECT
-system  public  replication_constraint_stats        root    UPDATE
-system  public  replication_critical_localities     admin   DELETE
-system  public  replication_critical_localities     admin   GRANT
-system  public  replication_critical_localities     admin   INSERT
-system  public  replication_critical_localities     admin   SELECT
-system  public  replication_critical_localities     admin   UPDATE
-system  public  replication_critical_localities     root    DELETE
-system  public  replication_critical_localities     root    GRANT
-system  public  replication_critical_localities     root    INSERT
-system  public  replication_critical_localities     root    SELECT
-system  public  replication_critical_localities     root    UPDATE
-system  public  replication_stats                   admin   DELETE
-system  public  replication_stats                   admin   GRANT
-system  public  replication_stats                   admin   INSERT
-system  public  replication_stats                   admin   SELECT
-system  public  replication_stats                   admin   UPDATE
-system  public  replication_stats                   root    DELETE
-system  public  replication_stats                   root    GRANT
-system  public  replication_stats                   root    INSERT
-system  public  replication_stats                   root    SELECT
-system  public  replication_stats                   root    UPDATE
-system  public  reports_meta                        admin   DELETE
-system  public  reports_meta                        admin   GRANT
-system  public  reports_meta                        admin   INSERT
-system  public  reports_meta                        admin   SELECT
-system  public  reports_meta                        admin   UPDATE
-system  public  reports_meta                        root    DELETE
-system  public  reports_meta                        root    GRANT
-system  public  reports_meta                        root    INSERT
-system  public  reports_meta                        root    SELECT
-system  public  reports_meta                        root    UPDATE
-system  public  role_members                        admin   DELETE
-system  public  role_members                        admin   GRANT
-system  public  role_members                        admin   INSERT
-system  public  role_members                        admin   SELECT
-system  public  role_members                        admin   UPDATE
-system  public  role_members                        root    DELETE
-system  public  role_members                        root    GRANT
-system  public  role_members                        root    INSERT
-system  public  role_members                        root    SELECT
-system  public  role_members                        root    UPDATE
-system  public  settings                            admin   DELETE
-system  public  settings                            admin   GRANT
-system  public  settings                            admin   INSERT
-system  public  settings                            admin   SELECT
-system  public  settings                            admin   UPDATE
-system  public  settings                            root    DELETE
-system  public  settings                            root    GRANT
-system  public  settings                            root    INSERT
-system  public  settings                            root    SELECT
-system  public  settings                            root    UPDATE
-system  public  table_statistics                    admin   DELETE
-system  public  table_statistics                    admin   GRANT
-system  public  table_statistics                    admin   INSERT
-system  public  table_statistics                    admin   SELECT
-system  public  table_statistics                    admin   UPDATE
-system  public  table_statistics                    root    DELETE
-system  public  table_statistics                    root    GRANT
-system  public  table_statistics                    root    INSERT
-system  public  table_statistics                    root    SELECT
-system  public  table_statistics                    root    UPDATE
-system  public  ui                                  admin   DELETE
-system  public  ui                                  admin   GRANT
-system  public  ui                                  admin   INSERT
-system  public  ui                                  admin   SELECT
-system  public  ui                                  admin   UPDATE
-system  public  ui                                  root    DELETE
-system  public  ui                                  root    GRANT
-system  public  ui                                  root    INSERT
-system  public  ui                                  root    SELECT
-system  public  ui                                  root    UPDATE
-system  public  users                               admin   DELETE
-system  public  users                               admin   GRANT
-system  public  users                               admin   INSERT
-system  public  users                               admin   SELECT
-system  public  users                               admin   UPDATE
-system  public  users                               root    DELETE
-system  public  users                               root    GRANT
-system  public  users                               root    INSERT
-system  public  users                               root    SELECT
-system  public  users                               root    UPDATE
-system  public  web_sessions                        admin   DELETE
-system  public  web_sessions                        admin   GRANT
-system  public  web_sessions                        admin   INSERT
-system  public  web_sessions                        admin   SELECT
-system  public  web_sessions                        admin   UPDATE
-system  public  web_sessions                        root    DELETE
-system  public  web_sessions                        root    GRANT
-system  public  web_sessions                        root    INSERT
-system  public  web_sessions                        root    SELECT
-system  public  web_sessions                        root    UPDATE
-system  public  zones                               admin   DELETE
-system  public  zones                               admin   GRANT
-system  public  zones                               admin   INSERT
-system  public  zones                               admin   SELECT
-system  public  zones                               admin   UPDATE
-system  public  zones                               root    DELETE
-system  public  zones                               root    GRANT
-system  public  zones                               root    INSERT
-system  public  zones                               root    SELECT
-system  public  zones                               root    UPDATE
+system  public  comments                         admin   DELETE
+system  public  comments                         admin   GRANT
+system  public  comments                         admin   INSERT
+system  public  comments                         admin   SELECT
+system  public  comments                         admin   UPDATE
+system  public  comments                         public  DELETE
+system  public  comments                         public  GRANT
+system  public  comments                         public  INSERT
+system  public  comments                         public  SELECT
+system  public  comments                         public  UPDATE
+system  public  comments                         root    DELETE
+system  public  comments                         root    GRANT
+system  public  comments                         root    INSERT
+system  public  comments                         root    SELECT
+system  public  comments                         root    UPDATE
+system  public  descriptor                       admin   GRANT
+system  public  descriptor                       admin   SELECT
+system  public  descriptor                       root    GRANT
+system  public  descriptor                       root    SELECT
+system  public  eventlog                         admin   DELETE
+system  public  eventlog                         admin   GRANT
+system  public  eventlog                         admin   INSERT
+system  public  eventlog                         admin   SELECT
+system  public  eventlog                         admin   UPDATE
+system  public  eventlog                         root    DELETE
+system  public  eventlog                         root    GRANT
+system  public  eventlog                         root    INSERT
+system  public  eventlog                         root    SELECT
+system  public  eventlog                         root    UPDATE
+system  public  jobs                             admin   DELETE
+system  public  jobs                             admin   GRANT
+system  public  jobs                             admin   INSERT
+system  public  jobs                             admin   SELECT
+system  public  jobs                             admin   UPDATE
+system  public  jobs                             root    DELETE
+system  public  jobs                             root    GRANT
+system  public  jobs                             root    INSERT
+system  public  jobs                             root    SELECT
+system  public  jobs                             root    UPDATE
+system  public  lease                            admin   DELETE
+system  public  lease                            admin   GRANT
+system  public  lease                            admin   INSERT
+system  public  lease                            admin   SELECT
+system  public  lease                            admin   UPDATE
+system  public  lease                            root    DELETE
+system  public  lease                            root    GRANT
+system  public  lease                            root    INSERT
+system  public  lease                            root    SELECT
+system  public  lease                            root    UPDATE
+system  public  locations                        admin   DELETE
+system  public  locations                        admin   GRANT
+system  public  locations                        admin   INSERT
+system  public  locations                        admin   SELECT
+system  public  locations                        admin   UPDATE
+system  public  locations                        root    DELETE
+system  public  locations                        root    GRANT
+system  public  locations                        root    INSERT
+system  public  locations                        root    SELECT
+system  public  locations                        root    UPDATE
+system  public  namespace                        admin   GRANT
+system  public  namespace                        admin   SELECT
+system  public  namespace                        root    GRANT
+system  public  namespace                        root    SELECT
+system  public  namespace_deprecated             admin   GRANT
+system  public  namespace_deprecated             admin   SELECT
+system  public  namespace_deprecated             root    GRANT
+system  public  namespace_deprecated             root    SELECT
+system  public  rangelog                         admin   DELETE
+system  public  rangelog                         admin   GRANT
+system  public  rangelog                         admin   INSERT
+system  public  rangelog                         admin   SELECT
+system  public  rangelog                         admin   UPDATE
+system  public  rangelog                         root    DELETE
+system  public  rangelog                         root    GRANT
+system  public  rangelog                         root    INSERT
+system  public  rangelog                         root    SELECT
+system  public  rangelog                         root    UPDATE
+system  public  replication_constraint_stats     admin   DELETE
+system  public  replication_constraint_stats     admin   GRANT
+system  public  replication_constraint_stats     admin   INSERT
+system  public  replication_constraint_stats     admin   SELECT
+system  public  replication_constraint_stats     admin   UPDATE
+system  public  replication_constraint_stats     root    DELETE
+system  public  replication_constraint_stats     root    GRANT
+system  public  replication_constraint_stats     root    INSERT
+system  public  replication_constraint_stats     root    SELECT
+system  public  replication_constraint_stats     root    UPDATE
+system  public  replication_critical_localities  admin   DELETE
+system  public  replication_critical_localities  admin   GRANT
+system  public  replication_critical_localities  admin   INSERT
+system  public  replication_critical_localities  admin   SELECT
+system  public  replication_critical_localities  admin   UPDATE
+system  public  replication_critical_localities  root    DELETE
+system  public  replication_critical_localities  root    GRANT
+system  public  replication_critical_localities  root    INSERT
+system  public  replication_critical_localities  root    SELECT
+system  public  replication_critical_localities  root    UPDATE
+system  public  replication_stats                admin   DELETE
+system  public  replication_stats                admin   GRANT
+system  public  replication_stats                admin   INSERT
+system  public  replication_stats                admin   SELECT
+system  public  replication_stats                admin   UPDATE
+system  public  replication_stats                root    DELETE
+system  public  replication_stats                root    GRANT
+system  public  replication_stats                root    INSERT
+system  public  replication_stats                root    SELECT
+system  public  replication_stats                root    UPDATE
+system  public  reports_meta                     admin   DELETE
+system  public  reports_meta                     admin   GRANT
+system  public  reports_meta                     admin   INSERT
+system  public  reports_meta                     admin   SELECT
+system  public  reports_meta                     admin   UPDATE
+system  public  reports_meta                     root    DELETE
+system  public  reports_meta                     root    GRANT
+system  public  reports_meta                     root    INSERT
+system  public  reports_meta                     root    SELECT
+system  public  reports_meta                     root    UPDATE
+system  public  role_members                     admin   DELETE
+system  public  role_members                     admin   GRANT
+system  public  role_members                     admin   INSERT
+system  public  role_members                     admin   SELECT
+system  public  role_members                     admin   UPDATE
+system  public  role_members                     root    DELETE
+system  public  role_members                     root    GRANT
+system  public  role_members                     root    INSERT
+system  public  role_members                     root    SELECT
+system  public  role_members                     root    UPDATE
+system  public  settings                         admin   DELETE
+system  public  settings                         admin   GRANT
+system  public  settings                         admin   INSERT
+system  public  settings                         admin   SELECT
+system  public  settings                         admin   UPDATE
+system  public  settings                         root    DELETE
+system  public  settings                         root    GRANT
+system  public  settings                         root    INSERT
+system  public  settings                         root    SELECT
+system  public  settings                         root    UPDATE
+system  public  table_statistics                 admin   DELETE
+system  public  table_statistics                 admin   GRANT
+system  public  table_statistics                 admin   INSERT
+system  public  table_statistics                 admin   SELECT
+system  public  table_statistics                 admin   UPDATE
+system  public  table_statistics                 root    DELETE
+system  public  table_statistics                 root    GRANT
+system  public  table_statistics                 root    INSERT
+system  public  table_statistics                 root    SELECT
+system  public  table_statistics                 root    UPDATE
+system  public  ui                               admin   DELETE
+system  public  ui                               admin   GRANT
+system  public  ui                               admin   INSERT
+system  public  ui                               admin   SELECT
+system  public  ui                               admin   UPDATE
+system  public  ui                               root    DELETE
+system  public  ui                               root    GRANT
+system  public  ui                               root    INSERT
+system  public  ui                               root    SELECT
+system  public  ui                               root    UPDATE
+system  public  users                            admin   DELETE
+system  public  users                            admin   GRANT
+system  public  users                            admin   INSERT
+system  public  users                            admin   SELECT
+system  public  users                            admin   UPDATE
+system  public  users                            root    DELETE
+system  public  users                            root    GRANT
+system  public  users                            root    INSERT
+system  public  users                            root    SELECT
+system  public  users                            root    UPDATE
+system  public  web_sessions                     admin   DELETE
+system  public  web_sessions                     admin   GRANT
+system  public  web_sessions                     admin   INSERT
+system  public  web_sessions                     admin   SELECT
+system  public  web_sessions                     admin   UPDATE
+system  public  web_sessions                     root    DELETE
+system  public  web_sessions                     root    GRANT
+system  public  web_sessions                     root    INSERT
+system  public  web_sessions                     root    SELECT
+system  public  web_sessions                     root    UPDATE
+system  public  zones                            admin   DELETE
+system  public  zones                            admin   GRANT
+system  public  zones                            admin   INSERT
+system  public  zones                            admin   SELECT
+system  public  zones                            admin   UPDATE
+system  public  zones                            root    DELETE
+system  public  zones                            root    GRANT
+system  public  zones                            root    INSERT
+system  public  zones                            root    SELECT
+system  public  zones                            root    UPDATE
 
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system
