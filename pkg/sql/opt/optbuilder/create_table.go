@@ -26,9 +26,24 @@ import (
 // statement.
 func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
+	isTemp := resolveTemporaryStatus(&ct.Table, ct.Temporary)
+	if isTemp {
+		// Postgres allows using `pg_temp` as an alias for the session specific temp
+		// schema. In PG, the following are equivalent:
+		// CREATE TEMP TABLE t <=> CREATE TABLE pg_temp.t <=> CREATE TEMP TABLE pg_temp.t
+		//
+		// The temporary schema is created the first time a session creates
+		// a temporary object, so it is possible to use `pg_temp` in a fully
+		// qualified name when the temporary schema does not exist. To allow this,
+		// we explicitly set the SchemaName to `public` for temporary tables, as
+		// the public schema is guaranteed to exist. This ensures the FQN can be
+		// resolved correctly.
+		// TODO(whomever): Once it is possible to drop schemas, it will no longer be
+		// safe to set the schema name to `public`, as it may have been dropped.
+		ct.Table.TableNamePrefix.SchemaName = tree.PublicSchemaName
+		ct.Temporary = true
+	}
 	sch, resName := b.resolveSchemaForCreate(&ct.Table)
-	// TODO(radu): we are modifying the AST in-place here. We should be storing
-	// the resolved name separately.
 	ct.Table.TableNamePrefix = resName
 	schID := b.factory.Metadata().AddSchema(sch)
 

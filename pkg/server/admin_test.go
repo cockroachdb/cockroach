@@ -386,7 +386,7 @@ func TestAdminAPINonTableStats(t *testing.T) {
 // with no user data, all the ranges on the Databases page consist of:
 // 1) the total ranges listed for the system database
 // 2) the total ranges listed for the Non-Table data
-func TestRangeCount_MissingOneRange(t *testing.T) {
+func TestRangeCount_MissingTwoRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -444,7 +444,9 @@ func TestRangeCount_MissingOneRange(t *testing.T) {
 	}
 
 	// TODO(celia): We're missing 1 range -- where is it?
-	expectedMissingRangeCount := int64(1)
+	// TODO(arul): We're missing 2 ranges after moving system.namespace out from
+	//  the gossip range -- where are they?
+	expectedMissingRangeCount := int64(2)
 	assert.Equal(t,
 		totalRangeCount,
 		nonTableRangeCount+systemTableRangeCount+expectedMissingRangeCount)

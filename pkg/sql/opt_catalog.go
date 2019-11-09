@@ -104,7 +104,9 @@ func (os *optSchema) Name() *cat.SchemaName {
 // GetDataSourceNames is part of the cat.Schema interface.
 func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
 	return GetObjectNames(
-		ctx, os.planner.Txn(), os.planner, os.desc,
+		ctx, os.planner.Txn(),
+		os.planner,
+		os.desc,
 		os.name.Schema(),
 		true, /* explicitPrefix */
 	)
@@ -128,6 +130,7 @@ func (oc *optCatalog) ResolveSchema(
 	// more general error.
 	oc.tn.TableName = ""
 	oc.tn.TableNamePrefix = *name
+
 	found, desc, err := oc.tn.ResolveTarget(
 		ctx,
 		oc.planner,

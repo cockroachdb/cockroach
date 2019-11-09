@@ -265,6 +265,12 @@ var (
 	MaxKey = roachpb.KeyMax
 	// MinKey is a minimum key value which sorts before all other keys.
 	MinKey = roachpb.KeyMin
+
+	// NamespaceTableMin is the start key of system.namespace, which is a system
+	// table that does not reside in the same range as other system tables.
+	NamespaceTableMin = roachpb.Key(MakeTablePrefix(NamespaceTableID))
+	// NamespaceTableMax is the end key of system.namespace.
+	NamespaceTableMax = roachpb.Key(MakeTablePrefix(NamespaceTableID + 1))
 )
 
 // Various IDs used by the structured data layer.
@@ -295,12 +301,14 @@ const (
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
 	// NOTE: IDs must be <= MaxSystemConfigDescID.
-	SystemDatabaseID  = 1
-	NamespaceTableID  = 2
-	DescriptorTableID = 3
-	UsersTableID      = 4
-	ZonesTableID      = 5
-	SettingsTableID   = 6
+	SystemDatabaseID = 1
+	// DeprecatedNamespaceTableID was the tableID for the system.namespace table
+	// for pre-20.1 clusters.
+	DeprecatedNamespaceTableID = 2
+	DescriptorTableID          = 3
+	UsersTableID               = 4
+	ZonesTableID               = 5
+	SettingsTableID            = 6
 
 	// IDs for the important columns and indexes in the zones table live here to
 	// avoid introducing a dependency on sql/sqlbase throughout the codebase.
@@ -330,6 +338,10 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
+	PublicSchemaID                       = 29
+	// New NamespaceTableID for cluster version >= 20.1
+	// Ensures that NamespaceTable does not get gossiped again
+	NamespaceTableID = 30
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
@@ -342,4 +354,4 @@ const (
 // there's no table descriptor). They're grouped here because the cluster
 // bootstrap process needs to create splits for them; splits for the tables
 // happen separately.
-var PseudoTableIDs = []uint32{MetaRangesID, SystemRangesID, TimeseriesRangesID, LivenessRangesID}
+var PseudoTableIDs = []uint32{MetaRangesID, SystemRangesID, TimeseriesRangesID, LivenessRangesID, PublicSchemaID}

@@ -250,7 +250,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 table reader                          Scan /Table/57/1/2{-/#}
 flow                                  CPut /Table/57/1/2/0 -> /TUPLE/2:2:Int/3
 flow                                  InitPut /Table/57/2/3/0 -> /BYTES/0x8a
-kv.DistSender: sending partial batch  r24: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r26: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 flow                                  fast path completed
 exec stmt                             rows affected: 1
 
@@ -264,7 +264,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 table reader                          Scan /Table/57/1/1{-/#}
 flow                                  CPut /Table/57/1/1/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/57/2/2/0 -> /BYTES/0x89
-kv.DistSender: sending partial batch  r24: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r26: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 flow                                  fast path completed
 exec stmt                             rows affected: 1
 
@@ -281,7 +281,7 @@ table reader                          fetched: /kv/primary/2/v -> /3
 flow                                  Put /Table/57/1/2/0 -> /TUPLE/2:2:Int/2
 flow                                  Del /Table/57/2/3/0
 flow                                  CPut /Table/57/2/2/0 -> /BYTES/0x8a (expecting does not exist)
-kv.DistSender: sending partial batch  r24: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r26: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 exec stmt                             execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
 
 

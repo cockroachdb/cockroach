@@ -48,6 +48,7 @@ import (
 // GetTableDescriptor retrieves a table descriptor directly from the KV layer.
 func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDescriptor {
 	// log.VEventf(context.TODO(), 2, "GetTableDescriptor %q %q", database, table)
+	// testutil, so we pass settings as nil for both database and table name keys.
 	dKey := NewDatabaseKey(database)
 	ctx := context.TODO()
 	gr, err := kvDB.Get(ctx, dKey.Key())
@@ -59,7 +60,7 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 	}
 	dbDescID := ID(gr.ValueInt())
 
-	tKey := NewTableKey(dbDescID, table)
+	tKey := NewPublicTableKey(dbDescID, table)
 	gr, err = kvDB.Get(ctx, tKey.Key())
 	if err != nil {
 		panic(err)

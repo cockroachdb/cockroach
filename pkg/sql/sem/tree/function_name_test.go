@@ -34,7 +34,7 @@ func TestResolveFunction(t *testing.T) {
 		{`""`, ``, `invalid function name: ""`},
 	}
 
-	searchPath := sessiondata.MakeSearchPath([]string{"pg_catalog"})
+	searchPath := sessiondata.MakeSearchPath([]string{"pg_catalog"}, sessiondata.DefaultTemporarySchemaName)
 	for _, tc := range testCases {
 		stmt, err := parser.ParseOne("SELECT " + tc.in + "(1)")
 		if err != nil {

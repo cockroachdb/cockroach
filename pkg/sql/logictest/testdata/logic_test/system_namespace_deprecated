@@ -1,0 +1,41 @@
+# This should test the local-mixed-19.2-20.1 configuration because system.namespace
+# changed in 20.1.
+# TODO(whomever): #42931 uncomment these tests and only run them for
+# local-mixed-19.2-20.1 configuration.
+
+# query ITI rowsort
+# SELECT * FROM system.namespace
+# ----
+# 0  defaultdb                        50
+# 0  postgres                         51
+# 0  system                           1
+# 0  test                             52
+# 1  comments                         24
+# 1  descriptor                       3
+# 1  eventlog                         12
+# 1  jobs                             15
+# 1  lease                            11
+# 1  locations                        21
+# 1  namespace                        30
+# 1  namespace_deprecated             2
+# 1  rangelog                         13
+# 1  replication_constraint_stats     25
+# 1  replication_critical_localities  26
+# 1  replication_stats                27
+# 1  reports_meta                     28
+# 1  role_members                     23
+# 1  settings                         6
+# 1  table_statistics                 20
+# 1  ui                               14
+# 1  users                            4
+# 1  web_sessions                     19
+# 1  zones                            5
+
+# # Verify format of system namespace.
+# query TTBTTTB
+# SHOW COLUMNS FROM system.namespace
+# ----
+# parentID        INT8    false  NULL  ·  {primary}  false
+# parentSchemaID  INT8    false  NULL  ·  {primary}  false
+# name            STRING  false  NULL  ·  {primary}  false
+# id              INT8    true   NULL  ·  {}         false

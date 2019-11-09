@@ -238,7 +238,7 @@ func bootstrapCluster(
 		// first store.
 		if i == 0 {
 			schema := GetBootstrapSchema(defaultZoneConfig, defaultSystemZoneConfig)
-			initialValues, tableSplits := schema.GetInitialValues()
+			initialValues, tableSplits := schema.GetInitialValues(bootstrapVersion)
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {
 				return splits[i].Less(splits[j])
