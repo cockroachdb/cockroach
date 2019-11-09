@@ -29,8 +29,9 @@
 import sys
 import itertools
 import re
-import os
-import datetime, time
+import datetime
+import time
+from gitdb import exc
 import subprocess
 from git import Repo
 from optparse import OptionParser
@@ -256,34 +257,38 @@ hideheader = options.hide_header
 repo = Repo('.')
 heads = repo.heads
 
+
 def reformat_note(note_lines):
     sep = '\n'
     if options.one_line:
         sep = ' '
     return sep.join(note_lines).strip()
 
+
 # Check that pull_ref_prefix is valid
 testrefname = "%s/1" % pull_ref_prefix
+
 try:
     repo.commit(testrefname)
-except:
+except exc.ODBError:
     print("Unable to find pull request refs at %s." % pull_ref_prefix, file=sys.stderr)
     print("Is your repo set up to fetch them?  Try adding", file=sys.stderr)
     print("  fetch = +refs/pull/*/head:%s/*" % pull_ref_prefix, file=sys.stderr)
     print("to the GitHub remote section of .git/config.", file=sys.stderr)
     exit(1)
 
+
 def find_commits(from_commit_ref, until_commit_ref):
     try:
         firstCommit = repo.commit(from_commit_ref)
-    except:
+    except exc.ODBError:
         print("Unable to find the first commit of the range.", file=sys.stderr)
         print("No ref named %s." % from_commit_ref, file=sys.stderr)
         exit(1)
 
     try:
         commit = repo.commit(until_commit_ref)
-    except:
+    except exc.ODBError:
         print("Unable to find the last commit of the range.", file=sys.stderr)
         print("No ref named %s." % until_commit_ref, file=sys.stderr)
         exit(1)
@@ -347,6 +352,7 @@ def check_reachability(firstCommit, commit):
 
 firstCommit, commit = check_reachability(firstCommit, commit)
 options.from_commit = firstCommit.hexsha
+
 
 def extract_release_notes(commit):
     msglines = commit.message.split('\n')
@@ -424,6 +430,7 @@ def extract_release_notes(commit):
 
     return foundnote, notes
 
+
 spinner = itertools.cycle(['/', '-', '\\', '|'])
 counter = 0
 def spin():
@@ -442,6 +449,7 @@ def get_direct_history(firstCommit, lastCommit):
     for c in repo.iter_commits(firstCommit.hexsha + '..' + lastCommit.hexsha, first_parent = True):
         history.append(c)
     return history
+
 
 excluded_notes = set()
 if excludedFirst is not None:
@@ -481,6 +489,7 @@ print("Collecting release notes from\n%s\nuntil\n%s" % (identify_commit(firstCom
 release_notes = {}
 missing_release_notes = []
 
+
 def collect_authors(commit):
     authors = set()
     author = author_aliases.get(commit.author.name, commit.author.name)
@@ -515,12 +524,14 @@ def process_release_notes(pr, title, commit):
         missing_item = makeitem(pr, title, commit.hexsha[:shamin], authors)
     return missing_item, authors
 
+
 def makeitem(pr, prtitle, sha, authors):
     return {'authors': ', '.join(sorted(authors)),
             'sha': sha,
             'pr': pr,
             'title': prtitle,
             'note': None}
+
 
 def completenote(commit, cat, notemsg, authors, pr, title):
     item = makeitem(pr, title, commit.hexsha[:shamin], authors)
@@ -531,9 +542,11 @@ def completenote(commit, cat, notemsg, authors, pr, title):
     catnotes.append(item)
     release_notes[cat] = catnotes
 
+
 per_group_history = {}
 individual_authors = set()
 allprs = set()
+
 
 # This function groups and counts all the commits that belong to a particular PR.
 # Some description is in order regarding the logic here: it should visit all
@@ -617,7 +630,6 @@ def analyze_pr(merge, pr):
 
     merge_base = merge_base_result[0]
 
-    commits_to_analyze = [tip]
     seen_commits = set()
 
     missing_items = []
@@ -650,6 +662,7 @@ def analyze_pr(merge, pr):
 
     collect_item(pr, note, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
 
+
 def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     individual_authors.update(authors)
     if len(authors) == 0:
@@ -666,6 +679,7 @@ def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     history = per_group_history.get(item['authors'], [])
     history.append(item)
     per_group_history[item['authors']] = history
+
 
 def analyze_standalone_commit(commit):
     # Some random out-of-branch commit. Let's not forget them.
@@ -790,6 +804,8 @@ $ docker pull cockroachdb/cockroach""" + ("-unstable:" if "-" in current_version
 
 seenshas = set()
 seenprs = set()
+
+
 def renderlinks(item):
     ret = '[%(pr)s][%(pr)s]' % item
     seenprs.add(item['pr'])
@@ -797,6 +813,7 @@ def renderlinks(item):
         ret += ' [%(sha)s][%(sha)s]' % item
         seenshas.add(item['sha'])
     return ret
+
 
 for sec in relnote_sec_order:
     r = release_notes.get(sec, None)
@@ -858,16 +875,16 @@ ext_contributors = individual_authors - crdb_folk
 
 notified_authors = sorted(set(ext_contributors) | set(firsttime_contributors))
 if len(notified_authors) > 0:
-        print("We would like to thank the following contributors from the CockroachDB community:")
+    print("We would like to thank the following contributors from the CockroachDB community:")
+    print()
+    for person in notified_authors:
+        print("-", person, end='')
+        if person in firsttime_contributors:
+            annot = ""
+            if person in crdb_folk:
+                annot = ", CockroachDB team member"
+            print(" (first-time contributor%s)" % annot, end='')
         print()
-        for person in notified_authors:
-            print("-", person, end='')
-            if person in firsttime_contributors:
-                annot = ""
-                if person in crdb_folk:
-                    annot = ", CockroachDB team member"
-                print(" (first-time contributor%s)" % annot, end='')
-            print()
 print()
 
 ## Print the per-author contribution list.
