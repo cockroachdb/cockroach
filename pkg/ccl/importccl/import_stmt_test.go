@@ -1549,7 +1549,7 @@ func TestImportIntoCSV(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func() error {
+				r.testingKnobs.afterImport = func(_ roachpb.BulkOpSummary) error {
 					if importBodyFinished != nil {
 						importBodyFinished <- struct{}{}
 					}
@@ -2359,7 +2359,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	// start up workers.
 	for i := 0; i < runtime.NumCPU(); i++ {
 		group.Go(func() error {
-			return c.convertRecordWorker(ctx)
+			return c.convertRecordWorker(ctx, i)
 		})
 	}
 	const batchSize = 500
