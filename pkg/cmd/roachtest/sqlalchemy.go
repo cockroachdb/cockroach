@@ -206,6 +206,7 @@ func registerSQLAlchemy(r *testRegistry) {
 		Name:       "sqlalchemy",
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v2.1.0",
+		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},
