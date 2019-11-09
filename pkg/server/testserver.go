@@ -64,7 +64,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.Insecure = false
 
 	// Configure test storage engine.
-	cfg.StorageEngine = engine.TestStorageEngine
+	cfg.StorageEngine = engine.DefaultStorageEngine
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
