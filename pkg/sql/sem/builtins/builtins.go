@@ -2967,7 +2967,7 @@ may increase either contention or retry errors, or both.`,
 				indexID := int(tree.MustBeDInt(args[1]))
 				rowDatums, ok := tree.AsDTuple(args[2])
 				if !ok {
-					return nil, errors.AssertionFailedf("expected tuple argument for row_tuple, found %s", args[2])
+					return nil, pgerror.Newf(pgcode.DatatypeMismatch, "expected tuple argument for row_tuple, found %s", args[2])
 				}
 
 				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
