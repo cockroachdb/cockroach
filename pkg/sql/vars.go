@@ -185,8 +185,8 @@ var varGen = map[string]sessionVar{
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
-				if _, err := evalCtx.schemaAccessors.logical.GetDatabaseDesc(ctx, evalCtx.Txn, dbName,
-					tree.DatabaseLookupFlags{Required: true}); err != nil {
+				if _, err := evalCtx.schemaAccessors.logical.GetDatabaseDesc(ctx, evalCtx.Txn,
+					dbName, tree.DatabaseLookupFlags{Required: true}); err != nil {
 					return "", err
 				}
 			}
@@ -618,7 +618,7 @@ var varGen = map[string]sessionVar{
 		},
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			paths := strings.Split(s, ",")
-			m.SetSearchPath(sessiondata.MakeSearchPath(paths))
+			m.UpdateSearchPath(paths)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {

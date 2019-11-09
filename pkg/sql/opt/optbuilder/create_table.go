@@ -26,19 +26,35 @@ import (
 // statement.
 func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	sch, resName := b.resolveSchemaForCreate(&ct.Table)
-	// TODO(radu): we are modifying the AST in-place here. We should be storing
-	// the resolved name separately.
-	ct.Table.TableNamePrefix = resName
+	syntax := *ct
+	isTemp := resolveTemporaryStatus(&syntax.Table, syntax.Temporary)
+	if isTemp {
+		// Postgres allows using `pg_temp` as an alias for the session specific temp
+		// schema. In PG, the following are equivalent:
+		// CREATE TEMP TABLE t <=> CREATE TABLE pg_temp.t <=> CREATE TEMP TABLE pg_temp.t
+		//
+		// The temporary schema is created the first time a session creates
+		// a temporary object, so it is possible to use `pg_temp` in a fully
+		// qualified name when the temporary schema does not exist. To allow this,
+		// we explicitly set the SchemaName to `public` for temporary tables, as
+		// the public schema is guaranteed to exist. This ensures the FQN can be
+		// resolved correctly.
+		// TODO(whomever): Once it is possible to drop schemas, it will no longer be
+		// safe to set the schema name to `public`, as it may have been dropped.
+		syntax.Table.TableNamePrefix.SchemaName = tree.PublicSchemaName
+		syntax.Temporary = true
+	}
+	sch, resName := b.resolveSchemaForCreate(&syntax.Table)
+	syntax.Table.TableNamePrefix = resName
 	schID := b.factory.Metadata().AddSchema(sch)
 
 	// HoistConstraints normalizes any column constraints in the CreateTable AST
 	// node.
-	ct.HoistConstraints()
+	syntax.HoistConstraints()
 
 	var input memo.RelExpr
 	var inputCols physical.Presentation
-	if ct.As() {
+	if syntax.As() {
 		// The execution code might need to stringify the query to run it
 		// asynchronously. For that we need the data sources to be fully qualified.
 		// TODO(radu): this interaction is pretty hacky, investigate moving the
@@ -50,12 +66,12 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 
 		b.pushWithFrame()
 		// Build the input query.
-		outScope := b.buildStmt(ct.AsSource, nil /* desiredTypes */, inScope)
+		outScope := b.buildStmt(syntax.AsSource, nil /* desiredTypes */, inScope)
 		b.popWithFrame(outScope)
 
 		numColNames := 0
-		for i := 0; i < len(ct.Defs); i++ {
-			if _, ok := ct.Defs[i].(*tree.ColumnTableDef); ok {
+		for i := 0; i < len(syntax.Defs); i++ {
+			if _, ok := syntax.Defs[i].(*tree.ColumnTableDef); ok {
 				numColNames++
 			}
 		}
@@ -68,7 +84,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		}
 
 		input = outScope.expr
-		if !ct.AsHasUserSpecifiedPrimaryKey() {
+		if !syntax.AsHasUserSpecifiedPrimaryKey() {
 			// Synthesize rowid column, and append to end of column list.
 			props, overloads := builtins.GetBuiltinProperties("unique_rowid")
 			private := &memo.FunctionPrivate{
@@ -92,7 +108,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		&memo.CreateTablePrivate{
 			Schema:    schID,
 			InputCols: inputCols,
-			Syntax:    ct,
+			Syntax:    &syntax,
 		},
 	)
 	return &scope{builder: b, expr: expr}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -72,17 +73,6 @@ func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 	}
 }
 
-// getKeysForDatabaseDescriptor retrieves the KV keys corresponding to
-// the zone, name and descriptor of a database.
-func getKeysForDatabaseDescriptor(
-	dbDesc *sqlbase.DatabaseDescriptor,
-) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = config.MakeZoneKey(uint32(dbDesc.ID))
-	nameKey = sqlbase.NewDatabaseKey(dbDesc.GetName()).Key()
-	descKey = sqlbase.MakeDescMetadataKey(dbDesc.ID)
-	return
-}
-
 // getDatabaseID resolves a database name into a database ID.
 // Returns InvalidID on failure.
 func getDatabaseID(
@@ -91,11 +81,11 @@ func getDatabaseID(
 	if name == sqlbase.SystemDB.Name {
 		return sqlbase.SystemDB.ID, nil
 	}
-	dbID, err := getDescriptorID(ctx, txn, sqlbase.NewDatabaseKey(name))
+	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, name)
 	if err != nil {
 		return sqlbase.InvalidID, err
 	}
-	if dbID == sqlbase.InvalidID && required {
+	if !found && required {
 		return dbID, sqlbase.NewUndefinedDatabaseError(name)
 	}
 	return dbID, nil
@@ -258,10 +248,16 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 		return sqlbase.SystemDB.ID, nil
 	}
 
-	nameKey := sqlbase.NewDatabaseKey(name)
+	var nameKey sqlbase.DescriptorKey = sqlbase.NewDatabaseKey(name)
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
-		return sqlbase.InvalidID, nil
+		// Try the deprecated system.namespace before returning InvalidID.
+		// TODO(whomever): This can be removed in 20.2.
+		nameKey = sqlbase.NewDeprecatedDatabaseKey(name)
+		nameVal = dc.systemConfig.GetValue(nameKey.Key())
+		if nameVal == nil {
+			return sqlbase.InvalidID, nil
+		}
 	}
 
 	id, err := nameVal.GetInt()
@@ -280,6 +276,11 @@ func (p *planner) renameDatabase(
 
 	oldKey := sqlbase.NewDatabaseKey(oldName).Key()
 	newKey := sqlbase.NewDatabaseKey(newName).Key()
+	// TODO(whomever): This can be removed in 20.2.
+	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+		oldKey = sqlbase.NewDeprecatedDatabaseKey(oldName).Key()
+		newKey = sqlbase.NewDeprecatedDatabaseKey(newName).Key()
+	}
 	descID := oldDesc.GetID()
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(oldDesc)

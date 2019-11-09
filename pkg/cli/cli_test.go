@@ -2229,6 +2229,8 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/22.json
   debug/nodes/1/ranges/23.json
   debug/nodes/1/ranges/24.json
+  debug/nodes/1/ranges/25.json
+  debug/nodes/1/ranges/26.json
   debug/schema/defaultdb@details.json
   debug/schema/postgres@details.json
   debug/schema/system@details.json
@@ -2239,6 +2241,7 @@ writing ` + os.DevNull + `
   debug/schema/system/lease.json
   debug/schema/system/locations.json
   debug/schema/system/namespace.json
+  debug/schema/system/namespace_deprecated.json
   debug/schema/system/rangelog.json
   debug/schema/system/replication_constraint_stats.json
   debug/schema/system/replication_critical_localities.json

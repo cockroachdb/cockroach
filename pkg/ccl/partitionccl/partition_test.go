@@ -1095,10 +1095,14 @@ func verifyScansOnNode(
 		}
 		traceLines = append(traceLines, traceLine.String)
 		if strings.Contains(traceLine.String, "read completed") {
-			if strings.Contains(traceLine.String, "SystemCon") {
+			if strings.Contains(traceLine.String, "SystemCon") || strings.Contains(traceLine.String, "NamespaceTab") {
 				// Ignore trace lines for the system config range (abbreviated as
 				// "SystemCon" in pretty printing of the range descriptor). A read might
 				// be performed to the system config range to update the table lease.
+				//
+				// Also ignore trace lines for the system.namespace table, which is a
+				// system table that resides outside the system config range. (abbreviated
+				// as "NamespaceTab" in pretty printing of the range descriptor).
 				continue
 			}
 			if !strings.Contains(traceLine.String, node) {

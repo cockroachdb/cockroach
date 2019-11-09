@@ -407,7 +407,6 @@ func (p *planner) initiateDropTable(
 				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}
 	}
-
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.
 	// Instead, that is taken care of asynchronously by the schema
