@@ -1,0 +1,29 @@
+*   63d6ab4163d783bf0757bc22573d9a5a2396e823 Merge pull request #300 from foo/bar
+|\  
+| * 905be19587abc15c62023bd34e24711a2541f889 merge pr canary
+|/  
+*   b10853b4a881b68d5132741487cb20aaa599cd72 Merge #3
+|\  
+| * d6960940e21fa8ab78120ab016b4244f86bd44eb extra revisions
+|/  
+*   3905a9e9504ce5de2f08ce6b1912a8934eb9688b Merge pull request #200 from foo/bar
+|\  
+| * 773310e94bd9c2c2cf6385a3045856c4873fc02d merge pr canary
+|/  
+*   b6d311cae6a8c6225c05a64973b13b6c49de3361 Merge #2
+|\  
+| * 990a43f208d5a010a63580c0677bd443763b095b synthetized note
+| * 0a0926ccbc529ecc0868a5ba6e7515e6dcf92ad2 synthetized note
+| * cca538acaa43e6625450719d5366d0084b5219a5 note revision
+| * cbd5be9c27b460573c886f1d21509c244cadea41 note revision
+|/  
+*   6286c37eaa2b9dec3bd3703bd4e31e59840aeb6a Merge pull request #100 from foo/bar
+|\  
+| * cf5e90b1f3426c6b329eba2d04d88ad1715a88d1 merge pr canary
+|/  
+*   0b2581ed149f72caaf39958864222577be6a9ff6 Merge #1
+|\  
+| * def86d75087c9252ed65bee8a0b611413e405efc feature 2
+| * db1e8c0722c5130f5128ed51aad267143907df8c fix 1
+|/  
+* 278a3705e1aecfb15248823a72ec17f70edfb62e initial
