@@ -30,7 +30,7 @@ We would like to thank the following contributors from the CockroachDB community
   - 2018-04-22 [#1    ][#1    ] [32204525a][32204525a] (+   0 -   0 ~   0/ 0) PR title (5 commits)
 
 - test4:
-  - 2018-04-22 [#100  ][#100  ] [1525c88bd][1525c88bd] (+   0 -   0 ~   0/ 0) PR title alternate format
+  - 2018-04-22 [#100  ][#100  ] [1525c88bd][1525c88bd] (+   0 -   0 ~   0/ 0) PR title alternate format [NO RELEASE NOTE]
 
 
 [#1]: https://github.com/cockroachdb/cockroach/pull/1
