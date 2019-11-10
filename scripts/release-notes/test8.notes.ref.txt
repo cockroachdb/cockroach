@@ -12,7 +12,7 @@ Docs team: Please add these manually.
 
 ### Contributors
 
-This release includes 4 merged PRs by 2 authors.
+This release includes 4 merged PRs and 1 standalone commit by 2 authors.
 We would like to thank the following contributors from the CockroachDB community:
 
 - Foo Foo (first-time contributor)
@@ -21,13 +21,13 @@ We would like to thank the following contributors from the CockroachDB community
 ### PRs merged by contributors
 
 - Foo Foo, test8:
-  - 2018-04-22 [#2    ][#2    ] [20f736f8b][20f736f8b] (+   0 -   0 ~   0/ 0) PR 2 title
-  - 2018-04-22 [#1    ][#1    ] [931a97757][931a97757] (+   0 -   0 ~   0/ 0) PR 1 title
+  - 2018-04-22 [#2    ][#2    ] [20f736f8b][20f736f8b] (+   0 -   0 ~   0/ 0) PR 2 title [NO RELEASE NOTE]
+  - 2018-04-22 [#1    ][#1    ] [931a97757][931a97757] (+   0 -   0 ~   0/ 0) PR 1 title [NO RELEASE NOTE]
 
 - test8:
-  - 2018-04-22 [#unknown][#unknown] [a1dec5651][a1dec5651] (+   1 -   0 ~   1/ 1) update AUTHORS
-  - 2018-04-22 [#200  ][#200  ] [801acad03][801acad03] (+   0 -   0 ~   0/ 0) PR 2 title alternate format
-  - 2018-04-22 [#100  ][#100  ] [ac02f9cf6][ac02f9cf6] (+   0 -   0 ~   0/ 0) PR 1 title alternate format
+  - 2018-04-22 [#unknown][#unknown] [a1dec5651][a1dec5651] (+   1 -   0 ~   1/ 1) update AUTHORS [NO RELEASE NOTE]
+  - 2018-04-22 [#200  ][#200  ] [801acad03][801acad03] (+   0 -   0 ~   0/ 0) PR 2 title alternate format [NO RELEASE NOTE]
+  - 2018-04-22 [#100  ][#100  ] [ac02f9cf6][ac02f9cf6] (+   0 -   0 ~   0/ 0) PR 1 title alternate format [NO RELEASE NOTE]
 
 
 [#1]: https://github.com/cockroachdb/cockroach/pull/1

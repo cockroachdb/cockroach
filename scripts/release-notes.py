@@ -584,7 +584,6 @@ if excludedFirst is not None:
         _, notes = extract_release_notes(c)
         for cat, note in notes:
             excluded_notes.add((cat, note))
-
     print("\b100%\n", file=sys.stderr)
 
 print("Collecting release notes from\n%s\nuntil\n%s" % (identify_commit(firstCommit), identify_commit(commit)), file=sys.stderr)
@@ -626,7 +625,7 @@ def process_release_notes(pr, title, commit):
     if not foundnote:
         # Missing release note. Keep track for later.
         missing_item = makeitem(pr, '', title, commit.hexsha[:shamin], authors)
-    return missing_item, authors
+    return missing_item, authors, len(notes)
 
 
 def makeitem(pr, cat, prtitle, sha, authors):
@@ -741,6 +740,8 @@ def analyze_pr(merge, pr):
     missing_items = []
     authors = set()
     ncommits = 0
+    num_notes = 0
+    commits_no_note = 0
     for commit in repo.iter_commits(merge_base.hexsha + '..' + tip.hexsha):
         spin()
 
@@ -753,9 +754,12 @@ def analyze_pr(merge, pr):
         commit_to_pr[commit.hexsha[:shamin]] = pr
 
         if not commit.message.startswith("Merge"):
-            missing_item, prauthors = process_release_notes(pr, note, commit)
+            missing_item, prauthors, num_notes1 = process_release_notes(pr, note, commit)
             authors.update(prauthors)
             ncommits += 1
+            num_notes += num_notes1
+            if num_notes == 0:
+                commits_no_note += 1
             if missing_item is not None:
                 missing_items.append(missing_item)
 
@@ -767,10 +771,12 @@ def analyze_pr(merge, pr):
     text = repo.git.diff(merge_base.hexsha, tip.hexsha, '--', numstat=True)
     stats = Stats._list_from_string(repo, text)
 
-    collect_item(pr, note, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
+    collect_item(pr, note, merge.hexsha[:shamin], ncommits, authors,
+                 stats.total, merge.committed_date,
+                 commits_no_note, num_notes == 0)
 
 
-def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
+def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts, ncommits_missing_note, pr_missing_note):
     individual_authors.update(authors)
     if len(authors) == 0:
         authors.add("Unknown Author")
@@ -781,6 +787,8 @@ def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
                  'files': stats['files'],
                  'lines': stats['lines'],
                  'date': datetime.date.fromtimestamp(prts).isoformat(),
+                 'pr_missing_note': pr_missing_note,
+                 'ncommits_missing_note': ncommits_missing_note,
                  })
 
     al = item['authors']
@@ -790,14 +798,19 @@ def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     per_group_history[k] = history
 
 
+all_standalone_commits = set()
 def analyze_standalone_commit(commit):
     # Some random out-of-branch commit. Let's not forget them.
-    authors = collect_authors(commit)
-    title = commit.message.split('\n',1)[0].strip()
+    title = commit.message.split('\n', 1)[0].strip()
     sha = commit.hexsha[:shamin]
-    item = makeitem('#unknown', '', title, sha, authors)
-    missing_release_notes.append(item)
-    collect_item('#unknown', title, sha, 1, authors, commit.stats.total, commit.committed_date)
+    all_standalone_commits.add(sha)
+    missing_item, authors, num_notes = process_release_notes("#unknown", title, commit)
+    if missing_item is not None:
+        missing_release_notes.append(missing_item)
+    commit_no_notes = num_notes == 0 and 1 or 0
+    collect_item('#unknown', title, sha, 1, authors,
+                 commit.stats.total, commit.committed_date,
+                 commit_no_notes, num_notes == 0)
     commit_to_pr[sha] = '#unknown'
 
 # Collect all the merge points so we can report progress.
@@ -1025,10 +1038,22 @@ print()
 ## Print the Contributors section.
 print("### Contributors")
 print()
-print("This release includes %d merged PR%s by %s author%s." %
-      (len(allprs), len(allprs) != 1 and "s" or "",
-       len(individual_authors), (len(individual_authors) != 1 and "s" or ""),
-      ))
+print("This release includes ", end='')
+if len(allprs) > 0:
+    print("%d merged PR%s" %
+          (len(allprs),
+           len(allprs) != 1 and "s" or ""),
+          end='')
+    if len(all_standalone_commits) > 0:
+        print(" and ", end='')
+if len(all_standalone_commits) > 0:
+    print("%d standalone commit%s" %
+          (len(all_standalone_commits),
+           len(all_standalone_commits) != 1 and "s" or ""),
+          end='')
+print(" by %s author%s." % (
+       len(individual_authors),
+       (len(individual_authors) != 1 and "s" or "")))
 
 ext_contributors = individual_authors - crdb_folk
 
@@ -1070,6 +1095,9 @@ if not hidepercontributor:
                 print(" (", end='')
                 print("%d commits" % ncommits, end='')
                 print(")", end='')
+
+            if item['pr_missing_note']:
+                print(" [NO RELEASE NOTE]", end='')
             print()
         print()
     print()
