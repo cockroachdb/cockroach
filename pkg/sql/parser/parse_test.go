@@ -3244,183 +3244,186 @@ func TestParsePrecedence(t *testing.T) {
 
 func TestUnimplementedSyntax(t *testing.T) {
 	testData := []struct {
-		sql      string
-		issue    int
-		expected string
-		hint     string
+		sql   string
+		issue int
+		// expectedMsg is the expected error message, without the "unimplemented: "
+		// prefix. If empty, a default "unimplemented: this syntax" is expected.
+		expectedMsg string
+		hint        string
+		// expectedTelemetry checks the error's telemetry key. If left empty, the
+		// telemetry key is checked against expectedMsg (i.e. most error have the
+		// same telemetry key as the message).
+		expectedTelemetry string
 	}{
-		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`, ``},
-		{`ALTER TABLE a ADD CONSTRAINT foo EXCLUDE USING gist (bar WITH =)`, 46657, `add constraint exclude using`, ``},
+		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`, ``, ``},
+		{`ALTER TABLE a ADD CONSTRAINT foo EXCLUDE USING gist (bar WITH =)`, 46657, `add constraint exclude using`, ``, ``},
 
-		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
-		{`CREATE CAST a`, 0, `create cast`, ``},
-		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
-		{`CREATE CONVERSION a`, 0, `create conversion`, ``},
-		{`CREATE DEFAULT CONVERSION a`, 0, `create def conv`, ``},
-		{`CREATE EXTENSION a`, 0, `create extension a`, ``},
-		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``},
-		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``},
-		{`CREATE FUNCTION a`, 17511, `create`, ``},
-		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`, ``},
-		{`CREATE LANGUAGE a`, 17511, `create language a`, ``},
-		{`CREATE MATERIALIZED VIEW a`, 41649, ``, ``},
-		{`CREATE OPERATOR a`, 0, `create operator`, ``},
-		{`CREATE PUBLICATION a`, 0, `create publication`, ``},
-		{`CREATE RULE a`, 0, `create rule`, ``},
-		{`CREATE SERVER a`, 0, `create server`, ``},
-		{`CREATE SUBSCRIPTION a`, 0, `create subscription`, ``},
-		{`CREATE TEXT SEARCH a`, 7821, `create text`, ``},
-		{`CREATE TRIGGER a`, 28296, `create`, ``},
+		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``, ``},
+		{`CREATE CAST a`, 0, `create cast`, ``, ``},
+		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``, ``},
+		{`CREATE CONVERSION a`, 0, `create conversion`, ``, ``},
+		{`CREATE DEFAULT CONVERSION a`, 0, `create def conv`, ``, ``},
+		{`CREATE EXTENSION a`, 0, `create extension a`, ``, ``},
+		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``, ``},
+		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``, ``},
+		{`CREATE FUNCTION a`, 17511, `create`, ``, ``},
+		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`, ``, ``},
+		{`CREATE LANGUAGE a`, 17511, `create language a`, ``, ``},
+		{`CREATE MATERIALIZED VIEW a`, 41649, ``, ``, ``},
+		{`CREATE OPERATOR a`, 0, `create operator`, ``, ``},
+		{`CREATE PUBLICATION a`, 0, `create publication`, ``, ``},
+		{`CREATE RULE a`, 0, `create rule`, ``, ``},
+		{`CREATE SERVER a`, 0, `create server`, ``, ``},
+		{`CREATE SUBSCRIPTION a`, 0, `create subscription`, ``, ``},
+		{`CREATE TEXT SEARCH a`, 7821, `create text`, ``, ``},
+		{`CREATE TRIGGER a`, 28296, `create`, ``, ``},
 
-		{`DROP AGGREGATE a`, 0, `drop aggregate`, ``},
-		{`DROP CAST a`, 0, `drop cast`, ``},
-		{`DROP COLLATION a`, 0, `drop collation`, ``},
-		{`DROP CONVERSION a`, 0, `drop conversion`, ``},
-		{`DROP DOMAIN a`, 27796, `drop`, ``},
-		{`DROP EXTENSION a`, 0, `drop extension a`, ``},
-		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`, ``},
-		{`DROP FOREIGN DATA WRAPPER a`, 0, `drop fdw`, ``},
-		{`DROP FUNCTION a`, 17511, `drop `, ``},
-		{`DROP LANGUAGE a`, 17511, `drop language a`, ``},
-		{`DROP OPERATOR a`, 0, `drop operator`, ``},
-		{`DROP PUBLICATION a`, 0, `drop publication`, ``},
-		{`DROP RULE a`, 0, `drop rule`, ``},
-		{`DROP SCHEMA a`, 26443, `drop`, ``},
-		{`DROP SERVER a`, 0, `drop server`, ``},
-		{`DROP SUBSCRIPTION a`, 0, `drop subscription`, ``},
-		{`DROP TEXT SEARCH a`, 7821, `drop text`, ``},
-		{`DROP TRIGGER a`, 28296, `drop`, ``},
+		{`DROP AGGREGATE a`, 0, `drop aggregate`, ``, ``},
+		{`DROP CAST a`, 0, `drop cast`, ``, ``},
+		{`DROP COLLATION a`, 0, `drop collation`, ``, ``},
+		{`DROP CONVERSION a`, 0, `drop conversion`, ``, ``},
+		{`DROP DOMAIN a`, 27796, `drop`, ``, ``},
+		{`DROP EXTENSION a`, 0, `drop extension a`, ``, ``},
+		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`, ``, ``},
+		{`DROP FOREIGN DATA WRAPPER a`, 0, `drop fdw`, ``, ``},
+		{`DROP FUNCTION a`, 17511, `drop `, ``, ``},
+		{`DROP LANGUAGE a`, 17511, `drop language a`, ``, ``},
+		{`DROP OPERATOR a`, 0, `drop operator`, ``, ``},
+		{`DROP PUBLICATION a`, 0, `drop publication`, ``, ``},
+		{`DROP RULE a`, 0, `drop rule`, ``, ``},
+		{`DROP SCHEMA a`, 26443, `drop`, ``, ``},
+		{`DROP SERVER a`, 0, `drop server`, ``, ``},
+		{`DROP SUBSCRIPTION a`, 0, `drop subscription`, ``, ``},
+		{`DROP TEXT SEARCH a`, 7821, `drop text`, ``, ``},
+		{`DROP TRIGGER a`, 28296, `drop`, ``, ``},
 
-		{`DISCARD PLANS`, 0, `discard plans`, ``},
-		{`DISCARD SEQUENCES`, 0, `discard sequences`, ``},
-		{`DISCARD TEMP`, 0, `discard temp`, ``},
-		{`DISCARD TEMPORARY`, 0, `discard temp`, ``},
+		{`DISCARD PLANS`, 0, `discard plans`, ``, ``},
+		{`DISCARD SEQUENCES`, 0, `discard sequences`, ``, ``},
+		{`DISCARD TEMP`, 0, `discard temp`, ``, ``},
+		{`DISCARD TEMPORARY`, 0, `discard temp`, ``, ``},
 
-		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
-		{`SET LOCAL foo = bar`, 32562, ``, ``},
-		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
+		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``, ``},
+		{`SET LOCAL foo = bar`, 32562, ``, ``, ``},
+		{`SET foo FROM CURRENT`, 0, `set from current`, ``, ``},
 
-		{`CREATE UNLOGGED TABLE a(b INT8)`, 0, `create unlogged`, ``},
+		{`CREATE UNLOGGED TABLE a(b INT8)`, 0, `create unlogged`, ``, ``},
 
-		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
-		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``},
-		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``, ``},
+		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``, ``},
+		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``, ``},
+		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``, ``, ``},
 
-		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`, ``},
+		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`, ``, ``},
 
-		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`, ``},
+		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`, ``, ``},
 
-		{`CREATE TABLE a(b INT8 AS (123) VIRTUAL)`, 0, `virtual computed columns`, ``},
-		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`, ``},
-		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) MATCH PARTIAL)`, 20305, `match partial`, ``},
+		{`CREATE TABLE a(b INT8 AS (123) VIRTUAL)`, 0, `virtual computed columns`, ``, ``},
+		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`, ``, ``},
+		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) MATCH PARTIAL)`, 20305, `match partial`, ``, ``},
 
-		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE)`, 31632, `deferrable`, ``},
-		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) INITIALLY DEFERRED)`, 31632, `initially deferred`, ``},
-		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) INITIALLY IMMEDIATE)`, 31632, `initially immediate`, ``},
-		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY DEFERRED)`, 31632, `initially deferred`, ``},
-		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY IMMEDIATE)`, 31632, `initially immediate`, ``},
-		{`CREATE TABLE a(b INT8, UNIQUE (b) DEFERRABLE)`, 31632, `deferrable`, ``},
-		{`CREATE TABLE a(b INT8, CHECK (b > 0) DEFERRABLE)`, 31632, `deferrable`, ``},
+		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE)`, 31632, `deferrable`, ``, ``},
+		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) INITIALLY DEFERRED)`, 31632, `initially deferred`, ``, ``},
+		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) INITIALLY IMMEDIATE)`, 31632, `initially immediate`, ``, ``},
+		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY DEFERRED)`, 31632, `initially deferred`, ``, ``},
+		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY IMMEDIATE)`, 31632, `initially immediate`, ``, ``},
+		{`CREATE TABLE a(b INT8, UNIQUE (b) DEFERRABLE)`, 31632, `deferrable`, ``, ``},
+		{`CREATE TABLE a(b INT8, CHECK (b > 0) DEFERRABLE)`, 31632, `deferrable`, ``, ``},
 
-		{`CREATE TABLE a (LIKE b INCLUDING COMMENTS)`, 47071, `like table`, ``},
-		{`CREATE TABLE a (LIKE b INCLUDING IDENTITY)`, 47071, `like table`, ``},
-		{`CREATE TABLE a (LIKE b INCLUDING STATISTICS)`, 47071, `like table`, ``},
-		{`CREATE TABLE a (LIKE b INCLUDING STORAGE)`, 47071, `like table`, ``},
+		{`CREATE TABLE a (LIKE b INCLUDING COMMENTS)`, 47071, `like table`, ``, ``},
+		{`CREATE TABLE a (LIKE b INCLUDING IDENTITY)`, 47071, `like table`, ``, ``},
+		{`CREATE TABLE a (LIKE b INCLUDING STATISTICS)`, 47071, `like table`, ``, ``},
+		{`CREATE TABLE a (LIKE b INCLUDING STORAGE)`, 47071, `like table`, ``, ``},
 
-		{`CREATE TEMP TABLE a (a int) ON COMMIT DROP`, 46556, `drop`, ``},
-		{`CREATE TEMP TABLE a (a int) ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},
-		{`CREATE TEMP TABLE IF NOT EXISTS a (a int) ON COMMIT DROP`, 46556, `drop`, ``},
-		{`CREATE TEMP TABLE IF NOT EXISTS a (a int) ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},
-		{`CREATE TEMP TABLE b AS SELECT a FROM a ON COMMIT DROP`, 46556, `drop`, ``},
-		{`CREATE TEMP TABLE b AS SELECT a FROM a ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},
-		{`CREATE TEMP TABLE IF NOT EXISTS b AS SELECT a FROM a ON COMMIT DROP`, 46556, `drop`, ``},
-		{`CREATE TEMP TABLE IF NOT EXISTS b AS SELECT a FROM a ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},
+		{`CREATE TEMP TABLE a (a int) ON COMMIT DROP`, 46556, `drop`, ``, ``},
+		{`CREATE TEMP TABLE a (a int) ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``, ``},
+		{`CREATE TEMP TABLE IF NOT EXISTS a (a int) ON COMMIT DROP`, 46556, `drop`, ``, ``},
+		{`CREATE TEMP TABLE IF NOT EXISTS a (a int) ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``, ``},
+		{`CREATE TEMP TABLE b AS SELECT a FROM a ON COMMIT DROP`, 46556, `drop`, ``, ``},
+		{`CREATE TEMP TABLE b AS SELECT a FROM a ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``, ``},
+		{`CREATE TEMP TABLE IF NOT EXISTS b AS SELECT a FROM a ON COMMIT DROP`, 46556, `drop`, ``, ``},
+		{`CREATE TEMP TABLE IF NOT EXISTS b AS SELECT a FROM a ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``, ``},
 
-		{`CREATE SEQUENCE a AS DOUBLE PRECISION`, 25110, `FLOAT8`, ``},
+		{`CREATE SEQUENCE a AS DOUBLE PRECISION`, 25110, `FLOAT8`, ``, ``},
 
-		{`CREATE RECURSIVE VIEW a AS SELECT b`, 0, `create recursive view`, ``},
+		{`CREATE RECURSIVE VIEW a AS SELECT b`, 0, `create recursive view`, ``, ``},
 
-		{`CREATE TYPE a AS (b)`, 27792, ``, ``},
-		{`CREATE TYPE a AS RANGE b`, 27791, ``, ``},
-		{`CREATE TYPE a (b)`, 27793, `base`, ``},
-		{`CREATE TYPE a`, 27793, `shell`, ``},
-		{`CREATE DOMAIN a`, 27796, `create`, ``},
+		{`CREATE TYPE a AS (b)`, 27792, `composite types`, ``, ``},
+		{`CREATE TYPE a AS RANGE b`, 27791, `range types`, ``, ``},
+		{`CREATE TYPE a (b)`, 27793, `base`, ``, ``},
+		{`CREATE TYPE a`, 27793, `shell`, ``, ``},
+		{`CREATE DOMAIN a`, 27796, `create`, ``, ``},
 
-		{`ALTER TYPE t OWNER TO hello`, 48700, `ALTER TYPE OWNER TO`, ``},
-		{`ALTER TYPE t OWNER TO CURRENT_USER`, 48700, `ALTER TYPE OWNER TO`, ``},
-		{`ALTER TYPE t OWNER TO SESSION_USER`, 48700, `ALTER TYPE OWNER TO`, ``},
-		{`ALTER TYPE db.t RENAME ATTRIBUTE foo TO bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar COLLATE hello`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar CASCADE`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t DROP ATTRIBUTE foo RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t DROP ATTRIBUTE foo CASCADE`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo TYPE typ`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo TYPE typ COLLATE en`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo TYPE typ COLLATE en CASCADE`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo SET DATA TYPE typ COLLATE en RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
-		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT, DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
+		{`ALTER TYPE t OWNER TO hello`, 48700, `ALTER TYPE OWNER TO`, ``, ``},
+		{`ALTER TYPE t OWNER TO CURRENT_USER`, 48700, `ALTER TYPE OWNER TO`, ``, ``},
+		{`ALTER TYPE t OWNER TO SESSION_USER`, 48700, `ALTER TYPE OWNER TO`, ``, ``},
+		{`ALTER TYPE db.t RENAME ATTRIBUTE foo TO bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar COLLATE hello`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar CASCADE`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t DROP ATTRIBUTE foo RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t DROP ATTRIBUTE foo CASCADE`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo TYPE typ`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo TYPE typ COLLATE en`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo TYPE typ COLLATE en CASCADE`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo SET DATA TYPE typ COLLATE en RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
+		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT, DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``, ``},
 
-		{`CREATE INDEX a ON b USING HASH (c)`, 0, `index using hash`, ``},
-		{`CREATE INDEX a ON b USING GIST (c)`, 0, `index using gist`, ``},
-		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
-		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
+		// Computed index telemetry keys are different from the error messages.
+		{`CREATE INDEX a ON b(c + d)`, 9682, `computed indexes`, ``, `#9682.*tree.BinaryExpr`},
+		{`CREATE INDEX a ON b(c[d])`, 9682, `computed indexes`, ``, `#9682.*tree.IndirectionExpr`},
+		{`CREATE INDEX a ON b(foo(c))`, 9682, `computed indexes`, ``, `#9682.*tree.FuncExpr`},
 
-		{`CREATE INDEX a ON b(c + d)`, 9682, ``, ``},
-		{`CREATE INDEX a ON b(c[d])`, 9682, ``, ``},
-		{`CREATE INDEX a ON b(foo(c))`, 9682, ``, ``},
-		{`CREATE INDEX a ON b(a NULLS LAST)`, 6224, ``, ``},
-		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``},
-		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
+		{`CREATE INDEX a ON b(a NULLS LAST)`, 6224, ``, ``, ``},
+		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``, ``},
+		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``, ``},
 
-		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
-		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``, ``},
+		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``, ``},
+		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``, ``, ``},
 
-		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`, ``},
+		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`, ``, ``},
 
-		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``},
-		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`, ``},
-		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``},
-		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`, ``},
-		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``},
-		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
-		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
+		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``, ``},
+		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`, ``, ``},
+		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``, ``},
+		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`, ``, ``},
+		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``, ``},
+		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``, ``},
+		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``, ``},
 
-		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
-		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},
-		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``, ``},
+		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``, ``},
+		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``, ``},
+		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``, ``, ``},
 
-		{`CREATE TABLE a(b BOX)`, 21286, `box`, ``},
-		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`, ``},
-		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`, ``},
-		{`CREATE TABLE a(b LINE)`, 21286, `line`, ``},
-		{`CREATE TABLE a(b LSEG)`, 21286, `lseg`, ``},
-		{`CREATE TABLE a(b MACADDR)`, 0, `macaddr`, ``},
-		{`CREATE TABLE a(b MACADDR8)`, 0, `macaddr8`, ``},
-		{`CREATE TABLE a(b MONEY)`, 0, `money`, ``},
-		{`CREATE TABLE a(b PATH)`, 21286, `path`, ``},
-		{`CREATE TABLE a(b PG_LSN)`, 0, `pg_lsn`, ``},
-		{`CREATE TABLE a(b POINT)`, 21286, `point`, ``},
-		{`CREATE TABLE a(b POLYGON)`, 21286, `polygon`, ``},
-		{`CREATE TABLE a(b TSQUERY)`, 7821, `tsquery`, ``},
-		{`CREATE TABLE a(b TSVECTOR)`, 7821, `tsvector`, ``},
-		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`, ``},
-		{`CREATE TABLE a(b XML)`, 0, `xml`, ``},
+		{`CREATE TABLE a(b BOX)`, 21286, `box`, ``, ``},
+		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`, ``, ``},
+		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`, ``, ``},
+		{`CREATE TABLE a(b LINE)`, 21286, `line`, ``, ``},
+		{`CREATE TABLE a(b LSEG)`, 21286, `lseg`, ``, ``},
+		{`CREATE TABLE a(b MACADDR)`, 0, `type name macaddr`, ``, ``},
+		{`CREATE TABLE a(b MACADDR8)`, 0, `type name macaddr8`, ``, ``},
+		{`CREATE TABLE a(b MONEY)`, 0, `type name money`, ``, ``},
+		{`CREATE TABLE a(b PATH)`, 21286, `path`, ``, ``},
+		{`CREATE TABLE a(b PG_LSN)`, 0, `type name pg_lsn`, ``, ``},
+		{`CREATE TABLE a(b POINT)`, 21286, `point`, ``, ``},
+		{`CREATE TABLE a(b POLYGON)`, 21286, `polygon`, ``, ``},
+		{`CREATE TABLE a(b TSQUERY)`, 7821, `tsquery`, ``, ``},
+		{`CREATE TABLE a(b TSVECTOR)`, 7821, `tsvector`, ``, ``},
+		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `type name txid_snapshot`, ``, ``},
+		{`CREATE TABLE a(b XML)`, 0, `type name xml`, ``, ``},
 
-		{`INSERT INTO a VALUES (1) ON CONFLICT (x) WHERE x > 3 DO NOTHING`, 32557, ``, ``},
+		{`INSERT INTO a VALUES (1) ON CONFLICT (x) WHERE x > 3 DO NOTHING`, 32557, ``, ``, ``},
 
-		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
-		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},
-		{`UPDATE Foo SET x.y = z`, 27792, ``, ``},
+		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``, ``},
+		{`UPDATE foo SET a.b = 1`, 27792, ``, ``, ``},
+		{`UPDATE Foo SET x.y = z`, 27792, ``, ``, ``},
 
-		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
-		{`REINDEX TABLE a`, 0, `reindex table`, `CockroachDB does not require reindexing.`},
-		{`REINDEX DATABASE a`, 0, `reindex database`, `CockroachDB does not require reindexing.`},
-		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
+		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`, ``},
+		{`REINDEX TABLE a`, 0, `reindex table`, `CockroachDB does not require reindexing.`, ``},
+		{`REINDEX DATABASE a`, 0, `reindex database`, `CockroachDB does not require reindexing.`, ``},
+		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`, ``},
 
-		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``, ``},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
@@ -3429,22 +3432,32 @@ func TestUnimplementedSyntax(t *testing.T) {
 				t.Errorf("%s: expected error, got nil", d.sql)
 				return
 			}
-			if errMsg := err.Error(); !strings.Contains(errMsg, "unimplemented: this syntax") {
-				t.Errorf("%s: expected unimplemented in message, got %q", d.sql, errMsg)
+			expMsg := "unimplemented: "
+			if d.expectedMsg != "" {
+				expMsg += d.expectedMsg
+			} else {
+				expMsg += "this syntax"
+			}
+			if errMsg := err.Error(); !strings.Contains(errMsg, expMsg) {
+				t.Errorf("%s: expected %q, got %q", d.sql, expMsg, errMsg)
 			}
 			tkeys := errors.GetTelemetryKeys(err)
 			if len(tkeys) == 0 {
 				t.Errorf("%s: expected telemetry key set", d.sql)
 			} else {
 				found := false
+				expTelemetry := d.expectedMsg
+				if d.expectedTelemetry != "" {
+					expTelemetry = d.expectedTelemetry
+				}
 				for _, tk := range tkeys {
-					if strings.Contains(tk, d.expected) {
+					if strings.Contains(tk, expTelemetry) {
 						found = true
 						break
 					}
 				}
 				if !found {
-					t.Errorf("%s: expected %q in telemetry keys, got %+v", d.sql, d.expected, tkeys)
+					t.Errorf("%s: expected %q in telemetry keys, got %+v", d.sql, expTelemetry, tkeys)
 				}
 			}
 			if d.hint != "" {

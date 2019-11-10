@@ -150,7 +150,7 @@ func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
 
 // Unimplemented wraps Error, setting lastUnimplementedError.
 func (l *lexer) Unimplemented(feature string) {
-	l.lastError = unimp.New(feature, "this syntax")
+	l.lastError = unimp.New(feature, feature /* msg */)
 	l.populateErrorDetails()
 }
 
@@ -162,7 +162,13 @@ func (l *lexer) UnimplementedWithIssue(issue int) {
 
 // UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
-	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
+	l.lastError = unimp.NewWithIssueDetail(issue, detail /* detail */, detail /* msg */)
+	l.populateErrorDetails()
+}
+
+// UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
+func (l *lexer) UnimplementedWithIssueDetailMsg(issue int, detail, msg string) {
+	l.lastError = unimp.NewWithIssueDetail(issue, detail, msg)
 	l.populateErrorDetails()
 }
 
@@ -172,7 +178,7 @@ func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
 	// the error may be actively tracked as a bug.
 	l.lastError = errors.WithHint(
 		errors.WithTelemetry(
-			pgerror.Newf(pgcode.Syntax, "unimplemented: this syntax"),
+			pgerror.Newf(pgcode.Syntax, "unimplemented: %s", feature),
 			fmt.Sprintf("sql.purposely_unimplemented.%s", feature),
 		),
 		reason,

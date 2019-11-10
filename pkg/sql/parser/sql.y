@@ -66,6 +66,11 @@ func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int
     sqllex.(*lexer).UnimplementedWithIssueDetail(issue, detail)
     return 1
 }
+
+func unimplementedWithIssueDetailMsg(sqllex sqlLexer, issue int, detail, msg string) int {
+    sqllex.(*lexer).UnimplementedWithIssueDetailMsg(issue, detail, msg)
+    return 1
+}
 %}
 
 %{
@@ -5304,8 +5309,8 @@ create_as_col_qualification_elem:
 opt_deferrable:
   /* EMPTY */ { /* no error */ }
 | DEFERRABLE { return unimplementedWithIssueDetail(sqllex, 31632, "deferrable") }
-| DEFERRABLE INITIALLY DEFERRED { return unimplementedWithIssueDetail(sqllex, 31632, "def initially deferred") }
-| DEFERRABLE INITIALLY IMMEDIATE { return unimplementedWithIssueDetail(sqllex, 31632, "def initially immediate") }
+| DEFERRABLE INITIALLY DEFERRED { return unimplementedWithIssueDetailMsg(sqllex, 31632, "def initially deferred", "initially deferred") }
+| DEFERRABLE INITIALLY IMMEDIATE { return unimplementedWithIssueDetailMsg(sqllex, 31632, "def initially immediate", "initially immediate") }
 | INITIALLY DEFERRED { return unimplementedWithIssueDetail(sqllex, 31632, "initially deferred") }
 | INITIALLY IMMEDIATE { return unimplementedWithIssueDetail(sqllex, 31632, "initially immediate") }
 
@@ -5708,9 +5713,9 @@ create_type_stmt:
   }
 | CREATE TYPE error // SHOW HELP: CREATE TYPE
   // Record/Composite types.
-| CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
+| CREATE TYPE type_name AS '(' error      { return unimplementedWithIssueDetail(sqllex, 27792, "composite types") }
   // Range types.
-| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
+| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssueDetail(sqllex, 27791, "range types") }
   // Base (primitive) types.
 | CREATE TYPE type_name '(' error         { return unimplementedWithIssueDetail(sqllex, 27793, "base") }
   // Shell types, gateway to define base types using the previous syntax.
@@ -5894,7 +5899,7 @@ index_elem:
     if colName, ok := e.(*tree.UnresolvedName); ok && colName.NumParts == 1 {
       $$.val = tree.IndexElem{Column: tree.Name(colName.Parts[0]), Direction: dir, NullsOrder: nullsOrder}
     } else {
-      return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", e))
+      return unimplementedWithIssueDetailMsg(sqllex, 9682, fmt.Sprintf("%T", e) /* detail */, "computed indexes" /* msg */)
     }
   }
 
