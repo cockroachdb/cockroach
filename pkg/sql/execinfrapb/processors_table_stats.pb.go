@@ -63,7 +63,7 @@ func (x *SketchType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SketchType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_2fd407c3f73f9e1f, []int{0}
+	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{0}
 }
 
 // SketchSpec contains the specification for a generated statistic.
@@ -73,7 +73,6 @@ type SketchSpec struct {
 	// TODO(radu): currently only one column is supported.
 	Columns []uint32 `protobuf:"varint,2,rep,name=columns" json:"columns,omitempty"`
 	// If set, we generate a histogram for the first column in the sketch.
-	// Only used by the SampleAggregator.
 	GenerateHistogram bool `protobuf:"varint,3,opt,name=generate_histogram,json=generateHistogram" json:"generate_histogram"`
 	// Controls the maximum number of buckets in the histogram.
 	// Only used by the SampleAggregator.
@@ -86,7 +85,7 @@ func (m *SketchSpec) Reset()         { *m = SketchSpec{} }
 func (m *SketchSpec) String() string { return proto.CompactTextString(m) }
 func (*SketchSpec) ProtoMessage()    {}
 func (*SketchSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_2fd407c3f73f9e1f, []int{0}
+	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{0}
 }
 func (m *SketchSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -129,7 +128,8 @@ var xxx_messageInfo_SketchSpec proto.InternalMessageInfo
 // groups:
 //   1. sampled row columns:
 //       - columns that map 1-1 to the columns in the input (same
-//         schema as the input).
+//         schema as the input). Note that columns unused in a histogram are
+//         set to NULL.
 //       - an INT column with the "rank" of the row; this is a random value
 //         associated with the row (necessary for combining sample sets).
 //   2. sketch columns:
@@ -160,7 +160,7 @@ func (m *SamplerSpec) Reset()         { *m = SamplerSpec{} }
 func (m *SamplerSpec) String() string { return proto.CompactTextString(m) }
 func (*SamplerSpec) ProtoMessage()    {}
 func (*SamplerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_2fd407c3f73f9e1f, []int{1}
+	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{1}
 }
 func (m *SamplerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -221,7 +221,7 @@ func (m *SampleAggregatorSpec) Reset()         { *m = SampleAggregatorSpec{} }
 func (m *SampleAggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*SampleAggregatorSpec) ProtoMessage()    {}
 func (*SampleAggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_2fd407c3f73f9e1f, []int{2}
+	return fileDescriptor_processors_table_stats_99f3061131dbffaf, []int{2}
 }
 func (m *SampleAggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1120,10 +1120,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors_table_stats.proto", fileDescriptor_processors_table_stats_2fd407c3f73f9e1f)
+	proto.RegisterFile("sql/execinfrapb/processors_table_stats.proto", fileDescriptor_processors_table_stats_99f3061131dbffaf)
 }
 
-var fileDescriptor_processors_table_stats_2fd407c3f73f9e1f = []byte{
+var fileDescriptor_processors_table_stats_99f3061131dbffaf = []byte{
 	// 619 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x54, 0x4f, 0x6f, 0xd3, 0x4e,
 	0x10, 0xcd, 0x36, 0x49, 0x93, 0x6e, 0x7e, 0xf9, 0x91, 0x9a, 0x22, 0x59, 0x15, 0x72, 0x4c, 0x54,
