@@ -22,6 +22,7 @@ function test_init() {
 # Initialize the repository. Tag the initial commit.
 function init_repo() {
     git init
+    mkdir -p .git/refs/pull/origin
     touch foo; git add foo; git commit "${flags[@]}" -m "initial"; git tag initial
 	git tag v000-base
 }
@@ -35,7 +36,6 @@ function make_change() {
 # Mark a branch tip as PR tip.
 # $1 = PR number.
 function tag_pr() {
-    mkdir -p .git/refs/pull/origin
     git log --pretty=tformat:%H > .git/refs/pull/origin/$1
 }
 

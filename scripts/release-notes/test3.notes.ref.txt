@@ -17,7 +17,7 @@ Docs team: Please add these manually.
 
 ### Contributors
 
-This release includes 2 merged PRs by 1 author.
+This release includes 2 merged PRs and 1 standalone commit by 1 author.
 We would like to thank the following contributors from the CockroachDB community:
 
 - test3
@@ -25,8 +25,8 @@ We would like to thank the following contributors from the CockroachDB community
 ### PRs merged by contributors
 
 - test3:
-  - 2018-04-22 [#unknown][#unknown] [4f4329fdc][4f4329fdc] (+   0 -   0 ~   0/ 0) master update
-  - 2018-04-22 [#100  ][#100  ] [b719cfe9e][b719cfe9e] (+   0 -   0 ~   0/ 0) PR title alternate format
+  - 2018-04-22 [#unknown][#unknown] [4f4329fdc][4f4329fdc] (+   0 -   0 ~   0/ 0) master update [NO RELEASE NOTE]
+  - 2018-04-22 [#100  ][#100  ] [b719cfe9e][b719cfe9e] (+   0 -   0 ~   0/ 0) PR title alternate format [NO RELEASE NOTE]
   - 2018-04-22 [#1    ][#1    ] [ef634455e][ef634455e] (+   0 -   0 ~   0/ 0) PR title (4 commits)
 
 

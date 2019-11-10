@@ -41,9 +41,9 @@ We would like to thank the following contributors from the CockroachDB community
 ### PRs merged by contributors
 
 - test9:
-  - 2018-04-22 [#200  ][#200  ] [3905a9e95][3905a9e95] (+   0 -   0 ~   0/ 0) PR 2 title alternate format
-  - 2018-04-22 [#2    ][#2    ] [b6d311cae][b6d311cae] (+   0 -   0 ~   0/ 0) PR 2 title (4 commits)
-  - 2018-04-22 [#100  ][#100  ] [6286c37ea][6286c37ea] (+   0 -   0 ~   0/ 0) PR 1 title alternate format
+  - 2018-04-22 [#200  ][#200  ] [3905a9e95][3905a9e95] (+   0 -   0 ~   0/ 0) PR 2 title alternate format [NO RELEASE NOTE]
+  - 2018-04-22 [#2    ][#2    ] [b6d311cae][b6d311cae] (+   0 -   0 ~   0/ 0) PR 2 title (4 commits) [NO RELEASE NOTE]
+  - 2018-04-22 [#100  ][#100  ] [6286c37ea][6286c37ea] (+   0 -   0 ~   0/ 0) PR 1 title alternate format [NO RELEASE NOTE]
   - 2018-04-22 [#1    ][#1    ] [0b2581ed1][0b2581ed1] (+   0 -   0 ~   0/ 0) PR 1 title (2 commits)
 
 
