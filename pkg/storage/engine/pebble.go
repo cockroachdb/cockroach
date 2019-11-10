@@ -968,23 +968,28 @@ func pebbleExportToSst(
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
 			// cause this command to be retried.
-			return []byte{}, roachpb.BulkOpSummary{}, err
+			return nil, roachpb.BulkOpSummary{}, err
 		}
-		if !ok || iter.UnsafeKey().Key.Compare(end.Key) >= 0 {
+		if !ok {
 			break
 		}
-
-		// Skip tombstone (len=0) records when startTime is zero
-		// (non-incremental) and we're not exporting all versions.
-		if !exportAllRevisions && start.Timestamp.IsEmpty() && len(iter.UnsafeValue()) == 0 {
-			continue
+		unsafeKey := iter.UnsafeKey()
+		if unsafeKey.Key.Compare(end.Key) >= 0 {
+			break
 		}
+		unsafeValue := iter.UnsafeValue()
 
-		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
-			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
-		}
-		if err := sstWriter.Add(MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
-			return []byte{}, roachpb.BulkOpSummary{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
+		// Skip tombstone (len=0) records when start time is zero (non-incremental)
+		// and we are not exporting all versions.
+		skipTombstones := !exportAllRevisions && start.Timestamp.IsEmpty()
+		if len(unsafeValue) > 0 || !skipTombstones {
+			if err := rows.Count(unsafeKey.Key); err != nil {
+				return nil, roachpb.BulkOpSummary{}, errors.Wrapf(err, "decoding %s", unsafeKey)
+			}
+			rows.BulkOpSummary.DataSize += int64(len(unsafeKey.Key) + len(unsafeValue))
+			if err := sstWriter.Add(MVCCKeyValue{Key: unsafeKey, Value: unsafeValue}); err != nil {
+				return nil, roachpb.BulkOpSummary{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+			}
 		}
 
 		if exportAllRevisions {
@@ -996,8 +1001,8 @@ func pebbleExportToSst(
 
 	data, err := sstWriter.Finish()
 	if err != nil {
-		return []byte{}, roachpb.BulkOpSummary{}, err
+		return nil, roachpb.BulkOpSummary{}, err
 	}
 
-	return data, roachpb.BulkOpSummary{}, nil
+	return data, rows.BulkOpSummary, nil
 }
