@@ -540,6 +540,7 @@ func NewEngine(
 			Opts:          DefaultPebbleOptions(),
 		}
 		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
+		pebbleConfig.Opts.ErrorIfNotExists = storageConfig.MustExist
 
 		return NewPebble(context.Background(), pebbleConfig)
 	case enginepb.EngineTypeRocksDB:
