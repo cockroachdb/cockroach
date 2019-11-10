@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -47,15 +48,23 @@ type SampleReservoir struct {
 	da       sqlbase.DatumAlloc
 	ra       sqlbase.EncDatumRowAlloc
 	memAcc   *mon.BoundAccount
+
+	// sampleCols contains the ordinals of columns that should be sampled from
+	// each row. Note that the sampled rows still contain all columns, but
+	// any columns not part of this set are given a null value.
+	sampleCols util.FastIntSet
 }
 
 var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
-func (sr *SampleReservoir) Init(numSamples int, colTypes []types.T, memAcc *mon.BoundAccount) {
+func (sr *SampleReservoir) Init(
+	numSamples int, colTypes []types.T, memAcc *mon.BoundAccount, sampleCols util.FastIntSet,
+) {
 	sr.samples = make([]SampledRow, 0, numSamples)
 	sr.colTypes = colTypes
 	sr.memAcc = memAcc
+	sr.sampleCols = sampleCols
 }
 
 // Disable releases the memory of this SampleReservoir and sets its capacity
@@ -131,6 +140,10 @@ func (sr *SampleReservoir) copyRow(
 	ctx context.Context, evalCtx *tree.EvalContext, dst, src sqlbase.EncDatumRow,
 ) error {
 	for i := range src {
+		if !sr.sampleCols.Contains(i) {
+			dst[i].Datum = tree.DNull
+			continue
+		}
 		// Copy only the decoded datum to ensure that we remove any reference to
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
 		// of ~10000 rows, so we must delete the reference to allow the garbage
@@ -152,7 +165,6 @@ func (sr *SampleReservoir) copyRow(
 				return err
 			}
 		}
-
 	}
 	return nil
 }

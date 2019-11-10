@@ -57,7 +57,16 @@ func runSampler(
 	// non-zero, the processor will hit this limit and disable sampling.
 	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memLimitBytes
 
-	spec := &execinfrapb.SamplerSpec{SampleSize: uint32(numSamples)}
+	spec := &execinfrapb.SamplerSpec{
+		Sketches: []execinfrapb.SketchSpec{
+			{
+				SketchType:        execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
+				Columns:           []uint32{0},
+				GenerateHistogram: true,
+			},
+		},
+		SampleSize: uint32(numSamples),
+	}
 	p, err := newSamplerProcessor(
 		&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, out,
 	)
@@ -83,6 +92,10 @@ func runSampler(
 			continue
 		} else if row == nil {
 			break
+		}
+		if row[0].IsNull() {
+			// This is a sketch row.
+			continue
 		}
 		for i := 2; i < len(outTypes); i++ {
 			if !row[i].IsNull() {
