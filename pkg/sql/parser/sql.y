@@ -5884,9 +5884,9 @@ create_type_stmt:
   }
 | CREATE TYPE error // SHOW HELP: CREATE TYPE
   // Record/Composite types.
-| CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
+| CREATE TYPE type_name AS '(' error      { return unimplementedWithIssueDetail(sqllex, 27792, "composite types") }
   // Range types.
-| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
+| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssueDetail(sqllex, 27791, "range types") }
   // Base (primitive) types.
 | CREATE TYPE type_name '(' error         { return unimplementedWithIssueDetail(sqllex, 27793, "base") }
   // Shell types, gateway to define base types using the previous syntax.

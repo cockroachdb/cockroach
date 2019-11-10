@@ -150,7 +150,7 @@ func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
 
 // Unimplemented wraps Error, setting lastUnimplementedError.
 func (l *lexer) Unimplemented(feature string) {
-	l.lastError = unimp.New(feature, "this syntax")
+	l.lastError = unimp.Newf(feature, "%s", feature)
 	l.populateErrorDetails()
 }
 
@@ -162,7 +162,7 @@ func (l *lexer) UnimplementedWithIssue(issue int) {
 
 // UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
-	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
+	l.lastError = unimp.NewWithIssueDetailf(issue, detail /* detail */, "%s", detail)
 	l.populateErrorDetails()
 }
 

@@ -3437,8 +3437,14 @@ func TestUnimplementedSyntax(t *testing.T) {
 				t.Errorf("%s: expected error, got nil", d.sql)
 				return
 			}
-			if errMsg := err.Error(); !strings.Contains(errMsg, "unimplemented: this syntax") {
-				t.Errorf("%s: expected unimplemented in message, got %q", d.sql, errMsg)
+			expMsg := "unimplemented: "
+			if d.expected != "" {
+				expMsg += d.expected
+			} else {
+				expMsg += "this syntax"
+			}
+			if errMsg := err.Error(); !strings.Contains(errMsg, expMsg) {
+				t.Errorf("%s: expected %q, got %q", d.sql, expMsg, errMsg)
 			}
 			tkeys := errors.GetTelemetryKeys(err)
 			if len(tkeys) == 0 {
