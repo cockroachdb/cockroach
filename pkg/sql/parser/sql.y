@@ -5061,11 +5061,11 @@ opt_view_recursive:
 // want to report it with the right issue number.
 create_type_stmt:
   // Record/Composite types.
-  CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
+  CREATE TYPE type_name AS '(' error      { return unimplementedWithIssueDetail(sqllex, 27792, "composite types") }
   // Enum types.
-| CREATE TYPE type_name AS ENUM '(' error { return unimplementedWithIssue(sqllex, 24873) }
+| CREATE TYPE type_name AS ENUM '(' error { return unimplementedWithIssueDetail(sqllex, 24873, "enum types") }
   // Range types.
-| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
+| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssueDetail(sqllex, 27791, "range types") }
   // Base (primitive) types.
 | CREATE TYPE type_name '(' error         { return unimplementedWithIssueDetail(sqllex, 27793, "base") }
   // Shell types, gateway to define base types using the previous syntax.
