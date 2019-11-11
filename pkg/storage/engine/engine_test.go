@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -485,6 +486,31 @@ func TestEngineMerge(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEngineMustExist(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	test := func(engineType enginepb.EngineType, errStr string) {
+		tempDir, dirCleanupFn := testutils.TempDir(t)
+		defer dirCleanupFn()
+
+		_, err := NewEngine(
+			engineType,
+			0, base.StorageConfig{
+				Dir:       tempDir,
+				MustExist: true,
+			})
+		if err == nil {
+			t.Fatal("expected error related to missing directory")
+		}
+		if !strings.Contains(fmt.Sprint(err), errStr) {
+			t.Fatal(err)
+		}
+	}
+
+	test(enginepb.EngineTypeRocksDB, "does not exist (create_if_missing is false)")
+	test(enginepb.EngineTypePebble, "no such file or directory")
 }
 
 func TestEngineTimeBound(t *testing.T) {
