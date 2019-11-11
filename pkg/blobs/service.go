@@ -26,11 +26,11 @@ which includes the following functionalities:
 package blobs
 
 import (
-	"bytes"
 	"context"
-	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc/metadata"
 )
 
 // Service implements the gRPC BlobService which exchanges bulk files between different nodes.
@@ -46,24 +46,30 @@ func NewBlobService(externalIODir string) (*Service, error) {
 	return &Service{localStorage: localStorage}, err
 }
 
-// GetBlob implements the gRPC service.
-func (s *Service) GetBlob(
-	ctx context.Context, req *blobspb.GetRequest,
-) (*blobspb.GetResponse, error) {
-	reader, err := s.localStorage.ReadFile(req.Filename)
+// GetStream implements the gRPC service.
+func (s *Service) GetStream(req *blobspb.GetRequest, stream blobspb.Blob_GetStreamServer) error {
+	content, err := s.localStorage.ReadFile(req.Filename)
 	if err != nil {
-		return &blobspb.GetResponse{}, err
+		return err
 	}
-	payload, err := ioutil.ReadAll(reader)
-	return &blobspb.GetResponse{Payload: payload}, err
+	defer content.Close()
+	return streamContent(stream, content)
 }
 
-// PutBlob implements the gRPC service.
-func (s *Service) PutBlob(
-	ctx context.Context, req *blobspb.PutRequest,
-) (*blobspb.PutResponse, error) {
-	return &blobspb.PutResponse{},
-		s.localStorage.WriteFile(req.Filename, bytes.NewReader(req.Payload))
+// PutStream implements the gRPC service.
+func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return errors.New("could not fetch metadata")
+	}
+	filename := md.Get("filename")
+	if len(filename) < 1 || filename[0] == "" {
+		return errors.New("no filename in metadata")
+	}
+	reader := newPutStreamReader(stream)
+	defer reader.Close()
+	err := s.localStorage.WriteFile(filename[0], reader)
+	return err
 }
 
 // List implements the gRPC service.
