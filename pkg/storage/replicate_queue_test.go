@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,6 +38,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/tracker"
+	"google.golang.org/grpc"
 )
 
 func TestReplicateQueueRebalance(t *testing.T) {
@@ -474,6 +479,166 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		}
 		if repl != "{1,2,3,4,5}" {
 			return fmt.Errorf("not up-replicated yet")
+		}
+		return nil
+	})
+}
+
+// Introduce a latency by delaying the sent messages.
+type delayingStream struct {
+	delay time.Duration
+	mu    sync.RWMutex
+	grpc.ClientStream
+}
+
+func (ds delayingStream) SendMsg(m interface{}) error {
+	defer func() {
+		time.Sleep(ds.delay)
+		ds.mu.Lock()
+		defer ds.mu.Unlock()
+		ds.ClientStream.SendMsg(m)
+	}()
+	return nil
+}
+
+func TestTransferLeaseToLaggingNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	streamInterceptor :=
+		func(target string, class rpc.ConnectionClass) grpc.StreamClientInterceptor {
+			return func(
+				ctx context.Context,
+				desc *grpc.StreamDesc,
+				cc *grpc.ClientConn,
+				method string,
+				streamer grpc.Streamer,
+				opts ...grpc.CallOption,
+			) (stream grpc.ClientStream, err error) {
+				clientStream, err := streamer(ctx, desc, cc, method, opts...)
+				if method != "/cockroach.storage.MultiRaft/RaftMessageBatch" {
+					return clientStream, err
+				}
+				return delayingStream{
+						delay:        60 * time.Millisecond,
+						ClientStream: clientStream,
+					},
+					err
+			}
+		}
+	clusterArgs := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				ScanMaxIdleTime: time.Millisecond,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "country", Value: "us"}},
+				},
+			},
+			1: {
+				ScanMaxIdleTime: time.Millisecond,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "country", Value: "ca"}},
+				},
+			},
+			2: {
+				ScanMaxIdleTime: time.Millisecond,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "country", Value: "mx"}},
+				},
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ContextTestingKnobs: rpc.ContextTestingKnobs{
+							StreamClientInterceptor: streamInterceptor,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t,
+		len(clusterArgs.ServerArgsPerNode), clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+
+	s := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Create a table and set the replication factor to 3
+	s.Exec(t, "create database test")
+	s.Exec(t, "create table test.busyTable(a int, b int)")
+	s.Exec(t, "insert into test.busyTable values(1,1)")
+	s.Exec(t, "alter table test.busyTable configure zone using "+
+		"num_replicas = 3,lease_preferences = '[[+country=us]]',"+
+		"constraints = '{\"+country=us\": 1,\"+country=ca\": 1, \"+country=mx\":1}'",
+	)
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get the table's range
+	var range_id int
+	s.QueryRow(t,
+		"select range_id from [show ranges from table test.busyTable] limit 1",
+	).Scan(&range_id)
+
+	// Create persistent range load.
+	tc.Stopper().RunWorker(ctx, func(ctx context.Context) {
+		for {
+			s.Exec(t, fmt.Sprintf("update test.busyTable set b=1 where a=1"))
+
+			done := time.After(time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return
+			case <-tc.Stopper().ShouldQuiesce():
+				return
+			case <-done:
+				return
+			default:
+			}
+		}
+	})
+
+	// Wait until we have a replica lagging behind.
+	testutils.SucceedsSoon(t, func() error {
+		// Ensure that replica on node 3 is behind.
+		s := tc.Servers[0]
+		store, _ := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+		n1Repl, _ := store.GetReplica(roachpb.RangeID(range_id))
+
+		if !n1Repl.OwnsValidLease(store.Clock().Now()) {
+			return errors.Errorf("waiting for n1 to get the lease")
+		}
+		if uint64(n1Repl.ReplicaID()) != n1Repl.RaftStatus().Lead {
+			return errors.Errorf("waiting for n1 to become lead")
+		}
+		rangeDesc := n1Repl.Desc()
+		for _, r := range rangeDesc.Replicas().Voters() {
+			// We are interested in the replica on the 3rd node
+			if r.NodeID == tc.Servers[2].NodeID() {
+				status := n1Repl.RaftStatus()
+				progress := status.Progress[uint64(r.ReplicaID)]
+				if progress.State == tracker.StateReplicate &&
+					(status.Commit-progress.Match) > 30 {
+					return nil
+				}
+			}
+		}
+		return errors.Errorf("no replica is behind")
+	})
+
+	// Set the lease preference so the lease moves.
+	s.Exec(t, "alter table test.busyTable configure zone using "+
+		"num_replicas = 3,lease_preferences = '[[+country=mx]]',"+
+		"constraints = '{\"+country=us\": 1,\"+country=ca\": 1, \"+country=mx\":1}'")
+
+	testutils.SucceedsSoon(t, func() error {
+		s := tc.Servers[2]
+		store, _ := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+		n3Repl, _ := store.GetReplica(roachpb.RangeID(range_id))
+		if !n3Repl.OwnsValidLease(store.Clock().Now()) {
+			return errors.Errorf("waiting for n3 to get the lease")
 		}
 		return nil
 	})
