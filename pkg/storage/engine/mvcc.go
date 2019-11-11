@@ -343,7 +343,7 @@ func updateStatsOnPut(
 
 		// Note that there is an interesting special case here: it's possible that
 		// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
-		// outside of tests (due to our semantics of txn.OrigTimestamp, which never
+		// outside of tests (due to our semantics of txn.ReadTimestamp, which never
 		// decreases) but it sure does happen in randomized testing. An earlier
 		// version of the code used `Forward` here, which is incorrect as it would be
 		// a no-op and fail to subtract out the intent bytes/GC age incurred due to

@@ -558,7 +558,7 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 // UpdateDeadlineMaybe sets the transactions deadline to the lower of the
 // current one (if any) and the passed value.
 //
-// The deadline cannot be lower than txn.OrigTimestamp.
+// The deadline cannot be lower than txn.ReadTimestamp.
 func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
@@ -938,7 +938,7 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 }
 
 // SetFixedTimestamp makes the transaction run in an unusual way, at a "fixed
-// timestamp": Timestamp and OrigTimestamp are set to ts, there's no clock
+// timestamp": Timestamp and RefreshedTimestamp are set to ts, there's no clock
 // uncertainty, and the txn's deadline is set to ts such that the transaction
 // can't be pushed to a different timestamp.
 //
@@ -954,7 +954,7 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on retriable errors. The transaction's timestamp is only
-// bumped to the extent that txn.OrigTimestamp is racheted up to txn.Timestamp.
+// bumped to the extent that txn.ReadTimestamp is racheted up to txn.Timestamp.
 // TODO(andrei): This method should take in an up-to-date timestamp, but
 // unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
