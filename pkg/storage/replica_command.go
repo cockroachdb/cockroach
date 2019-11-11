@@ -571,7 +571,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 // hand side range (the subsumed range). It also updates the range
 // addressing metadata. The handover of responsibility for the
 // reassigned key range is carried out seamlessly through a merge
-// trigger carried out as part of the commit of that transaction.  A
+// trigger carried out as part of the commit of that transaction. A
 // merge requires that the two ranges are collocated on the same set
 // of replicas.
 //
