@@ -38,8 +38,8 @@ message SketchSpec {
   repeated uint32 columns = 2;
 
   // If set, we generate a histogram for the first column in the sketch.
-  // Only used by the SampleAggregator.
   optional bool generate_histogram = 3 [(gogoproto.nullable) = false];
+
   // Controls the maximum number of buckets in the histogram.
   // Only used by the SampleAggregator.
   optional uint32 histogram_max_buckets = 4 [(gogoproto.nullable) = false];
@@ -66,7 +66,8 @@ message SketchSpec {
 // groups:
 //   1. sampled row columns:
 //       - columns that map 1-1 to the columns in the input (same
-//         schema as the input).
+//         schema as the input). Note that columns unused in a histogram are
+//         set to NULL.
 //       - an INT column with the "rank" of the row; this is a random value
 //         associated with the row (necessary for combining sample sets).
 //   2. sketch columns:
