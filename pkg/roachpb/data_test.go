@@ -1638,13 +1638,15 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 
 	vi := VOTER_INCOMING
 	vo := VOTER_OUTGOING
+	vd := VOTER_DEMOTING
 	l := LEARNER
 	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &vi}
 	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &vo}
 	learner := ReplicaDescriptor{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l}
+	repl3 := ReplicaDescriptor{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: &vd}
 	crt := ChangeReplicasTrigger{
 		InternalAddedReplicas:   []ReplicaDescriptor{repl1},
-		InternalRemovedReplicas: []ReplicaDescriptor{repl2},
+		InternalRemovedReplicas: []ReplicaDescriptor{repl2, repl3},
 		Desc: &RangeDescriptor{
 			RangeID:  1,
 			StartKey: RKey("a"),
@@ -1653,6 +1655,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 				repl1,
 				repl2,
 				learner,
+				repl3,
 			},
 			NextReplicaID:        10,
 			Generation:           proto.Int64(5),
@@ -1660,7 +1663,10 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := "ENTER_JOINT ADD_REPLICA[(n1,s2):3VOTER_INCOMING], REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING]: after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER] next=10"
+	exp := "ENTER_JOINT(r6 r12 l12 v3) ADD_REPLICA[(n1,s2):3VOTER_INCOMING], " +
+		"REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
+		"after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER " +
+		"(n10,s11):12VOTER_DEMOTING] next=10"
 	require.Equal(t, exp, act)
 
 	crt.InternalRemovedReplicas = nil
@@ -1829,14 +1835,14 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 			),
 			del: sl(
 				// Removals.
-				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_OUTGOING, 9,
+				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING, 9,
 			),
 			repls: sl(
 				// Replicas.
 				VOTER_FULL, 1,
 				VOTER_INCOMING, 6, // added
 				VOTER_INCOMING, 3, // added
-				VOTER_OUTGOING, 9, // removing
+				VOTER_DEMOTING, 9, // removing
 				LEARNER, 4, // added
 				VOTER_OUTGOING, 8, // removing
 				VOTER_FULL, 10,
@@ -1844,12 +1850,13 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 			exp: raftpb.ConfChangeV2{
 				Transition: raftpb.ConfChangeTransitionJointExplicit,
 				Changes: []raftpb.ConfChangeSingle{
-					{NodeID: 6, Type: raftpb.ConfChangeAddNode},
-					{NodeID: 4, Type: raftpb.ConfChangeAddLearnerNode},
-					{NodeID: 3, Type: raftpb.ConfChangeAddNode},
 					{NodeID: 2, Type: raftpb.ConfChangeRemoveNode},
 					{NodeID: 8, Type: raftpb.ConfChangeRemoveNode},
 					{NodeID: 9, Type: raftpb.ConfChangeRemoveNode},
+					{NodeID: 9, Type: raftpb.ConfChangeAddLearnerNode},
+					{NodeID: 6, Type: raftpb.ConfChangeAddNode},
+					{NodeID: 4, Type: raftpb.ConfChangeAddLearnerNode},
+					{NodeID: 3, Type: raftpb.ConfChangeAddNode},
 				}},
 		},
 

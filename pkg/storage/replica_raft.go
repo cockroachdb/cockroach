@@ -296,6 +296,13 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 		// leases can stay in such a state for a very long time when using epoch-
 		// based range leases). This shouldn't happen often, but has been seen
 		// before (#12591).
+		//
+		// Note that due to atomic replication changes, when a removal is initiated,
+		// the replica remains in the descriptor, but as VOTER_{OUTGOING,DEMOTING}.
+		// We want to block it from getting into that state in the first place,
+		// since there's no stopping the actual removal/demotion once it's there.
+		// The Removed() field has contains these replicas when this first
+		// transition is initiated, so its use here is copacetic.
 		replID := p.command.ProposerReplica.ReplicaID
 		for _, rDesc := range crt.Removed() {
 			if rDesc.ReplicaID == replID {

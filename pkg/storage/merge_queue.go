@@ -280,13 +280,13 @@ func (mq *mergeQueue) process(
 		// side and AdminRelocateRange removes any on the range it operates on.
 		// For the sake of obviousness, just fix this all upfront.
 		var err error
-		lhsDesc, err = removeNonFullVoters(ctx, store, lhsDesc)
+		lhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return err
 		}
 
-		rhsDesc, err = removeNonFullVoters(ctx, store, rhsDesc)
+		rhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, rhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return err

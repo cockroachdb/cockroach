@@ -1675,7 +1675,11 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
+	// Generation changes:
+	// +1 for entering joint config due to demotion
+	// +1 for transitioning out of joint config
+	// +1 for removing learner
+	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
 }
 
 func TestSystemZoneConfigs(t *testing.T) {
@@ -2760,7 +2764,15 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		rangeToBlockRangeDescriptorRead.Store(rhsDesc.RangeID)
 		blockRangeDescriptorReadChan <- struct{}{}
 		var wg sync.WaitGroup
+
+		defer func() {
+			// Unblock the original add on the separate goroutine to ensure that it
+			// properly handles reading a nil range descriptor.
+			close(blockRangeDescriptorReadChan)
+			wg.Wait()
+		}()
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 			_, err := db.AdminChangeReplicas(
@@ -2782,9 +2794,8 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 			}
 			return nil
 		})
-		// Add and remove a replica to exit the joint config.
-		_, err = tc.AddReplicas(rhs, tc.Target(2))
-		require.NoError(t, err)
+		// Remove the learner replica (left because the joint config was demoting
+		// a voter) which as a side effect exists the joint config.
 		_, err = tc.RemoveReplicas(rhs, tc.Target(2))
 		require.NoError(t, err)
 		// Merge the RHS away.
@@ -2795,11 +2806,6 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 			err = tc.WaitForSplitAndInitialization(rhs)
 			require.NoError(t, err)
 		}
-
-		// Unblock the original add on the separate goroutine to ensure that it
-		// properly handles reading a nil range descriptor.
-		close(blockRangeDescriptorReadChan)
-		wg.Wait()
 	})
 }
 
