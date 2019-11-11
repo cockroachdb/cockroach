@@ -221,7 +221,7 @@ func checkTxn(txn *client.Txn, exp expKVTxn) error {
 	}
 	if origTimestamp := txn.ReadTimestamp(); exp.origTSNanos != nil &&
 		*exp.origTSNanos != origTimestamp.WallTime {
-		return errors.Errorf("expected OrigTimestamp: %d, but got: %s",
+		return errors.Errorf("expected DeprecatedOrigTimestamp: %d, but got: %s",
 			*exp.origTSNanos, origTimestamp)
 	}
 	if exp.maxTSNanos != nil && *exp.maxTSNanos != proto.MaxTimestamp.WallTime {

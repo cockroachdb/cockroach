@@ -1460,8 +1460,8 @@ func mvccPutInternal(
 	if txn != nil {
 		readTimestamp = txn.ReadTimestamp
 		// For compatibility with 19.2 nodes which might not have set
-		// ReadTimestamp, fallback to OrigTimestamp.
-		readTimestamp.Forward(txn.OrigTimestamp)
+		// ReadTimestamp, fallback to DeprecatedOrigTimestamp.
+		readTimestamp.Forward(txn.DeprecatedOrigTimestamp)
 		if readTimestamp != timestamp {
 			return errors.AssertionFailedf(
 				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",

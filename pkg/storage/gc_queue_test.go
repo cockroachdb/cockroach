@@ -445,7 +445,7 @@ func TestGCQueueProcess(t *testing.T) {
 			if datum.txn {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				txn.ReadTimestamp = datum.ts
-				txn.OrigTimestamp = txn.ReadTimestamp
+				txn.DeprecatedOrigTimestamp = txn.ReadTimestamp
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
@@ -461,7 +461,7 @@ func TestGCQueueProcess(t *testing.T) {
 			if datum.txn {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				txn.ReadTimestamp = datum.ts
-				txn.OrigTimestamp = txn.ReadTimestamp
+				txn.DeprecatedOrigTimestamp = txn.ReadTimestamp
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
 			}
@@ -857,9 +857,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
-	txns[0].OrigTimestamp = intentResolveTS
+	txns[0].DeprecatedOrigTimestamp = intentResolveTS
 	txns[0].Timestamp = intentResolveTS
-	txns[1].OrigTimestamp = intentResolveTS
+	txns[1].DeprecatedOrigTimestamp = intentResolveTS
 	txns[1].Timestamp = intentResolveTS
 
 	// Two transactions.
