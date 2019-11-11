@@ -308,7 +308,7 @@ func (tc *TableCollection) getTableVersion(
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
+	// the deadline. We use ReadTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
 	txn.UpdateDeadlineMaybe(ctx, expiration)
@@ -373,7 +373,7 @@ func (tc *TableCollection) getTableVersionByID(
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
+	// the deadline. We use ReadTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
 	txn.UpdateDeadlineMaybe(ctx, expiration)
