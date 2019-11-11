@@ -25,7 +25,7 @@ import (
 
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
 // carried out. For transactional requests, ba.Timestamp must be zero initially
-// and it will be set to txn.RefreshedTimestamp (note though this mostly impacts
+// and it will be set to txn.ReadTimestamp (note though this mostly impacts
 // reads; writes use txn.Timestamp). For non-transactional requests, if no
 // timestamp is specified, nowFn is used to create and set one.
 func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
@@ -42,8 +42,8 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		//
 		// Note that writes will be performed at the provisional commit timestamp,
 		// txn.Timestamp, regardless of the batch timestamp.
-		ba.Timestamp = txn.RefreshedTimestamp
-		// For compatibility with 19.2 nodes which might not have set RefreshedTimestamp,
+		ba.Timestamp = txn.ReadTimestamp
+		// For compatibility with 19.2 nodes which might not have set ReadTimestamp,
 		// fallback to OrigTimestamp.
 		ba.Timestamp.Forward(txn.OrigTimestamp)
 	} else {
