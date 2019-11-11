@@ -197,11 +197,8 @@ type Reader interface {
 	// within the interval is exported. Deletions are included if all revisions are
 	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
 	// SSTable containing the exported keys, the size of exported data, or an error.
-	//
-	// TODO(hueypark): Separate MVCCKey into roachpb.Key and hlc.Timestamp.
-	// (https://github.com/cockroachdb/cockroach/pull/42134#pullrequestreview-311850163)
 	ExportToSst(
-		start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp, exportAllRevisions bool, io IterOptions,
 	) ([]byte, roachpb.BulkOpSummary, error)
 	// Get returns the value for the given key, nil otherwise.
 	//

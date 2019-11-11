@@ -397,9 +397,12 @@ func (p *Pebble) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *Pebble) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 // Get implements the Engine interface.
@@ -781,9 +784,12 @@ func (p *pebbleReadOnly) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *pebbleReadOnly) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
@@ -899,9 +905,12 @@ func (p *pebbleSnapshot) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *pebbleSnapshot) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 // Get implements the Reader interface.
@@ -949,7 +958,11 @@ func (p pebbleSnapshot) NewIterator(opts IterOptions) Iterator {
 }
 
 func pebbleExportToSst(
-	e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	e Reader,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
 	sstWriter := MakeSSTWriter()
 	defer sstWriter.Close()
@@ -959,24 +972,24 @@ func pebbleExportToSst(
 		e,
 		MVCCIncrementalIterOptions{
 			IterOptions: io,
-			StartTime:   start.Timestamp,
-			EndTime:     end.Timestamp,
+			StartTime:   startTS,
+			EndTime:     endTS,
 		})
 	defer iter.Close()
-	for iter.Seek(MakeMVCCMetadataKey(start.Key)); ; {
+	for iter.Seek(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
 			// cause this command to be retried.
 			return []byte{}, roachpb.BulkOpSummary{}, err
 		}
-		if !ok || iter.UnsafeKey().Key.Compare(end.Key) >= 0 {
+		if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
 
 		// Skip tombstone (len=0) records when startTime is zero
 		// (non-incremental) and we're not exporting all versions.
-		if !exportAllRevisions && start.Timestamp.IsEmpty() && len(iter.UnsafeValue()) == 0 {
+		if !exportAllRevisions && startTS.IsEmpty() && len(iter.UnsafeValue()) == 0 {
 			continue
 		}
 

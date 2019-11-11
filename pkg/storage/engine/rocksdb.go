@@ -777,8 +777,14 @@ func (r *RocksDB) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (r *RocksDB) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
+	start := MVCCKey{Key: startKey, Timestamp: startTS}
+	end := MVCCKey{Key: endKey, Timestamp: endTS}
+
 	var data C.DBString
 	var intentErr C.DBString
 	var bulkopSummary C.DBString
@@ -994,9 +1000,12 @@ func (r *rocksDBReadOnly) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (r *rocksDBReadOnly) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return r.parent.ExportToSst(start, end, exportAllRevisions, io)
+	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
@@ -1305,9 +1314,12 @@ func (r *rocksDBSnapshot) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (r *rocksDBSnapshot) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return r.parent.ExportToSst(start, end, exportAllRevisions, io)
+	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 // Get returns the value for the given key, nil otherwise using
@@ -1707,7 +1719,10 @@ func (r *rocksDBBatch) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (r *rocksDBBatch) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
 	panic("unimplemented")
 }

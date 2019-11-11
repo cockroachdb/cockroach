@@ -90,7 +90,10 @@ func (p *pebbleBatch) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *pebbleBatch) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
 	panic("unimplemented")
 }
