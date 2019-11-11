@@ -482,7 +482,7 @@ var nonZeroTxn = Transaction{
 	Name:                     "name",
 	Status:                   COMMITTED,
 	LastHeartbeat:            makeTS(1, 2),
-	OrigTimestamp:            makeTS(30, 31),
+	DeprecatedOrigTimestamp:  makeTS(30, 31),
 	ReadTimestamp:            makeTS(20, 22),
 	MaxTimestamp:             makeTS(40, 41),
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
@@ -661,7 +661,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.Sequence = 0
 	expTxn.Timestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
-	expTxn.OrigTimestamp = expTxn.ReadTimestamp
+	expTxn.DeprecatedOrigTimestamp = expTxn.ReadTimestamp
 	expTxn.WriteTooOld = false
 	expTxn.OrigTimestampWasObserved = false
 	expTxn.IntentSpans = nil

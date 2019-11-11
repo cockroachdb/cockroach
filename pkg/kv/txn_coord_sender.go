@@ -1194,8 +1194,8 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	tc.mu.txn.MaxTimestamp = ts
 	tc.mu.txn.OrigTimestampWasObserved = true
 
-	// For backwards compatibility with 19.2, set the OrigTimestamp too.
-	tc.mu.txn.OrigTimestamp = ts
+	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too.
+	tc.mu.txn.DeprecatedOrigTimestamp = ts
 
 	tc.mu.Unlock()
 }

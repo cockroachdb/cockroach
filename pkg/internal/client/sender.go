@@ -340,9 +340,9 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 	m.txn.MaxTimestamp = ts
 	m.txn.OrigTimestampWasObserved = true
 
-	// For backwards compatibility with 19.2, set the OrigTimestamp too (although
+	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too (although
 	// not really needed by this Mock sender).
-	m.txn.OrigTimestamp = ts
+	m.txn.DeprecatedOrigTimestamp = ts
 }
 
 // ManualRestart is part of the TxnSender interface.

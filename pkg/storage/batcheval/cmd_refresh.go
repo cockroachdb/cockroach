@@ -48,7 +48,7 @@ func Refresh(
 	refreshFrom := args.RefreshFrom
 	if refreshFrom.IsEmpty() {
 		// Compatibility with 19.2 nodes, which didn't set the args.RefreshFrom field.
-		refreshFrom = h.Txn.OrigTimestamp
+		refreshFrom = h.Txn.DeprecatedOrigTimestamp
 	}
 
 	// Get the most recent committed value and return any intent by

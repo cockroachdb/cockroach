@@ -379,8 +379,8 @@ func IsEndTransactionTriggeringRetryError(
 	} else {
 		readTimestamp := txn.ReadTimestamp
 		// For compatibility with 19.2 nodes which might not have set
-		// ReadTimestamp, fallback to OrigTimestamp.
-		readTimestamp.Forward(txn.OrigTimestamp)
+		// ReadTimestamp, fallback to DeprecatedOrigTimestamp.
+		readTimestamp.Forward(txn.DeprecatedOrigTimestamp)
 		isTxnPushed := txn.Timestamp != readTimestamp
 
 		// Return a transaction retry error if the commit timestamp isn't equal to

@@ -858,9 +858,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				t.Errorf("expected timestamp to be %s; got %s",
 					test.expTS, proto.Timestamp)
 			}
-			if proto.OrigTimestamp != test.expOrigTS {
+			if proto.DeprecatedOrigTimestamp != test.expOrigTS {
 				t.Errorf("expected orig timestamp to be %s; got %s",
-					test.expOrigTS, proto.OrigTimestamp)
+					test.expOrigTS, proto.DeprecatedOrigTimestamp)
 			}
 			if ns := proto.ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
 				t.Errorf("expected nodeSeen=%t, but list of hosts is %v",
@@ -1177,12 +1177,12 @@ func TestTxnRestartCount(t *testing.T) {
 	}
 
 	// This put will lay down an intent, txn timestamp will increase
-	// beyond OrigTimestamp.
+	// beyond DeprecatedOrigTimestamp.
 	if err := txn.Put(ctx, writeKey, value); err != nil {
 		t.Fatal(err)
 	}
 	proto := txn.Serialize()
-	if !proto.OrigTimestamp.Less(proto.Timestamp) {
+	if !proto.DeprecatedOrigTimestamp.Less(proto.Timestamp) {
 		t.Errorf("expected timestamp to increase: %s", proto)
 	}
 
