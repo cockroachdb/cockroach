@@ -933,11 +933,10 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 ) (bool, error) {
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
 	// so only consider the `Voters` replicas.
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas().Voters())
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,
-		candidates,
+		desc.Replicas().Voters(),
 		repl.store.StoreID(),
 		desc.RangeID,
 		repl.leaseholderStats,
