@@ -782,11 +782,11 @@ func MakeTransaction(
 			Priority:     MakePriority(userPriority),
 			Sequence:     0, // 1-indexed, incremented before each Request
 		},
-		Name:          name,
-		LastHeartbeat: now,
-		ReadTimestamp: now,
-		MaxTimestamp:  maxTS,
-		OrigTimestamp: now, // For compatibility with 19.2.
+		Name:                    name,
+		LastHeartbeat:           now,
+		ReadTimestamp:           now,
+		MaxTimestamp:            maxTS,
+		DeprecatedOrigTimestamp: now, // For compatibility with 19.2.
 	}
 }
 
@@ -820,7 +820,7 @@ func (t Transaction) LastActive() hlc.Timestamp {
 
 	// For compatibility with 19.2, handle the case where ReadTimestamp isn't
 	// set.
-	ts.Forward(t.OrigTimestamp)
+	ts.Forward(t.DeprecatedOrigTimestamp)
 	return ts
 }
 
@@ -934,7 +934,7 @@ func (t *Transaction) Restart(
 		t.Timestamp = timestamp
 	}
 	t.ReadTimestamp = t.Timestamp
-	t.OrigTimestamp = t.Timestamp // For 19.2 compatibility.
+	t.DeprecatedOrigTimestamp = t.Timestamp // For 19.2 compatibility.
 	// Upgrade priority to the maximum of:
 	// - the current transaction priority
 	// - a random priority created from userPriority
@@ -1042,7 +1042,7 @@ func (t *Transaction) Update(o *Transaction) {
 	// Forward each of the transaction timestamps.
 	t.Timestamp.Forward(o.Timestamp)
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
-	t.OrigTimestamp.Forward(o.OrigTimestamp)
+	t.DeprecatedOrigTimestamp.Forward(o.DeprecatedOrigTimestamp)
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
 	t.ReadTimestamp.Forward(o.ReadTimestamp)
 
