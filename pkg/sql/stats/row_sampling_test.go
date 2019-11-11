@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -29,7 +30,7 @@ import (
 func runSampleTest(t *testing.T, evalCtx *tree.EvalContext, numSamples int, ranks []int) {
 	ctx := context.Background()
 	var sr SampleReservoir
-	sr.Init(numSamples, []types.T{*types.Int}, nil /* memAcc */)
+	sr.Init(numSamples, []types.T{*types.Int}, nil /* memAcc */, util.MakeFastIntSet(0))
 	for _, r := range ranks {
 		d := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
 		if err := sr.SampleRow(ctx, evalCtx, sqlbase.EncDatumRow{d}, uint64(r)); err != nil {

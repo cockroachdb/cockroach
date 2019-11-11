@@ -109,6 +109,7 @@ func newSampleAggregator(
 		sketchCol:    rankCol + 4,
 	}
 
+	var sampleCols util.FastIntSet
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
 			spec:     spec.Sketches[i],
@@ -116,9 +117,12 @@ func newSampleAggregator(
 			numNulls: 0,
 			numRows:  0,
 		}
+		if spec.Sketches[i].GenerateHistogram {
+			sampleCols.Add(int(spec.Sketches[i].Columns[0]))
+		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc)
+	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
 
 	if err := s.Init(
 		nil, post, []types.T{}, flowCtx, processorID, output, memMonitor,
