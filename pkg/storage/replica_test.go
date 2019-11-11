@@ -10666,7 +10666,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.RefreshedTimestamp.Forward(now)
+				clone.ReadTimestamp.Forward(now)
 				clone.Timestamp.Forward(now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				// Add different in-flight writes to test whether they are
@@ -11519,7 +11519,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "recover transaction (implicitly committed) after end transaction (stage) with timestamp increase",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.RefreshedTimestamp.Forward(now)
+				clone.ReadTimestamp.Forward(now)
 				clone.Timestamp.Forward(now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				et.InFlightWrites = inFlightWrites
@@ -11680,7 +11680,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "recover transaction (not implicitly committed) after end transaction (stage) with timestamp increase",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.RefreshedTimestamp.Forward(now)
+				clone.ReadTimestamp.Forward(now)
 				clone.Timestamp.Forward(now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				et.InFlightWrites = inFlightWrites
