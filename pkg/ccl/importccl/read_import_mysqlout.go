@@ -71,6 +71,9 @@ func (d *mysqloutfileReader) readFile(
 	d.conv.KvBatch.Source = inputIdx
 	d.conv.FractionFn = input.ReadFraction
 	var count int64 = 1
+	d.conv.CompletedRowFn = func() int64 {
+		return count
+	}
 
 	var row []tree.Datum
 	var savedRow []rune
@@ -177,6 +180,9 @@ func (d *mysqloutfileReader) readFile(
 			gotOffendingRow = true
 			return makeRowErr(inputName, count, pgcode.Syntax,
 				"unexpected number of columns, expected %d got %d: %#v", len(d.conv.VisibleCols), len(row), row)
+		}
+		if count <= resumePos {
+			return nil
 		}
 		copy(d.conv.Datums, row)
 		if err := d.conv.Row(ctx, inputIdx, count); err != nil {
