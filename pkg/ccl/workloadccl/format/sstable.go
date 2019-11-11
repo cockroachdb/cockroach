@@ -75,17 +75,19 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 	var sst []byte
 	g.GoCtx(func(ctx context.Context) error {
 		sstTS := hlc.Timestamp{WallTime: ts.UnixNano()}
-		sw := engine.MakeSSTWriter()
+		sstFile := &engine.MemFile{}
+		sw := engine.MakeSSTWriter(sstFile)
 		defer sw.Close()
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
 				mvccKey := engine.MVCCKey{Timestamp: sstTS, Key: kv.Key}
-				if err := sw.Add(engine.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes}); err != nil {
+				if err := sw.Put(mvccKey, kv.Value.RawBytes); err != nil {
 					return err
 				}
 			}
 		}
-		sst, err = sw.Finish()
+		err = sw.Finish()
+		sst = sstFile.Data()
 		return err
 	})
 	if err := g.Wait(); err != nil {

@@ -317,18 +317,6 @@ type ReadWriter interface {
 	Writer
 }
 
-// SstFileWriter is the write interface to an engine's sst file data.
-type SstFileWriter interface {
-	// TODO(hueypark): Check necessity of Pebble SstFileWriter.
-	// Close finishes and frees memory and other resources. Close is idempotent.
-	Close()
-	// DataSize returns the total key and value bytes added so far.
-	DataSize() int64
-	// Finish finalizes the writer and returns the constructed file's contents. At
-	// least one kv entry must have been added.
-	Finish() ([]byte, error)
-}
-
 // Engine is the interface that wraps the core operations of a key/value store.
 type Engine interface {
 	ReadWriter

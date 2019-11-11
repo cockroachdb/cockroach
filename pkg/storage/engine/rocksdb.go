@@ -2943,6 +2943,12 @@ var _ Writer = &RocksDBSstFileWriter{}
 
 // MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
 // configuration.
+//
+// NOTE: This is deprecated - and should only be used in tests to check for
+// equivalence with engine.SSTWriter.
+//
+// TODO(itsbilal): Move all tests to SSTWriter and then delete this function
+// and struct.
 func MakeRocksDBSstFileWriter() (RocksDBSstFileWriter, error) {
 	fw := C.DBSstFileWriterNew()
 	err := statusToError(C.DBSstFileWriterOpen(fw))

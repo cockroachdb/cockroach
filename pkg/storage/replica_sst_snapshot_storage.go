@@ -86,33 +86,31 @@ func (ssss *SSTSnapshotStorageScratch) createDir() error {
 }
 
 // NewFile adds another file to SSTSnapshotStorageScratch. This file is lazily
-// created when the file is written to the first time.
-func (ssss *SSTSnapshotStorageScratch) NewFile() (*SSTSnapshotStorageFile, error) {
+// created when the file is written to the first time. A nonzero value for
+// chunkSize buffers up writes until the buffer is greater than chunkSize.
+func (ssss *SSTSnapshotStorageScratch) NewFile(
+	ctx context.Context, chunkSize int64,
+) (*SSTSnapshotStorageFile, error) {
 	id := len(ssss.ssts)
 	filename := ssss.filename(id)
 	ssss.ssts = append(ssss.ssts, filename)
 	sssf := &SSTSnapshotStorageFile{
-		ssss:     ssss,
-		filename: filename,
+		ssss:      ssss,
+		filename:  filename,
+		ctx:       ctx,
+		chunkSize: chunkSize,
 	}
 	return sssf, nil
 }
 
-// WriteSST writes an entire RocksDBSstFileWriter to a file. The method closes
+// WriteSST writes SST data to a file. The method closes
 // the provided SST when it is finished using it. If the provided SST is empty,
 // then no file will be created and nothing will be written.
-func (ssss *SSTSnapshotStorageScratch) WriteSST(
-	ctx context.Context, sst engine.SstFileWriter,
-) error {
-	defer sst.Close()
-	if sst.DataSize() == 0 {
+func (ssss *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) error {
+	if len(data) == 0 {
 		return nil
 	}
-	data, err := sst.Finish()
-	if err != nil {
-		return err
-	}
-	sssf, err := ssss.NewFile()
+	sssf, err := ssss.NewFile(ctx, 0)
 	if err != nil {
 		return err
 	}
@@ -121,7 +119,7 @@ func (ssss *SSTSnapshotStorageScratch) WriteSST(
 		// actionable if closing fails.
 		_ = sssf.Close()
 	}()
-	if err := sssf.Write(ctx, data); err != nil {
+	if _, err := sssf.Write(data); err != nil {
 		return err
 	}
 	return sssf.Close()
@@ -140,10 +138,13 @@ func (ssss *SSTSnapshotStorageScratch) Clear() error {
 // SSTSnapshotStorageFile is an SST file managed by a
 // SSTSnapshotStorageScratch.
 type SSTSnapshotStorageFile struct {
-	ssss     *SSTSnapshotStorageScratch
-	created  bool
-	file     engine.DBFile
-	filename string
+	ssss      *SSTSnapshotStorageScratch
+	created   bool
+	file      engine.DBFile
+	filename  string
+	ctx       context.Context
+	chunkSize int64
+	buffer    []byte
 }
 
 func (sssf *SSTSnapshotStorageFile) openFile() error {
@@ -170,18 +171,31 @@ func (sssf *SSTSnapshotStorageFile) openFile() error {
 // Write writes contents to the file while respecting the limiter passed into
 // SSTSnapshotStorageScratch. Writing empty contents is okay and is treated as
 // a noop. The file must have not been closed.
-func (sssf *SSTSnapshotStorageFile) Write(ctx context.Context, contents []byte) error {
+func (sssf *SSTSnapshotStorageFile) Write(contents []byte) (int, error) {
 	if len(contents) == 0 {
-		return nil
+		return 0, nil
 	}
 	if err := sssf.openFile(); err != nil {
-		return err
+		return 0, err
 	}
-	limitBulkIOWrite(ctx, sssf.ssss.sss.limiter, len(contents))
+	limitBulkIOWrite(sssf.ctx, sssf.ssss.sss.limiter, len(contents))
+	if sssf.chunkSize > 0 {
+		if int64(len(contents)+len(sssf.buffer)) < sssf.chunkSize {
+			// Don't write to file yet - buffer write until next time.
+			sssf.buffer = append(sssf.buffer, contents...)
+			return len(contents), nil
+		} else if len(sssf.buffer) > 0 {
+			// Write buffered writes and then empty the buffer.
+			if _, err := sssf.file.Write(sssf.buffer); err != nil {
+				return 0, err
+			}
+			sssf.buffer = sssf.buffer[:0]
+		}
+	}
 	if _, err := sssf.file.Write(contents); err != nil {
-		return err
+		return 0, err
 	}
-	return sssf.file.Sync()
+	return len(contents), sssf.file.Sync()
 }
 
 // Close closes the file. Calling this function multiple times is idempotent.
@@ -195,9 +209,21 @@ func (sssf *SSTSnapshotStorageFile) Close() error {
 	if sssf.file == nil {
 		return nil
 	}
+	if len(sssf.buffer) > 0 {
+		// Write out any buffered data.
+		if _, err := sssf.file.Write(sssf.buffer); err != nil {
+			return err
+		}
+		sssf.buffer = sssf.buffer[:0]
+	}
 	if err := sssf.file.Close(); err != nil {
 		return err
 	}
 	sssf.file = nil
 	return nil
+}
+
+// Sync syncs the file to disk. Implements writeCloseSyncer in engine.
+func (sssf *SSTSnapshotStorageFile) Sync() error {
+	return sssf.file.Sync()
 }
