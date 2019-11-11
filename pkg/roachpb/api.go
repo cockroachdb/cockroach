@@ -1041,10 +1041,12 @@ func (drr *DeleteRangeRequest) flags() int {
 	if drr.Inline {
 		return isWrite | isRange | isAlone
 	}
-	// DeleteRange updates the timestamp cache as it doesn't leave
-	// intents or tombstones for keys which don't yet exist. By updating
-	// the write timestamp cache, it forces subsequent writes to get a
-	// write-too-old error and avoids the phantom delete anomaly.
+	// DeleteRange updates the timestamp cache as it doesn't leave intents or
+	// tombstones for keys which don't yet exist. By updating write timestamp
+	// cache, it forces subsequent writes to get a write-too-old error and avoids
+	// the lost delete anomaly. Note that, even without it, delete of keys that
+	// exist would not be lost (since the DeleteRange leaves intents on those
+	// keys), but deletes of "empty space" would.
 	return isWrite | isTxn | isTxnWrite | isRange | consultsTSCache | updatesWriteTSCache | needsRefresh | canBackpressure
 }
 
