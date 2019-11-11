@@ -1,0 +1,55 @@
+# Change the application name.
+# NOTE: the order is different than postgres, because we execute the statement
+# in a non-transaction.
+
+send
+Parse {"Query": "SET application_name = 'pgtest'"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone.
+# NOTE: the order is different than postgres, because we execute the statement
+# in a non-transaction.
+
+send
+Parse {"Query": "SET TIME ZONE +6"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"6"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SET TIME ZONE 'America/New_York'"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/New_York"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -610,10 +610,17 @@ func (c *conn) sendInitialConnData(
 	// defaults with client-provided values.
 	// For details see: https://www.postgresql.org/docs/10/static/libpq-status.html
 	for _, param := range statusReportParams {
+		param := param
 		value := connHandler.GetStatusParam(ctx, param)
 		if err := c.sendStatusParam(param, value); err != nil {
 			return sql.ConnectionHandler{}, err
 		}
+		// `pgwire` also expects updates when these parameters change.
+		connHandler.RegisterOnSessionDataChange(param, func(val string) {
+			if err := c.sendStatusParam(param, val); err != nil {
+				panic(fmt.Sprintf("unexpected error when trying to send status param update: %s", err.Error()))
+			}
+		})
 	}
 	// The two following status parameters have no equivalent session
 	// variable.
