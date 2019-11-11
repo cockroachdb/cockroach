@@ -20,9 +20,9 @@ INSERT INTO t VALUES
 query T
 SELECT b + '6 month' from t order by a desc
 ----
-2016-02-29 00:00:00 +0000 UTC
-2016-02-29 00:00:00 +0000 UTC
-2016-02-25 00:00:00 +0000 UTC
+2016-02-29 00:00:00 +0000 +0000
+2016-02-29 00:00:00 +0000 +0000
+2016-02-25 00:00:00 +0000 +0000
 
 query TTT
 SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
@@ -1196,17 +1196,17 @@ SHOW TIME ZONE
 query T
 SELECT DATE '1999-01-01' + INTERVAL '4 minutes'
 ----
-1999-01-01 00:04:00 +0000 UTC
+1999-01-01 00:04:00 +0000 +0000
 
 query T
 SELECT INTERVAL '4 minutes' + DATE '1999-01-01'
 ----
-1999-01-01 00:04:00 +0000 UTC
+1999-01-01 00:04:00 +0000 +0000
 
 query T
 SELECT DATE '1999-01-01' - INTERVAL '4 minutes'
 ----
-1998-12-31 23:56:00 +0000 UTC
+1998-12-31 23:56:00 +0000 +0000
 
 query B
 SELECT DATE '1999-01-02' < TIMESTAMPTZ '1999-01-01'
@@ -1540,6 +1540,155 @@ query I
 select extract(day from '2019-01-15'::date) as final
 ----
 15
+
+# Check other usages of MakeDTimestampTZFromDate
+
+query TT
+select ('2019-01-15'::date + '16:17:18'::time), pg_typeof('2019-01-15'::date + '16:17:18'::time)
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp
+
+query TT
+select ('16:17:18'::time + '2019-01-15'::date), pg_typeof(('16:17:18'::time + '2019-01-15'::date))
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp
+
+query TT
+select ('2019-01-15'::date + '1 hour'::interval), pg_typeof('2019-01-15'::date + '1 hour'::interval)
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp
+
+query TT
+select ('1 hour'::interval + '2019-01-15'::date), pg_typeof('1 hour'::interval + '2019-01-15'::date)
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp
+
+query TT
+select ('2019-01-15'::date - '16:17:18'::time), pg_typeof('2019-01-15'::date - '16:17:18'::time)
+----
+2019-01-14 07:42:42 +0000 +0000  timestamp
+
+query TT
+select ('2019-01-15'::date - '1 hour'::interval), pg_typeof('2019-01-15'::date - '1 hour'::interval)
+----
+2019-01-14 23:00:00 +0000 +0000  timestamp
+
+query B
+select '2019-01-01'::date > '2019-01-01 00:00:00+00'::timestamptz
+----
+true
+
+query B
+select '2019-01-01 00:00:00+00'::timestamptz < '2019-01-01'::date
+----
+true
+
+query B
+select '2019-01-01'::date = '2019-01-01 00:00:00'::timestamp
+----
+true
+
+query B
+select '2019-01-01 00:00:00'::timestamp = '2019-01-01'::date
+----
+true
+
+query B
+select '2019-01-01'::date = '2019-01-01'::date
+----
+true
+
+# Check logic works on a table.
+
+statement ok
+SET TIME ZONE 0
+
+statement ok
+CREATE TABLE date_test (date_val date, time_val time, interval_val interval)
+
+statement ok
+INSERT INTO date_test VALUES ('2019-01-15'::date, '16:17:18'::time, '1 hour'::interval)
+
+statement ok
+SET TIME ZONE -5
+
+query TT
+select (date_test.date_val + date_test.time_val), pg_typeof(date_test.date_val + date_test.time_val) from date_test
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp
+
+query TT
+select (date_test.time_val + date_test.date_val), pg_typeof((date_test.time_val + date_test.date_val)) from date_test
+----
+2019-01-15 16:17:18 +0000 +0000  timestamp
+
+query TT
+select (date_test.date_val + date_test.interval_val), pg_typeof(date_test.date_val + date_test.interval_val) from date_test
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp
+
+query TT
+select (date_test.interval_val + date_test.date_val), pg_typeof(date_test.interval_val + date_test.date_val) from date_test
+----
+2019-01-15 01:00:00 +0000 +0000  timestamp
+
+query TT
+select (date_test.date_val - date_test.time_val), pg_typeof(date_test.date_val - date_test.time_val) from date_test
+----
+2019-01-14 07:42:42 +0000 +0000  timestamp
+
+query TT
+select (date_test.date_val - date_test.interval_val), pg_typeof(date_test.date_val - date_test.interval_val) from date_test
+----
+2019-01-14 23:00:00 +0000 +0000  timestamp
+
+query I
+select count(1) from date_test where date_test.date_val > '2019-01-15 00:00:00+00'::timestamptz
+----
+1
+
+query I
+select count(1) from date_test where '2019-01-15 00:00:00+00'::timestamptz < date_test.date_val
+----
+1
+
+query I
+select count(1) from date_test where '2019-01-15 00:00:00'::timestamp = date_test.date_val
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15 00:00:00'::timestamp
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15'::date
+----
+1
+
+statement ok
+SET TIME ZONE +5
+
+query I
+select count(1) from date_test where date_test.date_val < '2019-01-15 00:00:00+00'::timestamptz
+----
+1
+
+query I
+select count(1) from date_test where '2019-01-15 00:00:00+00'::timestamptz > date_test.date_val
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15 00:00:00'::timestamp
+----
+1
+
+query I
+select count(1) from date_test where date_test.date_val = '2019-01-15'::date
+----
+1
 
 statement ok
 SET TIME ZONE 0

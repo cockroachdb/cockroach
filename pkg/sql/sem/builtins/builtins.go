@@ -1788,11 +1788,11 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				date := args[1].(*tree.DDate)
-				fromTSTZ, err := tree.MakeDTimestampTZFromDate(time.UTC, date)
+				fromTime, err := date.ToTime()
 				if err != nil {
 					return nil, err
 				}
-				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				return extractStringFromTimestamp(ctx, fromTime, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
