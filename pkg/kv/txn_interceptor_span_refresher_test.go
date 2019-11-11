@@ -240,7 +240,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.Nil(t, pErr)
 				require.NotNil(t, br)
 				require.Equal(t, tc.expRefreshTS, br.Txn.Timestamp)
-				require.Equal(t, tc.expRefreshTS, br.Txn.RefreshedTimestamp)
+				require.Equal(t, tc.expRefreshTS, br.Txn.ReadTimestamp)
 				require.Equal(t, tc.expRefreshTS, tsr.refreshedTimestamp)
 			} else {
 				require.Nil(t, br)

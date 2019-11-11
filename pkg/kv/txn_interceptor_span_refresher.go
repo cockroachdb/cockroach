@@ -164,7 +164,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	// qualified by possible resume spans in the responses, if we
 	// haven't yet exceeded the max read key bytes.
 	if !sr.refreshInvalid {
-		ba.Txn.RefreshedTimestamp.Forward(largestRefreshTS)
+		ba.Txn.ReadTimestamp.Forward(largestRefreshTS)
 		if !sr.appendRefreshSpans(ctx, ba, br) {
 			// The refresh spans are out of date, return a generic client-side retry error.
 			return nil, roachpb.NewErrorWithTxn(
@@ -217,7 +217,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr, hlc.Timestamp{}
 	}
 
-	readTS := ba.Txn.RefreshedTimestamp
+	readTS := ba.Txn.ReadTimestamp
 	// If a prefix of the batch was executed, collect refresh spans for
 	// that executed portion, and retry the remainder. The canonical
 	// case is a batch split between everything up to but not including
@@ -237,7 +237,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	}
 
 	log.VEventf(ctx, 2, "retrying %s at refreshed timestamp %s because of %s",
-		retryBa, retryTxn.RefreshedTimestamp, pErr)
+		retryBa, retryTxn.ReadTimestamp, pErr)
 
 	// Try updating the txn spans so we can retry.
 	if ok := sr.tryUpdatingTxnSpans(ctx, retryTxn, readTS); !ok {
@@ -245,7 +245,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	}
 
 	// We've refreshed all of the read spans successfully and set
-	// newBa.Txn.RefreshedTimestamp to the current timestamp. Submit the
+	// newBa.Txn.ReadTimestamp to the current timestamp. Submit the
 	// batch again.
 	retryBr, retryErr, retryLargestRefreshTS := sr.sendLockedWithRefreshAttempts(
 		ctx, retryBa, maxRefreshAttempts-1,
@@ -257,7 +257,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 	log.VEventf(ctx, 2, "retry successful @%s", retryBa.Txn.Timestamp)
 	sr.autoRetryCounter.Inc(1)
-	retryTxn.RefreshedTimestamp.Forward(retryLargestRefreshTS)
+	retryTxn.ReadTimestamp.Forward(retryLargestRefreshTS)
 
 	// On success, combine responses if applicable and set error to nil.
 	if br != nil {
@@ -267,7 +267,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	} else {
 		br = retryBr
 	}
-	return br, nil, retryTxn.RefreshedTimestamp
+	return br, nil, retryTxn.ReadTimestamp
 }
 
 // tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all spans read
@@ -282,7 +282,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	// check in appendRefreshSpans prevents a race where a concurrent request
 	// may add new refresh spans only "verified" up to its batch timestamp after
 	// we've refreshed past that timestamp.
-	sr.refreshedTimestamp.Forward(refreshTxn.RefreshedTimestamp)
+	sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
 
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
@@ -344,7 +344,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) bool {
-	batchReadTS := ba.Txn.RefreshedTimestamp
+	batchReadTS := ba.Txn.ReadTimestamp
 	var concurrentRefresh bool
 	if batchReadTS.Less(sr.refreshedTimestamp) {
 		// We'll return an error if any of the requests generate a refresh span.

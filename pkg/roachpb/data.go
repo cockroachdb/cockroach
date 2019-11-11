@@ -782,11 +782,11 @@ func MakeTransaction(
 			Priority:     MakePriority(userPriority),
 			Sequence:     0, // 1-indexed, incremented before each Request
 		},
-		Name:               name,
-		LastHeartbeat:      now,
-		RefreshedTimestamp: now,
-		MaxTimestamp:       maxTS,
-		OrigTimestamp:      now, // For compatibility with 19.2.
+		Name:          name,
+		LastHeartbeat: now,
+		ReadTimestamp: now,
+		MaxTimestamp:  maxTS,
+		OrigTimestamp: now, // For compatibility with 19.2.
 	}
 }
 
@@ -813,12 +813,12 @@ func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
 }
 
 // LastActive returns the last timestamp at which client activity definitely
-// occurred, i.e. the maximum of RefreshedTimestamp and LastHeartbeat.
+// occurred, i.e. the maximum of ReadTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
-	ts.Forward(t.RefreshedTimestamp)
+	ts.Forward(t.ReadTimestamp)
 
-	// For compatibility with 19.2, handle the case where RefreshedTimestamp isn't
+	// For compatibility with 19.2, handle the case where ReadTimestamp isn't
 	// set.
 	ts.Forward(t.OrigTimestamp)
 	return ts
@@ -933,7 +933,7 @@ func (t *Transaction) Restart(
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
 	}
-	t.RefreshedTimestamp = t.Timestamp
+	t.ReadTimestamp = t.Timestamp
 	t.OrigTimestamp = t.Timestamp // For 19.2 compatibility.
 	// Upgrade priority to the maximum of:
 	// - the current transaction priority
@@ -1015,7 +1015,7 @@ func (t *Transaction) Update(o *Transaction) {
 
 		// If the refreshed timestamp move forward, overwrite
 		// WriteTooOld, otherwise the flags are cumulative.
-		if t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
+		if t.ReadTimestamp.Less(o.ReadTimestamp) {
 			t.WriteTooOld = o.WriteTooOld
 			t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
 		} else {
@@ -1044,7 +1044,7 @@ func (t *Transaction) Update(o *Transaction) {
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
-	t.RefreshedTimestamp.Forward(o.RefreshedTimestamp)
+	t.ReadTimestamp.Forward(o.ReadTimestamp)
 
 	// On update, set lower bound timestamps to the minimum seen by either txn.
 	// These shouldn't differ unless one of them is empty, but we're careful
@@ -1089,7 +1089,7 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
-		t.TxnMeta, t.IsWriting(), t.Status, t.RefreshedTimestamp, t.WriteTooOld, t.MaxTimestamp)
+		t.TxnMeta, t.IsWriting(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1109,7 +1109,7 @@ func (t Transaction) SafeMessage() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
-		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.RefreshedTimestamp, t.WriteTooOld, t.MaxTimestamp)
+		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1289,7 +1289,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 
 	newTxn := txn.Clone()
 	newTxn.Timestamp.Forward(timestamp)
-	newTxn.RefreshedTimestamp.Forward(newTxn.Timestamp)
+	newTxn.ReadTimestamp.Forward(newTxn.Timestamp)
 	newTxn.WriteTooOld = false
 
 	return true, newTxn
