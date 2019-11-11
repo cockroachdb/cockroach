@@ -712,15 +712,16 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 	return roachpb.Key(key), nil
 }
 
-// RandCreateTables creates random table definitions. They may contain foreign
-// key references to each other.
-func RandCreateTables(rng *rand.Rand, prefix string, num int) []tree.Statement {
+// RandCreateTables creates random table definitions.
+func RandCreateTables(
+	rng *rand.Rand, prefix string, num int, mutators ...mutations.MultiStatementMutation,
+) []tree.Statement {
 	if num < 1 {
 		panic("at least one table required")
 	}
 
 	// Make some random tables.
-	tables := make([]*tree.CreateTable, num)
+	tables := make([]tree.Statement, num)
 	byName := map[tree.TableName]*tree.CreateTable{}
 	for i := 1; i <= num; i++ {
 		t := RandCreateTable(rng, prefix, i)
@@ -728,120 +729,12 @@ func RandCreateTables(rng *rand.Rand, prefix string, num int) []tree.Statement {
 		byName[t.Table] = t
 	}
 
-	// Find columns in the tables.
-	cols := map[tree.TableName][]*tree.ColumnTableDef{}
-	for _, table := range tables {
-		for _, def := range table.Defs {
-			switch def := def.(type) {
-			case *tree.ColumnTableDef:
-				cols[table.Table] = append(cols[table.Table], def)
-			}
-		}
+	for _, m := range mutators {
+		muts := m(rng, tables)
+		tables = append(tables, muts...)
 	}
 
-	toNames := func(cols []*tree.ColumnTableDef) tree.NameList {
-		names := make(tree.NameList, len(cols))
-		for i, c := range cols {
-			names[i] = c.Name
-		}
-		return names
-	}
-
-	// We cannot mutate the table definitions themselves because 1) we
-	// don't know the order of dependencies (i.e., table 1 could reference
-	// table 4 which doesn't exist yet) and relatedly 2) we don't prevent
-	// circular dependencies. Instead, add new ALTER TABLE commands to the
-	// end of a list of statements.
-	statements := make([]tree.Statement, len(tables))
-	for i, t := range tables {
-		statements[i] = t
-	}
-
-	// Create some FKs.
-	for rng.Intn(2) == 0 {
-		// Choose a random table.
-		table := tables[rng.Intn(len(tables))]
-		// Choose a random column subset.
-		fkCols := append([]*tree.ColumnTableDef(nil), cols[table.Table]...)
-		rng.Shuffle(len(fkCols), func(i, j int) {
-			fkCols[i], fkCols[j] = fkCols[j], fkCols[i]
-		})
-		// Pick some randomly short prefix. I'm sure there's a closed
-		// form solution to this with a single call to rng.Intn but I'm
-		// not sure what to search for.
-		i := 1
-		for len(fkCols) > i && rng.Intn(2) == 0 {
-			i++
-		}
-		fkCols = fkCols[:i]
-
-		// Check if a table has the needed column types.
-	LoopTable:
-		for refTable, refCols := range cols {
-			// Prevent self references.
-			// TODO(mjibson): Circular references are not
-			// prevented, but it would be nice to detect and
-			// prevent them.
-			if refTable == table.Table || len(refCols) < len(fkCols) {
-				continue
-			}
-
-			// We found a table with enough columns. Check if it
-			// has some columns that are needed types. In order
-			// to not use columns multiple times, keep track of
-			// available columns.
-			availCols := append([]*tree.ColumnTableDef(nil), refCols...)
-			var usingCols []*tree.ColumnTableDef
-			for len(availCols) > 0 && len(usingCols) < len(fkCols) {
-				fkCol := fkCols[len(usingCols)]
-				found := false
-				for refI, refCol := range availCols {
-					if fkCol.Type.Equivalent(refCol.Type) {
-						usingCols = append(usingCols, refCol)
-						availCols = append(availCols[:refI], availCols[refI+1:]...)
-						found = true
-						break
-					}
-				}
-				if !found {
-					continue LoopTable
-				}
-			}
-			// If we didn't find enough columns, try another table.
-			if len(usingCols) != len(fkCols) {
-				continue
-			}
-
-			// Found a suitable table.
-			// TODO(mjibson): prevent the creation of unneeded
-			// unique indexes. One may already exist with the
-			// correct prefix.
-			ref := byName[refTable]
-			refColumns := make(tree.IndexElemList, len(usingCols))
-			for i, c := range usingCols {
-				refColumns[i].Column = c.Name
-			}
-			ref.Defs = append(ref.Defs, &tree.UniqueConstraintTableDef{
-				IndexTableDef: tree.IndexTableDef{
-					Columns: refColumns,
-				},
-			})
-
-			statements = append(statements, &tree.AlterTable{
-				Table: table.Table.ToUnresolvedObjectName(),
-				Cmds: tree.AlterTableCmds{&tree.AlterTableAddConstraint{
-					ConstraintDef: &tree.ForeignKeyConstraintTableDef{
-						Table:    ref.Table,
-						FromCols: toNames(fkCols),
-						ToCols:   toNames(usingCols),
-					},
-				}},
-			})
-			break
-		}
-	}
-
-	return statements
+	return tables
 }
 
 // RandCreateTable creates a random CreateTable definition.
@@ -898,7 +791,7 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 
 	// Create some random column families.
 	if rng.Intn(2) == 0 {
-		mutations.ColumnFamilyMutator(ret)
+		mutations.ColumnFamilyMutator(rng, ret)
 	}
 
 	return ret
