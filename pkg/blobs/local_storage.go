@@ -47,7 +47,7 @@ func (l *localStorage) prependExternalIODir(path string) (string, error) {
 }
 
 // WriteFile prepends IO dir to filename and writes the content to that local file.
-func (l *localStorage) WriteFile(filename string, content io.ReadSeeker) error {
+func (l *localStorage) WriteFile(filename string, content io.Reader) error {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return err
