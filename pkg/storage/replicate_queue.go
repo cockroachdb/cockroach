@@ -614,11 +614,10 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	zone *config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,
-		candidates,
+		desc.Replicas,
 		repl.store.StoreID(),
 		desc.RangeID,
 		repl.leaseholderStats,
