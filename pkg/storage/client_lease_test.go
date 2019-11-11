@@ -389,7 +389,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 			require.Error(t, err)
 			require.Regexp(t,
 				// The error generated during evaluation.
-				"replica.*of type VOTER_OUTGOING cannot hold lease|"+
+				"replica.*of type VOTER_DEMOTING cannot hold lease|"+
 					// If the lease transfer request has not yet made it to the latching
 					// phase by the time we close(ch) below, we can receive the following
 					// error due to the sanity checking which happens in
@@ -398,7 +398,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 					// We have a sleep loop below to try to encourage the lease transfer
 					// to make it past that sanity check prior to letting the change
 					// of replicas proceed.
-					"cannot transfer lease to replica of type VOTER_OUTGOING", err.Error())
+					"cannot transfer lease to replica of type VOTER_DEMOTING", err.Error())
 		}()
 		// Try really hard to make sure that our request makes it past the
 		// sanity check error to the evaluation error.

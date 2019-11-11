@@ -347,6 +347,7 @@ bool ReplicaType_IsValid(int value) {
     case 1:
     case 2:
     case 3:
+    case 4:
       return true;
     default:
       return false;
