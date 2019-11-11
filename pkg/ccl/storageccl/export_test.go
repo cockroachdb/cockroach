@@ -390,6 +390,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	var curWallTime = 0
 	var curLogical = 0
 
+	batch := e.NewBatch()
 	for i := 0; i < numKeys; i++ {
 		// Ensure walltime and logical are monotonically increasing.
 		curWallTime = randutil.RandIntInRange(rnd, 0, math.MaxInt64-1)
@@ -404,7 +405,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 		value.InitChecksum(key)
-		if err := engine.MVCCPut(ctx, e, nil, key, ts, value, nil); err != nil {
+		if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -415,11 +416,15 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 			ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
 			value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 			value.InitChecksum(key)
-			if err := engine.MVCCPut(ctx, e, nil, key, ts, value, nil); err != nil {
+			if err := engine.MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
+	if err := batch.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+	batch.Close()
 
 	sort.Slice(timestamps, func(i, j int) bool {
 		return (timestamps[i].WallTime < timestamps[j].WallTime) ||
