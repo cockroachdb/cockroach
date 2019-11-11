@@ -138,18 +138,15 @@ SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
 project
  ├── columns: k:1(int!null)
- ├── key: (1)
- └── select
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── scan a@u
       ├── columns: k:1(int!null) u:2(int!null)
-      ├── key: (1)
-      ├── fd: ()-->(2)
-      ├── scan a@u
-      │    ├── columns: k:1(int!null) u:2(int!null)
-      │    ├── constraint: /2/1: [/1 - /1]
-      │    ├── key: (1)
-      │    └── fd: ()-->(2)
-      └── filters
-           └── (k + u) = 1 [type=bool, outer=(1,2)]
+      ├── constraint: /2/1: [/1/0 - /1/0]
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,2)
 
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
@@ -158,28 +155,28 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 10.66
- ├── G2: (select G4 G5) (select G6 G7)
+ │         └── cost: 1.07
+ ├── G2: (select G4 G5) (select G6 G7) (scan a@u,cols=(1,2),constrained)
  │    └── []
- │         ├── best: (select G6 G7)
- │         └── cost: 10.62
+ │         ├── best: (scan a@u,cols=(1,2),constrained)
+ │         └── cost: 1.05
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
  │         └── cost: 1050.02
  ├── G5: (filters G8 G9)
- ├── G6: (scan a@u,cols=(1,2),constrained)
+ ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
- │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 10.51
- ├── G7: (filters G9)
+ │         ├── best: (scan a,cols=(1,2),constrained)
+ │         └── cost: 1.06
+ ├── G7: (filters G8)
  ├── G8: (eq G10 G11)
- ├── G9: (eq G12 G11)
+ ├── G9: (eq G12 G13)
  ├── G10: (variable u)
  ├── G11: (const 1)
- ├── G12: (plus G13 G10)
- └── G13: (variable k)
+ ├── G12: (variable k)
+ └── G13: (const 0)
 
 opt
 SELECT k FROM a WHERE u = 1 AND v = 5

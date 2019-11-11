@@ -1490,49 +1490,47 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── project
+ └── semi-join (hash)
       ├── columns: pk:1(int!null) col0:2(int!null) col2:4(int!null) col4:5(int!null)
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,2,4,5)
-      └── project
-           ├── columns: pk:1(int!null) col0:2(int!null) col2:4(int!null) col4:5(int!null) col0:7(int!null)
-           ├── cardinality: [0 - 1]
-           ├── key: ()
-           ├── fd: ()-->(1,2,4,5,7)
-           └── inner-join (lookup t)
-                ├── columns: pk:1(int!null) col0:2(int!null) col2:4(int!null) col4:5(int!null) col0:7(int!null) col2:9(int)
-                ├── key columns: [1] = [1]
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(1,2,4,5,7,9)
-                ├── inner-join (lookup t@secondary)
-                │    ├── columns: pk:1(int!null) col2:4(int!null) col0:7(int!null) col2:9(int)
-                │    ├── key columns: [7] = [4]
-                │    ├── cardinality: [0 - 1]
-                │    ├── key: ()
-                │    ├── fd: ()-->(1,4,7,9)
-                │    ├── select
-                │    │    ├── columns: col0:7(int!null) col2:9(int)
-                │    │    ├── cardinality: [0 - 1]
-                │    │    ├── key: ()
-                │    │    ├── fd: ()-->(7,9)
-                │    │    ├── index-join t
-                │    │    │    ├── columns: col0:7(int) col2:9(int)
-                │    │    │    ├── lax-key: (7)
-                │    │    │    ├── fd: ()-->(9), (9)~~>(7)
-                │    │    │    └── scan t@secondary
-                │    │    │         ├── columns: pk:6(int!null) col2:9(int)
-                │    │    │         ├── constraint: /9: [/NULL - /NULL]
-                │    │    │         ├── key: (6)
-                │    │    │         └── fd: ()-->(9), (9)~~>(6)
-                │    │    └── filters
-                │    │         └── col0 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-                │    └── filters
-                │         └── col2 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-                └── filters
-                     ├── col4 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-                     └── col0 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── select
+      │    ├── columns: pk:1(int!null) col0:2(int!null) col2:4(int!null) col4:5(int!null)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2,4,5)
+      │    ├── index-join t
+      │    │    ├── columns: pk:1(int!null) col0:2(int) col2:4(int) col4:5(int)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1,2,4,5)
+      │    │    └── scan t@secondary
+      │    │         ├── columns: pk:1(int!null) col2:4(int!null)
+      │    │         ├── constraint: /4: [/1 - /1]
+      │    │         ├── cardinality: [0 - 1]
+      │    │         ├── key: ()
+      │    │         └── fd: ()-->(1,4)
+      │    └── filters
+      │         ├── col4 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      │         └── col0 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── select
+      │    ├── columns: col0:7(int!null) col2:9(int)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7,9)
+      │    ├── index-join t
+      │    │    ├── columns: col0:7(int) col2:9(int)
+      │    │    ├── lax-key: (7)
+      │    │    ├── fd: ()-->(9), (9)~~>(7)
+      │    │    └── scan t@secondary
+      │    │         ├── columns: pk:6(int!null) col2:9(int)
+      │    │         ├── constraint: /9: [/NULL - /NULL]
+      │    │         ├── key: (6)
+      │    │         └── fd: ()-->(9), (9)~~>(6)
+      │    └── filters
+      │         └── col0 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── filters (true)
 
 # --------------------------------------------------
 # GenerateZigZagJoins
