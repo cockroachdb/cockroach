@@ -104,6 +104,9 @@ func (m *mysqldumpReader) readFile(
 	for _, conv := range m.tables {
 		conv.KvBatch.Source = inputIdx
 		conv.FractionFn = input.ReadFraction
+		conv.CompletedRowFn = func() int64 {
+			return count
+		}
 	}
 
 	for {
@@ -138,6 +141,10 @@ func (m *mysqldumpReader) readFile(
 			startingCount := count
 			for _, inputRow := range rows {
 				count++
+
+				if count <= resumePos {
+					continue
+				}
 				if expected, got := len(conv.VisibleCols), len(inputRow); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, inputRow)
 				}
