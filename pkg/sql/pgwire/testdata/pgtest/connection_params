@@ -1,0 +1,35 @@
+# Change the application name.
+
+send
+Parse {"Query": "SET application_name = 'pgtest'"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone.
+
+send
+Parse {"Query": "SET TIME ZONE +6"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"6"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

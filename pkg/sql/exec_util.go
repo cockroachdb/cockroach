@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1737,17 +1738,33 @@ type sessionDataMutator struct {
 	settings *cluster.Settings
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	setCurTxnReadOnly func(val bool)
-	// applicationNamedChanged, if set, is called when the "application name"
-	// variable is updated.
-	applicationNameChanged func(newName string)
+	// onSessionDataChangeListeners stores all the observers to execute when
+	// session data is modified, keyed by the value to change on.
+	onSessionDataChangeListeners map[string][]func(val interface{})
+}
+
+// RegisterOnSessionDataChange adds a listener to execute when a change on the
+// given key is made using the mutator object.
+func (m *sessionDataMutator) RegisterOnSessionDataChange(key string, f func(val interface{})) {
+	if m.onSessionDataChangeListeners == nil {
+		m.onSessionDataChangeListeners = make(map[string][]func(val interface{}))
+	}
+	if _, ok := m.onSessionDataChangeListeners[key]; !ok {
+		m.onSessionDataChangeListeners[key] = []func(val interface{}){}
+	}
+	m.onSessionDataChangeListeners[key] = append(m.onSessionDataChangeListeners[key], f)
+}
+
+func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val interface{}) {
+	for _, f := range m.onSessionDataChangeListeners[key] {
+		f(val)
+	}
 }
 
 // SetApplicationName sets the application name.
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
-	if m.applicationNameChanged != nil {
-		m.applicationNameChanged(appName)
-	}
+	m.notifyOnDataChangeListeners("application_name", appName)
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondata.BytesEncodeFormat) {
@@ -1816,6 +1833,13 @@ func (m *sessionDataMutator) SetSearchPath(val sessiondata.SearchPath) {
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.DataConversion.Location = loc
+
+	locStr := loc.String()
+	_, origRepr, parsed := timeutil.ParseFixedOffsetTimeZone(locStr)
+	if parsed {
+		locStr = origRepr
+	}
+	m.notifyOnDataChangeListeners("TimeZone", locStr)
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
