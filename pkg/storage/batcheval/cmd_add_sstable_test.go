@@ -57,15 +57,16 @@ var engineImpls = []struct {
 }
 
 func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return nil, err
-	}
+	sstFile := &engine.MemFile{}
+	sst := engine.MakeSSTWriter(sstFile)
 	defer sst.Close()
 	if err := sst.Put(key, value); err != nil {
 		return nil, err
 	}
-	return sst.Finish()
+	if err := sst.Finish(); err != nil {
+		return nil, err
+	}
+	return sstFile.Data(), nil
 }
 
 func TestDBAddSSTable(t *testing.T) {
@@ -404,21 +405,18 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			}()
 
 			mkSST := func(kvs []engine.MVCCKeyValue) []byte {
-				sst, err := engine.MakeRocksDBSstFileWriter()
-				if err != nil {
-					t.Fatalf("%+v", err)
-				}
+				sstFile := &engine.MemFile{}
+				sst := engine.MakeSSTWriter(sstFile)
 				defer sst.Close()
 				for _, kv := range kvs {
 					if err := sst.Put(kv.Key, kv.Value); err != nil {
 						t.Fatalf("%+v", err)
 					}
 				}
-				sstBytes, err := sst.Finish()
-				if err != nil {
+				if err := sst.Finish(); err != nil {
 					t.Fatalf("%+v", err)
 				}
-				return sstBytes
+				return sstFile.Data()
 			}
 
 			sstBytes := mkSST(sstKVs)
@@ -511,21 +509,18 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 			}
 
 			getSSTBytes := func(sstKVs []engine.MVCCKeyValue) []byte {
-				sst, err := engine.MakeRocksDBSstFileWriter()
-				if err != nil {
-					t.Fatalf("%+v", err)
-				}
+				sstFile := &engine.MemFile{}
+				sst := engine.MakeSSTWriter(sstFile)
 				defer sst.Close()
 				for _, kv := range sstKVs {
 					if err := sst.Put(kv.Key, kv.Value); err != nil {
 						t.Fatalf("%+v", err)
 					}
 				}
-				sstBytes, err := sst.Finish()
-				if err != nil {
+				if err := sst.Finish(); err != nil {
 					t.Fatalf("%+v", err)
 				}
-				return sstBytes
+				return sstFile.Data()
 			}
 
 			getStats := func(startKey, endKey roachpb.Key, data []byte) enginepb.MVCCStats {
