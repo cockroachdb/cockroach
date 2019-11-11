@@ -155,6 +155,7 @@ func registerTypeORM(r *testRegistry) {
 		Name:       "typeorm",
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v19.1.0",
+		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTypeORM(ctx, t, c)
 		},

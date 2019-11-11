@@ -595,7 +595,7 @@ func (r *testRunner) runTest(
 			shout(ctx, l, stdout, "--- FAIL: %s %s\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
+				authorEmail := getAuthorEmail(t.spec.Tags, failLoc.file, failLoc.line)
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
 					branch = b
