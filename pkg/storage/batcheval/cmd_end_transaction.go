@@ -377,9 +377,9 @@ func IsEndTransactionTriggeringRetryError(
 	if txn.WriteTooOld {
 		retry, reason = true, roachpb.RETRY_WRITE_TOO_OLD
 	} else {
-		readTimestamp := txn.RefreshedTimestamp
+		readTimestamp := txn.ReadTimestamp
 		// For compatibility with 19.2 nodes which might not have set
-		// RefreshedTimestamp, fallback to OrigTimestamp.
+		// ReadTimestamp, fallback to OrigTimestamp.
 		readTimestamp.Forward(txn.OrigTimestamp)
 		isTxnPushed := txn.Timestamp != readTimestamp
 

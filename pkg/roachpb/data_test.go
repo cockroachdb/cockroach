@@ -483,7 +483,7 @@ var nonZeroTxn = Transaction{
 	Status:                   COMMITTED,
 	LastHeartbeat:            makeTS(1, 2),
 	OrigTimestamp:            makeTS(30, 31),
-	RefreshedTimestamp:       makeTS(20, 22),
+	ReadTimestamp:            makeTS(20, 22),
 	MaxTimestamp:             makeTS(40, 41),
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	WriteTooOld:              true,
@@ -660,8 +660,8 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.Epoch++
 	expTxn.Sequence = 0
 	expTxn.Timestamp = makeTS(25, 1)
-	expTxn.RefreshedTimestamp = makeTS(25, 1)
-	expTxn.OrigTimestamp = expTxn.RefreshedTimestamp
+	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.OrigTimestamp = expTxn.ReadTimestamp
 	expTxn.WriteTooOld = false
 	expTxn.OrigTimestampWasObserved = false
 	expTxn.IntentSpans = nil

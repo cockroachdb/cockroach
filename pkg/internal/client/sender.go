@@ -137,7 +137,7 @@ type TxnSender interface {
 	TxnStatus() roachpb.TransactionStatus
 
 	// SetFixedTimestamp makes the transaction run in an unusual way, at a "fixed
-	// timestamp": Timestamp and RefreshedTimestamp are set to ts, there's no clock
+	// timestamp": Timestamp and ReadTimestamp are set to ts, there's no clock
 	// uncertainty, and the txn's deadline is set to ts such that the transaction
 	// can't be pushed to a different timestamp.
 	//
@@ -320,12 +320,12 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 
 // ReadTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
-	return m.txn.RefreshedTimestamp
+	return m.txn.ReadTimestamp
 }
 
 // CommitTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
-	return m.txn.RefreshedTimestamp
+	return m.txn.ReadTimestamp
 }
 
 // CommitTimestampFixed is part of the TxnSender interface.
@@ -336,7 +336,7 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 // SetFixedTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
 	m.txn.Timestamp = ts
-	m.txn.RefreshedTimestamp = ts
+	m.txn.ReadTimestamp = ts
 	m.txn.MaxTimestamp = ts
 	m.txn.OrigTimestampWasObserved = true
 

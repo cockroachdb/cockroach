@@ -1780,7 +1780,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			if tc.pusheeAlreadyPushed {
 				pushedTs := store.cfg.Clock.Now()
 				pushee.Timestamp.Forward(pushedTs)
-				pushee.RefreshedTimestamp.Forward(pushedTs)
+				pushee.ReadTimestamp.Forward(pushedTs)
 				hb, hbH := heartbeatArgs(pushee, store.cfg.Clock.Now())
 				if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), hbH, &hb); pErr != nil {
 					t.Fatal(pErr)

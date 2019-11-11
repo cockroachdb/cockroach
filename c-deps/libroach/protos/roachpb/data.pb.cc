@@ -3411,7 +3411,7 @@ void Transaction::InitAsDefaultInstance() {
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->orig_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->refreshed_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->read_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->max_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
@@ -3434,11 +3434,11 @@ void Transaction::clear_orig_timestamp() {
   }
   orig_timestamp_ = NULL;
 }
-void Transaction::clear_refreshed_timestamp() {
-  if (GetArenaNoVirtual() == NULL && refreshed_timestamp_ != NULL) {
-    delete refreshed_timestamp_;
+void Transaction::clear_read_timestamp() {
+  if (GetArenaNoVirtual() == NULL && read_timestamp_ != NULL) {
+    delete read_timestamp_;
   }
-  refreshed_timestamp_ = NULL;
+  read_timestamp_ = NULL;
 }
 void Transaction::clear_max_timestamp() {
   if (GetArenaNoVirtual() == NULL && max_timestamp_ != NULL) {
@@ -3453,7 +3453,7 @@ const int Transaction::kStatusFieldNumber;
 const int Transaction::kLastHeartbeatFieldNumber;
 const int Transaction::kOrigTimestampFieldNumber;
 const int Transaction::kOrigTimestampWasObservedFieldNumber;
-const int Transaction::kRefreshedTimestampFieldNumber;
+const int Transaction::kReadTimestampFieldNumber;
 const int Transaction::kMaxTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
@@ -3499,10 +3499,10 @@ Transaction::Transaction(const Transaction& from)
   } else {
     max_timestamp_ = NULL;
   }
-  if (from.has_refreshed_timestamp()) {
-    refreshed_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.refreshed_timestamp_);
+  if (from.has_read_timestamp()) {
+    read_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.read_timestamp_);
   } else {
-    refreshed_timestamp_ = NULL;
+    read_timestamp_ = NULL;
   }
   ::memcpy(&status_, &from.status_,
     static_cast<size_t>(reinterpret_cast<char*>(&write_too_old_) -
@@ -3528,7 +3528,7 @@ void Transaction::SharedDtor() {
   if (this != internal_default_instance()) delete last_heartbeat_;
   if (this != internal_default_instance()) delete orig_timestamp_;
   if (this != internal_default_instance()) delete max_timestamp_;
-  if (this != internal_default_instance()) delete refreshed_timestamp_;
+  if (this != internal_default_instance()) delete read_timestamp_;
 }
 
 void Transaction::SetCachedSize(int size) const {
@@ -3566,10 +3566,10 @@ void Transaction::Clear() {
     delete max_timestamp_;
   }
   max_timestamp_ = NULL;
-  if (GetArenaNoVirtual() == NULL && refreshed_timestamp_ != NULL) {
-    delete refreshed_timestamp_;
+  if (GetArenaNoVirtual() == NULL && read_timestamp_ != NULL) {
+    delete read_timestamp_;
   }
-  refreshed_timestamp_ = NULL;
+  read_timestamp_ = NULL;
   ::memset(&status_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&write_too_old_) -
       reinterpret_cast<char*>(&status_)) + sizeof(write_too_old_));
@@ -3707,7 +3707,7 @@ bool Transaction::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(122u /* 122 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_refreshed_timestamp()));
+               input, mutable_read_timestamp()));
         } else {
           goto handle_unusual;
         }
@@ -3822,9 +3822,9 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(12, this->write_too_old(), output);
   }
 
-  if (this->has_refreshed_timestamp()) {
+  if (this->has_read_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      15, this->_internal_refreshed_timestamp(), output);
+      15, this->_internal_read_timestamp(), output);
   }
 
   // bool orig_timestamp_was_observed = 16;
@@ -3912,10 +3912,10 @@ size_t Transaction::ByteSizeLong() const {
         *max_timestamp_);
   }
 
-  if (this->has_refreshed_timestamp()) {
+  if (this->has_read_timestamp()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *refreshed_timestamp_);
+        *read_timestamp_);
   }
 
   // .cockroach.roachpb.TransactionStatus status = 4;
@@ -3970,8 +3970,8 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.has_max_timestamp()) {
     mutable_max_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.max_timestamp());
   }
-  if (from.has_refreshed_timestamp()) {
-    mutable_refreshed_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.refreshed_timestamp());
+  if (from.has_read_timestamp()) {
+    mutable_read_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.read_timestamp());
   }
   if (from.status() != 0) {
     set_status(from.status());
@@ -4010,7 +4010,7 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(last_heartbeat_, other->last_heartbeat_);
   swap(orig_timestamp_, other->orig_timestamp_);
   swap(max_timestamp_, other->max_timestamp_);
-  swap(refreshed_timestamp_, other->refreshed_timestamp_);
+  swap(read_timestamp_, other->read_timestamp_);
   swap(status_, other->status_);
   swap(orig_timestamp_was_observed_, other->orig_timestamp_was_observed_);
   swap(write_too_old_, other->write_too_old_);

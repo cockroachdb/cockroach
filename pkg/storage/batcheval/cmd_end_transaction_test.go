@@ -50,7 +50,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 	pushedHeaderTxn.Timestamp.Forward(ts2)
 	refreshedHeaderTxn := txn.Clone()
 	refreshedHeaderTxn.Timestamp.Forward(ts2)
-	refreshedHeaderTxn.RefreshedTimestamp.Forward(ts2)
+	refreshedHeaderTxn.ReadTimestamp.Forward(ts2)
 	restartedHeaderTxn := txn.Clone()
 	restartedHeaderTxn.Restart(-1, 0, ts2)
 	restartedAndPushedHeaderTxn := txn.Clone()
