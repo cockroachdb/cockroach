@@ -319,13 +319,12 @@ message Transaction {
   // coordinator to indicate client activity. Concurrent transactions will
   // avoid aborting a transaction if it observes recent-enough activity.
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
-  // This field is deprecated.
   // The timestamp at which the transaction's current epoch started. Up until
   // version 19.2, this was used in conjunction with read_timestamp to
   // determine a transaction's read timestamp. In 20.1, read_timestamp
   // alone is sufficient. This is just maintained for compatibility with 19.2.
   // TODO(andrei): Remove in 20.2.
-  util.hlc.Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp deprecated_orig_timestamp = 6 [(gogoproto.nullable) = false];
   // This flag is set if the transaction's original timestamp was
   // "leaked" beyond the transaction (i.e. if returned via NOW() or
   // transaction_timestamp()). If true, this prevents optimizations
