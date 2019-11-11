@@ -99,3 +99,72 @@ func TestPebbleTimeBoundPropCollector(t *testing.T) {
 		}
 	})
 }
+
+func TestPebbleIterReuse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Regression test for https://github.com/cockroachdb/cockroach/issues/42354
+	// and similar issues arising from improper re-initialization of cached
+	// iterators.
+
+	eng := createTestPebbleEngine()
+	defer eng.Close()
+
+	batch := eng.NewBatch()
+	for i := 0; i < 100; i++ {
+		key := MVCCKey{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
+		if err := batch.Put(key, []byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	iter1 := batch.NewIterator(IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
+	valuesCount := 0
+	// Seek to a value before the lower bound. Identical to seeking to the lower bound.
+	iter1.SeekGE(MVCCKey{Key: []byte{30}})
+	for ; ; iter1.Next() {
+		ok, err := iter1.Valid()
+		if err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		i := iter1.UnsafeKey().Key[0]
+		if i < 40 || i >= 50 {
+			t.Fatalf("iterator returned key out of bounds: %d", i)
+		}
+
+		valuesCount++
+	}
+
+	if valuesCount != 10 {
+		t.Fatalf("expected 10 values, got %d", valuesCount)
+	}
+	iter1.Close()
+
+	// Create another iterator, with no lower bound but an upper bound that
+	// is lower than the previous iterator's lower bound. This should still result
+	// in the right amount of keys being returned; the lower bound from the
+	// previous iterator should get zeroed.
+	iter2 := batch.NewIterator(IterOptions{UpperBound: []byte{10}})
+	valuesCount = 0
+	iter1.SeekGE(MVCCKey{Key: []byte{0}})
+	for ; ; iter2.Next() {
+		ok, err := iter1.Valid()
+		if err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+
+		i := iter2.UnsafeKey().Key[0]
+		if i >= 10 {
+			t.Fatalf("iterator returned key out of bounds: %d", i)
+		}
+		valuesCount++
+	}
+
+	if valuesCount != 10 {
+		t.Fatalf("expected 10 values, got %d", valuesCount)
+	}
+	iter2.Close()
+}

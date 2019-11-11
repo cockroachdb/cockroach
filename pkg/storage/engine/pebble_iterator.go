@@ -131,6 +131,9 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 }
 
 func (p *pebbleIterator) setOptions(opts IterOptions) {
+	// Overwrite any stale options from last time.
+	p.options = pebble.IterOptions{}
+
 	if opts.MinTimestampHint != (hlc.Timestamp{}) || opts.MaxTimestampHint != (hlc.Timestamp{}) {
 		panic("iterator with timestamp hints cannot be reused")
 	}
