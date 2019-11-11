@@ -32,7 +32,7 @@ rowid        INT8         false        unique_rowid()  ·                      {
 query TTTT
 SELECT * FROM t
 ----
-some string  short  0000-01-01 20:16:27 +0000 UTC  2018-05-23 22:16:27.658082 +0200 +0200
+some string  short  0000-01-01 20:16:27 +0000 UTC  2018-05-23 22:16:27.658082 +0200 CEST
 
 statement ok
 DROP TABLE t

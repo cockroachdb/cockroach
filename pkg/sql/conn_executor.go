@@ -429,6 +429,12 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 	return defVal
 }
 
+// RegisterOnSessionDataChange adds a listener to execute when a change on the
+// given key is made using the mutator object.
+func (h ConnectionHandler) RegisterOnSessionDataChange(key string, f func(val string)) {
+	h.ex.dataMutator.RegisterOnSessionDataChange(key, f)
+}
+
 // ServeConn serves a client connection by reading commands from the stmtBuf
 // embedded in the ConnHandler.
 //
@@ -543,10 +549,10 @@ func (s *Server) newConnExecutor(
 		sdMutator.setCurTxnReadOnly = func(val bool) {
 			ex.state.readOnly = val
 		}
-		sdMutator.applicationNameChanged = func(newName string) {
+		sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
 			ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 			ex.applicationName.Store(newName)
-		}
+		})
 		// Initialize the session data from provided defaults. We need to do this early
 		// because other initializations below use the configured values.
 		if err := resetSessionVars(ctx, sdMutator); err != nil {
