@@ -271,8 +271,12 @@ func (d *pgCopyReader) readFile(
 	)
 	d.conv.KvBatch.Source = inputIdx
 	d.conv.FractionFn = input.ReadFraction
+	count := int64(1)
+	d.conv.CompletedRowFn = func() int64 {
+		return count
+	}
 
-	for count := int64(1); ; count++ {
+	for ; ; count++ {
 		row, err := c.Next()
 		if err == io.EOF {
 			break
@@ -280,6 +284,11 @@ func (d *pgCopyReader) readFile(
 		if err != nil {
 			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
+
+		if count <= resumePos {
+			continue
+		}
+
 		if len(row) != len(d.conv.VisibleColTypes) {
 			return makeRowErr(inputName, count, pgcode.Syntax,
 				"expected %d values, got %d", len(d.conv.VisibleColTypes), len(row))
