@@ -131,19 +131,19 @@ func (os *optSteps) Next() error {
 		}
 
 		if fo.lastAppliedSource == nil {
-			// This was a normalization that created a new memo group. Since there's
-			// just one node in the group, only ancestor groups need to be suppressed.
-			fo2.RestrictToGroup(fo.LookupPath(fo.lastAppliedTarget))
+			// This was a normalization that created a new memo group.
+			fo2.RestrictToExpr(fo.LookupPath(fo.lastAppliedTarget))
 		} else if fo.lastAppliedTarget == nil {
 			// This was an exploration rule that didn't add any expressions to the
 			// group, so only ancestor groups need to be suppressed.
-			fo2.RestrictToGroup(fo.LookupPath(fo.lastAppliedSource))
+			path := fo.LookupPath(fo.lastAppliedSource)
+			fo2.RestrictToExpr(path[:len(path)-1])
 		} else {
 			// This was an exploration rule that added one or more expressions to
 			// an existing group. Suppress all other members of the group.
 			member := fo.lastAppliedTarget.(memo.RelExpr)
 			for member != nil {
-				fo2.RestrictToGroup(fo.LookupPath(member))
+				fo2.RestrictToExpr(fo.LookupPath(member))
 				member = member.NextExpr()
 			}
 		}
