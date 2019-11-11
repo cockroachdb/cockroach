@@ -349,10 +349,8 @@ func writeSST(
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
 	log.Info(ctx, "writesst ", filename)
 
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return err
-	}
+	sstFile := &engine.MemFile{}
+	sst := engine.MakeSSTWriter(sstFile)
 	defer sst.Close()
 	for _, kv := range kvs {
 		kv.Key.Timestamp = ts
@@ -360,12 +358,14 @@ func writeSST(
 			return err
 		}
 	}
-	sstContents, err := sst.Finish()
+	err := sst.Finish()
 	if err != nil {
 		return err
 	}
 
-	if err := base.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
+	// TODO(itsbilal): Pass a file handle into SSTWriter instead of writing to a
+	// MemFile first.
+	if err := base.WriteFile(ctx, filename, bytes.NewReader(sstFile.Data())); err != nil {
 		return err
 	}
 
@@ -378,6 +378,6 @@ func writeSST(
 		},
 		Path: filename,
 	})
-	backup.EntryCounts.DataSize += sst.DataSize()
+	backup.EntryCounts.DataSize += sst.DataSize
 	return nil
 }

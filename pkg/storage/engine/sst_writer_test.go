@@ -65,17 +65,18 @@ func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
 }
 
 func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
-	w := engine.MakeSSTWriter()
+	f := &engine.MemFile{}
+	w := engine.MakeSSTWriter(f)
 	defer w.Close()
 
 	for i := range kvs {
-		if err := w.Add(kvs[i]); err != nil {
+		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
 			t.Fatal(err)
 		}
 	}
-	sst, err := w.Finish()
+	err := w.Finish()
 	require.NoError(t, err)
-	return sst
+	return f.Data()
 }
 
 // TestPebbleWritesSameSSTs tests that using pebble to write some SST produces
@@ -140,6 +141,21 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 	require.Equal(t, string(sstRocks), string(sstPebble))
 }
 
+func BenchmarkWriteRocksSSTable(b *testing.B) {
+	b.StopTimer()
+	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
+	const valueSize, revisions, ssts = 100, 100, 10
+	kvs := makeIntTableKVs(b.N, valueSize, revisions)
+	approxUserDataSizePerKV := kvs[b.N/2].Key.EncodedSize() + valueSize
+	b.SetBytes(int64(approxUserDataSizePerKV * ssts))
+	b.ResetTimer()
+	b.StartTimer()
+	for i := 0; i < ssts; i++ {
+		_ = makeRocksSST(b, kvs)
+	}
+	b.StopTimer()
+}
+
 func BenchmarkWriteSSTable(b *testing.B) {
 	b.StopTimer()
 	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
@@ -152,4 +168,5 @@ func BenchmarkWriteSSTable(b *testing.B) {
 	for i := 0; i < ssts; i++ {
 		_ = makePebbleSST(b, kvs)
 	}
+	b.StopTimer()
 }

@@ -817,10 +817,8 @@ func (r *Replica) applySnapshot(
 			inSnap.SnapUUID.Short(), snap.Metadata.Index)
 	}(timeutil.Now())
 
-	unreplicatedSST, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return err
-	}
+	unreplicatedSSTFile := &engine.MemFile{}
+	unreplicatedSST := engine.MakeSSTWriter(unreplicatedSSTFile)
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
@@ -877,8 +875,15 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
-	if err := inSnap.SSSS.WriteSST(ctx, &unreplicatedSST); err != nil {
+	if err := unreplicatedSST.Finish(); err != nil {
 		return err
+	}
+	if unreplicatedSST.DataSize > 0 {
+		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
+		// buffering in a MemFile first.
+		if err := inSnap.SSSS.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+			return err
+		}
 	}
 
 	if s.RaftAppliedIndex != snap.Metadata.Index {
@@ -999,10 +1004,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
 	for _, sr := range subsumedRepls {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			return err
-		}
+		subsumedReplSSTFile := &engine.MemFile{}
+		subsumedReplSST := engine.MakeSSTWriter(subsumedReplSSTFile)
+		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RaftTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
@@ -1017,8 +1021,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			subsumedReplSST.Close()
 			return err
 		}
-		if err := ssss.WriteSST(ctx, &subsumedReplSST); err != nil {
+		if err := subsumedReplSST.Finish(); err != nil {
 			return err
+		}
+		if subsumedReplSST.DataSize > 0 {
+			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
+			// buffering in a MemFile first.
+			if err := ssss.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+				return err
+			}
 		}
 
 		srKeyRanges := getKeyRanges(sr.Desc())
@@ -1049,10 +1060,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// subsume both r1 and r2 in S1.
 	for i := range keyRanges {
 		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
-			subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				return err
-			}
+			subsumedReplSSTFile := &engine.MemFile{}
+			subsumedReplSST := engine.MakeSSTWriter(subsumedReplSSTFile)
+			defer subsumedReplSST.Close()
 			if err := engine.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
@@ -1062,8 +1072,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 				subsumedReplSST.Close()
 				return err
 			}
-			if err := ssss.WriteSST(ctx, &subsumedReplSST); err != nil {
+			if err := subsumedReplSST.Finish(); err != nil {
 				return err
+			}
+			if subsumedReplSST.DataSize > 0 {
+				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
+				// buffering in a MemFile first.
+				if err := ssss.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+					return err
+				}
 			}
 		}
 		// The snapshot must never subsume a replica that extends the range of the
