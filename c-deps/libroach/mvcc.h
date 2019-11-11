@@ -48,7 +48,7 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool inconsistent, bool tombstones, bool ignore_sequence)
+              DBTxn txn, bool inconsistent, bool tombstones)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
@@ -61,7 +61,6 @@ template <bool reverse> class mvccScanner {
         txn_max_timestamp_(txn.max_timestamp),
         inconsistent_(inconsistent),
         tombstones_(tombstones),
-        ignore_sequence_(ignore_sequence),
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new chunkedBuffer),
         intents_(new rocksdb::WriteBatch),
@@ -302,7 +301,7 @@ template <bool reverse> class mvccScanner {
     }
 
     if (txn_epoch_ == meta_.txn().epoch()) {
-      if ((ignore_sequence_) || (txn_sequence_ >= meta_.txn().sequence())) {
+      if (txn_sequence_ >= meta_.txn().sequence()) {
         // 8. We're reading our own txn's intent at an equal or higher sequence.
         // Note that we read at the intent timestamp, not at our read timestamp
         // as the intent timestamp may have been pushed forward by another
@@ -666,7 +665,6 @@ template <bool reverse> class mvccScanner {
   const DBTimestamp txn_max_timestamp_;
   const bool inconsistent_;
   const bool tombstones_;
-  const bool ignore_sequence_;
   const bool check_uncertainty_;
   DBScanResults results_;
   std::unique_ptr<chunkedBuffer> kvs_;
