@@ -67,6 +67,7 @@ func registerTests(r *testRegistry) {
 	registerSchemaChangeIndexTPCC100(r)
 	registerSchemaChangeIndexTPCC1000(r)
 	registerMixedSchemaChangesTPCC1000(r)
+	registerForeignKeyUpgrade(r)
 	registerSchemaChangeInvertedIndex(r)
 	registerScrubAllChecksTPCC(r)
 	registerScrubIndexOnlyTPCC(r)

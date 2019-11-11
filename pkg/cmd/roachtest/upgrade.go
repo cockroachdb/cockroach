@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -272,6 +274,257 @@ func registerUpgrade(r *testRegistry) {
 				t.Fatal(err)
 			}
 			runUpgrade(ctx, t, c, pred)
+		},
+	})
+}
+
+func registerForeignKeyUpgrade(r *testRegistry) {
+	// TODO (lucy): There's some code that's reusable between this test and
+	// the regular upgrade test, which might be worth pulling out if/when we start
+	// doing more upgrade/mixed-version testing.
+	runForeignKeyUpgrade := func(ctx context.Context, t *test, c *cluster, oldVersion string) {
+		const nodeUpgradeWaitDuration = time.Minute
+		const numWarehouses = 1000
+		const tpccRamp = time.Minute * 5
+		const tpccDuration = time.Minute * 10
+
+		stop := func(node int) error {
+			port := fmt.Sprintf("{pgport:%d}", node)
+			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port="+port); err != nil {
+				return err
+			}
+			c.Stop(ctx, c.Node(node))
+			return nil
+		}
+
+		sleep := func(ts time.Duration) error {
+			t.WorkerStatus("sleeping")
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(ts):
+				return nil
+			}
+		}
+
+		upgradeNodeRange := func(first, last int) error {
+			t.l.Printf("starting upgrade of nodes %d through %d", first, last)
+			for i := first; i <= last; i++ {
+				if err := stop(i); err != nil {
+					return err
+				}
+				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
+				c.Start(ctx, t, c.Node(i))
+				if err := sleep(nodeUpgradeWaitDuration); err != nil {
+					return err
+				}
+			}
+			t.l.Printf("finished upgrading nodes %d through %d", first, last)
+			return nil
+		}
+
+		// TODO (lucy): Ideally, we'd also want to be able to restart and upgrade a
+		// node, etc. in the middle of a schema change, but there's no good way to
+		// time it or pause the schema change, so trying to do it now would probably
+		// just make the test too unpredictable. Adding the ability to pause schema
+		// changes in 20.1 will probably help.
+		addAndDropFK := func(ctx context.Context, db *gosql.DB) error {
+			t.WorkerStatus("adding foreign key")
+			addStartTime := timeutil.Now()
+			if _, err := db.ExecContext(ctx,
+				`ALTER TABLE tpcc.district ADD CONSTRAINT fk FOREIGN KEY (d_w_id) REFERENCES tpcc.warehouse (w_id)`,
+			); err != nil {
+				return err
+			}
+			t.l.Printf("added foreign key in %s", timeutil.Since(addStartTime))
+
+			t.WorkerStatus("dropping foreign key")
+			dropStartTime := timeutil.Now()
+			if _, err := db.ExecContext(ctx,
+				`ALTER TABLE tpcc.district DROP CONSTRAINT fk`,
+			); err != nil {
+				return err
+			}
+			t.l.Printf("dropped foreign key in %s", timeutil.Since(dropStartTime))
+			t.WorkerStatus("")
+			return nil
+		}
+
+		c.l.Printf("running test with previous version %s", oldVersion)
+
+		// Set up TPCC with all nodes running the old version.
+		oldVersions := make([]string, c.spec.NodeCount-1)
+		versionStr := "v" + oldVersion
+		for i := range oldVersions {
+			oldVersions[i] = versionStr
+		}
+		crdbNodes, workloadNode := setupTPCC(ctx, t, c, numWarehouses, oldVersions)
+		numCrdbNodes := len(crdbNodes)
+
+		dbConn := c.Conn(ctx, 1)
+		defer dbConn.Close()
+		// The following comment and line of code are taken from the upgrade roachtest.
+		//
+		// Without this line, the test reliably fails (at least on OSX), presumably
+		// because a connection to a node that gets restarted somehow sticks around
+		// in the pool and throws an error at the next client using it (instead of
+		// transparently reconnecting).
+		dbConn.SetMaxIdleConns(0)
+
+		clusterVersion := func() (string, error) {
+			var version string
+			if err := dbConn.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&version); err != nil {
+				return "", errors.Wrap(err, "determining cluster version")
+			}
+			return version, nil
+		}
+
+		oldVersion, err := clusterVersion()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		checkUpgraded := func() (bool, error) {
+			upgradedVersion, err := clusterVersion()
+			if err != nil {
+				return false, err
+			}
+			return upgradedVersion != oldVersion, nil
+		}
+
+		// Set cluster.preserve_downgrade_option to prevent the upgrade from being
+		// automatically finalized.
+		if _, err := dbConn.ExecContext(ctx,
+			fmt.Sprintf(`SET CLUSTER SETTING cluster.preserve_downgrade_option = '%s'`, oldVersion),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		m := newMonitor(ctx, c, crdbNodes)
+
+		m.Go(func(ctx context.Context) error {
+			defer t.WorkerStatus()
+			// The first part of the test involves upgrading half the nodes, so we run
+			// TPCC only on the nodes that are not being upgraded.
+			t.WorkerStatus("running tpcc")
+			cmd := fmt.Sprintf(
+				"./workload run tpcc --warehouses=%d --ramp=%s --duration=%s {pgurl:%d-%d}",
+				numWarehouses, tpccRamp, tpccDuration, 1, numCrdbNodes/2)
+			c.Run(ctx, workloadNode, cmd)
+			return nil
+		})
+
+		m.Go(func(ctx context.Context) error {
+			defer t.WorkerStatus()
+			if err := sleep(tpccRamp); err != nil {
+				t.Fatal(err)
+			}
+
+			// Drop existing foreign key so it can be added later during the test.
+			if _, err := dbConn.ExecContext(ctx,
+				`ALTER TABLE tpcc.district DROP CONSTRAINT fk_d_w_id_ref_warehouse`,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := addAndDropFK(ctx, dbConn); err != nil {
+				t.Fatal(err)
+			}
+
+			m.ExpectDeaths(int32((numCrdbNodes + 1) / 2))
+			// Upgrade half the nodes.
+			t.WorkerStatus("upgrading half of cluster")
+			if err := upgradeNodeRange(numCrdbNodes/2+1, numCrdbNodes); err != nil {
+				t.Fatal(err)
+			}
+			m.ResetDeaths()
+
+			// Add and drop a foreign key with one of the non-upgraded nodes as the
+			// gateway.
+			if err := addAndDropFK(ctx, dbConn); err != nil {
+				t.Fatal(err)
+			}
+
+			// Next, do the same thing with one of the upgraded nodes as the gateway.
+			dbConnUpgradedNode := c.Conn(ctx, numCrdbNodes)
+			defer dbConnUpgradedNode.Close()
+			if err := addAndDropFK(ctx, dbConnUpgradedNode); err != nil {
+				t.Fatal(err)
+			}
+
+			return nil
+		})
+
+		m.Wait()
+
+		// Upgrade the remaining half of the nodes.
+		if err := upgradeNodeRange(1, numCrdbNodes/2); err != nil {
+			t.Fatal(err)
+		}
+
+		m = newMonitor(ctx, c, crdbNodes)
+
+		m.Go(func(ctx context.Context) error {
+			defer t.WorkerStatus()
+			// Start tpcc again, this time on all nodes.
+			t.WorkerStatus("running tpcc")
+			cmd := fmt.Sprintf(
+				"./workload run tpcc --warehouses=%d --ramp=%s --duration=%s {pgurl:%d-%d}",
+				numWarehouses, tpccRamp, tpccDuration, 1, numCrdbNodes)
+			c.Run(ctx, workloadNode, cmd)
+			return nil
+		})
+
+		m.Go(func(ctx context.Context) error {
+			defer t.WorkerStatus()
+			if err := sleep(tpccRamp); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := addAndDropFK(ctx, dbConn); err != nil {
+				t.Fatal(err)
+			}
+
+			// Turn auto-finalization for the upgrade back on and wait for the cluster
+			// to update itself.
+			t.l.Printf("resetting cluster setting")
+			if _, err := dbConn.ExecContext(ctx,
+				"RESET CLUSTER SETTING cluster.preserve_downgrade_option;",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if err := sleep(nodeUpgradeWaitDuration); err != nil {
+				t.Fatal(err)
+			}
+
+			for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+				if upgraded, err := checkUpgraded(); err != nil {
+					t.Fatal(err)
+				} else if upgraded {
+					t.l.Printf("cluster upgraded")
+					break
+				}
+			}
+
+			if err := addAndDropFK(ctx, dbConn); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		})
+
+		m.Wait()
+	}
+
+	r.Add(testSpec{
+		Name:       "upgrade/foreign-key",
+		MinVersion: "v19.2.0",
+		Cluster:    makeClusterSpec(5),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			pred, err := PredecessorVersion(r.buildVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runForeignKeyUpgrade(ctx, t, c, pred)
 		},
 	})
 }
