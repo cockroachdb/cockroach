@@ -459,6 +459,9 @@ func (m *pgDumpReader) readFile(
 	for _, conv := range m.tables {
 		conv.KvBatch.Source = inputIdx
 		conv.FractionFn = input.ReadFraction
+		conv.CompletedRowFn = func() int64 {
+			return count
+		}
 	}
 
 	for {
@@ -495,6 +498,9 @@ func (m *pgDumpReader) readFile(
 			startingCount := count
 			for _, tuple := range values.Rows {
 				count++
+				if count <= resumePos {
+					continue
+				}
 				if expected, got := len(conv.VisibleCols), len(tuple); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, tuple)
 				}
@@ -552,6 +558,9 @@ func (m *pgDumpReader) readFile(
 					return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 				}
 				if !importing {
+					continue
+				}
+				if count <= resumePos {
 					continue
 				}
 				switch row := row.(type) {
