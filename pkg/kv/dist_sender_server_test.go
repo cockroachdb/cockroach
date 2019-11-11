@@ -2275,7 +2275,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				// Write again to make sure the timestamp of the second intent
 				// is correctly set to the txn's advanced timestamp. There was
-				// previously a bug where the txn's OrigTimestamp would be used
+				// previously a bug where the txn's DeprecatedOrigTimestamp would be used
 				// and so on the txn refresh caused by the WriteTooOld flag, the
 				// out-of-band Put's value would be missed (see #23032).
 				return txn.Put(ctx, "a", "txn-value2")

@@ -48,7 +48,7 @@ func RefreshRange(
 	refreshFrom := args.RefreshFrom
 	if refreshFrom.IsEmpty() {
 		// Compatibility with 19.2 nodes, which didn't set the args.RefreshFrom field.
-		refreshFrom = h.Txn.OrigTimestamp
+		refreshFrom = h.Txn.DeprecatedOrigTimestamp
 	}
 
 	// Iterate over values until we discover any value written at or after the
