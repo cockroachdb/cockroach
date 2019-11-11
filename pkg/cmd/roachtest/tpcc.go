@@ -120,7 +120,9 @@ func setupTPCC(
 				c.Put(ctx, binary, "./cockroach", c.Node(i+1))
 			}
 		}
-		c.Put(ctx, cockroach, "./cockroach", regularNodes...)
+		if len(regularNodes) > 0 {
+			c.Put(ctx, cockroach, "./cockroach", regularNodes...)
+		}
 	}
 
 	// Fixture import needs ./cockroach workload on workloadNode.
