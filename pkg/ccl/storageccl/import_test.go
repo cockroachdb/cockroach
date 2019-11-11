@@ -170,10 +170,8 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	writeSST := func(t *testing.T, offsets []int) string {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
-		sst, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
+		sstFile := &engine.MemFile{}
+		sst := engine.MakeSSTWriter(sstFile)
 		defer sst.Close()
 		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 		value := roachpb.MakeValueFromString("bar")
@@ -185,11 +183,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				t.Fatalf("%+v", err)
 			}
 		}
-		sstContents, err := sst.Finish()
-		if err != nil {
+		if err := sst.Finish(); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dir, "foo", path), sstContents, 0644); err != nil {
+		if err := ioutil.WriteFile(filepath.Join(dir, "foo", path), sstFile.Data(), 0644); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		return path
