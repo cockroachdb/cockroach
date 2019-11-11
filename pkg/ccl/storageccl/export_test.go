@@ -321,8 +321,6 @@ func assertEqualKVs(
 		}
 
 		// Run new C++ implementation of IncrementalIterator.
-		start := engine.MVCCKey{Key: startKey, Timestamp: startTime}
-		end := engine.MVCCKey{Key: endKey, Timestamp: endTime}
 		io := engine.IterOptions{
 			UpperBound: endKey,
 		}
@@ -330,7 +328,7 @@ func assertEqualKVs(
 			io.MaxTimestampHint = endTime
 			io.MinTimestampHint = startTime.Next()
 		}
-		sst, _, err := e.ExportToSst(start, end, exportAllRevisions, io)
+		sst, _, err := e.ExportToSst(startKey, endKey, startTime, endTime, exportAllRevisions, io)
 		if err != nil {
 			t.Fatal(err)
 		}

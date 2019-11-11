@@ -191,17 +191,14 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportToSst exports changes to the keyrange [start.Key, end.Key) over the
-	// interval (start.Timestamp, end.Timestamp]. Passing exportAllRevisions exports
+	// ExportToSst exports changes to the keyrange [startKey, endKey) over the
+	// interval (startTS, endTS]. Passing exportAllRevisions exports
 	// every revision of a key for the interval, otherwise only the latest value
 	// within the interval is exported. Deletions are included if all revisions are
 	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
 	// SSTable containing the exported keys, the size of exported data, or an error.
-	//
-	// TODO(hueypark): Separate MVCCKey into roachpb.Key and hlc.Timestamp.
-	// (https://github.com/cockroachdb/cockroach/pull/42134#pullrequestreview-311850163)
 	ExportToSst(
-		start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp, exportAllRevisions bool, io IterOptions,
 	) ([]byte, roachpb.BulkOpSummary, error)
 	// Get returns the value for the given key, nil otherwise.
 	//
