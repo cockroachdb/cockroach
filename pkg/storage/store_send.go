@@ -32,9 +32,9 @@ import (
 // specified through the incoming BatchRequest, and it is not guaranteed that
 // all operations are written at the same timestamp. If it is transactional, a
 // timestamp must not be set - it is deduced automatically from the
-// transaction. In particular, the read (original) timestamp will be used for
+// transaction. In particular, the read timestamp will be used for
 // all reads and the write (provisional commit) timestamp will be used for
-// all writes. See the comments on txn.TxnMeta.Timestamp and txn.OrigTimestamp
+// all writes. See the comments on txn.TxnMeta.Timestamp and txn.ReadTimestamp
 // for more details.
 //
 // Should a transactional operation be forced to a higher timestamp (for
