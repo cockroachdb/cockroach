@@ -32,9 +32,8 @@ func Get(
 	reply := resp.(*roachpb.GetResponse)
 
 	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, engine.MVCCGetOptions{
-		Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
-		IgnoreSequence: shouldIgnoreSequenceNums(),
-		Txn:            h.Txn,
+		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:          h.Txn,
 	})
 	if err != nil {
 		return result.Result{}, err
@@ -59,27 +58,4 @@ func Get(
 		}
 	}
 	return result.FromIntents(intents, args), err
-}
-
-func shouldIgnoreSequenceNums() bool {
-	// NOTE: In version 19.1 and below this checked if a cluster version was
-	// active. This was because Versions 2.1 and below did not properly
-	// propagate sequence numbers to leaf TxnCoordSenders, which meant that we
-	// couldn't rely on sequence numbers being properly assigned by those nodes.
-	// Therefore, we gated the use of sequence numbers while scanning on the
-	// cluster version.
-	//
-	// Because we checked this during batcheval instead of when sending a
-	// get/scan request with an associated flag on the request itself, 19.2
-	// clients can't immediately start relying on the correct sequence number
-	// behavior. This is because it's possible that a 19.2 node joins the
-	// cluster before all 19.1 nodes realize that the cluster version has been
-	// upgraded to the version that instructs them to respect sequence numbers.
-	// Instead, they must wait until a new cluster version (19.2.X) is active
-	// which proves that all nodes the could be evaluating their request will
-	// respect sequence numbers.
-	//
-	// TODO(nvanbenschoten): Remove in 20.1. This serves only as documentation
-	// now.
-	return false
 }

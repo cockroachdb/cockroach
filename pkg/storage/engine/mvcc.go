@@ -709,9 +709,7 @@ type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	// TODO(nvanbenschoten): Remove all references to IgnoreSequence in 20.1.
-	IgnoreSequence bool
-	Txn            *roachpb.Transaction
+	Txn          *roachpb.Transaction
 }
 
 // MVCCGet returns the most recent value for the specified key whose timestamp
@@ -2248,10 +2246,8 @@ type MVCCScanOptions struct {
 	// See the documentation for MVCCScan for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	// TODO(nvanbenschoten): Remove all references to IgnoreSequence in 20.1.
-	IgnoreSequence bool
-	Reverse        bool
-	Txn            *roachpb.Transaction
+	Reverse      bool
+	Txn          *roachpb.Transaction
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided engine up to some
