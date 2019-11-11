@@ -444,8 +444,8 @@ func TestGCQueueProcess(t *testing.T) {
 			var txn *roachpb.Transaction
 			if datum.txn {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
-				txn.RefreshedTimestamp = datum.ts
-				txn.OrigTimestamp = txn.RefreshedTimestamp
+				txn.ReadTimestamp = datum.ts
+				txn.OrigTimestamp = txn.ReadTimestamp
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
@@ -460,8 +460,8 @@ func TestGCQueueProcess(t *testing.T) {
 			var txn *roachpb.Transaction
 			if datum.txn {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
-				txn.RefreshedTimestamp = datum.ts
-				txn.OrigTimestamp = txn.RefreshedTimestamp
+				txn.ReadTimestamp = datum.ts
+				txn.OrigTimestamp = txn.ReadTimestamp
 				txn.Timestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
 			}

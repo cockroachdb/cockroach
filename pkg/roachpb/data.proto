@@ -322,8 +322,8 @@ message Transaction {
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
   // This field is deprecated.
   // The timestamp at which the transaction's current epoch started. Up until
-  // version 19.2, this was used in conjunction with refreshed_timestamp to
-  // determine a transaction's read timestamp. In 20.1, refreshed_timestamp
+  // version 19.2, this was used in conjunction with read_timestamp to
+  // determine a transaction's read timestamp. In 20.1, read_timestamp
   // alone is sufficient. This is just maintained for compatibility with 19.2.
   // TODO(andrei): Remove in 20.2.
   util.hlc.Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
@@ -334,9 +334,9 @@ message Transaction {
   // client-side retry.
   // !!! rename to commit_timestamp_was_observed (or commit_timestamp_fixed).
   bool orig_timestamp_was_observed = 16;
-  // The refreshed timestamp is the transaction's read timestamp. All reads are
-  // performed at this timestamp, ensuring that the transaction runs on top of a
-  // consistent snapshot of the database.
+  // The transaction's read timestamp. All reads are performed at this
+  // timestamp, ensuring that the transaction runs on top of a consistent
+  // snapshot of the database.
   // Writes are performed at the transaction's write timestamp (meta.timestamp).
   // The write timestamp can diverge from the read timestamp when a write is
   // "pushed": for example in case a write runs into the timestamp cache, we're
@@ -350,7 +350,7 @@ message Transaction {
   // advance "refreshing the read set". So, the read timestamp advances after a
   // successful refresh or, if the refresh is unsuccessful, after a transaction
   // restart.
-  util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
   // retry error, unless the node being read is listed in observed_timestamps
