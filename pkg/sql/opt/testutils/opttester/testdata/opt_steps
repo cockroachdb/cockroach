@@ -1,0 +1,117 @@
+optsteps
+SELECT 1
+----
+================================================================================
+Initial expression
+  Cost: 0.05
+================================================================================
+  project
+   ├── columns: "?column?":1(int!null)
+   ├── cardinality: [1 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   ├── values
+   │    ├── cardinality: [1 - 1]
+   │    ├── key: ()
+   │    └── tuple [type=tuple]
+   └── projections
+        └── const: 1 [type=int]
+================================================================================
+MergeProjectWithValues
+  Cost: 0.02
+================================================================================
+  -project
+  +values
+    ├── columns: "?column?":1(int!null)
+    ├── cardinality: [1 - 1]
+    ├── key: ()
+    ├── fd: ()-->(1)
+  - ├── values
+  - │    ├── cardinality: [1 - 1]
+  - │    ├── key: ()
+  - │    └── tuple [type=tuple]
+  - └── projections
+  + └── tuple [type=tuple{int}]
+         └── const: 1 [type=int]
+================================================================================
+Final best expression
+  Cost: 0.02
+================================================================================
+  values
+   ├── columns: "?column?":1(int!null)
+   ├── cardinality: [1 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── tuple [type=tuple{int}]
+        └── const: 1 [type=int]
+
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX(b))
+----
+
+optsteps
+SELECT * FROM ab WHERE b=1
+----
+================================================================================
+Initial expression
+  Cost: 1050.03
+================================================================================
+  select
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── key: (1)
+   ├── fd: ()-->(2)
+   ├── scan ab
+   │    ├── columns: a:1(int!null) b:2(int)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2)
+   └── filters
+        └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             ├── variable: b [type=int]
+             └── const: 1 [type=int]
+--------------------------------------------------------------------------------
+GenerateIndexScans (higher cost)
+--------------------------------------------------------------------------------
+   select
+    ├── columns: a:1(int!null) b:2(int!null)
+    ├── key: (1)
+    ├── fd: ()-->(2)
+  - ├── scan ab
+  + ├── scan ab@secondary
+    │    ├── columns: a:1(int!null) b:2(int)
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2)
+    └── filters
+         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+              ├── variable: b [type=int]
+              └── const: 1 [type=int]
+--------------------------------------------------------------------------------
+GenerateZigzagJoins (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+GenerateConstrainedScans
+  Cost: 10.41
+================================================================================
+  -select
+  +scan ab@secondary
+    ├── columns: a:1(int!null) b:2(int!null)
+  + ├── constraint: /2/1: [/1 - /1]
+    ├── key: (1)
+  - ├── fd: ()-->(2)
+  - ├── scan ab
+  - │    ├── columns: a:1(int!null) b:2(int)
+  - │    ├── key: (1)
+  - │    └── fd: (1)-->(2)
+  - └── filters
+  -      └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+  -           ├── variable: b [type=int]
+  -           └── const: 1 [type=int]
+  + └── fd: ()-->(2)
+================================================================================
+Final best expression
+  Cost: 10.41
+================================================================================
+  scan ab@secondary
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── constraint: /2/1: [/1 - /1]
+   ├── key: (1)
+   └── fd: ()-->(2)

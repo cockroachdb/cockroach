@@ -1,0 +1,262 @@
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX(b))
+----
+
+exploretrace
+SELECT * FROM ab WHERE b=1
+----
+----
+================================================================================
+GenerateIndexScans
+================================================================================
+Source expression:
+  select
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── key: (1)
+   ├── fd: ()-->(2)
+   ├── scan ab
+   │    ├── columns: a:1(int!null) b:2(int)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2)
+   └── filters
+        └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             ├── variable: b [type=int]
+             └── const: 1 [type=int]
+
+New expression 1 of 1:
+  select
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── key: (1)
+   ├── fd: ()-->(2)
+   ├── scan ab@secondary
+   │    ├── columns: a:1(int!null) b:2(int)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2)
+   └── filters
+        └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             ├── variable: b [type=int]
+             └── const: 1 [type=int]
+
+================================================================================
+GenerateZigzagJoins
+================================================================================
+Source expression:
+  select
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── key: (1)
+   ├── fd: ()-->(2)
+   ├── scan ab
+   │    ├── columns: a:1(int!null) b:2(int)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2)
+   └── filters
+        └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             ├── variable: b [type=int]
+             └── const: 1 [type=int]
+
+No new expressions.
+
+================================================================================
+GenerateConstrainedScans
+================================================================================
+Source expression:
+  select
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── key: (1)
+   ├── fd: ()-->(2)
+   ├── scan ab
+   │    ├── columns: a:1(int!null) b:2(int)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2)
+   └── filters
+        └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             ├── variable: b [type=int]
+             └── const: 1 [type=int]
+
+New expression 1 of 1:
+  scan ab@secondary
+   ├── columns: a:1(int!null) b:2(int!null)
+   ├── constraint: /2/1: [/1 - /1]
+   ├── key: (1)
+   └── fd: ()-->(2)
+----
+----
+
+exec-ddl
+CREATE TABLE parent (pid INT PRIMARY KEY, pa INT)
+----
+
+exec-ddl
+CREATE TABLE child (
+  pid INT,
+  cid INT,
+  ca INT,
+  PRIMARY KEY(pid, cid)
+)
+----
+
+exec-ddl
+CREATE TABLE grandchild (
+  pid INT,
+  cid INT,
+  gcid INT,
+  gca INT,
+  PRIMARY KEY(pid, cid, gcid)
+)
+----
+
+# Regression test for 36225.
+exploretrace join-limit=4 rule=AssociateJoin skip-no-op format=hide-all
+SELECT * FROM
+  grandchild
+  JOIN child USING (pid, cid)
+  JOIN parent USING (pid)
+ORDER BY pid
+----
+----
+================================================================================
+AssociateJoin
+================================================================================
+Source expression:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (merge)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters (true)
+             ├── scan parent
+             └── filters
+                  └── grandchild.pid = parent.pid
+
+New expression 1 of 1:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── scan grandchild
+             ├── inner-join (hash)
+             │    ├── scan child
+             │    ├── scan parent
+             │    └── filters
+             │         └── child.pid = parent.pid
+             └── filters
+                  ├── grandchild.pid = child.pid
+                  └── grandchild.cid = child.cid
+
+================================================================================
+AssociateJoin
+================================================================================
+Source expression:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (merge)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters (true)
+             ├── scan parent
+             └── filters
+                  └── grandchild.pid = parent.pid
+
+New expression 1 of 1:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── scan child
+             ├── inner-join (hash)
+             │    ├── scan grandchild
+             │    ├── scan parent
+             │    └── filters
+             │         └── grandchild.pid = parent.pid
+             └── filters
+                  ├── grandchild.pid = child.pid
+                  └── grandchild.cid = child.cid
+
+================================================================================
+AssociateJoin
+================================================================================
+Source expression:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (merge)
+             │    ├── scan child
+             │    ├── scan parent
+             │    └── filters (true)
+             ├── scan grandchild
+             └── filters
+                  ├── grandchild.pid = child.pid
+                  └── grandchild.cid = child.cid
+
+New expression 1 of 1:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── scan child
+             ├── inner-join (merge)
+             │    ├── scan grandchild
+             │    ├── scan parent
+             │    └── filters (true)
+             └── filters
+                  ├── grandchild.cid = child.cid
+                  └── child.pid = grandchild.pid
+
+================================================================================
+AssociateJoin
+================================================================================
+Source expression:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (merge)
+             │    ├── scan child
+             │    ├── scan parent
+             │    └── filters (true)
+             ├── scan grandchild
+             └── filters
+                  ├── grandchild.pid = child.pid
+                  └── grandchild.cid = child.cid
+
+New expression 1 of 1:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── scan parent
+             ├── inner-join (merge)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters (true)
+             └── filters
+                  └── child.pid = parent.pid
+
+================================================================================
+AssociateJoin
+================================================================================
+Source expression:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (merge)
+             │    ├── scan grandchild
+             │    ├── scan parent
+             │    └── filters (true)
+             ├── scan child
+             └── filters
+                  ├── grandchild.cid = child.cid
+                  └── child.pid = grandchild.pid
+
+New expression 1 of 1:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── scan parent
+             ├── inner-join (hash)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters
+             │         ├── grandchild.cid = child.cid
+             │         └── child.pid = grandchild.pid
+             └── filters
+                  └── grandchild.pid = parent.pid
+----
+----
