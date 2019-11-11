@@ -271,9 +271,12 @@ func (s spanSetReader) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (s spanSetReader) ExportToSst(
-	start, end engine.MVCCKey, exportAllRevisions bool, io engine.IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io engine.IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return s.r.ExportToSst(start, end, exportAllRevisions, io)
+	return s.r.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {

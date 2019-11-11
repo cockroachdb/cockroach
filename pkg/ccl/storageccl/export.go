@@ -115,9 +115,6 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	start := engine.MVCCKey{Key: args.Key, Timestamp: args.StartTime}
-	end := engine.MVCCKey{Key: args.EndKey, Timestamp: h.Timestamp}
-
 	io := engine.IterOptions{
 		UpperBound: args.EndKey,
 	}
@@ -134,7 +131,7 @@ func evalExport(
 
 	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 
-	data, summary, err := e.ExportToSst(start, end, exportAllRevisions, io)
+	data, summary, err := e.ExportToSst(args.Key, args.EndKey, args.StartTime, h.Timestamp, exportAllRevisions, io)
 
 	if err != nil {
 		return result.Result{}, err
