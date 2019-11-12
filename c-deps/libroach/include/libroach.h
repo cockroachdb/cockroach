@@ -225,6 +225,9 @@ void DBIterDestroy(DBIterator* iter);
 // Positions the iterator at the first key that is >= "key".
 DBIterState DBIterSeek(DBIterator* iter, DBKey key);
 
+// Positions the iterator at the first key that is <= "key".
+DBIterState DBIterSeekForPrev(DBIterator* iter, DBKey key);
+
 typedef struct {
   uint64_t internal_delete_skipped_count;
   // the number of SSTables touched (only for time bound iterators).

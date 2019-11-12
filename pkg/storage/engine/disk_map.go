@@ -43,7 +43,7 @@ type rocksDBMapBatchWriter struct {
 type rocksDBMapIterator struct {
 	iter Iterator
 	// makeKey is a function that transforms a key into an MVCCKey with a prefix
-	// used to Seek() the underlying iterator.
+	// used to SeekGE() the underlying iterator.
 	makeKey func(k []byte) MVCCKey
 	// prefix is the prefix of keys that this iterator iterates over.
 	prefix []byte
@@ -166,14 +166,14 @@ func (r *rocksDBMap) Close(ctx context.Context) {
 	}
 }
 
-// Seek implements the SortedDiskMapIterator interface.
-func (i *rocksDBMapIterator) Seek(k []byte) {
-	i.iter.Seek(i.makeKey(k))
+// SeekGE implements the SortedDiskMapIterator interface.
+func (i *rocksDBMapIterator) SeekGE(k []byte) {
+	i.iter.SeekGE(i.makeKey(k))
 }
 
 // Rewind implements the SortedDiskMapIterator interface.
 func (i *rocksDBMapIterator) Rewind() {
-	i.iter.Seek(i.makeKey(nil))
+	i.iter.SeekGE(i.makeKey(nil))
 }
 
 // Valid implements the SortedDiskMapIterator interface.
@@ -266,7 +266,7 @@ type pebbleMapIterator struct {
 	allowDuplicates bool
 	iter            *pebble.Iterator
 	// makeKey is a function that transforms a key into a byte slice with a prefix
-	// used to Seek() the underlying iterator.
+	// used to SeekGE() the underlying iterator.
 	makeKey func(k []byte) []byte
 	// prefix is the prefix of keys that this iterator iterates over.
 	prefix []byte
@@ -376,8 +376,8 @@ func (r *pebbleMap) Close(ctx context.Context) {
 	}
 }
 
-// Seek implements the SortedDiskMapIterator interface.
-func (i *pebbleMapIterator) Seek(k []byte) {
+// SeekGE implements the SortedDiskMapIterator interface.
+func (i *pebbleMapIterator) SeekGE(k []byte) {
 	i.iter.SeekGE(i.makeKey(k))
 }
 

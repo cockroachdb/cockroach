@@ -391,7 +391,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	iter := store.Engine().NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 
 	defer iter.Close()
-	for iter.Seek(start); ; iter.Next() {
+	for iter.SeekGE(start); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatal(err)
 		} else if !ok || !iter.UnsafeKey().Less(end) {

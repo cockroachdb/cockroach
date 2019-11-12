@@ -575,7 +575,7 @@ func (h *HashDiskRowContainer) NewBucketIterator(
 
 // Rewind implements the RowIterator interface.
 func (i *hashDiskRowBucketIterator) Rewind() {
-	i.Seek(i.encodedEqCols)
+	i.SeekGE(i.encodedEqCols)
 }
 
 // Valid implements the RowIterator interface.
@@ -1034,7 +1034,7 @@ func (h *HashDiskBackedRowContainer) recreateAllRowsIterators(ctx context.Contex
 			return errors.Errorf("the iterator is unexpectedly not hashMemRowIterator")
 		}
 		newIterator := h.NewUnmarkedIterator(ctx)
-		newIterator.(*diskRowIterator).Seek(oldIterator.curKey)
+		newIterator.(*diskRowIterator).SeekGE(oldIterator.curKey)
 		(*iterator).RowIterator.Close()
 		iterator.RowIterator = newIterator
 	}

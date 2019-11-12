@@ -38,7 +38,7 @@ import (
 //        UpperBound: endKey,
 //    })
 //    defer iter.Close()
-//    for iter.Seek(startKey); ; iter.Next() {
+//    for iter.SeekGE(startKey); ; iter.Next() {
 //        ok, err := iter.Valid()
 //        if !ok { ... }
 //        [code using iter.Key() and iter.Value()]
@@ -105,10 +105,10 @@ func NewMVCCIncrementalIterator(
 	}
 }
 
-// Seek advances the iterator to the first key in the engine which is >= the
+// SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (i *MVCCIncrementalIterator) Seek(startKey MVCCKey) {
-	i.iter.Seek(startKey)
+func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
+	i.iter.SeekGE(startKey)
 	i.err = nil
 	i.valid = true
 	i.advance()
@@ -229,7 +229,7 @@ func (i *MVCCIncrementalIterator) sanityCheckMetadataKey() ([]byte, bool, error)
 		return i.iter.UnsafeValue(), true, nil
 	}
 	unsafeKey := i.iter.UnsafeKey()
-	i.sanityIter.Seek(unsafeKey)
+	i.sanityIter.SeekGE(unsafeKey)
 	if ok, err := i.sanityIter.Valid(); err != nil {
 		return nil, false, err
 	} else if !ok {

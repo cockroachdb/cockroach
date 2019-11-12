@@ -57,11 +57,11 @@ func (f *multiIterator) Close() {
 	// No-op, multiIterator doesn't close the underlying iterators.
 }
 
-// Seek advances the iterator to the first key in the engine which is >= the
+// SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (f *multiIterator) Seek(key MVCCKey) {
+func (f *multiIterator) SeekGE(key MVCCKey) {
 	for _, iter := range f.iters {
-		iter.Seek(key)
+		iter.SeekGE(key)
 	}
 	// Each of the iterators now points at the first key >= key. Set currentIdx
 	// and itersWithCurrentKey but don't advance any of the underlying

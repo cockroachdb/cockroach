@@ -997,7 +997,7 @@ func TestBatchDistinct(t *testing.T) {
 			// Similarly, for distinct batch iterators we will see previous writes to the
 			// batch.
 			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-			iter.Seek(mvccKey("a"))
+			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
 				t.Fatalf("expected iterator to be valid; err=%v", err)
 			}
@@ -1064,7 +1064,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 			// Verify that reads on the distinct batch go to the underlying engine, not
 			// to the write-only batch.
 			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-			iter.Seek(mvccKey("a"))
+			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
 				t.Fatalf("expected iterator to be valid, err=%v", err)
 			}
@@ -1158,11 +1158,12 @@ func TestBatchIteration(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			iter := b.NewIterator(IterOptions{UpperBound: k3.Key})
+			iterOpts := IterOptions{UpperBound: k3.Key}
+			iter := b.NewIterator(iterOpts)
 			defer iter.Close()
 
-			// Forward iteration
-			iter.Seek(k1)
+			// Forward iteration,
+			iter.SeekGE(k1)
 			if ok, err := iter.Valid(); !ok {
 				t.Fatal(err)
 			}
@@ -1189,22 +1190,22 @@ func TestBatchIteration(t *testing.T) {
 				t.Fatalf("expected invalid, got valid at key %s", iter.Key())
 			}
 
-			// SeekReverse works.
-			iter.SeekReverse(k2)
-			if ok, err := iter.Valid(); !ok {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(iter.Key(), k2) {
-				t.Fatalf("expected %s, got %s", k2, iter.Key())
-			}
-			if !reflect.DeepEqual(iter.Value(), v2) {
-				t.Fatalf("expected %s, got %s", v2, iter.Value())
-			}
-			iter.Prev()
-
+			// Reverse iteration.
 			switch engineImpl.name {
 			case "pebble":
 				// Reverse iteration in batches works on Pebble.
+				iter.SeekLT(k3)
+				if ok, err := iter.Valid(); !ok {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(iter.Key(), k2) {
+					t.Fatalf("expected %s, got %s", k2, iter.Key())
+				}
+				if !reflect.DeepEqual(iter.Value(), v2) {
+					t.Fatalf("expected %s, got %s", v2, iter.Value())
+				}
+
+				iter.Prev()
 				if ok, err := iter.Valid(); !ok || err != nil {
 					t.Fatalf("expected success, but got invalid: %v", err)
 				}
@@ -1216,6 +1217,14 @@ func TestBatchIteration(t *testing.T) {
 				}
 			default:
 				// Reverse iteration in batches is not supported with RocksDB.
+				iter.SeekLT(k3)
+				if ok, err := iter.Valid(); ok {
+					t.Fatalf("expected invalid, got valid at key %s", iter.Key())
+				} else if !testutils.IsError(err, "SeekForPrev\\(\\) not supported") {
+					t.Fatalf("expected 'SeekForPrev() not supported', got %s", err)
+				}
+
+				iter.Prev()
 				if ok, err := iter.Valid(); ok {
 					t.Fatalf("expected invalid, got valid at key %s", iter.Key())
 				} else if !testutils.IsError(err, "Prev\\(\\) not supported") {

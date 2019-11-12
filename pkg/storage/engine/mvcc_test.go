@@ -1761,7 +1761,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 					{
 						// Seek the iter to a valid position.
 						iter := batch.NewIterator(iterOptions)
-						iter.Seek(MakeMVCCMetadataKey(key))
+						iter.SeekGE(MakeMVCCMetadataKey(key))
 						iter.Close()
 					}
 

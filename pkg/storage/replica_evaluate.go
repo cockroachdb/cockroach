@@ -95,7 +95,7 @@ func optimizePuts(
 	// we can determine whether any part of the range being written
 	// is "virgin" and set the puts to write blindly.
 	// Find the first non-empty key in the run.
-	iter.Seek(engine.MakeMVCCMetadataKey(minKey))
+	iter.SeekGE(engine.MakeMVCCMetadataKey(minKey))
 	var iterKey roachpb.Key
 	if ok, err := iter.Valid(); err != nil {
 		// TODO(bdarnell): return an error here instead of silently

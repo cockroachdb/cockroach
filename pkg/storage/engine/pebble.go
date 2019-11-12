@@ -977,7 +977,7 @@ func pebbleExportToSst(
 			EndTime:     endTS,
 		})
 	defer iter.Close()
-	for iter.Seek(MakeMVCCMetadataKey(startKey)); ; {
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
