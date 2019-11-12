@@ -442,6 +442,7 @@ func runSchemaChangeWithOperations(
 	keyMultiple int,
 	backfillNotification chan struct{},
 	execCfg *sql.ExecutorConfig,
+	useUpsert bool,
 ) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// Run the schema change in a separate goroutine.
@@ -484,7 +485,7 @@ func runSchemaChangeWithOperations(
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
-		if rand.Float32() < 0.5 {
+		if rand.Float32() < 0.5 || !useUpsert {
 			if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
 				t.Error(err)
 			}
@@ -505,7 +506,7 @@ func runSchemaChangeWithOperations(
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
-		if rand.Float32() < 0.5 {
+		if rand.Float32() < 0.5 || !useUpsert {
 			if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
 				t.Error(err)
 			}
@@ -657,7 +658,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		2,
 		initBackfillNotification(),
-		&execCfg)
+		&execCfg,
+		true,
+	)
 
 	// Drop column.
 	runSchemaChangeWithOperations(
@@ -669,7 +672,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		2,
 		initBackfillNotification(),
-		&execCfg)
+		&execCfg,
+		true,
+	)
 
 	// Add index.
 	runSchemaChangeWithOperations(
@@ -681,7 +686,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		3,
 		initBackfillNotification(),
-		&execCfg)
+		&execCfg,
+		true,
+	)
 
 	// Add STORING index (that will have non-nil values).
 	runSchemaChangeWithOperations(
@@ -693,7 +700,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		4,
 		initBackfillNotification(),
-		&execCfg)
+		&execCfg,
+		true,
+	)
 
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.
@@ -2238,6 +2247,330 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 		t.Fatalf("columns %+v", tableDesc.Columns)
 	} else if len(tableDesc.Mutations) != 2 {
 		t.Fatalf("mutations %+v", tableDesc.Mutations)
+	}
+}
+
+// TestVisibilityDuringPrimaryKeyChange tests visibility of different indexes
+// during the primary key change process.
+func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	swapNotification := make(chan struct{})
+	waitBeforeContinuing := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforePrimaryKeySwap: func() {
+				// Notify the tester that the primary key swap is about to happen.
+				swapNotification <- struct{}{}
+				// Wait for the tester to finish before continuing the swap.
+				<-waitBeforeContinuing
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+SET enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT PRIMARY KEY, y INT NOT NULL, z INT, INDEX i (z));
+INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3); 
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (y)`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-swapNotification
+
+	row := sqlDB.QueryRow("SHOW CREATE TABLE t.test")
+	var scanName, create string
+	if err := row.Scan(&scanName, &create); err != nil {
+		t.Fatal(err)
+	}
+	expected := `CREATE TABLE test (
+	x INT8 NOT NULL,
+	y INT8 NOT NULL,
+	z INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (x ASC),
+	INDEX i (z ASC),
+	FAMILY "primary" (x, y, z)
+)`
+	if create != expected {
+		t.Fatalf("expected %s, found %s", expected, create)
+	}
+
+	// Let the schema change process continue.
+	waitBeforeContinuing <- struct{}{}
+	// Wait for the primary key swap to happen.
+	wg.Wait()
+
+	row = sqlDB.QueryRow("SHOW CREATE TABLE t.test")
+	if err := row.Scan(&scanName, &create); err != nil {
+		t.Fatal(err)
+	}
+	expected = `CREATE TABLE test (
+	x INT8 NOT NULL,
+	y INT8 NOT NULL,
+	z INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (y ASC),
+	UNIQUE INDEX old_primary_key (x ASC),
+	INDEX i (z ASC),
+	FAMILY "primary" (x, y, z)
+)`
+	if create != expected {
+		t.Fatalf("expected %s, found %s", expected, create)
+	}
+}
+
+// TestPrimaryKeyChangeWithOperations ensures that different operations succeed
+// while a primary key change is happening.
+func TestPrimaryKeyChangeWithOperations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	var chunkSize int64 = 100
+	var maxValue = 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		maxValue = 200
+		chunkSize = 5
+	}
+
+	// protects backfillNotification
+	var mu syncutil.Mutex
+	backfillNotification := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	initBackfillNotification := func() chan struct{} {
+		mu.Lock()
+		defer mu.Unlock()
+		backfillNotification = make(chan struct{})
+		return backfillNotification
+	}
+	notifyBackfill := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if backfillNotification != nil {
+			// Close channel to notify that the backfill has started.
+			close(backfillNotification)
+			backfillNotification = nil
+		}
+	}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				notifyBackfill()
+				return nil
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	defer s.Stopper().Stop(ctx)
+	if _, err := sqlDB.Exec(`
+SET enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT NOT NULL, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	runSchemaChangeWithOperations(
+		t,
+		sqlDB,
+		kvDB,
+		s.JobRegistry().(*jobs.Registry),
+		"ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)",
+		maxValue,
+		2,
+		initBackfillNotification(),
+		&execCfg,
+		// We don't let runSchemaChangeWithOperations use UPSERT statements, because
+		// way in which runSchemaChangeWithOperations uses them assumes that k is already
+		// the primary key of the table, leading to some errors during the UPSERT
+		// conflict handling. Since we are changing the primary key of the table to
+		// be using k as the primary key, we disable the UPSERT statements in the test.
+		false,
+	)
+}
+
+// TestPrimaryKeyIndexRewritesGetRemoved ensures that the old versions of
+// indexes that are being rewritten eventually get cleaned up and removed.
+func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly: true,
+		},
+	}
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	if _, err := sqlDB.Exec(`
+SET enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, w INT, INDEX i (w));
+INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
+`); err != nil {
+		t.Fatal(err)
+	}
+	// Wait for the async schema changer to run.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		// We expect to have 3 (one for each row) * 3 (new primary key, old primary key and i rewritten).
+		return checkTableKeyCountExact(ctx, kvDB, 9)
+	})
+}
+
+func TestPrimaryKeyChangeWithCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var chunkSize int64 = 100
+	var maxValue = 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		maxValue = 200
+		chunkSize = 5
+	}
+
+	ctx := context.Background()
+	var db *gosql.DB
+	shouldCancel := true
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly:  true,
+			BackfillChunkSize: chunkSize,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				if !shouldCancel {
+					return nil
+				}
+				if _, err := db.Exec(`CANCEL JOB (
+					SELECT job_id FROM [SHOW JOBS]
+					WHERE
+						job_type = 'SCHEMA CHANGE' AND
+						status = $1 AND
+						description NOT LIKE 'ROLL BACK%'
+				)`, jobs.StatusRunning); err != nil {
+					t.Error(err)
+				}
+				return nil
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	db = sqlDB
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+SET enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT NOT NULL, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run a primary key change in a background thread.
+	go func() {
+		// This will fail, so we don't want to check the error.
+		_, _ = sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+	}()
+
+	// Ensure that the mutations corresponding to the primary key change are cleaned up and
+	// that the job did not succeed even though it was canceled.
+	testutils.SucceedsSoon(t, func() error {
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.Mutations) != 0 {
+			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.Mutations))
+		}
+		if len(tableDesc.PrimaryIndex.ColumnNames) != 1 || tableDesc.PrimaryIndex.ColumnNames[0] != "rowid" {
+			return errors.Errorf("expected primary key change to not succeed after cancellation")
+		}
+		return nil
+	})
+
+	// Stop any further attempts at cancellation, so the GC jobs don't fail.
+	shouldCancel = false
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Ensure that the writes from the partial new indexes are cleaned up.
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCount(ctx, kvDB, 1, maxValue)
+	})
+}
+
+// TestMultiplePrimaryKeyChanges ensures that we can run many primary key changes back to back.
+// We cannot run this in a logic test because we need the async schema changer to run so that
+// the following primary key change occurs quickly.
+func TestMultiplePrimaryKeyChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly: true,
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	if _, err := sqlDB.Exec(`
+SET enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT NOT NULL, y INT NOT NULL, z INT NOT NULL, w int, INDEX i (w));
+INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3); 
+`); err != nil {
+		t.Fatal(err)
+	}
+	for _, col := range []string{"x", "y", "z"} {
+		query := fmt.Sprintf("ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (%s)", col)
+		if _, err := sqlDB.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := sqlDB.Query("SELECT * FROM t.test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 1; rows.Next(); i++ {
+			var x, y, z, w int
+			if err := rows.Scan(&x, &y, &z, &w); err != nil {
+				t.Fatal(err)
+			}
+			if !(x == i && y == i && z == i && w == i) {
+				t.Errorf("expected all columns to be %d, but found (%d, %d, %d, %d)", i, x, y, z, w)
+			}
+		}
 	}
 }
 

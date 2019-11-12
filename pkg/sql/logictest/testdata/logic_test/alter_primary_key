@@ -1,0 +1,36 @@
+# TODO (rohany,solongordon): we still have to figure out what happens with multiple families, so fix that right now.
+statement ok
+SET enable_primary_key_changes = true
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX i (x), INDEX i2 (z), FAMILY (x, y, z, w))
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8)
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y, z)
+
+query IIII rowsort
+SELECT * FROM t@primary
+----
+1 2 3 4
+5 6 7 8
+
+# Test that composite values are encoded correctly in covering indexes.
+statement ok
+CREATE TABLE t_composite (x INT PRIMARY KEY, y DECIMAL NOT NULL, FAMILY (x, y));
+INSERT INTO t_composite VALUES (1, 1.0), (2, 1.001)
+
+statement ok
+ALTER TABLE t_composite ALTER PRIMARY KEY USING COLUMNS (y)
+
+query IT rowsort
+SELECT * FROM t_composite@primary
+----
+1 1.0
+2 1.001
+
+# Test that we can drop tables after a primary key change.
+statement ok
+DROP TABLE t_composite
