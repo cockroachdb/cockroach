@@ -64,16 +64,18 @@ var MVCCComparer = &pebble.Comparer{
 	},
 
 	Split: func(k []byte) int {
-		if len(k) == 0 {
+		key, _, ok := enginepb.SplitMVCCKey(k)
+		if !ok {
 			return len(k)
 		}
-		// This is similar to what enginepb.SplitMVCCKey does.
-		tsLen := int(k[len(k)-1])
-		keyPartEnd := len(k) - 1 - tsLen
-		if keyPartEnd < 0 {
-			return len(k)
-		}
-		return keyPartEnd
+		// This matches the behavior of libroach/KeyPrefix. RocksDB requires that
+		// keys generated via a SliceTransform be comparable with normal encoded
+		// MVCC keys. Encoded MVCC keys have a suffix indicating the number of
+		// bytes of timestamp data. MVCC keys without a timestamp have a suffix of
+		// 0. We're careful in EncodeKey to make sure that the user-key always has
+		// a trailing 0. If there is no timestamp this falls out naturally. If
+		// there is a timestamp we prepend a 0 to the encoded timestamp data.
+		return len(key) + 1
 	},
 
 	Name: "cockroach_comparator",
