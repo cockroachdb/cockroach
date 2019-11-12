@@ -77,7 +77,7 @@ func (l *loggerT) gcOldFiles() {
 	// prefix).
 	allFiles, err := l.listLogFiles()
 	if err != nil {
-		fmt.Fprintf(OrigStderr, "unable to GC log files: %s\n", err)
+		_, _ = fmt.Fprintf(OrigStderr, "unable to GC log files: %s\n", err)
 		return
 	}
 
@@ -96,10 +96,10 @@ func (l *loggerT) gcOldFiles() {
 		}
 		path := filepath.Join(dir, f.Name)
 		if err := l.archiveFile(path); err != nil {
-			fmt.Fprintln(OrigStderr, err)
+			_, _ = fmt.Fprintln(OrigStderr, err)
 		} else {
 			if err := os.Remove(path); err != nil {
-				fmt.Fprintln(OrigStderr, err)
+				_, _ = fmt.Fprintln(OrigStderr, err)
 			}
 		}
 	}
@@ -115,7 +115,7 @@ func (l *loggerT) archiveFile(path string) error {
 	}
 	defer func() {
 		if err := tf.Close(); err != nil {
-			fmt.Fprintln(OrigStderr, err)
+			_, _ = fmt.Fprintln(OrigStderr, err)
 		}
 	}()
 
@@ -126,7 +126,7 @@ func (l *loggerT) archiveFile(path string) error {
 	}
 	defer func() {
 		if err := gz.Close(); err != nil {
-			fmt.Fprintln(OrigStderr, err)
+			_, _ = fmt.Fprintln(OrigStderr, err)
 		}
 	}()
 
@@ -137,7 +137,7 @@ func (l *loggerT) archiveFile(path string) error {
 	}
 	defer func() {
 		if err := fs.Close(); err != nil {
-			fmt.Fprintln(OrigStderr, err)
+			_, _ = fmt.Fprintln(OrigStderr, err)
 		}
 	}()
 
