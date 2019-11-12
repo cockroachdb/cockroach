@@ -858,9 +858,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				t.Errorf("expected timestamp to be %s; got %s",
 					test.expTS, proto.Timestamp)
 			}
-			if proto.DeprecatedOrigTimestamp != test.expOrigTS {
+			if proto.ReadTimestamp != test.expOrigTS {
 				t.Errorf("expected orig timestamp to be %s; got %s",
-					test.expOrigTS, proto.DeprecatedOrigTimestamp)
+					test.expOrigTS, proto.ReadTimestamp)
 			}
 			if ns := proto.ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
 				t.Errorf("expected nodeSeen=%t, but list of hosts is %v",
@@ -1182,7 +1182,7 @@ func TestTxnRestartCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	proto := txn.Serialize()
-	if !proto.DeprecatedOrigTimestamp.Less(proto.Timestamp) {
+	if !proto.ReadTimestamp.Less(proto.Timestamp) {
 		t.Errorf("expected timestamp to increase: %s", proto)
 	}
 

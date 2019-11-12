@@ -635,7 +635,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				ba.Txn.WriteTooOld = true
 			}
 			if c.isTSOff {
-				ba.Txn.Timestamp = ba.Txn.DeprecatedOrigTimestamp.Add(1, 0)
+				ba.Txn.Timestamp = ba.Txn.ReadTimestamp.Add(1, 0)
 			}
 		} else {
 			require.False(t, c.isRestarted)
@@ -2833,7 +2833,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	// Read at tNew to populate the read timestamp cache.
 	// DeleteRange at tNew to populate the write timestamp cache.
 	txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-	txnNew.DeprecatedOrigTimestamp = tsNew
+	txnNew.ReadTimestamp = tsNew
 	txnNew.Timestamp = tsNew
 	keyGet := roachpb.Key("get")
 	keyDeleteRange := roachpb.Key("delete-range")
@@ -2850,7 +2850,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	// Write under the timestamp cache within the transaction, and verify that
 	// the intents are written above the timestamp cache.
 	txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-	txnOld.DeprecatedOrigTimestamp = tsOld
+	txnOld.ReadTimestamp = tsOld
 	txnOld.Timestamp = tsOld
 	for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
 		t.Run(string(key), func(t *testing.T) {
@@ -2903,7 +2903,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	// Try a transactional conditional put at a lower timestamp and
 	// ensure it is pushed.
 	txnEarly := newTransaction("test", key, 1, tc.Clock())
-	txnEarly.DeprecatedOrigTimestamp, txnEarly.Timestamp = t1, t1
+	txnEarly.ReadTimestamp, txnEarly.Timestamp = t1, t1
 	cpArgs2 := cPutArgs(key, []byte("value"), nil)
 	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &cpArgs2)
 	if pErr != nil {
@@ -2936,7 +2936,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 	abortIntent(cpArgs2.Span(), txnEarly)
 	txnLater := *txnEarly
-	txnLater.DeprecatedOrigTimestamp, txnLater.Timestamp = t3, t3
+	txnLater.ReadTimestamp, txnLater.Timestamp = t3, t3
 	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -2993,7 +2993,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	// Try a transactional init put at a lower timestamp and
 	// ensure it is pushed.
 	txnEarly := newTransaction("test", key, 1, tc.Clock())
-	txnEarly.DeprecatedOrigTimestamp, txnEarly.Timestamp = t1, t1
+	txnEarly.ReadTimestamp, txnEarly.Timestamp = t1, t1
 	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -3025,7 +3025,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 	abortIntent(ipArgs1.Span(), txnEarly)
 	txnLater := *txnEarly
-	txnLater.DeprecatedOrigTimestamp, txnLater.Timestamp = t3, t3
+	txnLater.ReadTimestamp, txnLater.Timestamp = t3, t3
 	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -3981,7 +3981,7 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 // timestamp is used when writing values in a 1PC transaction. We
 // verify this by updating the timestamp cache for the key being
 // written so that the timestamp there is greater than the txn's
-// DeprecatedOrigTimestamp.
+// ReadTimestamp.
 func Test1PCTransactionWriteTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -5412,7 +5412,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		// First, establish "start" of existing pushee's txn via HeartbeatTxn.
 		pushee.Timestamp = test.startTS
 		pushee.LastHeartbeat = test.startTS
-		pushee.DeprecatedOrigTimestamp = test.startTS
+		pushee.ReadTimestamp = test.startTS
 		hb, hbH := heartbeatArgs(pushee, pushee.Timestamp)
 		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), hbH, &hb); pErr != nil {
 			t.Fatal(pErr)
@@ -5591,7 +5591,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			if test.status == -1 {
 				t.Fatal("cannot heartbeat transaction record if it doesn't exist")
 			}
-			pushee.LastHeartbeat = pushee.DeprecatedOrigTimestamp.Add(test.heartbeatOffset, 0)
+			pushee.LastHeartbeat = pushee.ReadTimestamp.Add(test.heartbeatOffset, 0)
 		}
 
 		switch test.status {
@@ -5618,7 +5618,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Now, attempt to push the transaction with Now set to the txn start time + offset.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
-		args.PushTo = pushee.DeprecatedOrigTimestamp.Add(test.timeOffset, 0)
+		args.PushTo = pushee.ReadTimestamp.Add(test.timeOffset, 0)
 
 		reply, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
 		if !testutils.IsPError(pErr, test.expErr) {
@@ -6032,7 +6032,7 @@ func TestQueryIntentRequest(t *testing.T) {
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
-			if br.Txn.Timestamp == br.Txn.DeprecatedOrigTimestamp {
+			if br.Txn.Timestamp == br.Txn.ReadTimestamp {
 				t.Fatalf("transaction timestamp not bumped: %v", br.Txn)
 			}
 		}
@@ -9050,7 +9050,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			now := tc.Clock().Now()
 			txn.Timestamp = now
 			txn.MinTimestamp = now
-			txn.DeprecatedOrigTimestamp = now
+			txn.ReadTimestamp = now
 
 			if c.setup != nil {
 				if pErr := c.setup(ctx, repl); pErr != nil {
@@ -9075,7 +9075,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			ba.RangeID = repl.RangeID
 			if c.useTxn {
 				ba.Txn = txn
-				ba.Txn.DeprecatedOrigTimestamp = markerTS
+				ba.Txn.ReadTimestamp = markerTS
 				ba.Txn.Timestamp = markerTS
 				assignSeqNumsForReqs(txn, c.req)
 			}
@@ -10092,7 +10092,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	ctx := context.Background()
 	k := roachpb.Key("key")
 
-	// Start a transaction and assign its DeprecatedOrigTimestamp.
+	// Start a transaction and assign its ReadTimestamp.
 	ts1 := tc.Clock().Now()
 	txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, ts1, 0)
 
@@ -10929,7 +10929,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
-				// increment its DeprecatedOrigTimestamp as well. We used to check the GC
+				// increment its ReadTimestamp as well. We used to check the GC
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
@@ -11428,7 +11428,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
-				// increment its DeprecatedOrigTimestamp as well. We used to check the GC
+				// increment its ReadTimestamp as well. We used to check the GC
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
@@ -12026,7 +12026,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 			Txn:     txn,
 		},
 	}
-	ba.Timestamp = txn.DeprecatedOrigTimestamp
+	ba.Timestamp = txn.ReadTimestamp
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
@@ -12119,7 +12119,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 			Txn:     txn,
 		},
 	}
-	ba.Timestamp = txn.DeprecatedOrigTimestamp
+	ba.Timestamp = txn.ReadTimestamp
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
