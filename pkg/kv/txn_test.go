@@ -620,7 +620,7 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 				txn := ba.Txn.Clone()
 				refreshTS = txn.Timestamp.Add(0, 1)
 				pErr := roachpb.NewReadWithinUncertaintyIntervalError(
-					txn.DeprecatedOrigTimestamp,
+					txn.ReadTimestamp,
 					refreshTS,
 					txn)
 				return roachpb.NewErrorWithTxn(pErr, txn)
