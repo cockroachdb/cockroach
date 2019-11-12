@@ -472,16 +472,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			v.observer.attr(name, "strategy", n.run.ti.desc())
 		}
 
-		if v.observer.expr != nil {
-			for i, dexpr := range n.run.defaultExprs {
-				v.metadataExpr(name, "default", i, dexpr)
-			}
-			if n.run.checkHelper != nil {
-				for i, cexpr := range n.run.checkHelper.Exprs {
-					v.metadataExpr(name, "check", i, cexpr)
-				}
-			}
-		}
 		n.source = v.visit(n.source)
 
 	case *upsertNode:
@@ -500,19 +490,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			v.observer.attr(name, "strategy", n.run.tw.desc())
 		}
 
-		if v.observer.expr != nil {
-			for i, dexpr := range n.run.defaultExprs {
-				v.metadataExpr(name, "default", i, dexpr)
-			}
-			if n.run.checkHelper != nil {
-				for i, cexpr := range n.run.checkHelper.Exprs {
-					v.metadataExpr(name, "check", i, cexpr)
-				}
-			}
-			n.run.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
-				v.metadataExpr(name, d, i, e)
-			})
-		}
 		n.source = v.visit(n.source)
 
 	case *updateNode:
@@ -533,11 +510,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if v.observer.expr != nil {
 			for i, cexpr := range n.run.computeExprs {
 				v.metadataExpr(name, "computed", i, cexpr)
-			}
-			if n.run.checkHelper != nil {
-				for i, cexpr := range n.run.checkHelper.Exprs {
-					v.metadataExpr(name, "check", i, cexpr)
-				}
 			}
 		}
 		// An updater has no sub-expressions, so nothing special to do here.

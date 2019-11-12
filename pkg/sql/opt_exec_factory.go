@@ -1210,9 +1210,6 @@ func (ef *execFactory) ConstructInsert(
 	tabDesc := table.(*optTable).desc
 	colDescs := makeColDescList(table, insertColOrdSet)
 
-	// Construct the check helper if there are any check constraints.
-	checkHelper := sqlbase.NewInputCheckHelper(checkOrdSet, tabDesc)
-
 	var fkTables row.FkTableMetadata
 	checkFKs := row.SkipFKs
 	if !skipFKChecks {
@@ -1237,12 +1234,8 @@ func (ef *execFactory) ConstructInsert(
 	*ins = insertNode{
 		source: input.(planNode),
 		run: insertRun{
-			ti:          tableInserter{ri: ri},
-			checkHelper: checkHelper,
-			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
-				Cols:    tabDesc.Columns,
-				Mapping: ri.InsertColIDtoRowIndex,
-			},
+			ti:         tableInserter{ri: ri},
+			checkOrds:  checkOrdSet,
 			insertCols: ri.InsertCols,
 		},
 	}
@@ -1299,9 +1292,6 @@ func (ef *execFactory) ConstructUpdate(
 		sourceSlots[i] = scalarSlot{column: updateColDescs[i], sourceIndex: len(fetchColDescs) + i}
 	}
 
-	// Construct the check helper if there are any check constraints.
-	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
-
 	var fkTables row.FkTableMetadata
 	checkFKs := row.SkipFKs
 	if !skipFKChecks {
@@ -1349,8 +1339,8 @@ func (ef *execFactory) ConstructUpdate(
 	*upd = updateNode{
 		source: input.(planNode),
 		run: updateRun{
-			tu:          tableUpdater{ru: ru},
-			checkHelper: checkHelper,
+			tu:        tableUpdater{ru: ru},
+			checkOrds: checks,
 			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
 				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
 				Cols:         ru.FetchCols,
@@ -1444,9 +1434,6 @@ func (ef *execFactory) ConstructUpsert(
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
 	updateColDescs := makeColDescList(table, updateColOrdSet)
 
-	// Construct the check helper if there are any check constraints.
-	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
-
 	// Determine the foreign key tables involved in the upsert.
 	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckUpdates)
 	if err != nil {
@@ -1498,12 +1485,8 @@ func (ef *execFactory) ConstructUpsert(
 	*ups = upsertNode{
 		source: input.(planNode),
 		run: upsertRun{
-			checkHelper: checkHelper,
-			insertCols:  ri.InsertCols,
-			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
-				Cols:    tabDesc.Columns,
-				Mapping: ri.InsertColIDtoRowIndex,
-			},
+			checkOrds:  checks,
+			insertCols: ri.InsertCols,
 			tw: optTableUpserter{
 				ri:            ri,
 				alloc:         &ef.planner.alloc,
