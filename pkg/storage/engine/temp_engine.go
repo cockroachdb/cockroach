@@ -29,6 +29,8 @@ func NewTempEngine(
 	engine enginepb.EngineType, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, error) {
 	switch engine {
+	case enginepb.EngineTypeTeePebbleRocksDB:
+		fallthrough
 	case enginepb.EngineTypePebble:
 		return NewPebbleTempEngine(tempStorage, storeSpec)
 	case enginepb.EngineTypeRocksDB:

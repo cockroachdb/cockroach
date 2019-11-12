@@ -26,6 +26,8 @@ func NewInMem(
 	ctx context.Context, engine enginepb.EngineType, attrs roachpb.Attributes, cacheSize int64,
 ) Engine {
 	switch engine {
+	case enginepb.EngineTypeTeePebbleRocksDB:
+		return newTeeInMem(ctx, attrs, cacheSize)
 	case enginepb.EngineTypePebble:
 		return newPebbleInMem(ctx, attrs, cacheSize)
 	case enginepb.EngineTypeRocksDB:
