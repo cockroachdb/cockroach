@@ -343,6 +343,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_primary_key_changes`: {
+		GetStringVal: makeBoolGetStringValFn(`enable_primary_key_changes`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetPrimaryKeyChangesEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.PrimaryKeyChangesEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(primaryKeyChangesEnabledClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_zigzag_join`: {
 		GetStringVal: makeBoolGetStringValFn(`enable_zigzag_join`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

@@ -749,6 +749,75 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 	return nil, errors.AssertionFailedf("trying to apply inverted index to non JSON type")
 }
 
+// EncodePrimaryIndex constructs a list of k/v pairs for a row encoded as a primary index.
+func EncodePrimaryIndex(
+	tableDesc *TableDescriptor, index *IndexDescriptor, colMap map[ColumnID]int, values []tree.Datum,
+) ([]IndexEntry, error) {
+	keyPrefix := MakeIndexKeyPrefix(tableDesc, index.ID)
+	indexKey, _, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	// This information should be precomputed on the table descriptor.
+	indexedColumns := map[ColumnID]struct{}{}
+	for _, colID := range index.ColumnIDs {
+		indexedColumns[colID] = struct{}{}
+	}
+	var entryValue []byte
+	indexEntries := make([]IndexEntry, 0, len(tableDesc.Families))
+	var columnsToEncode []valueEncodedColumn
+	for i := range tableDesc.Families {
+		var err error
+		family := &tableDesc.Families[i]
+		if i > 0 {
+			indexKey = indexKey[:len(indexKey):len(indexKey)]
+			entryValue = entryValue[:0]
+			columnsToEncode = columnsToEncode[:0]
+		}
+		familyKey := keys.MakeFamilyKey(indexKey, uint32(family.ID))
+		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
+			datum := values[colMap[family.DefaultColumnID]]
+			if datum != tree.DNull {
+				col, err := tableDesc.FindColumnByID(family.DefaultColumnID)
+				if err != nil {
+					return nil, err
+				}
+				value, err := MarshalColumnValue(col, datum)
+				if err != nil {
+					return nil, err
+				}
+				indexEntries = append(indexEntries, IndexEntry{Key: familyKey, Value: value})
+			}
+			continue
+		}
+
+		for _, colID := range family.ColumnIDs {
+			if _, ok := indexedColumns[colID]; !ok {
+				columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID})
+				continue
+			}
+			if cdatum, ok := values[colMap[colID]].(tree.CompositeDatum); ok {
+				if cdatum.IsComposite() {
+					columnsToEncode = append(columnsToEncode, valueEncodedColumn{id: colID, isComposite: true})
+					continue
+				}
+			}
+		}
+		sort.Sort(byID(columnsToEncode))
+		entryValue, err = writeColumnValues(entryValue, colMap, values, columnsToEncode)
+		if err != nil {
+			return nil, err
+		}
+		if family.ID != 0 && len(entryValue) == 0 {
+			continue
+		}
+		entry := IndexEntry{Key: familyKey}
+		entry.Value.SetTuple(entryValue)
+		indexEntries = append(indexEntries, entry)
+	}
+	return indexEntries, nil
+}
+
 // EncodeSecondaryIndex encodes key/values for a secondary
 // index. colMap maps ColumnIDs to indices in `values`. This returns a
 // slice of IndexEntry. Forward indexes will return one value, while
@@ -760,6 +829,11 @@ func EncodeSecondaryIndex(
 	values []tree.Datum,
 ) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
+
+	// Use the primary key encoding for covering indexes.
+	if secondaryIndex.EncodingType == PrimaryIndexEncoding {
+		return EncodePrimaryIndex(tableDesc, secondaryIndex, colMap, values)
+	}
 
 	var containsNull = false
 	var secondaryKeys [][]byte

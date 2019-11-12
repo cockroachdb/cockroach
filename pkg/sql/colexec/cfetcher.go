@@ -917,7 +917,7 @@ func (rf *cFetcher) processValue(
 	}
 
 	val := rf.machine.nextKV.Value
-	if !table.isSecondaryIndex {
+	if !table.isSecondaryIndex || table.index.EncodingType == sqlbase.PrimaryIndexEncoding {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,

@@ -208,13 +208,14 @@ func (node *AlterTableAlterColumnType) GetColumn() Name {
 
 // AlterTableAlterPrimaryKey represents an ALTER TABLE ALTER PRIMARY KEY command.
 type AlterTableAlterPrimaryKey struct {
-	TableIndex TableIndexName
+	Columns IndexElemList
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableAlterPrimaryKey) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ALTER PRIMARY KEY USING INDEX ")
-	ctx.FormatNode(&node.TableIndex)
+	ctx.WriteString(" ALTER PRIMARY KEY USING COLUMNS (")
+	ctx.FormatNode(&node.Columns)
+	ctx.WriteString(")")
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.

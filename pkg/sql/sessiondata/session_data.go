@@ -58,6 +58,8 @@ type SessionData struct {
 	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a
 	// zigzag join.
 	ZigzagJoinEnabled bool
+	// PrimaryKeyChangesEnabled indicates whether are allowed to be used.
+	PrimaryKeyChangesEnabled bool
 	// ReorderJoinsLimit indicates the number of joins at which the optimizer should
 	// stop attempting to reorder.
 	ReorderJoinsLimit int
