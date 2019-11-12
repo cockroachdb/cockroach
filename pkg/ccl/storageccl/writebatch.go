@@ -98,7 +98,7 @@ func clearExistingData(
 	iter := batch.NewIterator(engine.IterOptions{UpperBound: end})
 	defer iter.Close()
 
-	iter.Seek(engine.MakeMVCCMetadataKey(start))
+	iter.SeekGE(engine.MakeMVCCMetadataKey(start))
 	if ok, err := iter.Valid(); err != nil {
 		return enginepb.MVCCStats{}, err
 	} else if ok && !iter.UnsafeKey().Less(engine.MakeMVCCMetadataKey(end)) {

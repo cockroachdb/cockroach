@@ -52,8 +52,8 @@ func TestIterStats(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			// Seeking past the tombstone manually counts it.
 			for i := 0; i < 10; i++ {
-				iter.Seek(NilKey)
-				iter.Seek(MVCCKeyMax)
+				iter.SeekGE(NilKey)
+				iter.SeekGE(MVCCKeyMax)
 				stats := iter.Stats()
 				if e, a := i+1, stats.InternalDeleteSkippedCount; a != e {
 					t.Errorf("expected internal delete skipped count of %d, not %d", e, a)

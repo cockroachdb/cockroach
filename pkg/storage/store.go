@@ -1135,7 +1135,7 @@ func IterateIDPrefixKeys(
 	for {
 		bumped := false
 		mvccKey := engine.MakeMVCCMetadataKey(keyFn(rangeID))
-		iter.Seek(mvccKey)
+		iter.SeekGE(mvccKey)
 
 		if ok, err := iter.Valid(); !ok {
 			return err

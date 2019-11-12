@@ -70,8 +70,8 @@ func (i *Iterator) Iterator() engine.Iterator {
 	return i.i
 }
 
-// Seek is part of the engine.Iterator interface.
-func (i *Iterator) Seek(key engine.MVCCKey) {
+// SeekGE is part of the engine.Iterator interface.
+func (i *Iterator) SeekGE(key engine.MVCCKey) {
 	if i.spansOnly {
 		i.err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	} else {
@@ -80,11 +80,14 @@ func (i *Iterator) Seek(key engine.MVCCKey) {
 	if i.err == nil {
 		i.invalid = false
 	}
-	i.i.Seek(key)
+	i.i.SeekGE(key)
 }
 
-// SeekReverse is part of the engine.Iterator interface.
-func (i *Iterator) SeekReverse(key engine.MVCCKey) {
+// SeekLT is part of the engine.Iterator interface.
+func (i *Iterator) SeekLT(key engine.MVCCKey) {
+	// NB: this isn't exactly right because the key provided to SeekLT is
+	// exclusive so requesting the first key in an allowed span should not
+	// be permitted, but it's close enough.
 	if i.spansOnly {
 		i.err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	} else {
@@ -93,7 +96,7 @@ func (i *Iterator) SeekReverse(key engine.MVCCKey) {
 	if i.err == nil {
 		i.invalid = false
 	}
-	i.i.SeekReverse(key)
+	i.i.SeekLT(key)
 }
 
 // Valid is part of the engine.Iterator interface.

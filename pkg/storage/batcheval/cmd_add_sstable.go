@@ -65,7 +65,7 @@ func EvalAddSSTable(
 	defer dataIter.Close()
 
 	// Check that the first key is in the expected range.
-	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
+	dataIter.SeekGE(engine.MVCCKey{Key: keys.MinKey})
 	ok, err := dataIter.Valid()
 	if err != nil {
 		return result.Result{}, err
@@ -107,7 +107,7 @@ func EvalAddSSTable(
 		stats = computed
 	}
 
-	dataIter.Seek(mvccEndKey)
+	dataIter.SeekGE(mvccEndKey)
 	ok, err = dataIter.Valid()
 	if err != nil {
 		return result.Result{}, err
@@ -181,7 +181,7 @@ func EvalAddSSTable(
 
 	if args.IngestAsWrites {
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
-		dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
+		dataIter.SeekGE(engine.MVCCKey{Key: keys.MinKey})
 		for {
 			ok, err := dataIter.Valid()
 			if err != nil {
@@ -227,7 +227,7 @@ func checkForKeyCollisions(
 	// Create iterator over the existing data.
 	existingDataIter := dbEngine.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
-	existingDataIter.Seek(mvccStartKey)
+	existingDataIter.SeekGE(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {
 		return emptyMVCCStats, errors.Wrap(err, "checking for key collisions")
 	} else if !ok {
