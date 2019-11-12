@@ -100,10 +100,10 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			// Delete the value at ts=3. We'll commit this at ts=4 later.
 			ts3 := hlc.Timestamp{WallTime: 3 * 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts3},
-				DeprecatedOrigTimestamp: ts3,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts3},
+				ReadTimestamp: ts3,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -155,8 +155,8 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			key := roachpb.Key("a")
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				DeprecatedOrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 			// Write an intent at t=1s.
 			value := roachpb.MakeValueFromString("value")
@@ -234,12 +234,12 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			key := roachpb.Key("a")
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				DeprecatedOrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 			// Write an intent.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -317,13 +317,13 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				DeprecatedOrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write an intent.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -383,7 +383,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, m2ValSize, 64)
 
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -429,12 +429,12 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				DeprecatedOrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write a deletion tombstone intent.
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -497,7 +497,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, m2ValSize, 54)
 
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -568,10 +568,10 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 			// Write an tombstone intent at t=2s.
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2},
-				DeprecatedOrigTimestamp: ts2,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2},
+				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -714,10 +714,10 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 			// Write a tombstone intent at t=2s.
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2},
-				DeprecatedOrigTimestamp: ts2,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2},
+				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -796,7 +796,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				require.EqualValues(t, vVal2Size, 14)
 
 				txn.Timestamp.Forward(ts3)
-				if err := MVCCPut(ctx, engine, &aggMS, key, txn.DeprecatedOrigTimestamp, val2, txn); err != nil {
+				if err := MVCCPut(ctx, engine, &aggMS, key, txn.ReadTimestamp, val2, txn); err != nil {
 					t.Fatal(err)
 				}
 
@@ -928,12 +928,12 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			ts201 := hlc.Timestamp{WallTime: 2e9 + 1}
 			ts099 := hlc.Timestamp{WallTime: 1e9 - 1}
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts201},
-				DeprecatedOrigTimestamp: ts099,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts201},
+				ReadTimestamp: ts099,
 			}
 			// Write an intent at 2s+1.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -963,7 +963,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			// the txn (which is, perhaps surprisingly, only really used when
 			// committing/aborting intents), and the timestamp passed directly to
 			// MVCCPut (which is where the intent will actually end up being written at,
-			// and which usually corresponds to txn.DeprecatedOrigTimestamp).
+			// and which usually corresponds to txn.ReadTimestamp).
 			txn.Sequence++
 			txn.Timestamp = ts099
 
@@ -976,7 +976,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 					{Sequence: 0, Value: value.RawBytes},
 				},
 			}).Size())
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1108,13 +1108,13 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				DeprecatedOrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write an intent at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, val1, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val1, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1162,7 +1162,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, mVal2Size, 64)
 
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, val2, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val2, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1196,13 +1196,13 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:                 enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				DeprecatedOrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write a system intent at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.DeprecatedOrigTimestamp, val1, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val1, txn); err != nil {
 				t.Fatal(err)
 			}
 
