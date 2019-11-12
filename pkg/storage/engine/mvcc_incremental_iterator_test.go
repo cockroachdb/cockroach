@@ -168,10 +168,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			txn1ID := uuid.MakeV4()
 			txn1 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey1,
-					ID:        txn1ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey1,
+					ID:             txn1ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
 				ReadTimestamp: ts4,
 			}
@@ -182,10 +182,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			txn2ID := uuid.MakeV4()
 			txn2 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey2,
-					ID:        txn2ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey2,
+					ID:             txn2ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
 				ReadTimestamp: ts4,
 			}
@@ -256,10 +256,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			txn1ID := uuid.MakeV4()
 			txn1 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey1,
-					ID:        txn1ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey1,
+					ID:             txn1ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
 				ReadTimestamp: ts4,
 			}
@@ -270,10 +270,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			txn2ID := uuid.MakeV4()
 			txn2 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey2,
-					ID:        txn2ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey2,
+					ID:             txn2ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
 				ReadTimestamp: ts4,
 			}
@@ -355,11 +355,11 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 			ts3 := hlc.Timestamp{WallTime: 3}
 			txn := &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       roachpb.Key("b"),
-					ID:        uuid.MakeV4(),
-					Epoch:     1,
-					Timestamp: ts1,
-					Sequence:  1,
+					Key:            roachpb.Key("b"),
+					ID:             uuid.MakeV4(),
+					Epoch:          1,
+					WriteTimestamp: ts1,
+					Sequence:       1,
 				},
 				ReadTimestamp: ts1,
 			}
@@ -373,7 +373,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 			g, _ := errgroup.WithContext(ctx)
 			g.Go(func() error {
 				// Re-write the intent with a higher timestamp.
-				txn.Timestamp = ts3
+				txn.WriteTimestamp = ts3
 				txn.Sequence = 2
 				return MVCCPut(ctx, e, nil, kA, ts1, vA2, txn)
 			})

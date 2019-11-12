@@ -269,7 +269,7 @@ func EndTransaction(
 			}
 
 			reply.Txn.Status = roachpb.STAGING
-			reply.StagingTimestamp = reply.Txn.Timestamp
+			reply.StagingTimestamp = reply.Txn.WriteTimestamp
 			if err := updateStagingTxn(ctx, batch, ms, key, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
@@ -291,7 +291,7 @@ func EndTransaction(
 		// transactions and thus the pre-intent value can safely be used.
 		if mt := args.InternalCommitTrigger.GetMergeTrigger(); mt != nil {
 			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
-				ms, mt, reply.Txn.Timestamp)
+				ms, mt, reply.Txn.WriteTimestamp)
 			if err != nil {
 				return result.Result{}, err
 			}
@@ -381,7 +381,7 @@ func IsEndTransactionTriggeringRetryError(
 		// For compatibility with 19.2 nodes which might not have set
 		// ReadTimestamp, fallback to DeprecatedOrigTimestamp.
 		readTimestamp.Forward(txn.DeprecatedOrigTimestamp)
-		isTxnPushed := txn.Timestamp != readTimestamp
+		isTxnPushed := txn.WriteTimestamp != readTimestamp
 
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
@@ -396,11 +396,11 @@ func IsEndTransactionTriggeringRetryError(
 	}
 
 	// However, a transaction must obey its deadline, if set.
-	if !retry && IsEndTransactionExceedingDeadline(txn.Timestamp, args) {
-		exceededBy := txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
+	if !retry && IsEndTransactionExceedingDeadline(txn.WriteTimestamp, args) {
+		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
 		extraMsg = fmt.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
-			exceededBy, txn.Timestamp, args.Deadline)
+			exceededBy, txn.WriteTimestamp, args.Deadline)
 		retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
 	}
 	return retry, reason, extraMsg
@@ -573,7 +573,7 @@ func RunCommitTrigger(
 
 	if ct.GetSplitTrigger() != nil {
 		newMS, trigger, err := splitTrigger(
-			ctx, rec, batch, *ms, ct.SplitTrigger, txn.Timestamp,
+			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
 		*ms = newMS
 		return trigger, err

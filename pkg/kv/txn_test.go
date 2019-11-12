@@ -618,7 +618,7 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 				}
 				injected = true
 				txn := ba.Txn.Clone()
-				refreshTS = txn.Timestamp.Add(0, 1)
+				refreshTS = txn.WriteTimestamp.Add(0, 1)
 				pErr := roachpb.NewReadWithinUncertaintyIntervalError(
 					txn.ReadTimestamp,
 					refreshTS,

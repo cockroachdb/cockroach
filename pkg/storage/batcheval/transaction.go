@@ -89,7 +89,7 @@ func SetAbortSpan(
 
 	entry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
-		Timestamp: txn.Timestamp,
+		Timestamp: txn.WriteTimestamp,
 		Priority:  txn.Priority,
 	}
 	if exists && curEntry.Equal(entry) {
@@ -132,7 +132,7 @@ func CanCreateTxnRecord(rec EvalContext, txn *roachpb.Transaction) error {
 	if !ok {
 		return roachpb.NewTransactionAbortedError(reason)
 	}
-	txn.Timestamp.Forward(minCommitTS)
+	txn.WriteTimestamp.Forward(minCommitTS)
 	return nil
 }
 
@@ -150,7 +150,7 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 		Status:  roachpb.PENDING,
 		// Set the LastHeartbeat timestamp to the intent's timestamp.
 		// We use this as an indication of client activity.
-		LastHeartbeat: txn.Timestamp,
+		LastHeartbeat: txn.WriteTimestamp,
 	}
 
 	// Determine whether the transaction record could ever actually be written
@@ -174,7 +174,7 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 		//
 		//  synthTxnRecord.Status = roachpb.ABORTED
 		//
-		txnMinTS = txn.Timestamp
+		txnMinTS = txn.WriteTimestamp
 
 		// If we don't need to worry about compatibility, disallow this case.
 		if util.RaceEnabled {
@@ -185,7 +185,7 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 	if ok {
 		// Forward the provisional commit timestamp by the minimum timestamp that
 		// the transaction would be able to create a transaction record at.
-		synthTxnRecord.Timestamp.Forward(minCommitTS)
+		synthTxnRecord.WriteTimestamp.Forward(minCommitTS)
 	} else {
 		// Mark the transaction as ABORTED because it is uncommittable.
 		synthTxnRecord.Status = roachpb.ABORTED

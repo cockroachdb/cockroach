@@ -389,7 +389,7 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
 	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	// Advance the txn timestamp.
-	txn.Timestamp = txn.Timestamp.Add(10, 2)
+	txn.WriteTimestamp = txn.WriteTimestamp.Add(10, 2)
 	txn.BumpEpoch()
 	if a, e := txn.Epoch, enginepb.TxnEpoch(1); a != e {
 		t.Errorf("expected epoch %d; got %d", e, a)
@@ -405,11 +405,11 @@ func TestTransactionInclusiveTimeBounds(t *testing.T) {
 	origNow := makeTS(1, 1)
 	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	verify(txn, origNow, origNow)
-	txn.Timestamp.Forward(makeTS(1, 2))
+	txn.WriteTimestamp.Forward(makeTS(1, 2))
 	verify(txn, origNow, makeTS(1, 2))
 	txn.Restart(1, 1, makeTS(2, 1))
 	verify(txn, origNow, makeTS(2, 1))
-	txn.Timestamp.Forward(makeTS(3, 1))
+	txn.WriteTimestamp.Forward(makeTS(3, 1))
 	verify(txn, origNow, makeTS(3, 1))
 }
 
@@ -471,13 +471,13 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Key:          Key("foo"),
-		ID:           uuid.MakeV4(),
-		Epoch:        2,
-		Timestamp:    makeTS(20, 21),
-		MinTimestamp: makeTS(10, 11),
-		Priority:     957356782,
-		Sequence:     123,
+		Key:            Key("foo"),
+		ID:             uuid.MakeV4(),
+		Epoch:          2,
+		WriteTimestamp: makeTS(20, 21),
+		MinTimestamp:   makeTS(10, 11),
+		Priority:       957356782,
+		Sequence:       123,
 	},
 	Name:                    "name",
 	Status:                  COMMITTED,
@@ -659,7 +659,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn := nonZeroTxn
 	expTxn.Epoch++
 	expTxn.Sequence = 0
-	expTxn.Timestamp = makeTS(25, 1)
+	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
 	expTxn.DeprecatedOrigTimestamp = expTxn.ReadTimestamp
 	expTxn.WriteTooOld = false

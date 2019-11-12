@@ -88,7 +88,7 @@ message TxnMeta {
   //       value will need to be rewritten at the forwarded timestamp if the
   //       transaction commits.
   //
-  util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp write_timestamp = 5 [(gogoproto.nullable) = false];
   // The timestamp that the transaction was assigned by its gateway when it
   // began its first epoch. This is the earliest timestamp that the transaction
   // could have written any of its intents at.

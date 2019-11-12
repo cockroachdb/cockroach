@@ -59,10 +59,10 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// Create an sstable containing an unresolved intent.
 	txn := &roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:       k,
-			ID:        uuid.MakeV4(),
-			Epoch:     1,
-			Timestamp: ts1,
+			Key:            k,
+			ID:             uuid.MakeV4(),
+			Epoch:          1,
+			WriteTimestamp: ts1,
 		},
 		ReadTimestamp: ts1,
 	}
@@ -144,7 +144,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 		Header: roachpb.Header{
 			Txn: &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Timestamp: ts3,
+					WriteTimestamp: ts3,
 				},
 				ReadTimestamp: ts2,
 			},

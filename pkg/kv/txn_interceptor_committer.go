@@ -255,7 +255,7 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 
 	// Check if the (read-only) txn was pushed above its deadline.
 	deadline := et.Deadline
-	if deadline != nil && !br.Txn.Timestamp.Less(*deadline) {
+	if deadline != nil && !br.Txn.WriteTimestamp.Less(*deadline) {
 		return nil, generateTxnDeadlineExceededErr(ba.Txn, *deadline)
 	}
 
@@ -339,7 +339,7 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 	if etResp.StagingTimestamp.IsEmpty() {
 		return roachpb.NewErrorf("empty StagingTimestamp in EndTransactionResponse: %v", etResp)
 	}
-	if etResp.StagingTimestamp.Less(br.Txn.Timestamp) {
+	if etResp.StagingTimestamp.Less(br.Txn.WriteTimestamp) {
 		// If the timestamp that the transaction record was staged at
 		// is less than the timestamp of the transaction in the batch
 		// response then one of the concurrent writes was pushed to

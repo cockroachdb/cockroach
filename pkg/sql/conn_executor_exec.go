@@ -503,7 +503,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
-	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.Serialize().Timestamp)
+	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.Serialize().WriteTimestamp)
 	if err != nil {
 		return err
 	}
