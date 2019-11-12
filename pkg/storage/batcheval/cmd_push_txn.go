@@ -119,9 +119,9 @@ func PushTxn(
 		// should not be performed at a timestamp in the future.
 		return result.Result{}, errors.Errorf("request timestamp %s less than PushTo timestamp %s", h.Timestamp, args.PushTo)
 	}
-	if h.Timestamp.Less(args.PusheeTxn.Timestamp) {
+	if h.Timestamp.Less(args.PusheeTxn.WriteTimestamp) {
 		// This condition must hold for the timestamp cache access/update to be safe.
-		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.Timestamp)
+		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.WriteTimestamp)
 	}
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return result.Result{}, errors.Errorf("request key %s should match pushee txn key %s", args.Key, args.PusheeTxn.Key)
@@ -173,7 +173,7 @@ func PushTxn(
 		// Forward the last heartbeat time of the transaction record by
 		// the timestamp of the intent. This is another indication of
 		// client activity.
-		reply.PusheeTxn.LastHeartbeat.Forward(args.PusheeTxn.Timestamp)
+		reply.PusheeTxn.LastHeartbeat.Forward(args.PusheeTxn.WriteTimestamp)
 	}
 
 	// If already committed or aborted, return success.
@@ -184,15 +184,15 @@ func PushTxn(
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == roachpb.PUSH_TIMESTAMP && !reply.PusheeTxn.Timestamp.Less(args.PushTo) {
+	if args.PushType == roachpb.PUSH_TIMESTAMP && !reply.PusheeTxn.WriteTimestamp.Less(args.PushTo) {
 		// Trivial noop.
 		return result.Result{}, nil
 	}
 
 	// The pusher might be aware of a newer version of the pushee.
 	increasedEpochOrTimestamp := false
-	if reply.PusheeTxn.Timestamp.Less(args.PusheeTxn.Timestamp) {
-		reply.PusheeTxn.Timestamp = args.PusheeTxn.Timestamp
+	if reply.PusheeTxn.WriteTimestamp.Less(args.PusheeTxn.WriteTimestamp) {
+		reply.PusheeTxn.WriteTimestamp = args.PusheeTxn.WriteTimestamp
 		increasedEpochOrTimestamp = true
 	}
 	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
@@ -276,7 +276,7 @@ func PushTxn(
 		// If the transaction record was already present, forward the timestamp
 		// to accommodate AbortSpan GC. See method comment for details.
 		if ok {
-			reply.PusheeTxn.Timestamp.Forward(reply.PusheeTxn.LastActive())
+			reply.PusheeTxn.WriteTimestamp.Forward(reply.PusheeTxn.LastActive())
 		}
 	case roachpb.PUSH_TIMESTAMP:
 		// Otherwise, update timestamp to be one greater than the request's
@@ -284,7 +284,7 @@ func PushTxn(
 		// timestamp cache. If the transaction record was not already present
 		// then we rely on the read timestamp cache to prevent the record from
 		// ever being written with a timestamp beneath this timestamp.
-		reply.PusheeTxn.Timestamp.Forward(args.PushTo)
+		reply.PusheeTxn.WriteTimestamp.Forward(args.PushTo)
 	default:
 		return result.Result{}, errors.Errorf("unexpected push type: %v", pushType)
 	}

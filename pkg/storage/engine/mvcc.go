@@ -757,8 +757,8 @@ func MVCCGetAsTxn(
 		Txn: &roachpb.Transaction{
 			TxnMeta:       txnMeta,
 			Status:        roachpb.PENDING,
-			ReadTimestamp: txnMeta.Timestamp,
-			MaxTimestamp:  txnMeta.Timestamp,
+			ReadTimestamp: txnMeta.WriteTimestamp,
+			MaxTimestamp:  txnMeta.WriteTimestamp,
 		}})
 }
 
@@ -1403,7 +1403,7 @@ func mvccPutInternal(
 				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
 				readTimestamp, timestamp)
 		}
-		writeTimestamp = txn.Timestamp
+		writeTimestamp = txn.WriteTimestamp
 	}
 
 	timestamp = hlc.Timestamp{} // prevent accidental use below
@@ -2509,15 +2509,15 @@ func mvccResolveWriteIntent(
 			gbuf.meta = buf.meta
 
 			v, _, _, err := mvccGetInternal(ctx, iter, metaKey,
-				intent.Txn.Timestamp, false, unsafeValue, nil, gbuf)
+				intent.Txn.WriteTimestamp, false, unsafeValue, nil, gbuf)
 			if err != nil {
 				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
-					intent.Key, intent.Txn.Timestamp, err)
+					intent.Key, intent.Txn.WriteTimestamp, err)
 			} else if v == nil {
 				// This can happen if the committed value was already GCed.
 				log.Warningf(ctx, "unable to find value for %s @ %s (%+v vs %+v)",
-					intent.Key, intent.Txn.Timestamp, meta, intent.Txn)
-			} else if v.Timestamp != intent.Txn.Timestamp {
+					intent.Key, intent.Txn.WriteTimestamp, meta, intent.Txn)
+			} else if v.Timestamp != intent.Txn.WriteTimestamp {
 				// This should never happen. If we find a value when seeking
 				// to the intent's commit timestamp then that value should
 				// always have the correct timestamp. Finding a value without
@@ -2525,7 +2525,7 @@ func mvccResolveWriteIntent(
 				// committed value was already GCed, because we now found a
 				// version with an even lower timestamp.
 				log.Warningf(ctx, "unable to find value for %s @ %s: %s (txn=%+v)",
-					intent.Key, intent.Txn.Timestamp, v.Timestamp, intent.Txn)
+					intent.Key, intent.Txn.WriteTimestamp, v.Timestamp, intent.Txn)
 			}
 		}
 		return false, nil
@@ -2552,7 +2552,7 @@ func mvccResolveWriteIntent(
 	// combined with replays of intent resolution make this configuration a
 	// possibility. We treat such intents as uncommitted.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
-	timestampsValid := !intent.Txn.Timestamp.Less(hlc.Timestamp(meta.Timestamp))
+	timestampsValid := !intent.Txn.WriteTimestamp.Less(hlc.Timestamp(meta.Timestamp))
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
 
 	// Note the small difference to commit epoch handling here: We allow
@@ -2581,7 +2581,7 @@ func mvccResolveWriteIntent(
 	// TODO(tschottdorf): various epoch-related scenarios here deserve more
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
-	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.Timestamp)
+	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.WriteTimestamp)
 
 	// There's nothing to do if meta's epoch is greater than or equal txn's
 	// epoch and the state is still in progress but the intent was not pushed
@@ -2597,7 +2597,7 @@ func mvccResolveWriteIntent(
 	if commit || pushed {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
-		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.Timestamp)
+		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.WriteTimestamp)
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
@@ -2638,7 +2638,7 @@ func mvccResolveWriteIntent(
 			iter = nil // prevent accidental use below
 
 			// Rewrite the versioned value at the new timestamp.
-			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.Timestamp}
+			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
 			valBytes, err := engine.Get(latestKey)
 			if err != nil {
 				return false, err
@@ -2665,7 +2665,7 @@ func mvccResolveWriteIntent(
 		engine.LogLogicalOp(logicalOp, MVCCLogicalOpDetails{
 			Txn:       intent.Txn,
 			Key:       intent.Key,
-			Timestamp: intent.Txn.Timestamp,
+			Timestamp: intent.Txn.WriteTimestamp,
 		})
 
 		return true, nil

@@ -29,13 +29,13 @@ func TestTransactionString(t *testing.T) {
 	}
 	txn := roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:          roachpb.Key("foo"),
-			ID:           txnID,
-			Epoch:        2,
-			Timestamp:    hlc.Timestamp{WallTime: 20, Logical: 21},
-			MinTimestamp: hlc.Timestamp{WallTime: 10, Logical: 11},
-			Priority:     957356782,
-			Sequence:     15,
+			Key:            roachpb.Key("foo"),
+			ID:             txnID,
+			Epoch:          2,
+			WriteTimestamp: hlc.Timestamp{WallTime: 20, Logical: 21},
+			MinTimestamp:   hlc.Timestamp{WallTime: 10, Logical: 11},
+			Priority:       957356782,
+			Sequence:       15,
 		},
 		Name:          "name",
 		Status:        roachpb.COMMITTED,

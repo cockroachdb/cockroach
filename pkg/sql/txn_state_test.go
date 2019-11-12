@@ -215,9 +215,9 @@ func checkTxn(txn *client.Txn, exp expKVTxn) error {
 			*exp.userPriority, txn.UserPriority())
 	}
 	proto := txn.Serialize()
-	if exp.tsNanos != nil && *exp.tsNanos != proto.Timestamp.WallTime {
+	if exp.tsNanos != nil && *exp.tsNanos != proto.WriteTimestamp.WallTime {
 		return errors.Errorf("expected Timestamp: %d, but got: %s",
-			*exp.tsNanos, proto.Timestamp)
+			*exp.tsNanos, proto.WriteTimestamp)
 	}
 	if origTimestamp := txn.ReadTimestamp(); exp.origTSNanos != nil &&
 		*exp.origTSNanos != origTimestamp.WallTime {

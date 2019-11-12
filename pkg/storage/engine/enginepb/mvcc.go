@@ -301,7 +301,7 @@ func (t TxnMeta) FormatW(buf io.Writer) {
 		FormatBytesAsKey(t.Key),
 		floatPri,
 		t.Epoch,
-		t.Timestamp,
+		t.WriteTimestamp,
 		t.MinTimestamp,
 		t.Sequence)
 }
@@ -321,7 +321,7 @@ func (t TxnMeta) SafeMessage() string {
 		t.Short(),
 		floatPri,
 		t.Epoch,
-		t.Timestamp,
+		t.WriteTimestamp,
 		t.MinTimestamp,
 		t.Sequence)
 	return buf.String()
