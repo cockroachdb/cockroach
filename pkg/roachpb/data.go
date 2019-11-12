@@ -963,7 +963,7 @@ func (t *Transaction) Restart(
 	// Reset all epoch-scoped state.
 	t.Sequence = 0
 	t.WriteTooOld = false
-	t.OrigTimestampWasObserved = false
+	t.CommitTimestampFixed = false
 	t.IntentSpans = nil
 	t.InFlightWrites = nil
 }
@@ -1011,7 +1011,7 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Epoch = o.Epoch
 		t.Status = o.Status
 		t.WriteTooOld = o.WriteTooOld
-		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+		t.CommitTimestampFixed = o.CommitTimestampFixed
 		t.Sequence = o.Sequence
 		t.IntentSpans = o.IntentSpans
 		t.InFlightWrites = o.InFlightWrites
@@ -1036,10 +1036,10 @@ func (t *Transaction) Update(o *Transaction) {
 		// WriteTooOld, otherwise the flags are cumulative.
 		if t.ReadTimestamp.Less(o.ReadTimestamp) {
 			t.WriteTooOld = o.WriteTooOld
-			t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+			t.CommitTimestampFixed = o.CommitTimestampFixed
 		} else {
 			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-			t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
+			t.CommitTimestampFixed = t.CommitTimestampFixed || o.CommitTimestampFixed
 		}
 
 		if t.Sequence < o.Sequence {
@@ -1283,7 +1283,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if txn == nil || txn.OrigTimestampWasObserved {
+	if txn == nil || txn.CommitTimestampFixed {
 		return false, nil
 	}
 	timestamp := txn.Timestamp

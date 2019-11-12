@@ -1774,11 +1774,11 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // bool orig_timestamp_was_observed = 16;
-  void clear_orig_timestamp_was_observed();
-  static const int kOrigTimestampWasObservedFieldNumber = 16;
-  bool orig_timestamp_was_observed() const;
-  void set_orig_timestamp_was_observed(bool value);
+  // bool commit_timestamp_fixed = 16;
+  void clear_commit_timestamp_fixed();
+  static const int kCommitTimestampFixedFieldNumber = 16;
+  bool commit_timestamp_fixed() const;
+  void set_commit_timestamp_fixed(bool value);
 
   // bool write_too_old = 12;
   void clear_write_too_old();
@@ -1800,7 +1800,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* max_timestamp_;
   ::cockroach::util::hlc::Timestamp* read_timestamp_;
   int status_;
-  bool orig_timestamp_was_observed_;
+  bool commit_timestamp_fixed_;
   bool write_too_old_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
@@ -4219,18 +4219,18 @@ inline void Transaction::set_allocated_deprecated_orig_timestamp(::cockroach::ut
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.deprecated_orig_timestamp)
 }
 
-// bool orig_timestamp_was_observed = 16;
-inline void Transaction::clear_orig_timestamp_was_observed() {
-  orig_timestamp_was_observed_ = false;
+// bool commit_timestamp_fixed = 16;
+inline void Transaction::clear_commit_timestamp_fixed() {
+  commit_timestamp_fixed_ = false;
 }
-inline bool Transaction::orig_timestamp_was_observed() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
-  return orig_timestamp_was_observed_;
+inline bool Transaction::commit_timestamp_fixed() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.commit_timestamp_fixed)
+  return commit_timestamp_fixed_;
 }
-inline void Transaction::set_orig_timestamp_was_observed(bool value) {
+inline void Transaction::set_commit_timestamp_fixed(bool value) {
   
-  orig_timestamp_was_observed_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
+  commit_timestamp_fixed_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.commit_timestamp_fixed)
 }
 
 inline bool Transaction::has_read_timestamp() const {
