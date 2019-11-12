@@ -23,7 +23,7 @@ import (
 )
 
 // DecodeIndexKeyToCols decodes an index key into the idx'th position of the
-// provided slices of exec.ColVecs. The input index key must already have its
+// provided slices of colexec.Vecs. The input index key must already have its
 // first table id / index id prefix removed. If matches is false, the key is
 // from a different table, and the returned remainingKey indicates a
 // "seek prefix": the next key that might be part of the table being searched
@@ -114,7 +114,7 @@ func DecodeIndexKeyToCols(
 }
 
 // DecodeKeyValsToCols decodes the values that are part of the key, writing the
-// result to the idx'th slot of the input slice of exec.ColVecs. If the
+// result to the idx'th slot of the input slice of colexec.Vecs. If the
 // directions slice is nil, the direction used will default to
 // encoding.Ascending.
 // If the unseen int set is non-nil, upon decoding the column with ordinal i,
@@ -154,7 +154,7 @@ func DecodeKeyValsToCols(
 }
 
 // decodeTableKeyToCol decodes a value encoded by EncodeTableKey, writing the result
-// to the idx'th slot of the input exec.Vec.
+// to the idx'th slot of the input colexec.Vec.
 // See the analog, DecodeTableKey, in sqlbase/column_type_encoding.go.
 func decodeTableKeyToCol(
 	vec coldata.Vec, idx uint16, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
@@ -209,7 +209,7 @@ func decodeTableKeyToCol(
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
 		vec.Decimal()[idx] = d
-	case types.BytesFamily, types.StringFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var r []byte
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -248,7 +248,7 @@ func skipTableKey(
 	var rkey []byte
 	var err error
 	switch valType.Family() {
-	case types.BoolFamily, types.IntFamily, types.DateFamily:
+	case types.BoolFamily, types.IntFamily, types.DateFamily, types.OidFamily:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeVarintAscending(key)
 		} else {
@@ -260,7 +260,7 @@ func skipTableKey(
 		} else {
 			rkey, _, err = encoding.DecodeFloatDescending(key)
 		}
-	case types.BytesFamily, types.StringFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
@@ -318,11 +318,11 @@ func UnmarshalColumnValueToCol(
 		vec.Float64()[idx] = v
 	case types.DecimalFamily:
 		err = value.GetDecimalInto(&vec.Decimal()[idx])
-	case types.BytesFamily, types.StringFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		var v []byte
 		v, err = value.GetBytes()
 		vec.Bytes().Set(int(idx), v)
-	case types.DateFamily:
+	case types.DateFamily, types.OidFamily:
 		var v int64
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v

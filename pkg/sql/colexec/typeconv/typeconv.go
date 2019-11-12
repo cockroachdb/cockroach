@@ -23,11 +23,13 @@ import (
 )
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
+// Note: if you're adding a new type here, add it to
+// colexec.AllSupportedSQLTypes as well.
 func FromColumnType(ct *types.T) coltypes.T {
 	switch ct.Family() {
 	case types.BoolFamily:
 		return coltypes.Bool
-	case types.BytesFamily, types.StringFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		return coltypes.Bytes
 	case types.DateFamily, types.OidFamily:
 		return coltypes.Int64
@@ -163,6 +165,14 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 				return nil, errors.Errorf("expected *tree.DDecimal, found %s", reflect.TypeOf(datum))
 			}
 			return d.Decimal, nil
+		}
+	case types.UuidFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DUuid)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DUuid, found %s", reflect.TypeOf(datum))
+			}
+			return d.UUID.GetBytesMut(), nil
 		}
 	}
 	// It would probably be more correct to return an error here, rather than a
