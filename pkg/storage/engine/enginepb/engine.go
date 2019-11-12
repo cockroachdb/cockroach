@@ -22,6 +22,8 @@ func (e *EngineType) String() string {
 		return "rocksdb"
 	case EngineTypePebble:
 		return "pebble"
+	case EngineTypeTeePebbleRocksDB:
+		return "pebble+rocksdb"
 	}
 	return ""
 }
@@ -33,6 +35,8 @@ func (e *EngineType) Set(s string) error {
 		*e = EngineTypeRocksDB
 	case "pebble":
 		*e = EngineTypePebble
+	case "pebble+rocksdb":
+		*e = EngineTypeTeePebbleRocksDB
 	default:
 		return fmt.Errorf("invalid storage engine: %s "+
 			"(possible values: rocksdb, pebble)", s)
