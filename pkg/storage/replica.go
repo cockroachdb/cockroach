@@ -1534,7 +1534,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		return nil
 	}
 	val, _, err := engine.MVCCGetAsTxn(
-		ctx, r.Engine(), descKey, intent.Txn.Timestamp, intent.Txn)
+		ctx, r.Engine(), descKey, intent.Txn.WriteTimestamp, intent.Txn)
 	if err != nil {
 		return err
 	} else if val != nil {

@@ -293,10 +293,10 @@ type unresolvedTxn struct {
 // asTxnMeta returns a TxnMeta representation of the unresolved transaction.
 func (t *unresolvedTxn) asTxnMeta() enginepb.TxnMeta {
 	return enginepb.TxnMeta{
-		ID:           t.txnID,
-		Key:          t.txnKey,
-		MinTimestamp: t.txnMinTimestamp,
-		Timestamp:    t.timestamp,
+		ID:             t.txnID,
+		Key:            t.txnKey,
+		MinTimestamp:   t.txnMinTimestamp,
+		WriteTimestamp: t.timestamp,
 	}
 }
 

@@ -146,7 +146,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			expError:            "timestamp change by implicitly committed transaction: 0.000000001,0->0.000000002,0",
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn
-				txnCopy.Timestamp = txnCopy.Timestamp.Add(1, 0)
+				txnCopy.WriteTimestamp = txnCopy.WriteTimestamp.Add(1, 0)
 				return txnCopy
 			}(),
 		},
@@ -184,7 +184,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			implicitlyCommitted: false,
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn
-				txnCopy.Timestamp = txnCopy.Timestamp.Add(1, 0)
+				txnCopy.WriteTimestamp = txnCopy.WriteTimestamp.Add(1, 0)
 				return txnCopy
 			}(),
 		},

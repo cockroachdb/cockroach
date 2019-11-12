@@ -56,13 +56,13 @@ var (
 	txn2ID       = uuid.MakeV4()
 	txn1TS       = hlc.Timestamp{Logical: 1}
 	txn2TS       = hlc.Timestamp{Logical: 2}
-	txn1         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS}
-	txn1Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS, Status: roachpb.COMMITTED}
-	txn1Abort    = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: txn1TS, MinTimestamp: txn1TS}, Status: roachpb.ABORTED}
-	txn1e2       = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, Timestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS}
-	txn1e2Commit = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, Timestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS, Status: roachpb.COMMITTED}
-	txn2         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Timestamp: txn2TS, MinTimestamp: txn2TS}, ReadTimestamp: txn2TS}
-	txn2Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Timestamp: txn2TS, MinTimestamp: txn2TS}, ReadTimestamp: txn2TS, Status: roachpb.COMMITTED}
+	txn1         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, WriteTimestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS}
+	txn1Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, WriteTimestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS, Status: roachpb.COMMITTED}
+	txn1Abort    = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, WriteTimestamp: txn1TS, MinTimestamp: txn1TS}, Status: roachpb.ABORTED}
+	txn1e2       = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, WriteTimestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS}
+	txn1e2Commit = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, WriteTimestamp: txn1TS, MinTimestamp: txn1TS}, ReadTimestamp: txn1TS, Status: roachpb.COMMITTED}
+	txn2         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, WriteTimestamp: txn2TS, MinTimestamp: txn2TS}, ReadTimestamp: txn2TS}
+	txn2Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, WriteTimestamp: txn2TS, MinTimestamp: txn2TS}, ReadTimestamp: txn2TS, Status: roachpb.COMMITTED}
 	value1       = roachpb.MakeValueFromString("testValue1")
 	value2       = roachpb.MakeValueFromString("testValue2")
 	value3       = roachpb.MakeValueFromString("testValue3")
@@ -103,7 +103,7 @@ func makeTxn(baseTxn roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction
 	txn := baseTxn.Clone()
 	txn.ReadTimestamp = ts
 	txn.DeprecatedOrigTimestamp = ts
-	txn.Timestamp = ts
+	txn.WriteTimestamp = ts
 	return txn
 }
 
@@ -480,14 +480,14 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 
 			txn := *txn1
 			txn.ReadTimestamp = hlc.Timestamp{WallTime: 1}
-			txn.Timestamp = hlc.Timestamp{WallTime: 2, Logical: 1}
+			txn.WriteTimestamp = hlc.Timestamp{WallTime: 2, Logical: 1}
 			if err := MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, value1, &txn); err != nil {
 				t.Fatal(err)
 			}
 
 			// Put operation with earlier wall time. Will NOT be ignored.
 			txn.Sequence++
-			txn.Timestamp = hlc.Timestamp{WallTime: 1}
+			txn.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if err := MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, value2, &txn); err != nil {
 				t.Fatal(err)
 			}
@@ -788,7 +788,7 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 			}
 
 			txn.Sequence++
-			txn.Timestamp = hlc.Timestamp{WallTime: 1}
+			txn.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if err := MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, value1, &txn); err != nil {
 				t.Fatal(err)
 			}
@@ -881,8 +881,8 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					// Txn with read timestamp 7 and MaxTimestamp 10.
 					txn := &roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{
-							ID:        uuid.MakeV4(),
-							Timestamp: hlc.Timestamp{WallTime: 7},
+							ID:             uuid.MakeV4(),
+							WriteTimestamp: hlc.Timestamp{WallTime: 7},
 						},
 						MaxTimestamp: hlc.Timestamp{WallTime: 10},
 					}
@@ -1010,8 +1010,8 @@ func TestMVCCGetUncertainty(t *testing.T) {
 					// -----------------
 					intentTxn := &roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{
-							ID:        uuid.MakeV4(),
-							Timestamp: hlc.Timestamp{WallTime: 9},
+							ID:             uuid.MakeV4(),
+							WriteTimestamp: hlc.Timestamp{WallTime: 9},
 						},
 						ReadTimestamp: hlc.Timestamp{WallTime: 9},
 					}
@@ -1354,7 +1354,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 					}
 
 					txn.Sequence++
-					txn.Timestamp = hlc.Timestamp{WallTime: 3}
+					txn.WriteTimestamp = hlc.Timestamp{WallTime: 3}
 					if err := MVCCDelete(ctx, engine, nil, testKey1, txn.ReadTimestamp, txn); err != nil {
 						t.Fatal(err)
 					}
@@ -3221,7 +3221,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 			// Commit value3.
 			txnCommit := txn
 			txnCommit.Status = roachpb.COMMITTED
-			txnCommit.Timestamp = clock.Now().Add(1, 0)
+			txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
 			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txnCommit.Status,
@@ -3234,7 +3234,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 			if _, ok := err.(*roachpb.WriteTooOldError); !ok {
 				t.Fatalf("expected write too old error; got %s", err)
 			}
-			expTS := txnCommit.Timestamp.Next()
+			expTS := txnCommit.WriteTimestamp.Next()
 			if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
 				t.Fatalf("expected wto error with actual timestamp = %s; got %s", expTS, wtoErr)
 			}
@@ -3372,7 +3372,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 			// Commit value3.
 			txnCommit := txn
 			txnCommit.Status = roachpb.COMMITTED
-			txnCommit.Timestamp = clock.Now().Add(1, 0)
+			txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
 			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txnCommit.Status,
@@ -3811,7 +3811,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 			defer engine.Close()
 
 			// Write first value.
-			if err := MVCCPut(ctx, engine, nil, testKey1, txn1Commit.Timestamp, value1, nil); err != nil {
+			if err := MVCCPut(ctx, engine, nil, testKey1, txn1Commit.WriteTimestamp, value1, nil); err != nil {
 				t.Fatal(err)
 			}
 			// Now, put down an intent which should return a write too old error
@@ -3851,8 +3851,8 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 			defer engine.Close()
 
 			txn := txn1.Clone()
-			tsEarly := txn.Timestamp
-			txn.TxnMeta.Timestamp.Forward(tsEarly.Add(10, 0))
+			tsEarly := txn.WriteTimestamp
+			txn.TxnMeta.WriteTimestamp.Forward(tsEarly.Add(10, 0))
 
 			// Write an intent which has txn.Timestamp > meta.timestamp.
 			if err := MVCCPut(ctx, engine, nil, testKey1, tsEarly, value1, txn); err != nil {
@@ -3881,8 +3881,8 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 			}{
 				// Check that the intent has indeed moved to where we pushed it.
 				{tsEarly, false},
-				{intent.Txn.Timestamp.Prev(), false},
-				{intent.Txn.Timestamp, true},
+				{intent.Txn.WriteTimestamp.Prev(), false},
+				{intent.Txn.WriteTimestamp, true},
 				{hlc.MaxTimestamp, true},
 			} {
 				_, _, err := MVCCGet(ctx, engine, testKey1, test.Timestamp, MVCCGetOptions{})
@@ -4047,13 +4047,13 @@ func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 			// below the existing key's timestamp and whose provisional commit timestamp
 			// is above the existing key's timestamp.
 			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-			txn.Timestamp = hlc.Timestamp{WallTime: 5}
+			txn.WriteTimestamp = hlc.Timestamp{WallTime: 5}
 			txn.Sequence++
 			err = MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, value2, txn)
 
 			// Verify that the Put returned a WriteTooOld with the ActualTime set to the
 			// transactions provisional commit timestamp.
-			expTS := txn.Timestamp
+			expTS := txn.WriteTimestamp
 			if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
 				t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
 			}
@@ -4086,7 +4086,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 			}
 
 			txn1AbortWithTS := txn1Abort.Clone()
-			txn1AbortWithTS.Timestamp = hlc.Timestamp{Logical: 1}
+			txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{Logical: 1}
 
 			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
@@ -4133,7 +4133,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 			}
 
 			txn1AbortWithTS := txn1Abort.Clone()
-			txn1AbortWithTS.Timestamp = hlc.Timestamp{WallTime: 2}
+			txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 2}
 
 			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
@@ -4182,13 +4182,13 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 			txne2 := txn
 			txne2.Sequence++
 			txne2.Epoch = 2
-			txne2.Timestamp = hlc.Timestamp{WallTime: 1}
+			txne2.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if err := MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, value2, &txne2); err != nil {
 				t.Fatal(err)
 			}
 			// Try a write with an earlier timestamp; this is just ignored.
 			txne2.Sequence++
-			txne2.Timestamp = hlc.Timestamp{WallTime: 1}
+			txne2.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if err := MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, value1, &txne2); err != nil {
 				t.Fatal(err)
 			}
@@ -4204,7 +4204,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 			// Resolve the intent.
 			txne2Commit := txne2
 			txne2Commit.Status = roachpb.COMMITTED
-			txne2Commit.Timestamp = hlc.Timestamp{WallTime: 1}
+			txne2Commit.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txne2Commit.Status,
@@ -4213,7 +4213,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			expTS := txne2Commit.Timestamp.Add(0, 1)
+			expTS := txne2Commit.WriteTimestamp.Add(0, 1)
 
 			// Now try writing an earlier value without a txn--should get WriteTooOldError.
 			err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value4, nil)
@@ -4357,12 +4357,12 @@ func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 					// Now write using txn1, epoch 1.
 					txn1ts := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 					// Bump epoch 1's write timestamp to timestamp 4.
-					txn1ts.Timestamp = hlc.Timestamp{WallTime: 4}
+					txn1ts.WriteTimestamp = hlc.Timestamp{WallTime: 4}
 					// Expected to hit WriteTooOld error but to still lay down intent.
 					err := MVCCPut(ctx, engine, nil, testKey1, txn1ts.ReadTimestamp, value3, txn1ts)
 					if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
 						t.Fatalf("unexpectedly not WriteTooOld: %+v", err)
-					} else if expTS, actTS := txn1ts.Timestamp, wtoErr.ActualTimestamp; expTS != actTS {
+					} else if expTS, actTS := txn1ts.WriteTimestamp, wtoErr.ActualTimestamp; expTS != actTS {
 						t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, actTS)
 					}
 					// Try reading using different epochs & timestamps.
@@ -4469,11 +4469,11 @@ func TestMVCCWriteWithSequence(t *testing.T) {
 					key := roachpb.Key(fmt.Sprintf("key-%d", tc.sequence))
 					txn := *txn1
 					txn.Sequence = 2
-					if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value1, &txn); err != nil {
+					if err := MVCCPut(ctx, engine, nil, key, txn.WriteTimestamp, value1, &txn); err != nil {
 						t.Fatal(err)
 					}
 					txn.Sequence = 3
-					if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value2, &txn); err != nil {
+					if err := MVCCPut(ctx, engine, nil, key, txn.WriteTimestamp, value2, &txn); err != nil {
 						t.Fatal(err)
 					}
 
@@ -4481,7 +4481,7 @@ func TestMVCCWriteWithSequence(t *testing.T) {
 					defer batch.Close()
 
 					txn.Sequence = tc.sequence
-					err := MVCCPut(ctx, batch, nil, key, txn.Timestamp, tc.value, &txn)
+					err := MVCCPut(ctx, batch, nil, key, txn.WriteTimestamp, tc.value, &txn)
 					if tc.expErr != "" && err != nil {
 						if !testutils.IsError(err, tc.expErr) {
 							t.Fatalf("unexpected error: %+v", err)
@@ -4537,7 +4537,7 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 					for i := enginepb.TxnSeq(0); i < 3; i++ {
 						key := append(prefix, []byte(strconv.Itoa(int(i)))...)
 						txn.Sequence = 2 + i
-						if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value1, &txn); err != nil {
+						if err := MVCCPut(ctx, engine, nil, key, txn.WriteTimestamp, value1, &txn); err != nil {
 							t.Fatal(err)
 						}
 					}
@@ -4546,7 +4546,7 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 					const origSeq = 6
 					txn.Sequence = origSeq
 					origDeleted, _, origNum, err := MVCCDeleteRange(
-						ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.Timestamp, &txn, true,
+						ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.WriteTimestamp, &txn, true,
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -4554,7 +4554,7 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 
 					txn.Sequence = tc.sequence
 					deleted, _, num, err := MVCCDeleteRange(
-						ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.Timestamp, &txn, true,
+						ctx, engine, nil, prefix, prefix.PrefixEnd(), math.MaxInt64, txn.WriteTimestamp, &txn, true,
 					)
 					if tc.expErr != "" && err != nil {
 						if !testutils.IsError(err, tc.expErr) {
@@ -4823,7 +4823,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 			}
 
 			txn1CommitWithTS := txn2Commit.Clone()
-			txn1CommitWithTS.Timestamp = hlc.Timestamp{WallTime: 1}
+			txn1CommitWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 1}
 			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey2},
 				Status: txn1CommitWithTS.Status,
@@ -5669,7 +5669,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 				}
 			}
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2},
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
 				ReadTimestamp: ts2,
 			}
 			if err := MVCCDelete(ctx, engine, nil, key, txn.ReadTimestamp, txn); err != nil {
@@ -5741,7 +5741,7 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 			value := roachpb.MakeValueFromString("first value")
 			newValue := roachpb.MakeValueFromString("second value")
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
 				ReadTimestamp: ts1,
 				Status:        roachpb.PENDING,
 			}
@@ -5874,9 +5874,9 @@ func TestMVCCIntentHistory(t *testing.T) {
 			newValue := roachpb.MakeValueFromString("second value")
 			txn := &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					ID:        uuid.MakeV4(),
-					Timestamp: ts0,
-					Sequence:  1,
+					ID:             uuid.MakeV4(),
+					WriteTimestamp: ts0,
+					Sequence:       1,
 				},
 				ReadTimestamp: ts0,
 				Status:        roachpb.PENDING,
@@ -5898,9 +5898,9 @@ func TestMVCCIntentHistory(t *testing.T) {
 			// Start a new transaction for the test.
 			txn = &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					ID:        uuid.MakeV4(),
-					Timestamp: ts1,
-					Sequence:  1,
+					ID:             uuid.MakeV4(),
+					WriteTimestamp: ts1,
+					Sequence:       1,
 				},
 				ReadTimestamp: ts1,
 				Status:        roachpb.PENDING,
@@ -5933,7 +5933,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 
 			// Lay down an overriding intent with a higher sequence.
 			txn.Sequence = 2
-			txn.Timestamp = ts2
+			txn.WriteTimestamp = ts2
 			if err := MVCCPut(ctx, engine, nil, key, txn.ReadTimestamp, newValue, txn); err != nil {
 				t.Fatal(err)
 			}

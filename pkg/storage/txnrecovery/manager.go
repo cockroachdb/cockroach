@@ -258,7 +258,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 		queriedTxn := &queryTxnResp.QueriedTxn
 		if queriedTxn.Status.IsFinalized() ||
 			txn.Epoch < queriedTxn.Epoch ||
-			txn.Timestamp.Less(queriedTxn.Timestamp) {
+			txn.WriteTimestamp.Less(queriedTxn.WriteTimestamp) {
 			// The transaction was already found to have changed.
 			// No need to issue a RecoverTxnRequest, just return
 			// the transaction as is.

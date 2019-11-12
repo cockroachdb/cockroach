@@ -59,9 +59,9 @@ func RecoverTxn(
 	if !bytes.Equal(args.Key, args.Txn.Key) {
 		return result.Result{}, errors.Errorf("request key %s does not match txn key %s", args.Key, args.Txn.Key)
 	}
-	if h.Timestamp.Less(args.Txn.Timestamp) {
+	if h.Timestamp.Less(args.Txn.WriteTimestamp) {
 		// This condition must hold for the timestamp cache access/update to be safe.
-		return result.Result{}, errors.Errorf("request timestamp %s less than txn timestamp %s", h.Timestamp, args.Txn.Timestamp)
+		return result.Result{}, errors.Errorf("request timestamp %s less than txn timestamp %s", h.Timestamp, args.Txn.WriteTimestamp)
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
@@ -121,7 +121,7 @@ func RecoverTxn(
 					"programming error: epoch change by implicitly committed transaction: %v->%v", was, is,
 				))
 			}
-			if was, is := args.Txn.Timestamp, reply.RecoveredTxn.Timestamp; was != is {
+			if was, is := args.Txn.WriteTimestamp, reply.RecoveredTxn.WriteTimestamp; was != is {
 				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
 					"programming error: timestamp change by implicitly committed transaction: %v->%v", was, is,
 				))
@@ -140,7 +140,7 @@ func RecoverTxn(
 		// Did the transaction change its epoch or timestamp in such a
 		// way that it would be allowed to continue trying to commit?
 		legalChange := args.Txn.Epoch < reply.RecoveredTxn.Epoch ||
-			args.Txn.Timestamp.Less(reply.RecoveredTxn.Timestamp)
+			args.Txn.WriteTimestamp.Less(reply.RecoveredTxn.WriteTimestamp)
 
 		switch reply.RecoveredTxn.Status {
 		case roachpb.ABORTED:
