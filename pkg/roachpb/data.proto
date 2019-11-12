@@ -325,13 +325,12 @@ message Transaction {
   // alone is sufficient. This is just maintained for compatibility with 19.2.
   // TODO(andrei): Remove in 20.2.
   util.hlc.Timestamp deprecated_orig_timestamp = 6 [(gogoproto.nullable) = false];
-  // This flag is set if the transaction's original timestamp was
-  // "leaked" beyond the transaction (i.e. if returned via NOW() or
-  // transaction_timestamp()). If true, this prevents optimizations
-  // which commit at a higher timestamp without resorting to a
-  // client-side retry.
-  // !!! rename to commit_timestamp_was_observed (or commit_timestamp_fixed).
-  bool orig_timestamp_was_observed = 16;
+  // This flag is set if the transaction's timestamp was "leaked" beyond the
+  // transaction (e.g. via cluster_logical_timestamp()). If true, this prevents
+  // the transaction's timestamp from being pushed, which means that the txn
+  // can't commit at a higher timestamp without resorting to a client-side
+  // retry.
+  bool commit_timestamp_fixed = 16;
   // The transaction's read timestamp. All reads are performed at this
   // timestamp, ensuring that the transaction runs on top of a consistent
   // snapshot of the database.
