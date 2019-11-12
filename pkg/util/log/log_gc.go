@@ -113,21 +113,33 @@ func (l *loggerT) archiveFile(path string) error {
 	if err != nil {
 		return err
 	}
-	defer tf.Close()
+	defer func() {
+		if err := tf.Close(); err != nil {
+			fmt.Fprintln(OrigStderr, err)
+		}
+	}()
 
 	// gzip writer with default compression
 	gz, err := gzip.NewWriterLevel(tf, gzip.DefaultCompression)
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() {
+		if err := gz.Close(); err != nil {
+			fmt.Fprintln(OrigStderr, err)
+		}
+	}()
 
 	// open file and write data to Writer
 	fs, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer fs.Close()
+	defer func() {
+		if err := fs.Close(); err != nil {
+			fmt.Fprintln(OrigStderr, err)
+		}
+	}()
 
 	// compress log file to gzip file
 	if _, err := io.Copy(gz, fs); err != nil {
