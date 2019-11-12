@@ -475,6 +475,10 @@ var returnTruePseudoError error = returnTrue{}
 // column ID either in its explicit column IDs, the extra column IDs, or the
 // stored column IDs.
 func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
+	// Covering indexes contain all columns.
+	if desc.Covering {
+		return true
+	}
 	return desc.RunOverAllColumns(func(id ColumnID) error {
 		if id == colID {
 			return returnTruePseudoError
@@ -1692,6 +1696,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 					"mutation in state %s, direction %s, constraint %v",
 					errors.Safe(m.State), errors.Safe(m.Direction), desc.Constraint.Name)
 			}
+		case *DescriptorMutation_PrimaryKeySwap:
+			if m.Direction != DescriptorMutation_NONE {
+				return errors.AssertionFailedf(
+					"primary key swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+			}
 		default:
 			return errors.AssertionFailedf(
 				"mutation in state %s, direction %s, and no column/index descriptor",
@@ -2822,12 +2831,72 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 
 	case DescriptorMutation_DROP:
 		switch t := m.Descriptor_.(type) {
-		case *DescriptorMutation_Column:
-			desc.RemoveColumnFromFamily(t.Column.ID)
-		}
 		// Nothing else to be done. The column/index was already removed from the
 		// set of column/index descriptors at mutation creation time.
 		// Constraints to be dropped are dropped before column/index backfills.
+		case *DescriptorMutation_Column:
+			desc.RemoveColumnFromFamily(t.Column.ID)
+		}
+
+	case DescriptorMutation_NONE:
+		switch t := m.Descriptor_.(type) {
+		case *DescriptorMutation_PrimaryKeySwap:
+			args := t.PrimaryKeySwap
+			getIndexIdxByID := func(id IndexID) (int, error) {
+				for i, idx := range desc.Indexes {
+					if idx.ID == id {
+						return i, nil
+					}
+				}
+				return 0, errors.New("index was not in list of indexes")
+			}
+
+			// Actually write the new primary index into the descriptor, and remove it from the indexes list.
+			// Additionally, schedule the old primary index for deletion. Note that if needed, a copy of the primary index
+			// that doesn't store any columns was created at the beginning of the primary key change operation.
+			primaryIndexCopy := protoutil.Clone(&desc.PrimaryIndex).(*IndexDescriptor)
+			if err := desc.AddIndexMutation(primaryIndexCopy, DescriptorMutation_DROP); err != nil {
+				return err
+			}
+			newIndex, err := desc.FindIndexByID(args.NewPrimaryIndexId)
+			if err != nil {
+				return err
+			}
+			newIndex.Name = "primary"
+			desc.PrimaryIndex = *newIndex
+			idx, err := getIndexIdxByID(newIndex.ID)
+			if err != nil {
+				return err
+			}
+			desc.Indexes = append(desc.Indexes[:idx], desc.Indexes[idx+1:]...)
+
+			// Swap out the old indexes with their rewritten versions.
+			for j := range args.OldIndexes {
+				oldID := args.OldIndexes[j]
+				newID := args.NewIndexes[j]
+				// All our new indexes have been inserted into the table descriptor by now, since the primary key swap
+				// is the last mutation processed in a group of mutations under the same mutation ID.
+				newIndex, err := desc.FindIndexByID(newID)
+				if err != nil {
+					return err
+				}
+				oldIndexIndex, err := getIndexIdxByID(oldID)
+				if err != nil {
+					return err
+				}
+				oldIndex := &desc.Indexes[oldIndexIndex]
+				newIndex.Name = oldIndex.Name
+				// Splice out old index from the indexes list.
+				desc.Indexes = append(desc.Indexes[:oldIndexIndex], desc.Indexes[oldIndexIndex+1:]...)
+				// Add a drop mutation for the old index.
+				// TODO (rohany): we have to see if the asynchronous schema changing picks up on these changes.
+				// TODO (rohany): it seems like other code wants there to be a job tied to the mutation ID
+				//  for this group of mutations added.
+				if err := desc.AddIndexMutation(oldIndex, DescriptorMutation_DROP); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -2958,6 +3027,12 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: idx}, Direction: direction}
 	desc.addMutation(m)
 	return nil
+}
+
+// AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.
+func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *PrimaryKeySwap) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap}, Direction: DescriptorMutation_NONE}
+	desc.addMutation(m)
 }
 
 func (desc *MutableTableDescriptor) addMutation(m DescriptorMutation) {

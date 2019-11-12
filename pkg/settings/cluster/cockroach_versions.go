@@ -50,6 +50,7 @@ const (
 	VersionChangeReplicasDemotion
 	VersionSecondaryIndexColumnFamilies
 	VersionNamespaceTableWithSchemas
+	VersionPrimaryKeyChanges
 
 	// Add new versions here (step one of two).
 
@@ -337,6 +338,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// no longer in the system config range -- implying it is no longer gossiped.
 		Key:     VersionNamespaceTableWithSchemas,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 5},
+	},
+	{
+		// VersionPrimaryKeyChanges is https://github.com/cockroachdb/cockroach/pull/42462
+		//
+		// It allows online primary key changes of tables.
+		Key:     VersionPrimaryKeyChanges,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
 	},
 
 	// Add new versions here (step two of two).
