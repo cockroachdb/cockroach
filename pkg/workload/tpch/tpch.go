@@ -242,14 +242,20 @@ func (w *worker) run(ctx context.Context) error {
 									queryName, err, numRows, i, actualValue, expectedValue)
 							}
 							// TPC-H spec requires 0.01 precision for DECIMALs, so we will
-							// first round the values to use in the comparison.
-							expectedFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.2f", expectedFloat), 64)
+							// first round the values to use in the comparison. Note that we
+							// round to a thousandth so that values like 0.601 and 0.609 were
+							// always considered to differ by less than 0.01 (due to the
+							// nature of representation of floats, it is possible that those
+							// two values when rounded to a hundredth would be represented as
+							// something like 0.59999 and 0.610001 which differ by more than
+							// 0.01).
+							expectedFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.3f", expectedFloat), 64)
 							if err != nil {
 								return errors.Errorf("[q%s] failed parsing rounded expected value as float64 with %s\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, err, numRows, i, actualValue, expectedValue)
 							}
-							actualFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.2f", actualFloat), 64)
+							actualFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.3f", actualFloat), 64)
 							if err != nil {
 								return errors.Errorf("[q%s] failed parsing rounded actual value as float64 with %s\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
