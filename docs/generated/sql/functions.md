@@ -573,6 +573,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="fnv32a"></a><code>fnv32a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 32-bit FNV-1a hash value of a set of values.</p>
 </span></td></tr>
+<tr><td><a name="fnv32all"></a><code>fnv32all(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 32-bit FNV-1 hash value of a set of columns by first casting them all to strings. Compatible with all CockroachDB SQL data types.</p>
+</span></td></tr>
 <tr><td><a name="fnv64"></a><code>fnv64(<a href="bytes.html">bytes</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="fnv64"></a><code>fnv64(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1 hash value of a set of values.</p>

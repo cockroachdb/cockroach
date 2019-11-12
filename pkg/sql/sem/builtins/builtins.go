@@ -764,6 +764,13 @@ var builtins = map[string]builtinDefinition{
 		"Calculates the 32-bit FNV-1 hash value of a set of values.",
 	),
 
+	"fnv32all": hash32AllBuiltin(
+		func() hash.Hash32 { return fnv.New32() },
+		"Calculates the 32-bit FNV-1 hash value of a set of columns"+
+			" by first casting them all to strings. Compatible with all"+
+			" CockroachDB SQL data types.",
+	),
+
 	"fnv32a": hash32Builtin(
 		func() hash.Hash32 { return fnv.New32a() },
 		"Calculates the 32-bit FNV-1a hash value of a set of values.",
@@ -4168,6 +4175,31 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 					return tree.DNull, err
 				}
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
+			},
+			Info: info,
+		},
+	)
+}
+
+func hash32AllBuiltin(newHash func() hash.Hash32, info string) builtinDefinition {
+	return makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+		tree.Overload{
+			Types:      tree.VariadicType{VarType: types.Any},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var castArgs []tree.Datum
+				for _, arg := range args {
+					d, err := tree.PerformCast(ctx, arg, types.String)
+					if err != nil {
+						return tree.DNull, err
+					}
+					castArgs = append(castArgs, d)
+				}
+				h := fnv.New32()
+				if ok, err := feedHash(h, castArgs); !ok || err != nil {
+					return tree.DNull, err
+				}
+				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info: info,
 		},
