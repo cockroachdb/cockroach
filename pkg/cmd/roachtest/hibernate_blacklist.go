@@ -135,7 +135,6 @@ var hibernateBlackList20_1 = blacklist{
 	"org.hibernate.test.hql.ASTParserLoadingTest.testSelectExpressions":                                                                                                              "41943",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testSimpleSelect":                                                                                                                   "unknown",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testStandardFunctions":                                                                                                              "26097",
-	"org.hibernate.test.hql.ASTParserLoadingTest.testStr":                                                                                                                            "42244",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testWhere":                                                                                                                          "unknown",
 	"org.hibernate.test.hql.BulkManipulationTest.testBooleanHandling":                                                                                                                "5807",
 	"org.hibernate.test.hql.BulkManipulationTest.testDeleteOnDiscriminatorSubclass":                                                                                                  "5807",
