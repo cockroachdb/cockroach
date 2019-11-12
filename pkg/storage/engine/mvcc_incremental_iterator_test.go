@@ -173,10 +173,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 					Epoch:     1,
 					Timestamp: ts4,
 				},
-				DeprecatedOrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn1Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.DeprecatedOrigTimestamp, txn1Val, &txn1); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
 			txn2ID := uuid.MakeV4()
@@ -187,10 +187,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 					Epoch:     1,
 					Timestamp: ts4,
 				},
-				DeprecatedOrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn2Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.DeprecatedOrigTimestamp, txn2Val, &txn2); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("intents",
@@ -261,10 +261,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 					Epoch:     1,
 					Timestamp: ts4,
 				},
-				DeprecatedOrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn1Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.DeprecatedOrigTimestamp, txn1Val, &txn1); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
 			txn2ID := uuid.MakeV4()
@@ -275,10 +275,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 					Epoch:     1,
 					Timestamp: ts4,
 				},
-				DeprecatedOrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn2Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.DeprecatedOrigTimestamp, txn2Val, &txn2); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("intents",
@@ -361,7 +361,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 					Timestamp: ts1,
 					Sequence:  1,
 				},
-				DeprecatedOrigTimestamp: ts1,
+				ReadTimestamp: ts1,
 			}
 			if err := MVCCPut(ctx, e, nil, kA, ts1, vA1, txn); err != nil {
 				t.Fatal(err)

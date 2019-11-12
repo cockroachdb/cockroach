@@ -1801,7 +1801,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			}
 
 			// Now, try to read value using the pusher's txn.
-			pusher.DeprecatedOrigTimestamp.Forward(readTs)
+			pusher.ReadTimestamp.Forward(readTs)
 			pusher.Timestamp.Forward(readTs)
 			gArgs := getArgs(key)
 			assignSeqNumsForReqs(pusher, &gArgs)
