@@ -1523,14 +1523,14 @@ statement ok
 SET DATABASE = test
 
 # We filter here because 'optimizer' will be different depending on which
-# configuration this logic test is running in.
+# configuration this logic test is running in, and session ID will vary.
 query TTTTTT colnames
 SELECT
   name, setting, category, short_desc, extra_desc, vartype
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
 ----
 name                                 setting             category  short_desc  extra_desc  vartype
 application_name                     ·                   NULL      NULL        NULL        string
@@ -1586,7 +1586,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
 ----
 name                                 setting             unit  context  enumvals  boot_val            reset_val
 application_name                     ·                   NULL  user     NULL      ·                   ·
@@ -1675,6 +1675,7 @@ search_path                          NULL    NULL     NULL     NULL        NULL
 server_encoding                      NULL    NULL     NULL     NULL        NULL
 server_version                       NULL    NULL     NULL     NULL        NULL
 server_version_num                   NULL    NULL     NULL     NULL        NULL
+session_id                           NULL    NULL     NULL     NULL        NULL
 session_user                         NULL    NULL     NULL     NULL        NULL
 sql_safe_updates                     NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings          NULL    NULL     NULL     NULL        NULL
