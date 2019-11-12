@@ -690,10 +690,10 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 func generateTxnDeadlineExceededErr(
 	txn *roachpb.Transaction, deadline hlc.Timestamp,
 ) *roachpb.Error {
-	exceededBy := txn.Timestamp.GoTime().Sub(deadline.GoTime())
+	exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
 	extraMsg := fmt.Sprintf(
 		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
-		exceededBy, txn.Timestamp, deadline)
+		exceededBy, txn.WriteTimestamp, deadline)
 	return roachpb.NewErrorWithTxn(
 		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
@@ -711,7 +711,7 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
 	deadline := ba.Requests[0].GetEndTransaction().Deadline
-	if deadline != nil && !tc.mu.txn.Timestamp.Less(*deadline) {
+	if deadline != nil && !tc.mu.txn.WriteTimestamp.Less(*deadline) {
 		txn := tc.mu.txn.Clone()
 		pErr := generateTxnDeadlineExceededErr(txn, *deadline)
 		// We need to bump the epoch and transform this retriable error.
@@ -766,7 +766,7 @@ func (tc *TxnCoordSender) Send(
 	}
 	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 	if log.V(2) {
-		ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.Timestamp)
+		ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.WriteTimestamp)
 	}
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
@@ -832,7 +832,7 @@ func (tc *TxnCoordSender) Send(
 func (tc *TxnCoordSender) maybeSleepForLinearizable(
 	ctx context.Context, br *roachpb.BatchResponse, startNs int64,
 ) {
-	if tsNS := br.Txn.Timestamp.WallTime; startNs > tsNS {
+	if tsNS := br.Txn.WriteTimestamp.WallTime; startNs > tsNS {
 		startNs = tsNS
 	}
 	maxOffset := tc.clock.MaxOffset()
@@ -1190,7 +1190,7 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()
 	tc.mu.txn.ReadTimestamp = ts
-	tc.mu.txn.Timestamp = ts
+	tc.mu.txn.WriteTimestamp = ts
 	tc.mu.txn.MaxTimestamp = ts
 	tc.mu.txn.CommitTimestampFixed = true
 
@@ -1230,7 +1230,7 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	isTxnPushed := tc.mu.txn.Timestamp != tc.mu.txn.ReadTimestamp
+	isTxnPushed := tc.mu.txn.WriteTimestamp != tc.mu.txn.ReadTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
 		tc.mu.txn.CommitTimestampFixed
 	// We check CommitTimestampFixed here because, if that's set, refreshing

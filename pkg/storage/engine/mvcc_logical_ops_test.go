@@ -57,7 +57,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			// Update the intents and write another. Use a distinct batch.
 			olDist := ol.Distinct()
 			txn1ts.Sequence++
-			txn1ts.Timestamp = hlc.Timestamp{Logical: 3}
+			txn1ts.WriteTimestamp = hlc.Timestamp{Logical: 3}
 			if err := MVCCPut(ctx, olDist, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +66,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			}
 			// Set the txn timestamp to a larger value than the intent.
 			txn1LargerTS := makeTxn(*txn1, hlc.Timestamp{Logical: 4})
-			txn1LargerTS.Timestamp = hlc.Timestamp{Logical: 4}
+			txn1LargerTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
 			if err := MVCCPut(ctx, olDist, nil, testKey2, txn1LargerTS.ReadTimestamp, value3, txn1LargerTS); err != nil {
 				t.Fatal(err)
 			}
@@ -74,7 +74,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 
 			// Resolve all three intent.
 			txn1CommitTS := *txn1Commit
-			txn1CommitTS.Timestamp = hlc.Timestamp{Logical: 4}
+			txn1CommitTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
 			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1, EndKey: testKey2.Next()},
 				Txn:    txn1CommitTS.TxnMeta,
@@ -96,7 +96,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				t.Fatal(err)
 			}
 			txn2Pushed := *txn2
-			txn2Pushed.Timestamp = hlc.Timestamp{Logical: 6}
+			txn2Pushed.WriteTimestamp = hlc.Timestamp{Logical: 6}
 			if err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey3},
 				Txn:    txn2Pushed.TxnMeta,

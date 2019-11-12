@@ -508,7 +508,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	) (*roachpb.BatchResponse, error) {
 		reply := args.CreateReply()
 		reply.Txn = args.Txn.Clone()
-		reply.Txn.Timestamp = hlc.MaxTimestamp
+		reply.Txn.WriteTimestamp = hlc.MaxTimestamp
 		return reply, nil
 	}
 
@@ -529,7 +529,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		"test", nil /* baseKey */, roachpb.NormalUserPriority,
 		clock.Now(), clock.MaxOffset().Nanoseconds(),
 	)
-	origTxnTs := txn.Timestamp
+	origTxnTs := txn.WriteTimestamp
 
 	// An optimization does copy-on-write if we haven't observed anything,
 	// so make sure we're not in that case.
@@ -542,7 +542,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	if txn.Timestamp != origTxnTs {
+	if txn.WriteTimestamp != origTxnTs {
 		t.Fatal("Transaction was mutated by DistSender")
 	}
 }

@@ -33,7 +33,7 @@ func CollectIntentRows(
 	res := make([]roachpb.KeyValue, 0, len(intents))
 	for _, intent := range intents {
 		val, _, err := engine.MVCCGetAsTxn(
-			ctx, batch, intent.Key, intent.Txn.Timestamp, intent.Txn,
+			ctx, batch, intent.Key, intent.Txn.WriteTimestamp, intent.Txn,
 		)
 		if err != nil {
 			return nil, err

@@ -335,7 +335,7 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 
 // SetFixedTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
-	m.txn.Timestamp = ts
+	m.txn.WriteTimestamp = ts
 	m.txn.ReadTimestamp = ts
 	m.txn.MaxTimestamp = ts
 	m.txn.CommitTimestampFixed = true

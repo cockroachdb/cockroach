@@ -124,8 +124,8 @@ func (s *Store) Send(
 				}
 				// Update our clock with the outgoing response txn timestamp
 				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Txn.Timestamp) {
-					s.cfg.Clock.Update(br.Txn.Timestamp)
+				if ba.Timestamp.Less(br.Txn.WriteTimestamp) {
+					s.cfg.Clock.Update(br.Txn.WriteTimestamp)
 				}
 			}
 		} else {

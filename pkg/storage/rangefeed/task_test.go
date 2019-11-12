@@ -61,10 +61,10 @@ func makeInline(key, val string) engine.MVCCKeyValue {
 func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) engine.MVCCKeyValue {
 	return makeMetaKV(key, enginepb.MVCCMetadata{
 		Txn: &enginepb.TxnMeta{
-			ID:           txnID,
-			Key:          []byte(txnKey),
-			Timestamp:    hlc.Timestamp{WallTime: txnTS},
-			MinTimestamp: hlc.Timestamp{WallTime: txnTS},
+			ID:             txnID,
+			Key:            []byte(txnKey),
+			WriteTimestamp: hlc.Timestamp{WallTime: txnTS},
+			MinTimestamp:   hlc.Timestamp{WallTime: txnTS},
 		},
 		Timestamp: hlc.LegacyTimestamp{WallTime: txnTS},
 	})
@@ -281,9 +281,9 @@ func TestTxnPushAttempt(t *testing.T) {
 	// Create a set of transactions.
 	txn1, txn2, txn3 := uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()
 	ts1, ts2, ts3 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}
-	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts1, MinTimestamp: ts1}
-	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts2, MinTimestamp: ts2}
-	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts3, MinTimestamp: ts3}
+	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts1, MinTimestamp: ts1}
+	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts2, MinTimestamp: ts2}
+	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts3, MinTimestamp: ts3}
 	txn1Proto := roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
 	txn2Proto := roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.COMMITTED}
 	txn3Proto := roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.ABORTED}
@@ -299,7 +299,7 @@ func TestTxnPushAttempt(t *testing.T) {
 
 		// Return all three protos. The PENDING txn is pushed.
 		txn1ProtoPushed := txn1Proto
-		txn1ProtoPushed.Timestamp = ts
+		txn1ProtoPushed.WriteTimestamp = ts
 		return []roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto}, nil
 	})
 	tp.mockCleanupTxnIntentsAsync(func(txns []roachpb.Transaction) error {

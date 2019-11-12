@@ -120,7 +120,7 @@ func TestIsPushed(t *testing.T) {
 			txn := roachpb.Transaction{
 				Status: test.txnStatus,
 				TxnMeta: enginepb.TxnMeta{
-					Timestamp: test.txnTimestamp,
+					WriteTimestamp: test.txnTimestamp,
 				},
 			}
 			if isPushed := isPushed(&req, &txn); isPushed != test.isPushed {

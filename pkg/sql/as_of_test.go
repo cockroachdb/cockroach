@@ -314,7 +314,7 @@ func TestAsOfRetry(t *testing.T) {
 						magicVals.failedValues[string(req.Key)] =
 							failureRecord{err, args.Hdr.Txn}
 						txn := args.Hdr.Txn.Clone()
-						txn.Timestamp = txn.Timestamp.Add(0, 1)
+						txn.WriteTimestamp = txn.WriteTimestamp.Add(0, 1)
 						return roachpb.NewErrorWithTxn(err, txn)
 					}
 				}

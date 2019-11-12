@@ -397,7 +397,7 @@ func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachp
 	}
 
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = txnMeta.Timestamp
+	ba.Timestamp = txnMeta.WriteTimestamp
 	ba.Add(qt)
 
 	db := txn.DB()
@@ -461,7 +461,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		pushedTimestamp := pusheeTxn.Timestamp
+		pushedTimestamp := pusheeTxn.WriteTimestamp
 
 		{
 			var err error
@@ -743,7 +743,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// the next attempt.
 			name: "TransactionAbortedError",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				txn.Timestamp = plus20
+				txn.WriteTimestamp = plus20
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
 			},
@@ -759,7 +759,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 					PusheeTxn: roachpb.Transaction{
-						TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: 10},
+						TxnMeta: enginepb.TxnMeta{WriteTimestamp: plus10, Priority: 10},
 					},
 				}, txn)
 			},
@@ -772,7 +772,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On retry, restart with new epoch, timestamp and priority.
 			name: "TransactionRetryError",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				txn.Timestamp = plus10
+				txn.WriteTimestamp = plus10
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{}, txn)
 			},
@@ -801,7 +801,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				} else if txn := pErr.GetTxn(); txn != nil {
 					// Update the manual clock to simulate an
 					// error updating a local hlc clock.
-					manual.Set(txn.Timestamp.WallTime)
+					manual.Set(txn.WriteTimestamp.WallTime)
 				}
 				return reply, pErr
 			}
@@ -854,9 +854,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				t.Errorf("expected priority = %d; got %d",
 					test.expPri, proto.Priority)
 			}
-			if proto.Timestamp != test.expTS {
+			if proto.WriteTimestamp != test.expTS {
 				t.Errorf("expected timestamp to be %s; got %s",
-					test.expTS, proto.Timestamp)
+					test.expTS, proto.WriteTimestamp)
 			}
 			if proto.ReadTimestamp != test.expOrigTS {
 				t.Errorf("expected orig timestamp to be %s; got %s",
@@ -1182,7 +1182,7 @@ func TestTxnRestartCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	proto := txn.Serialize()
-	if !proto.ReadTimestamp.Less(proto.Timestamp) {
+	if !proto.ReadTimestamp.Less(proto.WriteTimestamp) {
 		t.Errorf("expected timestamp to increase: %s", proto)
 	}
 
@@ -2010,14 +2010,14 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		req := requests[curReq]
-		if req.expRequestTS != ba.Txn.Timestamp {
+		if req.expRequestTS != ba.Txn.WriteTimestamp {
 			return nil, roachpb.NewErrorf("%d: expected ts %s got %s",
-				curReq, req.expRequestTS, ba.Txn.Timestamp)
+				curReq, req.expRequestTS, ba.Txn.WriteTimestamp)
 		}
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		br.Txn.Timestamp.Forward(requests[curReq].responseTS)
+		br.Txn.WriteTimestamp.Forward(requests[curReq].responseTS)
 		return br, nil
 	})
 
@@ -2053,7 +2053,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 			manual.Increment(100)
 			br := ba.CreateReply()
 			br.Txn = ba.Txn.Clone()
-			br.Txn.Timestamp.Forward(clock.Now())
+			br.Txn.WriteTimestamp.Forward(clock.Now())
 			return br, nil
 		}
 		return nil, nil
