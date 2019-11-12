@@ -16,7 +16,6 @@ import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
-  livenessNomenclature,
   LivenessStatus,
   nodeCapacityStats,
   NodesSummary,
@@ -31,9 +30,16 @@ import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
+import { trustIcon } from "src/util/trust";
+import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
+import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
+import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
+import { cockroach } from "src/js/protos";
 
 import { BytesBarChart } from "./barChart";
 import "./nodes.styl";
+
+import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -66,6 +72,17 @@ interface NodeCategoryListProps {
  * statistics for these nodes.
  */
 class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
+  getLivenessIcon(livenessStatus: NodeLivenessStatus) {
+    switch (livenessStatus) {
+      case NodeLivenessStatus.LIVE:
+        return liveIcon;
+      case NodeLivenessStatus.DEAD:
+        return deadIcon;
+      default:
+        return suspectIcon;
+    }
+  }
+
   render() {
     const { statuses, nodesSummary, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
@@ -94,7 +111,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               title: "Address",
               cell: (ns) => {
                 const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE;
-                const s = livenessNomenclature(status);
+                const icon = this.getLivenessIcon(status);
                 let tooltip: string;
                 switch (status) {
                   case LivenessStatus.LIVE:
@@ -109,7 +126,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 }
                 return (
                   <div className="sort-table__unbounded-column">
-                    <div className={"node-status-icon node-status-icon--" + s} title={tooltip} />
+                    <span className="node-status-icon" title={tooltip} dangerouslySetInnerHTML={ trustIcon(icon) } />
                     <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );
@@ -225,14 +242,13 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
               cell: (ns) => {
                 return (
                   <div>
-                    <div
-                      className="icon-circle-filled node-status-icon node-status-icon--dead"
+                    <span className="node-status-icon"
                       title={
                         "This node has not reported as live for a significant period and is considered dead. " +
                         "The cut-off period for dead nodes is configurable as cluster setting " +
                         "'server.time_until_store_dead'"
                       }
-                    />
+                      dangerouslySetInnerHTML={ trustIcon(deadIcon) } />
                     <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );
