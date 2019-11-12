@@ -879,7 +879,9 @@ func (rf *Fetcher) processKV(
 		return prettyKey, prettyValue, nil
 	}
 
-	if !table.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
+	// For covering secondary indexes, allow for decoding as a primary key.
+	if (!table.isSecondaryIndex || table.index.EncodingType == sqlbase.PrimaryIndexEncoding) &&
+		len(rf.keyRemainingBytes) > 0 {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,
