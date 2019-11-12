@@ -143,7 +143,7 @@ func repeatRunWithBuffer(
 		var result []byte
 		result, lastError = c.RunWithBuffer(ctx, l, node, args...)
 		if lastError != nil {
-			c.l.Printf("error - retrying: %s", lastError)
+			c.l.Printf("error - retrying: %s\n%s", lastError, string(result))
 			continue
 		}
 		return result, nil
