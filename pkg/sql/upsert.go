@@ -14,7 +14,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -39,25 +38,11 @@ type upsertNode struct {
 
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
-	tw          optTableUpserter
-	checkHelper *sqlbase.CheckHelper
+	tw        optTableUpserter
+	checkOrds checkSet
 
 	// insertCols are the columns being inserted/upserted into.
 	insertCols []sqlbase.ColumnDescriptor
-
-	// defaultExprs are the expressions used to generate default values.
-	defaultExprs []tree.TypedExpr
-
-	// computedCols are the columns that need to be (re-)computed as
-	// the result of computing some of the source rows prior to the upsert.
-	computedCols []sqlbase.ColumnDescriptor
-	// computeExprs are the expressions to evaluate to re-compute the
-	// columns in computedCols.
-	computeExprs []tree.TypedExpr
-	// iVarContainerForComputedCols is used as a temporary buffer that
-	// holds the updated values for every column in the source, to
-	// serve as input for indexed vars contained in the computeExprs.
-	iVarContainerForComputedCols sqlbase.RowIndexedVarContainer
 
 	// done informs a new call to BatchedNext() that the previous call to
 	// BatchedNext() has completed the work already.
@@ -166,42 +151,21 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 
 // processSourceRow processes one row from the source for upsertion.
 // The table writer is in charge of accumulating the result rows.
-func (n *upsertNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
-	// Process the incoming row tuple and generate the full inserted
-	// row. This fills in the defaults, computes computed columns, and
-	// checks the data width complies with the schema constraints.
-	rowVals, err := row.GenerateInsertRow(
-		n.run.defaultExprs,
-		n.run.computeExprs,
-		n.run.insertCols,
-		n.run.computedCols,
-		params.EvalContext().Copy(),
-		n.run.tw.tableDesc(),
-		sourceVals,
-		&n.run.iVarContainerForComputedCols,
-	)
-	if err != nil {
+func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
+	if err := enforceLocalColumnConstraints(rowVals, n.run.insertCols); err != nil {
 		return err
 	}
 
 	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
 	// constraints itself, or else inspect boolean columns from the input that
 	// contain the results of evaluation.
-	if n.run.checkHelper != nil {
-		if n.run.checkHelper.NeedsEval() {
-			insertColIDtoRowIndex := n.run.iVarContainerForComputedCols.Mapping
-			if err := n.run.checkHelper.LoadEvalRow(insertColIDtoRowIndex, rowVals, false); err != nil {
-				return err
-			}
-			if err := n.run.checkHelper.CheckEval(params.EvalContext()); err != nil {
-				return err
-			}
-		} else {
-			checkVals := sourceVals[len(sourceVals)-n.run.checkHelper.Count():]
-			if err := n.run.checkHelper.CheckInput(checkVals); err != nil {
-				return err
-			}
+	if !n.run.checkOrds.Empty() {
+		ord := len(rowVals) - n.run.checkOrds.Len()
+		checkVals := rowVals[ord:]
+		if err := checkMutationInput(n.run.tw.tableDesc(), n.run.checkOrds, checkVals); err != nil {
+			return err
 		}
+		rowVals = rowVals[:ord]
 	}
 
 	// Process the row. This is also where the tableWriter will accumulate

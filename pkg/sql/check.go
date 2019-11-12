@@ -22,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func validateCheckExpr(
@@ -297,4 +299,52 @@ func formatValues(colNames []string, values tree.Datums) string {
 		pairs.WriteString(fmt.Sprintf("%s=%v", colNames[i], values[i]))
 	}
 	return pairs.String()
+}
+
+// checkSet contains a subset of checks, as ordinals into
+// ImmutableTableDescriptor.ActiveChecks. These checks have boolean columns
+// produced as input to mutations, indicating the result of evaluating the
+// check.
+//
+// It is allowed to check only a subset of the active checks (the optimizer
+// could in principle determine that some checks can't fail because they
+// statically evaluate to true for the entire input).
+type checkSet = util.FastIntSet
+
+// When executing mutations, we calculate a boolean column for each check
+// indicating if the check passed. This function verifies that each result is
+// true or null.
+//
+// It is allowed to check only a subset of the active checks (for some, we could
+// determine that they can't fail because they statically evaluate to true for
+// the entire input); checkSet contains the set of checks for which we have
+// values, as ordinals into ActiveChecks(). There must be exactly one value in
+// checkVals for each element in checkSet.
+//
+func checkMutationInput(
+	tabDesc *sqlbase.ImmutableTableDescriptor, checkOrds checkSet, checkVals tree.Datums,
+) error {
+	if len(checkVals) != checkOrds.Len() {
+		return errors.AssertionFailedf(
+			"mismatched check constraint columns: expected %d, got %d", checkOrds.Len(), len(checkVals))
+	}
+
+	checks := tabDesc.ActiveChecks()
+	colIdx := 0
+	for i := range checks {
+		if !checkOrds.Contains(i) {
+			continue
+		}
+
+		if res, err := tree.GetBool(checkVals[colIdx]); err != nil {
+			return err
+		} else if !res && checkVals[colIdx] != tree.DNull {
+			// Failed to satisfy CHECK constraint.
+			return pgerror.Newf(
+				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", checks[i].Expr,
+			)
+		}
+		colIdx++
+	}
+	return nil
 }

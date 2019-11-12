@@ -40,9 +40,10 @@ type updateNode struct {
 
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
-	tu          tableUpdater
-	checkHelper *sqlbase.CheckHelper
-	rowsNeeded  bool
+	tu         tableUpdater
+	rowsNeeded bool
+
+	checkOrds checkSet
 
 	// rowCount is the number of rows in the current batch.
 	rowCount int
@@ -301,26 +302,10 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
 	// constraints itself, or else inspect boolean columns from the input that
 	// contain the results of evaluation.
-	if u.run.checkHelper != nil {
-		if u.run.checkHelper.NeedsEval() {
-			// TODO(justin): we have actually constructed the whole row at this point and
-			// thus should be able to avoid loading it separately like this now.
-			if err := u.run.checkHelper.LoadEvalRow(
-				u.run.tu.ru.FetchColIDtoRowIndex, oldValues, false); err != nil {
-				return err
-			}
-			if err := u.run.checkHelper.LoadEvalRow(
-				u.run.updateColsIdx, u.run.updateValues, true); err != nil {
-				return err
-			}
-			if err := u.run.checkHelper.CheckEval(params.EvalContext()); err != nil {
-				return err
-			}
-		} else {
-			checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
-			if err := u.run.checkHelper.CheckInput(checkVals); err != nil {
-				return err
-			}
+	if !u.run.checkOrds.Empty() {
+		checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
+		if err := checkMutationInput(u.run.tu.tableDesc(), u.run.checkOrds, checkVals); err != nil {
+			return err
 		}
 	}
 
