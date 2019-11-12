@@ -1528,11 +1528,12 @@ var (
 	stringCastTypes = annotateCast(types.String, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
 		types.VarBit,
 		types.AnyArray, types.AnyTuple,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.Oid, types.INet, types.Jsonb})
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb})
 	bytesCastTypes = annotateCast(types.Bytes, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
 	dateCastTypes  = annotateCast(types.Date, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	timeCastTypes  = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time,
+	timeCastTypes  = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ,
 		types.Timestamp, types.TimestampTZ, types.Interval})
+	timeTZCastTypes    = annotateCast(types.TimeTZ, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ, types.TimestampTZ})
 	timestampCastTypes = annotateCast(types.Timestamp, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
 	intervalCastTypes  = annotateCast(types.Interval, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
 	oidCastTypes       = annotateCast(types.Oid, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Oid})
@@ -1563,6 +1564,8 @@ func validCastTypes(t *types.T) []castInfo {
 		return dateCastTypes
 	case types.TimeFamily:
 		return timeCastTypes
+	case types.TimeTZFamily:
+		return timeTZCastTypes
 	case types.TimestampFamily, types.TimestampTZFamily:
 		return timestampCastTypes
 	case types.IntervalFamily:
@@ -1736,6 +1739,7 @@ func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }
 func (node *DTime) String() string            { return AsString(node) }
+func (node *DTimeTZ) String() string          { return AsString(node) }
 func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }

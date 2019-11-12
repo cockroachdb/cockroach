@@ -227,6 +227,7 @@ array_agg(oid) -> oid[]
 array_agg(uuid) -> uuid[]
 array_agg(inet) -> inet[]
 array_agg(time) -> time[]
+array_agg(timetz) -> timetz[]
 array_agg(varbit) -> varbit[]
 array_agg(bool) -> bool[]
 

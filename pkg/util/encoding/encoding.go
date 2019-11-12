@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -77,6 +79,8 @@ const (
 	bitArrayDataTerminator     = 0x00
 	bitArrayDataDescTerminator = 0xff
 
+	timeTZMarker = bitArrayDescMarker + 1
+
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
 	IntMin      = 0x80 // 128
@@ -100,12 +104,19 @@ const (
 	// without table descriptors.
 	interleavedSentinel = 0xfe
 	encodedNullDesc     = 0xff
+
+	// offsetSecsToMicros is a constant that allows conversion from seconds
+	// to microseconds for offsetSecs type calculations (e.g. for TimeTZ).
+	offsetSecsToMicros = 1000000
 )
 
 const (
 	// EncodedDurationMaxLen is the largest number of bytes used when encoding a
 	// Duration.
 	EncodedDurationMaxLen = 1 + 3*binary.MaxVarintLen64 // 3 varints are encoded.
+	// EncodedTimeTZMaxLen is the largest number of bytes used when encoding a
+	// TimeTZ.
+	EncodedTimeTZMaxLen = 1 + binary.MaxVarintLen64 + binary.MaxVarintLen32
 )
 
 // Direction for ordering results.
@@ -881,7 +892,7 @@ func DecodeIfInterleavedSentinel(b []byte) ([]byte, bool) {
 // EncodeTimeAscending encodes a time value, appends it to the supplied buffer,
 // and returns the final buffer. The encoding is guaranteed to be ordered
 // Such that if t1.Before(t2) then after EncodeTime(b1, t1), and
-// EncodeTime(b2, t1), Compare(b1, b2) < 0. The time zone offset not
+// EncodeTime(b2, t2), Compare(b1, b2) < 0. The time zone offset not
 // included in the encoding.
 func EncodeTimeAscending(b []byte, t time.Time) []byte {
 	return encodeTime(b, t.Unix(), int64(t.Nanosecond()))
@@ -935,6 +946,77 @@ func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
 		return b, 0, 0, err
 	}
 	return b, sec, nsec, nil
+}
+
+// EncodeTimeTZAscending encodes a timetz.TimeTZ value and appends it to
+// the supplied buffer and returns the final buffer.
+// The encoding is guaranteed to be ordered such that if t1.Before(t2)
+// then after encodeTimeTZ(b1, t1) and encodeTimeTZ(b2, t2),
+// Compare(b1, b2) < 0.
+// The time zone offset is included in the encoding.
+func EncodeTimeTZAscending(b []byte, t timetz.TimeTZ) []byte {
+	// Do not use TimeOfDay's add function, as it loses 24:00:00 encoding.
+	return encodeTimeTZ(b, int64(t.TimeOfDay)+int64(t.OffsetSecs)*offsetSecsToMicros, t.OffsetSecs)
+}
+
+// EncodeTimeTZDescending is the descending version of EncodeTimeTZAscending.
+func EncodeTimeTZDescending(b []byte, t timetz.TimeTZ) []byte {
+	// Do not use TimeOfDay's add function, as it loses 24:00:00 encoding.
+	return encodeTimeTZ(b, ^(int64(t.TimeOfDay) + int64(t.OffsetSecs)*offsetSecsToMicros), ^t.OffsetSecs)
+}
+
+func encodeTimeTZ(b []byte, unixMicros int64, offsetSecs int32) []byte {
+	b = append(b, timeTZMarker)
+	b = EncodeVarintAscending(b, unixMicros)
+	b = EncodeVarintAscending(b, int64(offsetSecs))
+	return b
+}
+
+// DecodeTimeTZAscending decodes a timetz.TimeTZ value which was encoded
+// using encodeTimeTZ. The remainder of the input buffer and the decoded
+// timetz.TimeTZ are returned.
+func DecodeTimeTZAscending(b []byte) ([]byte, timetz.TimeTZ, error) {
+	b, unixMicros, offsetSecs, err := decodeTimeTZ(b)
+	if err != nil {
+		return nil, timetz.TimeTZ{}, err
+	}
+	// Do not use timeofday.FromInt, as it loses 24:00:00 encoding.
+	return b, timetz.TimeTZ{
+		TimeOfDay:  timeofday.TimeOfDay(unixMicros - int64(offsetSecs)*offsetSecsToMicros),
+		OffsetSecs: offsetSecs,
+	}, nil
+}
+
+// DecodeTimeTZDescending is the descending version of DecodeTimeTZAscending.
+func DecodeTimeTZDescending(b []byte) ([]byte, timetz.TimeTZ, error) {
+	b, unixMicros, offsetSecs, err := decodeTimeTZ(b)
+	if err != nil {
+		return nil, timetz.TimeTZ{}, err
+	}
+	// Do not use timeofday.FromInt, as it loses 24:00:00 encoding.
+	return b, timetz.TimeTZ{
+		TimeOfDay:  timeofday.TimeOfDay(^unixMicros - int64(^offsetSecs)*offsetSecsToMicros),
+		OffsetSecs: ^offsetSecs,
+	}, nil
+}
+
+func decodeTimeTZ(b []byte) ([]byte, int64, int32, error) {
+	if PeekType(b) != TimeTZ {
+		return nil, 0, 0, errors.Errorf("did not find marker")
+	}
+	b = b[1:]
+	var err error
+	var unixMicros int64
+	b, unixMicros, err = DecodeVarintAscending(b)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	var offsetSecs int64
+	b, offsetSecs, err = DecodeVarintAscending(b)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return b, unixMicros, int32(offsetSecs), nil
 }
 
 // EncodeDurationAscending encodes a duration.Duration value, appends it to the
@@ -1191,6 +1273,7 @@ const (
 	Tuple        Type = 16
 	BitArray     Type = 17
 	BitArrayDesc Type = 18 // BitArray encoded descendingly
+	TimeTZ       Type = 19
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1233,6 +1316,8 @@ func slowPeekType(b []byte) Type {
 			return BitArrayDesc
 		case m == timeMarker:
 			return Time
+		case m == timeTZMarker:
+			return TimeTZ
 		case m == byte(Array):
 			return Array
 		case m == byte(True):
@@ -1314,7 +1399,7 @@ func PeekLength(b []byte) (int, error) {
 		return getJSONInvertedIndexKeyLength(b)
 	case bytesDescMarker:
 		return getBytesLength(b, descendingEscapes)
-	case timeMarker:
+	case timeMarker, timeTZMarker:
 		return GetMultiVarintLen(b, 2)
 	case durationBigNegMarker, durationMarker, durationBigPosMarker:
 		return GetMultiVarintLen(b, 3)
@@ -1520,6 +1605,17 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, t.UTC().Format(time.RFC3339Nano), nil
+	case TimeTZ:
+		var t timetz.TimeTZ
+		if dir == Descending {
+			b, t, err = DecodeTimeTZDescending(b)
+		} else {
+			b, t, err = DecodeTimeTZAscending(b)
+		}
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.String(), nil
 	case Duration:
 		var d duration.Duration
 		if dir == Descending {
@@ -1810,6 +1906,20 @@ func EncodeUntaggedTimeValue(appendTo []byte, t time.Time) []byte {
 	return EncodeNonsortingStdlibVarint(appendTo, int64(t.Nanosecond()))
 }
 
+// EncodeTimeTZValue encodes a timetz.TimeTZ value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeTimeTZValue(appendTo []byte, colID uint32, t timetz.TimeTZ) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, TimeTZ)
+	return EncodeUntaggedTimeTZValue(appendTo, t)
+}
+
+// EncodeUntaggedTimeTZValue encodes a time.Time value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
+	appendTo = EncodeNonsortingStdlibVarint(appendTo, int64(t.TimeOfDay))
+	return EncodeNonsortingStdlibVarint(appendTo, int64(t.OffsetSecs))
+}
+
 // EncodeDecimalValue encodes an apd.Decimal value with its value tag, appends
 // it to the supplied buffer, and returns the final buffer.
 func EncodeDecimalValue(appendTo []byte, colID uint32, d *apd.Decimal) []byte {
@@ -2043,6 +2153,31 @@ func DecodeUntaggedTimeValue(b []byte) (remaining []byte, t time.Time, err error
 	return b, timeutil.Unix(sec, nsec), nil
 }
 
+// DecodeTimeTZValue decodes a value encoded by EncodeTimeTZValue.
+func DecodeTimeTZValue(b []byte) (remaining []byte, t timetz.TimeTZ, err error) {
+	b, err = decodeValueTypeAssert(b, TimeTZ)
+	if err != nil {
+		return b, timetz.TimeTZ{}, err
+	}
+	return DecodeUntaggedTimeTZValue(b)
+}
+
+// DecodeUntaggedTimeTZValue decodes a value encoded by EncodeUntaggedTimeTZValue.
+func DecodeUntaggedTimeTZValue(b []byte) (remaining []byte, t timetz.TimeTZ, err error) {
+	var timeOfDayMicros int64
+	b, _, timeOfDayMicros, err = DecodeNonsortingStdlibVarint(b)
+	if err != nil {
+		return b, timetz.TimeTZ{}, err
+	}
+	var offsetSecs int64
+	b, _, offsetSecs, err = DecodeNonsortingStdlibVarint(b)
+	if err != nil {
+		return b, timetz.TimeTZ{}, err
+	}
+	// Do not use timeofday.FromInt as it truncates 24:00 into 00:00.
+	return b, timetz.MakeTimeTZ(timeofday.TimeOfDay(timeOfDayMicros), int32(offsetSecs)), nil
+}
+
 // DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.
 func DecodeDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 	b, err = decodeValueTypeAssert(b, Decimal)
@@ -2248,7 +2383,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 	case Decimal:
 		_, n, i, err := DecodeNonsortingStdlibUvarint(b)
 		return dataOffset + n + int(i), err
-	case Time:
+	case Time, TimeTZ:
 		n, err := getMultiNonsortingVarintLen(b, 2)
 		return dataOffset + n, err
 	case Duration:
@@ -2339,6 +2474,13 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, t.UTC().Format(time.RFC3339Nano), nil
+	case TimeTZ:
+		var t timetz.TimeTZ
+		b, t, err = DecodeTimeTZValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, t.String(), nil
 	case Duration:
 		var d duration.Duration
 		b, d, err = DecodeDurationValue(b)

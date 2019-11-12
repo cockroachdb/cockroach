@@ -79,6 +79,7 @@ import (
 // | UUID              | UUID           | T_uuid        | 0         | 0     |
 // | INET              | INET           | T_inet        | 0         | 0     |
 // | TIME              | TIME           | T_time        | 0         | 0     |
+// | TIMETZ            | TIMETZ         | T_timetz      | 0         | 0     |
 // | JSON              | JSONB          | T_jsonb       | 0         | 0     |
 // | JSONB             | JSONB          | T_jsonb       | 0         | 0     |
 // |                   |                |               |           |       |
@@ -247,6 +248,14 @@ var (
 	Time = &T{InternalType: InternalType{
 		Family: TimeFamily, Oid: oid.T_time, Locale: &emptyLocale}}
 
+	// TimeTZ is the type specifying hour, minute, second and timezone with
+	// no date component. By default, it has microsecond precision.
+	// For example:
+	//
+	//   HH:MM:SS.ssssss+-ZZ:ZZ
+	TimeTZ = &T{InternalType: InternalType{
+		Family: TimeTZFamily, Oid: oid.T_timetz, Locale: &emptyLocale}}
+
 	// Timestamp is the type of a value specifying year, month, day, hour, minute,
 	// and second, but with no associated timezone. By default, it has microsecond
 	// precision. For example:
@@ -310,6 +319,7 @@ var (
 		Uuid,
 		INet,
 		Time,
+		TimeTZ,
 		Jsonb,
 		VarBit,
 	}
@@ -465,7 +475,7 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 		panic(errors.AssertionFailedf("negative precision is not allowed"))
 	}
 	switch family {
-	case DecimalFamily, TimeFamily, TimestampFamily, TimestampTZFamily:
+	case DecimalFamily, TimeFamily, TimestampFamily, TimestampTZFamily, TimeTZFamily:
 	default:
 		if precision != 0 {
 			panic(errors.AssertionFailedf("type %s cannot have precision", family))
@@ -639,6 +649,19 @@ func MakeTime(precision int32) *T {
 	}
 	return &T{InternalType: InternalType{
 		Family: TimeFamily, Oid: oid.T_time, Precision: precision, Locale: &emptyLocale}}
+}
+
+// MakeTimeTZ constructs a new instance of a TIME type (oid = T_timetz) that has at
+// most the given number of fractional second digits.
+func MakeTimeTZ(precision int32) *T {
+	if precision == 0 {
+		return TimeTZ
+	}
+	if precision != 6 {
+		panic(errors.AssertionFailedf("precision %d is not currently supported", precision))
+	}
+	return &T{InternalType: InternalType{
+		Family: TimeTZFamily, Oid: oid.T_timetz, Precision: precision, Locale: &emptyLocale}}
 }
 
 // MakeTimestamp constructs a new instance of a TIMESTAMP type that has at most
@@ -885,6 +908,8 @@ func (t *T) Name() string {
 		return "timestamp"
 	case TimestampTZFamily:
 		return "timestamptz"
+	case TimeTZFamily:
+		return "timetz"
 	case TupleFamily:
 		// Tuple types are currently anonymous, with no name.
 		return ""
@@ -1077,6 +1102,11 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			return "time without time zone"
 		}
 		return fmt.Sprintf("time(%d) without time zone", typmod)
+	case TimeTZFamily:
+		if !haveTypmod || typmod <= 0 {
+			return "time with time zone"
+		}
+		return fmt.Sprintf("time(%d) with time zone", typmod)
 	case TimestampFamily:
 		if !haveTypmod || typmod <= 0 {
 			return "timestamp without time zone"
@@ -1160,7 +1190,7 @@ func (t *T) SQLString() string {
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "JSONB"
-	case TimeFamily, TimestampFamily, TimestampTZFamily:
+	case TimeFamily, TimeTZFamily, TimestampFamily, TimestampTZFamily:
 		if t.Precision() > 0 {
 			return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())
 		}
@@ -1729,6 +1759,8 @@ func IsDateTimeType(t *T) bool {
 	case DateFamily:
 		return true
 	case TimeFamily:
+		return true
+	case TimeTZFamily:
 		return true
 	case TimestampFamily:
 		return true

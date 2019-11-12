@@ -676,6 +676,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					case types.TimeFamily:
 						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
 						d = tree.MakeDTime(timeofday.FromTime(t))
+					case types.TimeTZFamily:
+						d = tree.NewDTimeTZFromTime(t)
 					case types.TimestampFamily:
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
 					case types.TimestampTZFamily:
