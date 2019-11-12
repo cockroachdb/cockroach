@@ -243,6 +243,9 @@ message DeleteResponse {
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
 // specifies the range of keys to delete.
+//
+// A DeleteRangeRequest populates the timestamp cache and is tracked for
+// refreshes.
 message DeleteRangeRequest {
   option (gogoproto.equal) = true;
 
