@@ -35,6 +35,8 @@ import "./index.styl";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
+import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 const statusOptions = [
   { value: "", label: "All" },
@@ -222,7 +224,18 @@ const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   { sortKey: 3 /* creation time */, ascending: false },
 );
 
-type JobsTableProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+interface JobsTableProps {
+  sort: SortSetting;
+  status: string;
+  show: string;
+  type: number;
+  setSort: (value: SortSetting) => void;
+  setStatus: (value: string) => void;
+  setShow: (value: string) => void;
+  setType: (value: JobType) => void;
+  refreshJobs: typeof refreshJobs;
+  jobs: CachedDataReducerState<JobsResponse>;
+}
 
 const titleTooltip = (
   <span>
@@ -381,4 +394,4 @@ const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
     dispatch,
   );
 
-export default connect(mapStateToProps, mapDispatchToProps)(JobsTable);
+export default connect(mapStateToProps, mapDispatchToProps)(JobsTable as any);

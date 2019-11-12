@@ -22,6 +22,7 @@ import { getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 import Loading from "src/views/shared/components/loading";
 import "./localities.styl";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 function formatCoord(coordinate: number) {
   return coordinate.toFixed(4);
@@ -75,7 +76,15 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
 
   return rows;
 }
-type LocalitiesProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+
+interface LocalitiesProps {
+  localityTree: LocalityTree;
+  localityStatus: CachedDataReducerState<any>;
+  locationTree: LocationTree;
+  locationStatus: CachedDataReducerState<any>;
+  refreshLocations: typeof refreshLocations;
+  refreshNodes: typeof refreshNodes;
+}
 
 class Localities extends React.Component<LocalitiesProps, {}> {
   componentWillMount() {

@@ -13,7 +13,6 @@ import React, { Fragment } from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
 import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
@@ -31,20 +30,27 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import "./statements.styl";
-import { makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
+import { makeStatementsColumns, StatementsSortedTable, AggregateStatistics } from "./statementsTable";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type RouteProps = RouteComponentProps<any, any>;
 
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+interface StatementsPageProps {
+  statements: AggregateStatistics[];
+  statementsError: Error | null;
+  apps: string[];
+  totalFingerprints: number;
+  lastReset: string;
+  refreshStatements: typeof refreshStatements;
+}
 
 interface StatementsPageState {
   sortSetting: SortSetting;
 }
 
-class StatementsPage extends React.Component<ReduxProps & RouteProps, StatementsPageState> {
+class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
 
-  constructor(props: ReduxProps & RouteProps) {
+  constructor(props: StatementsPageProps & RouteProps) {
     super(props);
     this.state = {
       sortSetting: {
@@ -275,13 +281,11 @@ const mapStateToProps = (state: StatementsState, props: RouteProps) => ({
   lastReset: selectLastReset(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshStatements,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = () => (
+  {
+    refreshStatements,
+  }
+);
 
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(

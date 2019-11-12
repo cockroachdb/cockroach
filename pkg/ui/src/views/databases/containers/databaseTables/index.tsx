@@ -19,7 +19,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { Bytes } from "src/util/format";
 import { trustIcon } from "src/util/trust";
-import { databaseDetails, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos } from "src/views/databases/containers/databaseSummary";
+import { databaseDetails, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
@@ -72,13 +72,9 @@ class DatabaseTableListEmpty extends React.Component {
   }
 }
 
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
-interface DatabaseSummaryTablesProps extends ReduxProps {
-  name?: string;
-}
 // DatabaseSummaryTables displays a summary section describing the tables
 // contained in a single database.
-class DatabaseSummaryTables extends React.Component<DatabaseSummaryTablesProps, {}> {
+class DatabaseSummaryTables extends DatabaseSummaryBase {
   totalSize() {
     const tableInfos = this.props.tableInfos;
     return _.sumBy(tableInfos, (ti) => ti.physicalSize);

@@ -208,7 +208,7 @@ const actions = {
 };
 
 // tslint:disable-next-line:variable-name
-const ClusterSummaryConnected = connect<ClusterSummaryStateProps, ClusterSummaryActionsProps>(mapStateToClusterSummaryProps, actions)(ClusterSummary);
+const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(ClusterSummary);
 
 /**
  * Renders the main content of the cluster visualization page.

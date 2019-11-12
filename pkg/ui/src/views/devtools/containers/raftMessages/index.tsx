@@ -16,7 +16,7 @@ import { InjectedRouter, RouterState } from "react-router";
 import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector } from "src/redux/hover";
+import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector, HoverState } from "src/redux/hover";
 import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
@@ -27,8 +27,18 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import messagesDashboard from "./messages";
 
-type NodeGraphsProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps> & RouterState;
+interface NodeGraphsOwnProps {
+  refreshNodes: typeof refreshNodes;
+  refreshLiveness: typeof refreshLiveness;
+  hoverOn: typeof hoverOnAction;
+  hoverOff: typeof hoverOffAction;
+  nodesQueryValid: boolean;
+  livenessQueryValid: boolean;
+  nodesSummary: NodesSummary;
+  hoverState: HoverState;
+}
 
+type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
 /**
  * NodeGraphs renders the main content of the cluster graphs page.
  */

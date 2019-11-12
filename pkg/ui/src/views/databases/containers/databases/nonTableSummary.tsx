@@ -10,13 +10,20 @@
 
 import React from "react";
 import { connect } from "react-redux";
+import * as protos from "src/js/protos";
 import { bindActionCreators, Dispatch } from "redux";
 import { refreshNonTableStats } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
 import { Bytes } from "src/util/format";
 
-type TimeSeriesSummaryProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+interface TimeSeriesSummaryProps {
+  nonTableStats: protos.cockroach.server.serverpb.NonTableStatsResponse;
+  // Must be connected to react-redux in order to auto-refresh time series
+  // information.
+  nonTableStatsValid: boolean;
+  refreshNonTableStats: typeof refreshNonTableStats;
+}
 
 // NonTableSummary displays a summary section describing the current data
 // usage of the time series system.

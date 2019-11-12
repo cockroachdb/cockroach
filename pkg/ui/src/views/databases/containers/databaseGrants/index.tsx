@@ -15,18 +15,12 @@ import * as protos from "src/js/protos";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, tableInfos } from "src/views/databases/containers/databaseSummary";
+import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, tableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 
 class DatabaseGrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant> {}
-
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
-
-interface DatabaseSummaryGrantsProps extends ReduxProps {
-  name: string;
-}
 
 const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/grants", (s) => s.localSettings,
@@ -34,7 +28,7 @@ const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
 
 // DatabaseSummaryGrants displays a summary section describing the grants
 // active on a single database.
-class DatabaseSummaryGrants extends React.Component<DatabaseSummaryGrantsProps, {}> {
+class DatabaseSummaryGrants extends DatabaseSummaryBase {
   totalUsers() {
     const grants = this.props.grants;
     return grants && grants.length;
@@ -110,4 +104,4 @@ const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
 export default connect(
   mapStateToProps,
   mapDispatchToProps,
-)(DatabaseSummaryGrants);
+)(DatabaseSummaryGrants as any);
