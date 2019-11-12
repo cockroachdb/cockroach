@@ -835,6 +835,7 @@ const queriesSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   query_id         STRING,         -- the cluster-unique ID of the query
   node_id          INT NOT NULL,   -- the node on which the query is running
+  session_id       STRING,         -- the ID of the session
   user_name        STRING,         -- the user running the query
   start            TIMESTAMP,      -- the start time of the query
   query            STRING,         -- the SQL code of the query
@@ -851,6 +852,31 @@ func (p *planner) makeSessionsRequest(ctx context.Context) serverpb.ListSessions
 		req.Username = ""
 	}
 	return req
+}
+
+func getSessionID(session serverpb.Session) tree.Datum {
+	// TODO(knz): serverpb.Session is always constructed with an ID
+	// set from a 16-byte session ID. Yet we get crash reports
+	// that fail in BytesToClusterWideID() with a byte slice that's
+	// too short. See #32517.
+	var sessionID tree.Datum
+	if session.ID == nil {
+		// TODO(knz): NewInternalTrackingError is misdesigned. Change to
+		// not use this. See the other facilities in
+		// pgerror/internal_errors.go.
+		telemetry.RecordError(
+			pgerror.NewInternalTrackingError(32517 /* issue */, "null"))
+		sessionID = tree.DNull
+	} else if len(session.ID) != 16 {
+		// TODO(knz): ditto above.
+		telemetry.RecordError(
+			pgerror.NewInternalTrackingError(32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID))))
+		sessionID = tree.NewDString("<invalid>")
+	} else {
+		clusterSessionID := BytesToClusterWideID(session.ID)
+		sessionID = tree.NewDString(clusterSessionID.String())
+	}
+	return sessionID
 }
 
 // crdbInternalLocalQueriesTable exposes the list of running queries
@@ -887,6 +913,7 @@ func populateQueriesTable(
 	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
 ) error {
 	for _, session := range response.Sessions {
+		sessionID := getSessionID(session)
 		for _, query := range session.ActiveQueries {
 			isDistributedDatum := tree.DNull
 			phase := strings.ToLower(query.Phase.String())
@@ -899,6 +926,7 @@ func populateQueriesTable(
 			if err := addRow(
 				tree.NewDString(query.ID),
 				tree.NewDInt(tree.DInt(session.NodeID)),
+				sessionID,
 				tree.NewDString(session.Username),
 				tree.MakeDTimestamp(query.Start, time.Microsecond),
 				tree.NewDString(query.Sql),
@@ -920,6 +948,7 @@ func populateQueriesTable(
 			if err := addRow(
 				tree.DNull,                             // query ID
 				tree.NewDInt(tree.DInt(rpcErr.NodeID)), // node ID
+				tree.DNull,                             // session ID
 				tree.DNull,                             // username
 				tree.DNull,                             // start
 				tree.NewDString("-- "+rpcErr.Message),  // query
@@ -1013,27 +1042,7 @@ func populateSessionsTable(
 			kvTxnIDDatum = tree.NewDString(session.KvTxnID.String())
 		}
 
-		// TODO(knz): serverpb.Session is always constructed with an ID
-		// set from a 16-byte session ID. Yet we get crash reports
-		// that fail in BytesToClusterWideID() with a byte slice that's
-		// too short. See #32517.
-		var sessionID tree.Datum
-		if session.ID == nil {
-			// TODO(knz): NewInternalTrackingError is misdesigned. Change to
-			// not use this. See the other facilities in
-			// pgerror/internal_errors.go.
-			telemetry.RecordError(
-				pgerror.NewInternalTrackingError(32517 /* issue */, "null"))
-			sessionID = tree.DNull
-		} else if len(session.ID) != 16 {
-			// TODO(knz): ditto above.
-			telemetry.RecordError(
-				pgerror.NewInternalTrackingError(32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID))))
-			sessionID = tree.NewDString("<invalid>")
-		} else {
-			clusterSessionID := BytesToClusterWideID(session.ID)
-			sessionID = tree.NewDString(clusterSessionID.String())
-		}
+		sessionID := getSessionID(session)
 
 		if err := addRow(
 			tree.NewDInt(tree.DInt(session.NodeID)),
@@ -1924,7 +1933,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   database_name        STRING NOT NULL,
   table_name           STRING NOT NULL,
   index_name           STRING NOT NULL,
-  replicas             INT[] NOT NULL,	
+  replicas             INT[] NOT NULL,
   replica_localities   STRING[] NOT NULL,
 	learner_replicas     INT[] NOT NULL,
 	split_enforced_until TIMESTAMP
