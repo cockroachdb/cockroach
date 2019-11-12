@@ -23,4 +23,7 @@ enum EngineType {
   EngineTypeRocksDB = 0;
   // Denotes Pebble as the underlying storage engine type.
   EngineTypePebble = 1;
+  // Denotes TeePebbleRocksDB as the underlying storage engine type. Only use
+  // for testing purposes.
+  EngineTypeTeePebbleRocksDB = 2;
 }

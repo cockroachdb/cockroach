@@ -13,6 +13,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"path"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -520,6 +521,29 @@ func NewEngine(
 	engine enginepb.EngineType, cacheSize int64, storageConfig base.StorageConfig,
 ) (Engine, error) {
 	switch engine {
+	case enginepb.EngineTypeTeePebbleRocksDB:
+		pebbleConfig := PebbleConfig{
+			StorageConfig: storageConfig,
+			Opts:          DefaultPebbleOptions(),
+		}
+		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
+		pebbleConfig.Dir = path.Join(pebbleConfig.Dir, "pebble")
+		cache := NewRocksDBCache(cacheSize)
+		defer cache.Release()
+
+		pebbleDB, err := NewPebble(context.Background(), pebbleConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		rocksDBConfig := RocksDBConfig{StorageConfig: storageConfig}
+		rocksDBConfig.Dir = path.Join(rocksDBConfig.Dir, "rocksdb")
+		rocksDB, err := NewRocksDB(rocksDBConfig, cache)
+		if err != nil {
+			return nil, err
+		}
+
+		return NewTee(rocksDB, pebbleDB), nil
 	case enginepb.EngineTypePebble:
 		pebbleConfig := PebbleConfig{
 			StorageConfig: storageConfig,
