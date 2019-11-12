@@ -444,6 +444,12 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 		return err
 	}
 
+	if s, err := serverCfg.Stores.GetPreventedStartupMessage(); err != nil {
+		return err
+	} else if s != "" {
+		log.Fatal(context.Background(), s)
+	}
+
 	// Set up the signal handlers. This also ensures that any of these
 	// signals received beyond this point do not interrupt the startup
 	// sequence until the point signals are checked below.

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"reflect"
 	"regexp"
 	"sort"
@@ -6408,6 +6409,10 @@ func TestReplicaCorruption(t *testing.T) {
 	if !testutils.IsPError(pErr, "replica corruption \\(processed=true\\)") {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
+
+	// Should have laid down marker file to prevent startup.
+	_, err := os.Stat(base.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
+	require.NoError(t, err)
 
 	// Should have triggered fatal error.
 	if exitStatus != 255 {
