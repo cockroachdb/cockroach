@@ -639,7 +639,7 @@ CREATE TABLE extract_test (x DATE)
 statement ok
 INSERT INTO extract_test VALUES ('2017-01-01')
 
-query I
+query R
 SELECT EXTRACT(YEAR FROM x) FROM extract_test
 ----
 2017
