@@ -479,17 +479,17 @@ var nonZeroTxn = Transaction{
 		Priority:     957356782,
 		Sequence:     123,
 	},
-	Name:                     "name",
-	Status:                   COMMITTED,
-	LastHeartbeat:            makeTS(1, 2),
-	DeprecatedOrigTimestamp:  makeTS(30, 31),
-	ReadTimestamp:            makeTS(20, 22),
-	MaxTimestamp:             makeTS(40, 41),
-	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
-	WriteTooOld:              true,
-	IntentSpans:              []Span{{Key: []byte("a"), EndKey: []byte("b")}},
-	InFlightWrites:           []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
-	OrigTimestampWasObserved: true,
+	Name:                    "name",
+	Status:                  COMMITTED,
+	LastHeartbeat:           makeTS(1, 2),
+	DeprecatedOrigTimestamp: makeTS(30, 31),
+	ReadTimestamp:           makeTS(20, 22),
+	MaxTimestamp:            makeTS(40, 41),
+	ObservedTimestamps:      []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
+	WriteTooOld:             true,
+	IntentSpans:             []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	InFlightWrites:          []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
+	CommitTimestampFixed:    true,
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -551,7 +551,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.IntentSpans = nil
 	expTxn5.InFlightWrites = nil
 	expTxn5.WriteTooOld = false
-	expTxn5.OrigTimestampWasObserved = false
+	expTxn5.CommitTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
 
 	// Updating a different transaction fatals.
@@ -663,7 +663,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.ReadTimestamp = makeTS(25, 1)
 	expTxn.DeprecatedOrigTimestamp = expTxn.ReadTimestamp
 	expTxn.WriteTooOld = false
-	expTxn.OrigTimestampWasObserved = false
+	expTxn.CommitTimestampFixed = false
 	expTxn.IntentSpans = nil
 	expTxn.InFlightWrites = nil
 	require.Equal(t, expTxn, txn)

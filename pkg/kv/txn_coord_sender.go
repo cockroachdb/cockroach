@@ -1175,7 +1175,7 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	txn := &tc.mu.txn
-	tc.mu.txn.OrigTimestampWasObserved = true
+	tc.mu.txn.CommitTimestampFixed = true
 	return txn.ReadTimestamp
 }
 
@@ -1183,7 +1183,7 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.mu.txn.OrigTimestampWasObserved
+	return tc.mu.txn.CommitTimestampFixed
 }
 
 // SetFixedTimestamp is part of the client.TxnSender interface.
@@ -1192,7 +1192,7 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.Timestamp = ts
 	tc.mu.txn.MaxTimestamp = ts
-	tc.mu.txn.OrigTimestampWasObserved = true
+	tc.mu.txn.CommitTimestampFixed = true
 
 	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too.
 	tc.mu.txn.DeprecatedOrigTimestamp = ts
@@ -1232,8 +1232,8 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 
 	isTxnPushed := tc.mu.txn.Timestamp != tc.mu.txn.ReadTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
-		tc.mu.txn.OrigTimestampWasObserved
-	// We check OrigTimestampWasObserved here because, if that's set, refreshing
+		tc.mu.txn.CommitTimestampFixed
+	// We check CommitTimestampFixed here because, if that's set, refreshing
 	// of reads is not performed.
 	return isTxnPushed && refreshAttemptNotPossible
 }

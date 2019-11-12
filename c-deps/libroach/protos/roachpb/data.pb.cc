@@ -3452,7 +3452,7 @@ const int Transaction::kNameFieldNumber;
 const int Transaction::kStatusFieldNumber;
 const int Transaction::kLastHeartbeatFieldNumber;
 const int Transaction::kDeprecatedOrigTimestampFieldNumber;
-const int Transaction::kOrigTimestampWasObservedFieldNumber;
+const int Transaction::kCommitTimestampFixedFieldNumber;
 const int Transaction::kReadTimestampFieldNumber;
 const int Transaction::kMaxTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
@@ -3714,14 +3714,14 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
-      // bool orig_timestamp_was_observed = 16;
+      // bool commit_timestamp_fixed = 16;
       case 16: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(128u /* 128 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &orig_timestamp_was_observed_)));
+                 input, &commit_timestamp_fixed_)));
         } else {
           goto handle_unusual;
         }
@@ -3827,9 +3827,9 @@ void Transaction::SerializeWithCachedSizes(
       15, this->_internal_read_timestamp(), output);
   }
 
-  // bool orig_timestamp_was_observed = 16;
-  if (this->orig_timestamp_was_observed() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(16, this->orig_timestamp_was_observed(), output);
+  // bool commit_timestamp_fixed = 16;
+  if (this->commit_timestamp_fixed() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(16, this->commit_timestamp_fixed(), output);
   }
 
   for (unsigned int i = 0,
@@ -3924,8 +3924,8 @@ size_t Transaction::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->status());
   }
 
-  // bool orig_timestamp_was_observed = 16;
-  if (this->orig_timestamp_was_observed() != 0) {
+  // bool commit_timestamp_fixed = 16;
+  if (this->commit_timestamp_fixed() != 0) {
     total_size += 2 + 1;
   }
 
@@ -3976,8 +3976,8 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.status() != 0) {
     set_status(from.status());
   }
-  if (from.orig_timestamp_was_observed() != 0) {
-    set_orig_timestamp_was_observed(from.orig_timestamp_was_observed());
+  if (from.commit_timestamp_fixed() != 0) {
+    set_commit_timestamp_fixed(from.commit_timestamp_fixed());
   }
   if (from.write_too_old() != 0) {
     set_write_too_old(from.write_too_old());
@@ -4012,7 +4012,7 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(max_timestamp_, other->max_timestamp_);
   swap(read_timestamp_, other->read_timestamp_);
   swap(status_, other->status_);
-  swap(orig_timestamp_was_observed_, other->orig_timestamp_was_observed_);
+  swap(commit_timestamp_fixed_, other->commit_timestamp_fixed_);
   swap(write_too_old_, other->write_too_old_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

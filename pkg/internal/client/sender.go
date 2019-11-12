@@ -338,7 +338,7 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 	m.txn.Timestamp = ts
 	m.txn.ReadTimestamp = ts
 	m.txn.MaxTimestamp = ts
-	m.txn.OrigTimestampWasObserved = true
+	m.txn.CommitTimestampFixed = true
 
 	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too (although
 	// not really needed by this Mock sender).
