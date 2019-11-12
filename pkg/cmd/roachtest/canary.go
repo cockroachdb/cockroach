@@ -130,7 +130,10 @@ func repeatRunE(
 func repeatRunWithBuffer(
 	ctx context.Context, c *cluster, l *logger, node nodeListOption, operation string, args ...string,
 ) ([]byte, error) {
-	var lastError error
+	var (
+		lastResult []byte
+		lastError  error
+	)
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -140,15 +143,14 @@ func repeatRunWithBuffer(
 		}
 		attempt++
 		c.l.Printf("attempt %d - %s", attempt, operation)
-		var result []byte
-		result, lastError = c.RunWithBuffer(ctx, l, node, args...)
+		lastResult, lastError = c.RunWithBuffer(ctx, l, node, args...)
 		if lastError != nil {
-			c.l.Printf("error - retrying: %s", lastError)
+			c.l.Printf("error - retrying: %s\n%s", lastError, string(lastResult))
 			continue
 		}
-		return result, nil
+		return lastResult, nil
 	}
-	return nil, fmt.Errorf("all attempts failed for %s, with error: %s", operation, lastError)
+	return nil, fmt.Errorf("all attempts failed for %s, with error: %s\n%s", operation, lastError, lastResult)
 }
 
 // repeatGitCloneE is the same function as c.GitCloneE but with an automatic
