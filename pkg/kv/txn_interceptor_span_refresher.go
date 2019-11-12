@@ -272,7 +272,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, retryErr, hlc.Timestamp{}
 	}
 
-	log.VEventf(ctx, 2, "retry successful @%s", retryBa.Txn.Timestamp)
+	log.VEventf(ctx, 2, "retry successful @%s", retryBa.Txn.WriteTimestamp)
 	sr.autoRetryCounter.Inc(1)
 	retryTxn.ReadTimestamp.Forward(retryLargestRefreshTS)
 
@@ -338,7 +338,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 			}
 			refreshSpanBa.Add(req)
 			log.VEventf(ctx, 2, "updating span %s @%s - @%s to avoid serializable restart",
-				req.Header().Span(), sr.refreshedTimestamp, refreshTxn.Timestamp)
+				req.Header().Span(), sr.refreshedTimestamp, refreshTxn.WriteTimestamp)
 		}
 	}
 	addRefreshes(sr.refreshReads, false /* write */)

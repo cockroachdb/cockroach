@@ -37,11 +37,11 @@ func Refresh(
 	}
 
 	// We're going to refresh up to the transaction's read timestamp.
-	if h.Timestamp != h.Txn.Timestamp {
+	if h.Timestamp != h.Txn.WriteTimestamp {
 		// We're expecting the read and write timestamp to have converged before the
 		// Refresh request was sent.
 		log.Fatalf(ctx, "expected provisional commit ts %s == read ts %s. txn: %s", h.Timestamp,
-			h.Txn.Timestamp, h.Txn)
+			h.Txn.WriteTimestamp, h.Txn)
 	}
 	refreshTo := h.Timestamp
 
@@ -72,7 +72,7 @@ func Refresh(
 	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
-			intent.Span.Key, intent.Txn.Timestamp)
+			intent.Span.Key, intent.Txn.WriteTimestamp)
 	}
 
 	return result.Result{}, nil

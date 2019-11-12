@@ -300,7 +300,7 @@ func evaluateBatch(
 				}
 
 				if baHeader.Txn != nil {
-					baHeader.Txn.Timestamp.Forward(tErr.ActualTimestamp)
+					baHeader.Txn.WriteTimestamp.Forward(tErr.ActualTimestamp)
 					baHeader.Txn.WriteTooOld = true
 				}
 
@@ -363,7 +363,7 @@ func evaluateBatch(
 		// retry (i.e. there were no refresh spans and the commit timestamp
 		// wasn't leaked).
 		if baHeader.Txn.Status == roachpb.COMMITTED {
-			br.Timestamp.Forward(baHeader.Txn.Timestamp)
+			br.Timestamp.Forward(baHeader.Txn.WriteTimestamp)
 		}
 	}
 	// Always update the batch response timestamp field to the timestamp at

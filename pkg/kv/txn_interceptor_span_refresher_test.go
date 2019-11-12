@@ -96,7 +96,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	txn := makeTxnProto()
-	txn.UpdateObservedTimestamp(1, txn.Timestamp.Add(20, 0))
+	txn.UpdateObservedTimestamp(1, txn.WriteTimestamp.Add(20, 0))
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	cases := []struct {
@@ -110,7 +110,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 					&roachpb.TransactionRetryError{Reason: roachpb.RETRY_SERIALIZABLE})
 			},
 			expRefresh:   true,
-			expRefreshTS: txn.Timestamp,
+			expRefreshTS: txn.WriteTimestamp,
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -118,7 +118,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 					&roachpb.TransactionRetryError{Reason: roachpb.RETRY_WRITE_TOO_OLD})
 			},
 			expRefresh:   true,
-			expRefreshTS: txn.Timestamp,
+			expRefreshTS: txn.WriteTimestamp,
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -130,10 +130,10 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 		{
 			pErr: func() *roachpb.Error {
 				return roachpb.NewError(
-					&roachpb.WriteTooOldError{ActualTimestamp: txn.Timestamp.Add(15, 0)})
+					&roachpb.WriteTooOldError{ActualTimestamp: txn.WriteTimestamp.Add(15, 0)})
 			},
 			expRefresh:   true,
-			expRefreshTS: txn.Timestamp.Add(15, 0),
+			expRefreshTS: txn.WriteTimestamp.Add(15, 0),
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -142,19 +142,19 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				return pErr
 			},
 			expRefresh:   true,
-			expRefreshTS: txn.Timestamp.Add(20, 0), // see UpdateObservedTimestamp
+			expRefreshTS: txn.WriteTimestamp.Add(20, 0), // see UpdateObservedTimestamp
 		},
 		{
 			pErr: func() *roachpb.Error {
 				pErr := roachpb.NewError(
 					&roachpb.ReadWithinUncertaintyIntervalError{
-						ExistingTimestamp: txn.Timestamp.Add(25, 0),
+						ExistingTimestamp: txn.WriteTimestamp.Add(25, 0),
 					})
 				pErr.OriginNode = 1
 				return pErr
 			},
 			expRefresh:   true,
-			expRefreshTS: txn.Timestamp.Add(25, 1), // see ExistingTimestamp
+			expRefreshTS: txn.WriteTimestamp.Add(25, 1), // see ExistingTimestamp
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -239,7 +239,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			if tc.expRefresh {
 				require.Nil(t, pErr)
 				require.NotNil(t, br)
-				require.Equal(t, tc.expRefreshTS, br.Txn.Timestamp)
+				require.Equal(t, tc.expRefreshTS, br.Txn.WriteTimestamp)
 				require.Equal(t, tc.expRefreshTS, br.Txn.ReadTimestamp)
 				require.Equal(t, tc.expRefreshTS, tsr.refreshedTimestamp)
 			} else {

@@ -218,7 +218,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 			duringProbing: true,
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn
-				txnCopy.Timestamp = txnCopy.Timestamp.Add(1, 0)
+				txnCopy.WriteTimestamp = txnCopy.WriteTimestamp.Add(1, 0)
 				return txnCopy
 			}(),
 			metricImpact: metricVals{attempts: 1, successesAsPending: 1},
@@ -260,7 +260,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 			duringProbing: false,
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn
-				txnCopy.Timestamp = txnCopy.Timestamp.Add(1, 0)
+				txnCopy.WriteTimestamp = txnCopy.WriteTimestamp.Add(1, 0)
 				return txnCopy
 			}(),
 			metricImpact: metricVals{attempts: 1, successesAsPending: 1},

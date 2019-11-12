@@ -446,7 +446,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				// Overwrite the timestamps set by newTransaction().
 				txn.ReadTimestamp = datum.ts
-				txn.Timestamp = datum.ts
+				txn.WriteTimestamp = datum.ts
 				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
@@ -463,7 +463,7 @@ func TestGCQueueProcess(t *testing.T) {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
 				// Overwrite the timestamps set by newTransaction().
 				txn.ReadTimestamp = datum.ts
-				txn.Timestamp = datum.ts
+				txn.WriteTimestamp = datum.ts
 				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
 			}
@@ -860,9 +860,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].ReadTimestamp = intentResolveTS
-	txns[0].Timestamp = intentResolveTS
+	txns[0].WriteTimestamp = intentResolveTS
 	txns[1].ReadTimestamp = intentResolveTS
-	txns[1].Timestamp = intentResolveTS
+	txns[1].WriteTimestamp = intentResolveTS
 
 	// Two transactions.
 	for i := 0; i < 2; i++ {
