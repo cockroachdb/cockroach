@@ -928,6 +928,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1::TIME", []preparedQueryTest{
 			baseTest.SetArgs("12:00:00").Results("0000-01-01T12:00:00Z"),
 		}},
+		{"SELECT $1::TIMETZ", []preparedQueryTest{
+			baseTest.SetArgs("12:00:00+0330").Results("0000-01-01T12:00:00+03:30"),
+		}},
 		{"SELECT $1:::FLOAT[]", []preparedQueryTest{
 			baseTest.SetArgs("{}").Results("{}"),
 			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1.0,2.0,3.0}"),

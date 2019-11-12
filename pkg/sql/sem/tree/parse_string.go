@@ -82,6 +82,8 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 		return NewDString(s), nil
 	case types.TimeFamily:
 		return ParseDTime(ctx, s)
+	case types.TimeTZFamily:
+		return ParseDTimeTZ(ctx, s)
 	case types.TimestampFamily:
 		return ParseDTimestamp(ctx, s, time.Microsecond)
 	case types.TimestampTZFamily:

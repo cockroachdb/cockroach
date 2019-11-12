@@ -454,6 +454,7 @@ var (
 		types.Date,
 		types.StringArray,
 		types.Time,
+		types.TimeTZ,
 		types.Timestamp,
 		types.TimestampTZ,
 		types.Interval,

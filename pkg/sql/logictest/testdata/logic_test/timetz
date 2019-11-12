@@ -1,0 +1,48 @@
+# NOTE: we cast timetz to strings here to avoid confusion with lib/pq
+# printing out timetz values with dates.
+
+statement ok
+CREATE TABLE timetz_test (a TIMETZ PRIMARY KEY, b TIMETZ, c INT)
+
+statement ok
+INSERT INTO timetz_test VALUES
+  ('11:00:00+0', '12:00:00+1', 1),
+  ('12:00:00+1', '10:00:00-1', 2),
+  ('13:00:00+2', '15:00:00-6', 3),
+  ('14:00:00+3', '24:00:00-1559', 4),
+  ('15:00:00+3', '15:00:00+3', 5)
+
+# NOTE: lib/pq parses '24:00:00-1559' incorrectly, but the data
+# structure underneath should still be correct.
+query B
+SELECT '24:00:00-1559'::timetz > '23:59:59-1559'::timetz;
+----
+true
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test ORDER BY a, c ASC
+----
+11:00:00+00:00:00  12:00:00+01:00:00  1
+12:00:00+01:00:00  10:00:00-01:00:00  2
+13:00:00+02:00:00  15:00:00-06:00:00  3
+14:00:00+03:00:00  24:00:00-15:59:00  4
+15:00:00+03:00:00  15:00:00+03:00:00  5
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test ORDER BY a DESC, c ASC
+----
+15:00:00+03:00:00  15:00:00+03:00:00  5
+14:00:00+03:00:00  24:00:00-15:59:00  4
+13:00:00+02:00:00  15:00:00-06:00:00  3
+12:00:00+01:00:00  10:00:00-01:00:00  2
+11:00:00+00:00:00  12:00:00+01:00:00  1
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test WHERE a > b ORDER BY c
+----
+11:00:00+00:00:00  12:00:00+01:00:00  1
+
+query TTI
+SELECT a::string, b::string, c FROM timetz_test WHERE a = b ORDER BY c
+----
+15:00:00+03:00:00  15:00:00+03:00:00  5
