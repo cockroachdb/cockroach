@@ -236,7 +236,7 @@ func exportUsingGoIterator(
 		EndTime:     endTime,
 	})
 	defer iter.Close()
-	for iter.Seek(engine.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
+	for iter.SeekGE(engine.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will

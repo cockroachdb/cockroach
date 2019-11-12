@@ -111,8 +111,8 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 	itPebble, err := engine.NewMemSSTIterator(sstPebble, false)
 	require.NoError(t, err)
 
-	itPebble.Seek(engine.NilKey)
-	for itRocks.Seek(engine.NilKey); ; {
+	itPebble.SeekGE(engine.NilKey)
+	for itRocks.SeekGE(engine.NilKey); ; {
 		okRocks, err := itRocks.Valid()
 		if err != nil {
 			t.Fatal(err)

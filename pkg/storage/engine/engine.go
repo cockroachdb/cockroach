@@ -41,9 +41,9 @@ func init() {
 type SimpleIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
-	// Seek advances the iterator to the first key in the engine which
+	// SeekGE advances the iterator to the first key in the engine which
 	// is >= the provided key.
-	Seek(key MVCCKey)
+	SeekGE(key MVCCKey)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
 	// a valid key (it is undefined to call Key(), Value(), or similar
@@ -81,9 +81,9 @@ type IteratorStats struct {
 type Iterator interface {
 	SimpleIterator
 
-	// SeekReverse advances the iterator to the first key in the engine which
-	// is <= the provided key.
-	SeekReverse(key MVCCKey)
+	// SeekLT advances the iterator to the first key in the engine which
+	// is < the provided key.
+	SeekLT(key MVCCKey)
 	// Prev moves the iterator backward to the previous key/value
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
@@ -617,7 +617,7 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end roachpb.Key) 
 	// TODO(bdarnell): Move this into ClearIterRange so we don't have
 	// to do this scan twice.
 	count := 0
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {
@@ -727,7 +727,7 @@ func iterateOnReader(
 	it := reader.NewIterator(IterOptions{UpperBound: end})
 	defer it.Close()
 
-	it.Seek(MakeMVCCMetadataKey(start))
+	it.SeekGE(MakeMVCCMetadataKey(start))
 	for ; ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {

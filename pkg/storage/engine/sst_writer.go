@@ -109,7 +109,7 @@ func (fw *SSTWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error
 	// ClearIterRange are with throwaway iterators, so there should be no new
 	// side effects.
 	iter.SetUpperBound(end)
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 
 	valid, err := iter.Valid()
 	for valid && err == nil {

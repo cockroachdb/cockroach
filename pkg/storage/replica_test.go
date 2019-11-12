@@ -2862,7 +2862,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			iter := tc.engine.NewIterator(engine.IterOptions{Prefix: true})
 			defer iter.Close()
 			mvccKey := engine.MakeMVCCMetadataKey(key)
-			iter.Seek(mvccKey)
+			iter.SeekGE(mvccKey)
 			var keyMeta enginepb.MVCCMetadata
 			if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
 				t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)

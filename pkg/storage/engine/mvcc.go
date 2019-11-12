@@ -783,7 +783,7 @@ func mvccGetMetadata(
 	if iter == nil {
 		return false, 0, 0, nil
 	}
-	iter.Seek(metaKey)
+	iter.SeekGE(metaKey)
 	if ok, err := iter.Valid(); !ok {
 		return false, 0, 0, err
 	}
@@ -959,7 +959,7 @@ func mvccGetInternal(
 		return nil, ignoredIntent, safeValue, nil
 	}
 
-	iter.Seek(seekKey)
+	iter.SeekGE(seekKey)
 	if ok, err := iter.Valid(); err != nil {
 		return nil, nil, safeValue, err
 	} else if !ok {
@@ -2027,7 +2027,7 @@ func MVCCClearTimeRange(
 	var clearedMetaKey MVCCKey
 	var clearedMeta enginepb.MVCCMetadata
 	var restoredMeta enginepb.MVCCMetadata
-	for it.Seek(MVCCKey{Key: key}); ; it.Next() {
+	for it.SeekGE(MVCCKey{Key: key}); ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {
 			return nil, err
@@ -2441,7 +2441,7 @@ func MVCCResolveWriteIntentUsingIter(
 func unsafeNextVersion(iter Iterator, latestKey MVCCKey) (MVCCKey, []byte, bool, error) {
 	// Compute the next possible mvcc value for this key.
 	nextKey := latestKey.Next()
-	iter.Seek(nextKey)
+	iter.SeekGE(nextKey)
 
 	if ok, err := iter.Valid(); err != nil || !ok || !iter.UnsafeKey().Key.Equal(latestKey.Key) {
 		return MVCCKey{}, nil, false /* never ok */, err
@@ -2800,7 +2800,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 			return num, &roachpb.Span{Key: nextKey.Key, EndKey: encEndKey.Key}, nil
 		}
 
-		iterAndBuf.iter.Seek(nextKey)
+		iterAndBuf.iter.SeekGE(nextKey)
 		if ok, err := iterAndBuf.iter.Valid(); err != nil {
 			return 0, nil, err
 		} else if !ok || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
@@ -3027,7 +3027,7 @@ func MVCCFindSplitKey(
 	// was dangerous because partitioning can split off ranges that do not start
 	// at valid row keys. The keys that are present in the range, by contrast, are
 	// necessarily valid row keys.
-	it.Seek(MakeMVCCMetadataKey(key.AsRawKey()))
+	it.SeekGE(MakeMVCCMetadataKey(key.AsRawKey()))
 	if ok, err := it.Valid(); err != nil {
 		return nil, err
 	} else if !ok {
@@ -3116,7 +3116,7 @@ func ComputeStatsGo(
 	var accrueGCAgeNanos int64
 	mvccEndKey := MakeMVCCMetadataKey(end)
 
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 	for ; ; iter.Next() {
 		ok, err := iter.Valid()
 		if err != nil {
@@ -3354,7 +3354,7 @@ func checkForKeyCollisionsGo(
 	}
 
 	defer sstIter.Close()
-	sstIter.Seek(MakeMVCCMetadataKey(start))
+	sstIter.SeekGE(MakeMVCCMetadataKey(start))
 	if ok, err := sstIter.Valid(); err != nil || !ok {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "checking for key collisions")
 	}
@@ -3456,9 +3456,9 @@ func checkForKeyCollisionsGo(
 			err := &Error{msg: existingIter.Key().Key.String()}
 			return enginepb.MVCCStats{}, errors.Wrap(err, "ingested key collides with an existing one")
 		} else if bytesCompare < 0 {
-			existingIter.Seek(MVCCKey{Key: sstKey.Key})
+			existingIter.SeekGE(MVCCKey{Key: sstKey.Key})
 		} else {
-			sstIter.Seek(MVCCKey{Key: existingKey.Key})
+			sstIter.SeekGE(MVCCKey{Key: existingKey.Key})
 		}
 
 		ok, extErr = existingIter.Valid()

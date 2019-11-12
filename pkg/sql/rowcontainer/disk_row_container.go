@@ -336,7 +336,7 @@ func (d *DiskRowContainer) NewFinalIterator(ctx context.Context) RowIterator {
 }
 
 func (r *diskRowFinalIterator) Rewind() {
-	r.Seek(r.diskRowIterator.rowContainer.lastReadKey)
+	r.SeekGE(r.diskRowIterator.rowContainer.lastReadKey)
 	if r.diskRowIterator.rowContainer.lastReadKey != nil {
 		r.Next()
 	}

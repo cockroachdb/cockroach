@@ -65,7 +65,7 @@ func (tsdb *DB) findTimeSeries(
 	iter := snapshot.NewIterator(engine.IterOptions{UpperBound: endKey.AsRawKey()})
 	defer iter.Close()
 
-	for iter.Seek(next); ; iter.Seek(next) {
+	for iter.SeekGE(next); ; iter.SeekGE(next) {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, err
 		} else if !ok || !iter.UnsafeKey().Less(end) {

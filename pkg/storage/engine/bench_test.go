@@ -684,7 +684,7 @@ func runClearRange(
 	// first key and simply ClearRange(NilKey, MVCCKeyMax).
 	iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
-	iter.Seek(NilKey)
+	iter.SeekGE(NilKey)
 	if ok, err := iter.Valid(); !ok {
 		b.Fatalf("unable to find first key (err: %v)", err)
 	}

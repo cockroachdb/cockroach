@@ -37,9 +37,9 @@ type Factory interface {
 //		// Do something.
 // 	}
 type SortedDiskMapIterator interface {
-	// Seek sets the iterator's position to the first key greater than or equal
+	// SeekGE sets the iterator's position to the first key greater than or equal
 	// to the provided key.
-	Seek(key []byte)
+	SeekGE(key []byte)
 	// Rewind seeks to the start key.
 	Rewind()
 	// Valid must be called after any call to Seek(), Rewind(), or Next(). It

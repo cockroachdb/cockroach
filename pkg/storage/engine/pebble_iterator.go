@@ -173,8 +173,8 @@ func (p *pebbleIterator) Close() {
 	pebbleIterPool.Put(p)
 }
 
-// Seek implements the Iterator interface.
-func (p *pebbleIterator) Seek(key MVCCKey) {
+// SeekGE implements the Iterator interface.
+func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
 	if p.prefix {
 		p.iter.SeekPrefixGE(p.keyBuf)
@@ -234,19 +234,10 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 	return p.iter.Value()
 }
 
-// SeekReverse implements the Iterator interface.
-func (p *pebbleIterator) SeekReverse(key MVCCKey) {
-	// Do a SeekGE, not a SeekLT. This is because SeekReverse seeks to the
-	// greatest key that's less than or equal to the specified key.
-	p.Seek(key)
+// SeekLT implements the Iterator interface.
+func (p *pebbleIterator) SeekLT(key MVCCKey) {
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
-
-	// The new key could either be greater or equal to the supplied key.
-	// Backtrack one step if it is greater.
-	comp := MVCCKeyCompare(p.keyBuf, p.iter.Key())
-	if comp < 0 && p.iter.Valid() {
-		p.Prev()
-	}
+	p.iter.SeekLT(p.keyBuf)
 }
 
 // Prev implements the Iterator interface.
@@ -321,7 +312,7 @@ func (p *pebbleIterator) FindSplitKey(
 	// terminate iteration because the iterator's upper bound has already been
 	// set to end.
 	mvccMinSplitKey := MakeMVCCMetadataKey(minSplitKey)
-	p.Seek(MakeMVCCMetadataKey(start))
+	p.SeekGE(MakeMVCCMetadataKey(start))
 	for ; p.iter.Valid(); p.iter.Next() {
 		mvccKey, err := DecodeMVCCKey(p.iter.Key())
 		if err != nil {

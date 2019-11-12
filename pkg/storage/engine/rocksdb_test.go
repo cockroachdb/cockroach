@@ -121,15 +121,15 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	after := b.NewIterator(IterOptions{Prefix: true})
 	defer after.Close()
 
-	after.Seek(k)
+	after.SeekGE(k)
 	if ok, err := after.Valid(); !ok {
 		t.Fatalf("write missing on batch iter created after write, err=%v", err)
 	}
-	before.Seek(k)
+	before.SeekGE(k)
 	if ok, err := before.Valid(); !ok {
 		t.Fatalf("write missing on batch iter created before write, err=%v", err)
 	}
-	nonBatchBefore.Seek(k)
+	nonBatchBefore.SeekGE(k)
 	if ok, err := nonBatchBefore.Valid(); err != nil {
 		t.Fatal(err)
 	} else if ok {
@@ -143,13 +143,13 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	nonBatchAfter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer nonBatchAfter.Close()
 
-	nonBatchBefore.Seek(k)
+	nonBatchBefore.SeekGE(k)
 	if ok, err := nonBatchBefore.Valid(); err != nil {
 		t.Fatal(err)
 	} else if ok {
 		t.Fatal("committed write seen by non-batch iter created before commit")
 	}
-	nonBatchAfter.Seek(k)
+	nonBatchAfter.SeekGE(k)
 	if ok, err := nonBatchAfter.Valid(); !ok {
 		t.Fatalf("committed write missing by non-batch iter created after commit, err=%v", err)
 	}
@@ -161,7 +161,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 				t.Fatalf("Unexpected panic: expected %q, got %q", expected, err)
 			}
 		}()
-		after.Seek(k)
+		after.SeekGE(k)
 		t.Fatalf(`Seek on batch-backed iter after batched closed should panic.
 			iter.engine: %T, iter.engine.Closed: %v, batch.Closed %v`,
 			after.(*rocksDBIterator).engine,
@@ -193,11 +193,11 @@ func TestBatchPrefixIter(t *testing.T) {
 	iter := b.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
-	iter.Seek(mvccKey("b"))
+	iter.SeekGE(mvccKey("b"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected to find \"b\", err=%v", err)
 	}
-	iter.Seek(mvccKey("a"))
+	iter.SeekGE(mvccKey("a"))
 	if ok, err := iter.Valid(); err != nil {
 		t.Fatal(err)
 	} else if ok {
@@ -240,13 +240,19 @@ func TestIterBounds(t *testing.T) {
 				func() {
 					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("b")})
 					defer iter.Close()
-					iter.SeekReverse(mvccKey("b"))
+					iter.SeekLT(mvccKey("c"))
 					if ok, err := iter.Valid(); err != nil {
 						t.Fatal(err)
 					} else if !ok {
 						t.Fatalf("expected iterator to be valid, but was invalid")
 					}
-					iter.SeekReverse(mvccKey("a"))
+					iter.SeekLT(mvccKey("b"))
+					if ok, err := iter.Valid(); err != nil {
+						t.Fatal(err)
+					} else if ok {
+						t.Fatalf("expected iterator to be invalid, but was valid")
+					}
+					iter.SeekLT(mvccKey("a"))
 					if ok, err := iter.Valid(); err != nil {
 						t.Fatal(err)
 					} else if ok {
@@ -260,7 +266,7 @@ func TestIterBounds(t *testing.T) {
 					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("a")})
 					defer iter.Close()
 
-					iter.SeekReverse(mvccKey("a"))
+					iter.SeekLT(mvccKey("b"))
 					if ok, err := iter.Valid(); !ok {
 						t.Fatal(err)
 					}
@@ -280,7 +286,7 @@ func TestIterBounds(t *testing.T) {
 			func() {
 				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("a")})
 				defer iter.Close()
-				iter.Seek(mvccKey("a"))
+				iter.SeekGE(mvccKey("a"))
 				if ok, err := iter.Valid(); err != nil {
 					t.Fatal(err)
 				} else if ok {
@@ -294,7 +300,7 @@ func TestIterBounds(t *testing.T) {
 				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("b")})
 				defer iter.Close()
 
-				iter.Seek(mvccKey("a"))
+				iter.SeekGE(mvccKey("a"))
 				if ok, err := iter.Valid(); !ok {
 					t.Fatal(err)
 				}
@@ -320,7 +326,7 @@ func TestIterBounds(t *testing.T) {
 			func() {
 				iter := w.NewIterator(IterOptions{UpperBound: roachpb.Key("c")})
 				defer iter.Close()
-				iter.Seek(mvccKey("c"))
+				iter.SeekGE(mvccKey("c"))
 				if ok, err := iter.Valid(); err != nil {
 					t.Fatal(err)
 				} else if ok {
@@ -360,7 +366,7 @@ func benchmarkIterOnBatch(ctx context.Context, b *testing.B, writes int) {
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
 		iter := batch.NewIterator(IterOptions{Prefix: true})
-		iter.Seek(key)
+		iter.SeekGE(key)
 		iter.Close()
 	}
 }
@@ -388,7 +394,7 @@ func benchmarkIterOnReadWriter(
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
 		iter := readWriter.NewIterator(IterOptions{Prefix: true})
-		iter.Seek(key)
+		iter.SeekGE(key)
 		iter.Close()
 	}
 }
@@ -985,7 +991,7 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 	}
 
 	iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-	iter.Seek(key("a"))
+	iter.SeekGE(key("a"))
 	if ok, _ := iter.Valid(); ok {
 		t.Fatalf("unexpected key: %s", iter.Key())
 	}
@@ -1409,7 +1415,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-						iter.Seek(MakeMVCCMetadataKey(from))
+						iter.SeekGE(MakeMVCCMetadataKey(from))
 						ok, err := iter.Valid()
 						if err != nil {
 							b.Fatal(err)
@@ -1518,7 +1524,7 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 		WithStats:        true,
 	})
 	defer it.Close()
-	for it.Seek(MVCCKey{Key: keys.MinKey}); ; it.Next() {
+	for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {
 			t.Fatal(err)
