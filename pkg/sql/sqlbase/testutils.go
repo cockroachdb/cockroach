@@ -159,6 +159,8 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return tree.NewDDate(d)
 	case types.TimeFamily:
 		return tree.MakeDTime(timeofday.Random(rng))
+	case types.TimeTZFamily:
+		return tree.NewDTimeTZFromOffset(timeofday.Random(rng), (rng.Int31n(28*60)-14*60)*60)
 	case types.TimestampFamily:
 		return tree.MakeDTimestamp(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)), time.Microsecond)
 	case types.IntervalFamily:

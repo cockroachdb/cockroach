@@ -1776,6 +1776,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Oid, types.Oid),
 		makeEqFn(types.String, types.String),
 		makeEqFn(types.Time, types.Time),
+		makeEqFn(types.TimeTZ, types.TimeTZ),
 		makeEqFn(types.Timestamp, types.Timestamp),
 		makeEqFn(types.TimestampTZ, types.TimestampTZ),
 		makeEqFn(types.Uuid, types.Uuid),
@@ -1819,6 +1820,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Oid, types.Oid),
 		makeLtFn(types.String, types.String),
 		makeLtFn(types.Time, types.Time),
+		makeLtFn(types.TimeTZ, types.TimeTZ),
 		makeLtFn(types.Timestamp, types.Timestamp),
 		makeLtFn(types.TimestampTZ, types.TimestampTZ),
 		makeLtFn(types.Uuid, types.Uuid),
@@ -1862,6 +1864,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Oid, types.Oid),
 		makeLeFn(types.String, types.String),
 		makeLeFn(types.Time, types.Time),
+		makeLeFn(types.TimeTZ, types.TimeTZ),
 		makeLeFn(types.Timestamp, types.Timestamp),
 		makeLeFn(types.TimestampTZ, types.TimestampTZ),
 		makeLeFn(types.Uuid, types.Uuid),
@@ -1914,6 +1917,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Oid, types.Oid),
 		makeIsFn(types.String, types.String),
 		makeIsFn(types.Time, types.Time),
+		makeIsFn(types.TimeTZ, types.TimeTZ),
 		makeIsFn(types.Timestamp, types.Timestamp),
 		makeIsFn(types.TimestampTZ, types.TimestampTZ),
 		makeIsFn(types.Uuid, types.Uuid),
@@ -1962,6 +1966,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.Oid),
 		makeEvalTupleIn(types.String),
 		makeEvalTupleIn(types.Time),
+		makeEvalTupleIn(types.TimeTZ),
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
 		makeEvalTupleIn(types.Uuid),
@@ -3329,7 +3334,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
 		case *DBool, *DInt, *DDecimal:
 			s = d.String()
-		case *DTimestamp, *DTimestampTZ, *DDate, *DTime:
+		case *DTimestamp, *DTimestampTZ, *DDate, *DTime, *DTimeTZ:
 			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DTuple:
 			s = AsStringWithFlags(d, FmtPgwireText)
@@ -3444,6 +3449,15 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return MakeDTime(timeofday.FromTime(d.stripTimeZone(ctx).Time)), nil
 		case *DInterval:
 			return MakeDTime(timeofday.Min.Add(d.Duration)), nil
+		}
+
+	case types.TimeTZFamily:
+		switch d := d.(type) {
+		case *DString:
+			return ParseDTimeTZ(ctx, string(*d))
+		case *DCollatedString:
+			return ParseDTimeTZ(ctx, d.Contents)
+			// TODO(otan#26097): expand for other valid types.
 		}
 
 	case types.TimestampFamily:
@@ -4175,6 +4189,11 @@ func (t *DDate) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DTime) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DTimeTZ) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

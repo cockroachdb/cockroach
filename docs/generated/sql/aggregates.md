@@ -29,6 +29,8 @@
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><a name="avg"></a><code>avg(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the average of the selected values.</p>
@@ -89,6 +91,8 @@
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
+<tr><td><a name="max"></a><code>max(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+</span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
@@ -120,6 +124,8 @@
 <tr><td><a name="min"></a><code>min(arg1: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+</span></td></tr>
+<tr><td><a name="min"></a><code>min(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
