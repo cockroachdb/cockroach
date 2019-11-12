@@ -189,11 +189,6 @@ class IntegerOverflowErrorDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<IntegerOverflowError>
       _instance;
 } _IntegerOverflowError_default_instance_;
-class MixedSuccessErrorDefaultTypeInternal {
- public:
-  ::google::protobuf::internal::ExplicitlyConstructed<MixedSuccessError>
-      _instance;
-} _MixedSuccessError_default_instance_;
 class BatchTimestampBeforeGCErrorDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<BatchTimestampBeforeGCError>
@@ -246,7 +241,6 @@ class ErrorDetailDefaultTypeInternal {
   const ::cockroach::roachpb::TransactionRetryWithProtoRefreshError* transaction_retry_with_proto_refresh_;
   const ::cockroach::roachpb::IntegerOverflowError* integer_overflow_;
   const ::cockroach::roachpb::UnsupportedRequestError* unsupported_request_;
-  const ::cockroach::roachpb::MixedSuccessError* mixed_success_;
   const ::cockroach::roachpb::BatchTimestampBeforeGCError* timestamp_before_;
   const ::cockroach::roachpb::TxnAlreadyEncounteredErrorError* txn_already_encountered_error_;
   const ::cockroach::roachpb::IntentMissingError* intent_missing_;
@@ -510,11 +504,6 @@ static void InitDefaultsAmbiguousResultError() {
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
   }
   {
-    void* ptr = &::cockroach::roachpb::_MixedSuccessError_default_instance_;
-    new (ptr) ::cockroach::roachpb::MixedSuccessError();
-    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
-  }
-  {
     void* ptr = &::cockroach::roachpb::_ErrorDetail_default_instance_;
     new (ptr) ::cockroach::roachpb::ErrorDetail();
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
@@ -525,7 +514,6 @@ static void InitDefaultsAmbiguousResultError() {
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
   }
   ::cockroach::roachpb::AmbiguousResultError::InitAsDefaultInstance();
-  ::cockroach::roachpb::MixedSuccessError::InitAsDefaultInstance();
   ::cockroach::roachpb::ErrorDetail::InitAsDefaultInstance();
   ::cockroach::roachpb::Error::InitAsDefaultInstance();
 }
@@ -6435,243 +6423,6 @@ void IntegerOverflowError::InternalSwap(IntegerOverflowError* other) {
 
 // ===================================================================
 
-void MixedSuccessError::InitAsDefaultInstance() {
-  ::cockroach::roachpb::_MixedSuccessError_default_instance_._instance.get_mutable()->wrapped_ = const_cast< ::cockroach::roachpb::ErrorDetail*>(
-      ::cockroach::roachpb::ErrorDetail::internal_default_instance());
-}
-#if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int MixedSuccessError::kWrappedFieldNumber;
-const int MixedSuccessError::kWrappedMessageFieldNumber;
-#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
-
-MixedSuccessError::MixedSuccessError()
-  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
-  ::google::protobuf::internal::InitSCC(
-      &protobuf_roachpb_2ferrors_2eproto::scc_info_AmbiguousResultError.base);
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.roachpb.MixedSuccessError)
-}
-MixedSuccessError::MixedSuccessError(const MixedSuccessError& from)
-  : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL),
-      _has_bits_(from._has_bits_) {
-  _internal_metadata_.MergeFrom(from._internal_metadata_);
-  wrapped_message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (from.has_wrapped_message()) {
-    wrapped_message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.wrapped_message_);
-  }
-  if (from.has_wrapped()) {
-    wrapped_ = new ::cockroach::roachpb::ErrorDetail(*from.wrapped_);
-  } else {
-    wrapped_ = NULL;
-  }
-  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.MixedSuccessError)
-}
-
-void MixedSuccessError::SharedCtor() {
-  wrapped_message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  wrapped_ = NULL;
-}
-
-MixedSuccessError::~MixedSuccessError() {
-  // @@protoc_insertion_point(destructor:cockroach.roachpb.MixedSuccessError)
-  SharedDtor();
-}
-
-void MixedSuccessError::SharedDtor() {
-  wrapped_message_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (this != internal_default_instance()) delete wrapped_;
-}
-
-void MixedSuccessError::SetCachedSize(int size) const {
-  _cached_size_.Set(size);
-}
-const MixedSuccessError& MixedSuccessError::default_instance() {
-  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2ferrors_2eproto::scc_info_AmbiguousResultError.base);
-  return *internal_default_instance();
-}
-
-
-void MixedSuccessError::Clear() {
-// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.MixedSuccessError)
-  ::google::protobuf::uint32 cached_has_bits = 0;
-  // Prevent compiler warnings about cached_has_bits being unused
-  (void) cached_has_bits;
-
-  cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 3u) {
-    if (cached_has_bits & 0x00000001u) {
-      wrapped_message_.ClearNonDefaultToEmptyNoArena();
-    }
-    if (cached_has_bits & 0x00000002u) {
-      GOOGLE_DCHECK(wrapped_ != NULL);
-      wrapped_->Clear();
-    }
-  }
-  _has_bits_.Clear();
-  _internal_metadata_.Clear();
-}
-
-bool MixedSuccessError::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
-      &_internal_metadata_);
-  ::google::protobuf::io::StringOutputStream unknown_fields_output(
-      unknown_fields_setter.buffer());
-  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
-      &unknown_fields_output, false);
-  // @@protoc_insertion_point(parse_start:cockroach.roachpb.MixedSuccessError)
-  for (;;) {
-    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      case 1: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_wrapped()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-                input, this->mutable_wrapped_message()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
-            input, tag, &unknown_fields_stream));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.roachpb.MixedSuccessError)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.MixedSuccessError)
-  return false;
-#undef DO_
-}
-
-void MixedSuccessError::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.MixedSuccessError)
-  ::google::protobuf::uint32 cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000002u) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      1, this->_internal_wrapped(), output);
-  }
-
-  if (cached_has_bits & 0x00000001u) {
-    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
-      2, this->wrapped_message(), output);
-  }
-
-  output->WriteRaw(_internal_metadata_.unknown_fields().data(),
-                   static_cast<int>(_internal_metadata_.unknown_fields().size()));
-  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.MixedSuccessError)
-}
-
-size_t MixedSuccessError::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.MixedSuccessError)
-  size_t total_size = 0;
-
-  total_size += _internal_metadata_.unknown_fields().size();
-
-  if (_has_bits_[0 / 32] & 3u) {
-    if (has_wrapped_message()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::StringSize(
-          this->wrapped_message());
-    }
-
-    if (has_wrapped()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSize(
-          *wrapped_);
-    }
-
-  }
-  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
-  SetCachedSize(cached_size);
-  return total_size;
-}
-
-void MixedSuccessError::CheckTypeAndMergeFrom(
-    const ::google::protobuf::MessageLite& from) {
-  MergeFrom(*::google::protobuf::down_cast<const MixedSuccessError*>(&from));
-}
-
-void MixedSuccessError::MergeFrom(const MixedSuccessError& from) {
-// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.MixedSuccessError)
-  GOOGLE_DCHECK_NE(&from, this);
-  _internal_metadata_.MergeFrom(from._internal_metadata_);
-  ::google::protobuf::uint32 cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 3u) {
-    if (cached_has_bits & 0x00000001u) {
-      set_has_wrapped_message();
-      wrapped_message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.wrapped_message_);
-    }
-    if (cached_has_bits & 0x00000002u) {
-      mutable_wrapped()->::cockroach::roachpb::ErrorDetail::MergeFrom(from.wrapped());
-    }
-  }
-}
-
-void MixedSuccessError::CopyFrom(const MixedSuccessError& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.MixedSuccessError)
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool MixedSuccessError::IsInitialized() const {
-  return true;
-}
-
-void MixedSuccessError::Swap(MixedSuccessError* other) {
-  if (other == this) return;
-  InternalSwap(other);
-}
-void MixedSuccessError::InternalSwap(MixedSuccessError* other) {
-  using std::swap;
-  wrapped_message_.Swap(&other->wrapped_message_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-    GetArenaNoVirtual());
-  swap(wrapped_, other->wrapped_);
-  swap(_has_bits_[0], other->_has_bits_[0]);
-  _internal_metadata_.Swap(&other->_internal_metadata_);
-}
-
-::std::string MixedSuccessError::GetTypeName() const {
-  return "cockroach.roachpb.MixedSuccessError";
-}
-
-
-// ===================================================================
-
 void BatchTimestampBeforeGCError::InitAsDefaultInstance() {
   ::cockroach::roachpb::_BatchTimestampBeforeGCError_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
@@ -8018,20 +7769,6 @@ void ErrorDetail::set_allocated_unsupported_request(::cockroach::roachpb::Unsupp
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.unsupported_request)
 }
-void ErrorDetail::set_allocated_mixed_success(::cockroach::roachpb::MixedSuccessError* mixed_success) {
-  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
-  clear_value();
-  if (mixed_success) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
-    if (message_arena != submessage_arena) {
-      mixed_success = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, mixed_success, submessage_arena);
-    }
-    set_has_mixed_success();
-    value_.mixed_success_ = mixed_success;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.mixed_success)
-}
 void ErrorDetail::set_allocated_timestamp_before(::cockroach::roachpb::BatchTimestampBeforeGCError* timestamp_before) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   clear_value();
@@ -8140,7 +7877,6 @@ const int ErrorDetail::kStoreNotFoundFieldNumber;
 const int ErrorDetail::kTransactionRetryWithProtoRefreshFieldNumber;
 const int ErrorDetail::kIntegerOverflowFieldNumber;
 const int ErrorDetail::kUnsupportedRequestFieldNumber;
-const int ErrorDetail::kMixedSuccessFieldNumber;
 const int ErrorDetail::kTimestampBeforeFieldNumber;
 const int ErrorDetail::kTxnAlreadyEncounteredErrorFieldNumber;
 const int ErrorDetail::kIntentMissingFieldNumber;
@@ -8253,10 +7989,6 @@ ErrorDetail::ErrorDetail(const ErrorDetail& from)
     }
     case kUnsupportedRequest: {
       mutable_unsupported_request()->::cockroach::roachpb::UnsupportedRequestError::MergeFrom(from.unsupported_request());
-      break;
-    }
-    case kMixedSuccess: {
-      mutable_mixed_success()->::cockroach::roachpb::MixedSuccessError::MergeFrom(from.mixed_success());
       break;
     }
     case kTimestampBefore: {
@@ -8407,10 +8139,6 @@ void ErrorDetail::clear_value() {
     }
     case kUnsupportedRequest: {
       delete value_.unsupported_request_;
-      break;
-    }
-    case kMixedSuccess: {
-      delete value_.mixed_success_;
       break;
     }
     case kTimestampBefore: {
@@ -8748,18 +8476,6 @@ bool ErrorDetail::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.roachpb.MixedSuccessError mixed_success = 33;
-      case 33: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(10u /* 266 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_mixed_success()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       // optional .cockroach.roachpb.BatchTimestampBeforeGCError timestamp_before = 34;
       case 34: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
@@ -8950,10 +8666,6 @@ void ErrorDetail::SerializeWithCachedSizes(
     case kUnsupportedRequest:
       ::google::protobuf::internal::WireFormatLite::WriteMessage(
         32, this->_internal_unsupported_request(), output);
-      break;
-    case kMixedSuccess:
-      ::google::protobuf::internal::WireFormatLite::WriteMessage(
-        33, this->_internal_mixed_success(), output);
       break;
     case kTimestampBefore:
       ::google::protobuf::internal::WireFormatLite::WriteMessage(
@@ -9154,13 +8866,6 @@ size_t ErrorDetail::ByteSizeLong() const {
           *value_.unsupported_request_);
       break;
     }
-    // optional .cockroach.roachpb.MixedSuccessError mixed_success = 33;
-    case kMixedSuccess: {
-      total_size += 2 +
-        ::google::protobuf::internal::WireFormatLite::MessageSize(
-          *value_.mixed_success_);
-      break;
-    }
     // optional .cockroach.roachpb.BatchTimestampBeforeGCError timestamp_before = 34;
     case kTimestampBefore: {
       total_size += 2 +
@@ -9315,10 +9020,6 @@ void ErrorDetail::MergeFrom(const ErrorDetail& from) {
     }
     case kUnsupportedRequest: {
       mutable_unsupported_request()->::cockroach::roachpb::UnsupportedRequestError::MergeFrom(from.unsupported_request());
-      break;
-    }
-    case kMixedSuccess: {
-      mutable_mixed_success()->::cockroach::roachpb::MixedSuccessError::MergeFrom(from.mixed_success());
       break;
     }
     case kTimestampBefore: {
@@ -10082,9 +9783,6 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::TxnAlreadyEn
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::IntegerOverflowError* Arena::CreateMaybeMessage< ::cockroach::roachpb::IntegerOverflowError >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::IntegerOverflowError >(arena);
-}
-template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::MixedSuccessError* Arena::CreateMaybeMessage< ::cockroach::roachpb::MixedSuccessError >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::roachpb::MixedSuccessError >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::BatchTimestampBeforeGCError* Arena::CreateMaybeMessage< ::cockroach::roachpb::BatchTimestampBeforeGCError >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::BatchTimestampBeforeGCError >(arena);
