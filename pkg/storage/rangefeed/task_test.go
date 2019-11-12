@@ -126,7 +126,7 @@ func (s *testIterator) Close() {
 	close(s.done)
 }
 
-func (s *testIterator) Seek(key engine.MVCCKey) {
+func (s *testIterator) SeekGE(key engine.MVCCKey) {
 	if s.closed {
 		panic("testIterator closed")
 	}

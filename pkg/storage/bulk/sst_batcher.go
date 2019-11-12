@@ -478,7 +478,7 @@ func createSplitSSTable(
 	var first, last roachpb.Key
 	var left, right *sstSpan
 
-	iter.Seek(engine.MVCCKey{Key: start})
+	iter.SeekGE(engine.MVCCKey{Key: start})
 	for {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, nil, err

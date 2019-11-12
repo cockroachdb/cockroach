@@ -140,14 +140,14 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				iter.Seek(key)
+				iter.SeekGE(key)
 
 				if err := batch.Clear(key); err != nil {
 					t.Fatal(err)
 				}
 
 				// Iterator should not reuse its cached result.
-				iter.Seek(key)
+				iter.SeekGE(key)
 
 				if ok, err := iter.Valid(); err != nil {
 					t.Fatal(err)
@@ -305,7 +305,7 @@ func TestEngineBatch(t *testing.T) {
 				}
 				// Try using an iterator to get the value from the batch.
 				iter := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-				iter.Seek(key)
+				iter.SeekGE(key)
 				if ok, err := iter.Valid(); !ok {
 					if currentBatch[len(currentBatch)-1].value != nil {
 						t.Errorf("%d: batch seek invalid, err=%v", i, err)
@@ -520,7 +520,7 @@ func TestEngineTimeBound(t *testing.T) {
 
 			check := func(t *testing.T, tbi Iterator, keys, ssts int) {
 				defer tbi.Close()
-				tbi.Seek(NilKey)
+				tbi.SeekGE(NilKey)
 
 				var count int
 				for ; ; tbi.Next() {
@@ -627,7 +627,7 @@ func TestEngineTimeBound(t *testing.T) {
 			// time bounded iterator instead.
 			iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			iter.Seek(NilKey)
+			iter.SeekGE(NilKey)
 
 			var count int
 			for ; ; iter.Next() {
@@ -998,7 +998,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify NewIterator still iterates over original snapshot.
 			iter := snap.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-			iter.Seek(newKey)
+			iter.SeekGE(newKey)
 			if ok, err := iter.Valid(); err != nil {
 				t.Fatal(err)
 			} else if ok {

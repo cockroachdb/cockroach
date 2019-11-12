@@ -239,7 +239,7 @@ func (r *registration) runCatchupScan() error {
 	// can't use NextKey.
 	var meta enginepb.MVCCMetadata
 
-	for r.catchupIter.Seek(startKey); ; r.catchupIter.Next() {
+	for r.catchupIter.SeekGE(startKey); ; r.catchupIter.Next() {
 		if ok, err := r.catchupIter.Valid(); err != nil {
 			return err
 		} else if !ok || !r.catchupIter.UnsafeKey().Less(endKey) {
@@ -259,7 +259,7 @@ func (r *registration) runCatchupScan() error {
 				// past the corresponding provisional key-value. To do this,
 				// scan directly to the provisional key and let the loop Next
 				// to the following key after it.
-				r.catchupIter.Seek(engine.MVCCKey{
+				r.catchupIter.SeekGE(engine.MVCCKey{
 					Key:       unsafeKey.Key,
 					Timestamp: hlc.Timestamp(meta.Timestamp),
 				})

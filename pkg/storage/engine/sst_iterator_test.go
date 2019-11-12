@@ -28,7 +28,7 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 	// Run the test multiple times to check re-Seeking.
 	for i := 0; i < 3; i++ {
 		var kvs []MVCCKeyValue
-		for iter.Seek(expected[0].Key); ; iter.Next() {
+		for iter.SeekGE(expected[0].Key); ; iter.Next() {
 			ok, err := iter.Valid()
 			if err != nil {
 				t.Fatalf("%+v", err)
@@ -54,7 +54,7 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 		lastElemKey := expected[len(expected)-1].Key
 		seekTo := MVCCKey{Key: lastElemKey.Key.Next()}
 
-		iter.Seek(seekTo)
+		iter.SeekGE(seekTo)
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatalf("%+v", err)
 		} else if ok {

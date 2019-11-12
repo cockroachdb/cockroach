@@ -149,7 +149,7 @@ func runIterate(
 		endTime := hlc.Timestamp{WallTime: int64(loadFactor * numBatches * batchTimeSpan)}
 		it := makeIterator(eng, startTime, endTime)
 		defer it.Close()
-		for it.Seek(engine.MVCCKey{}); ; it.Next() {
+		for it.SeekGE(engine.MVCCKey{}); ; it.Next() {
 			if ok, err := it.Valid(); !ok {
 				if err != nil {
 					b.Fatal(err)
