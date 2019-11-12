@@ -125,7 +125,7 @@ func setupMVCCData(
 		counts[idx]++
 		ts := hlc.Timestamp{WallTime: int64(counts[idx] * 5)}
 		if txn != nil {
-			txn.DeprecatedOrigTimestamp = ts
+			txn.ReadTimestamp = ts
 			txn.Timestamp = ts
 		}
 		if err := MVCCPut(ctx, batch, nil /* ms */, key, ts, value, txn); err != nil {
