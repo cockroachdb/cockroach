@@ -13,10 +13,9 @@ package pgdate
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestDateFromTime(t *testing.T) {
@@ -72,9 +71,10 @@ func TestDateFromTime(t *testing.T) {
 	} {
 		t.Run(tc.s, func(t *testing.T) {
 			d, err := ParseDate(time.Time{}, ParseModeYMD, tc.s)
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("got %v, expected %v", err, tc.err)
-			} else if err != nil {
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("got %v, expected %v", err, tc.err)
+				}
 				return
 			}
 			pg := d.PGEpochDays()

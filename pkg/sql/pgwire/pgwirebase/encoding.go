@@ -286,7 +286,12 @@ func DecodeOidDatum(
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as time", b)
 			}
 			return d, nil
-
+		case oid.T_timetz:
+			d, err := tree.ParseDTimeTZ(ctx, string(b))
+			if err != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timetz", b)
+			}
+			return d, nil
 		case oid.T_interval:
 			d, err := tree.ParseDInterval(string(b))
 			if err != nil {
@@ -529,6 +534,13 @@ func DecodeOidDatum(
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
+		case oid.T_timetz:
+			if len(b) < 12 {
+				return nil, pgerror.Newf(pgcode.Syntax, "timetz requires 12 bytes for binary format")
+			}
+			timeOfDayMicros := int64(binary.BigEndian.Uint64(b))
+			offsetSecs := int32(binary.BigEndian.Uint32(b))
+			return tree.NewDTimeTZFromOffset(timeofday.TimeOfDay(timeOfDayMicros), offsetSecs), nil
 		case oid.T_interval:
 			if len(b) < 16 {
 				return nil, pgerror.Newf(pgcode.Syntax, "interval requires 16 bytes for binary format")

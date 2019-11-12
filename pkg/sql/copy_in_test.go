@@ -50,6 +50,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 			b BYTES NULL,
 			d DATE NULL,
 			t TIME NULL,
+			ttz TIME NULL,
 			ts TIMESTAMP NULL,
 			n INTERVAL NULL,
 			o BOOL NULL,
@@ -68,17 +69,17 @@ func TestCopyNullInfNaN(t *testing.T) {
 	}
 
 	stmt, err := txn.Prepare(pq.CopyIn(
-		"t", "i", "f", "s", "b", "d", "t",
+		"t", "i", "f", "s", "b", "d", "t", "ttz",
 		"ts", "n", "o", "e", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	input := [][]interface{}{
-		{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.Inf(1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.Inf(-1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.NaN(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.Inf(1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.Inf(-1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.NaN(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
 	}
 
 	for _, in := range input {
@@ -146,6 +147,7 @@ func TestCopyRandom(t *testing.T) {
 			f FLOAT,
 			e DECIMAL,
 			t TIME,
+			ttz TIMETZ,
 			ts TIMESTAMP,
 			s STRING,
 			b BYTES,
@@ -163,7 +165,7 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ts", "s", "b", "u", "ip", "tz"))
+	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,6 +179,7 @@ func TestCopyRandom(t *testing.T) {
 		types.Float,
 		types.Decimal,
 		types.Time,
+		types.TimeTZ,
 		types.Timestamp,
 		types.String,
 		types.Bytes,
@@ -248,6 +251,8 @@ func TestCopyRandom(t *testing.T) {
 				var dt tree.NodeFormatter
 				if typs[i].Family() == types.TimeFamily {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
+				} else if typs[i].Family() == types.TimeTZFamily {
+					dt = tree.NewDTimeTZFromTime(d)
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)
 				}
