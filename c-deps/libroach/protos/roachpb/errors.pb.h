@@ -41,7 +41,7 @@ namespace protobuf_roachpb_2ferrors_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[34];
+  static const ::google::protobuf::internal::ParseTable schema[33];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -82,9 +82,6 @@ extern LeaseRejectedErrorDefaultTypeInternal _LeaseRejectedError_default_instanc
 class MergeInProgressError;
 class MergeInProgressErrorDefaultTypeInternal;
 extern MergeInProgressErrorDefaultTypeInternal _MergeInProgressError_default_instance_;
-class MixedSuccessError;
-class MixedSuccessErrorDefaultTypeInternal;
-extern MixedSuccessErrorDefaultTypeInternal _MixedSuccessError_default_instance_;
 class NodeUnavailableError;
 class NodeUnavailableErrorDefaultTypeInternal;
 extern NodeUnavailableErrorDefaultTypeInternal _NodeUnavailableError_default_instance_;
@@ -166,7 +163,6 @@ template<> ::cockroach::roachpb::IntegerOverflowError* Arena::CreateMaybeMessage
 template<> ::cockroach::roachpb::IntentMissingError* Arena::CreateMaybeMessage<::cockroach::roachpb::IntentMissingError>(Arena*);
 template<> ::cockroach::roachpb::LeaseRejectedError* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseRejectedError>(Arena*);
 template<> ::cockroach::roachpb::MergeInProgressError* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeInProgressError>(Arena*);
-template<> ::cockroach::roachpb::MixedSuccessError* Arena::CreateMaybeMessage<::cockroach::roachpb::MixedSuccessError>(Arena*);
 template<> ::cockroach::roachpb::NodeUnavailableError* Arena::CreateMaybeMessage<::cockroach::roachpb::NodeUnavailableError>(Arena*);
 template<> ::cockroach::roachpb::NotLeaseHolderError* Arena::CreateMaybeMessage<::cockroach::roachpb::NotLeaseHolderError>(Arena*);
 template<> ::cockroach::roachpb::OpRequiresTxnError* Arena::CreateMaybeMessage<::cockroach::roachpb::OpRequiresTxnError>(Arena*);
@@ -3409,139 +3405,6 @@ class IntegerOverflowError : public ::google::protobuf::MessageLite /* @@protoc_
 };
 // -------------------------------------------------------------------
 
-class MixedSuccessError : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.MixedSuccessError) */ {
- public:
-  MixedSuccessError();
-  virtual ~MixedSuccessError();
-
-  MixedSuccessError(const MixedSuccessError& from);
-
-  inline MixedSuccessError& operator=(const MixedSuccessError& from) {
-    CopyFrom(from);
-    return *this;
-  }
-  #if LANG_CXX11
-  MixedSuccessError(MixedSuccessError&& from) noexcept
-    : MixedSuccessError() {
-    *this = ::std::move(from);
-  }
-
-  inline MixedSuccessError& operator=(MixedSuccessError&& from) noexcept {
-    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
-      if (this != &from) InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
-  #endif
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const MixedSuccessError& default_instance();
-
-  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const MixedSuccessError* internal_default_instance() {
-    return reinterpret_cast<const MixedSuccessError*>(
-               &_MixedSuccessError_default_instance_);
-  }
-  static constexpr int kIndexInFileMessages =
-    25;
-
-  void Swap(MixedSuccessError* other);
-  friend void swap(MixedSuccessError& a, MixedSuccessError& b) {
-    a.Swap(&b);
-  }
-
-  // implements Message ----------------------------------------------
-
-  inline MixedSuccessError* New() const final {
-    return CreateMaybeMessage<MixedSuccessError>(NULL);
-  }
-
-  MixedSuccessError* New(::google::protobuf::Arena* arena) const final {
-    return CreateMaybeMessage<MixedSuccessError>(arena);
-  }
-  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
-    final;
-  void CopyFrom(const MixedSuccessError& from);
-  void MergeFrom(const MixedSuccessError& from);
-  void Clear() final;
-  bool IsInitialized() const final;
-
-  size_t ByteSizeLong() const final;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input) final;
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const final;
-  void DiscardUnknownFields();
-  int GetCachedSize() const final { return _cached_size_.Get(); }
-
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(MixedSuccessError* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return NULL;
-  }
-  inline void* MaybeArenaPtr() const {
-    return NULL;
-  }
-  public:
-
-  ::std::string GetTypeName() const final;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  bool has_wrapped_message() const;
-  void clear_wrapped_message();
-  static const int kWrappedMessageFieldNumber = 2;
-  const ::std::string& wrapped_message() const;
-  void set_wrapped_message(const ::std::string& value);
-  #if LANG_CXX11
-  void set_wrapped_message(::std::string&& value);
-  #endif
-  void set_wrapped_message(const char* value);
-  void set_wrapped_message(const char* value, size_t size);
-  ::std::string* mutable_wrapped_message();
-  ::std::string* release_wrapped_message();
-  void set_allocated_wrapped_message(::std::string* wrapped_message);
-
-  bool has_wrapped() const;
-  void clear_wrapped();
-  static const int kWrappedFieldNumber = 1;
-  private:
-  const ::cockroach::roachpb::ErrorDetail& _internal_wrapped() const;
-  public:
-  const ::cockroach::roachpb::ErrorDetail& wrapped() const;
-  ::cockroach::roachpb::ErrorDetail* release_wrapped();
-  ::cockroach::roachpb::ErrorDetail* mutable_wrapped();
-  void set_allocated_wrapped(::cockroach::roachpb::ErrorDetail* wrapped);
-
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.MixedSuccessError)
- private:
-  void set_has_wrapped();
-  void clear_has_wrapped();
-  void set_has_wrapped_message();
-  void clear_has_wrapped_message();
-
-  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable ::google::protobuf::internal::CachedSize _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr wrapped_message_;
-  ::cockroach::roachpb::ErrorDetail* wrapped_;
-  friend struct ::protobuf_roachpb_2ferrors_2eproto::TableStruct;
-};
-// -------------------------------------------------------------------
-
 class BatchTimestampBeforeGCError : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.BatchTimestampBeforeGCError) */ {
  public:
   BatchTimestampBeforeGCError();
@@ -3583,7 +3446,7 @@ class BatchTimestampBeforeGCError : public ::google::protobuf::MessageLite /* @@
                &_BatchTimestampBeforeGCError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    26;
+    25;
 
   void Swap(BatchTimestampBeforeGCError* other);
   friend void swap(BatchTimestampBeforeGCError& a, BatchTimestampBeforeGCError& b) {
@@ -3713,7 +3576,7 @@ class IntentMissingError : public ::google::protobuf::MessageLite /* @@protoc_in
                &_IntentMissingError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    27;
+    26;
 
   void Swap(IntentMissingError* other);
   friend void swap(IntentMissingError& a, IntentMissingError& b) {
@@ -3847,7 +3710,7 @@ class MergeInProgressError : public ::google::protobuf::MessageLite /* @@protoc_
                &_MergeInProgressError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    28;
+    27;
 
   void Swap(MergeInProgressError* other);
   friend void swap(MergeInProgressError& a, MergeInProgressError& b) {
@@ -3949,7 +3812,7 @@ class RangeFeedRetryError : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedRetryError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    29;
+    28;
 
   void Swap(RangeFeedRetryError* other);
   friend void swap(RangeFeedRetryError& a, RangeFeedRetryError& b) {
@@ -4083,7 +3946,7 @@ class IndeterminateCommitError : public ::google::protobuf::MessageLite /* @@pro
                &_IndeterminateCommitError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    30;
+    29;
 
   void Swap(IndeterminateCommitError* other);
   friend void swap(IndeterminateCommitError& a, IndeterminateCommitError& b) {
@@ -4217,7 +4080,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
     kTransactionRetryWithProtoRefresh = 28,
     kIntegerOverflow = 31,
     kUnsupportedRequest = 32,
-    kMixedSuccess = 33,
     kTimestampBefore = 34,
     kTxnAlreadyEncounteredError = 35,
     kIntentMissing = 36,
@@ -4233,7 +4095,7 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
                &_ErrorDetail_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    31;
+    30;
 
   void Swap(ErrorDetail* other);
   friend void swap(ErrorDetail& a, ErrorDetail& b) {
@@ -4560,18 +4422,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::UnsupportedRequestError* mutable_unsupported_request();
   void set_allocated_unsupported_request(::cockroach::roachpb::UnsupportedRequestError* unsupported_request);
 
-  // optional .cockroach.roachpb.MixedSuccessError mixed_success = 33;
-  bool has_mixed_success() const;
-  void clear_mixed_success();
-  static const int kMixedSuccessFieldNumber = 33;
-  private:
-  const ::cockroach::roachpb::MixedSuccessError& _internal_mixed_success() const;
-  public:
-  const ::cockroach::roachpb::MixedSuccessError& mixed_success() const;
-  ::cockroach::roachpb::MixedSuccessError* release_mixed_success();
-  ::cockroach::roachpb::MixedSuccessError* mutable_mixed_success();
-  void set_allocated_mixed_success(::cockroach::roachpb::MixedSuccessError* mixed_success);
-
   // optional .cockroach.roachpb.BatchTimestampBeforeGCError timestamp_before = 34;
   bool has_timestamp_before() const;
   void clear_timestamp_before();
@@ -4671,7 +4521,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
   void set_has_transaction_retry_with_proto_refresh();
   void set_has_integer_overflow();
   void set_has_unsupported_request();
-  void set_has_mixed_success();
   void set_has_timestamp_before();
   void set_has_txn_already_encountered_error();
   void set_has_intent_missing();
@@ -4710,7 +4559,6 @@ class ErrorDetail : public ::google::protobuf::MessageLite /* @@protoc_insertion
     ::cockroach::roachpb::TransactionRetryWithProtoRefreshError* transaction_retry_with_proto_refresh_;
     ::cockroach::roachpb::IntegerOverflowError* integer_overflow_;
     ::cockroach::roachpb::UnsupportedRequestError* unsupported_request_;
-    ::cockroach::roachpb::MixedSuccessError* mixed_success_;
     ::cockroach::roachpb::BatchTimestampBeforeGCError* timestamp_before_;
     ::cockroach::roachpb::TxnAlreadyEncounteredErrorError* txn_already_encountered_error_;
     ::cockroach::roachpb::IntentMissingError* intent_missing_;
@@ -4765,7 +4613,7 @@ class ErrPosition : public ::google::protobuf::MessageLite /* @@protoc_insertion
                &_ErrPosition_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    32;
+    31;
 
   void Swap(ErrPosition* other);
   friend void swap(ErrPosition& a, ErrPosition& b) {
@@ -4876,7 +4724,7 @@ class Error : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Error_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    33;
+    32;
 
   void Swap(Error* other);
   friend void swap(Error& a, Error& b) {
@@ -7206,132 +7054,6 @@ inline void IntegerOverflowError::set_increment_value(::google::protobuf::int64 
 
 // -------------------------------------------------------------------
 
-// MixedSuccessError
-
-inline bool MixedSuccessError::has_wrapped() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void MixedSuccessError::set_has_wrapped() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void MixedSuccessError::clear_has_wrapped() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void MixedSuccessError::clear_wrapped() {
-  if (wrapped_ != NULL) wrapped_->Clear();
-  clear_has_wrapped();
-}
-inline const ::cockroach::roachpb::ErrorDetail& MixedSuccessError::_internal_wrapped() const {
-  return *wrapped_;
-}
-inline const ::cockroach::roachpb::ErrorDetail& MixedSuccessError::wrapped() const {
-  const ::cockroach::roachpb::ErrorDetail* p = wrapped_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.MixedSuccessError.wrapped)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ErrorDetail*>(
-      &::cockroach::roachpb::_ErrorDetail_default_instance_);
-}
-inline ::cockroach::roachpb::ErrorDetail* MixedSuccessError::release_wrapped() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.MixedSuccessError.wrapped)
-  clear_has_wrapped();
-  ::cockroach::roachpb::ErrorDetail* temp = wrapped_;
-  wrapped_ = NULL;
-  return temp;
-}
-inline ::cockroach::roachpb::ErrorDetail* MixedSuccessError::mutable_wrapped() {
-  set_has_wrapped();
-  if (wrapped_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::ErrorDetail>(GetArenaNoVirtual());
-    wrapped_ = p;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MixedSuccessError.wrapped)
-  return wrapped_;
-}
-inline void MixedSuccessError::set_allocated_wrapped(::cockroach::roachpb::ErrorDetail* wrapped) {
-  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
-  if (message_arena == NULL) {
-    delete wrapped_;
-  }
-  if (wrapped) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
-    if (message_arena != submessage_arena) {
-      wrapped = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, wrapped, submessage_arena);
-    }
-    set_has_wrapped();
-  } else {
-    clear_has_wrapped();
-  }
-  wrapped_ = wrapped;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MixedSuccessError.wrapped)
-}
-
-inline bool MixedSuccessError::has_wrapped_message() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void MixedSuccessError::set_has_wrapped_message() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void MixedSuccessError::clear_has_wrapped_message() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void MixedSuccessError::clear_wrapped_message() {
-  wrapped_message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_wrapped_message();
-}
-inline const ::std::string& MixedSuccessError::wrapped_message() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.MixedSuccessError.wrapped_message)
-  return wrapped_message_.GetNoArena();
-}
-inline void MixedSuccessError::set_wrapped_message(const ::std::string& value) {
-  set_has_wrapped_message();
-  wrapped_message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.MixedSuccessError.wrapped_message)
-}
-#if LANG_CXX11
-inline void MixedSuccessError::set_wrapped_message(::std::string&& value) {
-  set_has_wrapped_message();
-  wrapped_message_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.MixedSuccessError.wrapped_message)
-}
-#endif
-inline void MixedSuccessError::set_wrapped_message(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  set_has_wrapped_message();
-  wrapped_message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.MixedSuccessError.wrapped_message)
-}
-inline void MixedSuccessError::set_wrapped_message(const char* value, size_t size) {
-  set_has_wrapped_message();
-  wrapped_message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.MixedSuccessError.wrapped_message)
-}
-inline ::std::string* MixedSuccessError::mutable_wrapped_message() {
-  set_has_wrapped_message();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MixedSuccessError.wrapped_message)
-  return wrapped_message_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* MixedSuccessError::release_wrapped_message() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.MixedSuccessError.wrapped_message)
-  if (!has_wrapped_message()) {
-    return NULL;
-  }
-  clear_has_wrapped_message();
-  return wrapped_message_.ReleaseNonDefaultNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void MixedSuccessError::set_allocated_wrapped_message(::std::string* wrapped_message) {
-  if (wrapped_message != NULL) {
-    set_has_wrapped_message();
-  } else {
-    clear_has_wrapped_message();
-  }
-  wrapped_message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), wrapped_message);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MixedSuccessError.wrapped_message)
-}
-
-// -------------------------------------------------------------------
-
 // BatchTimestampBeforeGCError
 
 inline bool BatchTimestampBeforeGCError::has_timestamp() const {
@@ -8668,50 +8390,6 @@ inline ::cockroach::roachpb::UnsupportedRequestError* ErrorDetail::mutable_unsup
   return value_.unsupported_request_;
 }
 
-// optional .cockroach.roachpb.MixedSuccessError mixed_success = 33;
-inline bool ErrorDetail::has_mixed_success() const {
-  return value_case() == kMixedSuccess;
-}
-inline void ErrorDetail::set_has_mixed_success() {
-  _oneof_case_[0] = kMixedSuccess;
-}
-inline void ErrorDetail::clear_mixed_success() {
-  if (has_mixed_success()) {
-    delete value_.mixed_success_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::roachpb::MixedSuccessError& ErrorDetail::_internal_mixed_success() const {
-  return *value_.mixed_success_;
-}
-inline ::cockroach::roachpb::MixedSuccessError* ErrorDetail::release_mixed_success() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ErrorDetail.mixed_success)
-  if (has_mixed_success()) {
-    clear_has_value();
-      ::cockroach::roachpb::MixedSuccessError* temp = value_.mixed_success_;
-    value_.mixed_success_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline const ::cockroach::roachpb::MixedSuccessError& ErrorDetail::mixed_success() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ErrorDetail.mixed_success)
-  return has_mixed_success()
-      ? *value_.mixed_success_
-      : *reinterpret_cast< ::cockroach::roachpb::MixedSuccessError*>(&::cockroach::roachpb::_MixedSuccessError_default_instance_);
-}
-inline ::cockroach::roachpb::MixedSuccessError* ErrorDetail::mutable_mixed_success() {
-  if (!has_mixed_success()) {
-    clear_value();
-    set_has_mixed_success();
-    value_.mixed_success_ = CreateMaybeMessage< ::cockroach::roachpb::MixedSuccessError >(
-        GetArenaNoVirtual());
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ErrorDetail.mixed_success)
-  return value_.mixed_success_;
-}
-
 // optional .cockroach.roachpb.BatchTimestampBeforeGCError timestamp_before = 34;
 inline bool ErrorDetail::has_timestamp_before() const {
   return value_case() == kTimestampBefore;
@@ -9353,8 +9031,6 @@ inline void Error::set_allocated_now(::cockroach::util::hlc::Timestamp* now) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

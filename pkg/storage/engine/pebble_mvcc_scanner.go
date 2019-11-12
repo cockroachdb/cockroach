@@ -104,10 +104,10 @@ type pebbleMVCCScanner struct {
 	meta enginepb.MVCCMetadata
 	// Bools copied over from MVCC{Scan,Get}Options. See the comment on the
 	// package level MVCCScan for what these mean.
-	inconsistent, tombstones    bool
-	ignoreSeq, checkUncertainty bool
-	keyBuf                      []byte
-	savedBuf                    []byte
+	inconsistent, tombstones bool
+	checkUncertainty         bool
+	keyBuf                   []byte
+	savedBuf                 []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that curRawKey = the full encoded MVCC key, while
 	// curKey = the user-key part of curRawKey (i.e. excluding the timestamp).
@@ -350,7 +350,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	}
 
 	if p.txnEpoch == p.meta.Txn.Epoch {
-		if p.ignoreSeq || (p.txnSequence >= p.meta.Txn.Sequence) {
+		if p.txnSequence >= p.meta.Txn.Sequence {
 			// 8. We're reading our own txn's intent at an equal or higher sequence.
 			// Note that we read at the intent timestamp, not at our read timestamp
 			// as the intent timestamp may have been pushed forward by another

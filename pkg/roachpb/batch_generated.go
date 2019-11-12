@@ -58,8 +58,6 @@ func (ru ErrorDetail) GetInner() error {
 		return t.IntegerOverflow
 	case *ErrorDetail_UnsupportedRequest:
 		return t.UnsupportedRequest
-	case *ErrorDetail_MixedSuccess:
-		return t.MixedSuccess
 	case *ErrorDetail_TimestampBefore:
 		return t.TimestampBefore
 	case *ErrorDetail_TxnAlreadyEncounteredError:
@@ -317,8 +315,6 @@ func (ru *ErrorDetail) SetInner(r error) bool {
 		union = &ErrorDetail_IntegerOverflow{t}
 	case *UnsupportedRequestError:
 		union = &ErrorDetail_UnsupportedRequest{t}
-	case *MixedSuccessError:
-		union = &ErrorDetail_MixedSuccess{t}
 	case *BatchTimestampBeforeGCError:
 		union = &ErrorDetail_TimestampBefore{t}
 	case *TxnAlreadyEncounteredErrorError:

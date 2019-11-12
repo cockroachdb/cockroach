@@ -398,7 +398,6 @@ func (p *pebbleIterator) MVCCGet(
 		maxKeys:      1,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
-		ignoreSeq:    opts.IgnoreSequence,
 	}
 
 	mvccScanner.init(opts.Txn)
@@ -467,7 +466,6 @@ func (p *pebbleIterator) MVCCScan(
 		maxKeys:      max,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
-		ignoreSeq:    opts.IgnoreSequence,
 	}
 
 	mvccScanner.init(opts.Txn)

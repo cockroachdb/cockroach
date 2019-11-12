@@ -2500,9 +2500,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
 			},
-			// Client-side retry required as this will be a mixed success due
-			// to parallel commits.
-			clientRetry: true,
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range batch with forwarded timestamp and cput and delete range",
@@ -2532,7 +2530,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // put to c will return WriteTooOldError
 			},
-			clientRetry: true,
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range batch with deferred write too old",
@@ -2562,7 +2560,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			clientRetry: true, // cput with write too old requires restart
+			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
+			expFailure:    "unexpected value", // the failure we get is a condition failed error
 		},
 		{
 			name: "multi-range batch with write too old and successful cput",
@@ -2578,7 +2577,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			clientRetry: true, // successful cput will still retry because of mixed success
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range batch with deferred write too old and failed cput",
@@ -2595,7 +2594,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			clientRetry: true, // cput with write too old requires restart
+			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
+			expFailure:    "unexpected value", // the failure we get is a condition failed error
 		},
 		{
 			name: "multi-range batch with deferred write too old and successful cput",
@@ -2612,7 +2612,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			clientRetry: true, // successful cput will still retry because of mixed success
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "cput within uncertainty interval",
@@ -2693,10 +2694,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("c", "cput", strToValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			// Client-side retry required as this will be a mixed success due
-			// to parallel commits.
-			clientRetry: true,
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range batch with uncertainty interval error and get conflict",
@@ -2731,8 +2730,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("c", "cput", strToValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			clientRetry: true, // client-side retry required as this will be a mixed success
+			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range scan with uncertainty interval error",
@@ -2740,16 +2740,18 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.Scan(ctx, "a", "d", 0)
 				return err
 			},
-			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			txnCoordRetry: true, // can restart at higher timestamp despite mixed success because read-only
+			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range delete range with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.DelRange(ctx, "a", "d")
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			clientRetry: true, // can't restart because of mixed success and write batch
+			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
 		},
 		{
 			name: "missing pipelined write caught on chain",
