@@ -100,9 +100,9 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     }
   }
 
-  renderTimePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="link" size="small">Now</Button>;
+  renderTimePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="default" size="small">Now</Button>;
 
-  renderDatePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="link" size="small">Today</Button>;
+  renderDatePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="default" size="small">Today</Button>;
 
   onChangeOption = (option: RangeOption) => () => {
     const { onChange } = this.props;
@@ -116,7 +116,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
       <Button
         className={`_time-button ${selected.title === option.value && "active" || ""}`}
         onClick={this.onChangeOption(option)}
-        type="link"
+        type="default"
         ghost
       >
         {option.value}
@@ -220,7 +220,6 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
           />
           <TimePicker
             value={start}
-            allowClear={false}
             format={`${timePickerFormat} ${moment(start).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
             use12Hours
             addon={this.renderTimePickerAddon(DateTypes.DATE_FROM)}
@@ -244,7 +243,6 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
           />
           <TimePicker
             value={end}
-            allowClear={false}
             format={`${timePickerFormat} ${moment(end).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
             use12Hours
             addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}

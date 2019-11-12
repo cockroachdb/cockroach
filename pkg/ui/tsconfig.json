@@ -13,6 +13,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "outDir": "./dist/",
+    "skipLibCheck": true,
     "sourceMap": true,
     "strictNullChecks": false,
     "target": "es6",

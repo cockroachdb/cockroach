@@ -19,13 +19,17 @@ import { RouterState } from "react-router";
 import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { nodesSummarySelector } from "src/redux/nodes";
+import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
 import { getFilters, localityToString, NodeFilterList } from "src/views/reports/components/nodeFilterList";
 
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+interface NodesOwnProps {
+  nodesSummary: NodesSummary;
+  refreshNodes: typeof refreshNodes;
+  refreshLiveness: typeof refreshLiveness;
+}
 
 interface NodesTableRowParams {
   title: string;
@@ -34,7 +38,7 @@ interface NodesTableRowParams {
   cellTitle?: (ns: protos.cockroach.server.status.statuspb.INodeStatus) => string;
 }
 
-type NodesProps = ReduxProps & RouterState;
+type NodesProps = NodesOwnProps & RouterState;
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 const detailTimeFormat = "Y/MM/DD HH:mm:ss";
@@ -311,7 +315,7 @@ class Nodes extends React.Component<NodesProps, {}> {
     const filters = getFilters(this.props.location);
 
     let nodeIDsContext = _.chain(nodesSummary.nodeIDs)
-      .map(nodeID => Number.parseInt(nodeID, 10));
+      .map((nodeID: string) => Number.parseInt(nodeID, 10));
     if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
       nodeIDsContext = nodeIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
     }

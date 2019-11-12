@@ -18,10 +18,14 @@ import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import Loading from "src/views/shared/components/loading";
 import "./index.styl";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+interface SettingsOwnProps {
+  settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
+  refreshSettings: typeof refreshSettings;
+}
 
-type SettingsProps = ReduxProps;
+type SettingsProps = SettingsOwnProps;
 
 /**
  * Renders the Cluster Settings Report page.

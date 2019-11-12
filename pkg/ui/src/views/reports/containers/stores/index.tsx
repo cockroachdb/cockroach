@@ -23,9 +23,7 @@ import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 import Loading from "src/views/shared/components/loading";
 import { Dispatch, bindActionCreators } from "redux";
 
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
-
-interface StoresOwnProps extends ReduxProps {
+interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.IStoreDetails[];
   loading: boolean;
   lastError: Error;

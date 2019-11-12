@@ -26,6 +26,23 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 const RANGES_PER_PAGE = 100;
 
+/**
+ * RangesMainData are the data properties which should be passed to the RangesMain
+ * container.
+ */
+interface RangesMainData {
+  state: CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse>;
+}
+
+/**
+ * RangesMainActions are the action dispatchers which should be passed to the
+ * RangesMain container.
+ */
+interface RangesMainActions {
+  // Call if the ranges statuses are stale and need to be refreshed.
+  refreshRaft: typeof refreshRaft;
+}
+
 interface RangesMainState {
   showState?: boolean;
   showReplicas?: boolean;
@@ -39,7 +56,7 @@ interface RangesMainState {
  * RangesMainProps is the type of the props object that must be passed to
  * RangesMain component.
  */
-type RangesMainProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+type RangesMainProps = RangesMainData & RangesMainActions;
 
 /**
  * Renders the main content of the raft ranges page, which is primarily a data

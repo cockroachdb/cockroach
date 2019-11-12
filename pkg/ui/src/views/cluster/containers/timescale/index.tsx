@@ -62,7 +62,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
 
   arrowClick = (direction: ArrowDirection) => {
     const { currentWindow, currentScale } = this.props;
-    const windowSize = moment.duration(moment(currentWindow.end).diff(currentWindow.start));
+    const windowSize: any = moment.duration(moment(currentWindow.end).diff(currentWindow.start));
     const seconds = windowSize.asSeconds();
     let selected = {};
     let key = currentScale.key;
@@ -86,8 +86,8 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
     if (!windowEnd || windowEnd > moment().subtract(currentScale.windowValid)) {
-      if (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } })) {
-        selected = (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } }));
+      if (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } } as any)) {
+        selected = (_.find(timewindow.availableTimeScales, { windowSize: { _data: windowSize._data } } as any));
       } else {
         key = "Custom";
       }

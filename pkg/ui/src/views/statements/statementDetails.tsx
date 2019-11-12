@@ -40,6 +40,18 @@ interface Fraction {
   denominator: number;
 }
 
+interface SingleStatementStatistics {
+  statement: string;
+  app: string[];
+  distSQL: Fraction;
+  opt: Fraction;
+  implicit_txn: Fraction;
+  failed: Fraction;
+  node_id: number[];
+  stats: StatementStatistics;
+  byNode: AggregateStatistics[];
+}
+
 function AppLink(props: { app: string }) {
   if (!props.app) {
     return <span className="app-name app-name__unset">(unset)</span>;
@@ -52,9 +64,14 @@ function AppLink(props: { app: string }) {
   );
 }
 
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+interface StatementDetailsOwnProps {
+  statement: SingleStatementStatistics;
+  statementsError: Error | null;
+  nodeNames: { [nodeId: string]: string };
+  refreshStatements: typeof refreshStatements;
+}
 
-type StatementDetailsProps = ReduxProps & RouterState;
+type StatementDetailsProps = StatementDetailsOwnProps & RouterState;
 
 interface StatementDetailsState {
   sortSetting: SortSetting;

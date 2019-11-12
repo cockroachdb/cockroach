@@ -26,7 +26,12 @@ import { FixLong } from "src/util/fixLong";
 import { getFilters, localityToString, NodeFilterList, NodeFilterListProps } from "src/views/reports/components/nodeFilterList";
 import Loading from "src/views/shared/components/loading";
 
-type ReduxProps = ReturnType<typeof mapStateToProps> & ReturnType<typeof mapDispatchToProps>;
+interface NetworkOwnProps {
+  nodesSummary: NodesSummary;
+  nodeSummaryErrors: Error[];
+  refreshNodes: typeof refreshNodes;
+  refreshLiveness: typeof refreshLiveness;
+}
 
 interface Identity {
   nodeID: number;
@@ -40,7 +45,7 @@ interface NoConnection {
   to: Identity;
 }
 
-type NetworkProps = ReduxProps & RouterState;
+type NetworkProps = NetworkOwnProps & RouterState;
 
 // staleTable is a table of all stale nodes.
 function staleTable(staleIdentities: Identity[]) {
