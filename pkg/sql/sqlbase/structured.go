@@ -1784,6 +1784,8 @@ func (desc *TableDescriptor) ValidateTable() error {
 					"mutation in state %s, direction %s, constraint %v",
 					errors.Safe(m.State), errors.Safe(m.Direction), desc.Constraint.Name)
 			}
+		case *DescriptorMutation_PrimaryKeySwap:
+			// TODO (rohany): I'm not sure what we want to be doing here?
 		default:
 			return errors.AssertionFailedf(
 				"mutation in state %s, direction %s, and no column/index descriptor",
@@ -2916,12 +2918,94 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 
 	case DescriptorMutation_DROP:
 		switch t := m.Descriptor_.(type) {
-		case *DescriptorMutation_Column:
-			desc.RemoveColumnFromFamily(t.Column.ID)
-		}
 		// Nothing else to be done. The column/index was already removed from the
 		// set of column/index descriptors at mutation creation time.
 		// Constraints to be dropped are dropped before column/index backfills.
+		case *DescriptorMutation_Column:
+			desc.RemoveColumnFromFamily(t.Column.ID)
+		}
+
+	case DescriptorMutation_NONE:
+		switch t := m.Descriptor_.(type) {
+		case *DescriptorMutation_PrimaryKeySwap:
+			args := t.PrimaryKeySwap
+			storedColumnIDs := make(ColumnIDs, 0, len(desc.Columns)-len(desc.PrimaryIndex.ColumnIDs))
+			storedColumnNames := make([]string, 0, len(storedColumnIDs))
+			for i := range desc.Columns {
+				col := &desc.Columns[i]
+				storedColumnIDs = append(storedColumnIDs, col.ID)
+				storedColumnNames = append(storedColumnNames, col.Name)
+			}
+			desc.PrimaryIndex.StoreColumnIDs = storedColumnIDs
+			desc.PrimaryIndex.StoreColumnNames = storedColumnNames
+			desc.PrimaryIndex.ExtraColumnIDs = nil
+			// TODO (rohany): need to update all covering indexes when we add a column to the table.
+			// TODO (rohany): I think we want to drop this index instead of marking it as covering. This is because
+			//  I don't know if we have infrastructure / if it is sound to be updating secondary index storing columns
+			//  when we add a column -- I don't think there is a process of also going and backfilling the secondary
+			//  index entries and staging the addition of that column onto the storing slice of the descriptor.
+			desc.PrimaryIndex.Covering = true
+			desc.PrimaryIndex.Name = "old_primary_key"
+
+			// TODO (rohany): this change/write needs to only get triggered once some
+			//  of the secondary indexes get fully rewritten.
+			// TODO (rohany): handle when this index is dropped -- it shouldn't be though.
+			newIndex, err := desc.FindIndexByID(args.NewPrimaryIndexId)
+			// Actually switch the indexes.
+			if err != nil {
+				return err
+			}
+			newIndex.Name = "primary"
+			primaryIndexCopy := protoutil.Clone(&desc.PrimaryIndex).(*IndexDescriptor)
+			desc.PrimaryIndex = *newIndex
+			for i := range desc.Indexes {
+				if desc.Indexes[i].ID == newIndex.ID {
+					desc.Indexes[i] = *primaryIndexCopy
+					break
+				}
+			}
+			getIndexIdxByID := func(id IndexID) (int, error) {
+				for i, idx := range desc.Indexes {
+					if idx.ID == id {
+						return i, nil
+					}
+				}
+				return 0, errors.New("Index was not in list of indexes")
+			}
+			// TODO (rohany): can make this more efficient later.
+			// TODO (rohany): this definitely has some interactions with foreign keys and other stuff that needs
+			//  to be dealt with later.
+			// Delete the other indexes.
+			for j := range args.OldIndexes {
+				oldID := args.OldIndexes[j]
+				newID := args.NewIndexes[j]
+				// TODO (rohany): should the new indexes have been inserted into the indexes list by now?
+				//  -- I think they should have.
+				// TODO (rohany): should we make it more explicit that the new indexes are getting moved into
+				//  the indexes slice here as a group because they are part of the primary key swap mutation?
+				//  Right now this is happening just because the index additions and the primary key swap mutation
+				//  all have the same mutation ID.
+				newIndex, err := desc.FindIndexByID(newID)
+				if err != nil {
+					return err
+				}
+				oldIndexIndex, err := getIndexIdxByID(oldID)
+				if err != nil {
+					return err
+				}
+				oldIndex := &desc.Indexes[oldIndexIndex]
+				newIndex.Name = oldIndex.Name
+				// Splice out old index from the indexes list.
+				desc.Indexes = append(desc.Indexes[:oldIndexIndex], desc.Indexes[oldIndexIndex+1:]...)
+				// Add a drop mutation for the old index.
+				// TODO (rohany): we have to see if the asynchronous schema changing picks up on these changes.
+				// TODO (rohany): it seems like other code wants there to be a job tied to the mutation ID
+				//  for this group of mutations added.
+				if err := desc.AddIndexMutation(oldIndex, DescriptorMutation_DROP); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -3052,6 +3136,12 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: idx}, Direction: direction}
 	desc.addMutation(m)
 	return nil
+}
+
+// TODO (rohany): figure out how to do a rollback on this -- I'm not sure how???
+func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *PrimaryKeySwap) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap}, Direction: DescriptorMutation_NONE}
+	desc.addMutation(m)
 }
 
 func (desc *MutableTableDescriptor) addMutation(m DescriptorMutation) {

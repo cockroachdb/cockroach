@@ -302,7 +302,150 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAlterPrimaryKey:
-			return unimplemented.NewWithIssue(19141, "primary key changes are unsupported")
+
+			for _, elem := range t.Columns {
+				col, dropped, err := n.tableDesc.FindColumnByName(elem.Column)
+				if err != nil {
+					return err
+				}
+				if dropped {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"column %q is being dropped", string(col.Name))
+				}
+				if col.Nullable {
+					return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", string(col.Name))
+				}
+			}
+
+			// Make a new index that is suitable to be a priamry index.
+			newPrimaryIndexDesc := &sqlbase.IndexDescriptor{
+				Name:              "newprimarykey",
+				Unique:            true,
+				CreatedExplicitly: true,
+				Covering:          true,
+				Type:              sqlbase.IndexDescriptor_FORWARD,
+			}
+			if err := newPrimaryIndexDesc.FillColumns(t.Columns); err != nil {
+				return err
+			}
+			if err := n.tableDesc.AddIndexMutation(newPrimaryIndexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+				return err
+			}
+			if err := n.tableDesc.AllocateIDs(); err != nil {
+				return err
+			}
+			// TODO (rohany): we could probably just call createOrUpdateSchemaChangeJob and writeSchemaChange
+			//  once at the end instead of calling it repeatedly here.
+			mutationID, err := params.p.createOrUpdateSchemaChangeJob(
+				params.ctx, n.tableDesc,
+				tree.AsStringWithFQNames(n.n, params.Ann()),
+			)
+			if err != nil {
+				return err
+			}
+			if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
+				return err
+			}
+			// TODO (rohany): add an event in the event log about this.
+
+			// TODO (rohany): figure out whats going on with interleaved tables later.
+			if err := n.tableDesc.ForeachNonDropIndex(func(i *sqlbase.IndexDescriptor) error {
+				if len(i.InterleavedBy) != 0 || len(i.Interleave.Ancestors) != 0 {
+					return errors.New("table being altered cannot have interleaved children or be interleaved")
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+
+			// We have to rewrite all indexes that either:
+			// * depend on uniqueness from the old primary key (inverted, non-unique, or unique with nulls).
+			// * don't store or index all columns in the new primary key.
+			shouldRewriteIndex := func(idx *sqlbase.IndexDescriptor) bool {
+				result := false
+				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
+					if !idx.ContainsColumnID(colID) {
+						result = true
+						break
+					}
+					col, err := n.tableDesc.FindColumnByID(colID)
+					if err != nil {
+						// TODO (rohany): I don't know what to do with this error right now
+						panic(err)
+					}
+					if idx.Unique && col.Nullable {
+						result = true
+						break
+					}
+				}
+				return result || !idx.Unique || idx.Type == sqlbase.IndexDescriptor_INVERTED
+			}
+			var indexesToRewrite []*sqlbase.IndexDescriptor
+			for i := range n.tableDesc.Indexes {
+				idx := &n.tableDesc.Indexes[i]
+				if idx.ID != newPrimaryIndexDesc.ID && shouldRewriteIndex(idx) {
+					indexesToRewrite = append(indexesToRewrite, idx)
+				}
+			}
+
+			// Queue up a mutation for each index that needs to be rewritten.
+			// This new index will have an altered ExtraColumnIDs to allow it to be rewritten
+			// using the unique-fying columns from the new table.
+			var oldIndexIDs, newIndexIDs []sqlbase.IndexID
+			for _, idx := range indexesToRewrite {
+				// TODO (rohany): look at the comment in dropIndexNode.startExec -- something about needing
+				//  to re-resolve the table descriptor from between calls??
+				newIndex := protoutil.Clone(idx).(*sqlbase.IndexDescriptor)
+				// Reset the ID of newIndex.
+				newIndex.ID = 0
+				// TODO (rohany): change this name to include a uuid or something?
+				newIndex.Name = newIndex.Name + "_rewrite_for_primary_key_change"
+				mutationIdx := len(n.tableDesc.Mutations)
+				if err := n.tableDesc.AddIndexMutation(newIndex, sqlbase.DescriptorMutation_ADD); err != nil {
+					return err
+				}
+				if err := n.tableDesc.AllocateIDs(); err != nil {
+					return err
+				}
+				// AllocateIDs might change some information about our index, so fetch it again.
+				// TODO (rohany): I'm doing this because some other code (create_index.go) says this could happen.
+				//  I don't understand what could go wrong though...
+				newIndex = n.tableDesc.Mutations[mutationIdx].GetIndex()
+				// Use the columns in the new primary index to construct this indexes extra column ids list.
+				newIndex.ExtraColumnIDs = nil
+				var extraColumnIDs []sqlbase.ColumnID
+				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
+					if !newIndex.ContainsColumnID(colID) {
+						extraColumnIDs = append(extraColumnIDs, colID)
+					}
+				}
+				newIndex.ExtraColumnIDs = extraColumnIDs
+				oldIndexIDs = append(oldIndexIDs, idx.ID)
+				newIndexIDs = append(newIndexIDs, newIndex.ID)
+
+				mutationID, err = params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc, tree.AsStringWithFQNames(n.n, params.Ann()))
+				if err != nil {
+					return err
+				}
+				if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
+					return err
+				}
+			}
+
+			swapArgs := &sqlbase.PrimaryKeySwap{
+				NewPrimaryIndexId: newPrimaryIndexDesc.ID,
+				NewIndexes:        newIndexIDs,
+				OldIndexes:        oldIndexIDs,
+			}
+			n.tableDesc.AddPrimaryKeySwapMutation(swapArgs)
+			mutationID, err = params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc, tree.AsStringWithFQNames(n.n, params.Ann()))
+			if err != nil {
+				return err
+			}
+			if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
+				return err
+			}
+			// Deletions of the old indexes are being enqueued in the phase where the primary key swap is "acknowledged".
 
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {

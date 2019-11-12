@@ -752,6 +752,54 @@ func EncodeSecondaryIndex(
 ) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
 
+	// Use the primary key encoding for covering indexes.
+	if secondaryIndex.Covering {
+		// not worrying about has nulls or extra columns because this is supposed to be a primary key replacement.
+		secondaryIndexKey, _, err := EncodeIndexKey(tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+		if err != nil {
+			return nil, err
+		}
+		// encode all the families for each of the keys.
+		// TODO (I will actually need the secondary index column families PR to go live here :))
+		// TODO (rohany): this needs to be updated to handle multiple column families as well.
+		secondaryIndexKey = keys.MakeFamilyKey(secondaryIndexKey, 0)
+		// TODO (rohany): this logic is shared across table descriptor calls. Check #6233 and use that once its unified.
+		indexedCols := map[ColumnID]struct{}{}
+		for _, colID := range secondaryIndex.ColumnIDs {
+			indexedCols[colID] = struct{}{}
+		}
+		// Make the value.
+		var colIDs []int
+		for i := range tableDesc.Columns {
+			// store columns that aren't indexed.
+			if _, ok := indexedCols[tableDesc.Columns[i].ID]; !ok {
+				colIDs = append(colIDs, int(tableDesc.Columns[i].ID))
+			}
+		}
+		sort.Ints(colIDs)
+		var entryValue []byte
+		var lastColID ColumnID
+		for _, id := range colIDs {
+			colID := ColumnID(id)
+			val := findColumnValue(colID, colMap, values)
+			if val == tree.DNull {
+				continue
+			}
+			if lastColID > colID {
+				panic(fmt.Errorf("cannot write column id %d after %d", colID, lastColID))
+			}
+			colIDDiff := colID - lastColID
+			lastColID = colID
+			entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
+			if err != nil {
+				return []IndexEntry{}, err
+			}
+		}
+		entry := IndexEntry{Key: secondaryIndexKey}
+		entry.Value.SetTuple(entryValue)
+		return []IndexEntry{entry}, nil
+	}
+
 	var containsNull = false
 	var secondaryKeys [][]byte
 	var err error
