@@ -1046,6 +1046,7 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	buildVersionMajorMinor := fmt.Sprintf("%d.%d", buildVersion.Major(), buildVersion.Minor())
 
 	verMap := map[string]string{
+		"20.1": "19.2.0",
 		"19.2": "19.1.5",
 		"19.1": "2.1.8",
 		"2.2":  "2.1.8",
