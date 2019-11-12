@@ -416,7 +416,7 @@ func IsEndTransactionTriggeringRetryError(
 func CanForwardCommitTimestampWithoutRefresh(
 	txn *roachpb.Transaction, args *roachpb.EndTransactionRequest,
 ) bool {
-	return !txn.OrigTimestampWasObserved && args.NoRefreshSpans
+	return !txn.CommitTimestampFixed && args.NoRefreshSpans
 }
 
 const intentResolutionBatchSize = 500
