@@ -1309,6 +1309,38 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			if err := scDesc.MakeMutationComplete(mutation); err != nil {
 				return err
 			}
+			if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+				if fn := sc.testingKnobs.RunBeforePrimaryKeySwap; fn != nil {
+					fn()
+				}
+				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
+				// a job for the index deletion mutations that the primary key swap mutation added, if any.
+				mutationID := scDesc.ClusterVersion.NextMutationID
+				span := scDesc.PrimaryIndexSpan()
+				var spanList []jobspb.ResumeSpanList
+				for j := len(scDesc.ClusterVersion.Mutations); j < len(scDesc.Mutations); j++ {
+					spanList = append(spanList,
+						jobspb.ResumeSpanList{
+							ResumeSpans: roachpb.Spans{span},
+						},
+					)
+				}
+				jobRecord := jobs.Record{
+					Description:   fmt.Sprintf("Cleanup job for '%s'", sc.job.Payload().Description),
+					Username:      sc.job.Payload().Username,
+					DescriptorIDs: sqlbase.IDs{scDesc.GetID()},
+					Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
+					Progress:      jobspb.SchemaChangeProgress{},
+				}
+				job := sc.jobRegistry.NewJob(jobRecord)
+				if err := job.Created(ctx); err != nil {
+					return err
+				}
+				scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+					MutationID: mutationID,
+					JobID:      *job.ID(),
+				})
+			}
 			i++
 		}
 		if i == 0 {
@@ -1528,6 +1560,22 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				}
 			}
 			scDesc.Mutations[i].Rollback = true
+		}
+
+		// In the case that there are any primary key change mutations with mutationID
+		// equal to sc.mutationID, we need to remove those mutations from the mutations
+		// list, since they don't have any cleanup to perform.
+		var primaryKeySwapMutations []int
+		for i, mutation := range scDesc.Mutations {
+			if mutation.MutationID != sc.mutationID {
+				break
+			}
+			if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+				primaryKeySwapMutations = append(primaryKeySwapMutations, i)
+			}
+		}
+		for _, del := range primaryKeySwapMutations {
+			scDesc.Mutations = append(scDesc.Mutations[:del], scDesc.Mutations[del+1:]...)
 		}
 
 		// Delete all mutations that reference any of the reversed columns
@@ -1855,6 +1903,9 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.
 	RunBeforeIndexBackfill func()
+
+	// RunBeforePrimaryKeySwap is called just before the primary key swap is committed.
+	RunBeforePrimaryKeySwap func()
 
 	// RunBeforeIndexValidation is called just before starting the index validation,
 	// after setting the job status to validating.

@@ -385,6 +385,9 @@ message IndexDescriptor {
   // CreatedExplicitly specifies whether this index was created explicitly
   // (i.e. via 'CREATE INDEX' statement).
   optional bool created_explicitly = 17 [(gogoproto.nullable) = false];
+
+  // Used for secondary indexes only.
+  optional bool covering = 19 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
@@ -420,6 +423,16 @@ message ConstraintToUpdate {
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
 }
 
+message PrimaryKeySwap {
+  option (gogoproto.equal) = true;
+  // new_primary_index_id is the ID of the new primary index for the table.
+  optional uint32 new_primary_index_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // old_indexes and new_indexes are lists of IndexID's where the i'th index in old_indexes will be
+  // swapped out with the i'th index in new_indexes.
+  repeated uint32 old_indexes = 2 [(gogoproto.casttype) = "IndexID"];
+  repeated uint32 new_indexes = 3 [(gogoproto.casttype) = "IndexID"];
+}
+
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -434,6 +447,7 @@ message DescriptorMutation {
     ColumnDescriptor column = 1;
     IndexDescriptor index = 2;
     ConstraintToUpdate constraint = 8;
+    PrimaryKeySwap primaryKeySwap = 9;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
