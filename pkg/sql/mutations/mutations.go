@@ -55,6 +55,14 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 	// Find columns in the tables.
 	cols := map[tree.TableName][]*tree.ColumnTableDef{}
 	byName := map[tree.TableName]*tree.CreateTable{}
+
+	// Keep track of referencing columns since we have a limitation that a
+	// column can only be used by one FK.
+	usedCols := map[tree.TableName]map[tree.Name]bool{}
+
+	// Keep track of table dependencies to prevent circular dependencies.
+	dependsOn := map[tree.TableName]map[tree.TableName]bool{}
+
 	var tables []*tree.CreateTable
 	for _, stmt := range stmts {
 		table, ok := stmt.(*tree.CreateTable)
@@ -63,6 +71,8 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 		}
 		tables = append(tables, table)
 		byName[table.Table] = table
+		usedCols[table.Table] = map[tree.Name]bool{}
+		dependsOn[table.Table] = map[tree.TableName]bool{}
 		for _, def := range table.Defs {
 			switch def := def.(type) {
 			case *tree.ColumnTableDef:
@@ -85,17 +95,10 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 	// circular dependencies. Instead, add new ALTER TABLE commands to the
 	// end of a list of statements.
 
-	// Keep track of referencing columns since we have a limitation that a
-	// column can only be used by one FK.
-	usedCols := map[tree.TableName]map[tree.Name]bool{}
-
 	// Create some FKs.
 	for rng.Intn(2) == 0 {
 		// Choose a random table.
 		table := tables[rng.Intn(len(tables))]
-		if _, ok := usedCols[table.Table]; !ok {
-			usedCols[table.Table] = map[tree.Name]bool{}
-		}
 		// Choose a random column subset.
 		var fkCols []*tree.ColumnTableDef
 		for _, c := range cols[table.Table] {
@@ -122,12 +125,31 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 		// Check if a table has the needed column types.
 	LoopTable:
 		for refTable, refCols := range cols {
-			// Prevent self references.
-			// TODO(mjibson): Circular references are not
-			// prevented, but it would be nice to detect and
-			// prevent them.
+			// Prevent circular and self references because
+			// generating valid INSERTs could become impossible or
+			// difficult algorithmically.
 			if refTable == table.Table || len(refCols) < len(fkCols) {
 				continue
+			}
+
+			{
+				// To prevent circular references, find all transitive
+				// dependencies of refTable and make sure none of them
+				// are table.
+				stack := []tree.TableName{refTable}
+				for i := 0; i < len(stack); i++ {
+					curTable := stack[i]
+					if curTable == table.Table {
+						// table was trying to add a dependency
+						// to refTable, but refTable already
+						// depends on table (directly or
+						// indirectly).
+						continue LoopTable
+					}
+					for t := range dependsOn[curTable] {
+						stack = append(stack, t)
+					}
+				}
 			}
 
 			// We found a table with enough columns. Check if it
@@ -168,6 +190,7 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 			for _, c := range fkCols {
 				usedCols[table.Table][c.Name] = true
 			}
+			dependsOn[table.Table][ref.Table] = true
 			ref.Defs = append(ref.Defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: tree.IndexTableDef{
 					Columns: refColumns,
