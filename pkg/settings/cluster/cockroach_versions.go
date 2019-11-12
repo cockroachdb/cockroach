@@ -51,6 +51,7 @@ const (
 	VersionSecondaryIndexColumnFamilies
 	VersionNamespaceTableWithSchemas
 	VersionProtectedTimestamps
+	VersionPrimaryKeyChanges
 
 	// Add new versions here (step one of two).
 
@@ -340,7 +341,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 5},
 	},
 	{
-
 		// VersionProtectedTimestamps introduces the system tables for the protected
 		// timestamps subsystem.
 		//
@@ -349,6 +349,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// schema.
 		Key:     VersionProtectedTimestamps,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
+	},
+	{
+		// VersionPrimaryKeyChanges is https://github.com/cockroachdb/cockroach/pull/42462
+		//
+		// It allows online primary key changes of tables.
+		Key:     VersionPrimaryKeyChanges,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 7},
 	},
 
 	// Add new versions here (step two of two).
