@@ -11,12 +11,19 @@
 package log
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"sync/atomic"
+)
+
+const (
+	// FileExtensionGZIP used for file name with gz suffix
+	FileExtensionGZIP = ".gz"
 )
 
 func init() {
@@ -88,8 +95,44 @@ func (l *loggerT) gcOldFiles() {
 			continue
 		}
 		path := filepath.Join(dir, f.Name)
-		if err := os.Remove(path); err != nil {
+		if err := l.archiveFile(path); err != nil {
 			fmt.Fprintln(OrigStderr, err)
+		} else {
+			if err := os.Remove(path); err != nil {
+				fmt.Fprintln(OrigStderr, err)
+			}
 		}
 	}
+}
+
+// archiveFile archive log file using gzip when log file in gc list
+func (l *loggerT) archiveFile(path string) error {
+
+	// create gzip file used by gzip writer
+	tf, err := os.Create(path + FileExtensionGZIP)
+	if err != nil {
+		return err
+	}
+	defer tf.Close()
+
+	// gzip writer with default compression
+	gz, err := gzip.NewWriterLevel(tf, gzip.DefaultCompression)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+
+	// open file and write data to Writer
+	fs, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer fs.Close()
+
+	// compress log file to gzip file
+	if _, err := io.Copy(gz, fs); err != nil {
+		return err
+	}
+
+	return nil
 }
