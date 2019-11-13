@@ -3727,3 +3727,144 @@ project
                      └── eq [type=bool]
                           ├── variable: k [type=int]
                           └── variable: a [type=int]
+
+# Tests with aliases (see #28059).
+build
+SELECT x + 1 AS z FROM abxy GROUP BY z
+----
+group-by
+ ├── columns: z:5(int)
+ ├── grouping columns: z:5(int)
+ └── project
+      ├── columns: z:5(int)
+      ├── scan abxy
+      │    └── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      └── projections
+           └── plus [type=int]
+                ├── variable: x [type=int]
+                └── const: 1 [type=int]
+
+# The FROM column has precedence, we should be grouping by abxy.x, not by x%10.
+build
+SELECT (x % 10) AS x FROM abxy GROUP BY x
+----
+project
+ ├── columns: x:5(int)
+ ├── group-by
+ │    ├── columns: abxy.x:3(int)
+ │    ├── grouping columns: abxy.x:3(int)
+ │    └── project
+ │         ├── columns: abxy.x:3(int)
+ │         └── scan abxy
+ │              └── columns: a:1(int!null) b:2(int!null) abxy.x:3(int) y:4(int)
+ └── projections
+      └── mod [type=int]
+           ├── variable: abxy.x [type=int]
+           └── const: 10 [type=int]
+
+# But aliases have precedence over columns from higher scopes. Here we are
+# grouping by v, not by the outer x.
+build
+SELECT x, (SELECT v AS x FROM kv GROUP BY x) FROM abxy
+----
+project
+ ├── columns: x:3(int) x:9(int)
+ ├── scan abxy
+ │    └── columns: a:1(int!null) b:2(int!null) abxy.x:3(int) y:4(int)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: v:6(int)
+                └── group-by
+                     ├── columns: v:6(int)
+                     ├── grouping columns: v:6(int)
+                     └── project
+                          ├── columns: v:6(int)
+                          └── scan kv
+                               └── columns: k:5(int!null) v:6(int) w:7(int) s:8(string)
+
+build
+SELECT sum(x) AS u FROM abxy GROUP BY u
+----
+error (42803): sum(): aggregate functions are not allowed in GROUP BY
+
+# Implicit aliases should work too.
+build
+SELECT x + 1 FROM abxy GROUP BY "?column?"
+----
+group-by
+ ├── columns: "?column?":5(int)
+ ├── grouping columns: "?column?":5(int)
+ └── project
+      ├── columns: "?column?":5(int)
+      ├── scan abxy
+      │    └── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      └── projections
+           └── plus [type=int]
+                ├── variable: x [type=int]
+                └── const: 1 [type=int]
+
+build
+SELECT sum(x) FROM abxy GROUP BY sum
+----
+error (42803): sum(): aggregate functions are not allowed in GROUP BY
+
+# Ambiguous aliases should error out.
+build
+SELECT (x + 1) AS u, (y + 1) AS u FROM abxy GROUP BY u
+----
+error (42702): GROUP BY "u" is ambiguous
+
+# In this case we would have had an outer column if it wasn't for the aliases;
+# this should error out just the same.
+build
+SELECT x, (SELECT v AS x, w AS x FROM kv GROUP BY x) FROM abxy
+----
+error (42702): GROUP BY "x" is ambiguous
+
+# Duplicate expressions with the same alias are not ambiguous.
+build
+SELECT (x + 1) AS u, (x + 1) AS u FROM abxy GROUP BY u
+----
+group-by
+ ├── columns: u:5(int) u:5(int)
+ ├── grouping columns: u:5(int)
+ └── project
+      ├── columns: u:5(int)
+      ├── scan abxy
+      │    └── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      └── projections
+           └── plus [type=int]
+                ├── variable: x [type=int]
+                └── const: 1 [type=int]
+
+build
+SELECT (x + 1) AS u, (x + 1) AS u, (y + 1) AS u FROM abxy GROUP BY u
+----
+error (42702): GROUP BY "u" is ambiguous
+
+# In this case, the FROM column has precedence.
+build
+SELECT sum(x + 1) AS x, sum(y + 1) AS x FROM abxy GROUP BY x
+----
+project
+ ├── columns: x:6(decimal) x:8(decimal)
+ └── group-by
+      ├── columns: x:3(int) sum:6(decimal) sum:8(decimal)
+      ├── grouping columns: x:3(int)
+      ├── project
+      │    ├── columns: column5:5(int) column7:7(int) x:3(int)
+      │    ├── scan abxy
+      │    │    └── columns: a:1(int!null) b:2(int!null) x:3(int) y:4(int)
+      │    └── projections
+      │         ├── plus [type=int]
+      │         │    ├── variable: x [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: y [type=int]
+      │              └── const: 1 [type=int]
+      └── aggregations
+           ├── sum [type=decimal]
+           │    └── variable: column5 [type=int]
+           └── sum [type=decimal]
+                └── variable: column7 [type=int]
