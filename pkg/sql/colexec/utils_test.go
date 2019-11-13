@@ -937,33 +937,6 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 	return emptyBatch
 }
 
-// randomLengthBatchSource is an Operator that forever returns the same batch at
-// a different length each time.
-type randomLengthBatchSource struct {
-	ZeroInputNode
-	internalBatch coldata.Batch
-	rng           *rand.Rand
-}
-
-var _ Operator = &randomLengthBatchSource{}
-
-// newRandomLengthBatchSource returns a new Operator initialized to return a
-// batch of random length between [1, col.BatchSize()) forever.
-func newRandomLengthBatchSource(batch coldata.Batch) *randomLengthBatchSource {
-	return &randomLengthBatchSource{
-		internalBatch: batch,
-	}
-}
-
-func (r *randomLengthBatchSource) Init() {
-	r.rng, _ = randutil.NewPseudoRand()
-}
-
-func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
-	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(coldata.BatchSize()))))
-	return r.internalBatch
-}
-
 // finiteChunksSource is an Operator that returns a batch specified number of
 // times. The first matchLen columns of the batch are incremented every time
 // (except for the first) the batch is returned to emulate source that is
