@@ -954,7 +954,7 @@ SET TIME ZONE 'America/New_York'
 query T
 SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
 ----
-2015-08-25 05:45:45 -0400 -0400
+2015-08-25 05:45:45 -0400 EDT
 
 query T
 SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
@@ -1356,12 +1356,12 @@ SELECT date_trunc('month', ts) AS date_trunc_month_created_at FROM "topics";
 query T
 SELECT date_trunc('month', tstz) AS date_trunc_month_created_at FROM "topics";
 ----
-2017-12-01 00:00:00 +0000 UTC
+2017-12-01 00:00:00 +0000 +0000
 
 query T
 SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 ----
-2017-12-01 00:00:00 +0000 UTC
+2017-12-01 00:00:00 +0000 +0000
 
 # Test date_trunc works when timestamp zone changes.
 subtest regression_41663
@@ -1369,12 +1369,12 @@ subtest regression_41663
 query T
 select date_trunc('day', '2011-01-01 22:30:00'::date);
 ----
-2011-01-01 00:00:00 +0000 UTC
+2011-01-01 00:00:00 +0000 +0000
 
 query T
 select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz);
 ----
-2011-01-01 00:00:00 +0000 UTC
+2011-01-01 00:00:00 +0000 +0000
 
 statement ok
 SET TIME ZONE 'Africa/Nairobi'
@@ -1382,7 +1382,7 @@ SET TIME ZONE 'Africa/Nairobi'
 query T
 select date_trunc('day', '2011-01-01 22:30:00'::date)
 ----
-2011-01-01 00:00:00 +0300 +0300
+2011-01-01 00:00:00 +0300 EAT
 
 query T
 select date_trunc('day', '2011-01-02 01:30:00'::timestamp)
@@ -1392,7 +1392,7 @@ select date_trunc('day', '2011-01-02 01:30:00'::timestamp)
 query T
 select date_trunc('day', '2011-01-01 22:30:00+01:00'::timestamptz)
 ----
-2011-01-02 00:00:00 +0300 +0300
+2011-01-02 00:00:00 +0300 EAT
 
 statement ok
 SET TIME ZONE -5

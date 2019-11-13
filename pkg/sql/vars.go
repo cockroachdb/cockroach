@@ -707,16 +707,7 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
 	`timezone`: {
 		Get: func(evalCtx *extendedEvalContext) string {
-			// If the time zone is a "fixed offset" one, initialized from an offset
-			// and not a standard name, then we use a magic format in the Location's
-			// name. We attempt to parse that here and retrieve the original offset
-			// specified by the user.
-			locStr := evalCtx.SessionData.DataConversion.Location.String()
-			_, origRepr, parsed := timeutil.ParseFixedOffsetTimeZone(locStr)
-			if parsed {
-				return origRepr
-			}
-			return locStr
+			return sessionDataTimeZoneFormat(evalCtx.SessionData.DataConversion.Location)
 		},
 		GetStringVal:  timeZoneVarGetStringVal,
 		Set:           timeZoneVarSet,
@@ -872,6 +863,21 @@ func displayPgBool(val bool) func(_ *settings.Values) string {
 }
 
 var globalFalse = displayPgBool(false)
+
+// sessionDataTimeZoneFormat returns the appropriate timezone format
+// to output when the `timezone` is required output.
+// If the time zone is a "fixed offset" one, initialized from an offset
+// and not a standard name, then we use a magic format in the Location's
+// name. We attempt to parse that here and retrieve the original offset
+// specified by the user.
+func sessionDataTimeZoneFormat(loc *time.Location) string {
+	locStr := loc.String()
+	_, origRepr, parsed := timeutil.ParseFixedOffsetTimeZone(locStr)
+	if parsed {
+		return origRepr
+	}
+	return locStr
+}
 
 func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) sessionVar {
 	displayValStr := formatBoolAsPostgresSetting(displayValue)
