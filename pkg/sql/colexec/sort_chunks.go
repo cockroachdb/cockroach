@@ -230,7 +230,11 @@ func (s *chunker) init() {
 	s.input.Init()
 	s.bufferedColumns = make([]coldata.Vec, len(s.inputTypes))
 	for i := 0; i < len(s.inputTypes); i++ {
-		s.bufferedColumns[i] = coldata.NewMemColumn(s.inputTypes[i], 0)
+		bufferedColumn, err := s.allocator.NewMemColumn(s.inputTypes[i], 0)
+		if err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		s.bufferedColumns[i] = bufferedColumn
 	}
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]uint64, 0, 16)

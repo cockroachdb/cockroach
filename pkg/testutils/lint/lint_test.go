@@ -1498,7 +1498,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			fmt.Sprintf(`coldata\.NewMemBatch(|WithSize)`),
+			fmt.Sprintf(`coldata\.NewMem(Batch|BatchWithSize|Column)`),
 			"--",
 			"sql/colexec",
 			"sql/colflow",

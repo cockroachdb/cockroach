@@ -117,7 +117,11 @@ func (p *allSpooler) init() {
 	p.input.Init()
 	p.values = make([]coldata.Vec, len(p.inputTypes))
 	for i := 0; i < len(p.inputTypes); i++ {
-		p.values[i] = coldata.NewMemColumn(p.inputTypes[i], 0)
+		vec, err := p.allocator.NewMemColumn(p.inputTypes[i], 0)
+		if err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+		p.values[i] = vec
 	}
 }
 

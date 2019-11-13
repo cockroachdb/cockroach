@@ -29,7 +29,7 @@ func NewAllocator() *Allocator {
 	return &Allocator{}
 }
 
-// TODO(yuzefovich): add NewMemColumn method.
+// TODO(yuzefovich): add AppendCol method to Allocator.
 // TODO(yuzefovich): it is possible for a batch obtained from an Allocator to
 // be Reset in a such way that a new batch will be allocated, and it will not
 // be accounted for.
@@ -45,6 +45,11 @@ func (*Allocator) NewMemBatchWithSize(
 	types []coltypes.T, size int,
 ) (batch coldata.Batch, err error) {
 	return coldata.NewMemBatchWithSize(types, size), nil
+}
+
+// NewMemColumn returns a new coldata.Vec, initialized with a length.
+func (*Allocator) NewMemColumn(t coltypes.T, n int) (coldata.Vec, error) {
+	return coldata.NewMemColumn(t, n), nil
 }
 
 // Append appends elements of a source coldata.Vec into dest according to

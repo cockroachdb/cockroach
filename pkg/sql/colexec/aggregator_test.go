@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -483,9 +484,11 @@ func TestAggregatorRandom(t *testing.T) {
 						func(t *testing.T) {
 							nTuples := int(coldata.BatchSize()) * numInputBatches
 							typs := []coltypes.T{coltypes.Int64, coltypes.Float64}
-							cols := []coldata.Vec{
-								coldata.NewMemColumn(typs[0], nTuples),
-								coldata.NewMemColumn(typs[1], nTuples)}
+							col1, err := testAllocator.NewMemColumn(typs[0], nTuples)
+							require.NoError(t, err)
+							col2, err := testAllocator.NewMemColumn(typs[1], nTuples)
+							require.NoError(t, err)
+							cols := []coldata.Vec{col1, col2}
 							groups, aggCol, aggColNulls := cols[0].Int64(), cols[1].Float64(), cols[1].Nulls()
 							var expRowCounts, expCounts []int64
 							var expSums, expMins, expMaxs []float64
@@ -643,7 +646,11 @@ func BenchmarkAggregator(b *testing.B) {
 									func(b *testing.B) {
 										colTypes := []coltypes.T{coltypes.Int64, typ}
 										nTuples := numInputBatches * int(coldata.BatchSize())
-										cols := []coldata.Vec{coldata.NewMemColumn(coltypes.Int64, nTuples), coldata.NewMemColumn(typ, nTuples)}
+										col1, err := testAllocator.NewMemColumn(coltypes.Int64, nTuples)
+										require.NoError(b, err)
+										col2, err := testAllocator.NewMemColumn(typ, nTuples)
+										require.NoError(b, err)
+										cols := []coldata.Vec{col1, col2}
 										groups := cols[0].Int64()
 										curGroup := -1
 										for i := 0; i < nTuples; i++ {

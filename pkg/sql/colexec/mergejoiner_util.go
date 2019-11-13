@@ -223,14 +223,18 @@ func (b *circularGroupsBuffer) getGroups() ([]group, []group) {
 	return leftGroups[startIdx:endIdx], rightGroups[startIdx:endIdx]
 }
 
-func newMJBufferedGroup(types []coltypes.T) *mjBufferedGroup {
+func newMJBufferedGroup(allocator *Allocator, types []coltypes.T) (*mjBufferedGroup, error) {
 	bg := &mjBufferedGroup{
 		colVecs: make([]coldata.Vec, len(types)),
 	}
 	for i, t := range types {
-		bg.colVecs[i] = coldata.NewMemColumn(t, int(coldata.BatchSize()))
+		colVec, err := allocator.NewMemColumn(t, int(coldata.BatchSize()))
+		if err != nil {
+			return nil, err
+		}
+		bg.colVecs[i] = colVec
 	}
-	return bg
+	return bg, nil
 }
 
 // mjBufferedGroup is a custom implementation of coldata.Batch interface (only

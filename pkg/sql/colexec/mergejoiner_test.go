@@ -1655,8 +1655,12 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
 			func(t *testing.T) {
 				typs := []coltypes.T{coltypes.Int64}
-				colsLeft := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
-				colsRight := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+				lCol, err := testAllocator.NewMemColumn(typs[0], nTuples)
+				require.NoError(t, err)
+				colsLeft := []coldata.Vec{lCol}
+				rCol, err := testAllocator.NewMemColumn(typs[0], nTuples)
+				require.NoError(t, err)
+				colsRight := []coldata.Vec{rCol}
 				groupsLeft := colsLeft[0].Int64()
 				groupsRight := colsRight[0].Int64()
 				for i := range groupsLeft {
@@ -1735,7 +1739,9 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches
 					typs := []coltypes.T{coltypes.Int64}
-					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+					col, err := testAllocator.NewMemColumn(typs[0], nTuples)
+					require.NoError(t, err)
+					cols := []coldata.Vec{col}
 					groups := cols[0].Int64()
 					for i := range groups {
 						groups[i] = int64(i)
@@ -1801,7 +1807,11 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches
 					typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
-					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples), coldata.NewMemColumn(typs[1], nTuples)}
+					col1, err := testAllocator.NewMemColumn(typs[0], nTuples)
+					require.NoError(t, err)
+					col2, err := testAllocator.NewMemColumn(typs[1], nTuples)
+					require.NoError(t, err)
+					cols := []coldata.Vec{col1, col2}
 					for i := range cols[0].Int64() {
 						cols[0].Int64()[i] = int64(i / groupSize)
 						cols[1].Int64()[i] = int64(i / groupSize)
@@ -1871,7 +1881,9 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 					func(t *testing.T) {
 						nTuples := int(coldata.BatchSize()) * numInputBatches
 						typs := []coltypes.T{coltypes.Int64}
-						cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+						col, err := testAllocator.NewMemColumn(typs[0], nTuples)
+						require.NoError(t, err)
+						cols := []coldata.Vec{col}
 						groups := cols[0].Int64()
 						for i := range groups {
 							groups[i] = int64(i)
@@ -1926,7 +1938,9 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches
 					typs := []coltypes.T{coltypes.Int64}
-					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+					col, err := testAllocator.NewMemColumn(typs[0], nTuples)
+					require.NoError(t, err)
+					cols := []coldata.Vec{col}
 					groups := cols[0].Int64()
 					for i := range groups {
 						groups[i] = int64(i / groupSize)
@@ -1982,11 +1996,19 @@ type expectedGroup struct {
 
 func newBatchesOfRandIntRows(
 	nTuples int, typs []coltypes.T, maxRunLength int64, skipValues bool, randomIncrement int64,
-) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
+) ([]coldata.Vec, []coldata.Vec, []expectedGroup, error) {
 	rng, _ := randutil.NewPseudoRand()
-	lCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+	col, err := testAllocator.NewMemColumn(typs[0], nTuples)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	lCols := []coldata.Vec{col}
 	lCol := lCols[0].Int64()
-	rCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+	col, err = testAllocator.NewMemColumn(typs[0], nTuples)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	rCols := []coldata.Vec{col}
 	rCol := rCols[0].Int64()
 	exp := make([]expectedGroup, nTuples)
 	val := int64(0)
@@ -2036,7 +2058,7 @@ func newBatchesOfRandIntRows(
 		}
 	}
 
-	return lCols, rCols, exp
+	return lCols, rCols, exp, nil
 }
 
 func TestMergeJoinerRandomized(t *testing.T) {
@@ -2050,7 +2072,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 						func(t *testing.T) {
 							nTuples := int(coldata.BatchSize()) * numInputBatches
 							typs := []coltypes.T{coltypes.Int64}
-							lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, typs, maxRunLength, skipValues, randomIncrement)
+							lCols, rCols, exp, err := newBatchesOfRandIntRows(nTuples, typs, maxRunLength, skipValues, randomIncrement)
+							require.NoError(t, err)
 							leftSource := newChunkingBatchSource(typs, lCols, uint64(nTuples))
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
 

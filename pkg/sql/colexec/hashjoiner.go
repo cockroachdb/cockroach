@@ -459,7 +459,11 @@ func makeHashTable(
 
 	for i := 0; i < nCols; i++ {
 		if keepCol[i] {
-			cols = append(cols, coldata.NewMemColumn(sourceTypes[i], 0))
+			col, err := allocator.NewMemColumn(sourceTypes[i], 0)
+			if err != nil {
+				execerror.VectorizedInternalPanic(err)
+			}
+			cols = append(cols, col)
 			keepTypes = append(keepTypes, sourceTypes[i])
 			keepCols = append(keepCols, uint32(i))
 

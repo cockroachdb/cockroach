@@ -407,8 +407,14 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
 		o.outputBatchSize = 1<<16 - 1
 	}
 
-	o.proberState.lBufferedGroup = newMJBufferedGroup(o.left.sourceTypes)
-	o.proberState.rBufferedGroup = newMJBufferedGroup(o.right.sourceTypes)
+	o.proberState.lBufferedGroup, err = newMJBufferedGroup(o.allocator, o.left.sourceTypes)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	o.proberState.rBufferedGroup, err = newMJBufferedGroup(o.allocator, o.right.sourceTypes)
+	if err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
