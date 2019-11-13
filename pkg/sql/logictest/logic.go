@@ -1905,9 +1905,9 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := mutations.ForAllStatements(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
-	for _, c := range changed {
-		t.outf("rewrote: %s;", c)
+	execSQL, changed := mutations.ApplyString(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
+	if changed {
+		t.outf("rewrote:\n%s\n", execSQL)
 	}
 	res, err := t.db.Exec(execSQL)
 	if err == nil {
