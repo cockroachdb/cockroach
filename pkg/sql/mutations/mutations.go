@@ -11,11 +11,24 @@
 package mutations
 
 import (
+	"encoding/json"
 	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
+
+var (
+	// StatisticsMutator adds ALTER TABLE INJECT STATISTICS statements.
+	StatisticsMutator MultiStatementMutation = statisticsMutator
+
+	// ForeignKeyMutator adds ALTER TABLE ADD FOREIGN KEY statements.
+	ForeignKeyMutator MultiStatementMutation = foreignKeyMutator
+
+	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
+	// definitions to have random FAMILY definitions.
+	ColumnFamilyMutator StatementMutator = columnFamilyMutator
 )
 
 // StatementMutator defines a func that can change a statement.
@@ -25,33 +38,146 @@ type StatementMutator func(rng *rand.Rand, stmt tree.Statement) (changed bool)
 // but must not change any of the statements passed.
 type MultiStatementMutation func(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement)
 
-// ForAllStatements executes stmtMutator on all SQL statements of input. The
-// list of changed statements is returned.
-func ForAllStatements(
-	rng *rand.Rand, input string, stmtMutator StatementMutator,
-) (output string, changed []string) {
+// Mutator defines a method that can mutate or add SQL statements.
+type Mutator interface {
+	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
+}
+
+// Mutate implements the Mutator interface.
+func (sm StatementMutator) Mutate(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
+	for _, stmt := range stmts {
+		sc := sm(rng, stmt)
+		changed = changed || sc
+	}
+	return stmts, changed
+}
+
+// Mutate implements the Mutator interface.
+func (msm MultiStatementMutation) Mutate(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
+	additional := msm(rng, stmts)
+	if len(additional) == 0 {
+		return stmts, false
+	}
+	return append(stmts, additional...), true
+}
+
+// Apply executes all mutators on stmts. It returns the (possibly mutated and
+// changed in place) statements and a boolean indicating whether any changes
+// were made.
+func Apply(
+	rng *rand.Rand, stmts []tree.Statement, mutators ...Mutator,
+) (mutated []tree.Statement, changed bool) {
+	var mc bool
+	for _, m := range mutators {
+		stmts, mc = m.Mutate(rng, stmts)
+		changed = changed || mc
+	}
+	return stmts, changed
+}
+
+// ApplyString executes all mutators on input.
+func ApplyString(rng *rand.Rand, input string, mutators ...Mutator) (output string, changed bool) {
 	parsed, err := parser.Parse(input)
 	if err != nil {
-		return input, nil
+		return input, false
+	}
+
+	stmts := make([]tree.Statement, len(parsed))
+	for i, p := range parsed {
+		stmts[i] = p.AST
+	}
+
+	stmts, changed = Apply(rng, stmts, mutators...)
+	if !changed {
+		return input, false
 	}
 
 	var sb strings.Builder
-	for _, p := range parsed {
-		stmtChanged := stmtMutator(rng, p.AST)
-		if !stmtChanged {
-			sb.WriteString(p.SQL)
-		} else {
-			s := p.AST.String()
-			sb.WriteString(s)
-			changed = append(changed, s)
-		}
+	for _, s := range stmts {
+		sb.WriteString(s.String())
 		sb.WriteString(";\n")
 	}
-	return sb.String(), changed
+	return sb.String(), true
 }
 
-// ForeignKeyMutator adds ALTER TABLE ADD FOREIGN KEY statements.
-func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
+// TODO(mjibson): This type is copied from sql/stats, but due to that package
+// depending on sqlbase, which depends on this package, a cycle would be
+// created. Refactor something such that we avoid the cycle. This probably
+// means moving all of the rand table/datum stuff out of sqlbase.
+type jsonStatistic struct {
+	Name          string   `json:"name,omitempty"`
+	CreatedAt     string   `json:"created_at"`
+	Columns       []string `json:"columns"`
+	RowCount      uint64   `json:"row_count"`
+	DistinctCount uint64   `json:"distinct_count"`
+	NullCount     uint64   `json:"null_count"`
+}
+
+func statisticsMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
+	for _, stmt := range stmts {
+		create, ok := stmt.(*tree.CreateTable)
+		if !ok {
+			continue
+		}
+		alter := &tree.AlterTable{
+			Table: create.Table.ToUnresolvedObjectName(),
+		}
+		// rowCount should be the same for all columns in a
+		// table. Attempt to distribute it over powers of 10.
+		var rowCount int64
+		if n := rng.Intn(20); n == 0 {
+			// ignore
+		} else if n <= 10 {
+			rowCount = rng.Int63n(10) + 1
+			for i := 0; i < n; i++ {
+				rowCount *= 10
+			}
+		} else {
+			rowCount = rng.Int63()
+		}
+		var stats []jsonStatistic
+		for _, def := range create.Defs {
+			col, ok := def.(*tree.ColumnTableDef)
+			if !ok {
+				continue
+			}
+			var nullCount, distinctCount uint64
+			if rowCount > 0 {
+				if col.Nullable.Nullability != tree.NotNull {
+					nullCount = uint64(rng.Int63n(rowCount))
+				}
+				distinctCount = uint64(rng.Int63n(rowCount))
+			}
+			// TODO(mjibson): Generate histograms for the first column of indexes.
+			stats = append(stats, jsonStatistic{
+				Name:          "__auto__",
+				CreatedAt:     "2000-01-01 00:00:00+00:00",
+				RowCount:      uint64(rowCount),
+				Columns:       []string{col.Name.String()},
+				DistinctCount: distinctCount,
+				NullCount:     nullCount,
+			})
+		}
+		if len(stats) > 0 {
+			b, err := json.Marshal(stats)
+			if err != nil {
+				// Should not happen.
+				panic(err)
+			}
+			alter.Cmds = append(alter.Cmds, &tree.AlterTableInjectStats{
+				Stats: tree.NewDString(string(b)),
+			})
+			additional = append(additional, alter)
+		}
+	}
+	return additional
+}
+
+func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
 	// Find columns in the tables.
 	cols := map[tree.TableName][]*tree.ColumnTableDef{}
 	byName := map[tree.TableName]*tree.CreateTable{}
@@ -214,9 +340,7 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 	return additional
 }
 
-// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
-// definitions to have random FAMILY definitions.
-func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
+func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	ast, ok := stmt.(*tree.CreateTable)
 	if !ok {
 		return false
