@@ -765,6 +765,17 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 				IndexTableDef: indexDef,
 			})
 		}
+		// Although not necessary for Cockroach to function correctly,
+		// but for ease of use for any code that introspects on the
+		// AST data structure (instead of the descriptor which doesn't
+		// exist yet), explicitly set all PK cols as NOT NULL.
+		for _, col := range columnDefs {
+			for _, elem := range indexDef.Columns {
+				if col.Name == elem.Column {
+					col.Nullable.Nullability = tree.NotNull
+				}
+			}
+		}
 	}
 
 	// Make indexes.
