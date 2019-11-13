@@ -25,18 +25,24 @@ import (
 // the result to the idx'th position of the input exec.Vec.
 // See the analog in sqlbase/column_type_encoding.go.
 func DecodeTableValueToCol(
-	vec coldata.Vec, idx uint16, typ encoding.Type, dataOffset int, valTyp *types.T, b []byte,
+	vecs *coldata.TypedVecs,
+	colIdx int,
+	idx uint16,
+	typ encoding.Type,
+	dataOffset int,
+	valTyp *types.T,
+	b []byte,
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
-		vec.Nulls().SetNull(idx)
+		vecs.Vecs[colIdx].Nulls().SetNull(idx)
 		return b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
 	if valTyp.Family() != types.BoolFamily {
 		b = b[dataOffset:]
 	}
-	return decodeUntaggedDatumToCol(vec, idx, valTyp, b)
+	return decodeUntaggedDatumToCol(vecs, colIdx, idx, valTyp, b)
 }
 
 // decodeUntaggedDatum is used to decode a Datum whose type is known,
@@ -49,41 +55,44 @@ func DecodeTableValueToCol(
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
 // See the analog in sqlbase/column_type_encoding.go.
-func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byte) ([]byte, error) {
+func decodeUntaggedDatumToCol(
+	vecs *coldata.TypedVecs, colIdx int, idx uint16, t *types.T, buf []byte,
+) ([]byte, error) {
 	var err error
+	typedColIdx := vecs.ColIdxToTypeIdx[colIdx]
 	switch t.Family() {
 	case types.BoolFamily:
 		var b bool
 		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		buf, b, err = encoding.DecodeBoolValue(buf)
-		vec.Bool()[idx] = b
+		vecs.BoolVecs[typedColIdx][idx] = b
 	case types.BytesFamily, types.StringFamily:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
-		vec.Bytes().Set(int(idx), data)
+		vecs.BytesVecs[typedColIdx].Set(int(idx), data)
 	case types.DateFamily, types.OidFamily:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
-		vec.Int64()[idx] = i
+		vecs.Int64Vecs[typedColIdx][idx] = i
 	case types.DecimalFamily:
-		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&vec.Decimal()[idx], buf)
+		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&vecs.DecimalVecs[typedColIdx][idx], buf)
 	case types.FloatFamily:
 		var f float64
 		buf, f, err = encoding.DecodeUntaggedFloatValue(buf)
-		vec.Float64()[idx] = f
+		vecs.Float64Vecs[typedColIdx][idx] = f
 	case types.IntFamily:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		switch t.Width() {
 		case 16:
-			vec.Int16()[idx] = int16(i)
+			vecs.Int16Vecs[typedColIdx][idx] = int16(i)
 		case 32:
-			vec.Int32()[idx] = int32(i)
+			vecs.Int32Vecs[typedColIdx][idx] = int32(i)
 		default:
 			// Pre-2.1 BIT was using INT encoding with arbitrary sizes.
 			// We map these to 64-bit INT now. See #34161.
-			vec.Int64()[idx] = i
+			vecs.Int64Vecs[typedColIdx][idx] = i
 		}
 	case types.UuidFamily:
 		var data uuid.UUID

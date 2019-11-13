@@ -60,14 +60,11 @@ type cTableInfo struct {
 	// The exec types corresponding to the table columns in cols.
 	typs []coltypes.T
 
-	// The ordered list of ColumnIDs that are required.
-	neededColsList []int
-
 	// The set of required value-component column ordinals in the table.
 	neededValueColsByIdx util.FastIntSet
 
 	// Map used to get the index for columns in cols.
-	colIdxMap colIdxMap
+	neededColIdxMap colIdxMap
 
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
@@ -112,9 +109,9 @@ type cTableInfo struct {
 type colIdxMap struct {
 	// vals is the sorted list of sqlbase.ColumnIDs in the table to fetch.
 	vals sqlbase.ColumnIDs
-	// colIdxOrds is the list of ordinals in cols for each column in colIdxVals.
-	// The ith entry in colIdxOrds is the ordinal within cols for the ith column
-	// in colIdxVals.
+	// ords is the list of ordinals in cols for each column in vals.
+	// The ith entry in ords is the ordinal within cols for the ith column
+	// in vals.
 	ords []int
 }
 
@@ -225,7 +222,7 @@ type cFetcher struct {
 
 		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
 		// having to call batch.Vec too often in the tight loop.
-		colvecs []coldata.Vec
+		colvecs coldata.TypedVecs
 	}
 
 	// estimatedStaticMemoryUsage is the best guess about how much memory the
@@ -254,15 +251,6 @@ func (rf *cFetcher) Init(
 	tableArgs := tables[0]
 	oldTable := rf.table
 
-	m := colIdxMap{
-		vals: make(sqlbase.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
-		ords: make([]int, 0, len(tableArgs.ColIdxMap)),
-	}
-	for k, v := range tableArgs.ColIdxMap {
-		m.vals = append(m.vals, k)
-		m.ords = append(m.ords, v)
-	}
-	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
 	typs := make([]coltypes.T, len(colDescriptors))
 	for i := range typs {
@@ -274,7 +262,6 @@ func (rf *cFetcher) Init(
 	table := cTableInfo{
 		spans:            tableArgs.Spans,
 		desc:             tableArgs.Desc,
-		colIdxMap:        m,
 		index:            tableArgs.Index,
 		isSecondaryIndex: tableArgs.IsSecondaryIndex,
 		cols:             colDescriptors,
@@ -286,24 +273,61 @@ func (rf *cFetcher) Init(
 		extraValColOrdinals:    oldTable.extraValColOrdinals[:0],
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
-	rf.machine.batch = coldata.NewMemBatch(typs)
-	rf.machine.colvecs = rf.machine.batch.ColVecs()
-	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, int(coldata.BatchSize()))
-
-	var err error
 
 	var neededCols util.FastIntSet
+	table.neededColIdxMap = colIdxMap{
+		vals: make(sqlbase.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
+		ords: make([]int, 0, len(tableArgs.ColIdxMap)),
+	}
+	m := &table.neededColIdxMap
 	// Scan through the entire columns map to see which columns are
 	// required.
-	table.neededColsList = make([]int, 0, tableArgs.ValNeededForCol.Len())
 	for col, idx := range tableArgs.ColIdxMap {
-		if tableArgs.ValNeededForCol.Contains(idx) {
+		if tableArgs.ValNeededForCol.Contains(idx) || rf.traceKV {
 			// The idx-th column is required.
 			neededCols.Add(int(col))
-			table.neededColsList = append(table.neededColsList, int(col))
+			m.vals = append(m.vals, col)
+			m.ords = append(m.ords, idx)
 		}
 	}
-	sort.Ints(table.neededColsList)
+	sort.Sort(m)
+	rf.machine.batch = coldata.NewMemBatch(typs)
+	rf.machine.colvecs.Vecs = rf.machine.batch.ColVecs()
+	rf.machine.colvecs.ColIdxToTypeIdx = make([]int, len(typs))
+	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, int(coldata.BatchSize()))
+	for i := range typs {
+		vec := rf.machine.batch.ColVec(i)
+		typedVecs := &rf.machine.colvecs
+		var n int
+		switch typs[i] {
+		case coltypes.Bool:
+			n = len(typedVecs.BoolVecs)
+			typedVecs.BoolVecs = append(typedVecs.BoolVecs, vec.Bool())
+		case coltypes.Int16:
+			n = len(typedVecs.Int16Vecs)
+			typedVecs.Int16Vecs = append(typedVecs.Int16Vecs, vec.Int16())
+		case coltypes.Int32:
+			n = len(typedVecs.Int32Vecs)
+			typedVecs.Int32Vecs = append(typedVecs.Int32Vecs, vec.Int32())
+		case coltypes.Int64:
+			n = len(typedVecs.Int64Vecs)
+			typedVecs.Int64Vecs = append(typedVecs.Int64Vecs, vec.Int64())
+		case coltypes.Float64:
+			n = len(typedVecs.Float64Vecs)
+			typedVecs.Float64Vecs = append(typedVecs.Float64Vecs, vec.Float64())
+		case coltypes.Bytes:
+			n = len(typedVecs.BytesVecs)
+			typedVecs.BytesVecs = append(typedVecs.BytesVecs, vec.Bytes())
+		case coltypes.Decimal:
+			n = len(typedVecs.DecimalVecs)
+			typedVecs.DecimalVecs = append(typedVecs.DecimalVecs, vec.Decimal())
+		default:
+			panic("Fail")
+		}
+		rf.machine.colvecs.ColIdxToTypeIdx[i] = n
+	}
+
+	var err error
 
 	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
 
@@ -594,8 +618,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			for i := range rf.machine.colvecs {
-				rf.machine.colvecs[i].Nulls().UnsetNulls()
+			for i := range rf.machine.colvecs.Vecs {
+				rf.machine.colvecs.Vecs[i].Nulls().UnsetNulls()
 			}
 			rf.machine.batch.ResetInternalBatch()
 			rf.shiftState()
@@ -605,7 +629,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					log.Infof(ctx, "Decoding first key %s", rf.machine.nextKV.Key)
 				}
 				key, matches, err := colencoding.DecodeIndexKeyToCols(
-					rf.machine.colvecs,
+					&rf.machine.colvecs,
 					rf.machine.rowIdx,
 					rf.table.desc,
 					rf.table.index,
@@ -788,7 +812,7 @@ func (rf *cFetcher) pushState(state fetcherState) {
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
 func (rf *cFetcher) getDatumAt(colIdx int, rowIdx uint16, typ types.T) tree.Datum {
-	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, &typ)
+	return PhysicalTypeColElemToDatum(rf.machine.colvecs.Vecs[colIdx], rowIdx, rf.table.da, &typ)
 }
 
 // processValue processes the state machine's current value component, setting
@@ -818,7 +842,7 @@ func (rf *cFetcher) processValue(
 		prettyKey = buf.String()
 	}
 
-	if len(table.neededColsList) == 0 {
+	if table.neededColIdxMap.Len() == 0 {
 		// We don't need to decode any values.
 		if rf.traceKV {
 			prettyValue = tree.DNull.String()
@@ -878,7 +902,7 @@ func (rf *cFetcher) processValue(
 			var err error
 			if rf.traceKV {
 				valueBytes, err = colencoding.DecodeKeyValsToCols(
-					rf.machine.colvecs,
+					&rf.machine.colvecs,
 					rf.machine.rowIdx,
 					table.allExtraValColOrdinals,
 					table.extraTypes,
@@ -888,7 +912,7 @@ func (rf *cFetcher) processValue(
 				)
 			} else {
 				valueBytes, err = colencoding.DecodeKeyValsToCols(
-					rf.machine.colvecs,
+					&rf.machine.colvecs,
 					rf.machine.rowIdx,
 					table.extraValColOrdinals,
 					table.extraTypes,
@@ -949,42 +973,28 @@ func (rf *cFetcher) processValueSingle(
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
-	var needDecode bool
-	if rf.traceKV {
-		needDecode = true
-	} else {
-		for i := range table.neededColsList {
-			if table.neededColsList[i] == int(colID) {
-				needDecode = true
-				break
-			}
+	if idx, ok := table.neededColIdxMap.get(colID); ok {
+		if rf.traceKV {
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
 		}
-	}
-
-	if needDecode {
-		if idx, ok := table.colIdxMap.get(colID); ok {
-			if rf.traceKV {
-				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
-			}
-			val := rf.machine.nextKV.Value
-			if len(val.RawBytes) == 0 {
-				return prettyKey, "", nil
-			}
-			typ := &table.cols[idx].Type
-			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
-			if err != nil {
-				return "", "", err
-			}
-			rf.machine.remainingValueColsByIdx.Remove(idx)
-
-			if rf.traceKV {
-				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, *typ).String()
-			}
-			if row.DebugRowFetch {
-				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
-			}
-			return prettyKey, prettyValue, nil
+		val := rf.machine.nextKV.Value
+		if len(val.RawBytes) == 0 {
+			return prettyKey, "", nil
 		}
+		typ := &table.cols[idx].Type
+		err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs, idx, rf.machine.rowIdx, typ, val)
+		if err != nil {
+			return "", "", err
+		}
+		rf.machine.remainingValueColsByIdx.Remove(idx)
+
+		if rf.traceKV {
+			prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, *typ).String()
+		}
+		if row.DebugRowFetch {
+			log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
+		}
+		return prettyKey, prettyValue, nil
 	}
 
 	// No need to unmarshal the column value. Either the column was part of
@@ -995,6 +1005,8 @@ func (rf *cFetcher) processValueSingle(
 	return "", "", nil
 }
 
+// processValueBytes reads value data from the input valueBytes, writing it into
+// the state machine's current row.
 func (rf *cFetcher) processValueBytes(
 	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
@@ -1007,13 +1019,14 @@ func (rf *cFetcher) processValueBytes(
 	}
 
 	var (
-		colIDDiff          uint32
-		lastColID          sqlbase.ColumnID
-		dataOffset         int
-		typ                encoding.Type
-		lastColIDIndex     int
-		lastNeededColIndex int
+		colIDDiff      uint32
+		lastColID      sqlbase.ColumnID
+		dataOffset     int
+		typ            encoding.Type
+		lastColIDIndex int
 	)
+	// Continue reading data until there's none left or we've finished populating
+	// the data for all of the requested columns.
 	for len(valueBytes) > 0 && rf.machine.remainingValueColsByIdx.Len() > 0 {
 		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
@@ -1021,17 +1034,20 @@ func (rf *cFetcher) processValueBytes(
 		}
 		colID := lastColID + sqlbase.ColumnID(colIDDiff)
 		lastColID = colID
-		var colIsNeeded bool
-		for ; lastNeededColIndex < len(table.neededColsList); lastNeededColIndex++ {
-			nextNeededColID := table.neededColsList[lastNeededColIndex]
-			if nextNeededColID == int(colID) {
-				colIsNeeded = true
+		idx := -1
+		// Find the ordinal into table.cols for the column ID we just decoded, by
+		// advancing through the sorted list of needed value columns until there's
+		// a match, or we passed the column ID we're looking for.
+		for ; lastColIDIndex < len(table.neededColIdxMap.vals); lastColIDIndex++ {
+			nextID := table.neededColIdxMap.vals[lastColIDIndex]
+			if nextID == colID {
+				idx = table.neededColIdxMap.ords[lastColIDIndex]
 				break
-			} else if nextNeededColID > int(colID) {
+			} else if nextID > colID {
 				break
 			}
 		}
-		if !colIsNeeded {
+		if idx == -1 {
 			// This column wasn't requested, so read its length and skip it.
 			len, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
 			if err != nil {
@@ -1043,26 +1059,14 @@ func (rf *cFetcher) processValueBytes(
 			}
 			continue
 		}
-		idx := -1
-		for ; lastColIDIndex < len(table.colIdxMap.vals); lastColIDIndex++ {
-			if table.colIdxMap.vals[lastColIDIndex] == colID {
-				idx = table.colIdxMap.ords[lastColIDIndex]
-				break
-			}
-		}
-		if idx == -1 {
-			return "", "", errors.Errorf("missing colid %d", colID)
-		}
 
 		if rf.traceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
 		}
 
-		vec := rf.machine.colvecs[idx]
-
 		valTyp := &table.cols[idx].Type
-		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,
-			valueBytes)
+		valueBytes, err = colencoding.DecodeTableValueToCol(&rf.machine.colvecs, idx,
+			rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -1113,7 +1117,7 @@ func (rf *cFetcher) fillNulls() error {
 					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
 		}
-		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
+		rf.machine.colvecs.Vecs[i].Nulls().SetNull(rf.machine.rowIdx)
 	}
 	return nil
 }
