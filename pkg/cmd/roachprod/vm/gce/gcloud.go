@@ -180,6 +180,7 @@ type providerOpts struct {
 	MachineType    string
 	Zones          []string
 	Image          string
+	SSDCount       int
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -258,6 +259,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		[]string{"us-east1-b", "us-west1-b", "europe-west2-b"}, "Zones for cluster")
 	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20190122a",
 		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
+	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
+		"Number of local SSDs to create on GCE instance.")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
@@ -365,7 +368,19 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	extraMountOpts := ""
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
-		args = append(args, "--local-ssd", "interface=SCSI")
+		// n2-class GCP machines cannot be requested with only 1 SSD;
+		// minimum number of actual SSDs is 2.
+		// TODO(pbardea): This is more general for machine types that
+		// come in different sizes.
+		// See: https://cloud.google.com/compute/docs/disks/
+		n2MachineTypes := regexp.MustCompile("^n2-.+-16")
+		if n2MachineTypes.MatchString(p.opts.MachineType) && p.opts.SSDCount < 2 {
+			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
+			p.opts.SSDCount = 2
+		}
+		for i := 0; i < p.opts.SSDCount; i++ {
+			args = append(args, "--local-ssd", "interface=SCSI")
+		}
 		if opts.SSDOpts.NoExt4Barrier {
 			extraMountOpts = "nobarrier"
 		}
