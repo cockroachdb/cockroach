@@ -1219,7 +1219,7 @@ func (ef *execFactory) ConstructInsert(
 		checkFKs = row.CheckFKs
 		// Determine the foreign key tables involved in the update.
 		var err error
-		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckInserts, checkHelper)
+		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckInserts)
 		if err != nil {
 			return nil, err
 		}
@@ -1302,23 +1302,16 @@ func (ef *execFactory) ConstructUpdate(
 	// Construct the check helper if there are any check constraints.
 	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
 
-	checkFKs := row.CheckFKs
-	if skipFKChecks {
-		checkFKs = row.SkipFKs
-	}
-
-	// Determine the foreign key tables involved in the update.
-	fkTables, err := row.MakeFkMetadata(
-		ef.planner.extendedEvalCtx.Context,
-		tabDesc,
-		row.CheckUpdates,
-		ef.planner.LookupTableByID,
-		ef.planner.CheckPrivilege,
-		ef.planner.analyzeExpr,
-		checkHelper,
-	)
-	if err != nil {
-		return nil, err
+	var fkTables row.FkTableMetadata
+	checkFKs := row.SkipFKs
+	if !skipFKChecks {
+		checkFKs = row.CheckFKs
+		// Determine the foreign key tables involved in the update.
+		var err error
+		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckUpdates)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Create the table updater, which does the bulk of the work. In the HP,
@@ -1406,10 +1399,21 @@ func (ef *execFactory) ConstructUpdate(
 }
 
 func (ef *execFactory) makeFkMetadata(
-	tabDesc *sqlbase.ImmutableTableDescriptor,
-	fkCheckType row.FKCheckType,
-	checkHelper *sqlbase.CheckHelper,
+	tabDesc *sqlbase.ImmutableTableDescriptor, fkCheckType row.FKCheckType,
 ) (row.FkTableMetadata, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+
+	// Create a CheckHelper, used in case of cascading actions that cause changes
+	// in the original table. This is only possible with UPDATE (together with
+	// cascade loops or self-references).
+	var checkHelper *sqlbase.CheckHelper
+	if fkCheckType == row.CheckUpdates {
+		var err error
+		checkHelper, err = sqlbase.NewEvalCheckHelper(ctx, ef.planner.analyzeExpr, tabDesc)
+		if err != nil {
+			return nil, err
+		}
+	}
 	// Determine the foreign key tables involved in the upsert.
 	return row.MakeFkMetadata(
 		ef.planner.extendedEvalCtx.Context,
@@ -1444,7 +1448,7 @@ func (ef *execFactory) ConstructUpsert(
 	checkHelper := sqlbase.NewInputCheckHelper(checks, tabDesc)
 
 	// Determine the foreign key tables involved in the upsert.
-	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckUpdates, checkHelper)
+	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckUpdates)
 	if err != nil {
 		return nil, err
 	}
@@ -1555,7 +1559,7 @@ func (ef *execFactory) ConstructDelete(
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
 
 	// Determine the foreign key tables involved in the delete.
-	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckDeletes, nil /* checkHelper */)
+	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckDeletes)
 	if err != nil {
 		return nil, err
 	}
