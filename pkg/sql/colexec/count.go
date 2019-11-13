@@ -32,11 +32,11 @@ type countOp struct {
 var _ StaticMemoryOperator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
-func NewCountOp(input Operator) Operator {
+func NewCountOp(allocator *Allocator, input Operator) Operator {
 	c := &countOp{
 		OneInputNode: NewOneInputNode(input),
 	}
-	c.internalBatch = coldata.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, 1)
+	c.internalBatch = allocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, 1)
 	return c
 }
 

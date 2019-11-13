@@ -26,7 +26,11 @@ import (
 // the columns in the input operator. The input tuples must be sorted on first
 // matchLen columns.
 func NewSortChunks(
-	input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, matchLen int,
+	allocator *Allocator,
+	input Operator,
+	inputTypes []coltypes.T,
+	orderingCols []execinfrapb.Ordering_Column,
+	matchLen int,
 ) (Operator, error) {
 	if matchLen == len(orderingCols) {
 		// input is already ordered on all orderingCols, so there is nothing more
@@ -38,11 +42,11 @@ func NewSortChunks(
 			"already ordered on at least one column. matchLen = %d was given.",
 			matchLen))
 	}
-	chunker, err := newChunker(input, inputTypes, orderingCols[:matchLen])
+	chunker, err := newChunker(allocator, input, inputTypes, orderingCols[:matchLen])
 	if err != nil {
 		return nil, err
 	}
-	sorter, err := newSorter(chunker, inputTypes, orderingCols[matchLen:])
+	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:])
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +157,8 @@ const (
 type chunker struct {
 	OneInputNode
 	NonExplainable
+
+	allocator *Allocator
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []coltypes.T
 	// inputDone indicates whether input has been fully consumed.
@@ -196,7 +202,10 @@ type chunker struct {
 var _ spooler = &chunker{}
 
 func newChunker(
-	input Operator, inputTypes []coltypes.T, alreadySortedCols []execinfrapb.Ordering_Column,
+	allocator *Allocator,
+	input Operator,
+	inputTypes []coltypes.T,
+	alreadySortedCols []execinfrapb.Ordering_Column,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))
@@ -206,9 +215,10 @@ func newChunker(
 			return nil, err
 		}
 	}
-	deselector := NewDeselectorOp(input, inputTypes)
+	deselector := NewDeselectorOp(allocator, input, inputTypes)
 	return &chunker{
 		OneInputNode:      NewOneInputNode(deselector),
+		allocator:         allocator,
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,
 		partitioners:      partitioners,
@@ -220,7 +230,7 @@ func (s *chunker) init() {
 	s.input.Init()
 	s.bufferedColumns = make([]coldata.Vec, len(s.inputTypes))
 	for i := 0; i < len(s.inputTypes); i++ {
-		s.bufferedColumns[i] = coldata.NewMemColumn(s.inputTypes[i], 0)
+		s.bufferedColumns[i] = s.allocator.NewMemColumn(s.inputTypes[i], 0)
 	}
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]uint64, 0, 16)
@@ -361,7 +371,8 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 // buffered tuples.
 func (s *chunker) buffer(start uint16, end uint16) {
 	for i := 0; i < len(s.bufferedColumns); i++ {
-		s.bufferedColumns[i].Append(
+		s.allocator.Append(
+			s.bufferedColumns[i],
 			coldata.SliceArgs{
 				ColType:     s.inputTypes[i],
 				Src:         s.batch.ColVec(i),

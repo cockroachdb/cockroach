@@ -14,7 +14,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,14 +36,14 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 			sqlbase.EncDatum{Datum: tree.DBoolFalse},
 		},
 	}
-	vec := coldata.NewMemColumn(coltypes.Bool, 2)
+	vec := testAllocator.NewMemColumn(coltypes.Bool, 2)
 	ct := types.Bool
 
 	// Test converting column 0.
 	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 		t.Fatal(err)
 	}
-	expected := coldata.NewMemColumn(coltypes.Bool, 2)
+	expected := testAllocator.NewMemColumn(coltypes.Bool, 2)
 	expected.Bool()[0] = false
 	expected.Bool()[1] = true
 	if !reflect.DeepEqual(vec, expected) {
@@ -68,11 +67,11 @@ func TestEncDatumRowsToColVecInt16(t *testing.T) {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(17)}},
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(42)}},
 	}
-	vec := coldata.NewMemColumn(coltypes.Int16, 2)
+	vec := testAllocator.NewMemColumn(coltypes.Int16, 2)
 	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, types.Int2, &alloc); err != nil {
 		t.Fatal(err)
 	}
-	expected := coldata.NewMemColumn(coltypes.Int16, 2)
+	expected := testAllocator.NewMemColumn(coltypes.Int16, 2)
 	expected.Int16()[0] = 17
 	expected.Int16()[1] = 42
 	if !reflect.DeepEqual(vec, expected) {
@@ -86,14 +85,14 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("foo")}},
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("bar")}},
 	}
-	vec := coldata.NewMemColumn(coltypes.Bytes, 2)
+	vec := testAllocator.NewMemColumn(coltypes.Bytes, 2)
 	for _, width := range []int32{0, 25} {
 		ct := types.MakeString(width)
 		vec.Bytes().Reset()
 		if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 			t.Fatal(err)
 		}
-		expected := coldata.NewMemColumn(coltypes.Bytes, 2)
+		expected := testAllocator.NewMemColumn(coltypes.Bytes, 2)
 		expected.Bytes().Set(0, []byte("foo"))
 		expected.Bytes().Set(1, []byte("bar"))
 		if !reflect.DeepEqual(vec, expected) {
@@ -106,7 +105,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nRows := 3
 	rows := make(sqlbase.EncDatumRows, nRows)
-	expected := coldata.NewMemColumn(coltypes.Decimal, 3)
+	expected := testAllocator.NewMemColumn(coltypes.Decimal, 3)
 	for i, s := range []string{"1.0000", "-3.12", "NaN"} {
 		var err error
 		dec, err := tree.ParseDDecimal(s)
@@ -116,7 +115,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: dec}}
 		expected.Decimal()[i] = dec.Decimal
 	}
-	vec := coldata.NewMemColumn(coltypes.Decimal, 3)
+	vec := testAllocator.NewMemColumn(coltypes.Decimal, 3)
 	ct := types.Decimal
 	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 		t.Fatal(err)
