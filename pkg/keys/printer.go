@@ -455,11 +455,19 @@ func localRangeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 					fmt.Fprintf(&buf, "%s/%s", roachpb.Key(decodedAddrKey), s.name)
 				}
 				if bytes.Equal(s.suffix, LocalTransactionSuffix) {
+					qualifier := ""
+					if bytes.HasSuffix(key, TransactionTombstoneTSCacheSuffix) {
+						qualifier = "/aborted"
+						key = key[0 : len(key)-len(TransactionTombstoneTSCacheSuffix)]
+					} else if bytes.HasSuffix(key, TransactionPushMarkerTSCacheSuffix) {
+						key = key[0 : len(key)-len(TransactionPushMarkerTSCacheSuffix)]
+						qualifier = "/pushed"
+					}
 					txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
 					if err != nil {
 						return fmt.Sprintf("/%q/err:%v", key, err)
 					}
-					fmt.Fprintf(&buf, "/%q", txnID)
+					fmt.Fprintf(&buf, "/%q%s", txnID, qualifier)
 				} else {
 					id := key[(begin + len(s.suffix)):]
 					fmt.Fprintf(&buf, "/%q", []byte(id))
