@@ -11,6 +11,7 @@
 package mutations
 
 import (
+	"encoding/json"
 	"math/rand"
 	"strings"
 
@@ -19,6 +20,9 @@ import (
 )
 
 var (
+	// StatisticsMutator adds ALTER TABLE INJECT STATISTICS statements.
+	StatisticsMutator MultiStatementMutation = statisticsMutator
+
 	// ForeignKeyMutator adds ALTER TABLE ADD FOREIGN KEY statements.
 	ForeignKeyMutator MultiStatementMutation = foreignKeyMutator
 
@@ -98,6 +102,79 @@ func ApplyString(rng *rand.Rand, input string, mutators ...Mutator) (output stri
 		sb.WriteString(";\n")
 	}
 	return sb.String(), true
+}
+
+// TODO(mjibson): This type is copied from sql/stats, but due to that package
+// depending on sqlbase, which depends on this package, a cycle would be
+// created. Refactor something such that we avoid the cycle. This probably
+// means moving all of the rand table/datum stuff out of sqlbase.
+type jsonStatistic struct {
+	Name          string   `json:"name,omitempty"`
+	CreatedAt     string   `json:"created_at"`
+	Columns       []string `json:"columns"`
+	RowCount      uint64   `json:"row_count"`
+	DistinctCount uint64   `json:"distinct_count"`
+	NullCount     uint64   `json:"null_count"`
+}
+
+func statisticsMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
+	for _, stmt := range stmts {
+		create, ok := stmt.(*tree.CreateTable)
+		if !ok {
+			continue
+		}
+		alter := &tree.AlterTable{
+			Table: create.Table.ToUnresolvedObjectName(),
+		}
+		// rowCount should be the same for all columns in a
+		// table. Attempt to distribute it over powers of 10.
+		var rowCount int64
+		if n := rng.Intn(20); n == 0 {
+			// ignore
+		} else if n <= 10 {
+			rowCount = rng.Int63n(10) + 1
+			for i := 0; i < n; i++ {
+				rowCount *= 10
+			}
+		} else {
+			rowCount = rng.Int63()
+		}
+		var stats []jsonStatistic
+		for _, def := range create.Defs {
+			col, ok := def.(*tree.ColumnTableDef)
+			if !ok {
+				continue
+			}
+			var nullCount, distinctCount uint64
+			if rowCount > 0 {
+				if col.Nullable.Nullability != tree.NotNull {
+					nullCount = uint64(rng.Int63n(rowCount))
+				}
+				distinctCount = uint64(rng.Int63n(rowCount))
+			}
+			// TODO(mjibson): Generate histograms for the first column of indexes.
+			stats = append(stats, jsonStatistic{
+				Name:          "__auto__",
+				CreatedAt:     "2000-01-01 00:00:00+00:00",
+				RowCount:      uint64(rowCount),
+				Columns:       []string{col.Name.String()},
+				DistinctCount: distinctCount,
+				NullCount:     nullCount,
+			})
+		}
+		if len(stats) > 0 {
+			b, err := json.Marshal(stats)
+			if err != nil {
+				// Should not happen.
+				panic(err)
+			}
+			alter.Cmds = append(alter.Cmds, &tree.AlterTableInjectStats{
+				Stats: tree.NewDString(string(b)),
+			})
+			additional = append(additional, alter)
+		}
+	}
+	return additional
 }
 
 func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
