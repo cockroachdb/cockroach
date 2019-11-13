@@ -37,6 +37,8 @@
 </span></td></tr>
 <tr><td><a name="avg"></a><code>avg(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the average of the selected values.</p>
 </span></td></tr>
+<tr><td><a name="avg"></a><code>avg(arg1: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the average of the selected values.</p>
+</span></td></tr>
 <tr><td><a name="bit_and"></a><code>bit_and(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the bitwise AND of all non-null input values, or null if none.</p>
 </span></td></tr>
 <tr><td><a name="bit_or"></a><code>bit_or(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the bitwise OR of all non-null input values, or null if none.</p>
