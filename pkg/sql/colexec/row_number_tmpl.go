@@ -32,9 +32,12 @@ import (
 // NewRowNumberOperator creates a new Operator that computes window function
 // ROW_NUMBER. outputColIdx specifies in which coldata.Vec the operator should
 // put its output (if there is no such column, a new column is appended).
-func NewRowNumberOperator(input Operator, outputColIdx int, partitionColIdx int) Operator {
+func NewRowNumberOperator(
+	allocator *Allocator, input Operator, outputColIdx int, partitionColIdx int,
+) Operator {
 	base := rowNumberBase{
 		OneInputNode:    NewOneInputNode(input),
+		allocator:       allocator,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
 	}
@@ -49,6 +52,7 @@ func NewRowNumberOperator(input Operator, outputColIdx int, partitionColIdx int)
 // and should not be used directly.
 type rowNumberBase struct {
 	OneInputNode
+	allocator       *Allocator
 	outputColIdx    int
 	partitionColIdx int
 
@@ -71,7 +75,7 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
 	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bool)
+		r.allocator.AppendColumn(batch, coltypes.Bool)
 	} else if r.partitionColIdx > batch.Width() {
 		execerror.VectorizedInternalPanic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}
@@ -79,7 +83,7 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	// {{ end }}
 
 	if r.outputColIdx == batch.Width() {
-		batch.AppendCol(coltypes.Int64)
+		r.allocator.AppendColumn(batch, coltypes.Int64)
 	} else if r.outputColIdx > batch.Width() {
 		execerror.VectorizedInternalPanic("unexpected: column outputColIdx is neither present nor the next to be appended")
 	}

@@ -29,8 +29,6 @@ func NewAllocator() *Allocator {
 	return &Allocator{}
 }
 
-// TODO(yuzefovich): add AppendCol method to Allocator.
-
 // NewMemBatch allocates a new in-memory coldata.Batch.
 func (a *Allocator) NewMemBatch(types []coltypes.T) coldata.Batch {
 	return a.NewMemBatchWithSize(types, int(coldata.BatchSize()))
@@ -45,6 +43,12 @@ func (*Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Batc
 // NewMemColumn returns a new coldata.Vec, initialized with a length.
 func (*Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 	return coldata.NewMemColumn(t, n)
+}
+
+// AppendColumn appends a newly allocated coldata.Vec of the given type to b.
+func (a *Allocator) AppendColumn(b coldata.Batch, t coltypes.T) {
+	col := a.NewMemColumn(t, int(coldata.BatchSize()))
+	b.AppendCol(col)
 }
 
 // Append appends elements of a source coldata.Vec into dest according to

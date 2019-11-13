@@ -22,6 +22,7 @@ import (
 type ordinalityOp struct {
 	OneInputNode
 
+	allocator *Allocator
 	// ordinalityCol is the index of the column in which ordinalityOp will write
 	// the ordinal number. It is colNotAppended if the column has not been
 	// appended yet.
@@ -39,9 +40,10 @@ func (c *ordinalityOp) EstimateStaticMemoryUsage() int {
 const colNotAppended = -1
 
 // NewOrdinalityOp returns a new WITH ORDINALITY operator.
-func NewOrdinalityOp(input Operator) Operator {
+func NewOrdinalityOp(allocator *Allocator, input Operator) Operator {
 	c := &ordinalityOp{
 		OneInputNode:  NewOneInputNode(input),
+		allocator:     allocator,
 		ordinalityCol: colNotAppended,
 		counter:       1,
 	}
@@ -56,7 +58,7 @@ func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 	bat := c.input.Next(ctx)
 	if c.ordinalityCol == colNotAppended {
 		c.ordinalityCol = bat.Width()
-		bat.AppendCol(coltypes.Int64)
+		c.allocator.AppendColumn(bat, coltypes.Int64)
 	}
 
 	if bat.Length() == 0 {

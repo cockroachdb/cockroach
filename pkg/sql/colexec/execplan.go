@@ -417,7 +417,7 @@ func NewColOperator(
 			return result, err
 		}
 		result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
-		result.Op, result.IsStreaming = NewOrdinalityOp(inputs[0]), true
+		result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(), inputs[0]), true
 
 	case core.HashJoiner != nil:
 		createHashJoinerWithOnExprPlanning := func(
@@ -659,11 +659,11 @@ func NewColOperator(
 		}
 		switch *wf.Func.WindowFunc {
 		case execinfrapb.WindowerSpec_ROW_NUMBER:
-			result.Op = NewRowNumberOperator(input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op = NewRowNumberOperator(NewAllocator(), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case execinfrapb.WindowerSpec_RANK:
-			result.Op, err = NewRankOperator(input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op, err = NewRankOperator(NewAllocator(), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case execinfrapb.WindowerSpec_DENSE_RANK:
-			result.Op, err = NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op, err = NewRankOperator(NewAllocator(), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
 			return result, errors.Newf("window function %s is not supported", wf.String())
 		}
@@ -1066,7 +1066,7 @@ func planTypedMaybeNullProjectionOperators(
 ) (op Operator, resultIdx int, ct []types.T, memUsed int, err error) {
 	if expr == tree.DNull {
 		resultIdx = len(columnTypes)
-		op = NewConstNullOp(input, resultIdx, typeconv.FromColumnType(exprTyp))
+		op = NewConstNullOp(NewAllocator(), input, resultIdx, typeconv.FromColumnType(exprTyp))
 		ct = append(columnTypes, *exprTyp)
 		memUsed = op.(StaticMemoryOperator).EstimateStaticMemoryUsage()
 		return op, resultIdx, ct, memUsed, nil
@@ -1104,7 +1104,7 @@ func planProjectionOperators(
 			return nil, 0, nil, 0, err
 		}
 		outputIdx := len(ct)
-		op, err = GetCastOperator(op, resultIdx, outputIdx, expr.ResolvedType(), t.Type)
+		op, err = GetCastOperator(NewAllocator(), op, resultIdx, outputIdx, expr.ResolvedType(), t.Type)
 		ct = append(ct, *t.Type)
 		if sMem, ok := op.(StaticMemoryOperator); ok {
 			memUsed += sMem.EstimateStaticMemoryUsage()
@@ -1132,7 +1132,7 @@ func planProjectionOperators(
 		funcOutputType := t.ResolvedType()
 		resultIdx = len(ct)
 		ct = append(ct, *funcOutputType)
-		op = NewBuiltinFunctionOperator(ctx, t, ct, inputCols, resultIdx, op)
+		op = NewBuiltinFunctionOperator(NewAllocator(), ctx, t, ct, inputCols, resultIdx, op)
 		return op, resultIdx, ct, memUsed, nil
 	case tree.Datum:
 		datumType := t.ResolvedType()
@@ -1147,7 +1147,7 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, memUsed, err
 		}
-		op, err := NewConstOp(input, typ, constVal, resultIdx)
+		op, err := NewConstOp(NewAllocator(), input, typ, constVal, resultIdx)
 		if err != nil {
 			return nil, resultIdx, ct, memUsed, err
 		}
@@ -1209,7 +1209,7 @@ func planProjectionOperators(
 		}
 		memUsed += elseMem
 
-		op := NewCaseOp(buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
+		op := NewCaseOp(NewAllocator(), buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 
 		return op, caseOutputIdx, ct, memUsed, nil
 	case *tree.AndExpr, *tree.OrExpr:
@@ -1245,7 +1245,7 @@ func planProjectionExpr(
 		resultIdx = len(ct)
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
-		op, err = GetProjectionLConstOperator(left.ResolvedType(), &ct[rightIdx], binOp, rightOp, rightIdx, lConstArg, resultIdx)
+		op, err = GetProjectionLConstOperator(NewAllocator(), left.ResolvedType(), &ct[rightIdx], binOp, rightOp, rightIdx, lConstArg, resultIdx)
 		ct = append(ct, *outputType)
 		if sMem, ok := op.(StaticMemoryOperator); ok {
 			memUsed += sMem.EstimateStaticMemoryUsage()
@@ -1264,7 +1264,7 @@ func planProjectionExpr(
 		if binOp == tree.Like || binOp == tree.NotLike {
 			negate := binOp == tree.NotLike
 			op, err = GetLikeProjectionOperator(
-				ctx, leftOp, leftIdx, resultIdx, string(tree.MustBeDString(rConstArg)), negate)
+				NewAllocator(), ctx, leftOp, leftIdx, resultIdx, string(tree.MustBeDString(rConstArg)), negate)
 		} else if binOp == tree.In || binOp == tree.NotIn {
 			negate := binOp == tree.NotIn
 			datumTuple, ok := tree.AsDTuple(rConstArg)
@@ -1272,7 +1272,7 @@ func planProjectionExpr(
 				err = errors.Errorf("IN operator supported only on constant expressions")
 				return nil, resultIdx, ct, leftMem, err
 			}
-			op, err = GetInProjectionOperator(&ct[leftIdx], leftOp, leftIdx, resultIdx, datumTuple, negate)
+			op, err = GetInProjectionOperator(NewAllocator(), &ct[leftIdx], leftOp, leftIdx, resultIdx, datumTuple, negate)
 		} else if binOp == tree.IsDistinctFrom || binOp == tree.IsNotDistinctFrom {
 			if right != tree.DNull {
 				err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
@@ -1281,9 +1281,9 @@ func planProjectionExpr(
 			// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
 			// negate when IS DISTINCT FROM is used.
 			negate := binOp == tree.IsDistinctFrom
-			op = newIsNullProjOp(leftOp, leftIdx, resultIdx, negate)
+			op = newIsNullProjOp(NewAllocator(), leftOp, leftIdx, resultIdx, negate)
 		} else {
-			op, err = GetProjectionRConstOperator(&ct[leftIdx], right.ResolvedType(), binOp, leftOp, leftIdx, rConstArg, resultIdx)
+			op, err = GetProjectionRConstOperator(NewAllocator(), &ct[leftIdx], right.ResolvedType(), binOp, leftOp, leftIdx, rConstArg, resultIdx)
 		}
 		ct = append(ct, *outputType)
 		if sMem, ok := op.(StaticMemoryOperator); ok {
@@ -1297,7 +1297,7 @@ func planProjectionExpr(
 		return nil, resultIdx, nil, leftMem + rightMem, err
 	}
 	resultIdx = len(ct)
-	op, err = GetProjectionOperator(&ct[leftIdx], &ct[rightIdx], binOp, rightOp, leftIdx, rightIdx, resultIdx)
+	op, err = GetProjectionOperator(NewAllocator(), &ct[leftIdx], &ct[rightIdx], binOp, rightOp, leftIdx, rightIdx, resultIdx)
 	ct = append(ct, *outputType)
 	if sMem, ok := op.(StaticMemoryOperator); ok {
 		memUsed += sMem.EstimateStaticMemoryUsage()
@@ -1344,12 +1344,14 @@ func planLogicalProjectionOp(
 	switch expr.(type) {
 	case *tree.AndExpr:
 		outputOp = NewAndProjOp(
+			NewAllocator(),
 			input, leftProjOpChain, rightProjOpChain,
 			&leftFeedOp, &rightFeedOp,
 			leftIdx, rightIdx, resultIdx,
 		)
 	case *tree.OrExpr:
 		outputOp = NewOrProjOp(
+			NewAllocator(),
 			input, leftProjOpChain, rightProjOpChain,
 			&leftFeedOp, &rightFeedOp,
 			leftIdx, rightIdx, resultIdx,
