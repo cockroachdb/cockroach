@@ -56,6 +56,7 @@ import (
 // columns. The input specifications to this function are the same as that of
 // the NewOrderedAggregator function.
 func NewHashAggregator(
+	allocator *Allocator,
 	input Operator,
 	colTypes []coltypes.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
@@ -99,6 +100,7 @@ func NewHashAggregator(
 	}
 
 	ht := makeHashTable(
+		allocator,
 		hashTableBucketSize,
 		colTypes,
 		groupCols,
@@ -127,7 +129,7 @@ func NewHashAggregator(
 		builder:     builder,
 		ht:          ht,
 		distinctCol: distinctCol,
-		batch:       coldata.NewMemBatch(ht.outTypes),
+		batch:       allocator.NewMemBatch(ht.outTypes),
 	}
 
 	orderedAgg := &orderedAggregator{

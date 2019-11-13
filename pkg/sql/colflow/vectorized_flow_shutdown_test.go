@@ -145,15 +145,15 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
 
-				hashRouter, hashRouterOutputs := colexec.NewHashRouter(hashRouterInput, typs, []int{0}, numHashRouterOutputs)
+				hashRouter, hashRouterOutputs := colexec.NewHashRouter(testAllocator, hashRouterInput, typs, []int{0}, numHashRouterOutputs)
 				for i := 0; i < numInboxes; i++ {
-					inbox, err := colrpc.NewInbox(typs, execinfrapb.StreamID(streamID))
+					inbox, err := colrpc.NewInbox(testAllocator, typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
 					synchronizerInputs = append(synchronizerInputs, colexec.Operator(inbox))
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(testAllocator, synchronizerInputs, typs, &wg)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				runOutboxInbox := func(
@@ -165,6 +165,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMetadataSources []execinfrapb.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
+						testAllocator,
 						outboxInput,
 						typs,
 						append(outboxMetadataSources,
@@ -216,7 +217,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						}
 						runOutboxInbox(ctxRemote, cancelRemote, hashRouterOutputs[i], inboxes[i], streamID, outboxMetadataSources)
 					} else {
-						batch := coldata.NewMemBatch(typs)
+						batch := testAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
 						runOutboxInbox(ctxRemote, cancelRemote, colexec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
 					}
@@ -227,7 +228,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
-					inbox, err := colrpc.NewInbox(typs, execinfrapb.StreamID(streamID))
+					inbox, err := colrpc.NewInbox(testAllocator, typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, synchronizer, inbox, streamID, materializerMetadataSources)

@@ -79,7 +79,7 @@ func wrapRowSource(
 		return nil, err
 	}
 
-	return NewColumnarizer(ctx, flowCtx, processorID, toWrap)
+	return NewColumnarizer(ctx, NewAllocator(), flowCtx, processorID, toWrap)
 }
 
 // NewColOperatorResult is a helper struct that encompasses all of the return
@@ -258,7 +258,7 @@ func NewColOperator(
 			return result, errors.Newf("scrub table reader is unsupported in vectorized")
 		}
 		var scanOp *colBatchScan
-		scanOp, err = newColBatchScan(flowCtx, core.TableReader, post)
+		scanOp, err = newColBatchScan(NewAllocator(), flowCtx, core.TableReader, post)
 		if err != nil {
 			return result, err
 		}
@@ -294,7 +294,7 @@ func NewColOperator(
 			// TODO(solon): The distsql plan for this case includes a TableReader, so
 			// we end up creating an orphaned colBatchScan. We should avoid that.
 			// Ideally the optimizer would not plan a scan in this unusual case.
-			result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(), true, nil
+			result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator()), true, nil
 			// We make ColumnTypes non-nil so that sanity check doesn't panic.
 			result.ColumnTypes = make([]types.T, 0)
 			break
@@ -304,7 +304,7 @@ func NewColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			result.Op, result.IsStreaming, err = NewCountOp(inputs[0]), true, nil
+			result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(), inputs[0]), true, nil
 			result.ColumnTypes = []types.T{*types.Int}
 			break
 		}
@@ -374,11 +374,11 @@ func NewColOperator(
 		}
 		if needHash {
 			result.Op, err = NewHashAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				NewAllocator(), inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 		} else {
 			result.Op, err = NewOrderedAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				NewAllocator(), inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 			result.IsStreaming = true
 		}
@@ -444,6 +444,7 @@ func NewColOperator(
 			}
 
 			result.Op, err = NewEqHashJoinerOp(
+				NewAllocator(),
 				inputs[0],
 				inputs[1],
 				core.HashJoiner.LeftEqColumns,
@@ -521,6 +522,7 @@ func NewColOperator(
 			}
 
 			result.Op, err = NewMergeJoinOp(
+				NewAllocator(),
 				core.MergeJoiner.Type,
 				inputs[0],
 				inputs[1],
@@ -596,16 +598,16 @@ func NewColOperator(
 		if matchLen > 0 {
 			// The input is already partially ordered. Use a chunks sorter to avoid
 			// loading all the rows into memory.
-			result.Op, err = NewSortChunks(input, inputTypes, orderingCols, int(matchLen))
+			result.Op, err = NewSortChunks(NewAllocator(), input, inputTypes, orderingCols, int(matchLen))
 		} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
 			// There is a limit specified with no post-process filter, so we know
 			// exactly how many rows the sorter should output. Choose a top K sorter,
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
-			result.Op, result.IsStreaming = NewTopKSorter(input, inputTypes, orderingCols, k), true
+			result.Op, result.IsStreaming = NewTopKSorter(NewAllocator(), input, inputTypes, orderingCols, k), true
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
-			result.Op, err = NewSorter(input, inputTypes, orderingCols)
+			result.Op, err = NewSorter(NewAllocator(), input, inputTypes, orderingCols)
 		}
 		result.ColumnTypes = spec.Input[0].ColumnTypes
 
@@ -638,11 +640,11 @@ func NewColOperator(
 			// TODO(yuzefovich): add support for hashing partitioner (probably by
 			// leveraging hash routers once we can distribute). The decision about
 			// which kind of partitioner to use should come from the optimizer.
-			input, err = NewWindowSortingPartitioner(input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
+			input, err = NewWindowSortingPartitioner(NewAllocator(), input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
 			tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
 		} else {
 			if len(wf.Ordering.Columns) > 0 {
-				input, err = NewSorter(input, typs, wf.Ordering.Columns)
+				input, err = NewSorter(NewAllocator(), input, typs, wf.Ordering.Columns)
 			}
 			// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
 			// omitted, the window function operator is actually streaming.
@@ -745,7 +747,7 @@ func NewColOperator(
 		result.Op = NewOffsetOp(result.Op, post.Offset)
 	}
 	if post.Limit != 0 {
-		result.Op = NewLimitOp(result.Op, post.Limit)
+		result.Op = NewLimitOp(NewAllocator(), result.Op, post.Limit)
 	}
 	return result, err
 }
