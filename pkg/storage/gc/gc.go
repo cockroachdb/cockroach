@@ -129,12 +129,11 @@ type CleanupIntentsFunc func(context.Context, []roachpb.Intent) error
 // transaction record.
 type CleanupTxnIntentsAsyncFunc func(context.Context, *roachpb.Transaction, []roachpb.Intent) error
 
-// Run runs garbage collection for the specified descriptor on the
-// provided Engine (which is not mutated). It uses the provided gcFn
-// to run garbage collection once on all implicated spans,
-// cleanupIntentsFn to resolve intents synchronously, and
-// cleanupTxnIntentsAsyncFn to asynchronously cleanup intents and
-// associated transaction record on success.
+// Run runs garbage collection for the specified descriptor on the provided
+// Reader. It uses the provided gcFn to run garbage collection once on all
+// implicated spans, cleanupIntentsFn to resolve intents synchronously, and
+// cleanupTxnIntentsAsyncFn to asynchronously cleanup intents and associated
+// transaction record on success.
 func Run(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,

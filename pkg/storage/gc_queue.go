@@ -410,7 +410,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
 		return nil
 	}
-	snap := repl.store.Engine().NewSnapshot()
+	snap := repl.Engine().NewSnapshot()
 	defer snap.Close()
 
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, *zone.GC, &replicaGCer{repl: repl},

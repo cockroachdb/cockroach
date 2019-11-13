@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -102,6 +103,9 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60,
 )
+
+// TODO(irfansharif): Add the right set of knobs for the raft storage engine
+// once we're using a different underlying engine.
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterPublicByteSizeSetting(
@@ -360,34 +364,38 @@ func (rs *storeReplicaVisitor) EstimatedCount() int {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
-	cfg                StoreConfig
-	db                 *client.DB
-	engine             engine.Engine        // The underlying key-value store
-	compactor          *compactor.Compactor // Schedules compaction of the engine
-	tsCache            tscache.Cache        // Most recent timestamps for keys / key ranges
-	allocator          Allocator            // Makes allocation decisions
-	replRankings       *replicaRankings
-	storeRebalancer    *StoreRebalancer
-	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
-	gcQueue            *gcQueue                    // Garbage collection queue
-	mergeQueue         *mergeQueue                 // Range merging queue
-	splitQueue         *splitQueue                 // Range splitting queue
-	replicateQueue     *replicateQueue             // Replication queue
-	replicaGCQueue     *replicaGCQueue             // Replica GC queue
-	raftLogQueue       *raftLogQueue               // Raft log truncation queue
-	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
-	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner            *replicaScanner             // Replica scanner
-	consistencyQueue   *consistencyQueue           // Replica consistency check queue
-	metrics            *StoreMetrics
-	intentResolver     *intentresolver.IntentResolver
-	recoveryMgr        txnrecovery.Manager
-	raftEntryCache     *raftentry.Cache
-	limiters           batcheval.Limiters
-	txnWaitMetrics     *txnwait.Metrics
-	sstSnapshotStorage SSTSnapshotStorage
-	protectedtsCache   protectedts.Cache
+	Ident      *roachpb.StoreIdent // pointer to catch access before Start() is called
+	cfg        StoreConfig
+	db         *client.DB
+	engine     engine.Engine      // The underlying storage medium for non-Raft data
+	raftEngine raftstorage.Engine // The underlying storage medium for Raft data
+	// TODO(irfansharif): We're not separately suggesting compactions for the
+	// raft storage engine. Perhaps it's a good idea to do so.
+	compactor              *compactor.Compactor // Schedules compaction of the non-Raft data engine
+	tsCache                tscache.Cache        // Most recent timestamps for keys / key ranges
+	allocator              Allocator            // Makes allocation decisions
+	replRankings           *replicaRankings
+	storeRebalancer        *StoreRebalancer
+	rangeIDAlloc           *idalloc.Allocator          // Range ID allocator
+	gcQueue                *gcQueue                    // Garbage collection queue
+	mergeQueue             *mergeQueue                 // Range merging queue
+	splitQueue             *splitQueue                 // Range splitting queue
+	replicateQueue         *replicateQueue             // Replication queue
+	replicaGCQueue         *replicaGCQueue             // Replica GC queue
+	raftLogQueue           *raftLogQueue               // Raft log truncation queue
+	raftSnapshotQueue      *raftSnapshotQueue          // Raft repair queue
+	tsMaintenanceQueue     *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner                *replicaScanner             // Replica scanner
+	consistencyQueue       *consistencyQueue           // Replica consistency check queue
+	metrics                *StoreMetrics
+	intentResolver         *intentresolver.IntentResolver
+	recoveryMgr            txnrecovery.Manager
+	raftEntryCache         *raftentry.Cache
+	limiters               batcheval.Limiters
+	txnWaitMetrics         *txnwait.Metrics
+	sstSnapshotStorage     SSTSnapshotStorage
+	raftSSTSnapshotStorage SSTSnapshotStorage
+	protectedtsCache       protectedts.Cache
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -766,7 +774,11 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 
 // NewStore returns a new instance of a store.
 func NewStore(
-	ctx context.Context, cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescriptor,
+	ctx context.Context,
+	cfg StoreConfig,
+	eng engine.Engine,
+	raftEng raftstorage.Engine,
+	nodeDesc *roachpb.NodeDescriptor,
 ) *Store {
 	// TODO(tschottdorf): find better place to set these defaults.
 	cfg.SetDefaults()
@@ -775,11 +787,12 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		cfg:        cfg,
+		db:         cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:     eng,
+		raftEngine: raftEng,
+		nodeDesc:   nodeDesc,
+		metrics:    newStoreMetrics(cfg.HistogramWindowInterval),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -855,9 +868,22 @@ func NewStore(
 	// after each snapshot application, except when the node crashed right before
 	// it can clean it up. If this fails it's not a correctness issue since the
 	// storage is also cleared before receiving a snapshot.
-	s.sstSnapshotStorage = NewSSTSnapshotStorage(s.engine, s.limiters.BulkIOWriteRate)
+	s.sstSnapshotStorage = NewSSTSnapshotStorage(
+		s.Engine(), "sstsnapshot-data", s.limiters.BulkIOWriteRate,
+	)
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
-		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
+		log.Warningf(ctx, "failed to clear snapshot storage for data eng: %v", err)
+	}
+
+	// TODO(irfansharif): This access to the underlying engine is unfortunate.
+	// Once `pkg/raftstorage` is changed to be less of a thin shim around
+	// engine.{Engine,Batch} interfaces, we should pull relevant parts of the
+	// SSTSnapshotStorage abstraction in as well.
+	s.raftSSTSnapshotStorage = NewSSTSnapshotStorage(
+		s.RaftEngine().UnderlyingEngine(), "sstsnapshot-raft", s.limiters.BulkIOWriteRate,
+	)
+	if err := s.raftSSTSnapshotStorage.Clear(); err != nil {
+		log.Warningf(ctx, "failed to clear snapshot storage for raft eng: %v", err)
 	}
 	s.protectedtsCache = cfg.ProtectedTimestampCache
 
@@ -2031,6 +2057,9 @@ func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 // Engine accessor.
 func (s *Store) Engine() engine.Engine { return s.engine }
 
+// RaftEngine accessor.
+func (s *Store) RaftEngine() raftstorage.Engine { return s.raftEngine }
+
 // DB accessor.
 func (s *Store) DB() *client.DB { return s.cfg.DB }
 
@@ -2314,12 +2343,15 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 // checkpoint creates a RocksDB checkpoint in the auxiliary directory with the
 // provided tag used in the filepath. The filepath for the checkpoint directory
 // is returned.
-func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
+func (s *Store) checkpoint(_ context.Context, tag string) (string, error) {
 	checkpointBase := filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
 	_ = os.MkdirAll(checkpointBase, 0700)
 
 	checkpointDir := filepath.Join(checkpointBase, tag)
-	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {
+	if err := s.RaftEngine().CreateCheckpoint(checkpointDir); err != nil {
+		return "", err
+	}
+	if err := s.Engine().CreateCheckpoint(checkpointDir); err != nil {
 		return "", err
 	}
 
@@ -2347,6 +2379,9 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		return err
 	}
 	s.metrics.updateRocksDBStats(*stats)
+
+	// TODO(irfansharif): Separately collect stats for raft engine once we're a
+	// separate underlying instance.
 
 	// Get engine Env stats.
 	envStats, err := s.engine.GetEnvStats()

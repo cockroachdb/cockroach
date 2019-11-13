@@ -381,6 +381,10 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	}
 	logEntries := make([][]byte, 0, preallocSize)
 
+	// TODO(irfansharif): Log entries are no longer sent with snapshots as of
+	// v19.2, we can/should delete all code around the sending of log entries in
+	// snapshots before v20.1 is cut.
+
 	var raftLogBytes int64
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		bytes, err := kv.Value.GetBytes()

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -27,7 +28,11 @@ import (
 // changes to the given ReadWriter will be written atomically with the
 // split commit.
 func splitPreApply(
-	ctx context.Context, readWriter engine.ReadWriter, split roachpb.SplitTrigger, r *Replica,
+	ctx context.Context,
+	readWriter engine.ReadWriter,
+	raftRW raftstorage.ReadWriter,
+	split roachpb.SplitTrigger,
+	r *Replica,
 ) {
 	// Check on the RHS, we need to ensure that it exists and has a minReplicaID
 	// less than or equal to the replica we're about to initialize.
@@ -77,16 +82,17 @@ func splitPreApply(
 		// Rather than specifically deleting around the data we want to preserve
 		// we read the HardState to preserve it, clear everything and write back
 		// the HardState and tombstone.
-		hs, err := rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
+		hs, err := rightRepl.raftMu.stateLoader.LoadHardState(ctx, raftRW)
 		if err != nil {
 			log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 		}
 		const rangeIDLocalOnly = false
 		const mustUseClearRange = false
-		if err := clearRangeData(&split.RightDesc, readWriter, readWriter, rangeIDLocalOnly, mustUseClearRange); err != nil {
+		if err := clearRangeData(
+			&split.RightDesc, readWriter, readWriter, raftRW, raftRW, rangeIDLocalOnly, mustUseClearRange); err != nil {
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
-		if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
+		if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, raftRW, hs); err != nil {
 			log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 		}
 		if err := r.setTombstoneKey(ctx, readWriter, r.minReplicaID()); err != nil {
@@ -99,7 +105,21 @@ func splitPreApply(
 	// replica is initialized (combining it with existing or default
 	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
-	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
+
+	// We need to seed RHS truncated state here manually. Upstream of raft,
+	// during splits, the RHS truncated state is written to the one write batch
+	// that is to be applied to the main data engine. Given that we know we're
+	// applying a split, we reconstruct the truncated state that was written
+	// upstream of raft.
+	ts := &roachpb.RaftTruncatedState{
+		Term:  stateloader.RaftInitialLogTerm,
+		Index: stateloader.RaftInitialLogIndex,
+	}
+	if err := rsl.SetRaftTruncatedState(ctx, raftRW, ts); err != nil {
+		log.Fatal(ctx, err)
+	}
+
+	if err := rsl.SynthesizeRaftState(ctx, readWriter, raftRW); err != nil {
 		log.Fatal(ctx, err)
 	}
 }

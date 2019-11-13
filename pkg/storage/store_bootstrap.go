@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,6 +26,17 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
+
+// TODO(irfansharif): Right now we're not separately writing store identifiers
+// to the raft storage engine seeing as how, pre-migration, they're backed by
+// the same underlying engine. Once that changes however, we will need to, and
+// think about what "raft storage" looks like for a node with multiple data
+// engines. Our system was originally designed such that a single store was
+// backed by a single storage engine. By introducing raft storage, we've
+// partitioned it so that a single store is now backed by two storage engines
+// (data + raft), with the raft engine not shared across stores. This however
+// does not work well for operators who have hardware to support X data engines
+// and Y raft engines on a given node, where X != Y.
 
 // InitEngine writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
@@ -85,6 +97,7 @@ func InitEngine(
 func WriteInitialClusterData(
 	ctx context.Context,
 	eng engine.Engine,
+	raftEng raftstorage.Engine,
 	initialValues []roachpb.KeyValue,
 	bootstrapVersion roachpb.Version,
 	numStores int,
@@ -171,6 +184,9 @@ func WriteInitialClusterData(
 		batch := eng.NewBatch()
 		defer batch.Close()
 
+		raftBatch := raftEng.NewBatch()
+		defer raftBatch.Close()
+
 		now := hlc.Timestamp{
 			WallTime: nowNanos,
 			Logical:  0,
@@ -226,8 +242,8 @@ func WriteInitialClusterData(
 
 		truncStateType := stateloader.TruncatedStateUnreplicated
 		lease := roachpb.BootstrapLease()
-		_, err := stateloader.WriteInitialState(
-			ctx, batch,
+		_, err := stateloader.WriteInitialStateDuringBootstrap(
+			ctx, batch, raftBatch,
 			enginepb.MVCCStats{},
 			*desc,
 			lease,
@@ -245,6 +261,14 @@ func WriteInitialClusterData(
 
 		sl := stateloader.Make(rangeID)
 		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
+			return err
+		}
+
+		// NB: It's crucial that we persist raft engine changes before we
+		// synchronize the primary engine. Not doing so leaves us vulnerable to
+		// the situation where we're able to successfully commit to the primary
+		// data engine, and fail to commit the corresponding raft data.
+		if err := raftBatch.Commit(true /* sync */); err != nil {
 			return err
 		}
 

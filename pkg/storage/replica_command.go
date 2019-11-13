@@ -328,7 +328,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			var err error
 			targetSize := r.GetMaxBytes() / 2
 			foundSplitKey, err = engine.MVCCFindSplitKey(
-				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize)
+				ctx, r.Engine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
 				return reply, errors.Errorf("unable to determine split key: %s", err)
 			}
@@ -1932,6 +1932,10 @@ func (r *Replica) sendSnapshot(
 	canAvoidSendingLog := !usesReplicatedTruncatedState &&
 		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
 
+	// TODO(irfansharif): Log entries are no longer sent with snapshots as of
+	// v19.2, we can/should delete all code around the sending/handling of log
+	// entries in snapshots before v20.1 is cut.
+
 	if canAvoidSendingLog {
 		// If we're not using a legacy (replicated) truncated state, we avoid
 		// sending the (past) Raft log in the snapshot in the first place and
@@ -1986,7 +1990,7 @@ func (r *Replica) sendSnapshot(
 		r.store.allocator.storePool,
 		req,
 		snap,
-		r.store.Engine().NewBatch,
+		r.Engine().NewBatch,
 		sent,
 	); err != nil {
 		if errors.Cause(err) == errMalformedSnapshot {

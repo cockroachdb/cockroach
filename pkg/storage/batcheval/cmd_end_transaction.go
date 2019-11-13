@@ -113,15 +113,15 @@ func declareKeysEndTxn(
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 				})
 
-				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
+				leftRangeIDReplicatedPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
 				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-					Key:    leftRangeIDPrefix,
-					EndKey: leftRangeIDPrefix.PrefixEnd(),
+					Key:    leftRangeIDReplicatedPrefix,
+					EndKey: leftRangeIDReplicatedPrefix.PrefixEnd(),
 				})
-				rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
+				rightRangeIDReplicatedPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
 				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-					Key:    rightRangeIDPrefix,
-					EndKey: rightRangeIDPrefix.PrefixEnd(),
+					Key:    rightRangeIDReplicatedPrefix,
+					EndKey: rightRangeIDReplicatedPrefix.PrefixEnd(),
 				})
 
 				rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
@@ -915,7 +915,7 @@ func splitTriggerHelper(
 	// initial state. Additionally, since bothDeltaMS is tracking writes to
 	// both sides, we need to update it as well.
 	{
-		// Various pieces of code rely on a replica's lease never being unitialized,
+		// Various pieces of code rely on a replica's lease never being uninitialized,
 		// but it's more than that - it ensures that we properly initialize the
 		// timestamp cache, which is only populated on the lease holder, from that
 		// of the original Range.  We found out about a regression here the hard way
@@ -931,7 +931,7 @@ func splitTriggerHelper(
 		//   not know about the read at 'd' which happened at the beginning.
 		// - node two can illegally propose a write to 'd' at a lower timestamp.
 		//
-		// TODO(tschottdorf): why would this use r.store.Engine() and not the
+		// TODO(tschottdorf): why would this use r.Engine() and not the
 		// batch?
 		leftLease, err := MakeStateLoader(rec).LoadLease(ctx, rec.Engine())
 		if err != nil {
@@ -1011,8 +1011,35 @@ func splitTriggerHelper(
 		// HardState via a call to synthesizeRaftState. Here, we only call
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
+		//
+		// NB: We're writing "raft data" into an engine.Batch derived from the
+		// data storage engine, not the raft one. Downstream of raft we inspect
+		// the write batch to sniff out said raft data and route it accordingly.
 
-		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
+		// Commands are only evaluated on batches or read-only wrappers derived
+		// from the one data engine. Writes intended for the raft storage
+		// engine, as is the case below where we seed the initial replica state
+		// for the RHS, are also evaluated using the same write batch. This is
+		// an artifact from when we used a single storage engine for both raft
+		// and non-raft data. The write batch proposed to raft therefore
+		// contains diffs for both engines (albeit just the one key for the
+		// raft engine), and are sent in the same proposal.
+		//
+		// Given that the RHS initial/truncated state is fixed to being
+		// stateloader.RaftInitialLog{Term,Index}, downstream of raft when we
+		// detect the command is a split, we simply reconstruct the truncated
+		// state in `splitPreApply` (which then gets written to the raft
+		// engine). We also let a copy of the truncated state key sit in
+		// the main data engine. Check `replicaAppBatch.stageWriteBatch` for
+		// more details. As for the RHS stats computation below, since it does
+		// not consider the truncated state key in the computation, we don't
+		// need to do any additional work downstream of raft.
+		//
+		// TODO(irfansharif): Once we have long running migrations (#39182), we
+		// should move the writing of the RHS initial replica state downstream
+		// of raft to avoid the proposal inspection + truncated state
+		// reconstruction described above.
+		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaStateUpstreamOfRaft(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*gcThreshold, truncStateType,
 		)

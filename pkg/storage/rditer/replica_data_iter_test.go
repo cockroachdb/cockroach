@@ -124,6 +124,8 @@ func verifyRDIter(
 	replicatedOnly bool,
 	expectedKeys []engine.MVCCKey,
 ) {
+	// XXX(irfansharif): NewReplicaDataIterator only iterates over one
+	// engine. This, and all callers need to be updated.
 	t.Helper()
 	verify := func(t *testing.T, useSpanSet, reverse bool) {
 		if useSpanSet {

@@ -837,11 +837,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			"but only %d are left", exp, count)
 	}
 
-	batch := tc.engine.NewSnapshot()
-	defer batch.Close()
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
-	tc.repl.assertStateLocked(ctx, batch) // check that in-mem and on-disk state were updated
+	tc.repl.assertStateLocked(ctx, tc.engine, tc.raftEngine) // check that in-mem and on-disk state were updated
 	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 }

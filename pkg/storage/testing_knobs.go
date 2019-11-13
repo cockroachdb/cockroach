@@ -221,7 +221,7 @@ type StoreTestingKnobs struct {
 	ReplicationAlwaysUseJointConfig func() bool
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
-	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string) error
+	BeforeSnapshotSSTIngestion func(IncomingSnapshot, SnapshotRequest_Type, []string, []string) error
 	// BeforeRelocateOne intercepts the return values of s.relocateOne before
 	// they're being put into effect.
 	BeforeRelocateOne func(_ []roachpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget, _ error)

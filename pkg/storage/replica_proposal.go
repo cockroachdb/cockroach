@@ -748,8 +748,13 @@ func (r *Replica) evaluateProposal(
 		!res.Replicated.Equal(storagepb.ReplicatedEvalResult{})
 
 	if needConsensus {
-		// Set the proposal's WriteBatch, which is the serialized representation of
-		// the proposals effect on RocksDB.
+		// Set the proposal's WriteBatch, which is the serialized representation
+		// of the proposals' effect on the primary storage engine.
+		//
+		// NB: For evaluations of splits, the WriteBatch will also contain
+		// truncated state for the RHS, which is a key to be applied in the raft
+		// storage engine. Downstream of raft we will reconstruct this key in
+		// order to apply to the raft storage engine.
 		res.WriteBatch = &storagepb.WriteBatch{
 			Data: batch.Repr(),
 		}

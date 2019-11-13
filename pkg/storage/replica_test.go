@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -170,6 +171,7 @@ type testContext struct {
 	rangeID       roachpb.RangeID
 	gossip        *gossip.Gossip
 	engine        engine.Engine
+	raftEngine    raftstorage.Engine
 	manualClock   *hlc.ManualClock
 	bootstrapMode bootstrapMode
 }
@@ -209,6 +211,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	if tc.engine == nil {
 		tc.engine = engine.NewInMem(context.Background(), engine.DefaultStorageEngine,
 			roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		tc.raftEngine = raftstorage.Wrap(tc.engine)
 		stopper.AddCloser(tc.engine)
 	}
 	if tc.transport == nil {
@@ -237,7 +240,8 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		if err := cluster.Version.Initialize(ctx, cv.Version, cfg.Settings); err != nil {
 			t.Fatal(err)
 		}
-		tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
+		tc.raftEngine = raftstorage.Wrap(tc.engine)
+		tc.store = NewStore(ctx, cfg, tc.engine, tc.raftEngine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
 		factory.setStore(tc.store)
 		// We created the store without a real KV client, so it can't perform splits
@@ -247,7 +251,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
 			if err := WriteInitialClusterData(
-				ctx, tc.store.Engine(),
+				ctx, tc.store.Engine(), tc.store.RaftEngine(),
 				nil, /* initialValues */
 				bootstrapVersion,
 				1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
@@ -266,9 +270,10 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	if realRange {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
-			if _, err := stateloader.WriteInitialState(
+			if _, err := stateloader.WriteInitialStateDuringBootstrap(
 				ctx,
 				tc.store.Engine(),
+				tc.store.RaftEngine(),
 				enginepb.MVCCStats{},
 				*testDesc,
 				roachpb.BootstrapLease(),
@@ -392,7 +397,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	tc.repl.setDesc(ctx, &newDesc)
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
-	tc.repl.assertStateLocked(ctx, tc.engine)
+	tc.repl.assertStateLocked(ctx, tc.engine, tc.raftEngine)
 	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 	return secondReplica, nil
@@ -6906,6 +6911,7 @@ func TestReplicaDestroy(t *testing.T) {
 	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(),
 		false /* replicatedOnly */, false /* seekEnd */)
 	defer iter.Close()
+
 	if ok, err := iter.Valid(); err != nil {
 		t.Fatal(err)
 	} else if ok {
@@ -6923,6 +6929,15 @@ func TestReplicaDestroy(t *testing.T) {
 		}
 	} else {
 		t.Errorf("expected a tombstone key, but got an empty iteration")
+	}
+
+	raftIter := rditer.NewReplicaRaftDataIterator(tc.repl.Desc(), tc.repl.store.Engine())
+	defer raftIter.Close()
+
+	if ok, err := iter.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Errorf("expected to find no keys")
 	}
 }
 
@@ -9623,7 +9638,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
 	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.engine, ms)
-	repl.assertStateLocked(ctx, tc.engine)
+	repl.assertStateLocked(ctx, tc.engine, tc.raftEngine)
 	repl.mu.Unlock()
 	repl.raftMu.Unlock()
 

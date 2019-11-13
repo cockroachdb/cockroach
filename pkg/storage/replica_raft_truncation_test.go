@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -85,7 +86,9 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 					Term:  term,
 				}
 
-				apply, err := handleTruncatedStateBelowRaft(ctx, &prevTruncatedState, newTruncatedState, loader, eng)
+				apply, err := handleTruncatedStateBelowRaft(
+					ctx, &prevTruncatedState, newTruncatedState, loader, eng, raftstorage.Wrap(eng),
+				)
 				if err != nil {
 					return err.Error()
 				}

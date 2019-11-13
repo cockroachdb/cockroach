@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -677,6 +678,11 @@ func (r *Replica) Engine() engine.Engine {
 	return r.store.Engine()
 }
 
+// RaftEngine returns the Replica's underlying Raft Engine.
+func (r *Replica) RaftEngine() raftstorage.Engine {
+	return r.store.RaftEngine()
+}
+
 // AbortSpan returns the Replica's AbortSpan.
 func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 	// Despite its name, the AbortSpan doesn't hold on-disk data in
@@ -813,7 +819,7 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, &timestamp,
+	_, err := engine.MVCCGetProto(ctx, r.Engine(), key, hlc.Timestamp{}, &timestamp,
 		engine.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
@@ -823,7 +829,7 @@ func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.Timestamp{}, nil, &timestamp)
+	return engine.MVCCPutProto(ctx, r.Engine(), nil, key, hlc.Timestamp{}, nil, &timestamp)
 }
 
 // getQueueLastProcessed returns the last processed timestamp for the
@@ -832,7 +838,7 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	var timestamp hlc.Timestamp
 	if r.store != nil {
-		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, &timestamp,
+		_, err := engine.MVCCGetProto(ctx, r.Engine(), key, hlc.Timestamp{}, &timestamp,
 			engine.MVCCGetOptions{})
 		if err != nil {
 			log.VErrEventf(ctx, 2, "last processed timestamp unavailable: %s", err)
@@ -930,8 +936,10 @@ func (r *Replica) State() storagepb.RangeInfo {
 // Requires that both r.raftMu and r.mu are held.
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
-func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
-	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
+func (r *Replica) assertStateLocked(
+	ctx context.Context, reader engine.Reader, raftReader raftstorage.Reader,
+) {
+	diskState, err := r.mu.stateLoader.Load(ctx, reader, raftReader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}

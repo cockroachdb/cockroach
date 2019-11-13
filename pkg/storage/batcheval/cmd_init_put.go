@@ -42,7 +42,15 @@ func InitPut(
 		}
 	}
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+		err := engine.MVCCBlindInitPut(
+			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value,
+			args.FailOnTombstones, h.Txn,
+		)
+		return result.Result{}, err
 	}
-	return result.Result{}, engine.MVCCInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	err := engine.MVCCInitPut(
+		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value,
+		args.FailOnTombstones, h.Txn,
+	)
+	return result.Result{}, err
 }

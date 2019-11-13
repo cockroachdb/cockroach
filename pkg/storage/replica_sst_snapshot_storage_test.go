@@ -34,7 +34,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	defer cleanup()
 	defer eng.Close()
 
-	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, "sstsnapshot", testLimiter)
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	// Check that the storage lazily creates the directories on first write.

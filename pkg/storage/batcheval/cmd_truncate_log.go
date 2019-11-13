@@ -36,6 +36,29 @@ func declareKeysTruncateLog(
 	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 }
 
+// Log truncation commands get "evaluated" by computing the truncated state, and
+// transmitting the state in the ReplicatedEvalResult. To compute stats,
+// deletion of log entries are simulated upstream of raft and are also included
+// as RaftLogDelta in the ReplicatedEvalResult. Downstream of raft we intercept
+// truncated state (in the aptly named `handleTruncatedStateBelowRaft`), and
+// delete raft log entries accordingly. The new truncated state is also written
+// to the raft storage engine.
+//
+// TODO(irfansharif): Stats computation for the log truncations is
+// non-functional for when the primary and raft storage engines are two distinct
+// ones. This is because we're relying on the simulated truncation stats
+// evaluated off the primary engine. This was left intentionally so pending the
+// resolution of the ongoing local raft log truncation work (#36262).
+//
+// TODO(irfansharif): Evaluation of log truncation commands is a shell of what
+// it once was. Previous iterations of this listed out all to-be-deleted keys
+// in the write batch. Currently, for backwards compatibility, we only really
+// use it to deal with `RaftTruncatedStateLegacyKey`. Once we have long running
+// migrations (#39182), we can remove this all together (and clean up some of
+// the awkwardness that necessitates `handleTruncatedStateBelowRaft` to even
+// exist). Log truncations being a purely "downstream of raft" operation also
+// meshes well with local raft log truncations (#36262).
+
 // TruncateLog discards a prefix of the raft log. Truncating part of a log that
 // has already been truncated has no effect. If this range is not the one
 // specified within the request body, the request will also be ignored.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -129,7 +130,8 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		cfg := TestStoreConfig(clock)
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 
-		store := NewStore(ctx, cfg, memEngine, &roachpb.NodeDescriptor{NodeID: 1})
+		raftEng := raftstorage.Wrap(memEngine)
+		store := NewStore(ctx, cfg, memEngine, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 		// Fake-set an ident. This is usually read from the engine on store.Start()
 		// which we're not even going to call.
 		store.Ident = &roachpb.StoreIdent{StoreID: storeID}
@@ -220,7 +222,8 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 		eng := engine.NewDefaultInMem()
 		stopper.AddCloser(eng)
-		s := NewStore(context.TODO(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		raftEng := raftstorage.Wrap(eng)
+		s := NewStore(context.TODO(), cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident = &roachpb.StoreIdent{StoreID: storeIDAlloc}
 		stores = append(stores, s)

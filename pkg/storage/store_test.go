@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -229,7 +230,8 @@ func createTestStoreWithoutStart(
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
 	cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
-	store := NewStore(context.TODO(), *cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	raftEng := raftstorage.Wrap(eng)
+	store := NewStore(context.TODO(), *cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 	factory.setStore(store)
 	if err := InitEngine(
 		context.TODO(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
@@ -248,7 +250,7 @@ func createTestStoreWithoutStart(
 		})
 	}
 	if err := WriteInitialClusterData(
-		context.TODO(), eng, kvs, /* initialValues */
+		context.TODO(), eng, raftEng, kvs, /* initialValues */
 		cluster.BinaryServerVersion,
 		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 	); err != nil {
@@ -431,7 +433,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	factory := &testSenderFactory{}
 	cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 	{
-		store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		raftEng := raftstorage.Wrap(eng)
+		store := NewStore(ctx, cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 		// Can't start as haven't bootstrapped.
 		if err := store.Start(ctx, stopper); err == nil {
 			t.Error("expected failure starting un-bootstrapped store")
@@ -464,15 +467,16 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		})
 
 		if err := WriteInitialClusterData(
-			ctx, eng, kvs /* initialValues */, cluster.BinaryServerVersion,
+			ctx, eng, raftstorage.Wrap(eng), kvs /* initialValues */, cluster.BinaryServerVersion,
 			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 		); err != nil {
 			t.Errorf("failure to create first range: %+v", err)
 		}
 	}
 
+	raftEng := raftstorage.Wrap(eng)
 	// Now, attempt to initialize a store with a now-bootstrapped range.
-	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	store := NewStore(ctx, cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 	if err := store.Start(ctx, stopper); err != nil {
 		t.Fatalf("failure initializing bootstrapped store: %+v", err)
 	}
@@ -510,7 +514,8 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	raftEng := raftstorage.Wrap(eng)
+	store := NewStore(ctx, cfg, eng, raftEng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
 	switch err := errors.Cause(store.Start(ctx, stopper)); err.(type) {
@@ -1365,8 +1370,8 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		rangeID, splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	_, err = stateloader.WriteInitialState(
-		ctx, store.engine, enginepb.MVCCStats{}, *rhsDesc, roachpb.Lease{},
+	_, err = stateloader.WriteInitialStateDuringBootstrap(
+		ctx, store.Engine(), store.RaftEngine(), enginepb.MVCCStats{}, *rhsDesc, roachpb.Lease{},
 		hlc.Timestamp{}, stateloader.TruncatedStateUnreplicated,
 	)
 	require.NoError(t, err)
@@ -2892,8 +2897,8 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
-	if _, err := stateloader.WriteInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, uninitDesc, roachpb.Lease{},
+	if _, err := stateloader.WriteInitialStateDuringBootstrap(
+		ctx, s.Engine(), s.RaftEngine(), enginepb.MVCCStats{}, uninitDesc, roachpb.Lease{},
 		hlc.Timestamp{}, stateloader.TruncatedStateUnreplicated,
 	); err != nil {
 		t.Fatal(err)

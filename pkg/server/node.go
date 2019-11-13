@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -246,7 +247,7 @@ func bootstrapCluster(
 			})
 
 			if err := storage.WriteInitialClusterData(
-				ctx, eng, initialValues,
+				ctx, eng, raftstorage.Wrap(eng), initialValues,
 				bootstrapVersion.Version, len(engines), splits,
 				hlc.UnixNano(),
 			); err != nil {
@@ -424,7 +425,7 @@ func (n *Node) start(
 
 	// Create stores from the engines that were already bootstrapped.
 	for _, e := range initializedEngines {
-		s := storage.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
+		s := storage.NewStore(ctx, n.storeCfg, e, raftstorage.Wrap(e), &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
@@ -622,7 +623,7 @@ func (n *Node) bootstrapStores(
 				return err
 			}
 
-			s := storage.NewStore(ctx, n.storeCfg, eng, &n.Descriptor)
+			s := storage.NewStore(ctx, n.storeCfg, eng, raftstorage.Wrap(eng), &n.Descriptor)
 			if err := s.Start(ctx, stopper); err != nil {
 				return err
 			}
