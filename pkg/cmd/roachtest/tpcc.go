@@ -59,7 +59,7 @@ type tpccOptions struct {
 func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) string {
 	var command string
 	switch cloud {
-	case "gce":
+	case gce:
 		// TODO(nvanbenschoten): We could switch to import for both clouds.
 		// At the moment, import is still a little unstable and load is still
 		// marginally faster.
@@ -75,7 +75,7 @@ func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) st
 			t.Fatalf("could not find fixture big enough for %d warehouses", warehouses)
 		}
 		warehouses = fixtureWarehouses
-	case "aws":
+	case aws, azure:
 		// For fixtures import, use the version built into the cockroach binary
 		// so the tpcc workload-versions match on release branches.
 		command = "./cockroach workload fixtures import"
