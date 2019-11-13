@@ -422,6 +422,26 @@ func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return MakeRangeKey(rk, LocalTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
 }
 
+// TransactionTombstoneTSCacheKey returns the key used by the marker indicating
+// that a particular txn was finalized (i.e. by an EndTransaction, RecoverTxn or
+// PushTxn(Abort)). This key is never written to; instead, it is used as a
+// marker in the timestamp cache serving as a guard against creating a
+// transaction record after the transaction record has been cleaned up (i.e. by
+// a BeginTxn being evaluated out of order or arriving after another txn
+// Push(Abort)'ed the txn).
+func TransactionTombstoneTSCacheKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	return append(TransactionKey(key, txnID), TransactionTombstoneTSCacheSuffix...)
+}
+
+// TransactionPushMarkerTSCacheKey returns the key used by the marker indicating
+// that a particular txn was pushed before writing its transaction record. This
+// key is never written to; instead, it is used as a marker in the timestamp
+// cache indicating that the transaction was pushed in case the push happens
+// before there's a transaction record.
+func TransactionPushMarkerTSCacheKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	return append(TransactionKey(key, txnID), TransactionPushMarkerTSCacheSuffix...)
+}
+
 // QueueLastProcessedKey returns a range-local key for last processed
 // timestamps for the named queue. These keys represent per-range last
 // processed times.

@@ -174,6 +174,10 @@ var (
 	// NOTE: if this value changes, it must be updated in C++
 	// (storage/engine/rocksdb/db.cc).
 	LocalTransactionSuffix = roachpb.RKey("txn-")
+
+	TransactionTombstoneTSCacheSuffix  = roachpb.RKey("-tmbs")
+	TransactionPushMarkerTSCacheSuffix = roachpb.RKey("-push")
+
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
 	LocalQueueLastProcessedSuffix = roachpb.RKey("qlpt")
 
