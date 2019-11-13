@@ -1424,6 +1424,7 @@ func Example_user() {
 	c.Run("user set f,oo")
 	c.Run("user set foo,")
 	c.Run("user set 0foo")
+	c.Run("user set 0123")
 	c.Run("user set foo0")
 	c.Run("user set f0oo")
 	c.Run("user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof")
@@ -1483,16 +1484,19 @@ func Example_user() {
 	// CREATE USER 1
 	// user set ,foo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set f,oo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username "f,oo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// pq: username "f,oo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foo,
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username "foo," invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// pq: username "foo," invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set 0foo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// CREATE USER 1
+	// user set 0123
+	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
+	// CREATE USER 1
 	// user set foo0
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
@@ -1501,7 +1505,7 @@ func Example_user() {
 	// CREATE USER 1
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
@@ -1518,6 +1522,8 @@ func Example_user() {
 	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//                              user_name
 	// +-----------------------------------------------------------------+
+	//   0123
+	//   0foo
 	//   _foo
 	//   and
 	//   f0oo
@@ -1529,7 +1535,7 @@ func Example_user() {
 	//   root
 	//   table
 	//   ομηρος
-	// (11 rows)
+	// (13 rows)
 	// user rm foo
 	// warning: This command is deprecated. Use DROP USER or DROP ROLE in a SQL session.
 	// DROP USER 1
@@ -1537,6 +1543,8 @@ func Example_user() {
 	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//                              user_name
 	// +-----------------------------------------------------------------+
+	//   0123
+	//   0foo
 	//   _foo
 	//   and
 	//   f0oo
@@ -1547,7 +1555,7 @@ func Example_user() {
 	//   root
 	//   table
 	//   ομηρος
-	// (10 rows)
+	// (12 rows)
 	// sql -e drop database defaultdb
 	// DROP DATABASE
 	// user set foo
@@ -1562,12 +1570,14 @@ func Example_cert() {
 	c.RunWithCAArgs([]string{"cert", "create-client", "foo"})
 	c.RunWithCAArgs([]string{"cert", "create-client", "Ομηρος"})
 	c.RunWithCAArgs([]string{"cert", "create-client", "0foo"})
+	c.RunWithCAArgs([]string{"cert", "create-client", ",foo"})
 
 	// Output:
 	// cert create-client foo
 	// cert create-client Ομηρος
 	// cert create-client 0foo
-	// failed to generate client certificate and key: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// cert create-client ,foo
+	// failed to generate client certificate and key: username ",foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 }
 
 // TestFlagUsage is a basic test to make sure the fragile
