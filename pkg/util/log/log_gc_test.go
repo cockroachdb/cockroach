@@ -161,6 +161,18 @@ func testLogGC(
 		if e, a := expectedFilesAfterGC, len(allFilesAfter); e != a {
 			return fmt.Errorf("expected %d files, but found %d", e, a)
 		}
+		faMap := make(map[string]struct{})
+		for _, fa := range allFilesAfter {
+			faMap[fa.Name] = struct{}{}
+		}
+		for _, fb := range allFilesBefore {
+			if _, ok := faMap[fb.Name]; !ok {
+				gzipF := filepath.Join(logger.logDir.String(), fb.Name+FileExtensionGZIP)
+				if _, err := os.Stat(gzipF); os.IsNotExist(err) {
+					return fmt.Errorf("expected file %s", gzipF)
+				}
+			}
+		}
 		return nil
 	})
 }
