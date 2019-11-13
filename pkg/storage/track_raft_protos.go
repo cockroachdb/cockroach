@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -52,6 +53,10 @@ func TrackRaftProtos() func() []reflect.Type {
 		// tryReproposeWithNewLeaseIndex is only run on the replica that
 		// proposed the command.
 		funcName((*Replica).tryReproposeWithNewLeaseIndex),
+		// MVCCValueMerger.Finish is part of the Pebble merge operator and is
+		// needed to marshal roachpb.InternalTimeSeriesData. The Pebble merge
+		// operator can be called below Raft whenever a Pebble Iterator is used.
+		funcName((*engine.MVCCValueMerger).Finish),
 	}
 
 	belowRaftProtos := struct {
