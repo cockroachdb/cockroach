@@ -223,12 +223,12 @@ func (b *circularGroupsBuffer) getGroups() ([]group, []group) {
 	return leftGroups[startIdx:endIdx], rightGroups[startIdx:endIdx]
 }
 
-func newMJBufferedGroup(types []coltypes.T) *mjBufferedGroup {
+func newMJBufferedGroup(allocator *Allocator, types []coltypes.T) *mjBufferedGroup {
 	bg := &mjBufferedGroup{
 		colVecs: make([]coldata.Vec, len(types)),
 	}
 	for i, t := range types {
-		bg.colVecs[i] = coldata.NewMemColumn(t, int(coldata.BatchSize()))
+		bg.colVecs[i] = allocator.NewMemColumn(t, int(coldata.BatchSize()))
 	}
 	return bg
 }

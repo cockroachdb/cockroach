@@ -72,7 +72,10 @@ type Outbox struct {
 
 // NewOutbox creates a new Outbox.
 func NewOutbox(
-	input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource,
+	allocator *colexec.Allocator,
+	input colexec.Operator,
+	typs []coltypes.T,
+	metadataSources []execinfrapb.MetadataSource,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -85,7 +88,7 @@ func NewOutbox(
 	o := &Outbox{
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
-		OneInputNode:    colexec.NewOneInputNode(colexec.NewDeselectorOp(input, typs)),
+		OneInputNode:    colexec.NewOneInputNode(colexec.NewDeselectorOp(allocator, input, typs)),
 		typs:            typs,
 		converter:       c,
 		serializer:      s,

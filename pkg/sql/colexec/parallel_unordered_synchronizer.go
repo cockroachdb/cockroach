@@ -91,7 +91,7 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
 func NewParallelUnorderedSynchronizer(
-	inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
+	allocator *Allocator, inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -99,14 +99,12 @@ func NewParallelUnorderedSynchronizer(
 		// only be one message on the channel at a time.
 		readNextBatch[i] = make(chan struct{}, 1)
 	}
-	zeroBatch := coldata.NewMemBatchWithSize(typs, 0)
-	zeroBatch.SetLength(0)
 	return &ParallelUnorderedSynchronizer{
 		inputs:            inputs,
 		readNextBatch:     readNextBatch,
 		batches:           make([]coldata.Batch, len(inputs)),
 		nextBatch:         make([]func(), len(inputs)),
-		zeroBatch:         zeroBatch,
+		zeroBatch:         allocator.NewMemBatchWithSize(typs, 0 /* size */),
 		externalWaitGroup: wg,
 		internalWaitGroup: &sync.WaitGroup{},
 		batchCh:           make(chan *unorderedSynchronizerMsg, len(inputs)),
@@ -203,8 +201,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 // Next is part of the Operator interface.
 func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if s.done {
-		// TODO(yuzefovich): do we want to be on the safe side and explicitly set
-		// the length here (and below) to 0?
+		s.zeroBatch.SetLength(0)
 		return s.zeroBatch
 	}
 	if !s.initialized {
@@ -237,6 +234,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			default:
 			}
 			s.done = true
+			s.zeroBatch.SetLength(0)
 			return s.zeroBatch
 		}
 		s.lastReadInputIdx = msg.inputIdx

@@ -25,6 +25,7 @@ import (
 // puts true in partitionColIdx'th column (which is appended if needed) for
 // every tuple that is the first within its partition.
 func NewWindowSortingPartitioner(
+	allocator *Allocator,
 	input Operator,
 	inputTyps []coltypes.T,
 	partitionIdxs []uint32,
@@ -36,7 +37,7 @@ func NewWindowSortingPartitioner(
 		partitionAndOrderingCols[i] = execinfrapb.Ordering_Column{ColIdx: idx}
 	}
 	copy(partitionAndOrderingCols[len(partitionIdxs):], ordCols)
-	input, err = NewSorter(input, inputTyps, partitionAndOrderingCols)
+	input, err = NewSorter(allocator, input, inputTyps, partitionAndOrderingCols)
 	if err != nil {
 		return nil, err
 	}

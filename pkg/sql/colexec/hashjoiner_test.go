@@ -936,6 +936,7 @@ func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
 		leftSource := newOpTestInput(1, tc.leftTuples, tc.leftTypes)
 		rightSource := newOpTestInput(1, tc.rightTuples, tc.rightTypes)
 		hjOp, err := NewEqHashJoinerOp(
+			testAllocator,
 			leftSource, rightSource,
 			tc.leftEqCols, tc.rightEqCols,
 			tc.leftOutCols, tc.rightOutCols,
@@ -963,7 +964,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 		sourceTypes[colIdx] = coltypes.Int64
 	}
 
-	batch := coldata.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatch(sourceTypes)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
@@ -1024,6 +1025,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										}
 
 										hj := &hashJoinEqOp{
+											allocator:       testAllocator,
 											spec:            spec,
 											outputBatchSize: coldata.BatchSize(),
 										}
