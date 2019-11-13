@@ -3001,7 +3001,10 @@ may increase either contention or retry errors, or both.`,
 					datums = append(datums, newDatum)
 				}
 
-				indexDesc := tableDesc.AllNonDropIndexes()[indexID-1]
+				indexDesc, err := tableDesc.FindIndexByID(sqlbase.IndexID(indexID))
+				if err != nil {
+					return nil, err
+				}
 
 				// Create a column id to row index map. In this case, each column ID just maps to the i'th ordinal.
 				colMap := make(map[sqlbase.ColumnID]int)
