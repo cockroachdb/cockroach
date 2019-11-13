@@ -37,6 +37,8 @@
 </span></td></tr>
 <tr><td><code>avg(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the average of the selected values.</p>
 </span></td></tr>
+<tr><td><code>avg(arg1: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the average of the selected values.</p>
+</span></td></tr>
 <tr><td><code>bool_and(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Calculates the boolean value of <code>AND</code>ing all selected values.</p>
 </span></td></tr>
 <tr><td><code>bool_or(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Calculates the boolean value of <code>OR</code>ing all selected values.</p>
