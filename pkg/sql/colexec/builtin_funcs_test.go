@@ -106,7 +106,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 
 	for i := 0; i < int(coldata.BatchSize()); i++ {
@@ -173,7 +173,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes, coltypes.Int64, coltypes.Int64, coltypes.Bytes})
+	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes, coltypes.Int64, coltypes.Int64, coltypes.Bytes})
 	bCol := batch.ColVec(0).Bytes()
 	sCol := batch.ColVec(1).Int64()
 	eCol := batch.ColVec(2).Int64()

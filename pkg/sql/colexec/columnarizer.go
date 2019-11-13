@@ -30,8 +30,9 @@ type Columnarizer struct {
 	execinfra.ProcessorBase
 	NonExplainable
 
-	input execinfra.RowSource
-	da    sqlbase.DatumAlloc
+	allocator *Allocator
+	input     execinfra.RowSource
+	da        sqlbase.DatumAlloc
 
 	buffered        sqlbase.EncDatumRows
 	batch           coldata.Batch
@@ -44,12 +45,17 @@ var _ StaticMemoryOperator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, input execinfra.RowSource,
+	ctx context.Context,
+	allocator *Allocator,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	input execinfra.RowSource,
 ) (*Columnarizer, error) {
 	var err error
 	c := &Columnarizer{
-		input: input,
-		ctx:   ctx,
+		allocator: allocator,
+		input:     input,
+		ctx:       ctx,
 	}
 	if err = c.ProcessorBase.Init(
 		nil,
@@ -76,7 +82,7 @@ func (c *Columnarizer) EstimateStaticMemoryUsage() int {
 
 // Init is part of the Operator interface.
 func (c *Columnarizer) Init() {
-	c.batch = coldata.NewMemBatch(c.typs)
+	c.batch = c.allocator.NewMemBatch(c.typs)
 	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))

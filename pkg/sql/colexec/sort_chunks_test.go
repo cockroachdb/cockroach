@@ -193,7 +193,7 @@ func TestSortChunks(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
-			return NewSortChunks(input[0], tc.typ, tc.ordCols, tc.matchLen)
+			return NewSortChunks(testAllocator, input[0], tc.typ, tc.ordCols, tc.matchLen)
 		})
 	}
 }
@@ -234,7 +234,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				sort.Slice(expected, less(expected, ordCols))
 
 				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, func(input []Operator) (Operator, error) {
-					return NewSortChunks(input[0], typs[:nCols], ordCols, matchLen)
+					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen)
 				})
 			}
 		}
@@ -245,10 +245,10 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(Operator, []coltypes.T, []execinfrapb.Ordering_Column, int) (Operator, error){
+	sorterConstructors := []func(*Allocator, Operator, []coltypes.T, []execinfrapb.Ordering_Column, int) (Operator, error){
 		NewSortChunks,
-		func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, _ int) (Operator, error) {
-			return NewSorter(input, inputTypes, orderingCols)
+		func(allocator *Allocator, input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, _ int) (Operator, error) {
+			return NewSorter(allocator, input, inputTypes, orderingCols)
 		},
 	}
 	sorterNames := []string{"CHUNKS", "ALL"}
@@ -271,7 +271,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								for i := range typs {
 									typs[i] = coltypes.Int64
 								}
-								batch := coldata.NewMemBatch(typs)
+								batch := testAllocator.NewMemBatch(typs)
 								batch.SetLength(coldata.BatchSize())
 								ordCols := make([]execinfrapb.Ordering_Column, nCols)
 								for i := range ordCols {
@@ -299,7 +299,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := newFiniteChunksSource(batch, nBatches, matchLen)
-									sorter, err := sorterConstructor(source, typs, ordCols, matchLen)
+									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen)
 									if err != nil {
 										b.Fatal(err)
 									}

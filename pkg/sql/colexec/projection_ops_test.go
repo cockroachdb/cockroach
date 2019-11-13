@@ -79,7 +79,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 	for i := 0; i < int(coldata.BatchSize()); i++ {
 		col[i] = 1
@@ -206,7 +206,7 @@ func TestRandomComparisons(t *testing.T) {
 		if ct.Family() == types.UuidFamily {
 			bytesFixedLength = 16
 		}
-		b := coldata.NewMemBatchWithSize(typs, numTuples)
+		b := testAllocator.NewMemBatchWithSize(typs, numTuples)
 		lVec := b.ColVec(0)
 		rVec := b.ColVec(1)
 		ret := b.ColVec(2)
@@ -291,7 +291,7 @@ func benchmarkProjOp(
 ) {
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{intType, intType, outputType})
+	batch := testAllocator.NewMemBatch([]coltypes.T{intType, intType, outputType})
 	switch intType {
 	case coltypes.Int64:
 		col1 := batch.ColVec(0).Int64()

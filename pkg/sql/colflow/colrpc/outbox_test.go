@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -34,7 +33,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		typs     = []coltypes.T{coltypes.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
-	outbox, err := NewOutbox(input, typs, nil)
+	outbox, err := NewOutbox(testAllocator, input, typs, nil)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -50,7 +49,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		wg.Done()
 	}()
 
-	inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
@@ -84,6 +83,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	newOutboxWithMetaSources := func() (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(
+			testAllocator,
 			input,
 			typs,
 			[]execinfrapb.MetadataSource{
@@ -106,7 +106,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		outbox, sourceDrained, err := newOutboxWithMetaSources()
 		require.NoError(t, err)
 
-		b := coldata.NewMemBatch(typs)
+		b := testAllocator.NewMemBatch(typs)
 		b.SetLength(0)
 		input.Add(b)
 

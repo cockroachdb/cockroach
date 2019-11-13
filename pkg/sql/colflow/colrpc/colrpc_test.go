@@ -119,6 +119,10 @@ func handleStream(
 	return handleStreamErrCh
 }
 
+// testAllocator is a colexec.Allocator with an unlimited budget for use
+// in tests.
+var testAllocator = colexec.NewAllocator()
+
 func TestOutboxInbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -214,10 +218,10 @@ func TestOutboxInbox(t *testing.T) {
 		}
 		input := colexec.NewRandomDataOp(rng, args)
 
-		outbox, err := NewOutbox(input, typs, nil)
+		outbox, err := NewOutbox(testAllocator, input, typs, nil)
 		require.NoError(t, err)
 
-		inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
@@ -252,7 +256,7 @@ func TestOutboxInbox(t *testing.T) {
 
 		// Use a deselector op to verify that the Outbox gets rid of the selection
 		// vector.
-		inputBatches := colexec.NewDeselectorOp(inputBuffer, typs)
+		inputBatches := colexec.NewDeselectorOp(testAllocator, inputBuffer, typs)
 		inputBatches.Init()
 		outputBatches := colexec.NewBatchBuffer()
 		var readerErr error
@@ -267,9 +271,10 @@ func TestOutboxInbox(t *testing.T) {
 			if cancellationScenario == noCancel {
 				// Accumulate batches to check for correctness.
 				// Copy batch since it's not safe to reuse after calling Next.
-				batchCopy := coldata.NewMemBatchWithSize(typs, int(outputBatch.Length()))
+				batchCopy := testAllocator.NewMemBatchWithSize(typs, int(outputBatch.Length()))
 				for i := range typs {
-					batchCopy.ColVec(i).Append(
+					testAllocator.Append(
+						batchCopy.ColVec(i),
 						coldata.SliceArgs{
 							ColType:   typs[i],
 							Src:       outputBatch.ColVec(i),
@@ -435,6 +440,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			const expectedMeta = "someError"
 
 			outbox, err := NewOutbox(
+				testAllocator,
 				input,
 				typs,
 				[]execinfrapb.MetadataSource{
@@ -447,7 +453,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
+			inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 			require.NoError(t, err)
 
 			var (
@@ -500,15 +506,15 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	typs := []coltypes.T{coltypes.Int64}
 
-	batch := coldata.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
 
 	input := colexec.NewRepeatableBatchSource(batch)
 
-	outbox, err := NewOutbox(input, typs, nil /* metadataSources */)
+	outbox, err := NewOutbox(testAllocator, input, typs, nil /* metadataSources */)
 	require.NoError(b, err)
 
-	inbox, err := NewInbox(typs, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 	require.NoError(b, err)
 
 	var wg sync.WaitGroup
@@ -556,14 +562,14 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	nextDone := make(chan struct{})
 	input := &colexec.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
-		b := coldata.NewMemBatchWithSize(typs, 0)
+		b := testAllocator.NewMemBatchWithSize(typs, 0)
 		b.SetLength(0)
 		inTags = logtags.FromContext(ctx)
 		nextDone <- struct{}{}
 		return b
 	}}
 
-	outbox, err := NewOutbox(input, typs, nil)
+	outbox, err := NewOutbox(testAllocator, input, typs, nil)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})
@@ -627,7 +633,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			typs := []coltypes.T{coltypes.Int64}
 
-			inbox, err := NewInbox(typs, streamID)
+			inbox, err := NewInbox(testAllocator, typs, streamID)
 			require.NoError(t, err)
 
 			ctxExtract := make(chan struct{})

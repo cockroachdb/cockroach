@@ -64,7 +64,7 @@ func TestLimit(t *testing.T) {
 		// The tuples consisting of all nulls still count as separate rows, so if
 		// we replace all values with nulls, we should get the same output.
 		runTestsWithoutAllNullsInjection(t, []tuples{tc.tuples}, nil /* typs */, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
-			return NewLimitOp(input[0], tc.limit), nil
+			return NewLimitOp(testAllocator, input[0], tc.limit), nil
 		})
 	}
 }
