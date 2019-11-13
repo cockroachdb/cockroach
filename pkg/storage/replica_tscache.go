@@ -76,34 +76,32 @@ func (r *Replica) updateTimestampCache(
 		start, end := header.Key, header.EndKey
 		switch t := args.(type) {
 		case *roachpb.EndTxnRequest:
-			// EndTxn requests that finalize their transaction add the
-			// transaction key to the write timestamp cache as a tombstone to
-			// ensure replays and concurrent requests aren't able to recreate
-			// the transaction record.
+			// EndTxn requests that finalize their transaction record a
+			// tombstone in the timestamp cache to ensure replays and concurrent
+			// requests aren't able to recreate the transaction record.
 			//
 			// It inserts the timestamp of the final batch in the transaction.
 			// This timestamp must necessarily be equal to or greater than the
 			// transaction's MinTimestamp, which is consulted in
 			// CanCreateTxnRecord.
 			if br.Txn.Status.IsFinalized() {
-				key := keys.TransactionKey(start, txnID)
-				addToTSCache(key, nil, ts, txnID, false /* readCache */)
+				key := transactionTombstoneMarker(start, txnID)
+				addToTSCache(key, nil, ts, txnID, true /* readCache */)
 			}
 		case *roachpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
-			// transaction that it was trying to recover. If so, then we add the
-			// transaction's key to the write timestamp cache as a tombstone to
-			// ensure that replays and concurrent requests aren't able to
-			// recreate the transaction record. This parallels what we do in the
-			// EndTxn request case.
+			// transaction that it was trying to recover. If so, then we record
+			// a tombstone to the timestamp cache to ensure that replays and
+			// concurrent requests aren't able to recreate the transaction record.
+			// This parallels what we do in the EndTxn request case.
 			//
 			// Insert the timestamp of the batch, which we asserted during
 			// command evaluation was equal to or greater than the transaction's
 			// MinTimestamp.
 			recovered := br.Responses[i].GetInner().(*roachpb.RecoverTxnResponse).RecoveredTxn
 			if recovered.Status.IsFinalized() {
-				key := keys.TransactionKey(start, recovered.ID)
-				addToTSCache(key, nil, ts, recovered.ID, false /* readCache */)
+				key := transactionTombstoneMarker(start, recovered.ID)
+				addToTSCache(key, nil, ts, recovered.ID, true /* readCache */)
 			}
 		case *roachpb.PushTxnRequest:
 			// A successful PushTxn request bumps the timestamp cache for
@@ -114,16 +112,16 @@ func (r *Replica) updateTimestampCache(
 			// of the transaction record to forward its provisional commit
 			// timestamp to honor the result of this push. If the push left
 			// the transaction in an ABORTED state (PUSH_ABORT) then we
-			// update the write timestamp cache. This will prevent the
-			// creation of the transaction record entirely.
+			// update the a special record in the timestamp cache. This will prevent
+			// the creation of the transaction record entirely.
 			pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 
-			var readCache bool
+			var tombstone bool
 			switch pushee.Status {
 			case roachpb.PENDING:
-				readCache = true
+				tombstone = false
 			case roachpb.ABORTED:
-				readCache = false
+				tombstone = true
 			case roachpb.STAGING:
 				// No need to update the timestamp cache. If a transaction
 				// is in this state then it must have a transaction record.
@@ -133,8 +131,14 @@ func (r *Replica) updateTimestampCache(
 				// updated by the corresponding EndTxn request.
 				continue
 			}
-			key := keys.TransactionKey(start, pushee.ID)
-			addToTSCache(key, nil, pushee.WriteTimestamp, t.PusherTxn.ID, readCache)
+
+			var key roachpb.Key
+			if tombstone {
+				key = transactionTombstoneMarker(start, pushee.ID)
+			} else {
+				key = transactionPushMarker(start, pushee.ID)
+			}
+			addToTSCache(key, nil, pushee.WriteTimestamp, t.PusherTxn.ID, true /* readCache */)
 		case *roachpb.ConditionalPutRequest:
 			// ConditionalPut only updates on ConditionFailedErrors. On other
 			// errors, no information is returned. On successful writes, the
@@ -432,33 +436,34 @@ func (r *Replica) CanCreateTxnRecord(
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.
 	// The read timestamp cache is used to push the timestamp of transactions
-	// that don't have transaction records. The write timestamp cache is used
+	// that don't have transaction records. The timestamp cache is used
 	// to abort transactions entirely that don't have transaction records.
 	//
 	// Using this strategy, we enforce the invariant that only requests sent
 	// from a transaction's own coordinator can create its transaction record.
 	// However, once a transaction record is written, other concurrent actors
 	// can modify it. This is reflected in the diagram above.
-	key := keys.TransactionKey(txnKey, txnID)
+	tombstoneKey := transactionTombstoneMarker(txnKey, txnID)
+	pushKey := transactionPushMarker(txnKey, txnID)
 
 	// Look in the read timestamp cache to see if there is an entry for this
 	// transaction, which indicates the minimum timestamp that the transaction
 	// can commit at. This is used by pushers to push the timestamp of a
 	// transaction that hasn't yet written its transaction record.
-	minCommitTS, _ = r.store.tsCache.GetMaxRead(key, nil /* end */)
+	minCommitTS, _ = r.store.tsCache.GetMaxRead(pushKey, nil /* end */)
 
-	// Also look in the write timestamp cache to see if there is an entry for
+	// Also look in the timestamp cache to see if there is a tombstone entry for
 	// this transaction, which would indicate this transaction has already been
 	// finalized or was already aborted by a concurrent transaction. If there is
 	// an entry, then we return a retriable error: if this is a re-evaluation,
 	// then the error will be transformed into an ambiguous one higher up.
 	// Otherwise, if the client is still waiting for a result, then this cannot
 	// be a "replay" of any sort.
-	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key)
+	tombstoneTimestamp, tombstomeTxnID := r.store.tsCache.GetMaxRead(tombstoneKey, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
-	if txnMinTS.LessEq(wTS) {
-		switch wTxnID {
+	if txnMinTS.LessEq(tombstoneTimestamp) {
+		switch tombstomeTxnID {
 		case txnID:
 			// If we find our own transaction ID then an EndTxn request sent by
 			// our coordinator has already been processed. We might be a replay,
@@ -470,7 +475,7 @@ func (r *Replica) CanCreateTxnRecord(
 			lease, _ /* nextLease */ := r.GetLease()
 			// Recognize the case where a lease started recently. Lease transfers bump
 			// the ts cache low water mark.
-			if wTS == lease.Start {
+			if tombstoneTimestamp == lease.Start {
 				return false, hlc.Timestamp{}, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
 			}
 			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
@@ -478,10 +483,28 @@ func (r *Replica) CanCreateTxnRecord(
 			// If we find another transaction's ID then that transaction has
 			// aborted us before our transaction record was written. It obeyed
 			// the restriction that it couldn't create a transaction record for
-			// us, so it bumped the write timestamp cache instead to prevent us
+			// us, so it recorded a tombstone cache instead to prevent us
 			// from ever creating a transaction record.
 			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 		}
 	}
 	return true, minCommitTS, 0
+}
+
+// transactionTombstoneMarker returns the key used as a marker indicating that a
+// particular txn was finalized (i.e. by an EndTransaction, RecoverTxn or
+// PushTxn(Abort)). It is used as a marker in the timestamp cache serving as a
+// guard against creating a transaction record after the transaction record has
+// been cleaned up (i.e. by a BeginTxn being evaluated out of order or arriving
+// after another txn Push(Abort)'ed the txn).
+func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	return append(keys.TransactionKey(key, txnID), []byte("-tmbs")...)
+}
+
+// transactionPushMarker returns the key used by the marker indicating that a
+// particular txn was pushed before writing its transaction record. It is used
+// as a marker in the timestamp cache indicating that the transaction was pushed
+// in case the push happens before there's a transaction record.
+func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	return append(keys.TransactionKey(key, txnID), []byte("-push")...)
 }
