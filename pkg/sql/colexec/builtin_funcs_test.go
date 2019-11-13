@@ -96,7 +96,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					return NewBuiltinFunctionOperator(tctx, typedExpr.(*tree.FuncExpr), tc.outputTypes, tc.inputCols, 1, input[0]), nil
+					return NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), tc.outputTypes, tc.inputCols, 1, input[0]), nil
 				})
 		})
 	}
@@ -147,7 +147,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	if err != nil {
 		b.Fatal(err)
 	}
-	op := NewBuiltinFunctionOperator(tctx, typedExpr.(*tree.FuncExpr), []types.T{*types.Int}, []int{0}, 1, source)
+	op := NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), []types.T{*types.Int}, []int{0}, 1, source)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
@@ -201,6 +201,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
 		OneInputNode:   NewOneInputNode(source),
+		allocator:      testAllocator,
 		evalCtx:        tctx,
 		funcExpr:       typedExpr.(*tree.FuncExpr),
 		outputIdx:      3,
@@ -216,6 +217,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	// Set up the specialized substring operator.
 	specOp := &substringFunctionOperator{
 		OneInputNode: NewOneInputNode(source),
+		allocator:    testAllocator,
 		argumentCols: inputCols,
 		outputIdx:    3,
 	}

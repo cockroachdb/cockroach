@@ -284,8 +284,8 @@ func (bg *mjBufferedGroup) SetSelection(bool) {
 
 // AppendCol is not implemented because mjBufferedGroup is only initialized
 // when the column schema is known.
-func (bg *mjBufferedGroup) AppendCol(coltypes.T) {
-	execerror.VectorizedInternalPanic("AppendCol(coltypes.T) should not be called on mjBufferedGroup")
+func (bg *mjBufferedGroup) AppendCol(coldata.Vec) {
+	execerror.VectorizedInternalPanic("AppendCol(coldata.Vec) should not be called on mjBufferedGroup")
 }
 
 // Reset is not implemented because mjBufferedGroup is not reused with

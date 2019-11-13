@@ -21,7 +21,8 @@ import (
 )
 
 type caseOp struct {
-	buffer *bufferOp
+	allocator *Allocator
+	buffer    *bufferOp
 
 	caseOps []Operator
 	elseOp  Operator
@@ -69,6 +70,7 @@ func (c *caseOp) EstimateStaticMemoryUsage() int {
 // thenCol is the index into the output batch to write to.
 // typ is the type of the CASE expression.
 func NewCaseOp(
+	allocator *Allocator,
 	buffer Operator,
 	caseOps []Operator,
 	elseOp Operator,
@@ -77,6 +79,7 @@ func NewCaseOp(
 	typ coltypes.T,
 ) Operator {
 	return &caseOp{
+		allocator: allocator,
 		buffer:    buffer.(*bufferOp),
 		caseOps:   caseOps,
 		elseOp:    elseOp,
@@ -98,7 +101,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	c.buffer.advance(ctx)
 	origLen := c.buffer.batch.Batch.Length()
 	if c.buffer.batch.Width() == c.outputIdx {
-		c.buffer.batch.AppendCol(c.typ)
+		c.allocator.AppendColumn(c.buffer.batch, c.typ)
 	}
 	// NB: we don't short-circuit if the batch is length 0 here, because we have
 	// to make sure to run all of our case arms. This is unfortunate.

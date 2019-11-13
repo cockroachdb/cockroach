@@ -89,7 +89,7 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
 	if p.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes._RET_TYP)
+		p.allocator.AppendColumn(batch, coltypes._RET_TYP)
 	}
 	if n == 0 {
 		return batch
@@ -192,6 +192,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // GetProjection_CONST_SIDEConstOperator returns the appropriate constant
 // projection operator for the given left and right column types and operation.
 func GetProjection_CONST_SIDEConstOperator(
+	allocator *Allocator,
 	leftColType *types.T,
 	rightColType *types.T,
 	op tree.Operator,
@@ -202,6 +203,7 @@ func GetProjection_CONST_SIDEConstOperator(
 ) (Operator, error) {
 	projConstOpBase := projConstOpBase{
 		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    outputIdx,
 	}

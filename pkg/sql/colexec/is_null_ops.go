@@ -22,14 +22,18 @@ import (
 // If negate is true, it does the opposite - it performs IS NOT NULL check.
 type isNullProjOp struct {
 	OneInputNode
+	allocator *Allocator
 	colIdx    int
 	outputIdx int
 	negate    bool
 }
 
-func newIsNullProjOp(input Operator, colIdx, outputIdx int, negate bool) Operator {
+func newIsNullProjOp(
+	allocator *Allocator, input Operator, colIdx, outputIdx int, negate bool,
+) Operator {
 	return &isNullProjOp{
 		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    outputIdx,
 		negate:       negate,
@@ -45,7 +49,7 @@ func (o *isNullProjOp) Init() {
 func (o *isNullProjOp) Next(ctx context.Context) coldata.Batch {
 	batch := o.input.Next(ctx)
 	if o.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bool)
+		o.allocator.AppendColumn(batch, coltypes.Bool)
 	}
 	n := batch.Length()
 	if n == 0 {
