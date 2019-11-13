@@ -45,11 +45,18 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	aws   = "aws"
+	gce   = "gce"
+	azure = "azure"
+)
+
 var (
 	local       bool
 	cockroach   string
-	cloud                    = "gce"
+	cloud                    = gce
 	encrypt     encryptValue = "false"
+	machine     string
 	workload    string
 	roachprod   string
 	buildTag    string
@@ -474,6 +481,8 @@ func MachineTypeToCPUs(s string) int {
 		}
 	}
 
+	// TODO(pbardea): Azure will currently fail and always return
+	// 'unknown machine type`.
 	fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", s)
 	os.Exit(1)
 	return -1
@@ -501,6 +510,7 @@ func awsMachineType(cpus int) string {
 	}
 }
 
+// Default GCE machine type when none is specified.
 func gceMachineType(cpus int) string {
 	// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
 	// machines have a decent amount of RAM. We could use customer machine
@@ -510,6 +520,12 @@ func gceMachineType(cpus int) string {
 		return fmt.Sprintf("n1-standard-%d", cpus)
 	}
 	return fmt.Sprintf("n1-highcpu-%d", cpus)
+}
+
+func azureMachineType(cpus int) string {
+	// Currently don't pay attention to the number of CPUs for Azure.
+	// TODO(pbardea): Choose a machine type based on the amount of requested CPU.
+	return "Standard_D4_v3"
 }
 
 type testI interface {
@@ -601,6 +617,7 @@ type clusterSpec struct {
 	CPUs        int
 	Zones       string
 	Geo         bool
+	MachineType string
 	Lifetime    time.Duration
 	ReusePolicy clusterReusePolicy
 }
@@ -622,6 +639,9 @@ func clustersCompatible(s1, s2 clusterSpec) bool {
 
 func (s clusterSpec) String() string {
 	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
+	if len(s.MachineType) > 0 {
+		str += "machine-" + s.MachineType
+	}
 	if s.Geo {
 		str += "-geo"
 	}
@@ -632,7 +652,7 @@ func (s *clusterSpec) args() []string {
 	var args []string
 
 	switch cloud {
-	case "aws":
+	case aws:
 		if s.Zones != "" {
 			fmt.Fprintf(os.Stderr, "zones spec not yet supported on AWS: %s\n", s.Zones)
 			os.Exit(1)
@@ -643,18 +663,44 @@ func (s *clusterSpec) args() []string {
 		}
 
 		args = append(args, "--clouds=aws")
+	case azure:
+		args = append(args, "--clouds=azure")
 	}
 
 	if !local && s.CPUs != 0 {
-		switch cloud {
-		case "aws":
-			args = append(args, "--aws-machine-type-ssd="+awsMachineType(s.CPUs))
-		case "gce":
-			args = append(args, "--gce-machine-type="+gceMachineType(s.CPUs))
+		machineType := s.MachineType
+		if len(machineType) == 0 {
+			// If no machine type was specified, choose one
+			// based on the cloud and CPU count.
+			switch cloud {
+			case aws:
+				machineType = awsMachineType(s.CPUs)
+			case gce:
+				machineType = gceMachineType(s.CPUs)
+			case azure:
+				machineType = azureMachineType(s.CPUs)
+			}
 		}
+		if cloud == aws {
+			if isSSD(machineType) {
+				args = append(args, "--local-ssd=true")
+			} else {
+				args = append(args, "--local-ssd=false")
+			}
+		}
+		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
+		args = append(args, machineTypeArg)
 	}
 	if s.Zones != "" {
-		args = append(args, "--gce-zones="+s.Zones)
+		switch cloud {
+		case gce:
+			args = append(args, "--gce-zones="+s.Zones)
+		case azure:
+			args = append(args, "--azure-locations="+s.Zones)
+		default:
+			fmt.Fprintf(os.Stderr, "zones spec not yet supported on cloud %s - zones: %s\n", cloud, s.Zones)
+			os.Exit(1)
+		}
 	}
 	if s.Geo {
 		args = append(args, "--geo")
@@ -686,6 +732,16 @@ func (o nodeCPUOption) apply(spec *clusterSpec) {
 // cpu is a node option which requests nodes with the specified number of CPUs.
 func cpu(n int) nodeCPUOption {
 	return nodeCPUOption(n)
+}
+
+type nodeMachineTypeOption string
+
+func (o nodeMachineTypeOption) apply(spec *clusterSpec) {
+	spec.MachineType = string(o)
+}
+
+func machineType(machineType string) nodeMachineTypeOption {
+	return nodeMachineTypeOption(machineType)
 }
 
 type nodeGeoOption struct{}
@@ -1130,11 +1186,15 @@ func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger) er
 	if len(cDetails.VMs) < c.spec.NodeCount {
 		return fmt.Errorf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.spec.NodeCount)
 	}
-	if cpus := nodes.CPUs; cpus != 0 {
-		for i, vm := range cDetails.VMs {
-			vmCPUs := MachineTypeToCPUs(vm.MachineType)
-			if vmCPUs < cpus {
-				return fmt.Errorf("node %d has %d CPUs, test requires %d", i, vmCPUs, cpus)
+	if cloud != azure {
+		// TODO(pbardea): MachineTypeToCPUs is not implemented yet for Azure.
+		// Skip this check for now.
+		if cpus := nodes.CPUs; cpus != 0 {
+			for i, vm := range cDetails.VMs {
+				vmCPUs := MachineTypeToCPUs(vm.MachineType)
+				if vmCPUs < cpus {
+					return fmt.Errorf("node %d has %d CPUs, test requires %d", i, vmCPUs, cpus)
+				}
 			}
 		}
 	}
@@ -2334,4 +2394,37 @@ func makeLoadGroups(c *cluster, numZones, numRoachNodes, numLoadNodes int) loadG
 		}
 	}
 	return loadGroups
+}
+
+func machineTypeFlag(machineType string) string {
+	switch cloud {
+	case aws:
+		if isSSD(machineType) {
+			return "--aws-machine-type-ssd"
+		}
+		return "--aws-machine-type"
+	case gce:
+		return "--gce-machine-type"
+	case azure:
+		return "--azure-machine-type"
+	default:
+		panic(fmt.Sprintf("unsupported cloud: %s\n", cloud))
+	}
+}
+
+func isSSD(machineType string) bool {
+	if cloud != aws {
+		return false
+	}
+
+	typeAndSize := strings.Split(machineType, ".")
+	if len(typeAndSize) == 2 {
+		awsType := typeAndSize[0]
+		// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
+		return strings.HasPrefix(awsType, "i3") || strings.HasSuffix(awsType, "d")
+	}
+
+	fmt.Fprint(os.Stderr, "aws machine type does not match expected format 'type.size' (e.g. c5d.4xlarge)", machineType)
+	os.Exit(1)
+	return false
 }

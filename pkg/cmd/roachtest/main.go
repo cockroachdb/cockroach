@@ -205,6 +205,8 @@ the test tags.
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
 		cmd.Flags().StringVar(
+			&machine, "machine", machine, "the machine type for tpccbench to use (see https://aws.amazon.com/ec2/instance-types/ or https://cloud.google.com/compute/docs/machine-types)")
+		cmd.Flags().StringVar(
 			&zonesF, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
 		cmd.Flags().IntVar(
 			&cpuQuota, "cpu-quota", 300,
