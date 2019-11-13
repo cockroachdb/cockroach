@@ -138,13 +138,7 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (engi
 
 	var db engine.Engine
 
-	// TODO(peter): Using Pebble here causes TestRemoveDeadReplicas to fail with:
-	//
-	// debug_test.go:292: pebble: internal error: L0 flushed file 000004 overlaps with the largest seqnum of a preceding flushed file: 0-2278 vs 414
-
-	// engineType := engine.DefaultStorageEngine
-	engineType := enginepb.EngineTypeRocksDB
-	switch engineType {
+	switch engine.DefaultStorageEngine {
 	case enginepb.EngineTypePebble:
 		cfg := engine.PebbleConfig{
 			StorageConfig: storageConfig,
