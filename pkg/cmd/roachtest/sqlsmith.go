@@ -29,7 +29,25 @@ func registerSQLSmith(r *testRegistry) {
 		"seed":        sqlsmith.Setups["seed"],
 		"rand-tables": sqlsmith.Setups["rand-tables"],
 		"tpch-sf1": func(r *rand.Rand) string {
-			return `RESTORE DATABASE tpch FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup';`
+			return `RESTORE DATABASE tpch FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'defaultdb';`
+		},
+		"tpcc": func(r *rand.Rand) string {
+			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
+			var sb strings.Builder
+			for _, t := range []string{
+				"customer",
+				"district",
+				"history",
+				"item",
+				"new_order",
+				"order",
+				"order_line",
+				"stock",
+				"warehouse",
+			} {
+				fmt.Fprintf(&sb, "RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s' WITH into_db = 'defaultdb';\n", t, version)
+			}
+			return sb.String()
 		},
 	}
 	settings := map[string]sqlsmith.SettingFunc{
