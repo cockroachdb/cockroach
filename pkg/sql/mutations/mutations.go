@@ -18,6 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+var (
+	// ForeignKeyMutator adds ALTER TABLE ADD FOREIGN KEY statements.
+	ForeignKeyMutator MultiStatementMutation = foreignKeyMutator
+
+	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
+	// definitions to have random FAMILY definitions.
+	ColumnFamilyMutator StatementMutator = columnFamilyMutator
+)
+
 // StatementMutator defines a func that can change a statement.
 type StatementMutator func(rng *rand.Rand, stmt tree.Statement) (changed bool)
 
@@ -25,33 +34,73 @@ type StatementMutator func(rng *rand.Rand, stmt tree.Statement) (changed bool)
 // but must not change any of the statements passed.
 type MultiStatementMutation func(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement)
 
-// ForAllStatements executes stmtMutator on all SQL statements of input. The
-// list of changed statements is returned.
-func ForAllStatements(
-	rng *rand.Rand, input string, stmtMutator StatementMutator,
-) (output string, changed []string) {
+// Mutator defines a method that can mutate or add SQL statements.
+type Mutator interface {
+	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
+}
+
+// Mutate implements the Mutator interface.
+func (sm StatementMutator) Mutate(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
+	for _, stmt := range stmts {
+		sc := sm(rng, stmt)
+		changed = changed || sc
+	}
+	return stmts, changed
+}
+
+// Mutate implements the Mutator interface.
+func (msm MultiStatementMutation) Mutate(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
+	additional := msm(rng, stmts)
+	if len(additional) == 0 {
+		return stmts, false
+	}
+	return append(stmts, additional...), true
+}
+
+// Apply executes all mutators on stmts. It returns the (possibly mutated and
+// changed in place) statements and a boolean indicating whether any changes
+// were made.
+func Apply(
+	rng *rand.Rand, stmts []tree.Statement, mutators ...Mutator,
+) (mutated []tree.Statement, changed bool) {
+	var mc bool
+	for _, m := range mutators {
+		stmts, mc = m.Mutate(rng, stmts)
+		changed = changed || mc
+	}
+	return stmts, changed
+}
+
+// ApplyString executes all mutators on input.
+func ApplyString(rng *rand.Rand, input string, mutators ...Mutator) (output string, changed bool) {
 	parsed, err := parser.Parse(input)
 	if err != nil {
-		return input, nil
+		return input, false
+	}
+
+	stmts := make([]tree.Statement, len(parsed))
+	for i, p := range parsed {
+		stmts[i] = p.AST
+	}
+
+	stmts, changed = Apply(rng, stmts, mutators...)
+	if !changed {
+		return input, false
 	}
 
 	var sb strings.Builder
-	for _, p := range parsed {
-		stmtChanged := stmtMutator(rng, p.AST)
-		if !stmtChanged {
-			sb.WriteString(p.SQL)
-		} else {
-			s := p.AST.String()
-			sb.WriteString(s)
-			changed = append(changed, s)
-		}
+	for _, s := range stmts {
+		sb.WriteString(s.String())
 		sb.WriteString(";\n")
 	}
-	return sb.String(), changed
+	return sb.String(), true
 }
 
-// ForeignKeyMutator adds ALTER TABLE ADD FOREIGN KEY statements.
-func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
+func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
 	// Find columns in the tables.
 	cols := map[tree.TableName][]*tree.ColumnTableDef{}
 	byName := map[tree.TableName]*tree.CreateTable{}
@@ -214,9 +263,7 @@ func ForeignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 	return additional
 }
 
-// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
-// definitions to have random FAMILY definitions.
-func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
+func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	ast, ok := stmt.(*tree.CreateTable)
 	if !ok {
 		return false
