@@ -205,13 +205,11 @@ func readInputFiles(
 						// no rejected rows
 						return nil
 					}
-					rejectedFile := dataFile
-					parsedURI, err := url.Parse(rejectedFile)
+					rejFn, err := rejectedFilename(dataFile)
 					if err != nil {
 						return err
 					}
-					parsedURI.Path = parsedURI.Path + ".rejected"
-					conf, err := cloud.ExternalStorageConfFromURI(rejectedFile)
+					conf, err := cloud.ExternalStorageConfFromURI(rejFn)
 					if err != nil {
 						return err
 					}
@@ -248,6 +246,15 @@ func readInputFiles(
 		}
 	}
 	return nil
+}
+
+func rejectedFilename(datafile string) (string, error) {
+	parsedURI, err := url.Parse(datafile)
+	if err != nil {
+		return "", err
+	}
+	parsedURI.Path = parsedURI.Path + ".rejected"
+	return parsedURI.String(), nil
 }
 
 func decompressingReader(

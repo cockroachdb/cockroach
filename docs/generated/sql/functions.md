@@ -334,20 +334,20 @@ return without an error.</p>
 </span></td></tr>
 <tr><td><a name="experimental_strptime"></a><code>experimental_strptime(input: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns <code>input</code> as a timestamptz using <code>format</code> (which uses standard <code>strptime</code> formatting).</p>
 </span></td></tr>
-<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: millennium, century, decade, year, isoyear,
 quarter, month, week, dayofweek, isodow, dayofyear, julian,
 hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
-<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
-<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamp</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamp</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: millennium, century, decade, year, isoyear,
 quarter, month, week, dayofweek, isodow, dayofyear, julian,
 hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
-<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: millennium, century, decade, year, isoyear,
 quarter, month, week, dayofweek, isodow, dayofyear, julian,
 hour, minute, second, millisecond, microsecond, epoch</p>

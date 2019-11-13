@@ -1517,14 +1517,14 @@ func (r *batchIterator) Close() {
 	r.iter.destroy()
 }
 
-func (r *batchIterator) Seek(key MVCCKey) {
+func (r *batchIterator) SeekGE(key MVCCKey) {
 	r.batch.flushMutations()
-	r.iter.Seek(key)
+	r.iter.SeekGE(key)
 }
 
-func (r *batchIterator) SeekReverse(key MVCCKey) {
+func (r *batchIterator) SeekLT(key MVCCKey) {
 	r.batch.flushMutations()
-	r.iter.SeekReverse(key)
+	r.iter.SeekLT(key)
 }
 
 func (r *batchIterator) Valid() (bool, error) {
@@ -1558,6 +1558,10 @@ func (r *batchIterator) FindSplitKey(
 ) (MVCCKey, error) {
 	r.batch.flushMutations()
 	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize)
+}
+
+func (r *batchIterator) MVCCOpsSpecialized() bool {
+	return r.iter.MVCCOpsSpecialized()
 }
 
 func (r *batchIterator) MVCCGet(
@@ -2163,7 +2167,7 @@ var iterPool = sync.Pool{
 // iterator to free up resources.
 func newRocksDBIterator(
 	rdb *C.DBEngine, opts IterOptions, engine Reader, parent *RocksDB,
-) Iterator {
+) MVCCIterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
@@ -2238,7 +2242,7 @@ func (r *rocksDBIterator) Close() {
 	iterPool.Put(r)
 }
 
-func (r *rocksDBIterator) Seek(key MVCCKey) {
+func (r *rocksDBIterator) SeekGE(key MVCCKey) {
 	r.checkEngineOpen()
 	if len(key.Key) == 0 {
 		// start=Key("") needs special treatment since we need
@@ -2253,25 +2257,15 @@ func (r *rocksDBIterator) Seek(key MVCCKey) {
 	}
 }
 
-func (r *rocksDBIterator) SeekReverse(key MVCCKey) {
+func (r *rocksDBIterator) SeekLT(key MVCCKey) {
 	r.checkEngineOpen()
 	if len(key.Key) == 0 {
 		r.setState(C.DBIterSeekToLast(r.iter))
 	} else {
-		// We can avoid seeking if we're already at the key we seek.
-		if r.valid && !r.reseek && key.Equal(r.UnsafeKey()) {
-			return
-		}
-		r.setState(C.DBIterSeek(r.iter, goToCKey(key)))
-		// Maybe the key sorts after the last key in RocksDB.
-		if ok, _ := r.Valid(); !ok {
-			r.setState(C.DBIterSeekToLast(r.iter))
-		}
-		if ok, _ := r.Valid(); !ok {
-			return
-		}
-		// Make sure the current key is <= the provided key.
-		if key.Less(r.UnsafeKey()) {
+		// SeekForPrev positions the iterator at the last key that is less
+		// than or equal to key, so we may need to iterate backwards once.
+		r.setState(C.DBIterSeekForPrev(r.iter, goToCKey(key)))
+		if r.valid && key.Equal(r.UnsafeKey()) {
 			r.Prev()
 		}
 	}
@@ -2380,6 +2374,12 @@ func (r *rocksDBIterator) FindSplitKey(
 		return MVCCKey{}, err
 	}
 	return MVCCKey{Key: cStringToGoBytes(splitKey)}, nil
+}
+
+func (r *rocksDBIterator) MVCCOpsSpecialized() bool {
+	// rocksDBIterator provides specialized implementations of MVCCGet and
+	// MVCCScan.
+	return true
 }
 
 func (r *rocksDBIterator) MVCCGet(
@@ -2519,7 +2519,7 @@ func (r *rocksDBIterator) CheckForKeyCollisions(
 	}
 	sstIterator := sst.NewIterator(IterOptions{UpperBound: end}).(*rocksDBIterator)
 	defer sstIterator.Close()
-	sstIterator.Seek(MakeMVCCMetadataKey(start))
+	sstIterator.SeekGE(MakeMVCCMetadataKey(start))
 	if ok, err := sstIterator.Valid(); err != nil || !ok {
 		return emptyStats, errors.Wrap(err, "checking for key collisions")
 	}
@@ -3017,7 +3017,7 @@ func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end roachpb
 		return errors.New("cannot call ClearIterRange on a closed writer")
 	}
 	mvccEndKey := MakeMVCCMetadataKey(end)
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {

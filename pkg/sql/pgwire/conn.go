@@ -593,6 +593,13 @@ func (c *conn) sendStatusParam(param, value string) error {
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
+func (c *conn) bufferStatusParam(param, value string) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
+	c.msgBuilder.writeTerminatedString(param)
+	c.msgBuilder.writeTerminatedString(value)
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
+}
+
 func (c *conn) sendInitialConnData(
 	ctx context.Context, sqlServer *sql.Server,
 ) (sql.ConnectionHandler, error) {
@@ -610,10 +617,17 @@ func (c *conn) sendInitialConnData(
 	// defaults with client-provided values.
 	// For details see: https://www.postgresql.org/docs/10/static/libpq-status.html
 	for _, param := range statusReportParams {
+		param := param
 		value := connHandler.GetStatusParam(ctx, param)
 		if err := c.sendStatusParam(param, value); err != nil {
 			return sql.ConnectionHandler{}, err
 		}
+		// `pgwire` also expects updates when these parameters change.
+		connHandler.RegisterOnSessionDataChange(param, func(val string) {
+			if err := c.bufferStatusParam(param, val); err != nil {
+				panic(fmt.Sprintf("unexpected error when trying to send status param update: %s", err.Error()))
+			}
+		})
 	}
 	// The two following status parameters have no equivalent session
 	// variable.

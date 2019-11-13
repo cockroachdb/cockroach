@@ -1770,7 +1770,7 @@ may increase either contention or retry errors, or both.`,
 		tree.FunctionProperties{Category: categoryDateAndTime},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
-			ReturnType: tree.FixedReturnType(types.Int),
+			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// extract timeSpan fromTime.
 				fromTS := args[1].(*tree.DTimestamp)
@@ -1784,7 +1784,7 @@ may increase either contention or retry errors, or both.`,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: tree.FixedReturnType(types.Int),
+			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				date := args[1].(*tree.DDate)
@@ -1801,7 +1801,7 @@ may increase either contention or retry errors, or both.`,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
-			ReturnType: tree.FixedReturnType(types.Int),
+			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTSTZ := args[1].(*tree.DTimestampTZ)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -1814,7 +1814,7 @@ may increase either contention or retry errors, or both.`,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-			ReturnType: tree.FixedReturnType(types.Int),
+			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[1].(*tree.DTime)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -4477,23 +4477,27 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 }
 
 const microsPerMilli = 1000
+const millisPerSec = 1000
+const secsPerHour = 3600
+const secsPerMinute = 60
+const secsPerDay = 86400
 
 func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*fromTime)
 	switch timeSpan {
 	case "hour", "hours":
-		return tree.NewDInt(tree.DInt(t.Hour())), nil
+		return tree.NewDFloat(tree.DFloat(t.Hour())), nil
 	case "minute", "minutes":
-		return tree.NewDInt(tree.DInt(t.Minute())), nil
+		return tree.NewDFloat(tree.DFloat(t.Minute())), nil
 	case "second", "seconds":
-		return tree.NewDInt(tree.DInt(t.Second())), nil
+		return tree.NewDFloat(tree.DFloat(float64(t.Second()) + float64(t.Microsecond())/(microsPerMilli*millisPerSec))), nil
 	case "millisecond", "milliseconds":
-		return tree.NewDInt(tree.DInt((t.Second() * 1000) + (t.Microsecond() / microsPerMilli))), nil
+		return tree.NewDFloat(tree.DFloat(float64(t.Second()*millisPerSec) + float64(t.Microsecond())/microsPerMilli)), nil
 	case "microsecond", "microseconds":
-		return tree.NewDInt(tree.DInt((t.Second() * 1000 * 1000) + t.Microsecond())), nil
+		return tree.NewDFloat(tree.DFloat((t.Second() * millisPerSec * microsPerMilli) + t.Microsecond())), nil
 	case "epoch":
-		seconds := time.Duration(t) * time.Microsecond / time.Second
-		return tree.NewDInt(tree.DInt(int64(seconds))), nil
+		seconds := float64(time.Duration(t)) * float64(time.Microsecond) / float64(time.Second)
+		return tree.NewDFloat(tree.DFloat(seconds)), nil
 	default:
 		return nil, pgerror.Newf(
 			pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
@@ -4525,79 +4529,81 @@ func extractStringFromTimestamp(
 	case "millennia", "millennium", "millenniums":
 		year := fromTime.Year()
 		if year > 0 {
-			return tree.NewDInt(tree.DInt((year + 999) / 1000)), nil
+			return tree.NewDFloat(tree.DFloat((year + 999) / 1000)), nil
 		}
-		return tree.NewDInt(tree.DInt(-((999 - (year - 1)) / 1000))), nil
+		return tree.NewDFloat(tree.DFloat(-((999 - (year - 1)) / 1000))), nil
 
 	case "centuries", "century":
 		year := fromTime.Year()
 		if year > 0 {
-			return tree.NewDInt(tree.DInt((year + 99) / 100)), nil
+			return tree.NewDFloat(tree.DFloat((year + 99) / 100)), nil
 		}
-		return tree.NewDInt(tree.DInt(-((99 - (year - 1)) / 100))), nil
+		return tree.NewDFloat(tree.DFloat(-((99 - (year - 1)) / 100))), nil
 
 	case "decade", "decades":
 		year := fromTime.Year()
 		if year >= 0 {
-			return tree.NewDInt(tree.DInt(year / 10)), nil
+			return tree.NewDFloat(tree.DFloat(year / 10)), nil
 		}
-		return tree.NewDInt(tree.DInt(-((8 - (year - 1)) / 10))), nil
+		return tree.NewDFloat(tree.DFloat(-((8 - (year - 1)) / 10))), nil
 
 	case "year", "years":
-		return tree.NewDInt(tree.DInt(fromTime.Year())), nil
+		return tree.NewDFloat(tree.DFloat(fromTime.Year())), nil
 
 	case "isoyear":
 		year, _ := fromTime.ISOWeek()
-		return tree.NewDInt(tree.DInt(year)), nil
+		return tree.NewDFloat(tree.DFloat(year)), nil
 
 	case "quarter":
-		return tree.NewDInt(tree.DInt((fromTime.Month()-1)/3 + 1)), nil
+		return tree.NewDFloat(tree.DFloat((fromTime.Month()-1)/3 + 1)), nil
 
 	case "month", "months":
-		return tree.NewDInt(tree.DInt(fromTime.Month())), nil
+		return tree.NewDFloat(tree.DFloat(fromTime.Month())), nil
 
 	case "week", "weeks":
 		_, week := fromTime.ISOWeek()
-		return tree.NewDInt(tree.DInt(week)), nil
+		return tree.NewDFloat(tree.DFloat(week)), nil
 
 	case "day", "days":
-		return tree.NewDInt(tree.DInt(fromTime.Day())), nil
+		return tree.NewDFloat(tree.DFloat(fromTime.Day())), nil
 
 	case "dayofweek", "dow":
-		return tree.NewDInt(tree.DInt(fromTime.Weekday())), nil
+		return tree.NewDFloat(tree.DFloat(fromTime.Weekday())), nil
 
 	case "isodow":
 		day := fromTime.Weekday()
 		if day == 0 {
-			return tree.NewDInt(tree.DInt(7)), nil
+			return tree.NewDFloat(tree.DFloat(7)), nil
 		}
-		return tree.NewDInt(tree.DInt(day)), nil
+		return tree.NewDFloat(tree.DFloat(day)), nil
 
 	case "dayofyear", "doy":
-		return tree.NewDInt(tree.DInt(fromTime.YearDay())), nil
+		return tree.NewDFloat(tree.DFloat(fromTime.YearDay())), nil
 
 	case "julian":
-		julianDay := dateToJulianDay(fromTime.Year(), int(fromTime.Month()), fromTime.Day())
-		return tree.NewDInt(tree.DInt(julianDay)), nil
+		julianDay := float64(dateToJulianDay(fromTime.Year(), int(fromTime.Month()), fromTime.Day())) +
+			(float64(fromTime.Hour()*secsPerHour+fromTime.Minute()*secsPerMinute+fromTime.Second())+
+				float64(fromTime.Nanosecond())/float64(time.Second))/secsPerDay
+		return tree.NewDFloat(tree.DFloat(julianDay)), nil
 
 	case "hour", "hours":
-		return tree.NewDInt(tree.DInt(fromTime.Hour())), nil
+		return tree.NewDFloat(tree.DFloat(fromTime.Hour())), nil
 
 	case "minute", "minutes":
-		return tree.NewDInt(tree.DInt(fromTime.Minute())), nil
+		return tree.NewDFloat(tree.DFloat(fromTime.Minute())), nil
 
 	case "second", "seconds":
-		return tree.NewDInt(tree.DInt(fromTime.Second())), nil
+		return tree.NewDFloat(tree.DFloat(float64(fromTime.Second()) + float64(fromTime.Nanosecond())/float64(time.Second))), nil
 
 	case "millisecond", "milliseconds":
 		// This a PG extension not supported in MySQL.
-		return tree.NewDInt(tree.DInt((fromTime.Second() * 1000) + (fromTime.Nanosecond() / int(time.Millisecond)))), nil
+		return tree.NewDFloat(tree.DFloat(float64(fromTime.Second()*millisPerSec) + float64(fromTime.Nanosecond())/float64(time.Millisecond))), nil
 
 	case "microsecond", "microseconds":
-		return tree.NewDInt(tree.DInt((fromTime.Second() * 1000 * 1000) + (fromTime.Nanosecond() / int(time.Microsecond)))), nil
+		return tree.NewDFloat(tree.DFloat(float64(fromTime.Second()*millisPerSec*microsPerMilli) + float64(fromTime.Nanosecond())/float64(time.Microsecond))), nil
 
 	case "epoch":
-		return tree.NewDInt(tree.DInt(fromTime.Unix())), nil
+		return tree.NewDFloat(tree.DFloat(float64(fromTime.UnixNano()) / float64(time.Second))), nil
 
 	default:
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)

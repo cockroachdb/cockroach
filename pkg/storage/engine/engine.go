@@ -41,9 +41,9 @@ func init() {
 type SimpleIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
-	// Seek advances the iterator to the first key in the engine which
+	// SeekGE advances the iterator to the first key in the engine which
 	// is >= the provided key.
-	Seek(key MVCCKey)
+	SeekGE(key MVCCKey)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
 	// a valid key (it is undefined to call Key(), Value(), or similar
@@ -81,9 +81,9 @@ type IteratorStats struct {
 type Iterator interface {
 	SimpleIterator
 
-	// SeekReverse advances the iterator to the first key in the engine which
-	// is <= the provided key.
-	SeekReverse(key MVCCKey)
+	// SeekLT advances the iterator to the first key in the engine which
+	// is < the provided key.
+	SeekLT(key MVCCKey)
 	// Prev moves the iterator backward to the previous key/value
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
@@ -116,11 +116,23 @@ type Iterator interface {
 	// and the encoded SST data specified, within the provided key range. Returns
 	// stats on skipped KVs, or an error if a collision is found.
 	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
+	// SetUpperBound installs a new upper bound for this iterator.
+	SetUpperBound(roachpb.Key)
+	// Stats returns statistics about the iterator.
+	Stats() IteratorStats
+}
+
+// MVCCIterator is an interface that extends Iterator and provides concrete
+// implementations for MVCCGet and MVCCScan operations. It is used by instances
+// of the interface backed by RocksDB iterators to avoid cgo hops.
+type MVCCIterator interface {
+	Iterator
+	// MVCCOpsSpecialized returns whether the iterator has a specialized
+	// implementation of MVCCGet and MVCCScan. This is exposed as a method
+	// so that wrapper types can defer to their wrapped iterators.
+	MVCCOpsSpecialized() bool
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
-	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
-	// package-level MVCCGet, or one of its variants, instead.
 	MVCCGet(
 		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 	) (*roachpb.Value, *roachpb.Intent, error)
@@ -129,20 +141,9 @@ type Iterator interface {
 	// returned raw, as a series of buffers of length-prefixed slices,
 	// alternating from key to value, where numKVs specifies the number of pairs
 	// in the buffer.
-	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
-	// package-level MVCCScan, or one of its variants, instead. For correct
-	// operation, the caller must set the lower and upper bounds on the iterator
-	// before calling this method.
-	//
-	// TODO(peter): unexport this method.
 	MVCCScan(
 		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 	) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
-	// SetUpperBound installs a new upper bound for this iterator.
-	SetUpperBound(roachpb.Key)
-
-	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an Iterator.
@@ -617,7 +618,7 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end roachpb.Key) 
 	// TODO(bdarnell): Move this into ClearIterRange so we don't have
 	// to do this scan twice.
 	count := 0
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {
@@ -727,7 +728,7 @@ func iterateOnReader(
 	it := reader.NewIterator(IterOptions{UpperBound: end})
 	defer it.Close()
 
-	it.Seek(MakeMVCCMetadataKey(start))
+	it.SeekGE(MakeMVCCMetadataKey(start))
 	for ; ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {

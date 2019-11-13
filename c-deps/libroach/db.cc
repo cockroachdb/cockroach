@@ -675,6 +675,12 @@ DBIterState DBIterSeek(DBIterator* iter, DBKey key) {
   return DBIterGetState(iter);
 }
 
+DBIterState DBIterSeekForPrev(DBIterator* iter, DBKey key) {
+  ScopedStats stats(iter);
+  iter->rep->SeekForPrev(EncodeKey(key));
+  return DBIterGetState(iter);
+}
+
 DBIterState DBIterSeekToFirst(DBIterator* iter) {
   ScopedStats stats(iter);
   iter->rep->SeekToFirst();

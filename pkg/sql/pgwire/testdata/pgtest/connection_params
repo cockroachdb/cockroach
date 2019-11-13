@@ -1,0 +1,73 @@
+# Change the application name.
+
+send
+Parse {"Query": "SET application_name = 'pgtest'"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone using an offset.
+# TODO(#42404): postgres has a different output. This is what we have right now
+# as code, but we need to dig into what/why we use this format in param status.
+# postgres: {"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c+06\u003e-06"}
+
+send
+Parse {"Query": "SET TIME ZONE +6"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"6"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SET TIME ZONE -11.5"}
+Bind
+Execute
+Sync
+----
+
+# postgres: {"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c-11:30\u003e+11:30"}
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"-11.5"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Change the time zone using a real string.
+
+send
+Parse {"Query": "SET TIME ZONE 'America/New_York'"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/New_York"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

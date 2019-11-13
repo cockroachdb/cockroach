@@ -39,6 +39,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	outsideKey3 := engine.MakeMVCCMetadataKey(roachpb.Key("m"))
 	insideKey := engine.MakeMVCCMetadataKey(roachpb.Key("c"))
 	insideKey2 := engine.MakeMVCCMetadataKey(roachpb.Key("d"))
+	insideKey3 := engine.MakeMVCCMetadataKey(roachpb.Key("f"))
 
 	// Write values outside the range that we can try to read later.
 	if err := eng.Put(outsideKey, []byte("value")); err != nil {
@@ -120,12 +121,12 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		defer iter.Close()
 
 		// Iterators check boundaries on seek and next/prev
-		iter.Seek(outsideKey)
+		iter.SeekGE(outsideKey)
 		if _, err := iter.Valid(); !isReadSpanErr(err) {
 			t.Fatalf("Seek: unexpected error %v", err)
 		}
 		// Seeking back in bounds restores validity.
-		iter.Seek(insideKey)
+		iter.SeekGE(insideKey)
 		if ok, err := iter.Valid(); !ok {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
@@ -157,12 +158,12 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	}
 	iter := spanset.NewIterator(eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax}), &ss)
 	defer iter.Close()
-	iter.SeekReverse(outsideKey)
+	iter.SeekLT(outsideKey)
 	if _, err := iter.Valid(); !isReadSpanErr(err) {
-		t.Fatalf("SeekReverse: unexpected error %v", err)
+		t.Fatalf("SeekLT: unexpected error %v", err)
 	}
 	// Seeking back in bounds restores validity.
-	iter.SeekReverse(insideKey2)
+	iter.SeekLT(insideKey3)
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected valid iterator, err=%v", err)
 	}
@@ -184,7 +185,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		t.Errorf("unexpected error on iterator: %+v", err)
 	}
 	// Seeking back in bounds restores validity.
-	iter.SeekReverse(insideKey)
+	iter.SeekLT(insideKey)
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected valid iterator, err=%v", err)
 	}
@@ -334,7 +335,7 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 		iter := batchAt1.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 
-		iter.Seek(k1)
+		iter.SeekGE(k1)
 		if ok, err := iter.Valid(); !ok {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
@@ -356,12 +357,12 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 		iter := batchAt2.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 
-		iter.Seek(k1)
+		iter.SeekGE(k1)
 		if ok, _ := iter.Valid(); ok {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 		}
 
-		iter.Seek(k2)
+		iter.SeekGE(k2)
 		if ok, err := iter.Valid(); !ok {
 			t.Fatalf("expected valid iterator, err=%v", err)
 		}
@@ -376,12 +377,12 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 
-		iter.Seek(k1)
+		iter.SeekGE(k1)
 		if ok, _ := iter.Valid(); ok {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 		}
 
-		iter.Seek(k2)
+		iter.SeekGE(k2)
 		if ok, _ := iter.Valid(); ok {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 		}
