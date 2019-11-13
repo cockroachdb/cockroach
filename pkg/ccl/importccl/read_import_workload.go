@@ -99,6 +99,7 @@ func makeDatumFromColOffset(
 func (w *workloadReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	_ map[int32]int64,
 	_ roachpb.IOFileFormat,
 	_ cloud.ExternalStorageFactory,
 ) error {
