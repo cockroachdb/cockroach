@@ -227,13 +227,13 @@ func TestComputeTruncateDecision(t *testing.T) {
 				}
 			}
 			input := truncateDecisionInput{
-				RaftStatus:                     status,
-				LogSize:                        c.raftLogSize,
-				MaxLogSize:                     targetSize,
-				LogSizeTrusted:                 true,
-				FirstIndex:                     c.firstIndex,
-				LastIndex:                      c.lastIndex,
-				PendingPreemptiveSnapshotIndex: c.pendingSnapshot,
+				RaftStatus:           status,
+				LogSize:              c.raftLogSize,
+				MaxLogSize:           targetSize,
+				LogSizeTrusted:       true,
+				FirstIndex:           c.firstIndex,
+				LastIndex:            c.lastIndex,
+				PendingSnapshotIndex: c.pendingSnapshot,
 			}
 			decision := computeTruncateDecision(input)
 			if act, exp := decision.String(), c.exp; act != exp {

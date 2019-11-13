@@ -216,13 +216,13 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	}
 
 	input := truncateDecisionInput{
-		RaftStatus:                     *raftStatus,
-		LogSize:                        raftLogSize,
-		MaxLogSize:                     targetSize,
-		LogSizeTrusted:                 logSizeTrusted,
-		FirstIndex:                     firstIndex,
-		LastIndex:                      lastIndex,
-		PendingPreemptiveSnapshotIndex: pendingSnapshotIndex,
+		RaftStatus:           *raftStatus,
+		LogSize:              raftLogSize,
+		MaxLogSize:           targetSize,
+		LogSizeTrusted:       logSizeTrusted,
+		FirstIndex:           firstIndex,
+		LastIndex:            lastIndex,
+		PendingSnapshotIndex: pendingSnapshotIndex,
 	}
 
 	decision := computeTruncateDecision(input)
@@ -266,11 +266,11 @@ const (
 )
 
 type truncateDecisionInput struct {
-	RaftStatus                     raft.Status
-	LogSize, MaxLogSize            int64
-	LogSizeTrusted                 bool // false when LogSize might be off
-	FirstIndex, LastIndex          uint64
-	PendingPreemptiveSnapshotIndex uint64
+	RaftStatus            raft.Status
+	LogSize, MaxLogSize   int64
+	LogSizeTrusted        bool // false when LogSize might be off
+	FirstIndex, LastIndex uint64
+	PendingSnapshotIndex  uint64
 }
 
 func (input truncateDecisionInput) LogTooLarge() bool {
@@ -307,7 +307,7 @@ func (td *truncateDecision) raftSnapshotsForIndex(index uint64) int {
 			n++
 		}
 	}
-	if td.Input.PendingPreemptiveSnapshotIndex != 0 && td.Input.PendingPreemptiveSnapshotIndex < index {
+	if td.Input.PendingSnapshotIndex != 0 && td.Input.PendingSnapshotIndex < index {
 		n++
 	}
 
@@ -451,8 +451,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// about to be added to the range (or is in Raft recovery). We don't want to
 	// truncate the log in a way that will require that new replica to be caught
 	// up via yet another Raft snapshot.
-	if input.PendingPreemptiveSnapshotIndex > 0 {
-		decision.ProtectIndex(input.PendingPreemptiveSnapshotIndex, truncatableIndexChosenViaPendingSnap)
+	if input.PendingSnapshotIndex > 0 {
+		decision.ProtectIndex(input.PendingSnapshotIndex, truncatableIndexChosenViaPendingSnap)
 	}
 
 	// If new first index dropped below first index, make them equal (resulting
