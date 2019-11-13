@@ -647,8 +647,7 @@ func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 
 // Compact implements the Engine interface.
 func (p *Pebble) Compact() error {
-	// TODO(hueypark): Implement this.
-	return nil
+	return p.db.Compact(nil, EncodeKey(MVCCKeyMax))
 }
 
 // CompactRange implements the Engine interface.
