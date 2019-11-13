@@ -63,7 +63,7 @@ func TestDeselector(t *testing.T) {
 
 	for _, tc := range tcs {
 		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.sel, func(t *testing.T, input []Operator) {
-			op := NewDeselectorOp(input[0], tc.colTypes)
+			op := NewDeselectorOp(testAllocator, input[0], tc.colTypes)
 			out := newOpTestOutput(op, tc.expected)
 
 			if err := out.Verify(); err != nil {
@@ -84,7 +84,7 @@ func BenchmarkDeselector(b *testing.B) {
 		inputTypes[colIdx] = coltypes.Int64
 	}
 
-	batch := coldata.NewMemBatch(inputTypes)
+	batch := testAllocator.NewMemBatch(inputTypes)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
@@ -104,7 +104,7 @@ func BenchmarkDeselector(b *testing.B) {
 				copy(batch.Selection(), sel)
 				batch.SetLength(batchLen)
 				input := NewRepeatableBatchSource(batch)
-				op := NewDeselectorOp(input, inputTypes)
+				op := NewDeselectorOp(testAllocator, input, inputTypes)
 				op.Init()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

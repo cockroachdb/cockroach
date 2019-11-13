@@ -1654,8 +1654,8 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
 			func(t *testing.T) {
 				typs := []coltypes.T{coltypes.Int64}
-				colsLeft := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
-				colsRight := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+				colsLeft := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
+				colsRight := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
 				groupsLeft := colsLeft[0].Int64()
 				groupsRight := colsRight[0].Int64()
 				for i := range groupsLeft {
@@ -1665,6 +1665,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 				leftSource := newChunkingBatchSource(typs, colsLeft, uint64(nTuples))
 				rightSource := newChunkingBatchSource(typs, colsRight, uint64(nTuples))
 				a, err := NewMergeJoinOp(
+					testAllocator,
 					sqlbase.FullOuterJoin,
 					leftSource,
 					rightSource,
@@ -1733,7 +1734,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches
 					typs := []coltypes.T{coltypes.Int64}
-					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+					cols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
 					groups := cols[0].Int64()
 					for i := range groups {
 						groups[i] = int64(i)
@@ -1743,6 +1744,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1798,7 +1800,10 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches
 					typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
-					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples), coldata.NewMemColumn(typs[1], nTuples)}
+					cols := []coldata.Vec{
+						testAllocator.NewMemColumn(typs[0], nTuples),
+						testAllocator.NewMemColumn(typs[1], nTuples),
+					}
 					for i := range cols[0].Int64() {
 						cols[0].Int64()[i] = int64(i / groupSize)
 						cols[1].Int64()[i] = int64(i / groupSize)
@@ -1808,6 +1813,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1867,7 +1873,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 					func(t *testing.T) {
 						nTuples := int(coldata.BatchSize()) * numInputBatches
 						typs := []coltypes.T{coltypes.Int64}
-						cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+						cols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
 						groups := cols[0].Int64()
 						for i := range groups {
 							groups[i] = int64(i)
@@ -1877,6 +1883,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 						a, err := NewMergeJoinOp(
+							testAllocator,
 							sqlbase.InnerJoin,
 							leftSource,
 							rightSource,
@@ -1921,7 +1928,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches
 					typs := []coltypes.T{coltypes.Int64}
-					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+					cols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
 					groups := cols[0].Int64()
 					for i := range groups {
 						groups[i] = int64(i / groupSize)
@@ -1931,6 +1938,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
@@ -1978,9 +1986,9 @@ func newBatchesOfRandIntRows(
 	nTuples int, typs []coltypes.T, maxRunLength int64, skipValues bool, randomIncrement int64,
 ) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
 	rng, _ := randutil.NewPseudoRand()
-	lCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+	lCols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
 	lCol := lCols[0].Int64()
-	rCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+	rCols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
 	rCol := rCols[0].Int64()
 	exp := make([]expectedGroup, nTuples)
 	val := int64(0)
@@ -2049,6 +2057,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
 
 							a, err := NewMergeJoinOp(
+								testAllocator,
 								sqlbase.InnerJoin,
 								leftSource,
 								rightSource,
@@ -2139,7 +2148,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		sourceTypes[colIdx] = coltypes.Int64
 	}
 
-	batch := coldata.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatch(sourceTypes)
 
 	// 1:1 join.
 	for _, nBatches := range []int{1, 4, 16, 1024} {

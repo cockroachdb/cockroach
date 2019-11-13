@@ -139,7 +139,7 @@ func TestSort(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
-			return NewSorter(input[0], tc.typ, tc.ordCols)
+			return NewSorter(testAllocator, input[0], tc.typ, tc.ordCols)
 		})
 	}
 }
@@ -187,9 +187,9 @@ func TestSortRandomized(t *testing.T) {
 
 					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []Operator) (Operator, error) {
 						if topK {
-							return NewTopKSorter(input[0], typs[:nCols], ordCols, k), nil
+							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
 						}
-						return NewSorter(input[0], typs[:nCols], ordCols)
+						return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
 					})
 				})
 			}
@@ -241,7 +241,7 @@ func TestAllSpooler(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTestsWithFn(t, []tuples{tc.tuples}, nil /* typs */, func(t *testing.T, input []Operator) {
-			allSpooler := newAllSpooler(input[0], tc.typ)
+			allSpooler := newAllSpooler(testAllocator, input[0], tc.typ)
 			allSpooler.init()
 			allSpooler.spool(context.Background())
 			if len(tc.tuples) != int(allSpooler.getNumTuples()) {
@@ -280,7 +280,7 @@ func BenchmarkSort(b *testing.B) {
 					for i := range typs {
 						typs[i] = coltypes.Int64
 					}
-					batch := coldata.NewMemBatch(typs)
+					batch := testAllocator.NewMemBatch(typs)
 					batch.SetLength(coldata.BatchSize())
 					ordCols := make([]execinfrapb.Ordering_Column, nCols)
 					for i := range ordCols {
@@ -298,11 +298,11 @@ func BenchmarkSort(b *testing.B) {
 						var sorter Operator
 						var resultBatches int
 						if topK {
-							sorter = NewTopKSorter(source, typs, ordCols, k)
+							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
 							resultBatches = 1
 						} else {
 							var err error
-							sorter, err = NewSorter(source, typs, ordCols)
+							sorter, err = NewSorter(testAllocator, source, typs, ordCols)
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -336,7 +336,7 @@ func BenchmarkAllSpooler(b *testing.B) {
 				for i := range typs {
 					typs[i] = coltypes.Int64
 				}
-				batch := coldata.NewMemBatch(typs)
+				batch := testAllocator.NewMemBatch(typs)
 				batch.SetLength(coldata.BatchSize())
 				for i := 0; i < nCols; i++ {
 					col := batch.ColVec(i).Int64()
@@ -347,7 +347,7 @@ func BenchmarkAllSpooler(b *testing.B) {
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
 					source := newFiniteBatchSource(batch, nBatches)
-					allSpooler := newAllSpooler(source, typs)
+					allSpooler := newAllSpooler(testAllocator, source, typs)
 					allSpooler.init()
 					allSpooler.spool(ctx)
 				}
