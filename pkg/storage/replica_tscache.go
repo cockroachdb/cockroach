@@ -126,6 +126,7 @@ func (r *Replica) updateTimestampCache(
 			case roachpb.STAGING:
 				// No need to update the timestamp cache. If a transaction
 				// is in this state then it must have a transaction record.
+				continue
 			case roachpb.COMMITTED:
 				// No need to update the timestamp cache. It was already
 				// updated by the corresponding EndTransaction request.
