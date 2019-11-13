@@ -774,24 +774,24 @@ EXPLAIN (OPT,VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
 sort
  ├── columns: a:1 b:2
- ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
- ├── cost: 52.2638708
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ ├── cost: 52.7943856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1 b:2
-      ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
-      ├── cost: 51.401
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+      ├── cost: 51.92
       ├── fd: ()-->(1)
       ├── prune: (2)
       ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1 rowid:3
            ├── constraint: /1/3: [/10 - /10]
-           ├── stats: [rows=9.9, distinct(1)=1, null(1)=0, distinct(3)=9.9, null(3)=0]
-           ├── cost: 10.702
+           ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+           ├── cost: 10.81
            ├── key: (3)
            └── fd: ()-->(1)
 
@@ -800,24 +800,24 @@ EXPLAIN (OPT,TYPES) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
 sort
  ├── columns: a:1(int!null) b:2(int)
- ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
- ├── cost: 52.2638708
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ ├── cost: 52.7943856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
  ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)
-      ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
-      ├── cost: 51.401
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+      ├── cost: 51.92
       ├── fd: ()-->(1)
       ├── prune: (2)
       ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1(int!null) rowid:3(int!null)
            ├── constraint: /1/3: [/10 - /10]
-           ├── stats: [rows=9.9, distinct(1)=1, null(1)=0, distinct(3)=9.9, null(3)=0]
-           ├── cost: 10.702
+           ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+           ├── cost: 10.81
            ├── key: (3)
            └── fd: ()-->(1)
 
@@ -857,8 +857,8 @@ TABLE t
       └── k int not null
 inner-join (hash)
  ├── columns: a:1 b:2 k:4 v:5
- ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
- ├── cost: 2220.05
+ ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(4)=99, null(4)=0]
+ ├── cost: 2219.95
  ├── fd: (4)-->(5), (1)==(4), (4)==(1)
  ├── prune: (2,5)
  ├── scan tc
