@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
@@ -58,8 +57,8 @@ func (b *projectingBatch) Width() int {
 	return len(b.projection)
 }
 
-func (b *projectingBatch) AppendCol(t coltypes.T) {
-	b.Batch.AppendCol(t)
+func (b *projectingBatch) AppendCol(col coldata.Vec) {
+	b.Batch.AppendCol(col)
 	b.projection = append(b.projection, uint32(b.Batch.Width())-1)
 }
 

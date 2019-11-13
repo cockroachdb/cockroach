@@ -171,7 +171,13 @@ func isWildcard(c byte) bool {
 // result of the specified LIKE pattern, or NOT LIKE if the negate argument is
 // true. The implementation varies depending on the complexity of the pattern.
 func GetLikeProjectionOperator(
-	ctx *tree.EvalContext, input Operator, colIdx int, resultIdx int, pattern string, negate bool,
+	allocator *Allocator,
+	ctx *tree.EvalContext,
+	input Operator,
+	colIdx int,
+	resultIdx int,
+	pattern string,
+	negate bool,
 ) (Operator, error) {
 	likeOpType, pattern, err := getLikeOperatorType(pattern, negate)
 	if err != nil {
@@ -180,6 +186,7 @@ func GetLikeProjectionOperator(
 	pat := []byte(pattern)
 	base := projConstOpBase{
 		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
 		colIdx:       colIdx,
 		outputIdx:    resultIdx,
 	}

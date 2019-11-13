@@ -1517,11 +1517,17 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			fmt.Sprintf(`coldata\.NewMem(Batch|BatchWithSize|Column)`),
+			// We prohibit usage of:
+			// - coldata.NewMemBatch
+			// - coldata.NewMemBatchWithSize
+			// - coldata.NewMemColumn
+			// - coldata.Batch.AppendCol
+			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithSize|Column)|\.AppendCol)\(`),
 			"--",
 			"sql/colexec",
 			"sql/colflow",
 			":!sql/colexec/allocator.go",
+			":!sql/colexec/simple_project.go",
 		)
 		if err != nil {
 			t.Fatal(err)

@@ -50,6 +50,7 @@ func NewWindowSortingPartitioner(
 
 	return &windowSortingPartitioner{
 		OneInputNode:    NewOneInputNode(input),
+		allocator:       allocator,
 		distinctCol:     distinctCol,
 		partitionColIdx: partitionColIdx,
 	}, nil
@@ -58,6 +59,7 @@ func NewWindowSortingPartitioner(
 type windowSortingPartitioner struct {
 	OneInputNode
 
+	allocator *Allocator
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new partition begins with the
 	// corresponding tuple.
@@ -72,7 +74,7 @@ func (p *windowSortingPartitioner) Init() {
 func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	b := p.input.Next(ctx)
 	if p.partitionColIdx == b.Width() {
-		b.AppendCol(coltypes.Bool)
+		p.allocator.AppendColumn(b, coltypes.Bool)
 	} else if p.partitionColIdx > b.Width() {
 		execerror.VectorizedInternalPanic("unexpected: column partitionColIdx is neither present nor the next to be appended")
 	}

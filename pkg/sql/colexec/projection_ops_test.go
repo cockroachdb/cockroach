@@ -136,7 +136,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constVal := float64(31.37)
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(types.Float, types.Float, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(testAllocator, types.Float, types.Float, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -161,7 +161,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(types.Int, types.Int2, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(testAllocator, types.Int, types.Int2, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -237,7 +237,7 @@ func TestRandomComparisons(t *testing.T) {
 				expected[i] = b
 			}
 			input := newChunkingBatchSource(typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
-			op, err := GetProjectionOperator(ct, ct, cmpOp, input, 0, 1, 2)
+			op, err := GetProjectionOperator(testAllocator, ct, ct, cmpOp, input, 0, 1, 2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -264,7 +264,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	col1Idx := 5
 	col2Idx := 7
 	outputIdx := 9
-	op, err := GetProjectionOperator(ct, ct, binOp, input, col1Idx, col2Idx, outputIdx)
+	op, err := GetProjectionOperator(testAllocator, ct, ct, binOp, input, col1Idx, col2Idx, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}

@@ -32,7 +32,8 @@ import (
 // {{ range .}}
 
 type _OP_LOWERProjOp struct {
-	input Operator
+	allocator *Allocator
+	input     Operator
 
 	leftProjOpChain  Operator
 	rightProjOpChain Operator
@@ -53,11 +54,13 @@ type _OP_LOWERProjOp struct {
 // the boolean columns at leftIdx and rightIdx, returning the result in
 // outputIdx.
 func New_OP_TITLEProjOp(
+	allocator *Allocator,
 	input, leftProjOpChain, rightProjOpChain Operator,
 	leftFeedOp, rightFeedOp *feedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) Operator {
 	return &_OP_LOWERProjOp{
+		allocator:        allocator,
 		input:            input,
 		leftProjOpChain:  leftProjOpChain,
 		rightProjOpChain: rightProjOpChain,
@@ -106,7 +109,7 @@ func (o *_OP_LOWERProjOp) Init() {
 func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	batch := o.input.Next(ctx)
 	if o.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bool)
+		o.allocator.AppendColumn(batch, coltypes.Bool)
 	}
 	origLen := batch.Length()
 	// NB: we don't short-circuit if the batch is length 0 here, because we have

@@ -25,6 +25,7 @@ import (
 
 type defaultBuiltinFuncOperator struct {
 	OneInputNode
+	allocator      *Allocator
 	evalCtx        *tree.EvalContext
 	funcExpr       *tree.FuncExpr
 	columnTypes    []types.T
@@ -38,6 +39,8 @@ type defaultBuiltinFuncOperator struct {
 	da  sqlbase.DatumAlloc
 }
 
+var _ Operator = &defaultBuiltinFuncOperator{}
+
 func (b *defaultBuiltinFuncOperator) Init() {
 	b.input.Init()
 }
@@ -46,7 +49,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	batch := b.input.Next(ctx)
 	n := batch.Length()
 	if b.outputIdx == batch.Width() {
-		batch.AppendCol(b.outputPhysType)
+		b.allocator.AppendColumn(batch, b.outputPhysType)
 	}
 	if n == 0 {
 		return batch
@@ -97,6 +100,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 type substringFunctionOperator struct {
 	OneInputNode
+	allocator    *Allocator
 	argumentCols []int
 	outputIdx    int
 }
@@ -110,7 +114,7 @@ func (s *substringFunctionOperator) Init() {
 func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	batch := s.input.Next(ctx)
 	if s.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bytes)
+		s.allocator.AppendColumn(batch, coltypes.Bytes)
 	}
 
 	n := batch.Length()
@@ -174,6 +178,7 @@ func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
+	allocator *Allocator,
 	evalCtx *tree.EvalContext,
 	funcExpr *tree.FuncExpr,
 	columnTypes []types.T,
@@ -186,6 +191,7 @@ func NewBuiltinFunctionOperator(
 	case tree.SubstringStringIntInt:
 		return &substringFunctionOperator{
 			OneInputNode: NewOneInputNode(input),
+			allocator:    allocator,
 			argumentCols: argumentCols,
 			outputIdx:    outputIdx,
 		}
@@ -193,6 +199,7 @@ func NewBuiltinFunctionOperator(
 		outputType := funcExpr.ResolvedType()
 		return &defaultBuiltinFuncOperator{
 			OneInputNode:   NewOneInputNode(input),
+			allocator:      allocator,
 			evalCtx:        evalCtx,
 			funcExpr:       funcExpr,
 			outputIdx:      outputIdx,
