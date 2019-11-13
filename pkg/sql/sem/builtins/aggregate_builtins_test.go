@@ -78,6 +78,11 @@ func TestAvgDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalAvgAggregate, makeDecimalTestDatum(10))
 }
 
+func TestAvgIntervalResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAggregateResultDeepCopy(t, newIntervalAvgAggregate, makeIntervalTestDatum(10))
+}
+
 func TestBitAndIntResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Run("all null", func(t *testing.T) {
@@ -401,6 +406,14 @@ func BenchmarkAvgAggregateDecimal(b *testing.B) {
 	for _, count := range []int{1000} {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
 			runBenchmarkAggregate(b, newDecimalAvgAggregate, makeDecimalTestDatum(count))
+		})
+	}
+}
+
+func BenchmarkAvgAggregateInterval(b *testing.B) {
+	for _, count := range []int{1000} {
+		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+			runBenchmarkAggregate(b, newIntervalAvgAggregate, makeIntervalTestDatum(count))
 		})
 	}
 }

@@ -125,6 +125,8 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the average of the selected values."),
 		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalAvgAggregate,
 			"Calculates the average of the selected values."),
+		makeAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalAvgAggregate,
+			"Calculates the average of the selected values."),
 	),
 
 	"bit_and": makeBuiltin(aggProps(),
@@ -571,6 +573,11 @@ func newDecimalAvgAggregate(
 ) tree.AggregateFunc {
 	return &avgAggregate{agg: newDecimalSumAggregate(params, evalCtx, arguments)}
 }
+func newIntervalAvgAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &avgAggregate{agg: newIntervalSumAggregate(params, evalCtx, arguments)}
+}
 
 // Add accumulates the passed datum into the average.
 func (a *avgAggregate) Add(ctx context.Context, datum tree.Datum, other ...tree.Datum) error {
@@ -600,6 +607,8 @@ func (a *avgAggregate) Result() (tree.Datum, error) {
 		count := apd.New(int64(a.count), 0)
 		_, err := tree.DecimalCtx.Quo(&t.Decimal, &t.Decimal, count)
 		return t, err
+	case *tree.DInterval:
+		return &tree.DInterval{Duration: t.Duration.Div(int64(a.count))}, nil
 	default:
 		return nil, errors.AssertionFailedf("unexpected SUM result type: %s", t)
 	}

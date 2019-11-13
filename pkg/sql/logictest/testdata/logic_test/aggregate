@@ -5,7 +5,8 @@ CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT,
   w INT,
-  s STRING
+  s STRING,
+  i INTERVAL
 )
 
 # Aggregate functions return NULL if there are no rows.
@@ -35,6 +36,11 @@ query T
 SELECT jsonb_agg(1) FROM kv
 ----
 NULL
+
+query TTTT
+SELECT min(i), avg(i), max(i), sum(i) FROM kv
+----
+NULL NULL NULL NULL
 
 query IIIIRRRRBBT
 SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
@@ -147,12 +153,12 @@ SELECT (SELECT COALESCE(max(1), 0) FROM generate_series(1,0))
 
 statement OK
 INSERT INTO kv VALUES
-(1, 2, 3, 'a'),
-(3, 4, 5, 'a'),
-(5, NULL, 5, NULL),
-(6, 2, 3, 'b'),
-(7, 2, 2, 'b'),
-(8, 4, 2, 'A')
+(1, 2, 3, 'a', '1min'),
+(3, 4, 5, 'a', '2sec'),
+(5, NULL, 5, NULL, NULL),
+(6, 2, 3, 'b', '1ms'),
+(7, 2, 2, 'b', '4 days'),
+(8, 4, 2, 'A', '3 years')
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
@@ -594,6 +600,11 @@ query RRRR
 SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
 5 2.8 30 14
+
+query TTTT
+SELECT min(i), avg(i), max(i), sum(i) FROM kv
+----
+00:00:00.001  7 mons 6 days 19:12:12.4002  3 years  3 years 4 days 00:01:02.001
 
 query RRRR
 SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
