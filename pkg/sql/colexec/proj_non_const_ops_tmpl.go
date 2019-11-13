@@ -92,7 +92,7 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
 	if p.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes._RET_TYP)
+		p.allocator.AppendColumn(batch, coltypes._RET_TYP)
 	}
 	if n == 0 {
 		return batch
@@ -193,6 +193,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // GetProjectionOperator returns the appropriate projection operator for the
 // given left and right column types and operation.
 func GetProjectionOperator(
+	allocator *Allocator,
 	leftColType *types.T,
 	rightColType *types.T,
 	op tree.Operator,
@@ -201,7 +202,13 @@ func GetProjectionOperator(
 	col2Idx int,
 	outputIdx int,
 ) (Operator, error) {
-	projOpBase := projOpBase{OneInputNode: NewOneInputNode(input), col1Idx: col1Idx, col2Idx: col2Idx, outputIdx: outputIdx}
+	projOpBase := projOpBase{
+		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
+		col1Idx:      col1Idx,
+		col2Idx:      col2Idx,
+		outputIdx:    outputIdx,
+	}
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case coltypes._L_TYP_VAR:
