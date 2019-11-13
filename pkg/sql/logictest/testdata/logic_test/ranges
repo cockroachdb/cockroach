@@ -498,3 +498,21 @@ query TT
 SELECT start_key, end_key from [SHOW RANGE FROM INDEX range_for_row_nulls@i FOR ROW (1, NULL)]
 ----
 /NULL NULL
+
+# Regression for #42456
+statement ok
+CREATE TABLE t42456 (x int primary key);
+
+statement ok
+CREATE INDEX i1 on t42456 (x);
+CREATE INDEX i2 on t42456 (x);
+DROP INDEX t42456@i1;
+DROP INDEX t42456@i2;
+CREATE INDEX i3 on t42456 (x)
+
+query T
+SELECT crdb_internal.pretty_key(crdb_internal.encode_key(70, 4, (1, )), 0)
+----
+/70/4/1/0
+
+
