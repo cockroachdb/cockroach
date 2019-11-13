@@ -730,14 +730,78 @@ type MVCCGetOptions struct {
 func MVCCGet(
 	ctx context.Context, eng Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
+	iter := eng.NewIterator(IterOptions{Prefix: true})
+	defer iter.Close()
+	return mvccGet(ctx, iter, key, timestamp, opts)
+}
+
+func mvccGet(
+	ctx context.Context, iter Iterator, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+) (value *roachpb.Value, intent *roachpb.Intent, err error) {
 	if timestamp.WallTime < 0 {
 		return nil, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
 	}
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(key) == 0 {
+		return nil, nil, emptyKeyError()
+	}
 
-	iter := eng.NewIterator(IterOptions{Prefix: true})
-	value, intent, err := iter.MVCCGet(key, timestamp, opts)
-	iter.Close()
-	return value, intent, err
+	// If the iterator has a specialized implementation, defer to that.
+	if mvccIter, ok := iter.(MVCCIterator); ok && mvccIter.MVCCOpsSpecialized() {
+		return mvccIter.MVCCGet(key, timestamp, opts)
+	}
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
+	// specify an empty key for the end key which will ensure we don't retrieve a
+	// key different than the start key. This is a bit of a hack.
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       iter,
+		start:        key,
+		ts:           timestamp,
+		maxKeys:      1,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+	}
+
+	mvccScanner.init(opts.Txn)
+	mvccScanner.get()
+
+	if mvccScanner.err != nil {
+		return nil, nil, mvccScanner.err
+	}
+	intents, err := buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	if len(intents) > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+	} else if len(intents) == 1 {
+		intent = &intents[0]
+	}
+
+	if len(mvccScanner.results.repr) == 0 {
+		return nil, intent, nil
+	}
+
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	value = &roachpb.Value{
+		RawBytes:  rawValue,
+		Timestamp: mvccKey.Timestamp,
+	}
+	return
 }
 
 // MVCCGetAsTxn constructs a temporary transaction from the given transaction
@@ -2170,6 +2234,65 @@ func MVCCDeleteRange(
 	return keys, resumeSpan, int64(len(kvs)), err
 }
 
+func mvccScanToBytes(
+	ctx context.Context,
+	iter Iterator,
+	key, endKey roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	opts MVCCScanOptions,
+) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(endKey) == 0 {
+		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if max == 0 {
+		resumeSpan = &roachpb.Span{Key: key, EndKey: endKey}
+		return nil, 0, resumeSpan, nil, nil
+	}
+
+	// If the iterator has a specialized implementation, defer to that.
+	if mvccIter, ok := iter.(MVCCIterator); ok && mvccIter.MVCCOpsSpecialized() {
+		return mvccIter.MVCCScan(key, endKey, max, timestamp, opts)
+	}
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       iter,
+		reverse:      opts.Reverse,
+		start:        key,
+		end:          endKey,
+		ts:           timestamp,
+		maxKeys:      max,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+	}
+
+	mvccScanner.init(opts.Txn)
+	resumeSpan, err = mvccScanner.scan()
+
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+
+	kvData = mvccScanner.results.finish()
+	numKVs = mvccScanner.results.count
+
+	intents, err = buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	return
+}
+
 // mvccScanToKvs converts the raw key/value pairs returned by Iterator.MVCCScan
 // into a slice of roachpb.KeyValues.
 func mvccScanToKvs(
@@ -2180,7 +2303,7 @@ func mvccScanToKvs(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	kvData, numKVs, resumeSpan, intents, err := iter.MVCCScan(key, endKey, max, timestamp, opts)
+	kvData, numKVs, resumeSpan, intents, err := mvccScanToBytes(ctx, iter, key, endKey, max, timestamp, opts)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -2305,7 +2428,7 @@ func MVCCScanToBytes(
 ) ([][]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
 	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
-	return iter.MVCCScan(key, endKey, max, timestamp, opts)
+	return mvccScanToBytes(ctx, iter, key, endKey, max, timestamp, opts)
 }
 
 // MVCCIterate iterates over the key range [start,end). At each step of the

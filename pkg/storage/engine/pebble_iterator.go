@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
 
@@ -363,124 +362,6 @@ func (p *pebbleIterator) FindSplitKey(
 	}
 
 	return bestSplitKey, nil
-}
-
-// MVCCGet implements the Iterator interface.
-func (p *pebbleIterator) MVCCGet(
-	key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (value *roachpb.Value, intent *roachpb.Intent, err error) {
-	if opts.Inconsistent && opts.Txn != nil {
-		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
-	}
-	if len(key) == 0 {
-		return nil, nil, emptyKeyError()
-	}
-	if p.iter == nil {
-		panic("uninitialized iterator")
-	}
-
-	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer pebbleMVCCScannerPool.Put(mvccScanner)
-
-	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
-	// specify an empty key for the end key which will ensure we don't retrieve a
-	// key different than the start key. This is a bit of a hack.
-	*mvccScanner = pebbleMVCCScanner{
-		parent:       p.iter,
-		start:        key,
-		ts:           timestamp,
-		maxKeys:      1,
-		inconsistent: opts.Inconsistent,
-		tombstones:   opts.Tombstones,
-	}
-
-	mvccScanner.init(opts.Txn)
-	mvccScanner.get()
-
-	if mvccScanner.err != nil {
-		return nil, nil, mvccScanner.err
-	}
-	intents, err := buildScanIntents(mvccScanner.intents.Repr())
-	if err != nil {
-		return nil, nil, err
-	}
-	if !opts.Inconsistent && len(intents) > 0 {
-		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
-	}
-
-	if len(intents) > 1 {
-		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
-	} else if len(intents) == 1 {
-		intent = &intents[0]
-	}
-
-	if len(mvccScanner.results.repr) == 0 {
-		return nil, intent, nil
-	}
-
-	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	value = &roachpb.Value{
-		RawBytes:  rawValue,
-		Timestamp: mvccKey.Timestamp,
-	}
-	return
-}
-
-// MVCCScan implements the Iterator interface.
-func (p *pebbleIterator) MVCCScan(
-	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
-) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
-	if opts.Inconsistent && opts.Txn != nil {
-		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
-	}
-	if len(end) == 0 {
-		return nil, 0, nil, nil, emptyKeyError()
-	}
-	if max == 0 {
-		resumeSpan = &roachpb.Span{Key: start, EndKey: end}
-		return nil, 0, resumeSpan, nil, nil
-	}
-	if p.iter == nil {
-		panic("uninitialized iterator")
-	}
-
-	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer pebbleMVCCScannerPool.Put(mvccScanner)
-
-	*mvccScanner = pebbleMVCCScanner{
-		parent:       p.iter,
-		reverse:      opts.Reverse,
-		start:        start,
-		end:          end,
-		ts:           timestamp,
-		maxKeys:      max,
-		inconsistent: opts.Inconsistent,
-		tombstones:   opts.Tombstones,
-	}
-
-	mvccScanner.init(opts.Txn)
-	resumeSpan, err = mvccScanner.scan()
-
-	if err != nil {
-		return nil, 0, nil, nil, err
-	}
-
-	kvData = mvccScanner.results.finish()
-	numKVs = mvccScanner.results.count
-
-	intents, err = buildScanIntents(mvccScanner.intents.Repr())
-	if err != nil {
-		return nil, 0, nil, nil, err
-	}
-
-	if !opts.Inconsistent && len(intents) > 0 {
-		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
-	}
-	return
 }
 
 // SetUpperBound implements the Iterator interface.

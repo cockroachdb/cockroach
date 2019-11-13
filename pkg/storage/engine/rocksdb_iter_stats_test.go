@@ -11,6 +11,7 @@
 package engine
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -21,6 +22,8 @@ import (
 
 func TestIterStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
 
 	db := setupMVCCInMemRocksDB(t, "test_iter_stats")
 	defer db.Close()
@@ -61,8 +64,8 @@ func TestIterStats(t *testing.T) {
 			}
 			// Scanning a key range containing the tombstone sees it.
 			for i := 0; i < 10; i++ {
-				if _, _, _, _, err := iter.MVCCScan(
-					roachpb.KeyMin, roachpb.KeyMax, math.MaxInt64, hlc.Timestamp{}, MVCCScanOptions{},
+				if _, _, _, err := mvccScanToKvs(
+					ctx, iter, roachpb.KeyMin, roachpb.KeyMax, math.MaxInt64, hlc.Timestamp{}, MVCCScanOptions{},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -74,7 +77,7 @@ func TestIterStats(t *testing.T) {
 
 			// Getting the key with the tombstone sees it.
 			for i := 0; i < 10; i++ {
-				if _, _, err := iter.MVCCGet(k.Key, hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
+				if _, _, err := mvccGet(ctx, iter, k.Key, hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 					t.Fatal(err)
 				}
 				stats := iter.Stats()
@@ -84,7 +87,7 @@ func TestIterStats(t *testing.T) {
 			}
 			// Getting KeyMax doesn't see it.
 			for i := 0; i < 10; i++ {
-				if _, _, err := iter.MVCCGet(roachpb.KeyMax, hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
+				if _, _, err := mvccGet(ctx, iter, roachpb.KeyMax, hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 					t.Fatal(err)
 				}
 				stats := iter.Stats()
