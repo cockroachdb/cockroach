@@ -62,7 +62,7 @@ func runImport(
 			inputs = make(map[int32]string)
 			for id, name := range spec.Uri {
 				// TODO(yevgeniy): Support offsets into the file, not just full file skipping.
-				if seek, ok := spec.ResumePos[id]; !ok || seek != math.MaxUint64 {
+				if seek, ok := spec.ResumePos[id]; !ok || seek != math.MaxInt64 {
 					inputs[id] = name
 				}
 			}
@@ -89,11 +89,11 @@ func runImport(
 			return err
 		}
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-		prog.ResumePos = make(map[int32]uint64)
+		prog.ResumePos = make(map[int32]int64)
 		prog.CompletedFraction = make(map[int32]float32)
 		for i := range spec.Uri {
 			prog.CompletedFraction[i] = 1.0
-			prog.ResumePos[i] = math.MaxUint64
+			prog.ResumePos[i] = math.MaxInt64
 		}
 		progCh <- prog
 		return nil

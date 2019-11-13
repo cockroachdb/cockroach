@@ -189,7 +189,7 @@ func doNothingBulkAdderFactory(
 	return doNothingAdder, nil
 }
 
-var eofOffset uint64 = math.MaxUint64
+var eofOffset int64 = math.MaxInt64
 
 func TestImportIgnoresProcessedFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -213,43 +213,43 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	tests := []struct {
 		name         string
 		spec         testSpec
-		inputOffsets []uint64 // List of file ids that were fully processed
+		inputOffsets []int64 // List of file ids that were fully processed
 	}{
 		{
 			"csv-two-invalid",
 			newTestSpec(t, roachpb.IOFileFormat_CSV, "__invalid__", "testdata/csv/data-0", "/_/missing/_"),
-			[]uint64{eofOffset, 0, eofOffset},
+			[]int64{eofOffset, 0, eofOffset},
 		},
 		{
 			"csv-all-invalid",
 			newTestSpec(t, roachpb.IOFileFormat_CSV, "__invalid__", "../../&"),
-			[]uint64{eofOffset, eofOffset},
+			[]int64{eofOffset, eofOffset},
 		},
 		{
 			"csv-all-valid",
 			newTestSpec(t, roachpb.IOFileFormat_CSV, "testdata/csv/data-0"),
-			[]uint64{0},
+			[]int64{0},
 		},
 		{
 			"mysql-one-invalid",
 			newTestSpec(t, roachpb.IOFileFormat_Mysqldump, "testdata/mysqldump/simple.sql", "/_/missing/_"),
-			[]uint64{0, eofOffset},
+			[]int64{0, eofOffset},
 		},
 		{
 			"pgdump-one-input",
 			newTestSpec(t, roachpb.IOFileFormat_PgDump, "testdata/pgdump/simple.sql"),
-			[]uint64{0},
+			[]int64{0},
 		},
 	}
 
 	// Configures import spec to have appropriate input offsets set.
 	setInputOffsets := func(
-		t *testing.T, spec *execinfrapb.ReadImportDataSpec, offsets []uint64,
+		t *testing.T, spec *execinfrapb.ReadImportDataSpec, offsets []int64,
 	) *execinfrapb.ReadImportDataSpec {
 		if len(spec.Uri) != len(offsets) {
 			t.Fatal("Expected matching number of input offsets")
 		}
-		spec.ResumePos = make(map[int32]uint64)
+		spec.ResumePos = make(map[int32]int64)
 		for id, offset := range offsets {
 			if offset > 0 {
 				spec.ResumePos[int32(id)] = offset
