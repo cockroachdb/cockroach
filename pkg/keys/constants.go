@@ -174,6 +174,7 @@ var (
 	// NOTE: if this value changes, it must be updated in C++
 	// (storage/engine/rocksdb/db.cc).
 	LocalTransactionSuffix = roachpb.RKey("txn-")
+
 	// LocalQueueLastProcessedSuffix is the suffix for replica queue state keys.
 	LocalQueueLastProcessedSuffix = roachpb.RKey("qlpt")
 
