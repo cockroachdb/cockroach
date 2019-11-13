@@ -70,5 +70,5 @@ export default function swapByLicense<TProps>(
     }
   }
 
-  return connect(mapStateToProps)(LicenseSwap);
+  return connect(mapStateToProps)(LicenseSwap) as ComponentClass<TProps>;
 }

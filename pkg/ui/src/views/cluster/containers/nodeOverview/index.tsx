@@ -30,6 +30,25 @@ import {
   SummaryBar, SummaryLabel, SummaryValue,
 } from "src/views/shared/components/summaryBar";
 
+/**
+ * TableRow is a small stateless component that renders a single row in the node
+ * overview table. Each row renders a store metrics value, comparing the value
+ * across the different stores on the node (along with a total value for the
+ * node itself).
+ */
+function TableRow(props: { data: INodeStatus, title: string, valueFn: (s: StatusMetrics) => React.ReactNode }) {
+  return <tr className="table__row table__row--body">
+    <td className="table__cell">{ props.title }</td>
+    <td className="table__cell">{ props.valueFn(props.data.metrics) }</td>
+    {
+      _.map(props.data.store_statuses, (ss) => {
+        return <td key={ss.desc.store_id} className="table__cell">{ props.valueFn(ss.metrics) }</td>;
+      })
+    }
+    <td className="table__cell table__cell--filler" />
+  </tr>;
+}
+
 interface NodeOverviewProps extends RouterState {
   node: INodeStatus;
   nodesSummary: NodesSummary;
@@ -161,25 +180,6 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
       </div>
     );
   }
-}
-
-/**
- * TableRow is a small stateless component that renders a single row in the node
- * overview table. Each row renders a store metrics value, comparing the value
- * across the different stores on the node (along with a total value for the
- * node itself).
- */
-function TableRow(props: { data: INodeStatus, title: string, valueFn: (s: StatusMetrics) => React.ReactNode }) {
-  return <tr className="table__row table__row--body">
-    <td className="table__cell">{ props.title }</td>
-    <td className="table__cell">{ props.valueFn(props.data.metrics) }</td>
-    {
-      _.map(props.data.store_statuses, (ss) => {
-        return <td key={ss.desc.store_id} className="table__cell">{ props.valueFn(ss.metrics) }</td>;
-      })
-    }
-    <td className="table__cell table__cell--filler" />
-  </tr>;
 }
 
 export const currentNode = createSelector(

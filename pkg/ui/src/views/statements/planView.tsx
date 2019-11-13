@@ -230,6 +230,19 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
   }
 }
 
+function PlanNodes(props: {
+  nodes: FlatPlanNode[],
+}): React.ReactElement<{}> {
+  const nodes = props.nodes;
+  return (
+    <ul>
+      {nodes.map( (node) => {
+        return <PlanNode node={node}/>;
+      })}
+    </ul>
+  );
+}
+
 interface PlanNodeProps {
   node: FlatPlanNode;
 }
@@ -254,19 +267,6 @@ class PlanNode extends React.Component<PlanNodeProps> {
       </li>
     );
   }
-}
-
-function PlanNodes(props: {
-  nodes: FlatPlanNode[],
-}): React.ReactElement<{}> {
-  const nodes = props.nodes;
-  return (
-    <ul>
-      {nodes.map( (node) => {
-        return <PlanNode node={node}/>;
-      })}
-    </ul>
-  );
 }
 
 interface PlanViewProps {
