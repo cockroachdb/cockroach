@@ -116,6 +116,16 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     5531676819244041709,
 		populatedSum: 14781226418259198098,
 	},
+	// This is marshaled below Raft by the Pebble merge operator. The Pebble
+	// merge operator can be called below Raft whenever a Pebble Iterator is
+	// used.
+	reflect.TypeOf(&roachpb.InternalTimeSeriesData{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
+		},
+		emptySum:     5531676819244041709,
+		populatedSum: 8911200268508796945,
+	},
 }
 
 func TestBelowRaftProtos(t *testing.T) {
