@@ -260,7 +260,7 @@ type Replica struct {
 		// from the Raft log entry. Use the invalidLastTerm constant for this
 		// case.
 		lastIndex, lastTerm uint64
-		// A map of raft log index of pending preemptive snapshots to deadlines.
+		// A map of raft log index of pending snapshots to deadlines.
 		// Used to prohibit raft log truncations that would leave a gap between
 		// the snapshot and the new first index. The map entry has a zero
 		// deadline while the snapshot is being sent and turns nonzero when the
