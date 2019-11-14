@@ -31,11 +31,7 @@ type ordinalityOp struct {
 	counter int64
 }
 
-var _ StaticMemoryOperator = &ordinalityOp{}
-
-func (c *ordinalityOp) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Int64}, int(coldata.BatchSize()))
-}
+var _ Operator = &ordinalityOp{}
 
 const colNotAppended = -1
 

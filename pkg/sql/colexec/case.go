@@ -37,6 +37,8 @@ type caseOp struct {
 	origSel []uint16
 }
 
+var _ StaticMemoryOperator = &caseOp{}
+
 func (c *caseOp) ChildCount() int {
 	return 1 + len(c.caseOps) + 1
 }
@@ -54,9 +56,9 @@ func (c *caseOp) Child(nth int) execinfra.OpNode {
 	return nil
 }
 
-func (c *caseOp) EstimateStaticMemoryUsage() int {
+func (c *caseOp) StaticMemoryUsage() int {
 	// We statically use a single selection vector, origSel.
-	return int(coldata.BatchSize()) * sizeOfInt16
+	return sizeOfBatchSizeSelVector
 }
 
 // NewCaseOp returns an operator that runs a case statement.

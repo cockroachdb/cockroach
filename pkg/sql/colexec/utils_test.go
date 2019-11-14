@@ -24,8 +24,11 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
@@ -84,6 +87,23 @@ type testRunner func(*testing.T, []tuples, [][]coltypes.T, tuples, verifier, fun
 // increase test coverage of these operators.
 type variableOutputBatchSizeInitializer interface {
 	initWithOutputBatchSize(uint16)
+}
+
+var (
+	// testAllocator is an Allocator with an unlimited budget for use in tests.
+	testAllocator *Allocator
+
+	// testMemMonitor and testMemAcc are started below in init() method and
+	// closed within TestMain function in colexec/main_test.go.
+	testMemMonitor *mon.BytesMonitor
+	testMemAcc     mon.BoundAccount
+)
+
+func init() {
+	ctx := context.Background()
+	testMemMonitor = execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	testMemAcc = testMemMonitor.MakeBoundAccount()
+	testAllocator = NewAllocator(ctx, &testMemAcc)
 }
 
 // runTests is a helper that automatically runs your tests with varied batch
@@ -908,7 +928,6 @@ type finiteBatchSource struct {
 	ZeroInputNode
 
 	repeatableBatch *RepeatableBatchSource
-	zeroBatch       coldata.Batch
 
 	usableCount int
 }
@@ -920,7 +939,6 @@ var _ Operator = &finiteBatchSource{}
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
-		zeroBatch:       testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */),
 		usableCount:     usableCount,
 	}
 }
@@ -934,8 +952,7 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 		f.usableCount--
 		return f.repeatableBatch.Next(ctx)
 	}
-	f.zeroBatch.SetLength(0)
-	return f.zeroBatch
+	return zeroBatch
 }
 
 // finiteChunksSource is an Operator that returns a batch specified number of
@@ -945,7 +962,6 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 type finiteChunksSource struct {
 	ZeroInputNode
 	repeatableBatch *RepeatableBatchSource
-	zeroBatch       coldata.Batch
 
 	usableCount int
 	matchLen    int
@@ -957,7 +973,6 @@ var _ Operator = &finiteChunksSource{}
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
-		zeroBatch:       testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */),
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -992,8 +1007,7 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 		}
 		return batch
 	}
-	f.zeroBatch.SetLength(0)
-	return f.zeroBatch
+	return zeroBatch
 }
 
 func TestOpTestInputOutput(t *testing.T) {

@@ -12,12 +12,16 @@ package colserde
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -25,7 +29,13 @@ import (
 
 func TestFileRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	typs, b := randomBatch()
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
+	typs, b := randomBatch(testAllocator)
 
 	t.Run(`mem`, func(t *testing.T) {
 		// Make a copy of the original batch because the converter modifies and

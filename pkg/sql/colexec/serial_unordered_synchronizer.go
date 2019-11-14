@@ -28,7 +28,6 @@ type SerialUnorderedSynchronizer struct {
 	inputs []Operator
 	// curSerialInputIdx indicates the index of the current input being consumed.
 	curSerialInputIdx int
-	zeroBatch         coldata.Batch
 }
 
 var _ Operator = &SerialUnorderedSynchronizer{}
@@ -46,12 +45,11 @@ func (s *SerialUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
 func NewSerialUnorderedSynchronizer(
-	allocator *Allocator, inputs []Operator, typs []coltypes.T,
+	inputs []Operator, typs []coltypes.T,
 ) *SerialUnorderedSynchronizer {
 	return &SerialUnorderedSynchronizer{
 		inputs:            inputs,
 		curSerialInputIdx: 0,
-		zeroBatch:         allocator.NewMemBatchWithSize(typs, 0 /* size */),
 	}
 }
 
@@ -66,8 +64,7 @@ func (s *SerialUnorderedSynchronizer) Init() {
 func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
-			s.zeroBatch.SetLength(0)
-			return s.zeroBatch
+			return zeroBatch
 		}
 		b := s.inputs[s.curSerialInputIdx].Next(ctx)
 		if b.Length() == 0 {

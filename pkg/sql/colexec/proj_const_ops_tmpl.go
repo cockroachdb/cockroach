@@ -56,6 +56,9 @@ var _ = math.MaxInt64
 // Dummy import to pull in "time" package.
 var _ time.Time
 
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
+
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
 func _ASSIGN(_, _, _ interface{}) {
@@ -79,10 +82,6 @@ type _OP_CONST_NAME struct {
 	// {{ else }}
 	constArg _R_GO_TYPE
 	// {{ end }}
-}
-
-func (p _OP_CONST_NAME) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{coltypes._RET_TYP}, int(coldata.BatchSize()))
 }
 
 func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {

@@ -75,7 +75,9 @@ func verifyColOperator(
 		return errors.New("processor is unexpectedly not a RowSource")
 	}
 
-	testAllocator := colexec.NewAllocator()
+	acc := evalCtx.Mon.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
 	columnarizers := make([]colexec.Operator, len(inputs))
 	for i, input := range inputsColOp {
 		c, err := colexec.NewColumnarizer(ctx, testAllocator, flowCtx, int32(i)+1, input)
@@ -85,7 +87,7 @@ func verifyColOperator(
 		columnarizers[i] = c
 	}
 
-	result, err := colexec.NewColOperator(ctx, flowCtx, pspec, columnarizers)
+	result, err := colexec.NewColOperator(ctx, flowCtx, pspec, columnarizers, &acc)
 	if err != nil {
 		return err
 	}

@@ -17,7 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,13 +29,18 @@ import (
 func TestOutboxCatchesPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+
 	var (
-		ctx      = context.Background()
 		input    = colexec.NewBatchBuffer()
 		typs     = []coltypes.T{coltypes.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
-	outbox, err := NewOutbox(testAllocator, input, typs, nil)
+	accOutbox := memMonitor.MakeBoundAccount()
+	defer accOutbox.Close(ctx)
+	outbox, err := NewOutbox(colexec.NewAllocator(ctx, &accOutbox), input, typs, nil)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -49,7 +56,9 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		wg.Done()
 	}()
 
-	inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+	accInbox := memMonitor.MakeBoundAccount()
+	defer accInbox.Close(ctx)
+	inbox, err := NewInbox(colexec.NewAllocator(ctx, &accInbox), typs, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
@@ -72,18 +81,21 @@ func TestOutboxCatchesPanics(t *testing.T) {
 func TestOutboxDrainsMetadataSources(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+
 	var (
-		ctx   = context.Background()
 		input = colexec.NewBatchBuffer()
 		typs  = []coltypes.T{coltypes.Int64}
 	)
 
 	// Define common function that returns both an Outbox and a pointer to a
 	// uint32 that is set atomically when the outbox drains a metadata source.
-	newOutboxWithMetaSources := func() (*Outbox, *uint32, error) {
+	newOutboxWithMetaSources := func(allocator *colexec.Allocator) (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(
-			testAllocator,
+			allocator,
 			input,
 			typs,
 			[]execinfrapb.MetadataSource{
@@ -103,10 +115,14 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 	t.Run("AfterSuccessfulRun", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		outbox, sourceDrained, err := newOutboxWithMetaSources()
+		accOutbox := memMonitor.MakeBoundAccount()
+		defer accOutbox.Close(ctx)
+		outbox, sourceDrained, err := newOutboxWithMetaSources(colexec.NewAllocator(ctx, &accOutbox))
 		require.NoError(t, err)
 
-		b := testAllocator.NewMemBatch(typs)
+		acc := memMonitor.MakeBoundAccount()
+		defer acc.Close(ctx)
+		b := colexec.NewAllocator(ctx, &acc).NewMemBatch(typs)
 		b.SetLength(0)
 		input.Add(b)
 
@@ -126,7 +142,9 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		require.Panics(t, func() { input.Next(ctx) })
 
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		outbox, sourceDrained, err := newOutboxWithMetaSources()
+		accOutbox := memMonitor.MakeBoundAccount()
+		defer accOutbox.Close(ctx)
+		outbox, sourceDrained, err := newOutboxWithMetaSources(colexec.NewAllocator(ctx, &accOutbox))
 		require.NoError(t, err)
 
 		close(rpcLayer.client.csChan)

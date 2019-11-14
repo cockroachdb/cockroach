@@ -36,6 +36,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 			return &projPlusInt64Int64ConstOp{
 				projConstOpBase: projConstOpBase{
 					OneInputNode: NewOneInputNode(input[0]),
+					allocator:    testAllocator,
 					colIdx:       0,
 					outputIdx:    1,
 				},
@@ -52,6 +53,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 			return &projPlusInt64Int64Op{
 				projOpBase: projOpBase{
 					OneInputNode: NewOneInputNode(input[0]),
+					allocator:    testAllocator,
 					col1Idx:      0,
 					col2Idx:      1,
 					outputIdx:    2,
@@ -68,6 +70,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 			return &projDivFloat64Float64Op{
 				projOpBase: projOpBase{
 					OneInputNode: NewOneInputNode(input[0]),
+					allocator:    testAllocator,
 					col1Idx:      0,
 					col2Idx:      1,
 					outputIdx:    2,
@@ -105,6 +108,7 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 	plusOp := &projPlusInt64Int64ConstOp{
 		projConstOpBase: projConstOpBase{
 			OneInputNode: NewOneInputNode(source),
+			allocator:    testAllocator,
 			colIdx:       0,
 			outputIdx:    1,
 		},
@@ -143,6 +147,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	expected := &projMultFloat64Float64ConstOp{
 		projConstOpBase: projConstOpBase{
 			OneInputNode: NewOneInputNode(input),
+			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
 		},
@@ -168,6 +173,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	expected := &projGEInt64Int16ConstOp{
 		projConstOpBase: projConstOpBase{
 			OneInputNode: NewOneInputNode(input),
+			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
 		},
@@ -188,6 +194,7 @@ func TestRandomComparisons(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	ctx := evalCtx.Ctx()
 	defer evalCtx.Stop(ctx)
+
 	expected := make([]bool, numTuples)
 	var da sqlbase.DatumAlloc
 	lDatums := make([]tree.Datum, numTuples)
@@ -271,6 +278,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	expected := &projMultInt16Int16Op{
 		projOpBase: projOpBase{
 			OneInputNode: NewOneInputNode(input),
+			allocator:    testAllocator,
 			col1Idx:      col1Idx,
 			col2Idx:      col2Idx,
 			outputIdx:    outputIdx,
@@ -345,6 +353,7 @@ func BenchmarkProjOp(b *testing.B) {
 		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
+				allocator:    testAllocator,
 				col1Idx:      0,
 				col2Idx:      1,
 				outputIdx:    2,
@@ -366,6 +375,7 @@ func BenchmarkProjOp(b *testing.B) {
 		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
+				allocator:    testAllocator,
 				col1Idx:      0,
 				col2Idx:      1,
 				outputIdx:    2,
@@ -387,6 +397,7 @@ func BenchmarkProjOp(b *testing.B) {
 		"projMultIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
+				allocator:    testAllocator,
 				col1Idx:      0,
 				col2Idx:      1,
 				outputIdx:    2,
@@ -408,6 +419,7 @@ func BenchmarkProjOp(b *testing.B) {
 		"projDivIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
+				allocator:    testAllocator,
 				col1Idx:      0,
 				col2Idx:      1,
 				outputIdx:    2,

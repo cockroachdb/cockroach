@@ -11,6 +11,7 @@
 package colexec
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -21,5 +22,7 @@ import (
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
+	defer testMemMonitor.Stop(context.Background())
+	defer testMemAcc.Close(context.Background())
 	os.Exit(m.Run())
 }

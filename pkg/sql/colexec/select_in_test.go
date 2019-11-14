@@ -215,6 +215,7 @@ func TestProjectInInt64(t *testing.T) {
 				func(input []Operator) (Operator, error) {
 					op := projectInOpInt64{
 						OneInputNode: NewOneInputNode(input[0]),
+						allocator:    testAllocator,
 						colIdx:       0,
 						outputIdx:    1,
 						filterRow:    c.filterRow,

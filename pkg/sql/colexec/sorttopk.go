@@ -45,11 +45,7 @@ func NewTopKSorter(
 	}
 }
 
-var _ StaticMemoryOperator = &topKSorter{}
-
-func (t *topKSorter) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes(t.inputTypes, int(t.k))
-}
+var _ Operator = &topKSorter{}
 
 // topKSortState represents the state of the sort operator.
 type topKSortState int

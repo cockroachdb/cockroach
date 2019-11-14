@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,6 +59,13 @@ var _ flowStreamServer = callbackFlowStreamServer{}
 
 func TestInboxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
 
 	typs := []coltypes.T{coltypes.Int64}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
@@ -124,6 +133,13 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
+
 	inbox, err := NewInbox(testAllocator, []coltypes.T{coltypes.Int64}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
@@ -149,11 +165,17 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 func TestInboxTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
+
 	inbox, err := NewInbox(testAllocator, []coltypes.T{coltypes.Int64}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	var (
-		ctx         = context.Background()
 		readerErrCh = make(chan error)
 		rpcLayer    = makeMockFlowStreamRPCLayer()
 	)
@@ -187,6 +209,13 @@ func TestInboxTimeout(t *testing.T) {
 func TestInboxShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
+
 	var (
 		rng, _ = randutil.NewPseudoRand()
 		// infiniteBatches will influence whether or not we're likely to test a
@@ -199,7 +228,7 @@ func TestInboxShutdown(t *testing.T) {
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
 		typs               = []coltypes.T{coltypes.Int64}
-		batch              = colexec.RandomBatch(rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
+		batch              = colexec.RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
 	)
 
 	for _, runDrainMetaGoroutine := range []bool{false, true} {

@@ -118,13 +118,18 @@ func (n *twoInputNode) Child(nth int) execinfra.OpNode {
 	return nil
 }
 
-// StaticMemoryOperator is an interface that streaming operators can implement
-// if they are able to declare their memory usage upfront.
+// TODO(yuzefovich): audit all Operators to make sure that all static memory is
+// accounted for.
+
+// StaticMemoryOperator is an interface that operators which use static memory
+// need to implement.	"Static memory" is defined as memory that is internal to
+// the operator and is not exposed to the outside; notably, it does *not*
+// include any coldata.Batch'es and coldata.Vec's.
 type StaticMemoryOperator interface {
 	Operator
-	// EstimateStaticMemoryUsage estimates the memory usage (in bytes)
-	// of an operator.
-	EstimateStaticMemoryUsage() int
+	// StaticMemoryUsage reports the static memory usage (in bytes) of an
+	// operator.
+	StaticMemoryUsage() int
 }
 
 // resetter is an interface that operators can implement if they can be reset

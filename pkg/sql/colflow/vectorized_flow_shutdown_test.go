@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -118,6 +119,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					EvalCtx: &evalCtx,
 					Cfg:     &execinfra.ServerConfig{Settings: st},
 				}
+				ctx := context.Background()
+				memMonitor := execinfra.MakeTestMemMonitor(ctx, st)
+				defer memMonitor.Stop(ctx)
+				accHashRouterInput := memMonitor.MakeBoundAccount()
+				defer accHashRouterInput.Close(ctx)
 
 				rng, _ := randutil.NewPseudoRand()
 				var (
@@ -126,6 +132,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					typs            = []coltypes.T{coltypes.Int64}
 					semtyps         = []types.T{*types.Int}
 					hashRouterInput = colexec.NewRandomDataOp(
+						colexec.NewAllocator(ctx, &accHashRouterInput),
 						rng,
 						colexec.RandomDataOpArgs{
 							DeterministicTyps: typs,
@@ -145,27 +152,36 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
 
-				hashRouter, hashRouterOutputs := colexec.NewHashRouter(testAllocator, hashRouterInput, typs, []int{0}, numHashRouterOutputs)
+				accHashRouter := memMonitor.MakeBoundAccount()
+				defer accHashRouter.Close(ctx)
+				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
+					colexec.NewAllocator(ctx, &accHashRouter), hashRouterInput, typs, []int{0}, numHashRouterOutputs,
+				)
 				for i := 0; i < numInboxes; i++ {
-					inbox, err := colrpc.NewInbox(testAllocator, typs, execinfrapb.StreamID(streamID))
+					accInbox := memMonitor.MakeBoundAccount()
+					defer accInbox.Close(ctx)
+					inbox, err := colrpc.NewInbox(
+						colexec.NewAllocator(ctx, &accInbox), typs, execinfrapb.StreamID(streamID),
+					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
 					synchronizerInputs = append(synchronizerInputs, colexec.Operator(inbox))
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(testAllocator, synchronizerInputs, typs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				runOutboxInbox := func(
 					ctx context.Context,
 					cancelFn context.CancelFunc,
+					acc *mon.BoundAccount,
 					outboxInput colexec.Operator,
 					inbox *colrpc.Inbox,
 					id int,
 					outboxMetadataSources []execinfrapb.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
-						testAllocator,
+						colexec.NewAllocator(ctx, acc),
 						outboxInput,
 						typs,
 						append(outboxMetadataSources,
@@ -210,16 +226,18 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}()
 				for i := 0; i < numInboxes; i++ {
 					var outboxMetadataSources []execinfrapb.MetadataSource
+					acc := memMonitor.MakeBoundAccount()
+					defer acc.Close(ctx)
 					if i < numHashRouterOutputs {
 						if i == 0 {
 							// Only one outbox should drain the hash router.
 							outboxMetadataSources = append(outboxMetadataSources, hashRouter)
 						}
-						runOutboxInbox(ctxRemote, cancelRemote, hashRouterOutputs[i], inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &acc, hashRouterOutputs[i], inboxes[i], streamID, outboxMetadataSources)
 					} else {
-						batch := testAllocator.NewMemBatch(typs)
+						batch := colexec.NewAllocator(ctx, &acc).NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, colexec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &acc, colexec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}
@@ -228,10 +246,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
-					inbox, err := colrpc.NewInbox(testAllocator, typs, execinfrapb.StreamID(streamID))
+					accInbox := memMonitor.MakeBoundAccount()
+					defer accInbox.Close(ctx)
+					inbox, err := colrpc.NewInbox(colexec.NewAllocator(ctx, &accInbox), typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
-					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, synchronizer, inbox, streamID, materializerMetadataSources)
+					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, &accInbox, synchronizer, inbox, streamID, materializerMetadataSources)
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
 					// only metadata source.
