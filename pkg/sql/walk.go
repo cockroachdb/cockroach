@@ -470,6 +470,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			buf.WriteByte(')')
 			v.observer.attr(name, "into", buf.String())
 			v.observer.attr(name, "strategy", n.run.ti.desc())
+			if n.run.ti.autoCommit == autoCommitEnabled {
+				v.observer.attr(name, "auto commit", "")
+			}
 		}
 
 		if v.observer.expr != nil {
@@ -498,6 +501,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			buf.WriteByte(')')
 			v.observer.attr(name, "into", buf.String())
 			v.observer.attr(name, "strategy", n.run.tw.desc())
+			if n.run.tw.autoCommit == autoCommitEnabled {
+				v.observer.attr(name, "auto commit", "")
+			}
 		}
 
 		if v.observer.expr != nil {
@@ -529,6 +535,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				v.observer.attr(name, "set", buf.String())
 			}
 			v.observer.attr(name, "strategy", n.run.tu.desc())
+			if n.run.tu.autoCommit == autoCommitEnabled {
+				v.observer.attr(name, "auto commit", "")
+			}
 		}
 		if v.observer.expr != nil {
 			for i, cexpr := range n.run.computeExprs {
@@ -547,6 +556,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if v.observer.attr != nil {
 			v.observer.attr(name, "from", n.run.td.tableDesc().Name)
 			v.observer.attr(name, "strategy", n.run.td.desc())
+			if n.run.td.autoCommit == autoCommitEnabled {
+				v.observer.attr(name, "auto commit", "")
+			}
 		}
 		// A deleter has no sub-expressions, so nothing special to do here.
 		n.source = v.visit(n.source)
@@ -554,6 +566,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *deleteRangeNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "from", n.desc.Name)
+			if n.autoCommitEnabled {
+				v.observer.attr(name, "auto commit", "")
+			}
 		}
 		if v.observer.spans != nil {
 			v.observer.spans(name, "spans", &n.desc.PrimaryIndex, n.spans)

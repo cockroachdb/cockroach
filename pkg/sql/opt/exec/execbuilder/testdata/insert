@@ -313,6 +313,7 @@ count                          ·            ·
  └── insert                    ·            ·
       │                        into         insert_t(x, v, rowid)
       │                        strategy     inserter
+      │                        auto commit  ·
       └── render               ·            ·
            │                   render 0     x
            │                   render 1     v
@@ -337,6 +338,7 @@ count                ·            ·
  └── insert          ·            ·
       │              into         insert_t(x, v, rowid)
       │              strategy     inserter
+      │              auto commit  ·
       └── render     ·            ·
            │         render 0     x
            │         render 1     v
@@ -356,6 +358,7 @@ count                       ·            ·
  └── insert                 ·            ·
       │                     into         insert_t(x, v, rowid)
       │                     strategy     inserter
+      │                     auto commit  ·
       └── render            ·            ·
            └── limit        ·            ·
                 │           count        1
@@ -371,6 +374,7 @@ count                            ·            ·
  └── insert                      ·            ·
       │                          into         insert_t(x, v, rowid)
       │                          strategy     inserter
+      │                          auto commit  ·
       └── render                 ·            ·
            └── limit             ·            ·
                 │                count        1
@@ -388,6 +392,7 @@ count                            ·            ·
  └── insert                      ·            ·
       │                          into         insert_t(x, v, rowid)
       │                          strategy     inserter
+      │                          auto commit  ·
       └── render                 ·            ·
            └── limit             ·            ·
                 │                count        1
@@ -405,6 +410,7 @@ count                            ·            ·
  └── insert                      ·            ·
       │                          into         insert_t(x, v, rowid)
       │                          strategy     inserter
+      │                          auto commit  ·
       └── render                 ·            ·
            └── limit             ·            ·
                 │                count        1
@@ -515,6 +521,7 @@ render                    ·            ·                    (z)               
       └── insert          ·            ·                    (z, rowid[hidden])  ·
            │              into         xyz(x, y, z, rowid)  ·                   ·
            │              strategy     inserter             ·                   ·
+           │              auto commit  ·                    ·                   ·
            └── render     ·            ·                    (a, b, c, column9)  +c
                 │         render 0     a                    ·                   ·
                 │         render 1     b                    ·                   ·

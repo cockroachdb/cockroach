@@ -28,6 +28,7 @@ count                     ·            ·                          ()          
       │                   table        t9                         ·                                 ·
       │                   set          b                          ·                                 ·
       │                   strategy     updater                    ·                                 ·
+      │                   auto commit  ·                          ·                                 ·
       └── render          ·            ·                          (a, b, column11, check1, check2)  ·
            │              render 0     a                          ·                                 ·
            │              render 1     b                          ·                                 ·
@@ -54,6 +55,7 @@ count                ·            ·           ()                              
       │              table        t9          ·                                          ·
       │              set          a           ·                                          ·
       │              strategy     updater     ·                                          ·
+      │              auto commit  ·           ·                                          ·
       └── render     ·            ·           (a, b, c, d, e, column11, check1, check2)  ·
            │         render 0     a           ·                                          ·
            │         render 1     b           ·                                          ·
