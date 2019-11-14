@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -29,11 +30,12 @@ type rideInfo struct {
 }
 
 type movrWorker struct {
-	db          *gosql.DB
-	hists       *histogram.Histograms
-	activeRides []rideInfo
-	rng         *rand.Rand
-	faker       faker.Faker
+	db           *gosql.DB
+	hists        *histogram.Histograms
+	activeRides  []rideInfo
+	rng          *rand.Rand
+	faker        faker.Faker
+	creationTime time.Time
 }
 
 func (m *movrWorker) getRandomUser(city string) (string, error) {
@@ -121,14 +123,18 @@ func (m *movrWorker) updateActiveRides() error {
 }
 
 func (m *movrWorker) addUser(id uuid.UUID, city string) error {
-	q := `INSERT INTO users VALUES ($1, $2, NULL, NULL, NULL)`
-	_, err := m.db.Exec(q, id.String(), city)
+	q := `INSERT INTO users VALUES ($1, $2, $3, $4, $5)`
+	_, err := m.db.Exec(
+		q, id.String(), city, m.faker.Name(m.rng), m.faker.StreetAddress(m.rng), randCreditCard(m.rng))
 	return err
 }
 
 func (m *movrWorker) createPromoCode(id uuid.UUID, _ string) error {
-	q := `INSERT INTO promo_codes VALUES ($1, NULL, NULL, NULL, NULL)`
-	_, err := m.db.Exec(q, id.String())
+	expirationTime := m.creationTime.Add(time.Duration(m.rng.Intn(30)) * 24 * time.Hour)
+	creationTime := expirationTime.Add(-time.Duration(m.rng.Intn(30)) * 24 * time.Hour)
+	const rulesJSON = `{"type": "percent_discount", "value": "10%"}`
+	q := `INSERT INTO promo_codes VALUES ($1, $2, $3, $4, $5)`
+	_, err := m.db.Exec(q, id.String(), m.faker.Paragraph(m.rng), creationTime, expirationTime, rulesJSON)
 	return err
 }
 
@@ -150,7 +156,7 @@ func (m *movrWorker) applyPromoCode(id uuid.UUID, city string) error {
 	}
 	// If is has not been, apply the promo code.
 	if count == 0 {
-		q = `INSERT INTO user_promo_codes VALUES ($1, $2, $3, NULL, NULL)`
+		q = `INSERT INTO user_promo_codes VALUES ($1, $2, $3, now(), 1)`
 		_, err = m.db.Exec(q, city, user, code)
 		return err
 	}
@@ -163,8 +169,14 @@ func (m *movrWorker) addVehicle(id uuid.UUID, city string) error {
 		return err
 	}
 	typ := randVehicleType(m.rng)
-	q := `INSERT INTO vehicles VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL)`
-	_, err = m.db.Exec(q, id.String(), city, typ, ownerID)
+	q := `INSERT INTO vehicles VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err = m.db.Exec(
+		q, id.String(), city, typ, ownerID,
+		m.creationTime.Format(timestampFormat),
+		randVehicleStatus(m.rng),
+		m.faker.StreetAddress(m.rng),
+		randVehicleMetadata(m.rng, typ),
+	)
 	return err
 }
 
@@ -177,8 +189,8 @@ func (m *movrWorker) startRide(id uuid.UUID, city string) error {
 	if err != nil {
 		return err
 	}
-	q := `INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, NULL, now(), NULL, NULL)`
-	_, err = m.db.Exec(q, id.String(), city, rider, vehicle, m.faker.StreetAddress(m.rng))
+	q := `INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, NULL, now(), NULL, $6)`
+	_, err = m.db.Exec(q, id.String(), city, rider, vehicle, m.faker.StreetAddress(m.rng), m.rng.Intn(100))
 	if err != nil {
 		return err
 	}
@@ -286,12 +298,12 @@ func (m *movrWorker) generateWorkSimulation() func(context.Context) error {
 }
 
 // Ops implements the Opser interface
-func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (m *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	// Initialize the faker in case it hasn't been setup already.
-	g.fakerOnce.Do(func() {
-		g.faker = faker.NewFaker()
+	m.fakerOnce.Do(func() {
+		m.faker = faker.NewFaker()
 	})
-	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
+	sqlDatabase, err := workload.SanitizeUrls(m, m.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -303,11 +315,12 @@ func (g *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
 	worker := movrWorker{
-		db:          db,
-		rng:         rand.New(rand.NewSource(g.seed)),
-		faker:       g.faker,
-		activeRides: []rideInfo{},
-		hists:       reg.GetHandle(),
+		db:           db,
+		rng:          rand.New(rand.NewSource(m.seed)),
+		faker:        m.faker,
+		creationTime: m.creationTime,
+		activeRides:  []rideInfo{},
+		hists:        reg.GetHandle(),
 	}
 
 	ql.WorkerFns = append(ql.WorkerFns, worker.generateWorkSimulation())
