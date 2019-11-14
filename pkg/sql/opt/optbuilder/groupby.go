@@ -304,14 +304,14 @@ func (b *Builder) constructGroupBy(
 // buildGroupingColumns builds the grouping columns and adds them to the
 // groupby scopes that will be used to build the aggregation expression.
 // Returns the slice of grouping columns.
-func (b *Builder) buildGroupingColumns(sel *tree.SelectClause, fromScope *scope) {
+func (b *Builder) buildGroupingColumns(sel *tree.SelectClause, projectionsScope, fromScope *scope) {
 	if fromScope.groupby == nil {
 		fromScope.initGrouping()
 	}
 	g := fromScope.groupby
 
 	// The "from" columns are visible to any grouping expressions.
-	b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope)
+	b.buildGroupingList(sel.GroupBy, sel.Exprs, projectionsScope, fromScope)
 
 	// Copy the grouping columns to the aggOutScope.
 	g.aggOutScope.appendColumns(g.groupingCols())
@@ -458,7 +458,7 @@ func (b *Builder) buildHaving(having tree.TypedExpr, fromScope *scope) opt.Scala
 //           indicates that the grouping is on the second select expression, k.
 // fromScope The scope for the input to the aggregation (the FROM clause).
 func (b *Builder) buildGroupingList(
-	groupBy tree.GroupBy, selects tree.SelectExprs, fromScope *scope,
+	groupBy tree.GroupBy, selects tree.SelectExprs, projectionsScope *scope, fromScope *scope,
 ) {
 	g := fromScope.groupby
 	g.groupStrs = make(groupByStrSet, len(groupBy))
@@ -476,7 +476,7 @@ func (b *Builder) buildGroupingList(
 	// a grouping error until the grouping columns are fully built.
 	g.buildingGroupingCols = true
 	for _, e := range groupBy {
-		b.buildGrouping(e, selects, fromScope, g.aggInScope)
+		b.buildGrouping(e, selects, projectionsScope, fromScope, g.aggInScope)
 	}
 	g.buildingGroupingCols = false
 }
@@ -486,26 +486,97 @@ func (b *Builder) buildGroupingList(
 // groupStrs and to the aggInScope.
 //
 //
-// groupBy    The given GROUP BY expression.
-// selects    The select expressions are needed in case the GROUP BY expression
-//            is an index into to the select list.
-// fromScope  The scope for the input to the aggregation (the FROM clause).
-// aggInScope The scope that will contain the grouping expressions as well as
-//            the aggregate function arguments.
+// groupBy          The given GROUP BY expression.
+// selects          The select expressions are needed in case the GROUP BY
+//                  expression is an index into to the select list.
+// projectionsScope The scope that contains the columns for the SELECT targets
+//                  (used when GROUP BY refers to a target by alias).
+// fromScope        The scope for the input to the aggregation (the FROM
+//                  clause).
+// aggInScope       The scope that will contain the grouping expressions as well
+//                  as the aggregate function arguments.
 func (b *Builder) buildGrouping(
-	groupBy tree.Expr, selects tree.SelectExprs, fromScope, aggInScope *scope,
+	groupBy tree.Expr, selects tree.SelectExprs, projectionsScope, fromScope, aggInScope *scope,
 ) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	groupBy = tree.StripParens(groupBy)
-
-	// Check whether the GROUP BY clause refers to a column in the SELECT list
-	// by index, e.g. `SELECT a, SUM(b) FROM y GROUP BY 1`.
-	col := colIndex(len(selects), groupBy, "GROUP BY")
 	alias := ""
-	if col != -1 {
-		groupBy = selects[col].Expr
-		alias = string(selects[col].As)
-	}
+
+	// Comment below pasted from PostgreSQL (findTargetListEntrySQL92 in
+	// src/backend/parser/parse_clause.c).
+	//
+	// Handle two special cases as mandated by the SQL92 spec:
+	//
+	// 1. Bare ColumnName (no qualifier or subscripts)
+	//    For a bare identifier, we search for a matching column name
+	//    in the existing target list.  Multiple matches are an error
+	//    unless they refer to identical values; for example,
+	//    we allow  SELECT a, a FROM table ORDER BY a
+	//    but not   SELECT a AS b, b FROM table ORDER BY b
+	//    If no match is found, we fall through and treat the identifier
+	//    as an expression.
+	//    For GROUP BY, it is incorrect to match the grouping item against
+	//    targetlist entries: according to SQL92, an identifier in GROUP BY
+	//    is a reference to a column name exposed by FROM, not to a target
+	//    list column.  However, many implementations (including pre-7.0
+	//    PostgreSQL) accept this anyway.  So for GROUP BY, we look first
+	//    to see if the identifier matches any FROM column name, and only
+	//    try for a targetlist name if it doesn't.  This ensures that we
+	//    adhere to the spec in the case where the name could be both.
+	//    DISTINCT ON isn't in the standard, so we can do what we like there;
+	//    we choose to make it work like ORDER BY, on the rather flimsy
+	//    grounds that ordinary DISTINCT works on targetlist entries.
+	//
+	// 2. IntegerConstant
+	//    This means to use the n'th item in the existing target list.
+	//    Note that it would make no sense to order/group/distinct by an
+	//    actual constant, so this does not create a conflict with SQL99.
+	//    GROUP BY column-number is not allowed by SQL92, but since
+	//    the standard has no other behavior defined for this syntax,
+	//    we may as well accept this common extension.
+
+	// This function sets groupBy and alias in these special cases.
+	func() {
+		// Check whether the GROUP BY clause refers to a column in the SELECT list
+		// by index, e.g. `SELECT a, SUM(b) FROM y GROUP BY 1` (case 2 above).
+		if col := colIndex(len(selects), groupBy, "GROUP BY"); col != -1 {
+			groupBy, alias = selects[col].Expr, string(selects[col].As)
+			return
+		}
+
+		if name, ok := groupBy.(*tree.UnresolvedName); ok {
+			if name.NumParts != 1 || name.Star {
+				return
+			}
+			// Case 1 above.
+			targetName := name.Parts[0]
+
+			// We must prefer a match against a FROM-clause column (but ignore upper
+			// scopes); in this case we let the general case below handle the reference.
+			for i := range fromScope.cols {
+				if string(fromScope.cols[i].name) == targetName {
+					return
+				}
+			}
+			// See if it matches exactly one of the target lists.
+			var match *scopeColumn
+			for i := range projectionsScope.cols {
+				if col := &projectionsScope.cols[i]; string(col.name) == targetName {
+					if match != nil {
+						// Multiple matches are only allowed if they refer to identical
+						// expressions.
+						if match.getExprStr() != col.getExprStr() {
+							panic(pgerror.Newf(pgcode.AmbiguousColumn, "GROUP BY %q is ambiguous", targetName))
+						}
+					}
+					match = col
+				}
+			}
+			if match != nil {
+				groupBy, alias = match.expr, targetName
+			}
+		}
+	}()
 
 	// We need to save and restore the previous value of the field in semaCtx
 	// in case we are recursively called within a subquery context.
