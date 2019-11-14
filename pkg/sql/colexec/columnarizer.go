@@ -41,7 +41,7 @@ type Columnarizer struct {
 	typs            []coltypes.T
 }
 
-var _ StaticMemoryOperator = &Columnarizer{}
+var _ Operator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
@@ -72,12 +72,6 @@ func NewColumnarizer(
 	c.typs, err = typeconv.FromColumnTypes(c.OutputTypes())
 
 	return c, err
-}
-
-// EstimateStaticMemoryUsage is part of the StaticMemoryOperator
-// interface.
-func (c *Columnarizer) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes(c.typs, int(coldata.BatchSize()))
 }
 
 // Init is part of the Operator interface.

@@ -917,7 +917,7 @@ func TestHashJoiner(t *testing.T) {
 			typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
 			runTestsWithTyps(t, inputs, typs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
 				spec := createSpecForHashJoiner(tc)
-				result, err := NewColOperator(ctx, flowCtx, spec, sources)
+				result, err := NewColOperator(ctx, flowCtx, spec, sources, &testMemAcc)
 				if err != nil {
 					return nil, err
 				}
@@ -1128,7 +1128,7 @@ func TestHashJoinerProjection(t *testing.T) {
 
 	leftSource := newOpTestInput(1, leftTuples, leftColTypes)
 	rightSource := newOpTestInput(1, rightTuples, rightColTypes)
-	hjOp, err := NewColOperator(ctx, flowCtx, spec, []Operator{leftSource, rightSource})
+	hjOp, err := NewColOperator(ctx, flowCtx, spec, []Operator{leftSource, rightSource}, &testMemAcc)
 	require.NoError(t, err)
 	hjOp.Op.Init()
 	for {

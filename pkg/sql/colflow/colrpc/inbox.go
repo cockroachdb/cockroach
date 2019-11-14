@@ -115,7 +115,7 @@ type Inbox struct {
 	}
 }
 
-var _ colexec.StaticMemoryOperator = &Inbox{}
+var _ colexec.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
@@ -146,11 +146,6 @@ func NewInbox(
 	i.stateMu.bufferedMeta = make([]execinfrapb.ProducerMetadata, 0)
 	i.stateMu.nextExited = sync.NewCond(&i.stateMu)
 	return i, nil
-}
-
-// EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
-func (i *Inbox) EstimateStaticMemoryUsage() int {
-	return colexec.EstimateBatchSizeBytes(i.typs, int(coldata.BatchSize()))
 }
 
 // maybeInitLocked calls Inbox.initLocked if the inbox is not initialized and

@@ -29,7 +29,7 @@ type countOp struct {
 	count         int64
 }
 
-var _ StaticMemoryOperator = &countOp{}
+var _ Operator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
 func NewCountOp(allocator *Allocator, input Operator) Operator {
@@ -38,10 +38,6 @@ func NewCountOp(allocator *Allocator, input Operator) Operator {
 	}
 	c.internalBatch = allocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, 1)
 	return c
-}
-
-func (c *countOp) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Int64}, 1)
 }
 
 func (c *countOp) Init() {

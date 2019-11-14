@@ -58,7 +58,6 @@ type ParallelUnorderedSynchronizer struct {
 
 	initialized bool
 	done        bool
-	zeroBatch   coldata.Batch
 	// externalWaitGroup refers to the WaitGroup passed in externally. Since the
 	// ParallelUnorderedSynchronizer spawns goroutines, this allows callers to
 	// wait for the completion of these goroutines.
@@ -91,7 +90,7 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
 func NewParallelUnorderedSynchronizer(
-	allocator *Allocator, inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
+	inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -104,7 +103,6 @@ func NewParallelUnorderedSynchronizer(
 		readNextBatch:     readNextBatch,
 		batches:           make([]coldata.Batch, len(inputs)),
 		nextBatch:         make([]func(), len(inputs)),
-		zeroBatch:         allocator.NewMemBatchWithSize(typs, 0 /* size */),
 		externalWaitGroup: wg,
 		internalWaitGroup: &sync.WaitGroup{},
 		batchCh:           make(chan *unorderedSynchronizerMsg, len(inputs)),
@@ -201,8 +199,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 // Next is part of the Operator interface.
 func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if s.done {
-		s.zeroBatch.SetLength(0)
-		return s.zeroBatch
+		return zeroBatch
 	}
 	if !s.initialized {
 		s.init(ctx)
@@ -234,8 +231,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			default:
 			}
 			s.done = true
-			s.zeroBatch.SetLength(0)
-			return s.zeroBatch
+			return zeroBatch
 		}
 		s.lastReadInputIdx = msg.inputIdx
 		return msg.b

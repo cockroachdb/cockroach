@@ -150,11 +150,7 @@ type projectInOp_TYPE struct {
 	negate    bool
 }
 
-var _ StaticMemoryOperator = &projectInOp_TYPE{}
-
-func (p *projectInOp_TYPE) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, int(coldata.BatchSize()))
-}
+var _ Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
 	conv := typeconv.GetDatumToPhysicalFn(ct)

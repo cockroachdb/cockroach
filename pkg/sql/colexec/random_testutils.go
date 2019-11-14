@@ -141,16 +141,18 @@ func RandomVec(
 	}
 }
 
-// testAllocator is an Allocator with an unlimited budget for use in tests.
-var testAllocator = NewAllocator()
-
 // RandomBatch returns a batch with a capacity of capacity and a number of
 // random elements equal to length (capacity if length is 0). The values will be
 // null with a probability of nullProbability.
 func RandomBatch(
-	rng *rand.Rand, typs []coltypes.T, capacity int, length int, nullProbability float64,
+	allocator *Allocator,
+	rng *rand.Rand,
+	typs []coltypes.T,
+	capacity int,
+	length int,
+	nullProbability float64,
 ) coldata.Batch {
-	batch := testAllocator.NewMemBatchWithSize(typs, capacity)
+	batch := allocator.NewMemBatchWithSize(typs, capacity)
 	if length == 0 {
 		length = capacity
 	}
@@ -191,9 +193,14 @@ var _ = randomTypes
 // selProbability is 0, none will. The returned batch will have its length set
 // to the length of the selection vector, unless selProbability is 0.
 func randomBatchWithSel(
-	rng *rand.Rand, typs []coltypes.T, n int, nullProbability float64, selProbability float64,
+	allocator *Allocator,
+	rng *rand.Rand,
+	typs []coltypes.T,
+	n int,
+	nullProbability float64,
+	selProbability float64,
 ) coldata.Batch {
-	batch := RandomBatch(rng, typs, n, 0 /* length */, nullProbability)
+	batch := RandomBatch(allocator, rng, typs, n, 0 /* length */, nullProbability)
 	if selProbability != 0 {
 		sel := randomSel(rng, uint16(n), 1-selProbability)
 		batch.SetSelection(true)
@@ -240,6 +247,7 @@ type RandomDataOpArgs struct {
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
 	ZeroInputNode
+	allocator        *Allocator
 	batchAccumulator func(b coldata.Batch)
 	typs             []coltypes.T
 	rng              *rand.Rand
@@ -251,7 +259,7 @@ type RandomDataOp struct {
 }
 
 // NewRandomDataOp creates a new RandomDataOp.
-func NewRandomDataOp(rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
+func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
 	var (
 		availableTyps   = coltypes.AllTypes
 		maxSchemaLength = defaultMaxSchemaLength
@@ -280,6 +288,7 @@ func NewRandomDataOp(rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
 		}
 	}
 	return &RandomDataOp{
+		allocator:        allocator,
 		batchAccumulator: args.BatchAccumulator,
 		typs:             typs,
 		rng:              rng,
@@ -297,8 +306,7 @@ func (o *RandomDataOp) Init() {}
 func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
-		b := testAllocator.NewMemBatchWithSize(o.typs, 0)
-		b.SetLength(0)
+		b := zeroBatch
 		if o.batchAccumulator != nil {
 			o.batchAccumulator(b)
 		}
@@ -317,7 +325,7 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 			nullProbability = o.rng.Float64()
 		}
 
-		b := randomBatchWithSel(o.rng, o.typs, o.batchSize, nullProbability, selProbability)
+		b := randomBatchWithSel(o.allocator, o.rng, o.typs, o.batchSize, nullProbability, selProbability)
 		if !o.selection {
 			b.SetSelection(false)
 		}
