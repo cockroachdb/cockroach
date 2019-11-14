@@ -266,7 +266,10 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			case *tree.Where:
 				walk(node.Expr)
 			case *tree.WindowDef:
-				walk(node.Partitions, node.Frame)
+				walk(node.Partitions)
+				if node.Frame != nil {
+					walk(node.Frame)
+				}
 			case *tree.WindowFrame:
 				if node.Bounds.StartBound != nil {
 					walk(node.Bounds.StartBound)
