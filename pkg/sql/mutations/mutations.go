@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 var (
@@ -288,7 +289,14 @@ func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 				fkCol := fkCols[len(usingCols)]
 				found := false
 				for refI, refCol := range availCols {
-					if fkCol.Type.Equivalent(refCol.Type) {
+					var equiv bool
+					switch fkCol.Type.Family() {
+					case types.OidFamily:
+						equiv = fkCol.Type.Identical(refCol.Type)
+					default:
+						equiv = fkCol.Type.Equivalent(refCol.Type)
+					}
+					if equiv {
 						usingCols = append(usingCols, refCol)
 						availCols = append(availCols[:refI], availCols[refI+1:]...)
 						found = true
