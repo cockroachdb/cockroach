@@ -657,7 +657,6 @@ type StorageConfig struct {
 	// an initialized instance.
 	//
 	// Makes no sense for in-memory instances.
-	// TODO(hueypark): Implement this for pebble.
 	MustExist bool
 	// MaxSize is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
