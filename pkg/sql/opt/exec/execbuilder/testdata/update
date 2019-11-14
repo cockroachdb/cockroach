@@ -108,6 +108,7 @@ count                ·            ·
       │              table        xyz
       │              set          y
       │              strategy     updater
+      │              auto commit  ·
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        xyz@primary
@@ -123,6 +124,7 @@ count                ·            ·            ()                           ·
       │              table        xyz          ·                            ·
       │              set          x, y         ·                            ·
       │              strategy     updater      ·                            ·
+      │              auto commit  ·            ·                            ·
       └── render     ·            ·            (x, y, z, column7, column8)  ·
            │         render 0     x            ·                            ·
            │         render 1     y            ·                            ·
@@ -143,6 +145,7 @@ count                ·            ·            ()               ·
       │              table        xyz          ·                ·
       │              set          x, y         ·                ·
       │              strategy     updater      ·                ·
+      │              auto commit  ·            ·                ·
       └── render     ·            ·            (x, y, z, y, x)  ·
            │         render 0     x            ·                ·
            │         render 1     y            ·                ·
@@ -163,6 +166,7 @@ count                     ·            ·            ()                        
       │                   table        xyz          ·                            ·
       │                   set          x, y         ·                            ·
       │                   strategy     updater      ·                            ·
+      │                   auto commit  ·            ·                            ·
       └── render          ·            ·            (x, y, z, column7, column7)  ·
            │              render 0     x            ·                            ·
            │              render 1     y            ·                            ·
@@ -230,6 +234,7 @@ count                          ·            ·
       │                        table        kv
       │                        set          v
       │                        strategy     updater
+      │                        auto commit  ·
       └── render               ·            ·
            └── limit           ·            ·
                 │              count        10
@@ -250,6 +255,7 @@ count                ·            ·
       │              table        kv
       │              set          v
       │              strategy     updater
+      │              auto commit  ·
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        kv@primary
@@ -276,6 +282,7 @@ count                ·            ·
       │              table        tu
       │              set          c
       │              strategy     updater
+      │              auto commit  ·
       └── render     ·            ·
            │         render 0     a
            │         render 1     c
@@ -334,6 +341,7 @@ render                    ·            ·              (a)                     
            │              table        abc            ·                         ·
            │              set          a              ·                         ·
            │              strategy     updater        ·                         ·
+           │              auto commit  ·              ·                         ·
            └── render     ·            ·              (a, b, c, rowid, c)       +c
                 │         render 0     a              ·                         ·
                 │         render 1     b              ·                         ·
@@ -382,6 +390,7 @@ count                           ·            ·               ()               
       │                         table        t38799          ·                   ·
       │                         set          c               ·                   ·
       │                         strategy     updater         ·                   ·
+      │                         auto commit  ·               ·                   ·
       └── render                ·            ·               (a, b, c, column7)  ·
            │                    render 0     a               ·                   ·
            │                    render 1     b               ·                   ·

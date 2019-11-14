@@ -1523,6 +1523,7 @@ count                ·            ·
       │              table        t4
       │              set          c
       │              strategy     updater
+      │              auto commit  ·
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        t4@primary
@@ -1536,6 +1537,7 @@ EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 ·             vectorized   false
 delete range  ·            ·
 ·             from         t4
+·             auto commit  ·
 ·             spans        /10/20-/10/20/#
 
 # Optimization should not be applied for non point lookups.

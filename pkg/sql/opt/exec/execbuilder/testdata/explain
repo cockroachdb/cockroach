@@ -403,6 +403,7 @@ count             ·            ·
  └── insert       ·            ·
       │           into         t(k, v)
       │           strategy     inserter
+      │           auto commit  ·
       └── values  ·            ·
 ·                 size         2 columns, 1 row
 
@@ -552,6 +553,7 @@ count             ·              ·                 ()                         
  └── insert       ·              ·                 ()                          ·
       │           into           t(k, v)           ·                           ·
       │           strategy       inserter          ·                           ·
+      │           auto commit    ·                 ·                           ·
       └── values  ·              ·                 (column1 int, column2 int)  ·
 ·                 size           2 columns, 1 row  ·                           ·
 ·                 row 0, expr 0  (1)[int]          ·                           ·
@@ -636,6 +638,7 @@ count                ·            ·                            ()             
  └── delete          ·            ·                            ()              ·
       │              from         t                            ·               ·
       │              strategy     deleter                      ·               ·
+      │              auto commit  ·                            ·               ·
       └── render     ·            ·                            (k int)         ·
            │         render 0     (k)[int]                     ·               ·
            └── scan  ·            ·                            (k int, v int)  ·
@@ -653,6 +656,7 @@ count                ·            ·                              ()           
       │              table        t                              ·                            ·
       │              set          v                              ·                            ·
       │              strategy     updater                        ·                            ·
+      │              auto commit  ·                              ·                            ·
       └── render     ·            ·                              (k int, v int, column5 int)  ·
            │         render 0     (k)[int]                       ·                            ·
            │         render 1     (v)[int]                       ·                            ·
