@@ -51,7 +51,7 @@ limit
  │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    │    └── limit hint: 5.00
+ │    │    └── limit hint: 50.00
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── const: 5 [type=int]
@@ -200,7 +200,7 @@ limit
  │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(2)=501, null(2)=1000, distinct(3)=11, null(3)=1000, distinct(4)=200, null(4)=0, distinct(2,3)=2000, null(2,3)=1500]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    │    └── limit hint: 5.00
+ │    │    └── limit hint: 100.00
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── const: 5 [type=int]

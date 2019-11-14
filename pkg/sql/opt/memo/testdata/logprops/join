@@ -676,7 +676,7 @@ semi-join-apply
  │    │    ├── limit hint: 5.00
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int)
- │    │    │    ├── limit hint: 5.00
+ │    │    │    ├── limit hint: 5.05
  │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -738,7 +738,7 @@ anti-join-apply
  │    │    ├── limit hint: 5.00
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int)
- │    │    │    ├── limit hint: 5.00
+ │    │    │    ├── limit hint: 5.05
  │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
