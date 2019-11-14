@@ -114,7 +114,7 @@ memo (optimized, ~6KB, required=[presentation: s:4])
  │         └── cost: 10.51
  ├── G3: (const 1)
  ├── G4: (scan a,cols=(4)) (scan a@s_idx,cols=(4)) (scan a@si_idx,cols=(4))
- │    └── [limit hint: 1.00]
+ │    └── [limit hint: 100.00]
  │         ├── best: (scan a@s_idx,cols=(4))
  │         └── cost: 1050.02
  ├── G5: (filters G6)
