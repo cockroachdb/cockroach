@@ -99,6 +99,21 @@ spec:
       - name: cockroachdb
         image: cockroachdb/cockroach:v19.1.5
         imagePullPolicy: IfNotPresent
+        # TODO: Change these to appropriate values for the hardware that you're running. You can see
+        # the amount of allocatable resources on each of your Kubernetes nodes by running:
+        #   kubectl describe nodes
+        # resources:
+        #   requests:
+        #     cpu: "16"
+        #     memory: "8Gi"
+        #   limits:
+            # NOTE: Unless you have enabled the non-default Static CPU Management Policy
+            # and are using an integer number of CPUs, we don't recommend setting a CPU limit.
+            # See:
+            #   https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/#static-policy
+            #   https://github.com/kubernetes/kubernetes/issues/51135
+            #   cpu: "16"
+            #   memory: "8Gi" 
         ports:
         - containerPort: 26257
           name: grpc
