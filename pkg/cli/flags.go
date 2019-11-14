@@ -393,6 +393,11 @@ func init() {
 
 		// Engine flags.
 		VarFlag(f, cacheSizeValue, cliflags.Cache)
+
+		// Attempt to default serverCfg.SQLMemoryPoolSize to 25% if possible.
+		if bytes, _ := memoryPercentResolver(25); bytes != 0 {
+			serverCfg.SQLMemoryPoolSize = bytes
+		}
 		VarFlag(f, sqlSizeValue, cliflags.SQLMem)
 		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
 		// the stores flag has been parsed and the storage device that a percentage
