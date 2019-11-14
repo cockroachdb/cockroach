@@ -98,10 +98,14 @@ func TestColumnConversions(t *testing.T) {
 			"BYTES": ColumnConversionTrivial,
 		},
 		"TIMESTAMP": {
-			"TIMESTAMPTZ": ColumnConversionTrivial,
+			"TIMESTAMPTZ":  ColumnConversionTrivial,
+			"TIMESTAMP":    ColumnConversionTrivial,
+			"TIMESTAMP(5)": ColumnConversionValidate,
 		},
 		"TIMESTAMPTZ": {
-			"TIMESTAMP": ColumnConversionTrivial,
+			"TIMESTAMP":      ColumnConversionTrivial,
+			"TIMESTAMPTZ":    ColumnConversionTrivial,
+			"TIMESTAMPTZ(5)": ColumnConversionValidate,
 		},
 
 		"UUID": {

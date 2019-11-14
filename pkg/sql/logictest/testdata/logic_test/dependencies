@@ -15,22 +15,22 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, column_id
 ----
-descriptor_id  descriptor_name  column_id  column_name  column_type                                                                  nullable  default_expr    hidden
-53             test_kv          1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     NULL            false
-53             test_kv          2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        true      NULL            false
-53             test_kv          3          w            family:DecimalFamily width:0 precision:0 locale:"" visible_type:0 oid:1700   true      NULL            false
-54             test_kvr1        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     NULL            false
-55             test_kvr2        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        true      NULL            false
-55             test_kvr2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        true      NULL            false
-55             test_kvr2        3          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     unique_rowid()  true
-56             test_kvr3        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        true      NULL            false
-56             test_kvr3        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        true      NULL            false
-56             test_kvr3        3          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     unique_rowid()  true
-57             test_kvi1        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     NULL            false
-58             test_kvi2        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     NULL            false
-58             test_kvi2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        true      NULL            false
-59             test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     NULL            false
-60             test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20        false     NULL            false
+descriptor_id  descriptor_name  column_id  column_name  column_type                                                                                              nullable  default_expr    hidden
+53             test_kv          1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
+53             test_kv          2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+53             test_kv          3          w            family:DecimalFamily width:0 precision:0 locale:"" visible_type:0 oid:1700 time_precision_is_set:false   true      NULL            false
+54             test_kvr1        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
+55             test_kvr2        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+55             test_kvr2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+55             test_kvr2        3          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     unique_rowid()  true
+56             test_kvr3        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+56             test_kvr3        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+56             test_kvr3        3          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     unique_rowid()  true
+57             test_kvi1        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
+58             test_kvi2        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
+58             test_kvi2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
+59             test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
+60             test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
 
 query ITITTB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
