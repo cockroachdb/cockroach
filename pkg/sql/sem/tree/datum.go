@@ -2115,6 +2115,11 @@ func MustBeDTimestamp(e Expr) DTimestamp {
 	return t
 }
 
+// Round returns a new DTimestamp to the specified precision.
+func (d *DTimestamp) Round(precision time.Duration) *DTimestamp {
+	return MakeDTimestamp(d.Time, precision)
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestamp) ResolvedType() *types.T {
 	return types.Timestamp
@@ -2294,6 +2299,11 @@ func MustBeDTimestampTZ(e Expr) DTimestampTZ {
 		panic(errors.AssertionFailedf("expected *DTimestampTZ, found %T", e))
 	}
 	return t
+}
+
+// Round returns a new DTimestampTZ to the specified precision.
+func (d *DTimestampTZ) Round(precision time.Duration) *DTimestampTZ {
+	return MakeDTimestampTZ(d.Time, precision)
 }
 
 // ResolvedType implements the TypedExpr interface.
