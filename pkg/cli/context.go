@@ -108,6 +108,10 @@ func initCLIDefaults() {
 	serverCfg.JoinList = nil
 	serverCfg.DefaultZoneConfig = config.DefaultZoneConfig()
 	serverCfg.DefaultSystemZoneConfig = config.DefaultSystemZoneConfig()
+	// Attempt to default serverCfg.SQLMemoryPoolSize to 25% if possible.
+	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
+		serverCfg.SQLMemoryPoolSize = bytes
+	}
 
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory

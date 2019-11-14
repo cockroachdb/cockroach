@@ -1042,19 +1042,6 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		log.Warning(ctx, buf.String())
 	}
 
-	if !sqlSizeValue.IsSet() {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "Using the default setting for --max-sql-memory (%s).\n", sqlSizeValue)
-		fmt.Fprintf(&buf, "  A significantly larger value is usually needed in production.\n")
-		if size, err := status.GetTotalMemory(context.Background()); err == nil {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --max-sql-memory=.25 (%s).",
-				humanizeutil.IBytes(size/4))
-		} else {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
-		}
-		log.Warning(ctx, buf.String())
-	}
-
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
 		requestedMem := serverCfg.CacheSize + serverCfg.SQLMemoryPoolSize
