@@ -111,7 +111,7 @@ project
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2,3,9)
       │         │    ├── ordering: +1 opt(9) [actual: +1]
-      │         │    └── limit hint: 50.00
+      │         │    └── limit hint: 101.01
       │         └── filters
       │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
       └── const: 50 [type=int]
@@ -154,7 +154,7 @@ project
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2,3,9)
       │         │    ├── ordering: +1 opt(9) [actual: +1]
-      │         │    └── limit hint: 50.00
+      │         │    └── limit hint: 101.01
       │         └── filters
       │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
       └── const: 50 [type=int]
@@ -182,7 +182,7 @@ limit
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
  │    │    ├── ordering: +1 opt(9) [actual: +1]
- │    │    └── limit hint: 5.00
+ │    │    └── limit hint: 10.10
  │    └── filters
  │         └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
  └── const: 5 [type=int]

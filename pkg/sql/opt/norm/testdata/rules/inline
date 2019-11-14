@@ -438,10 +438,10 @@ project
       │    ├── limit hint: 107.00
       │    ├── project
       │    │    ├── columns: c0:6(int) c1:7(int)
-      │    │    ├── limit hint: 107.00
+      │    │    ├── limit hint: 321.00
       │    │    ├── scan crdb_internal.public.zones
       │    │    │    ├── columns: crdb_internal.public.zones.zone_id:1(int!null)
-      │    │    │    └── limit hint: 107.00
+      │    │    │    └── limit hint: 321.00
       │    │    └── projections
       │    │         ├── crdb_internal.public.zones.zone_id + 1 [type=int, outer=(1)]
       │    │         └── crdb_internal.public.zones.zone_id + 2 [type=int, outer=(1)]

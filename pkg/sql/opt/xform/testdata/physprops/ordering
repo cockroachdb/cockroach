@@ -820,7 +820,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    ├── ordering: +1,+2
- │    │    └── limit hint: 10.00
+ │    │    └── limit hint: 30.00
  │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
@@ -867,7 +867,7 @@ sort
       │    ├── scan abc
       │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    │    ├── ordering: +1,+2
-      │    │    └── limit hint: 10.00
+      │    │    └── limit hint: 30.00
       │    └── filters
       │         └── c < (a + b) [type=bool]
       └── const: 10 [type=int]
@@ -912,7 +912,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    ├── ordering: +1,+2
- │    │    └── limit hint: 10.00
+ │    │    └── limit hint: 30.00
  │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
@@ -954,7 +954,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    ├── ordering: +1,+2,+3
- │    │    └── limit hint: 10.00
+ │    │    └── limit hint: 30.00
  │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]

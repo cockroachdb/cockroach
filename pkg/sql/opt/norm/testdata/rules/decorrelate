@@ -710,7 +710,7 @@ semi-join-apply
  │    │    ├── limit hint: 1.00
  │    │    ├── scan xy
  │    │    │    ├── columns: y:7(int)
- │    │    │    └── limit hint: 1.00
+ │    │    │    └── limit hint: 1.01
  │    │    └── filters
  │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    └── const: 1 [type=int]
@@ -742,7 +742,7 @@ anti-join-apply
  │    │    ├── limit hint: 1.00
  │    │    ├── scan xy
  │    │    │    ├── columns: y:7(int)
- │    │    │    └── limit hint: 1.00
+ │    │    │    └── limit hint: 1.01
  │    │    └── filters
  │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    └── const: 1 [type=int]
@@ -5133,7 +5133,7 @@ select
                 │    ├── limit hint: 1.00
                 │    ├── scan xy
                 │    │    ├── columns: y:7(int)
-                │    │    └── limit hint: 1.00
+                │    │    └── limit hint: 100.00
                 │    └── filters
                 │         └── y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
                 └── const: 1 [type=int]
@@ -5267,7 +5267,7 @@ select
                      │    ├── limit hint: 1.00
                      │    ├── scan xy
                      │    │    ├── columns: y:7(int)
-                     │    │    └── limit hint: 1.00
+                     │    │    └── limit hint: 3.00
                      │    └── filters
                      │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
                      └── const: 1 [type=int]
