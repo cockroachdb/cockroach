@@ -2087,7 +2087,9 @@ character_without_length ::=
 const_datetime ::=
 	'DATE'
 	| 'TIMESTAMP' opt_timezone
+	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone
 	| 'TIMESTAMPTZ'
+	| 'TIMESTAMPTZ' '(' iconst32 ')'
 
 const_json ::=
 	'JSON'

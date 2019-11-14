@@ -11,8 +11,6 @@
 package tree
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -83,9 +81,9 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	case types.TimeFamily:
 		return ParseDTime(ctx, s)
 	case types.TimestampFamily:
-		return ParseDTimestamp(ctx, s, time.Microsecond)
+		return ParseDTimestamp(ctx, s, timeFamilyPrecisionToRoundDuration(t.Precision()))
 	case types.TimestampTZFamily:
-		return ParseDTimestampTZ(ctx, s, time.Microsecond)
+		return ParseDTimestampTZ(ctx, s, timeFamilyPrecisionToRoundDuration(t.Precision()))
 	case types.UuidFamily:
 		return ParseDUuidFromString(s)
 	default:

@@ -111,10 +111,16 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 		types.StringFamily: classifierWidth,
 	},
 	types.TimestampFamily: {
+		// TODO(otan): use classifierPrecision - this is currently blocked by
+		// the "change reports fields from timestamp to timestamptz" 19.2 migration.
 		types.TimestampTZFamily: ColumnConversionTrivial.classifier(),
+		types.TimestampFamily:   classifierPrecision,
 	},
 	types.TimestampTZFamily: {
-		types.TimestampFamily: ColumnConversionTrivial.classifier(),
+		// TODO(otan): use classifierPrecision - this is currently blocked by
+		// the "change reports fields from timestamp to timestamptz" 19.2 migration.
+		types.TimestampFamily:   ColumnConversionTrivial.classifier(),
+		types.TimestampTZFamily: classifierPrecision,
 	},
 }
 
@@ -143,12 +149,15 @@ func classifierHardestOf(classifiers ...classifier) classifier {
 // greater than the existing precision.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
 func classifierPrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
+	oldPrecision := oldType.PrecisionExpandDefault()
+	newPrecision := newType.PrecisionExpandDefault()
+
 	switch {
-	case oldType.Precision() == newType.Precision():
+	case oldPrecision == newPrecision:
 		return ColumnConversionTrivial
-	case oldType.Precision() == 0:
+	case oldPrecision == 0:
 		return ColumnConversionValidate
-	case newType.Precision() == 0 || newType.Precision() > oldType.Precision():
+	case newPrecision == 0 || newPrecision > oldPrecision:
 		return ColumnConversionTrivial
 	default:
 		return ColumnConversionValidate
