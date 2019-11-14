@@ -134,6 +134,7 @@ func NewHashAggregator(
 
 	orderedAgg := &orderedAggregator{
 		OneInputNode:   NewOneInputNode(grouper),
+		allocator:      allocator,
 		aggCols:        mappedAggCols,
 		aggTypes:       aggTyps,
 		groupCol:       distinctCol,

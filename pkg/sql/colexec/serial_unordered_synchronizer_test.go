@@ -32,12 +32,12 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	typs := []coltypes.T{coltypes.Int64}
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		batch := RandomBatch(rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
+		batch := RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
 		source := NewRepeatableBatchSource(batch)
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
 	}
-	s := NewSerialUnorderedSynchronizer(testAllocator, inputs, typs)
+	s := NewSerialUnorderedSynchronizer(inputs, typs)
 	resultBatches := 0
 	for {
 		b := s.Next(ctx)

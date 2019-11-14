@@ -45,6 +45,8 @@ type routerOutputOp struct {
 	input execinfra.OpNode
 
 	types []coltypes.T
+	// TODO(yuzefovich): remove this field and use global zeroBatch instead. This
+	// will require a minor refactor of merge joiner.
 	// zeroBatch is used to return a 0 length batch in some cases.
 	zeroBatch coldata.Batch
 
@@ -111,7 +113,6 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 		blockedThreshold:    blockedThreshold,
 		outputBatchSize:     outputBatchSize,
 	}
-	o.zeroBatch.SetLength(0)
 	o.mu.cond = sync.NewCond(&o.mu)
 	o.mu.data = make([]coldata.Batch, 0, o.blockedThreshold/o.outputBatchSize)
 	return o

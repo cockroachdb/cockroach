@@ -38,79 +38,36 @@ func TestVectorizeSpaceError(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	// Without a limit, the default sorter creates a vectorized operator
-	// that we don't know memory usage of statically.
-	sorterCore := &execinfrapb.SorterSpec{
-		OutputOrdering: execinfrapb.Ordering{
-			Columns: []execinfrapb.Ordering_Column{
-				{
-					ColIdx:    0,
-					Direction: execinfrapb.Ordering_Column_ASC,
-				},
-			},
-		},
+	oneInput := []execinfrapb.InputSyncSpec{
+		{ColumnTypes: []types.T{*types.Int}},
 	}
-
-	aggregatorCore := &execinfrapb.AggregatorSpec{
-		Type: execinfrapb.AggregatorSpec_SCALAR,
-		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
-			{
-				Func:   execinfrapb.AggregatorSpec_MAX,
-				ColIdx: []uint32{0},
-			},
-		},
+	twoInputs := []execinfrapb.InputSyncSpec{
+		{ColumnTypes: []types.T{*types.Int}},
+		{ColumnTypes: []types.T{*types.Int}},
 	}
-
-	input := []execinfrapb.InputSyncSpec{{
-		ColumnTypes: []types.T{*types.Int},
-	}}
 
 	testCases := []struct {
 		desc string
 		spec *execinfrapb.ProcessorSpec
 	}{
 		{
-			desc: "topk",
+			desc: "CASE",
 			spec: &execinfrapb.ProcessorSpec{
-				Input: input,
+				Input: oneInput,
 				Core: execinfrapb.ProcessorCoreUnion{
-					Sorter: sorterCore,
+					Noop: &execinfrapb.NoopCoreSpec{},
 				},
 				Post: execinfrapb.PostProcessSpec{
-					Limit: 5,
+					RenderExprs: []execinfrapb.Expression{{Expr: "CASE WHEN @1 = 1 THEN 1 ELSE 2 END"}},
 				},
 			},
 		},
 		{
-			desc: "projection",
+			desc: "MERGE JOIN",
 			spec: &execinfrapb.ProcessorSpec{
-				Input: input,
+				Input: twoInputs,
 				Core: execinfrapb.ProcessorCoreUnion{
-					Sorter: sorterCore,
-				},
-				Post: execinfrapb.PostProcessSpec{
-					RenderExprs: []execinfrapb.Expression{{Expr: "@1 + 1"}},
-				},
-			},
-		},
-		{
-			desc: "in_projection",
-			spec: &execinfrapb.ProcessorSpec{
-				Input: input,
-				Core: execinfrapb.ProcessorCoreUnion{
-					Sorter: sorterCore,
-				},
-				Post: execinfrapb.PostProcessSpec{
-					RenderExprs: []execinfrapb.Expression{{Expr: "@1 IN (1, 2)"}},
-				},
-			},
-		},
-		{
-			desc: "aggregation",
-			spec: &execinfrapb.ProcessorSpec{
-				Input: input,
-				Core: execinfrapb.ProcessorCoreUnion{
-					Aggregator: aggregatorCore,
+					MergeJoiner: &execinfrapb.MergeJoinerSpec{},
 				},
 			},
 		},
@@ -120,6 +77,9 @@ func TestVectorizeSpaceError(t *testing.T) {
 		for _, succ := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, succ), func(t *testing.T) {
 				inputs := []colexec.Operator{colexec.NewZeroOp(nil)}
+				if len(tc.spec.Input) > 1 {
+					inputs = append(inputs, colexec.NewZeroOp(nil))
+				}
 				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if succ {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
@@ -127,11 +87,11 @@ func TestVectorizeSpaceError(t *testing.T) {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 				}
 				acc := memMon.MakeBoundAccount()
-				result, err := colexec.NewColOperator(ctx, flowCtx, tc.spec, inputs)
+				result, err := colexec.NewColOperator(ctx, flowCtx, tc.spec, inputs, &mon.BoundAccount{})
 				if err != nil {
 					t.Fatal(err)
 				}
-				err = acc.Grow(ctx, int64(result.MemUsage))
+				err = acc.Grow(ctx, int64(result.StaticMemUsage))
 				if succ && err != nil {
 					t.Fatal("Expected success, found:", err)
 				}

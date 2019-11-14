@@ -124,6 +124,9 @@ type Vec interface {
 	// SetNulls sets the nulls vector for this column.
 	SetNulls(*Nulls)
 
+	// Length returns the length of the slice that is underlying this Vec.
+	Length() int
+
 	// SetLength sets the length of the slice that is underlying this Vec. Note
 	// that the length of the batch which this Vec belongs to "takes priority".
 	SetLength(int)
@@ -223,6 +226,29 @@ func (m *memColumn) Nulls() *Nulls {
 
 func (m *memColumn) SetNulls(n *Nulls) {
 	m.nulls = *n
+}
+
+func (m *memColumn) Length() int {
+	switch m.t {
+	case coltypes.Bool:
+		return len(m.col.([]bool))
+	case coltypes.Bytes:
+		return m.Bytes().Len()
+	case coltypes.Int16:
+		return len(m.col.([]int16))
+	case coltypes.Int32:
+		return len(m.col.([]int32))
+	case coltypes.Int64:
+		return len(m.col.([]int64))
+	case coltypes.Float64:
+		return len(m.col.([]float64))
+	case coltypes.Decimal:
+		return len(m.col.([]apd.Decimal))
+	case coltypes.Timestamp:
+		return len(m.col.([]time.Time))
+	default:
+		panic(fmt.Sprintf("unhandled type %s", m.t))
+	}
 }
 
 func (m *memColumn) SetLength(l int) {
