@@ -324,10 +324,7 @@ func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 			})
 
 			match := tree.MatchSimple
-			if rng.Intn(2) == 0 {
-				// TODO(mjibson): Enable once #42498 is fixed.
-				//match = tree.MatchFull
-			}
+			// TODO(mjibson): Set match once #42498 is fixed.
 			var actions tree.ReferenceActions
 			if rng.Intn(2) == 0 {
 				actions.Delete = randAction(rng, table)
