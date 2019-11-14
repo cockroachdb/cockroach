@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -213,12 +213,47 @@ type txnInterceptor interface {
 type txnLockGatekeeper struct {
 	wrapped client.Sender
 	mu      sync.Locker // shared with TxnCoordSender
+
+	// If set, concurrent requests are allowed. If not set, concurrent requests
+	// result in an assertion error. Only leaf transactions are supposed allow
+	// concurrent requests - leaves don't restart the transaction and they don't
+	// bump the read timestamp through refreshes.
+	allowConcurrentRequests bool
+	// requestInFlight is set while a request is being processed by the wrapped
+	// sender. Used to detect and prevent concurrent txn use.
+	requestInFlight bool
 }
 
 // SendLocked implements the lockedSender interface.
 func (gs *txnLockGatekeeper) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	// If so configured, protect against concurrent use of the txn. Concurrent
+	// requests don't work generally because of races between clients sending
+	// requests and the TxnCoordSender restarting the transaction, and also
+	// concurrent requests are not compatible with the span refresher in
+	// particular since refreshing is invalid if done concurrently with requests
+	// in flight whose spans haven't been accounted for.
+	//
+	// As a special case, allow for async rollbacks and heartbeats to be sent
+	// whenever. As another special case, we allow concurrent requests on AS OF
+	// SYSTEM TIME transactions. I think these transactions can't experience
+	// retriable errors, so they're safe. And they're used concurrently by schema
+	// change code.
+	if !gs.allowConcurrentRequests && !ba.Txn.CommitTimestampFixed {
+		asyncRequest := ba.IsSingleAbortTransactionRequest() || ba.IsSingleHeartbeatTxnRequest()
+		if !asyncRequest {
+			if gs.requestInFlight {
+				return nil, roachpb.NewError(
+					errors.AssertionFailedf("concurrent txn use detected. ba: %s", ba))
+			}
+			gs.requestInFlight = true
+			defer func() {
+				gs.requestInFlight = false
+			}()
+		}
+	}
+
 	// Note the funky locking here: we unlock for the duration of the call and the
 	// lock again.
 	gs.mu.Unlock()
@@ -519,8 +554,9 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		autoRetryCounter: tcs.metrics.AutoRetries,
 	}
 	tcs.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
-		wrapped: tcs.wrapped,
-		mu:      &tcs.mu.Mutex,
+		wrapped:                 tcs.wrapped,
+		mu:                      &tcs.mu.Mutex,
+		allowConcurrentRequests: typ == client.LeafTxn,
 	}
 
 	// Once the interceptors are initialized, piece them all together in the

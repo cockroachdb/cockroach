@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -1907,10 +1906,9 @@ func TestSequenceNumbers(t *testing.T) {
 	}
 }
 
-// TestConcurrentTxnRequests verifies that multiple requests can be executed on
-// a transaction at the same time from multiple goroutines. It makes sure that
-// exactly one BeginTxnRequest and one EndTxnRequest are sent.
-func TestConcurrentTxnRequests(t *testing.T) {
+// TestConcurrentTxnRequests verifies that multiple requests cannot be executed
+// on a transaction at the same time from multiple goroutines.
+func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -1919,15 +1917,13 @@ func TestConcurrentTxnRequests(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var callCountsMu syncutil.Mutex
-	callCounts := make(map[roachpb.Method]int)
+	putSync := make(chan struct{})
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		callCountsMu.Lock()
-		for _, m := range ba.Methods() {
-			callCounts[m]++
+		if _, ok := ba.GetArg(roachpb.Put); ok {
+			// Block the Put until the Get runs.
+			putSync <- struct{}{}
+			<-putSync
 		}
-		callCountsMu.Unlock()
-
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
@@ -1945,31 +1941,24 @@ func TestConcurrentTxnRequests(t *testing.T) {
 		},
 		sender,
 	)
-	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := client.NewDB(ambient, factory, clock)
 
-	const keys = "abcdefghijklmnopqrstuvwxyz"
-	const value = "value"
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		g, gCtx := errgroup.WithContext(ctx)
-		for _, keyChar := range keys {
-			key := string(keyChar)
-			g.Go(func() error {
-				return txn.Put(gCtx, key, value)
-			})
-		}
+		g.Go(func() error {
+			return txn.Put(gCtx, "test_put", "val")
+		})
+		g.Go(func() error {
+			// Wait for the Put to be blocked.
+			<-putSync
+			_, err := txn.Get(gCtx, "test_get")
+			// Unblock the Put.
+			putSync <- struct{}{}
+			return err
+		})
 		return g.Wait()
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	expectedCallCounts := map[roachpb.Method]int{
-		roachpb.Put:            26,
-		roachpb.QueryIntent:    26,
-		roachpb.EndTransaction: 1,
-	}
-	if !reflect.DeepEqual(expectedCallCounts, callCounts) {
-		t.Errorf("expected %v, got %v", expectedCallCounts, callCounts)
-	}
+	})
+	require.Error(t, err, "concurrent txn use detected")
 }
 
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
