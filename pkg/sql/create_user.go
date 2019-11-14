@@ -153,10 +153,10 @@ func (*CreateUserNode) Close(context.Context) {}
 // FastPathResults implements the planNodeFastPath interface.
 func (n *CreateUserNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
 
-const usernameHelp = "usernames are case insensitive, must start with a letter " +
-	"or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters"
+const usernameHelp = "usernames are case insensitive, must start with a letter, " +
+	"digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters"
 
-var usernameRE = regexp.MustCompile(`^[\p{Ll}_][\p{Ll}0-9_-]{0,62}$`)
+var usernameRE = regexp.MustCompile(`^[\p{Ll}0-9_][\p{Ll}0-9_-]{0,62}$`)
 
 var blacklistedUsernames = map[string]struct{}{
 	security.NodeUser: {},
