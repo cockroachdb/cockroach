@@ -289,6 +289,16 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				snapType:                       header.Type,
 			}
 
+			expLen := inSnap.State.RaftAppliedIndex - inSnap.State.TruncatedState.Index
+			if expLen != uint64(len(logEntries)) {
+				// We've received a botched snapshot. We could fatal right here but opt
+				// to warn loudly instead, and fatal when applying the snapshot
+				// (in Replica.applySnapshot) in order to capture replica hard state.
+				log.Warningf(ctx,
+					"missing log entries in snapshot (%s): got %d entries, expected %d",
+					inSnap.String(), len(logEntries), expLen)
+			}
+
 			// 19.1 nodes don't set the Type field on the SnapshotRequest_Header proto
 			// when sending this RPC, so in a mixed cluster setting we may have gotten
 			// the zero value of RAFT. Since the RPC didn't have type information
@@ -307,6 +317,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 	}
 }
+
+// errMalformedSnapshot indicates that the snapshot in question is malformed,
+// for e.g. missing raft log entries.
+var errMalformedSnapshot = errors.New("malformed snapshot generated")
 
 // Send implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Send(
@@ -410,6 +424,24 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
+	}
+
+	// The difference between the snapshot index (applied index at the time of
+	// snapshot) and the truncated index should equal the number of log entries
+	// shipped over.
+	expLen := endIndex - firstIndex
+	if expLen != uint64(len(logEntries)) {
+		// We've generated a botched snapshot. We could fatal right here but opt
+		// to warn loudly instead, and fatal at the caller to capture a checkpoint
+		// of the underlying storage engine.
+		entriesRange, err := extractRangeFromEntries(logEntries)
+		if err != nil {
+			return err
+		}
+		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
+			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
+			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
+		return errMalformedSnapshot
 	}
 
 	// Inline the payloads for all sideloaded proposals.
