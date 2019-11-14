@@ -196,7 +196,6 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	return &pebble.Options{
-		Cleaner:               pebble.ArchiveCleaner{},
 		Comparer:              MVCCComparer,
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,
