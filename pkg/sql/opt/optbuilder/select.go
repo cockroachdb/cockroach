@@ -793,7 +793,7 @@ func (b *Builder) buildSelectClause(
 		// Grouping columns must be built before building the projection list so
 		// we can check that any column references that appear in the SELECT list
 		// outside of aggregate functions are present in the grouping list.
-		b.buildGroupingColumns(sel, fromScope)
+		b.buildGroupingColumns(sel, projectionsScope, fromScope)
 		having = b.buildHaving(havingExpr, fromScope)
 	}
 
