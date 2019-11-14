@@ -12,19 +12,22 @@ package colserde
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-func randomBatch() ([]coltypes.T, coldata.Batch) {
+func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
@@ -43,7 +46,7 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 
 	capacity := rng.Intn(int(coldata.BatchSize())) + 1
 	length := rng.Intn(capacity)
-	b := colexec.RandomBatch(rng, typs, capacity, length, rng.Float64())
+	b := colexec.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
 }
 
@@ -128,8 +131,14 @@ func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 
 func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
 
-	typs, b := randomBatch()
+	typs, b := randomBatch(testAllocator)
 	c, err := NewArrowBatchConverter(typs)
 	require.NoError(t, err)
 
@@ -175,8 +184,14 @@ func roundTripBatch(
 
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
 
-	typs, b := randomBatch()
+	typs, b := randomBatch(testAllocator)
 	c, err := NewArrowBatchConverter(typs)
 	require.NoError(t, err)
 	r, err := NewRecordBatchSerializer(typs)
@@ -192,6 +207,12 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 }
 
 func BenchmarkArrowBatchConverter(b *testing.B) {
+	ctx := context.Background()
+	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+	defer memMonitor.Stop(ctx)
+	acc := memMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
 	// fixedLen specifies how many bytes we should fit variable length data types
 	// to in order to reduce benchmark noise.
 	const fixedLen = 64
@@ -215,7 +236,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colexec.RandomBatch(rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
+		batch := colexec.RandomBatch(testAllocator, rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}

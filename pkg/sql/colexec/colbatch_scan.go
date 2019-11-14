@@ -48,11 +48,7 @@ type colBatchScan struct {
 	init bool
 }
 
-var _ StaticMemoryOperator = &colBatchScan{}
-
-func (s *colBatchScan) EstimateStaticMemoryUsage() int {
-	return s.rf.EstimateStaticMemoryUsage()
-}
+var _ Operator = &colBatchScan{}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()

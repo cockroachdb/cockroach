@@ -23,17 +23,15 @@ import (
 // all subsequent calls.
 type filterFeedOperator struct {
 	ZeroInputNode
-	batch     coldata.Batch
-	zeroBatch coldata.Batch
-	nexted    bool
+	batch  coldata.Batch
+	nexted bool
 }
 
 var _ Operator = &filterFeedOperator{}
 
 func newFilterFeedOperator(allocator *Allocator, inputTypes []coltypes.T) *filterFeedOperator {
 	return &filterFeedOperator{
-		batch:     allocator.NewMemBatchWithSize(inputTypes, 1 /* size */),
-		zeroBatch: allocator.NewMemBatchWithSize([]coltypes.T{}, 0 /* size */),
+		batch: allocator.NewMemBatchWithSize(inputTypes, 1 /* size */),
 	}
 }
 
@@ -44,8 +42,7 @@ func (o *filterFeedOperator) Next(context.Context) coldata.Batch {
 		o.nexted = true
 		return o.batch
 	}
-	o.zeroBatch.SetLength(0)
-	return o.zeroBatch
+	return zeroBatch
 }
 
 func (o *filterFeedOperator) reset() {
@@ -85,7 +82,7 @@ type joinerFilter struct {
 	onlyOnLeft bool
 }
 
-var _ StaticMemoryOperator = &joinerFilter{}
+var _ Operator = &joinerFilter{}
 
 // isLeftTupleFilteredOut returns whether a tuple lIdx from lBatch combined
 // with all tuples in range [rStartIdx, rEndIdx) from rBatch does *not* satisfy
@@ -145,15 +142,4 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 	}
 	f.input.batch.SetLength(1)
 	f.input.batch.SetSelection(false)
-}
-
-// EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
-func (f *joinerFilter) EstimateStaticMemoryUsage() int {
-	filterMemUsage := 0
-	if s, ok := f.Operator.(StaticMemoryOperator); ok {
-		filterMemUsage = s.EstimateStaticMemoryUsage()
-	}
-	return filterMemUsage +
-		EstimateBatchSizeBytes(f.leftSourceTypes, 1 /* batchLength */) +
-		EstimateBatchSizeBytes(f.rightSourceTypes, 1 /* batchLength */)
 }

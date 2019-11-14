@@ -61,24 +61,16 @@ func OrderedDistinctColsToOperators(
 		execerror.VectorizedInternalPanic("unexpectedly an ordered distinct is not a resetter")
 	}
 	distinctChain := &distinctChainOps{
-		resettableOperator:         r,
-		estimatedStaticMemoryUsage: EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, int(coldata.BatchSize())),
+		resettableOperator: r,
 	}
 	return distinctChain, distinctCol, nil
 }
 
 type distinctChainOps struct {
 	resettableOperator
-
-	estimatedStaticMemoryUsage int
 }
 
-var _ StaticMemoryOperator = &distinctChainOps{}
 var _ resettableOperator = &distinctChainOps{}
-
-func (d *distinctChainOps) EstimateStaticMemoryUsage() int {
-	return d.estimatedStaticMemoryUsage
-}
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given coltypes.

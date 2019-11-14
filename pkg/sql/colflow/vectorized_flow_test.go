@@ -35,12 +35,12 @@ type callbackRemoteComponentCreator struct {
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
-	_ *colexec.Allocator,
+	allocator *colexec.Allocator,
 	input colexec.Operator,
 	typs []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
 ) (*colrpc.Outbox, error) {
-	return c.newOutboxFn(testAllocator, input, typs, metadataSources)
+	return c.newOutboxFn(allocator, input, typs, metadataSources)
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
@@ -56,8 +56,6 @@ func intCols(numCols int) []types.T {
 	}
 	return cols
 }
-
-var testAllocator = colexec.NewAllocator()
 
 // TestDrainOnlyInputDAG is a regression test for #39137 to ensure
 // that queries don't hang using the following scenario:
@@ -182,7 +180,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
 		newOutboxFn: func(
-			_ *colexec.Allocator,
+			allocator *colexec.Allocator,
 			op colexec.Operator,
 			typs []coltypes.T,
 			sources []execinfrapb.MetadataSource,
@@ -195,10 +193,10 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// expect from the input DAG.
 			require.Len(t, sources, 1)
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
-			return colrpc.NewOutbox(testAllocator, op, typs, sources)
+			return colrpc.NewOutbox(allocator, op, typs, sources)
 		},
-		newInboxFn: func(_ *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(testAllocator, typs, streamID)
+		newInboxFn: func(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
+			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
 		},

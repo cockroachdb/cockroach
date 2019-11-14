@@ -143,6 +143,7 @@ func TestOrderedSync(t *testing.T) {
 		}
 		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []Operator) (Operator, error) {
 			return &OrderedSynchronizer{
+				allocator:   testAllocator,
 				inputs:      inputs,
 				ordering:    tc.ordering,
 				columnTypes: columnTypes,
@@ -183,7 +184,8 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	}
 
 	op := OrderedSynchronizer{
-		inputs: inputs,
+		allocator: testAllocator,
+		inputs:    inputs,
 		ordering: sqlbase.ColumnOrdering{
 			{
 				ColIdx:    0,
@@ -219,7 +221,8 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	}
 
 	op := OrderedSynchronizer{
-		inputs: inputs,
+		allocator: testAllocator,
+		inputs:    inputs,
 		ordering: sqlbase.ColumnOrdering{
 			{ColIdx: 0, Direction: encoding.Ascending},
 		},
