@@ -29,7 +29,7 @@ func registerSQLSmith(r *testRegistry) {
 		"seed":        sqlsmith.Setups["seed"],
 		"rand-tables": sqlsmith.Setups["rand-tables"],
 		"tpch-sf1": func(r *rand.Rand) string {
-			return `RESTORE DATABASE tpch FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'defaultdb';`
+			return `RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'defaultdb';`
 		},
 		"tpcc": func(r *rand.Rand) string {
 			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
