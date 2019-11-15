@@ -1120,9 +1120,11 @@ func (s *adminServer) Settings(
 		if !ok {
 			continue
 		}
+		// Note the Settings RPC is also used by `cockroach zip`
+		// and so must report redacted values.
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
 			Type:        v.Typ(),
-			Value:       settings.SanitizedValue(k, &s.server.st.SV),
+			Value:       settings.RedactedValue(k, &s.server.st.SV),
 			Description: v.Description(),
 		}
 	}

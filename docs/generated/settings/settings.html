@@ -7,6 +7,7 @@
 <tr><td><code>cloudstorage.timeout</code></td><td>duration</td><td><code>10m0s</code></td><td>the timeout for import/export storage operations</td></tr>
 <tr><td><code>cluster.organization</code></td><td>string</td><td><code></code></td><td>organization name</td></tr>
 <tr><td><code>cluster.preserve_downgrade_option</code></td><td>string</td><td><code></code></td><td>disable (automatic or manual) cluster version upgrade from the specified version until reset</td></tr>
+<tr><td><code>cluster.secret</code></td><td>string</td><td><code><random></code></td><td>cluster specific secret</td></tr>
 <tr><td><code>compactor.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when false, the system will reclaim space occupied by deleted data less aggressively</td></tr>
 <tr><td><code>compactor.max_record_age</code></td><td>duration</td><td><code>24h0m0s</code></td><td>discard suggestions not processed within this duration (WARNING: may compromise cluster stability or correctness; do not edit without supervision)</td></tr>
 <tr><td><code>compactor.min_interval</code></td><td>duration</td><td><code>15s</code></td><td>minimum time interval to wait before compacting (WARNING: may compromise cluster stability or correctness; do not edit without supervision)</td></tr>
@@ -18,6 +19,7 @@
 <tr><td><code>diagnostics.reporting.enabled</code></td><td>boolean</td><td><code>true</code></td><td>enable reporting diagnostic metrics to cockroach labs</td></tr>
 <tr><td><code>diagnostics.reporting.interval</code></td><td>duration</td><td><code>1h0m0s</code></td><td>interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)</td></tr>
 <tr><td><code>diagnostics.reporting.send_crash_reports</code></td><td>boolean</td><td><code>true</code></td><td>send crash and panic reports</td></tr>
+<tr><td><code>enterprise.license</code></td><td>string</td><td><code></code></td><td>the encoded cluster license</td></tr>
 <tr><td><code>external.graphite.endpoint</code></td><td>string</td><td><code></code></td><td>if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port</td></tr>
 <tr><td><code>external.graphite.interval</code></td><td>duration</td><td><code>10s</code></td><td>the interval at which metrics are pushed to Graphite (if enabled)</td></tr>
 <tr><td><code>jobs.registry.leniency</code></td><td>duration</td><td><code>1m0s</code></td><td>the amount of time to defer any attempts to reschedule a job</td></tr>

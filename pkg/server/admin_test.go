@@ -894,7 +894,7 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 		typ := ref.Typ()
 
-		if typ == "s" && k != "version" {
+		if !ref.IsReportable() {
 			if v.Value != "<redacted>" && v.Value != "" {
 				t.Errorf("%s: expected redacted value for %v, got %s", k, ref, v.Value)
 			}

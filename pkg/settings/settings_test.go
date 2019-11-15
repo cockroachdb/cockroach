@@ -151,7 +151,7 @@ var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
 var mA = settings.RegisterStateMachineSettingImpl("statemachine", "foo", &dummyTransformer{})
 
 func init() {
-	settings.RegisterBoolSetting("sekretz", "desc", false).SetConfidential()
+	settings.RegisterBoolSetting("sekretz", "desc", false).SetReportable(false)
 }
 
 var strVal = settings.RegisterValidatedStringSetting(
@@ -636,33 +636,33 @@ func TestCache(t *testing.T) {
 
 }
 
-func TestHide(t *testing.T) {
-	keys := make(map[string]struct{})
-	for _, k := range settings.Keys() {
-		keys[k] = struct{}{}
-	}
-	if _, ok := keys["bool.t"]; !ok {
+func TestReportability(t *testing.T) {
+	if v, ok := settings.Lookup("bool.t"); !ok || !v.IsReportable() {
 		t.Errorf("expected 'bool.t' to be unhidden")
 	}
-	if _, ok := keys["sekretz"]; ok {
+	if v, ok := settings.Lookup("sekretz"); !ok || v.IsReportable() {
 		t.Errorf("expected 'sekretz' to be hidden")
 	}
 }
 
 func TestOnChangeWithMaxSettings(t *testing.T) {
 	// Register MaxSettings settings to ensure that no errors occur.
-	maxName, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-1-len(settings.Keys()))
+	maxName, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-settings.NumRegisteredSettings())
 	if err != nil {
-		t.Errorf("expected no error to register 128 settings, but get error : %s", err)
+		t.Fatalf("expected no error to register %d settings, but get error: %v", settings.MaxSettings, err)
 	}
 
 	// Change the max slotIdx setting to ensure that no errors occur.
 	sv := &settings.Values{}
 	sv.Init(settings.TestOpaque)
 	var changes int
-	intSetting, ok := settings.Lookup(maxName)
+	s, ok := settings.Lookup(maxName)
 	if !ok {
-		t.Errorf("expected lookup of %s to succeed", maxName)
+		t.Fatalf("expected lookup of %s to succeed", maxName)
+	}
+	intSetting, ok := s.(*settings.IntSetting)
+	if !ok {
+		t.Fatalf("expected int setting, got %T", s)
 	}
 	intSetting.SetOnChange(sv, func() { changes++ })
 
@@ -677,18 +677,13 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 }
 
 func TestMaxSettingsPanics(t *testing.T) {
-	var origRegistry = make(map[string]settings.Setting)
-	for k, v := range settings.Registry {
-		origRegistry[k] = v
-	}
-	defer func() {
-		settings.Registry = origRegistry
-	}()
+	defer settings.TestingSaveRegistry()()
 
 	// Register too many settings which will cause a panic which is caught and converted to an error.
-	_, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-len(settings.Keys()))
+	_, err := batchRegisterSettings(t, t.Name(),
+		settings.MaxSettings-settings.NumRegisteredSettings()+1)
 	expectedErr := "too many settings; increase MaxSettings"
-	if err == nil || err.Error() != expectedErr {
+	if !testutils.IsError(err, expectedErr) {
 		t.Errorf("expected error %v, but got %v", expectedErr, err)
 	}
 

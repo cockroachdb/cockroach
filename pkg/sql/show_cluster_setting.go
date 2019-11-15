@@ -106,6 +106,14 @@ func (p *planner) ShowClusterSetting(
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
+
+	if m, ok := val.(*settings.MaskedSetting); ok {
+		// Lookup returns MaskedSetting for non-reportable settings. Since
+		// this SHOW statement is not a report, it's safe to access the
+		// underlying setting directly.
+		val = m.UnderlyingSetting()
+	}
+
 	var dType *types.T
 	switch val.(type) {
 	case *settings.IntSetting:

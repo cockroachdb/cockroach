@@ -793,9 +793,13 @@ CREATE TABLE crdb_internal.cluster_settings (
 		}
 		for _, k := range settings.Keys() {
 			setting, _ := settings.Lookup(k)
+			strVal := setting.String(&p.ExecCfg().Settings.SV)
+			if _, ok := setting.(*settings.MaskedSetting); ok {
+				strVal = "<redacted>"
+			}
 			if err := addRow(
 				tree.NewDString(k),
-				tree.NewDString(setting.String(&p.ExecCfg().Settings.SV)),
+				tree.NewDString(strVal),
 				tree.NewDString(setting.Typ()),
 				tree.NewDString(setting.Description()),
 			); err != nil {
