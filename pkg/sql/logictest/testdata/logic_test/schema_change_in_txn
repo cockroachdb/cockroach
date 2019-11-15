@@ -520,7 +520,7 @@ CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), (
 statement count 3
 SELECT * FROM shopping
 
-statement error pgcode 42P15 division by zero
+statement error pgcode 22012 division by zero
 ALTER TABLE shopping ADD COLUMN c int AS (quantity::int // 0) STORED
 
 statement ok
@@ -1746,3 +1746,28 @@ DROP TABLE people;
 
 statement ok
 COMMIT;
+
+subtest add_column_default_sequence_op
+
+# This is a current known limitation (#42508). This test ensures that
+# the error message is properly reported, with issue hint.
+# Once the limitation is lifted, this entire test can be removed
+# (and replaced by test for the feature).
+
+statement ok
+CREATE TABLE t42508(x INT); INSERT INTO t42508(x) VALUES (1);
+
+statement ok
+CREATE SEQUENCE s42508
+
+statement error pgcode 0A000 unimplemented: cannot backfill such sequence operation.*\nHINT.*\n.*42508
+ALTER TABLE t42508 ADD COLUMN y INT DEFAULT nextval('s42508')
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t42508 ADD COLUMN y INT DEFAULT nextval('s42508')
+
+statement error pgcode XXA00 unimplemented: cannot backfill such sequence operation.*\nHINT.*\n.*42508
+COMMIT
