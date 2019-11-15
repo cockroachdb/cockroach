@@ -62,7 +62,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 // exceed this threshold, they're condensed to avoid memory blowup both on the
 // coordinator and (critically) on the EndTransaction command at the Raft group
 // responsible for the transaction record.
-var trackedWritesMaxSize = settings.RegisterIntSetting(
+var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track write intents in transactions",
 	1<<18, /* 256 KB */

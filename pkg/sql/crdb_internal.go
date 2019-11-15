@@ -785,6 +785,7 @@ CREATE TABLE crdb_internal.cluster_settings (
   variable      STRING NOT NULL,
   value         STRING NOT NULL,
   type          STRING NOT NULL,
+  public        BOOL NOT NULL, -- whether the setting is documented, which implies the user can expect support.
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -794,11 +795,14 @@ CREATE TABLE crdb_internal.cluster_settings (
 		for _, k := range settings.Keys() {
 			setting, _ := settings.Lookup(k, settings.LookupForLocalAccess)
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
+			isPublic := setting.Visibility() == settings.Public
+			desc := setting.Description()
 			if err := addRow(
 				tree.NewDString(k),
 				tree.NewDString(strVal),
 				tree.NewDString(setting.Typ()),
-				tree.NewDString(setting.Description()),
+				tree.MakeDBool(tree.DBool(isPublic)),
+				tree.NewDString(desc),
 			); err != nil {
 				return err
 			}

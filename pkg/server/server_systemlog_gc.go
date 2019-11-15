@@ -33,7 +33,7 @@ const (
 var (
 	// rangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
 	// entries are periodically garbage collected.
-	rangeLogTTL = settings.RegisterDurationSetting(
+	rangeLogTTL = settings.RegisterPublicDurationSetting(
 		"server.rangelog.ttl",
 		fmt.Sprintf(
 			"if nonzero, range log entries older than this duration are deleted every %s. "+
@@ -45,7 +45,7 @@ var (
 
 	// eventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
 	// entries are periodically garbage collected.
-	eventLogTTL = settings.RegisterDurationSetting(
+	eventLogTTL = settings.RegisterPublicDurationSetting(
 		"server.eventlog.ttl",
 		fmt.Sprintf(
 			"if nonzero, event log entries older than this duration are deleted every %s. "+

@@ -26,15 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var changefeedPollInterval = func() *settings.DurationSetting {
-	s := settings.RegisterNonNegativeDurationSetting(
-		"changefeed.experimental_poll_interval",
-		"polling interval for the prototype changefeed implementation",
-		1*time.Second,
-	)
-	s.SetSensitive()
-	return s
-}()
+var changefeedPollInterval = settings.RegisterNonNegativeDurationSetting(
+	"changefeed.experimental_poll_interval",
+	"polling interval for the prototype changefeed implementation",
+	1*time.Second,
+)
 
 const (
 	jsonMetaSentinel = `__crdb__`

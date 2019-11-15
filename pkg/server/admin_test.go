@@ -920,6 +920,10 @@ func TestAdminAPISettings(t *testing.T) {
 			}
 		}
 
+		if expectedPublic := ref.Visibility() == settings.Public; expectedPublic != v.Public {
+			t.Errorf("%s: expected public %v, got %v", k, expectedPublic, v.Public)
+		}
+
 		if desc := ref.Description(); desc != v.Description {
 			t.Errorf("%s: expected description %s, got %s", k, desc, v.Description)
 		}
@@ -960,7 +964,7 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 
 		if !seenRef {
-			t.Fatalf("failed to observe test setting %s, got %q", settingKey, resp.KeyValues)
+			t.Fatalf("failed to observe test setting %s, got %+v", settingKey, resp.KeyValues)
 		}
 	})
 
