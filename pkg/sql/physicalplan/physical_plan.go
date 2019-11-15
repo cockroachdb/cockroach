@@ -126,6 +126,9 @@ type PhysicalPlan struct {
 	// reader in this plan will output. This information is used to decide
 	// whether to use the vectorized execution engine.
 	MaxEstimatedRowCount uint64
+	// TotalEstimatedScannedRows is the sum of the row count estimate of all the
+	// table readers in the plan.
+	TotalEstimatedScannedRows uint64
 }
 
 // NewStageID creates a stage identifier that can be used in processor specs.
@@ -893,6 +896,14 @@ func MergePlans(
 	// Update the processor indices in the right routers.
 	for i := range rightRouters {
 		rightRouters[i] += rightProcStart
+	}
+
+	mergedPlan.TotalEstimatedScannedRows = left.TotalEstimatedScannedRows + right.TotalEstimatedScannedRows
+	// NB(dt): AFAIK no one looks at the MaxEstimatedRowCount of the overall plan
+	// but it is maintained here too just for completeness.
+	mergedPlan.MaxEstimatedRowCount = left.MaxEstimatedRowCount
+	if right.MaxEstimatedRowCount > left.MaxEstimatedRowCount {
+		mergedPlan.MaxEstimatedRowCount = left.MaxEstimatedRowCount
 	}
 
 	return mergedPlan, leftRouters, rightRouters
