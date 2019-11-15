@@ -358,7 +358,7 @@ func (s *Server) getReportingInfo(
 		info.AlteredSettings = make(map[string]string, len(datums))
 		for _, row := range datums {
 			name := string(tree.MustBeDString(row[0]))
-			info.AlteredSettings[name] = settings.SanitizedValue(name, &s.st.SV)
+			info.AlteredSettings[name] = settings.RedactedValue(name, &s.st.SV)
 		}
 	}
 
