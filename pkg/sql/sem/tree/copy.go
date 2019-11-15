@@ -15,6 +15,7 @@ type CopyFrom struct {
 	Table   TableName
 	Columns NameList
 	Stdin   bool
+	Options KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -29,5 +30,9 @@ func (node *CopyFrom) Format(ctx *FmtCtx) {
 	ctx.WriteString(" FROM ")
 	if node.Stdin {
 		ctx.WriteString("STDIN")
+	}
+	if node.Options != nil {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
 	}
 }

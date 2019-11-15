@@ -35,14 +35,14 @@ import (
 
 // Service implements the gRPC BlobService which exchanges bulk files between different nodes.
 type Service struct {
-	localStorage *localStorage
+	localStorage *LocalStorage
 }
 
 var _ blobspb.BlobServer = &Service{}
 
 // NewBlobService instantiates a blob service server.
 func NewBlobService(externalIODir string) (*Service, error) {
-	localStorage, err := newLocalStorage(externalIODir)
+	localStorage, err := NewLocalStorage(externalIODir)
 	return &Service{localStorage: localStorage}, err
 }
 
