@@ -96,52 +96,58 @@ func (l *loggerT) gcOldFiles() {
 		}
 		path := filepath.Join(dir, f.Name)
 		if err := l.archiveFile(path); err != nil {
-			_, _ = fmt.Fprintln(OrigStderr, err)
+			fmt.Fprintln(OrigStderr, err)
 		} else {
 			if err := os.Remove(path); err != nil {
-				_, _ = fmt.Fprintln(OrigStderr, err)
+				fmt.Fprintln(OrigStderr, err)
 			}
 		}
 	}
 }
 
-// archiveFile archive log file using gzip when log file in gc list
+// archiveFile compress log file using gzip if log file is in gc list.
+// The name of the compressed file is appended with the .gz suffix
+// after the name of the original file.
+// As an example, compare the original file with the compressed file.
+// - original   file: /cockroach-data/log/___server_start.xxx.xxx.2019-11-12T02_13_41Z.033675.log,
+// - compressed file: /cockroach-data/log/___server_start.xxx.xxx.2019-11-12T02_13_41Z.033675.log.gz
 func (l *loggerT) archiveFile(path string) error {
 
-	// create gzip file used by gzip writer
+	// Create a file with gzip suffix according to the path, this file will be
+	// used by gzip writer.
 	tf, err := os.Create(path + FileExtensionGZIP)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err := tf.Close(); err != nil {
-			_, _ = fmt.Fprintln(OrigStderr, err)
+			fmt.Fprintln(OrigStderr, err)
 		}
 	}()
 
-	// gzip writer with default compression
+	// Create a new gzip writer with default compression level for writing gzip data.
 	gz, err := gzip.NewWriterLevel(tf, gzip.DefaultCompression)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err := gz.Close(); err != nil {
-			_, _ = fmt.Fprintln(OrigStderr, err)
+			fmt.Fprintln(OrigStderr, err)
 		}
 	}()
 
-	// open file and write data to Writer
+	// Open the gzip file for reading.
 	fs, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err := fs.Close(); err != nil {
-			_, _ = fmt.Fprintln(OrigStderr, err)
+			fmt.Fprintln(OrigStderr, err)
 		}
 	}()
 
-	// compress log file to gzip file
+	// Copy data from log file to gzip file.
 	if _, err := io.Copy(gz, fs); err != nil {
 		return err
 	}
