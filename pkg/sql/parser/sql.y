@@ -554,7 +554,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
 %token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
-%token <str> PROCEDURAL PUBLICATION
+%token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
 
@@ -3466,7 +3466,7 @@ show_backup_stmt:
 // %Category: Cfg
 // %Text:
 // SHOW CLUSTER SETTING <var>
-// SHOW ALL CLUSTER SETTINGS
+// SHOW [ PUBLIC | ALL ] CLUSTER SETTINGS
 // %SeeAlso: WEBDOCS/cluster-settings.html
 show_csettings_stmt:
   SHOW CLUSTER SETTING var_name
@@ -3475,14 +3475,23 @@ show_csettings_stmt:
   }
 | SHOW CLUSTER SETTING ALL
   {
-    $$.val = &tree.ShowAllClusterSettings{}
+    $$.val = &tree.ShowClusterSettingList{All: true}
   }
 | SHOW CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 | SHOW ALL CLUSTER SETTINGS
   {
-    $$.val = &tree.ShowAllClusterSettings{}
+    $$.val = &tree.ShowClusterSettingList{All: true}
   }
 | SHOW ALL CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
+| SHOW CLUSTER SETTINGS
+  {
+    $$.val = &tree.ShowClusterSettingList{}
+  }
+| SHOW PUBLIC CLUSTER SETTINGS
+  {
+    $$.val = &tree.ShowClusterSettingList{}
+  }
+| SHOW PUBLIC CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 
 // %Help: SHOW COLUMNS - list columns in relation
 // %Category: DDL
@@ -9508,6 +9517,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRIORITY
+| PUBLIC
 | PUBLICATION
 | QUERIES
 | QUERY

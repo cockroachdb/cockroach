@@ -276,7 +276,12 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := testuser.Exec(`SHOW ALL CLUSTER SETTINGS`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SHOW ALL CLUSTER SETTINGS`,
+		`only users with the admin role are allowed to SHOW CLUSTER SETTINGS`,
+	) {
+		t.Fatal(err)
+	}
+	if _, err := testuser.Exec(`SHOW CLUSTER SETTINGS`); !testutils.IsError(err,
+		`only users with the admin role are allowed to SHOW CLUSTER SETTINGS`,
 	) {
 		t.Fatal(err)
 	}
