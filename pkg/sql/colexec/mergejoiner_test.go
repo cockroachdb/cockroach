@@ -1632,7 +1632,10 @@ func TestMergeJoiner(t *testing.T) {
 		runner(t, []tuples{tc.leftTuples, tc.rightTuples}, nil /* typs */, tc.expected, mergeJoinVerifier,
 			func(input []Operator) (Operator, error) {
 				spec := createSpecForMergeJoiner(tc)
-				result, err := NewColOperator(ctx, flowCtx, spec, input, &testMemAcc)
+				result, err := NewColOperator(
+					ctx, flowCtx, spec, input, testMemAcc,
+					true, /* useStreamingMemAccountForBuffering */
+				)
 				if err != nil {
 					return nil, err
 				}

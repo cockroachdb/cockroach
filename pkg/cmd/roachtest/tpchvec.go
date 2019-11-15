@@ -30,18 +30,26 @@ func registerTPCHVec(r *testRegistry) {
 	)
 
 	var vecOnQueriesToSkip = map[int]string{
-		// TODO(yuzefovich): remove this once we have memory monitoring.
-		9:  "can cause OOM",
 		12: "unsupported: sum_int #38845",
 		15: "unsupported: create view",
 		16: "unsupported: distinct aggregation #39242",
 		21: "unsupported: non-inner hash join with ON expression #38018",
+		// TODO(yuzefovich): remove this once we have disk spilling.
+		1:  "needs disk spilling",
+		3:  "needs disk spilling",
+		8:  "needs disk spilling",
+		9:  "needs disk spilling",
+		19: "needs disk spilling",
 	}
 	var vecOffQueriesToSkip = map[int]string{
-		// TODO(yuzefovich): remove this once we're not skipping query 9 with vec
-		// on.
-		9:  "too long",
 		12: "the query is skipped by tpch workload",
+		// TODO(yuzefovich): remove this once we're not skipping these queries with
+		// vec on.
+		1:  "skipped with vec on",
+		3:  "skipped with vec on",
+		8:  "skipped with vec on",
+		9:  "skipped with vec on",
+		19: "skipped with vec on",
 	}
 
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {

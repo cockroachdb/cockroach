@@ -81,31 +81,36 @@ func (a *Allocator) AppendColumn(b coldata.Batch, t coltypes.T) {
 // Append appends elements of a source coldata.Vec into dest according to
 // coldata.SliceArgs.
 func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
-	var delta int64
+	var before, after, delta int64
+	// To simplify the accounting, we perform the append first and then will
+	// update the memory account. The minor "drift" in accounting that is caused
+	// by this approach is ok.
 	if dest.Type() == coltypes.Bytes {
-		destBytes, srcBytes := dest.Bytes(), args.Src.Bytes()
-		delta -= int64(destBytes.Slice(int(args.DestIdx), destBytes.Len()).Size()) - int64(coldata.FlatBytesOverhead)
-		if args.Sel != nil {
-			for idx := args.SrcStartIdx; idx < args.SrcEndIdx; idx++ {
-				start := int(args.Sel[idx])
-				end := start + 1
-				delta += int64(srcBytes.Slice(start, end).Size()) - int64(coldata.FlatBytesOverhead)
-			}
-		} else {
-			delta += int64(srcBytes.Slice(int(args.SrcStartIdx), int(args.SrcEndIdx)).Size()) - int64(coldata.FlatBytesOverhead)
-		}
+		before = int64(dest.Bytes().Size())
 	} else {
-		delta -= int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Length()-int(args.DestIdx)))
-		delta += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, int(args.SrcEndIdx-args.SrcStartIdx)))
-	}
-	if err := a.acc.Grow(a.ctx, delta); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		before = int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Length()))
 	}
 	dest.Append(args)
+	if dest.Type() == coltypes.Bytes {
+		after = int64(dest.Bytes().Size())
+	} else {
+		after = int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Length()))
+	}
+	delta = after - before
+	if delta >= 0 {
+		if err := a.acc.Grow(a.ctx, delta); err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+	} else {
+		a.acc.Shrink(a.ctx, -delta)
+	}
 }
 
 // TODO(yuzefovich): Vec.Copy and execgen.SET need to also go through the
 // Allocator.
+// TODO(yuzefovich): extend Allocator so that it could free up the memory (and
+// resize the memory account accordingly) when the caller is done with the
+// batches.
 
 const (
 	sizeOfBool    = int(unsafe.Sizeof(true))

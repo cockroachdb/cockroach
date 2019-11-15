@@ -26,7 +26,7 @@ type bufferOp struct {
 	batch *selectionBatch
 }
 
-var _ StaticMemoryOperator = &bufferOp{}
+var _ InternalMemoryOperator = &bufferOp{}
 
 // NewBufferOp returns a new bufferOp, initialized to buffer batches from the
 // supplied input.
@@ -39,8 +39,8 @@ func NewBufferOp(input Operator) Operator {
 	}
 }
 
-func (b *bufferOp) StaticMemoryUsage() int {
-	// We statically use a single selection vector within the selectionBatch.
+func (b *bufferOp) InternalMemoryUsage() int {
+	// We internally use a single selection vector within the selectionBatch.
 	return sizeOfBatchSizeSelVector
 }
 

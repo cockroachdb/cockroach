@@ -173,7 +173,7 @@ func TestEval(t *testing.T) {
 			flowCtx := &execinfra.FlowCtx{
 				EvalCtx: evalCtx,
 			}
-			memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+			memMonitor := execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
 			defer memMonitor.Stop(ctx)
 			acc := memMonitor.MakeBoundAccount()
 			defer acc.Close(ctx)
@@ -225,6 +225,7 @@ func TestEval(t *testing.T) {
 					},
 				},
 				&acc,
+				true, /* useStreamingMemAccountForBuffering */
 			)
 			if testutils.IsError(err, "unable to columnarize") {
 				// Skip this test as execution is not supported by the vectorized

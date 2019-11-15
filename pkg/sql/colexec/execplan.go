@@ -87,11 +87,13 @@ func wrapRowSource(
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op              Operator
-	ColumnTypes     []types.T
-	StaticMemUsage  int
-	MetadataSources []execinfrapb.MetadataSource
-	IsStreaming     bool
+	Op                    Operator
+	ColumnTypes           []types.T
+	InternalMemUsage      int
+	MetadataSources       []execinfrapb.MetadataSource
+	IsStreaming           bool
+	BufferingOpMemMonitor *mon.BytesMonitor
+	BufferingOpMemAccount *mon.BoundAccount
 }
 
 // joinerPlanningState is a helper struct used when creating a hash or merge
@@ -222,9 +224,9 @@ func createJoiner(
 
 	if onExpr != nil && joinType == sqlbase.JoinType_INNER {
 		// We will plan other Operators on top of the joiners, so we need to
-		// account for the static memory explicitly.
-		if staticMemOp, ok := result.Op.(StaticMemoryOperator); ok {
-			result.StaticMemUsage += staticMemOp.StaticMemoryUsage()
+		// account for the internal memory explicitly.
+		if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
+			result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
 		}
 
 		err = result.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, onExprPlanning.indexVarMap, acc)
@@ -234,12 +236,16 @@ func createJoiner(
 }
 
 // NewColOperator creates a new columnar operator according to the given spec.
+// useStreamingMemAccountForBuffering specifies whether to use
+// streamingMemAccount when creating buffering operators and should only be set
+// to 'true' in tests.
 func NewColOperator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
 	inputs []Operator,
-	acc *mon.BoundAccount,
+	streamingMemAccount *mon.BoundAccount,
+	useStreamingMemAccountForBuffering bool,
 ) (result NewColOperatorResult, err error) {
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
@@ -269,7 +275,7 @@ func NewColOperator(
 			return result, errors.Newf("scrub table reader is unsupported in vectorized")
 		}
 		var scanOp *colBatchScan
-		scanOp, err = newColBatchScan(NewAllocator(ctx, acc), flowCtx, core.TableReader, post)
+		scanOp, err = newColBatchScan(NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
 		if err != nil {
 			return result, err
 		}
@@ -303,7 +309,7 @@ func NewColOperator(
 			// TODO(solon): The distsql plan for this case includes a TableReader, so
 			// we end up creating an orphaned colBatchScan. We should avoid that.
 			// Ideally the optimizer would not plan a scan in this unusual case.
-			result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator(ctx, acc)), true, nil
+			result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator(ctx, streamingMemAccount)), true, nil
 			// We make ColumnTypes non-nil so that sanity check doesn't panic.
 			result.ColumnTypes = make([]types.T, 0)
 			break
@@ -313,7 +319,7 @@ func NewColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, acc), inputs[0]), true, nil
+			result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true, nil
 			result.ColumnTypes = []types.T{*types.Int}
 			break
 		}
@@ -382,12 +388,19 @@ func NewColOperator(
 			return result, err
 		}
 		if needHash {
+			hashAggregatorMemAccount := streamingMemAccount
+			if !useStreamingMemAccountForBuffering {
+				result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator-limited")
+				hashAggregatorMemAccount = result.BufferingOpMemAccount
+			}
 			result.Op, err = NewHashAggregator(
-				NewAllocator(ctx, acc), inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
+				aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 		} else {
 			result.Op, err = NewOrderedAggregator(
-				NewAllocator(ctx, acc), inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
+				aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 			result.IsStreaming = true
 		}
@@ -426,7 +439,7 @@ func NewColOperator(
 			return result, err
 		}
 		result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
-		result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, acc), inputs[0]), true
+		result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true
 
 	case core.HashJoiner != nil:
 		createHashJoinerWithOnExprPlanning := func(
@@ -452,8 +465,13 @@ func NewColOperator(
 				}
 			}
 
+			hashJoinerMemAccount := streamingMemAccount
+			if !useStreamingMemAccountForBuffering {
+				result.createBufferingMemAccount(ctx, flowCtx, "hash-joiner-limited")
+				hashJoinerMemAccount = result.BufferingOpMemAccount
+			}
 			result.Op, err = NewEqHashJoinerOp(
-				NewAllocator(ctx, acc),
+				NewAllocator(ctx, hashJoinerMemAccount),
 				inputs[0],
 				inputs[1],
 				core.HashJoiner.LeftEqColumns,
@@ -470,7 +488,7 @@ func NewColOperator(
 		}
 
 		err = createJoiner(
-			ctx, &result, flowCtx, spec, inputs, acc, &planningState,
+			ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
 			core.HashJoiner.Type, createHashJoinerWithOnExprPlanning,
 		)
 
@@ -519,7 +537,7 @@ func NewColOperator(
 						// We don't need to specify indexVarMap because the filter will be
 						// run alongside the merge joiner, and it will have access to all
 						// of the columns from both sides.
-						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */, acc)
+						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */, streamingMemAccount)
 						return r.Op, err
 					}
 				default:
@@ -530,8 +548,14 @@ func NewColOperator(
 				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
 			}
 
+			mergeJoinerMemAccount := streamingMemAccount
+			if !result.IsStreaming && !useStreamingMemAccountForBuffering {
+				// Whether the merge joiner is streaming is already set above.
+				result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner-limited")
+				mergeJoinerMemAccount = result.BufferingOpMemAccount
+			}
 			result.Op, err = NewMergeJoinOp(
-				NewAllocator(ctx, acc),
+				NewAllocator(ctx, mergeJoinerMemAccount),
 				core.MergeJoiner.Type,
 				inputs[0],
 				inputs[1],
@@ -548,7 +572,7 @@ func NewColOperator(
 		}
 
 		err = createJoiner(
-			ctx, &result, flowCtx, spec, inputs, acc, &planningState,
+			ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
 			core.MergeJoiner.Type, createMergeJoinerWithOnExprPlanning,
 		)
 
@@ -563,7 +587,7 @@ func NewColOperator(
 			flowCtx,
 			inputs[0],
 			spec.Input[0].ColumnTypes,
-			acc,
+			streamingMemAccount,
 			func(input execinfra.RowSource) (execinfra.RowSource, error) {
 				var (
 					jr  execinfra.RowSource
@@ -608,16 +632,39 @@ func NewColOperator(
 		if matchLen > 0 {
 			// The input is already partially ordered. Use a chunks sorter to avoid
 			// loading all the rows into memory.
-			result.Op, err = NewSortChunks(NewAllocator(ctx, acc), input, inputTypes, orderingCols, int(matchLen))
+			var sortChunksMemAccount *mon.BoundAccount
+			if useStreamingMemAccountForBuffering {
+				sortChunksMemAccount = streamingMemAccount
+			} else {
+				result.createBufferingMemAccount(ctx, flowCtx, "sort-chunks-limited")
+				sortChunksMemAccount = result.BufferingOpMemAccount
+			}
+			result.Op, err = NewSortChunks(
+				NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
+				orderingCols, int(matchLen),
+			)
 		} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
 			// There is a limit specified with no post-process filter, so we know
 			// exactly how many rows the sorter should output. Choose a top K sorter,
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
-			result.Op, result.IsStreaming = NewTopKSorter(NewAllocator(ctx, acc), input, inputTypes, orderingCols, k), true
+			result.Op = NewTopKSorter(
+				NewAllocator(ctx, streamingMemAccount), input, inputTypes,
+				orderingCols, k,
+			)
+			result.IsStreaming = true
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
-			result.Op, err = NewSorter(NewAllocator(ctx, acc), input, inputTypes, orderingCols)
+			var sorterMemAccount *mon.BoundAccount
+			if useStreamingMemAccountForBuffering {
+				sorterMemAccount = streamingMemAccount
+			} else {
+				result.createBufferingMemAccount(ctx, flowCtx, "sort-all-limited")
+				sorterMemAccount = result.BufferingOpMemAccount
+			}
+			result.Op, err = NewSorter(
+				NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
+			)
 		}
 		result.ColumnTypes = spec.Input[0].ColumnTypes
 
@@ -650,11 +697,27 @@ func NewColOperator(
 			// TODO(yuzefovich): add support for hashing partitioner (probably by
 			// leveraging hash routers once we can distribute). The decision about
 			// which kind of partitioner to use should come from the optimizer.
-			input, err = NewWindowSortingPartitioner(NewAllocator(ctx, acc), input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
+			windowSortingPartitionerMemAccount := streamingMemAccount
+			if !useStreamingMemAccountForBuffering {
+				result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner-limited")
+				windowSortingPartitionerMemAccount = result.BufferingOpMemAccount
+			}
+			input, err = NewWindowSortingPartitioner(
+				NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
+				core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
+			)
 			tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
 		} else {
 			if len(wf.Ordering.Columns) > 0 {
-				input, err = NewSorter(NewAllocator(ctx, acc), input, typs, wf.Ordering.Columns)
+				windowSorterMemAccount := streamingMemAccount
+				if !useStreamingMemAccountForBuffering {
+					result.createBufferingMemAccount(ctx, flowCtx, "window-sorter-limited")
+					windowSorterMemAccount = result.BufferingOpMemAccount
+				}
+				input, err = NewSorter(
+					NewAllocator(ctx, windowSorterMemAccount), input, typs,
+					wf.Ordering.Columns,
+				)
 			}
 			// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
 			// omitted, the window function operator is actually streaming.
@@ -669,11 +732,11 @@ func NewColOperator(
 		}
 		switch *wf.Func.WindowFunc {
 		case execinfrapb.WindowerSpec_ROW_NUMBER:
-			result.Op = NewRowNumberOperator(NewAllocator(ctx, acc), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op = NewRowNumberOperator(NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case execinfrapb.WindowerSpec_RANK:
-			result.Op, err = NewRankOperator(NewAllocator(ctx, acc), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case execinfrapb.WindowerSpec_DENSE_RANK:
-			result.Op, err = NewRankOperator(NewAllocator(ctx, acc), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
 			return result, errors.Newf("window function %s is not supported", wf.String())
 		}
@@ -699,9 +762,9 @@ func NewColOperator(
 		return result, err
 	}
 
-	// After constructing the base operator, calculate its static memory usage.
-	if sMem, ok := result.Op.(StaticMemoryOperator); ok {
-		result.StaticMemUsage += sMem.StaticMemoryUsage()
+	// After constructing the base operator, calculate its internal memory usage.
+	if sMem, ok := result.Op.(InternalMemoryOperator); ok {
+		result.InternalMemUsage += sMem.InternalMemoryUsage()
 	}
 	log.VEventf(ctx, 1, "made op %T\n", result.Op)
 
@@ -710,7 +773,8 @@ func NewColOperator(
 
 	if !post.Filter.Empty() {
 		if err = result.planFilterExpr(
-			ctx, flowCtx.NewEvalCtx(), post.Filter, planningState.postFilterPlanning.indexVarMap, acc,
+			ctx, flowCtx.NewEvalCtx(), post.Filter,
+			planningState.postFilterPlanning.indexVarMap, streamingMemAccount,
 		); err != nil {
 			return result, err
 		}
@@ -727,16 +791,16 @@ func NewColOperator(
 		var renderedCols []uint32
 		for _, expr := range post.RenderExprs {
 			var (
-				helper          execinfra.ExprHelper
-				renderStaticMem int
+				helper            execinfra.ExprHelper
+				renderInternalMem int
 			)
 			err := helper.Init(expr, result.ColumnTypes, flowCtx.EvalCtx)
 			if err != nil {
 				return result, err
 			}
 			var outputIdx int
-			result.Op, outputIdx, result.ColumnTypes, renderStaticMem, err = planProjectionOperators(
-				ctx, flowCtx.NewEvalCtx(), helper.Expr, result.ColumnTypes, result.Op, acc,
+			result.Op, outputIdx, result.ColumnTypes, renderInternalMem, err = planProjectionOperators(
+				ctx, flowCtx.NewEvalCtx(), helper.Expr, result.ColumnTypes, result.Op, streamingMemAccount,
 			)
 			if err != nil {
 				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
@@ -744,7 +808,7 @@ func NewColOperator(
 			if outputIdx < 0 {
 				return result, errors.AssertionFailedf("missing outputIdx")
 			}
-			result.StaticMemUsage += renderStaticMem
+			result.InternalMemUsage += renderInternalMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
 		result.Op = NewSimpleProjectOp(result.Op, len(result.ColumnTypes), renderedCols)
@@ -758,7 +822,7 @@ func NewColOperator(
 		result.Op = NewOffsetOp(result.Op, post.Offset)
 	}
 	if post.Limit != 0 {
-		result.Op = NewLimitOp(NewAllocator(ctx, acc), result.Op, post.Limit)
+		result.Op = NewLimitOp(NewAllocator(ctx, streamingMemAccount), result.Op, post.Limit)
 	}
 	return result, err
 }
@@ -907,6 +971,19 @@ func (p *filterPlanningState) projectOutExtraCols(result *NewColOperatorResult) 
 	result.ColumnTypes = newTypes
 }
 
+// createBufferingMemAccount instantiates a memory monitor and a memory account
+// to be used with a buffering Operator. The receiver is updated to have
+// references to both objects.
+func (r *NewColOperatorResult) createBufferingMemAccount(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
+) {
+	r.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, name,
+	)
+	bufferingMemAccount := r.BufferingOpMemMonitor.MakeBoundAccount()
+	r.BufferingOpMemAccount = &bufferingMemAccount
+}
+
 // setProjectedByJoinerColumnTypes sets column types on r according to a
 // joiner handled projection.
 // NOTE: r.ColumnTypes is updated.
@@ -930,8 +1007,8 @@ func (r *NewColOperatorResult) planFilterExpr(
 	acc *mon.BoundAccount,
 ) error {
 	var (
-		helper             execinfra.ExprHelper
-		selectionStaticMem int
+		helper               execinfra.ExprHelper
+		selectionInternalMem int
 	)
 	err := helper.InitWithRemapping(filter, r.ColumnTypes, evalCtx, indexVarMap)
 	if err != nil {
@@ -944,13 +1021,13 @@ func (r *NewColOperatorResult) planFilterExpr(
 		return nil
 	}
 	var filterColumnTypes []types.T
-	r.Op, _, filterColumnTypes, selectionStaticMem, err = planSelectionOperators(
+	r.Op, _, filterColumnTypes, selectionInternalMem, err = planSelectionOperators(
 		ctx, evalCtx, helper.Expr, r.ColumnTypes, r.Op, acc,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
 	}
-	r.StaticMemUsage += selectionStaticMem
+	r.InternalMemUsage += selectionInternalMem
 	if len(filterColumnTypes) > len(r.ColumnTypes) {
 		// Additional columns were appended to store projections while evaluating
 		// the filter. Project them away.
@@ -982,27 +1059,27 @@ func planSelectionOperators(
 	columnTypes []types.T,
 	input Operator,
 	acc *mon.BoundAccount,
-) (op Operator, resultIdx int, ct []types.T, staticMemUsed int, err error) {
+) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		return NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, staticMemUsed, nil
+		return NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, internalMemUsed, nil
 	case *tree.AndExpr:
 		// AND expressions are handled by an implicit AND'ing of selection vectors.
 		// First we select out the tuples that are true on the left side, and then,
 		// only among the matched tuples, we select out the tuples that are true on
 		// the right side.
 		var leftOp, rightOp Operator
-		var staticMemUsedLeft, staticMemUsedRight int
-		leftOp, _, ct, staticMemUsedLeft, err = planSelectionOperators(
+		var internalMemUsedLeft, internalMemUsedRight int
+		leftOp, _, ct, internalMemUsedLeft, err = planSelectionOperators(
 			ctx, evalCtx, t.TypedLeft(), columnTypes, input, acc,
 		)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
-		rightOp, resultIdx, ct, staticMemUsedRight, err = planSelectionOperators(
+		rightOp, resultIdx, ct, internalMemUsedRight, err = planSelectionOperators(
 			ctx, evalCtx, t.TypedRight(), ct, leftOp, acc,
 		)
-		return rightOp, resultIdx, ct, staticMemUsedLeft + staticMemUsedRight, err
+		return rightOp, resultIdx, ct, internalMemUsedLeft + internalMemUsedRight, err
 	case *tree.OrExpr:
 		// OR expressions are handled by converting them to an equivalent CASE
 		// statement. Since CASE statements don't have a selection form, plan a
@@ -1021,26 +1098,26 @@ func planSelectionOperators(
 			tree.DBoolFalse,
 			types.Bool)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
-		op, resultIdx, ct, staticMemUsed, err = planProjectionOperators(
+		op, resultIdx, ct, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, caseExpr, columnTypes, input, acc,
 		)
 		op = NewBoolVecToSelOp(op, resultIdx)
-		return op, resultIdx, ct, staticMemUsed, err
+		return op, resultIdx, ct, internalMemUsed, err
 	case *tree.CaseExpr:
-		op, resultIdx, ct, staticMemUsed, err = planProjectionOperators(
+		op, resultIdx, ct, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, expr, columnTypes, input, acc,
 		)
 		op = NewBoolVecToSelOp(op, resultIdx)
-		return op, resultIdx, ct, staticMemUsed, err
+		return op, resultIdx, ct, internalMemUsed, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
-		leftOp, leftIdx, ct, staticMemUsedLeft, err := planProjectionOperators(
+		leftOp, leftIdx, ct, internalMemUsedLeft, err := planProjectionOperators(
 			ctx, evalCtx, t.TypedLeft(), columnTypes, input, acc,
 		)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
 		lTyp := &ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
@@ -1048,42 +1125,42 @@ func planSelectionOperators(
 				negate := t.Operator == tree.NotLike
 				op, err = GetLikeOperator(
 					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate)
-				return op, resultIdx, ct, staticMemUsedLeft, err
+				return op, resultIdx, ct, internalMemUsedLeft, err
 			}
 			if t.Operator == tree.In || t.Operator == tree.NotIn {
 				negate := t.Operator == tree.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
 				if !ok {
 					err = errors.Errorf("IN is only supported for constant expressions")
-					return nil, resultIdx, ct, staticMemUsed, err
+					return nil, resultIdx, ct, internalMemUsed, err
 				}
 				op, err = GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
-				return op, resultIdx, ct, staticMemUsedLeft, err
+				return op, resultIdx, ct, internalMemUsedLeft, err
 			}
 			if t.Operator == tree.IsDistinctFrom || t.Operator == tree.IsNotDistinctFrom {
 				if t.Right != tree.DNull {
 					err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
-					return nil, resultIdx, ct, staticMemUsed, err
+					return nil, resultIdx, ct, internalMemUsed, err
 				}
 				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
 				// negate when IS DISTINCT FROM is used.
 				negate := t.Operator == tree.IsDistinctFrom
 				op = newIsNullSelOp(leftOp, leftIdx, negate)
-				return op, resultIdx, ct, staticMemUsedLeft, err
+				return op, resultIdx, ct, internalMemUsedLeft, err
 			}
 			op, err := GetSelectionConstOperator(lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx, constArg)
-			return op, resultIdx, ct, staticMemUsedLeft, err
+			return op, resultIdx, ct, internalMemUsedLeft, err
 		}
-		rightOp, rightIdx, ct, staticMemUsedRight, err := planProjectionOperators(
+		rightOp, rightIdx, ct, internalMemUsedRight, err := planProjectionOperators(
 			ctx, evalCtx, t.TypedRight(), ct, leftOp, acc,
 		)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
 		op, err := GetSelectionOperator(lTyp, &ct[rightIdx], cmpOp, rightOp, leftIdx, rightIdx)
-		return op, resultIdx, ct, staticMemUsedLeft + staticMemUsedRight, err
+		return op, resultIdx, ct, internalMemUsedLeft + internalMemUsedRight, err
 	default:
-		return nil, resultIdx, nil, staticMemUsed, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
+		return nil, resultIdx, nil, internalMemUsed, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
 	}
 }
 
@@ -1098,12 +1175,12 @@ func planTypedMaybeNullProjectionOperators(
 	columnTypes []types.T,
 	input Operator,
 	acc *mon.BoundAccount,
-) (op Operator, resultIdx int, ct []types.T, staticMemUsed int, err error) {
+) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
 	if expr == tree.DNull {
 		resultIdx = len(columnTypes)
 		op = NewConstNullOp(NewAllocator(ctx, acc), input, resultIdx, typeconv.FromColumnType(exprTyp))
 		ct = append(columnTypes, *exprTyp)
-		return op, resultIdx, ct, staticMemUsed, nil
+		return op, resultIdx, ct, internalMemUsed, nil
 	}
 	return planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc)
 }
@@ -1119,11 +1196,11 @@ func planProjectionOperators(
 	columnTypes []types.T,
 	input Operator,
 	acc *mon.BoundAccount,
-) (op Operator, resultIdx int, ct []types.T, staticMemUsed int, err error) {
+) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		return input, t.Idx, columnTypes, staticMemUsed, nil
+		return input, t.Idx, columnTypes, internalMemUsed, nil
 	case *tree.ComparisonExpr:
 		return planProjectionExpr(ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input, acc)
 	case *tree.BinaryExpr:
@@ -1135,21 +1212,21 @@ func planProjectionOperators(
 		// We can't use planProjectionOperators because it will reject planning a constNullOp without knowing
 		// the post typechecking "type" of the NULL.
 		if expr.ResolvedType() == types.Unknown {
-			op, resultIdx, ct, staticMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, evalCtx, expr, t.Type, columnTypes, input, acc)
+			op, resultIdx, ct, internalMemUsed, err = planTypedMaybeNullProjectionOperators(ctx, evalCtx, expr, t.Type, columnTypes, input, acc)
 		} else {
-			op, resultIdx, ct, staticMemUsed, err = planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc)
+			op, resultIdx, ct, internalMemUsed, err = planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc)
 		}
 		if err != nil {
-			return nil, 0, nil, staticMemUsed, err
+			return nil, 0, nil, internalMemUsed, err
 		}
 		outputIdx := len(ct)
 		op, err = GetCastOperator(NewAllocator(ctx, acc), op, resultIdx, outputIdx, expr.ResolvedType(), t.Type)
 		ct = append(ct, *t.Type)
-		return op, outputIdx, ct, staticMemUsed, err
+		return op, outputIdx, ct, internalMemUsed, err
 	case *tree.FuncExpr:
 		var (
-			inputCols           []int
-			projectionStaticMem int
+			inputCols             []int
+			projectionInternalMem int
 		)
 		ct = columnTypes
 		op = input
@@ -1158,45 +1235,45 @@ func planProjectionOperators(
 			// TODO(rohany): This could be done better, especially in the case of
 			// constant arguments, because the vectorized engine right now
 			// creates a new column full of the constant value.
-			op, resultIdx, ct, projectionStaticMem, err = planProjectionOperators(
+			op, resultIdx, ct, projectionInternalMem, err = planProjectionOperators(
 				ctx, evalCtx, e.(tree.TypedExpr), ct, op, acc,
 			)
 			if err != nil {
-				return nil, resultIdx, nil, staticMemUsed, err
+				return nil, resultIdx, nil, internalMemUsed, err
 			}
 			inputCols = append(inputCols, resultIdx)
-			staticMemUsed += projectionStaticMem
+			internalMemUsed += projectionInternalMem
 		}
 		funcOutputType := t.ResolvedType()
 		resultIdx = len(ct)
 		ct = append(ct, *funcOutputType)
 		op = NewBuiltinFunctionOperator(NewAllocator(ctx, acc), evalCtx, t, ct, inputCols, resultIdx, op)
-		return op, resultIdx, ct, staticMemUsed, nil
+		return op, resultIdx, ct, internalMemUsed, nil
 	case tree.Datum:
 		datumType := t.ResolvedType()
 		ct = columnTypes
 		resultIdx = len(ct)
 		ct = append(ct, *datumType)
 		if datumType.Family() == types.UnknownFamily {
-			return nil, resultIdx, ct, staticMemUsed, errors.New("cannot plan null type unknown")
+			return nil, resultIdx, ct, internalMemUsed, errors.New("cannot plan null type unknown")
 		}
 		typ := typeconv.FromColumnType(datumType)
 		constVal, err := typeconv.GetDatumToPhysicalFn(datumType)(t)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
 		op, err := NewConstOp(NewAllocator(ctx, acc), input, typ, constVal, resultIdx)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
-		return op, resultIdx, ct, staticMemUsed, nil
+		return op, resultIdx, ct, internalMemUsed, nil
 	case *tree.CaseExpr:
 		if t.Expr != nil {
-			return nil, resultIdx, ct, staticMemUsed, errors.New("CASE <expr> WHEN expressions unsupported")
+			return nil, resultIdx, ct, internalMemUsed, errors.New("CASE <expr> WHEN expressions unsupported")
 		}
 
 		buffer := NewBufferOp(input)
-		staticMemUsed += buffer.(StaticMemoryOperator).StaticMemoryUsage()
+		internalMemUsed += buffer.(InternalMemoryOperator).InternalMemoryUsage()
 		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
 		caseOutputIdx := len(columnTypes)
@@ -1216,47 +1293,47 @@ func planProjectionOperators(
 			// previous WHEN arm. Finally, after each WHEN arm runs, we copy the
 			// results of the WHEN into a single output vector, assembling the final
 			// result of the case projection.
-			var whenStaticMemUsed, thenStaticMemUsed int
-			caseOps[i], resultIdx, ct, whenStaticMemUsed, err = planTypedMaybeNullProjectionOperators(
+			var whenInternalMemUsed, thenInternalMemUsed int
+			caseOps[i], resultIdx, ct, whenInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
 				ctx, evalCtx, when.Cond.(tree.TypedExpr), t.ResolvedType(), ct, buffer, acc,
 			)
 			if err != nil {
-				return nil, resultIdx, ct, staticMemUsed, err
+				return nil, resultIdx, ct, internalMemUsed, err
 			}
 			// Transform the booleans to a selection vector.
 			caseOps[i] = NewBoolVecToSelOp(caseOps[i], resultIdx)
 
 			// Run the "then" clause on those tuples that were selected.
-			caseOps[i], thenIdxs[i], ct, thenStaticMemUsed, err = planTypedMaybeNullProjectionOperators(
+			caseOps[i], thenIdxs[i], ct, thenInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
 				ctx, evalCtx, when.Val.(tree.TypedExpr), t.ResolvedType(), ct, caseOps[i], acc,
 			)
 			if err != nil {
-				return nil, resultIdx, ct, staticMemUsed, err
+				return nil, resultIdx, ct, internalMemUsed, err
 			}
-			staticMemUsed += whenStaticMemUsed + thenStaticMemUsed
+			internalMemUsed += whenInternalMemUsed + thenInternalMemUsed
 		}
-		var elseStaticMemUsed int
+		var elseInternalMemUsed int
 		var elseOp Operator
 		elseExpr := t.Else
 		if elseExpr == nil {
 			// If there's no ELSE arm, we write NULLs.
 			elseExpr = tree.DNull
 		}
-		elseOp, thenIdxs[len(t.Whens)], ct, elseStaticMemUsed, err = planTypedMaybeNullProjectionOperators(
+		elseOp, thenIdxs[len(t.Whens)], ct, elseInternalMemUsed, err = planTypedMaybeNullProjectionOperators(
 			ctx, evalCtx, elseExpr.(tree.TypedExpr), t.ResolvedType(), ct, buffer, acc,
 		)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
-		staticMemUsed += elseStaticMemUsed
+		internalMemUsed += elseInternalMemUsed
 
 		op := NewCaseOp(NewAllocator(ctx, acc), buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
-		staticMemUsed += op.(StaticMemoryOperator).StaticMemoryUsage()
-		return op, caseOutputIdx, ct, staticMemUsed, nil
+		internalMemUsed += op.(InternalMemoryOperator).InternalMemoryUsage()
+		return op, caseOutputIdx, ct, internalMemUsed, nil
 	case *tree.AndExpr, *tree.OrExpr:
 		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc)
 	default:
-		return nil, resultIdx, nil, staticMemUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
+		return nil, resultIdx, nil, internalMemUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
 }
 
@@ -1269,7 +1346,7 @@ func planProjectionExpr(
 	columnTypes []types.T,
 	input Operator,
 	acc *mon.BoundAccount,
-) (op Operator, resultIdx int, ct []types.T, staticMemUsed int, err error) {
+) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
@@ -1281,11 +1358,11 @@ func planProjectionExpr(
 		// operators such as - and /, though, so we still need this case.
 		var rightOp Operator
 		var rightIdx int
-		rightOp, rightIdx, ct, staticMemUsed, err = planProjectionOperators(
+		rightOp, rightIdx, ct, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, right, columnTypes, input, acc,
 		)
 		if err != nil {
-			return nil, resultIdx, ct, staticMemUsed, err
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
 		resultIdx = len(ct)
 		// The projection result will be outputted to a new column which is appended
@@ -1295,18 +1372,18 @@ func planProjectionExpr(
 			rightOp, rightIdx, lConstArg, resultIdx,
 		)
 		ct = append(ct, *outputType)
-		if sMem, ok := op.(StaticMemoryOperator); ok {
-			staticMemUsed += sMem.StaticMemoryUsage()
+		if sMem, ok := op.(InternalMemoryOperator); ok {
+			internalMemUsed += sMem.InternalMemoryUsage()
 		}
-		return op, resultIdx, ct, staticMemUsed, err
+		return op, resultIdx, ct, internalMemUsed, err
 	}
-	leftOp, leftIdx, ct, staticMemUsedLeft, err := planProjectionOperators(
+	leftOp, leftIdx, ct, internalMemUsedLeft, err := planProjectionOperators(
 		ctx, evalCtx, left, columnTypes, input, acc,
 	)
 	if err != nil {
-		return nil, resultIdx, ct, staticMemUsed, err
+		return nil, resultIdx, ct, internalMemUsed, err
 	}
-	staticMemUsed += staticMemUsedLeft
+	internalMemUsed += internalMemUsedLeft
 	if rConstArg, rConst := right.(tree.Datum); rConst {
 		// Case 2: The right is constant.
 		// The projection result will be outputted to a new column which is appended
@@ -1323,7 +1400,7 @@ func planProjectionExpr(
 			datumTuple, ok := tree.AsDTuple(rConstArg)
 			if !ok {
 				err = errors.Errorf("IN operator supported only on constant expressions")
-				return nil, resultIdx, ct, staticMemUsed, err
+				return nil, resultIdx, ct, internalMemUsed, err
 			}
 			op, err = GetInProjectionOperator(
 				NewAllocator(ctx, acc), &ct[leftIdx], leftOp, leftIdx,
@@ -1332,7 +1409,7 @@ func planProjectionExpr(
 		} else if binOp == tree.IsDistinctFrom || binOp == tree.IsNotDistinctFrom {
 			if right != tree.DNull {
 				err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
-				return nil, resultIdx, ct, staticMemUsed, err
+				return nil, resultIdx, ct, internalMemUsed, err
 			}
 			// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
 			// negate when IS DISTINCT FROM is used.
@@ -1345,29 +1422,29 @@ func planProjectionExpr(
 			)
 		}
 		ct = append(ct, *outputType)
-		if sMem, ok := op.(StaticMemoryOperator); ok {
-			staticMemUsed += sMem.StaticMemoryUsage()
+		if sMem, ok := op.(InternalMemoryOperator); ok {
+			internalMemUsed += sMem.InternalMemoryUsage()
 		}
-		return op, resultIdx, ct, staticMemUsed, err
+		return op, resultIdx, ct, internalMemUsed, err
 	}
 	// Case 3: neither are constant.
-	rightOp, rightIdx, ct, staticMemUsedRight, err := planProjectionOperators(
+	rightOp, rightIdx, ct, internalMemUsedRight, err := planProjectionOperators(
 		ctx, evalCtx, right, ct, leftOp, acc,
 	)
 	if err != nil {
-		return nil, resultIdx, nil, staticMemUsed, err
+		return nil, resultIdx, nil, internalMemUsed, err
 	}
-	staticMemUsed += staticMemUsedRight
+	internalMemUsed += internalMemUsedRight
 	resultIdx = len(ct)
 	op, err = GetProjectionOperator(
 		NewAllocator(ctx, acc), &ct[leftIdx], &ct[rightIdx], binOp, rightOp,
 		leftIdx, rightIdx, resultIdx,
 	)
 	ct = append(ct, *outputType)
-	if sMem, ok := op.(StaticMemoryOperator); ok {
-		staticMemUsed += sMem.StaticMemoryUsage()
+	if sMem, ok := op.(InternalMemoryOperator); ok {
+		internalMemUsed += sMem.InternalMemoryUsage()
 	}
-	return op, resultIdx, ct, staticMemUsed, err
+	return op, resultIdx, ct, internalMemUsed, err
 }
 
 // planLogicalProjectionOp plans all the needed operators for a projection of
@@ -1379,7 +1456,7 @@ func planLogicalProjectionOp(
 	columnTypes []types.T,
 	input Operator,
 	acc *mon.BoundAccount,
-) (op Operator, resultIdx int, ct []types.T, staticMemUsed int, err error) {
+) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
 	// Add a new boolean column that will store the result of the projection.
 	resultIdx = len(columnTypes)
 	ct = append(columnTypes, *types.Bool)
@@ -1387,7 +1464,7 @@ func planLogicalProjectionOp(
 		typedLeft, typedRight                       tree.TypedExpr
 		leftProjOpChain, rightProjOpChain, outputOp Operator
 		leftIdx, rightIdx                           int
-		staticMemUsedLeft, staticMemUsedRight       int
+		internalMemUsedLeft, internalMemUsedRight   int
 		leftFeedOp, rightFeedOp                     feedOperator
 	)
 	switch t := expr.(type) {
@@ -1400,17 +1477,17 @@ func planLogicalProjectionOp(
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected logical expression type %s", t.String()))
 	}
-	leftProjOpChain, leftIdx, ct, staticMemUsedLeft, err = planTypedMaybeNullProjectionOperators(
+	leftProjOpChain, leftIdx, ct, internalMemUsedLeft, err = planTypedMaybeNullProjectionOperators(
 		ctx, evalCtx, typedLeft, types.Bool, ct, &leftFeedOp, acc,
 	)
 	if err != nil {
-		return nil, resultIdx, ct, staticMemUsed, err
+		return nil, resultIdx, ct, internalMemUsed, err
 	}
-	rightProjOpChain, rightIdx, ct, staticMemUsedRight, err = planTypedMaybeNullProjectionOperators(
+	rightProjOpChain, rightIdx, ct, internalMemUsedRight, err = planTypedMaybeNullProjectionOperators(
 		ctx, evalCtx, typedRight, types.Bool, ct, &rightFeedOp, acc,
 	)
 	if err != nil {
-		return nil, resultIdx, ct, staticMemUsed, err
+		return nil, resultIdx, ct, internalMemUsed, err
 	}
 	switch expr.(type) {
 	case *tree.AndExpr:
@@ -1428,5 +1505,5 @@ func planLogicalProjectionOp(
 			leftIdx, rightIdx, resultIdx,
 		)
 	}
-	return outputOp, resultIdx, ct, staticMemUsedLeft + staticMemUsedRight, nil
+	return outputOp, resultIdx, ct, internalMemUsedLeft + internalMemUsedRight, nil
 }

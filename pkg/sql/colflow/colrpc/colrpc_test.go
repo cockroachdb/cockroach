@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -128,9 +127,6 @@ func TestOutboxInbox(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
 	require.NoError(t, err)
@@ -216,18 +212,24 @@ func TestOutboxInbox(t *testing.T) {
 			// Disable accumulation to avoid memory blowups.
 			args.BatchAccumulator = nil
 		}
-		accInput := memMonitor.MakeBoundAccount()
-		defer accInput.Close(ctx)
-		input := colexec.NewRandomDataOp(colexec.NewAllocator(ctx, &accInput), rng, args)
+		inputMemAcc := testMemMonitor.MakeBoundAccount()
+		defer inputMemAcc.Close(ctx)
+		input := colexec.NewRandomDataOp(
+			colexec.NewAllocator(ctx, &inputMemAcc), rng, args,
+		)
 
-		accOutbox := memMonitor.MakeBoundAccount()
-		defer accOutbox.Close(ctx)
-		outbox, err := NewOutbox(colexec.NewAllocator(ctx, &accOutbox), input, typs, nil)
+		outboxMemAcc := testMemMonitor.MakeBoundAccount()
+		defer outboxMemAcc.Close(ctx)
+		outbox, err := NewOutbox(
+			colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil,
+		)
 		require.NoError(t, err)
 
-		accInbox := memMonitor.MakeBoundAccount()
-		defer accInbox.Close(ctx)
-		inbox, err := NewInbox(colexec.NewAllocator(ctx, &accInbox), typs, execinfrapb.StreamID(0))
+		inboxMemAcc := testMemMonitor.MakeBoundAccount()
+		defer inboxMemAcc.Close(ctx)
+		inbox, err := NewInbox(
+			colexec.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+		)
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
@@ -260,12 +262,13 @@ func TestOutboxInbox(t *testing.T) {
 			wg.Done()
 		}()
 
-		acc := memMonitor.MakeBoundAccount()
-		defer acc.Close(ctx)
-		testAllocator := colexec.NewAllocator(ctx, &acc)
 		// Use a deselector op to verify that the Outbox gets rid of the selection
 		// vector.
-		inputBatches := colexec.NewDeselectorOp(testAllocator, inputBuffer, typs)
+		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
+		defer deselectorMemAcc.Close(ctx)
+		inputBatches := colexec.NewDeselectorOp(
+			colexec.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
+		)
 		inputBatches.Init()
 		outputBatches := colexec.NewBatchBuffer()
 		var readerErr error
@@ -372,12 +375,6 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
-
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
@@ -456,8 +453,10 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			const expectedMeta = "someError"
 
+			outboxMemAcc := testMemMonitor.MakeBoundAccount()
+			defer outboxMemAcc.Close(ctx)
 			outbox, err := NewOutbox(
-				testAllocator,
+				colexec.NewAllocator(ctx, &outboxMemAcc),
 				input,
 				typs,
 				[]execinfrapb.MetadataSource{
@@ -470,7 +469,12 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+			inboxMemAcc := testMemMonitor.MakeBoundAccount()
+			defer inboxMemAcc.Close(ctx)
+			inbox, err := NewInbox(
+				colexec.NewAllocator(ctx, &inboxMemAcc),
+				typs, execinfrapb.StreamID(0),
+			)
 			require.NoError(t, err)
 
 			var (
@@ -505,12 +509,6 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
-
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
@@ -534,10 +532,19 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	input := colexec.NewRepeatableBatchSource(batch)
 
-	outbox, err := NewOutbox(testAllocator, input, typs, nil /* metadataSources */)
+	outboxMemAcc := testMemMonitor.MakeBoundAccount()
+	defer outboxMemAcc.Close(ctx)
+	outbox, err := NewOutbox(
+		colexec.NewAllocator(ctx, &outboxMemAcc),
+		input, typs, nil, /* metadataSources */
+	)
 	require.NoError(b, err)
 
-	inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+	inboxMemAcc := testMemMonitor.MakeBoundAccount()
+	defer inboxMemAcc.Close(ctx)
+	inbox, err := NewInbox(
+		colexec.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+	)
 	require.NoError(b, err)
 
 	var wg sync.WaitGroup
@@ -572,12 +579,6 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
-
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
 	)
@@ -598,7 +599,11 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 		return b
 	}}
 
-	outbox, err := NewOutbox(testAllocator, input, typs, nil)
+	outboxMemAcc := testMemMonitor.MakeBoundAccount()
+	defer outboxMemAcc.Close(ctx)
+	outbox, err := NewOutbox(
+		colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil,
+	)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})
@@ -633,12 +638,6 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 
 	testCases := []struct {
 		name string

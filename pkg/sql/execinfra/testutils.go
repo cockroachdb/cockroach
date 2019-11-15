@@ -78,8 +78,12 @@ func (r *RepeatableRowSource) ConsumerDone() {}
 // ConsumerClosed is part of the RowSource interface.
 func (r *RepeatableRowSource) ConsumerClosed() {}
 
-// MakeTestMemMonitor creates a new memory monitor to be used in tests.
-func MakeTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+// NewTestMemMonitor creates and starts a new memory monitor to be used in
+// tests.
+// TODO(yuzefovich): consider reusing this in tree.MakeTestingEvalContext
+// (currently it would create an import cycle, so this code will need to be
+// moved).
+func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
 	memMonitor := mon.MakeMonitor(
 		"test-mem",
 		mon.MemoryResource,
@@ -93,8 +97,9 @@ func MakeTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 	return &memMonitor
 }
 
-// MakeTestDiskMonitor creates a new disk monitor to be used in tests.
-func MakeTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+// NewTestDiskMonitor creates and starts a new disk monitor to be used in
+// tests.
+func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
 		mon.DiskResource,
