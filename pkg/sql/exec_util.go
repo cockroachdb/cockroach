@@ -72,14 +72,18 @@ var ClusterOrganization = settings.RegisterStringSetting(
 	"",
 )
 
-// ClusterSecret is a cluster specific secret. This setting is hidden.
+// ClusterSecret is a cluster specific secret. This setting is
+// non-reportable.
 var ClusterSecret = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
 		"cluster.secret",
 		"cluster specific secret",
 		"",
 	)
-	s.SetConfidential()
+	// Even though string settings are non-reportable by default, we
+	// still mark them explicitly in case a future code change flips the
+	// default.
+	s.SetReportable(false)
 	return s
 }()
 

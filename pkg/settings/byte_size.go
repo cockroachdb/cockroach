@@ -22,7 +22,7 @@ type ByteSizeSetting struct {
 	IntSetting
 }
 
-var _ Setting = &ByteSizeSetting{}
+var _ extendedSetting = &ByteSizeSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*ByteSizeSetting) Typ() string {

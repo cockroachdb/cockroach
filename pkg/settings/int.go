@@ -21,7 +21,7 @@ type IntSetting struct {
 	validateFn   func(int64) error
 }
 
-var _ Setting = &IntSetting{}
+var _ extendedSetting = &IntSetting{}
 
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get(sv *Values) int64 {

@@ -792,10 +792,11 @@ CREATE TABLE crdb_internal.cluster_settings (
 			return err
 		}
 		for _, k := range settings.Keys() {
-			setting, _ := settings.Lookup(k)
+			setting, _ := settings.Lookup(k, settings.LookupForLocalAccess)
+			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			if err := addRow(
 				tree.NewDString(k),
-				tree.NewDString(setting.String(&p.ExecCfg().Settings.SV)),
+				tree.NewDString(strVal),
 				tree.NewDString(setting.Typ()),
 				tree.NewDString(setting.Description()),
 			); err != nil {

@@ -321,9 +321,11 @@ export function getRangeLog(
   );
 }
 
-// getSettings gets all cluster settings
+// getSettings gets all cluster settings. We request unredacted_values, which will attempt
+// to obtain all values from the server. The server will only accept to do so if
+// the user also happens to have admin privilege.
 export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Duration): Promise<SettingsResponseMessage> {
-  return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings`, null, timeout);
+  return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings?unredacted_values=true`, null, timeout);
 }
 
 export function userLogin(req: UserLoginRequestMessage, timeout?: moment.Duration): Promise<UserLoginResponseMessage> {

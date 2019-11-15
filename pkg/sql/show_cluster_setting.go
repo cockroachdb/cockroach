@@ -102,10 +102,11 @@ func (p *planner) ShowClusterSetting(
 
 	name := strings.ToLower(n.Name)
 	st := p.ExecCfg().Settings
-	val, ok := settings.Lookup(name)
+	val, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
+
 	var dType *types.T
 	switch val.(type) {
 	case *settings.IntSetting:
