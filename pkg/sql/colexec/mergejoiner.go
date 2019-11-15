@@ -409,7 +409,7 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
 
-	o.groups = makeGroupsBuffer(int(coldata.BatchSize()))
+	o.groups = makeGroupsBuffer(int(o.outputBatchSize))
 	o.resetBuilderCrossProductState()
 
 	if o.filter != nil {
