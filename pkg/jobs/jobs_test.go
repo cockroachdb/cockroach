@@ -264,6 +264,27 @@ func TestRegistryLifecycle(t *testing.T) {
 		check(t)
 	})
 
+	t.Run("create separately success", func(t *testing.T) {
+		clear()
+		j := registry.NewJob(mockJob)
+		if err := j.Created(ctx); err != nil {
+			t.Fatal(err)
+		}
+		_, err := j.Start(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resumeExit++
+		e.success = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
 	t.Run("pause", func(t *testing.T) {
 		clear()
 		job, _, err := registry.StartJob(ctx, nil, mockJob)

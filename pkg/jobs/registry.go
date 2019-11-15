@@ -201,30 +201,35 @@ func (r *Registry) StartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
 	j := r.NewJob(record)
-	resumer, err := r.createResumer(j, r.settings)
-	if err != nil {
-		return nil, nil, err
+	errCh, err := j.Start(ctx, resultsCh)
+	return j, errCh, err
+}
+
+func startJob(
+	ctx context.Context, r *Registry, resultsCh chan<- tree.Datums, j *Job, resumer Resumer,
+) (<-chan error, error) {
+	if j.ID() == nil {
+		id := r.makeJobID()
+		if err := j.insert(ctx, id, r.newLease()); err != nil {
+			return nil, err
+		}
 	}
+	resumeCtx, cancel := r.makeCtx()
+	r.register(*j.ID(), cancel)
+
 	// We create the job with a known ID, rather than relying on the column's
 	// DEFAULT unique_rowid(), to avoid a race condition where the job exists
 	// in the jobs table but is not yet present in our registry, which would
 	// allow another node to adopt it.
-	id := r.makeJobID()
-	resumeCtx, cancel := r.makeCtx()
-	r.register(id, cancel)
-	if err := j.insert(ctx, id, r.newLease()); err != nil {
-		r.unregister(id)
-		return nil, nil, err
-	}
 	if err := j.Started(ctx); err != nil {
-		r.unregister(id)
-		return nil, nil, err
+		r.unregister(*j.ID())
+		return nil, err
 	}
 	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return j, errCh, nil
+	return errCh, nil
 }
 
 // NewJob creates a new Job.

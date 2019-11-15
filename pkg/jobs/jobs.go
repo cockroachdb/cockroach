@@ -100,6 +100,17 @@ func (e *InvalidStatusError) Error() string {
 	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
 }
 
+// Start starts a previously unstarted job. The job may already have been
+// created but must not have ever been started.
+func (j *Job) Start(ctx context.Context, resultsCh chan<- tree.Datums) (<-chan error, error) {
+	resumer, err := j.registry.createResumer(j, j.registry.settings)
+	if err != nil {
+		return nil, err
+	}
+	errCh, err := startJob(ctx, j.registry, resultsCh, j, resumer)
+	return errCh, err
+}
+
 // SimplifyInvalidStatusError unwraps an *InvalidStatusError into an error
 // message suitable for users. Other errors are returned as passed.
 func SimplifyInvalidStatusError(err error) error {
@@ -479,7 +490,9 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 		return nil
 	}
 
+	j.mu.Lock()
 	j.mu.payload.Lease = lease
+	j.mu.Unlock()
 
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Note: although the following uses OrigTimestamp and
@@ -488,6 +501,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 		// to be equal *or greater* than previously inserted timestamps
 		// computed by now(). For now OrigTimestamp can only move forward
 		// and the assertion OrigTimestamp >= now() holds at all times.
+		j.mu.Lock()
 		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
 		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 		if err != nil {
@@ -497,6 +511,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 		if err != nil {
 			return err
 		}
+		j.mu.Unlock()
 
 		const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
 		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes, progressBytes)
