@@ -361,6 +361,54 @@ index-constraints vars=(int, int, int) index=(@1 not null, @2 not null)
 [ - /1/2]
 Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
+# Negated columns.
+
+index-constraints vars=(int, int, int) index=(@1, @2 desc, @3)
+(@1, -@2, @3) >= (1, 2, 3)
+----
+[/1/-2/3 - ]
+
+index-constraints vars=(int, int, int) index=(@1, @2 desc, @3)
+(-@1, @2, -@3) >= (1, 2, 3)
+----
+[ - /-1/2/-3]
+Remaining filter: (-@1, @2, -@3) >= (1, 2, 3)
+
+index-constraints vars=(int, int, int) index=(@1, @2 desc, @3)
+(@1, -@2, -@3) >= (1, 2, 3)
+----
+[/1/-2 - ]
+Remaining filter: (@1, -@2, -@3) >= (1, 2, 3)
+
+index-constraints vars=(int, int, int) index=(@1, @2 desc, @3)
+(@1, -@2, -@3) > (1, 2, 3)
+----
+[/1/-2 - ]
+Remaining filter: (@1, -@2, -@3) > (1, 2, 3)
+
+index-constraints vars=(int, int, int) index=(@1, @2 desc, @3)
+(-@1, @2, @3) >= (1, 2, 3)
+----
+[ - /-1/2]
+Remaining filter: (-@1, @2, @3) >= (1, 2, 3)
+
+index-constraints vars=(int, int, int) index=(@1, @2 desc, @3)
+(-@1, -@2, @3) >= (1, 2, 3)
+----
+[ - /-1]
+Remaining filter: (-@1, -@2, @3) >= (1, 2, 3)
+
+index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3)
+(-@1, -@2, @3) >= (1, 2, 3)
+----
+[/-1/-2/3 - ]
+
+index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3)
+(@1, @2, -@3) >= (1, 2, 3)
+----
+[ - /1/2/-3]
+Remaining filter: (@1, @2, -@3) >= (1, 2, 3)
+
 # Cases with NULLs in tuple inequalities. These conditions are true only when
 # they don't depend on the NULL value, i.e. when the inequality holds true for
 # the prefix up to the first NULL.

@@ -332,9 +332,28 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	// same direction) starting at <offset>.
 	prefixLen := 0
 	descending := c.columns[offset].Descending()
+	// If the first column in the tuple is negated, then we are actually scanning
+	// the opposite direction.
+	if lhs.Elems[0].Op() == opt.UnaryMinusOp {
+		descending = !descending
+	}
 	nullVal := false
+
+	var datums tree.Datums
+
 	for i, leftChild := range lhs.Elems {
+		columnNegated := false
 		rightChild := rhs.Elems[i]
+		if um, ok := leftChild.(*memo.UnaryMinusExpr); ok {
+			// If one of the columns in the LHS of the tuple is negated, then strip
+			// away the minus sign and negate the constant in the RHS. Note that we
+			// do not need to flip the inequality in this case because that's already
+			// handled by the determination of whether we're forward- or
+			// reverse-scanning the index.
+			leftChild = um.Input
+			columnNegated = true
+			rightChild = c.factory.ConstructUnaryMinus(rightChild)
+		}
 		if !(offset+i < len(c.columns) && c.isIndexColumn(leftChild, offset+i)) {
 			// Variable doesn't refer to the column of interest.
 			break
@@ -354,31 +373,35 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 			nullVal = true
 			break
 		}
-		if c.columns[offset+i].Descending() != descending && e.Op() != opt.NeOp {
+
+		compatibleDirection := c.columns[offset+i].Descending() == descending
+		// If this column was negated on the LHS (for example, (a, -b, c) > (1, 2, 3)),
+		// then we're compatible in the opposite case.
+		if columnNegated {
+			compatibleDirection = !compatibleDirection
+		}
+
+		if !compatibleDirection && e.Op() != opt.NeOp {
 			// The direction changed. For example:
 			//   a ASCENDING, b DESCENDING, c ASCENDING
 			//   (a, b, c) >= (1, 2, 3)
 			// We can only use a >= 1 here.
-			//
-			// TODO(radu): we could support inequalities for cases like this by
-			// allowing negation, for example:
-			//  (a, -b, c) >= (1, -2, 3)
 			//
 			// The != operator is an exception where the column directions don't
 			// matter. For example, for (a, b, c) != (1, 2, 3) the spans
 			// [ - /1/2/2], [1/2/4 - ] apply for any combination of directions.
 			break
 		}
+
+		if datums == nil {
+			datums = make(tree.Datums, 0, len(lhs.Elems))
+		}
+		datums = append(datums, memo.ExtractConstDatum(rightChild))
 		prefixLen++
 	}
 	if prefixLen == 0 {
 		c.unconstrained(offset, out)
 		return false
-	}
-
-	datums := make(tree.Datums, prefixLen)
-	for i := range datums {
-		datums[i] = memo.ExtractConstDatum(rhs.Elems[i])
 	}
 
 	// less is true if the op is < or <= and false if the op is > or >=.
