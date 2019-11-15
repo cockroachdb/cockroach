@@ -712,6 +712,12 @@ var specs = []stmtSpec{
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'PARTITION")},
 	},
 	{
+		name:    "alter_index_partition_by",
+		stmt:    "alter_oneindex_stmt",
+		inline:  []string{"alter_index_cmds", "alter_index_cmd", "partition_by"},
+		replace: map[string]string{"table_index_name": "table_name '@' index_name"},
+	},
+	{
 		name:    "create_table_partition_by",
 		stmt:    "create_table_stmt",
 		inline:  []string{"opt_partition_by", "partition_by"},
