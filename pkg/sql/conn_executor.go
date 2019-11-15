@@ -1626,28 +1626,42 @@ func (ex *connExecutor) execCopyIn(
 		ex.state.mon.Start(ctx, ex.sessionMon, mon.BoundAccount{} /* reserved */)
 		monToStop = ex.state.mon
 	}
-	cm, err := newCopyMachine(
-		ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
+	var cm copyMachineInterface
+	var err error
+	if cmd.Stmt.Table.TableName == fileUploadTable {
+		cm, err = newFileUploadMachine(cmd.Conn, cmd.Stmt, ex.server.cfg,
+			// resetPlanner
+			func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
+				ex.statsCollector = ex.newStatsCollector()
+				ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+				ex.initPlanner(ctx, p)
+				ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
+			},
+		)
+	} else {
+		cm, err = newCopyMachine(
+			ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
 
-		// resetPlanner
-		func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
-			// HACK: We're reaching inside ex.state and changing sqlTimestamp by hand.
-			// It is used by resetPlanner. Normally sqlTimestamp is updated by the
-			// state machine, but the copyMachine manages its own transactions without
-			// going through the state machine.
-			ex.state.sqlTimestamp = txnTS
-			ex.statsCollector = ex.newStatsCollector()
-			ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
-			ex.initPlanner(ctx, p)
-			ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
-		},
+			// resetPlanner
+			func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
+				// HACK: We're reaching inside ex.state and changing sqlTimestamp by hand.
+				// It is used by resetPlanner. Normally sqlTimestamp is updated by the
+				// state machine, but the copyMachine manages its own transactions without
+				// going through the state machine.
+				ex.state.sqlTimestamp = txnTS
+				ex.statsCollector = ex.newStatsCollector()
+				ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+				ex.initPlanner(ctx, p)
+				ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
+			},
 
-		// execInsertPlan
-		func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
-			_, _, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, false /* distribute */)
-			return err
-		},
-	)
+			// execInsertPlan
+			func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
+				_, _, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, false /* distribute */)
+				return err
+			},
+		)
+	}
 	if err != nil {
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
 		payload := eventNonRetriableErrPayload{err: err}
