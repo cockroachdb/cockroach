@@ -82,7 +82,7 @@ import (
 
 // logStatementsExecuteEnabled causes the Executor to log executed
 // statements and, if any, resulting errors.
-var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
+var logStatementsExecuteEnabled = settings.RegisterPublicBoolSetting(
 	"sql.trace.log_statement_execute",
 	"set to true to enable logging of executed statements",
 	false,

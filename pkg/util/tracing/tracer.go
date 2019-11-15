@@ -52,19 +52,19 @@ const (
 	fieldNameShadowType = prefixTracerState + "shadowtype"
 )
 
-var enableNetTrace = settings.RegisterBoolSetting(
+var enableNetTrace = settings.RegisterPublicBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen in the /debug page",
 	false,
 )
 
-var lightstepToken = settings.RegisterStringSetting(
+var lightstepToken = settings.RegisterPublicStringSetting(
 	"trace.lightstep.token",
 	"if set, traces go to Lightstep using this token",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_LIGHTSTEP_TOKEN", ""),
 )
 
-var zipkinCollector = settings.RegisterStringSetting(
+var zipkinCollector = settings.RegisterPublicStringSetting(
 	"trace.zipkin.collector",
 	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
