@@ -119,7 +119,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
-	job, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, *record)
+	job, errCh, err := n.p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, *record)
 	if err != nil {
 		return err
 	}
