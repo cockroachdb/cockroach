@@ -367,8 +367,6 @@ func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
 
 func (o *mergeJoinBase) StaticMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
-	// TODO(yuzefovich): this is not accurate in all cases because merge joiner
-	// supports variable outputBatchSize.
 	return 8 * int(coldata.BatchSize()) * sizeOfGroup // o.groups
 }
 

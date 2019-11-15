@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -1597,6 +1598,11 @@ func TestMergeJoiner(t *testing.T) {
 		},
 	}
 
+	var (
+		memMonitors []*mon.BytesMonitor
+		memAccounts []*mon.BoundAccount
+	)
+
 	for _, tc := range tcs {
 		tc.Init()
 
@@ -1636,8 +1642,16 @@ func TestMergeJoiner(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
+				memMonitors = append(memMonitors, result.BufferingOpMemMonitor)
+				memAccounts = append(memAccounts, result.BufferingOpMemAccount)
 				return result.Op, nil
 			})
+	}
+	for _, memAcc := range memAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitors := range memMonitors {
+		memMonitors.Stop(ctx)
 	}
 }
 

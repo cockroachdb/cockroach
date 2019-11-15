@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -910,6 +911,10 @@ func TestHashJoiner(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
+	var (
+		memMonitors []*mon.BytesMonitor
+		memAccounts []*mon.BoundAccount
+	)
 
 	for _, outputBatchSize := range []uint16{1, 17, coldata.BatchSize()} {
 		for _, tc := range tcs {
@@ -921,12 +926,20 @@ func TestHashJoiner(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
+				memMonitors = append(memMonitors, result.BufferingOpMemMonitor)
+				memAccounts = append(memAccounts, result.BufferingOpMemAccount)
 				if hj, ok := result.Op.(*hashJoinEqOp); ok {
 					hj.outputBatchSize = outputBatchSize
 				}
 				return result.Op, nil
 			})
 		}
+	}
+	for _, memAcc := range memAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitors := range memMonitors {
+		memMonitors.Stop(ctx)
 	}
 }
 
@@ -1130,6 +1143,8 @@ func TestHashJoinerProjection(t *testing.T) {
 	rightSource := newOpTestInput(1, rightTuples, rightColTypes)
 	hjOp, err := NewColOperator(ctx, flowCtx, spec, []Operator{leftSource, rightSource}, &testMemAcc)
 	require.NoError(t, err)
+	defer hjOp.BufferingOpMemMonitor.Stop(ctx)
+	defer hjOp.BufferingOpMemAccount.Close(ctx)
 	hjOp.Op.Init()
 	for {
 		b := hjOp.Op.Next(ctx)

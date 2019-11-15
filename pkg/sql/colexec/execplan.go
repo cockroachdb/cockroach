@@ -87,11 +87,13 @@ func wrapRowSource(
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op              Operator
-	ColumnTypes     []types.T
-	StaticMemUsage  int
-	MetadataSources []execinfrapb.MetadataSource
-	IsStreaming     bool
+	Op                    Operator
+	ColumnTypes           []types.T
+	StaticMemUsage        int
+	MetadataSources       []execinfrapb.MetadataSource
+	IsStreaming           bool
+	BufferingOpMemMonitor *mon.BytesMonitor
+	BufferingOpMemAccount *mon.BoundAccount
 }
 
 // joinerPlanningState is a helper struct used when creating a hash or merge
@@ -239,7 +241,7 @@ func NewColOperator(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
 	inputs []Operator,
-	acc *mon.BoundAccount,
+	streamingMemAccount *mon.BoundAccount,
 ) (result NewColOperatorResult, err error) {
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
@@ -269,7 +271,7 @@ func NewColOperator(
 			return result, errors.Newf("scrub table reader is unsupported in vectorized")
 		}
 		var scanOp *colBatchScan
-		scanOp, err = newColBatchScan(NewAllocator(ctx, acc), flowCtx, core.TableReader, post)
+		scanOp, err = newColBatchScan(NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
 		if err != nil {
 			return result, err
 		}
@@ -303,7 +305,7 @@ func NewColOperator(
 			// TODO(solon): The distsql plan for this case includes a TableReader, so
 			// we end up creating an orphaned colBatchScan. We should avoid that.
 			// Ideally the optimizer would not plan a scan in this unusual case.
-			result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator(ctx, acc)), true, nil
+			result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator(ctx, streamingMemAccount)), true, nil
 			// We make ColumnTypes non-nil so that sanity check doesn't panic.
 			result.ColumnTypes = make([]types.T, 0)
 			break
@@ -313,7 +315,7 @@ func NewColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, acc), inputs[0]), true, nil
+			result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true, nil
 			result.ColumnTypes = []types.T{*types.Int}
 			break
 		}
@@ -382,12 +384,19 @@ func NewColOperator(
 			return result, err
 		}
 		if needHash {
+			result.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+				ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hash-aggregator-limited",
+			)
+			bufferingMemAccount := result.BufferingOpMemMonitor.MakeBoundAccount()
+			result.BufferingOpMemAccount = &bufferingMemAccount
 			result.Op, err = NewHashAggregator(
-				NewAllocator(ctx, acc), inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				NewAllocator(ctx, &bufferingMemAccount), inputs[0], typs, aggFns,
+				aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 		} else {
 			result.Op, err = NewOrderedAggregator(
-				NewAllocator(ctx, acc), inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
+				aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 			)
 			result.IsStreaming = true
 		}
@@ -426,7 +435,7 @@ func NewColOperator(
 			return result, err
 		}
 		result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
-		result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, acc), inputs[0]), true
+		result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true
 
 	case core.HashJoiner != nil:
 		createHashJoinerWithOnExprPlanning := func(
@@ -452,8 +461,13 @@ func NewColOperator(
 				}
 			}
 
+			result.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+				ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hash-joiner-limited",
+			)
+			bufferingMemAccount := result.BufferingOpMemMonitor.MakeBoundAccount()
+			result.BufferingOpMemAccount = &bufferingMemAccount
 			result.Op, err = NewEqHashJoinerOp(
-				NewAllocator(ctx, acc),
+				NewAllocator(ctx, &bufferingMemAccount),
 				inputs[0],
 				inputs[1],
 				core.HashJoiner.LeftEqColumns,
@@ -470,7 +484,7 @@ func NewColOperator(
 		}
 
 		err = createJoiner(
-			ctx, &result, flowCtx, spec, inputs, acc, &planningState,
+			ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
 			core.HashJoiner.Type, createHashJoinerWithOnExprPlanning,
 		)
 
@@ -519,7 +533,7 @@ func NewColOperator(
 						// We don't need to specify indexVarMap because the filter will be
 						// run alongside the merge joiner, and it will have access to all
 						// of the columns from both sides.
-						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */, acc)
+						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */, streamingMemAccount)
 						return r.Op, err
 					}
 				default:
@@ -530,8 +544,18 @@ func NewColOperator(
 				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
 			}
 
+			mergeJoinerMemAccount := streamingMemAccount
+			if !result.IsStreaming {
+				// Whether the merge joiner is streaming is already set above.
+				result.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+					ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "merge-joiner-limited",
+				)
+				bufferingMemAccount := result.BufferingOpMemMonitor.MakeBoundAccount()
+				mergeJoinerMemAccount = &bufferingMemAccount
+				result.BufferingOpMemAccount = &bufferingMemAccount
+			}
 			result.Op, err = NewMergeJoinOp(
-				NewAllocator(ctx, acc),
+				NewAllocator(ctx, mergeJoinerMemAccount),
 				core.MergeJoiner.Type,
 				inputs[0],
 				inputs[1],
@@ -548,7 +572,7 @@ func NewColOperator(
 		}
 
 		err = createJoiner(
-			ctx, &result, flowCtx, spec, inputs, acc, &planningState,
+			ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
 			core.MergeJoiner.Type, createMergeJoinerWithOnExprPlanning,
 		)
 
@@ -563,7 +587,7 @@ func NewColOperator(
 			flowCtx,
 			inputs[0],
 			spec.Input[0].ColumnTypes,
-			acc,
+			streamingMemAccount,
 			func(input execinfra.RowSource) (execinfra.RowSource, error) {
 				var (
 					jr  execinfra.RowSource
@@ -608,16 +632,35 @@ func NewColOperator(
 		if matchLen > 0 {
 			// The input is already partially ordered. Use a chunks sorter to avoid
 			// loading all the rows into memory.
-			result.Op, err = NewSortChunks(NewAllocator(ctx, acc), input, inputTypes, orderingCols, int(matchLen))
+			result.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+				ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sort-chunks-limited",
+			)
+			bufferingMemAccount := result.BufferingOpMemMonitor.MakeBoundAccount()
+			result.BufferingOpMemAccount = &bufferingMemAccount
+			result.Op, err = NewSortChunks(
+				NewAllocator(ctx, &bufferingMemAccount), input, inputTypes,
+				orderingCols, int(matchLen),
+			)
 		} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
 			// There is a limit specified with no post-process filter, so we know
 			// exactly how many rows the sorter should output. Choose a top K sorter,
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
-			result.Op, result.IsStreaming = NewTopKSorter(NewAllocator(ctx, acc), input, inputTypes, orderingCols, k), true
+			result.Op = NewTopKSorter(
+				NewAllocator(ctx, streamingMemAccount), input, inputTypes,
+				orderingCols, k,
+			)
+			result.IsStreaming = true
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
-			result.Op, err = NewSorter(NewAllocator(ctx, acc), input, inputTypes, orderingCols)
+			result.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+				ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sort-all-limited",
+			)
+			bufferingMemAccount := result.BufferingOpMemMonitor.MakeBoundAccount()
+			result.BufferingOpMemAccount = &bufferingMemAccount
+			result.Op, err = NewSorter(
+				NewAllocator(ctx, &bufferingMemAccount), input, inputTypes, orderingCols,
+			)
 		}
 		result.ColumnTypes = spec.Input[0].ColumnTypes
 
@@ -650,11 +693,27 @@ func NewColOperator(
 			// TODO(yuzefovich): add support for hashing partitioner (probably by
 			// leveraging hash routers once we can distribute). The decision about
 			// which kind of partitioner to use should come from the optimizer.
-			input, err = NewWindowSortingPartitioner(NewAllocator(ctx, acc), input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
+			result.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+				ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "window-sorting-partitioner-limited",
+			)
+			bufferingMemAccount := result.BufferingOpMemMonitor.MakeBoundAccount()
+			result.BufferingOpMemAccount = &bufferingMemAccount
+			input, err = NewWindowSortingPartitioner(
+				NewAllocator(ctx, &bufferingMemAccount), input, typs,
+				core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
+			)
 			tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
 		} else {
 			if len(wf.Ordering.Columns) > 0 {
-				input, err = NewSorter(NewAllocator(ctx, acc), input, typs, wf.Ordering.Columns)
+				result.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+					ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "window-sorter-limited",
+				)
+				bufferingMemAccount := result.BufferingOpMemMonitor.MakeBoundAccount()
+				result.BufferingOpMemAccount = &bufferingMemAccount
+				input, err = NewSorter(
+					NewAllocator(ctx, &bufferingMemAccount), input, typs,
+					wf.Ordering.Columns,
+				)
 			}
 			// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
 			// omitted, the window function operator is actually streaming.
@@ -669,11 +728,11 @@ func NewColOperator(
 		}
 		switch *wf.Func.WindowFunc {
 		case execinfrapb.WindowerSpec_ROW_NUMBER:
-			result.Op = NewRowNumberOperator(NewAllocator(ctx, acc), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op = NewRowNumberOperator(NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case execinfrapb.WindowerSpec_RANK:
-			result.Op, err = NewRankOperator(NewAllocator(ctx, acc), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case execinfrapb.WindowerSpec_DENSE_RANK:
-			result.Op, err = NewRankOperator(NewAllocator(ctx, acc), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
 			return result, errors.Newf("window function %s is not supported", wf.String())
 		}
@@ -710,7 +769,8 @@ func NewColOperator(
 
 	if !post.Filter.Empty() {
 		if err = result.planFilterExpr(
-			ctx, flowCtx.NewEvalCtx(), post.Filter, planningState.postFilterPlanning.indexVarMap, acc,
+			ctx, flowCtx.NewEvalCtx(), post.Filter,
+			planningState.postFilterPlanning.indexVarMap, streamingMemAccount,
 		); err != nil {
 			return result, err
 		}
@@ -736,7 +796,7 @@ func NewColOperator(
 			}
 			var outputIdx int
 			result.Op, outputIdx, result.ColumnTypes, renderStaticMem, err = planProjectionOperators(
-				ctx, flowCtx.NewEvalCtx(), helper.Expr, result.ColumnTypes, result.Op, acc,
+				ctx, flowCtx.NewEvalCtx(), helper.Expr, result.ColumnTypes, result.Op, streamingMemAccount,
 			)
 			if err != nil {
 				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
@@ -758,7 +818,7 @@ func NewColOperator(
 		result.Op = NewOffsetOp(result.Op, post.Offset)
 	}
 	if post.Limit != 0 {
-		result.Op = NewLimitOp(NewAllocator(ctx, acc), result.Op, post.Limit)
+		result.Op = NewLimitOp(NewAllocator(ctx, streamingMemAccount), result.Op, post.Limit)
 	}
 	return result, err
 }

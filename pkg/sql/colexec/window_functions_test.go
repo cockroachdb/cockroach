@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 type windowFnTestCase struct {
@@ -40,6 +41,10 @@ func TestRank(t *testing.T) {
 			Settings: st,
 		},
 	}
+	var (
+		memMonitors []*mon.BytesMonitor
+		memAccounts []*mon.BoundAccount
+	)
 
 	rankFn := execinfrapb.WindowerSpec_RANK
 	denseRankFn := execinfrapb.WindowerSpec_DENSE_RANK
@@ -143,8 +148,16 @@ func TestRank(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
+			memMonitors = append(memMonitors, result.BufferingOpMemMonitor)
+			memAccounts = append(memAccounts, result.BufferingOpMemAccount)
 			return result.Op, nil
 		})
+	}
+	for _, memAcc := range memAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitors := range memMonitors {
+		memMonitors.Stop(ctx)
 	}
 }
 
@@ -160,6 +173,10 @@ func TestRowNumber(t *testing.T) {
 			Settings: st,
 		},
 	}
+	var (
+		memMonitors []*mon.BytesMonitor
+		memAccounts []*mon.BoundAccount
+	)
 
 	rowNumberFn := execinfrapb.WindowerSpec_ROW_NUMBER
 	for _, tc := range []windowFnTestCase{
@@ -211,7 +228,15 @@ func TestRowNumber(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
+			memMonitors = append(memMonitors, result.BufferingOpMemMonitor)
+			memAccounts = append(memAccounts, result.BufferingOpMemAccount)
 			return result.Op, nil
 		})
+	}
+	for _, memAcc := range memAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitors := range memMonitors {
+		memMonitors.Stop(ctx)
 	}
 }
