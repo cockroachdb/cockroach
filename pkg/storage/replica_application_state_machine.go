@@ -574,6 +574,9 @@ func (b *replicaAppBatch) runPreApplyTriggers(ctx context.Context, cmd *replicat
 		if copied {
 			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
 		}
+		if added := res.Delta.KeyCount; added > 0 {
+			b.r.writeStats.recordCount(float64(added), 0)
+		}
 		res.AddSSTable = nil
 	}
 
