@@ -112,7 +112,7 @@ type mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp struct {
 	mergeJoinBase
 }
 
-var _ StaticMemoryOperator = &mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp{}
+var _ InternalMemoryOperator = &mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp{}
 
 // {{ end }}
 // {{ end }}

@@ -61,7 +61,17 @@ type FlowCtx struct {
 	// Local is true if this flow is being run as part of a local-only query.
 	Local bool
 
-	VectorizedBoundAccount *mon.BoundAccount
+	// VectorizedStreamingMemAccount is the memory account that is tracking the
+	// static memory usage of the whole vectorized flow as well as all dynamic
+	// memory of the streaming vectorized components.
+	VectorizedStreamingMemAccount *mon.BoundAccount
+
+	// VectorizedBufferingMemMonitors are the memory monitors of the buffering
+	// vectorized components.
+	VectorizedBufferingMemMonitors []*mon.BytesMonitor
+	// VectorizedBufferingMemAccounts are the memory accounts that are tracking
+	// the dynamic memory usage of the buffering vectorized components.
+	VectorizedBufferingMemAccounts []*mon.BoundAccount
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.

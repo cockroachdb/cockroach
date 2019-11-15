@@ -8,20 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colserde
+package colserde_test
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -29,12 +26,6 @@ import (
 
 func TestFileRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 	typs, b := randomBatch(testAllocator)
 
 	t.Run(`mem`, func(t *testing.T) {
@@ -43,7 +34,7 @@ func TestFileRoundtrip(t *testing.T) {
 		original := copyBatch(b)
 
 		var buf bytes.Buffer
-		s, err := NewFileSerializer(&buf, typs)
+		s, err := colserde.NewFileSerializer(&buf, typs)
 		require.NoError(t, err)
 		require.NoError(t, s.AppendBatch(b))
 		require.NoError(t, s.Finish())
@@ -54,7 +45,7 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := coldata.NewMemBatchWithSize(nil, 0)
-				d, err := NewFileDeserializerFromBytes(buf.Bytes())
+				d, err := colserde.NewFileDeserializerFromBytes(buf.Bytes())
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
 				require.Equal(t, typs, d.Typs())
@@ -78,7 +69,7 @@ func TestFileRoundtrip(t *testing.T) {
 		f, err := os.Create(path)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, f.Close()) }()
-		s, err := NewFileSerializer(f, typs)
+		s, err := colserde.NewFileSerializer(f, typs)
 		require.NoError(t, err)
 		require.NoError(t, s.AppendBatch(b))
 		require.NoError(t, s.Finish())
@@ -90,7 +81,7 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := coldata.NewMemBatchWithSize(nil, 0)
-				d, err := NewFileDeserializerFromPath(path)
+				d, err := colserde.NewFileDeserializerFromPath(path)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
 				require.Equal(t, typs, d.Typs())
@@ -110,7 +101,7 @@ func TestFileIndexing(t *testing.T) {
 	typs := []coltypes.T{coltypes.Int64}
 
 	var buf bytes.Buffer
-	s, err := NewFileSerializer(&buf, typs)
+	s, err := colserde.NewFileSerializer(&buf, typs)
 	require.NoError(t, err)
 
 	for i := 0; i < numInts; i++ {
@@ -121,7 +112,7 @@ func TestFileIndexing(t *testing.T) {
 	}
 	require.NoError(t, s.Finish())
 
-	d, err := NewFileDeserializerFromBytes(buf.Bytes())
+	d, err := colserde.NewFileDeserializerFromBytes(buf.Bytes())
 	require.NoError(t, err)
 	defer func() { require.NoError(t, d.Close()) }()
 	require.Equal(t, typs, d.Typs())

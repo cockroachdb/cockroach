@@ -8,20 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colserde
+package colserde_test
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"testing"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -124,22 +122,16 @@ func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 
 	unsupportedTypes := []coltypes.T{coltypes.Decimal}
 	for _, typ := range unsupportedTypes {
-		_, err := NewArrowBatchConverter([]coltypes.T{typ})
+		_, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
 		require.Error(t, err)
 	}
 }
 
 func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 
 	typs, b := randomBatch(testAllocator)
-	c, err := NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs)
 	require.NoError(t, err)
 
 	// Make a copy of the original batch because the converter modifies and casts
@@ -159,7 +151,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 // batch is equal to the input batch. Make sure to copy the input batch before
 // passing it to this function to assert equality.
 func roundTripBatch(
-	b coldata.Batch, c *ArrowBatchConverter, r *RecordBatchSerializer,
+	b coldata.Batch, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
 ) (coldata.Batch, error) {
 	var buf bytes.Buffer
 	arrowDataIn, err := c.BatchToArrow(b)
@@ -184,17 +176,11 @@ func roundTripBatch(
 
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 
 	typs, b := randomBatch(testAllocator)
-	c, err := NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs)
 	require.NoError(t, err)
-	r, err := NewRecordBatchSerializer(typs)
+	r, err := colserde.NewRecordBatchSerializer(typs)
 	require.NoError(t, err)
 
 	// Make a copy of the original batch because the converter modifies and casts
@@ -207,12 +193,6 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 }
 
 func BenchmarkArrowBatchConverter(b *testing.B) {
-	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 	// fixedLen specifies how many bytes we should fit variable length data types
 	// to in order to reduce benchmark noise.
 	const fixedLen = 64
@@ -259,7 +239,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			}
 			batch.ColVec(0).SetCol(newBytes)
 		}
-		c, err := NewArrowBatchConverter([]coltypes.T{typ})
+		c, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
 		require.NoError(b, err)
 		nullFractions := []float64{0, 0.25, 0.5}
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {

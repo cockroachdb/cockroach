@@ -24,11 +24,8 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
@@ -87,23 +84,6 @@ type testRunner func(*testing.T, []tuples, [][]coltypes.T, tuples, verifier, fun
 // increase test coverage of these operators.
 type variableOutputBatchSizeInitializer interface {
 	initWithOutputBatchSize(uint16)
-}
-
-var (
-	// testAllocator is an Allocator with an unlimited budget for use in tests.
-	testAllocator *Allocator
-
-	// testMemMonitor and testMemAcc are started below in init() method and
-	// closed within TestMain function in colexec/main_test.go.
-	testMemMonitor *mon.BytesMonitor
-	testMemAcc     mon.BoundAccount
-)
-
-func init() {
-	ctx := context.Background()
-	testMemMonitor = execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	testMemAcc = testMemMonitor.MakeBoundAccount()
-	testAllocator = NewAllocator(ctx, &testMemAcc)
 }
 
 // runTests is a helper that automatically runs your tests with varied batch
