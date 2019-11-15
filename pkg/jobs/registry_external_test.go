@@ -148,7 +148,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 			Details:  jobspb.BackupDetails{},
 			Progress: jobspb.BackupProgress{},
 		}
-		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, rec)
+		job, _, err := newRegistry(nodeid).CreateAndStartJob(ctx, nil, rec)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -310,7 +310,7 @@ func changefeedPlanHook(
 		// been setup okay. This intentionally abuses what would normally be
 		// hooked up to resultsCh to avoid a bunch of extra plumbing.
 		startedCh := make(chan tree.Datums)
-		job, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, startedCh, jobs.Record{
+		job, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, startedCh, jobs.Record{
 			Description: jobDescription,
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
