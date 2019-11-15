@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -38,10 +37,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 	logScope := log.Scope(b)
 	defer logScope.Close(b)
 	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
 
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -83,7 +78,10 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
-				res, err := colexec.NewColOperator(ctx, &flowCtx, &spec, nil /* inputs */, &acc)
+				res, err := colexec.NewColOperator(
+					ctx, &flowCtx, &spec, nil /* inputs */, testMemAcc,
+					true, /* useStreamingMemAccountForBuffering */
+				)
 				if err != nil {
 					b.Fatal(err)
 				}

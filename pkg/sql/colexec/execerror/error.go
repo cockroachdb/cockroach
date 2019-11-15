@@ -104,7 +104,7 @@ const (
 // file name and the line number) came from the vectorized engine.
 // panicEmittedFrom must be trimmed to not have any white spaces in the prefix.
 func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
-	const testExceptionPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflow.(*testNonVectorizedPanicEmitter)"
+	const testExceptionPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflow_test.(*testNonVectorizedPanicEmitter)"
 	if strings.HasPrefix(panicEmittedFrom, testExceptionPrefix) {
 		// Although the panic appears to be coming from the vectorized engine, it
 		// is intended to not be caught in order to test the panic propagation, so

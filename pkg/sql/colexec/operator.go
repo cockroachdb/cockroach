@@ -122,7 +122,7 @@ func (n *twoInputNode) Child(nth int) execinfra.OpNode {
 // accounted for.
 
 // StaticMemoryOperator is an interface that operators which use static memory
-// need to implement.	"Static memory" is defined as memory that is internal to
+// need to implement. "Static memory" is defined as memory that is internal to
 // the operator and is not exposed to the outside; notably, it does *not*
 // include any coldata.Batch'es and coldata.Vec's.
 type StaticMemoryOperator interface {

@@ -301,7 +301,7 @@ func TestSorter(t *testing.T) {
 
 						evalCtx := tree.MakeTestingEvalContext(st)
 						defer evalCtx.Stop(ctx)
-						diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
+						diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 						defer diskMonitor.Stop(ctx)
 						flowCtx := execinfra.FlowCtx{
 							EvalCtx: &evalCtx,
@@ -416,7 +416,7 @@ func BenchmarkSortAll(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -458,7 +458,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -504,7 +504,7 @@ func BenchmarkSortChunks(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

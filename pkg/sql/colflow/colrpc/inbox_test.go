@@ -24,10 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -59,13 +57,6 @@ var _ flowStreamServer = callbackFlowStreamServer{}
 
 func TestInboxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 
 	typs := []coltypes.T{coltypes.Int64}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
@@ -133,13 +124,6 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
-
 	inbox, err := NewInbox(testAllocator, []coltypes.T{coltypes.Int64}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
@@ -166,11 +150,6 @@ func TestInboxTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 
 	inbox, err := NewInbox(testAllocator, []coltypes.T{coltypes.Int64}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
@@ -209,13 +188,6 @@ func TestInboxTimeout(t *testing.T) {
 func TestInboxShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
-
 	var (
 		rng, _ = randutil.NewPseudoRand()
 		// infiniteBatches will influence whether or not we're likely to test a
@@ -247,13 +219,18 @@ func TestInboxShutdown(t *testing.T) {
 					"drain=%t/next=%t/stream=%t/inf=%t",
 					runDrainMetaGoroutine, runNextGoroutine, runRunWithStreamGoroutine, infiniteBatches,
 				), func(t *testing.T) {
-					inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+					inboxCtx, inboxCancel := context.WithCancel(context.Background())
+					inboxMemAccount := testMemMonitor.MakeBoundAccount()
+					defer inboxMemAccount.Close(inboxCtx)
+					inbox, err := NewInbox(
+						colexec.NewAllocator(inboxCtx, &inboxMemAccount),
+						typs, execinfrapb.StreamID(0),
+					)
 					require.NoError(t, err)
 					c, err := colserde.NewArrowBatchConverter(typs)
 					require.NoError(t, err)
 					r, err := colserde.NewRecordBatchSerializer(typs)
 					require.NoError(t, err)
-					inboxCtx, inboxCancel := context.WithCancel(context.Background())
 
 					goroutines := []struct {
 						name           string

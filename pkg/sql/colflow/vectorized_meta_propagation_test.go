@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colflow
+package colflow_test
 
 import (
 	"context"
@@ -42,11 +42,6 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
-	memMonitor := execinfra.MakeTestMemMonitor(ctx, st)
-	defer memMonitor.Stop(ctx)
-	acc := memMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
 
 	nRows := 10
 	nCols := 1

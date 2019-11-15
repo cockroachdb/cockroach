@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colflow
+package colflow_test
 
 import (
 	"context"
@@ -26,7 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-func TestVectorizeSpaceError(t *testing.T) {
+// TODO(yuzefovich): write a test to verify that the Allocator respects the
+// memory limit.
+
+func TestVectorizeStaticMemorySpaceError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -87,7 +90,10 @@ func TestVectorizeSpaceError(t *testing.T) {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 				}
 				acc := memMon.MakeBoundAccount()
-				result, err := colexec.NewColOperator(ctx, flowCtx, tc.spec, inputs, &mon.BoundAccount{})
+				result, err := colexec.NewColOperator(
+					ctx, flowCtx, tc.spec, inputs, &mon.BoundAccount{},
+					true, /* useStreamingMemAccountForBuffering */
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
