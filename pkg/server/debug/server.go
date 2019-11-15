@@ -72,6 +72,7 @@ var DebugRemote = func() *settings.StringSetting {
 		},
 	)
 	s.SetReportable(true)
+	s.SetVisibility(settings.Public)
 	return s
 }()
 

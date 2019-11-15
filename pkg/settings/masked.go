@@ -33,6 +33,11 @@ func (s *MaskedSetting) String(sv *Values) string {
 	return "<redacted>"
 }
 
+// Visibility returns the visibility setting for the underlying setting.
+func (s *MaskedSetting) Visibility() Visibility {
+	return s.setting.Visibility()
+}
+
 // Description returns the description string for the underlying setting.
 func (s *MaskedSetting) Description() string {
 	return s.setting.Description()

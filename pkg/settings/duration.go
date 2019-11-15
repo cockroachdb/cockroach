@@ -97,6 +97,24 @@ func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *Dura
 	return RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterPublicDurationSetting defines a new setting with type
+// duration and makes it public.
+func RegisterPublicDurationSetting(key, desc string, defaultValue time.Duration) *DurationSetting {
+	s := RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
+	s.SetVisibility(Public)
+	return s
+}
+
+// RegisterPublicNonNegativeDurationSetting defines a new setting with
+// type duration and makes it public.
+func RegisterPublicNonNegativeDurationSetting(
+	key, desc string, defaultValue time.Duration,
+) *DurationSetting {
+	s := RegisterNonNegativeDurationSetting(key, desc, defaultValue)
+	s.SetVisibility(Public)
+	return s
+}
+
 // RegisterNonNegativeDurationSetting defines a new setting with type duration.
 func RegisterNonNegativeDurationSetting(
 	key, desc string, defaultValue time.Duration,

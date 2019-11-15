@@ -68,37 +68,37 @@ type transactionStats struct {
 
 // stmtStatsEnable determines whether to collect per-statement
 // statistics.
-var stmtStatsEnable = settings.RegisterBoolSetting(
+var stmtStatsEnable = settings.RegisterPublicBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
 )
 
 // txnStatsEnable determines whether to collect per-application transaction
 // statistics.
-var txnStatsEnable = settings.RegisterBoolSetting(
+var txnStatsEnable = settings.RegisterPublicBoolSetting(
 	"sql.metrics.transaction_details.enabled", "collect per-application transaction statistics", true,
 )
 
 // sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
-var sqlStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
+var sqlStatsCollectionLatencyThreshold = settings.RegisterPublicDurationSetting(
 	"sql.metrics.statement_details.threshold",
 	"minimum execution time to cause statistics to be collected",
 	0,
 )
 
-var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
+var dumpStmtStatsToLogBeforeReset = settings.RegisterPublicBoolSetting(
 	"sql.metrics.statement_details.dump_to_logs",
 	"dump collected statement statistics to node logs when periodically cleared",
 	false,
 )
 
-var sampleLogicalPlans = settings.RegisterBoolSetting(
+var sampleLogicalPlans = settings.RegisterPublicBoolSetting(
 	"sql.metrics.statement_details.plan_collection.enabled",
 	"periodically save a logical plan for each fingerprint",
 	true,
 )
 
-var logicalPlanCollectionPeriod = settings.RegisterNonNegativeDurationSetting(
+var logicalPlanCollectionPeriod = settings.RegisterPublicNonNegativeDurationSetting(
 	"sql.metrics.statement_details.plan_collection.period",
 	"the time until a new logical plan is collected",
 	5*time.Minute,

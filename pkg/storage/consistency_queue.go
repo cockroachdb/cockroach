@@ -26,7 +26,8 @@ import (
 
 var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
 	"server.consistency_check.interval",
-	"the time between range consistency checks; set to 0 to disable consistency checking",
+	"the time between range consistency checks; set to 0 to disable consistency checking."+
+		" Note that intervals that are too short can negatively impact performance.",
 	24*time.Hour,
 )
 

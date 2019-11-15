@@ -132,10 +132,10 @@ SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
 ----
 span_idx  message_idx  timestamp  duration  operation  loc  tag  message age
 
-query TTTT colnames
+query TTTBT colnames
 SELECT * FROM crdb_internal.cluster_settings WHERE variable = ''
 ----
-variable  value  type  description
+variable  value  type  public  description
 
 query TI colnames
 SELECT * FROM crdb_internal.feature_usage WHERE feature_name = ''

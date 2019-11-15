@@ -152,6 +152,7 @@ var mA = settings.RegisterStateMachineSettingImpl("statemachine", "foo", &dummyT
 
 func init() {
 	settings.RegisterBoolSetting("sekretz", "desc", false).SetReportable(false)
+	settings.RegisterBoolSetting("rezervedz", "desc", false).SetVisibility(settings.Reserved)
 }
 
 var strVal = settings.RegisterValidatedStringSetting(

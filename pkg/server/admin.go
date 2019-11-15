@@ -1193,6 +1193,7 @@ func (s *adminServer) Settings(
 			// Note: v.String() redacts the values if the purpose is not "LocalAccess".
 			Value:       v.String(&s.server.st.SV),
 			Description: v.Description(),
+			Public:      v.Visibility() == settings.Public,
 		}
 	}
 

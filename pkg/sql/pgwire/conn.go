@@ -1587,39 +1587,43 @@ func (c *conn) handleAuthentication(
 
 const serverHBAConfSetting = "server.host_based_authentication.configuration"
 
-var connAuthConf = settings.RegisterValidatedStringSetting(
-	serverHBAConfSetting,
-	"host-based authentication configuration to use during connection authentication",
-	"",
-	func(values *settings.Values, s string) error {
-		if s == "" {
+var connAuthConf = func() *settings.StringSetting {
+	s := settings.RegisterValidatedStringSetting(
+		serverHBAConfSetting,
+		"host-based authentication configuration to use during connection authentication",
+		"",
+		func(values *settings.Values, s string) error {
+			if s == "" {
+				return nil
+			}
+			conf, err := hba.Parse(s)
+			if err != nil {
+				return err
+			}
+			for _, entry := range conf.Entries {
+				for _, db := range entry.Database {
+					if !db.IsSpecial("all") {
+						return errors.New("database must be specified as all")
+					}
+				}
+				if addr, ok := entry.Address.(hba.String); ok && !addr.IsSpecial("all") {
+					return errors.New("host addresses not supported")
+				}
+				if hbaAuthMethods[entry.Method] == nil {
+					return errors.Errorf("unknown auth method %q", entry.Method)
+				}
+				if check := hbaCheckHBAEntries[entry.Method]; check != nil {
+					if err := check(entry); err != nil {
+						return err
+					}
+				}
+			}
 			return nil
-		}
-		conf, err := hba.Parse(s)
-		if err != nil {
-			return err
-		}
-		for _, entry := range conf.Entries {
-			for _, db := range entry.Database {
-				if !db.IsSpecial("all") {
-					return errors.New("database must be specified as all")
-				}
-			}
-			if addr, ok := entry.Address.(hba.String); ok && !addr.IsSpecial("all") {
-				return errors.New("host addresses not supported")
-			}
-			if hbaAuthMethods[entry.Method] == nil {
-				return errors.Errorf("unknown auth method %q", entry.Method)
-			}
-			if check := hbaCheckHBAEntries[entry.Method]; check != nil {
-				if err := check(entry); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	},
-)
+		},
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // authenticator is the interface used by the connection to pass password data
 // to the authenticator and expect an authentication decision from it.

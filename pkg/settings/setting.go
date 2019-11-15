@@ -191,6 +191,7 @@ type Setting interface {
 	Typ() string
 	String(sv *Values) string
 	Description() string
+	Visibility() Visibility
 }
 
 // WritableSetting is the exported interface of non-masked settings.
@@ -221,12 +222,33 @@ type extendedSetting interface {
 	isReportable() bool
 }
 
+// Visibility describes how a user should feel confident that
+// they can customize the setting.  See the constant definitions below
+// for details.
+type Visibility int
+
+const (
+	// Reserved - which is the default - indicates that a setting is
+	// not documented and the CockroachDB team has not developed
+	// internal experience about the impact of customizing it to other
+	// values.
+	// In short: "Use at your own risk."
+	Reserved Visibility = iota
+	// Public indicates that a setting is documented, the range of
+	// possible values yields predictable results, and the CockroachDB
+	// team is there to assist if issues occur as a result of the
+	// customization.
+	// In short: "Go ahead but be careful."
+	Public
+)
+
 type common struct {
-	description   string
+	description string
+	visibility  Visibility
+	// Each setting has a slotIdx which is used as a handle with Values.
+	slotIdx       int
 	nonReportable bool
 	deprecated    bool
-	// Each setting has a slotIdx which is used as a handle with Values.
-	slotIdx int
 }
 
 func (i *common) isDeprecated() bool {
@@ -253,6 +275,11 @@ func (i *common) setDescription(s string) {
 func (i common) Description() string {
 	return i.description
 }
+
+func (i common) Visibility() Visibility {
+	return i.visibility
+}
+
 func (i common) isReportable() bool {
 	return !i.nonReportable
 }
@@ -271,9 +298,9 @@ func (i *common) SetReportable(reportable bool) {
 	i.nonReportable = !reportable
 }
 
-// SetSensitive marks the setting as dangerous to modify.
-func (i *common) SetSensitive() {
-	i.description += " (WARNING: may compromise cluster stability or correctness; do not edit without supervision)"
+// SetVisibility customizes the visibility of a setting.
+func (i *common) SetVisibility(v Visibility) {
+	i.visibility = v
 }
 
 // SetDeprecated marks the setting as obsolete. It also hides

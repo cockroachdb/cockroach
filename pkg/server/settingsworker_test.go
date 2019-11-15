@@ -303,8 +303,9 @@ func TestSettingsShowAll(t *testing.T) {
 	if len(rows) < 2 {
 		t.Fatalf("show all returned too few rows (%d)", len(rows))
 	}
-	if len(rows[0]) != 4 {
-		t.Fatalf("show all must return 4 columns, found %d", len(rows[0]))
+	const expColumns = 5
+	if len(rows[0]) != expColumns {
+		t.Fatalf("show all must return %d columns, found %d", expColumns, len(rows[0]))
 	}
 	hasIntKey := false
 	hasStrKey := false
