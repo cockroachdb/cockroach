@@ -223,6 +223,9 @@ type cFetcher struct {
 		// batch is the output batch the fetcher writes to.
 		batch coldata.Batch
 
+		// outputIdxMap is used to get the output index into colvecs for a given column.
+		outputIdxMap colIdxMap
+
 		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
 		// having to call batch.Vec too often in the tight loop.
 		colvecs []coldata.Vec
@@ -237,7 +240,10 @@ type cFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *cFetcher) Init(
-	allocator *Allocator, reverse, returnRangeInfo bool, isCheck bool, tables ...row.FetcherTableArgs,
+	allocator *Allocator,
+	reverse, returnRangeInfo bool,
+	isCheck bool,
+	tables ...row.FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
@@ -263,13 +269,26 @@ func (rf *cFetcher) Init(
 	}
 	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
-	typs := make([]coltypes.T, len(colDescriptors))
-	for i := range typs {
-		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == coltypes.Unhandled {
+	typs := make([]coltypes.T, 0, len(colDescriptors))
+	outputIdxMap := colIdxMap{
+		vals: make(sqlbase.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
+		ords: make([]int, 0, len(tableArgs.ColIdxMap)),
+	}
+	outputIdx := 0
+	for i := range colDescriptors {
+		if !tableArgs.ValNeededForCol.Contains(i) {
+			continue
+		}
+		typ := typeconv.FromColumnType(&colDescriptors[i].Type)
+		if typ == coltypes.Unhandled {
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
 		}
+		typs = append(typs, typ)
+		outputIdxMap.vals = append(outputIdxMap.vals, colDescriptors[i].ID)
+		outputIdxMap.ords = append(outputIdxMap.ords, outputIdx)
+		outputIdx++
 	}
+	sort.Sort(outputIdxMap)
 	table := cTableInfo{
 		spans:            tableArgs.Spans,
 		desc:             tableArgs.Desc,
@@ -285,6 +304,7 @@ func (rf *cFetcher) Init(
 		extraValColOrdinals:    oldTable.extraValColOrdinals[:0],
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
+	rf.machine.outputIdxMap = outputIdxMap
 	rf.machine.batch = allocator.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
 	rf.estimatedStaticMemoryUsage = EstimateBatchSizeBytes(typs, int(coldata.BatchSize()))
@@ -300,6 +320,9 @@ func (rf *cFetcher) Init(
 			// The idx-th column is required.
 			neededCols.Add(int(col))
 			table.neededColsList = append(table.neededColsList, int(col))
+		} else {
+			// Not needed.
+			delete(tableArgs.ColIdxMap, col)
 		}
 	}
 	sort.Ints(table.neededColsList)
@@ -970,7 +993,12 @@ func (rf *cFetcher) processValueSingle(
 				return prettyKey, "", nil
 			}
 			typ := &table.cols[idx].Type
-			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
+			// TODO(asubiotto): Shouldn't we return an error if we can't find the col ID in colIdxMap?
+			outputIdx, ok := rf.machine.outputIdxMap.get(colID)
+			if !ok {
+				return "", "", errors.Errorf("missing output index mapping colid %d", colID)
+			}
+			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[outputIdx], rf.machine.rowIdx, typ, val)
 			if err != nil {
 				return "", "", err
 			}
@@ -1057,7 +1085,12 @@ func (rf *cFetcher) processValueBytes(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
 		}
 
-		vec := rf.machine.colvecs[idx]
+		// So we need to translate
+		outputIdx, ok := rf.machine.outputIdxMap.get(colID)
+		if !ok {
+			return "", "", errors.Errorf("missing output index mapping colid %d", colID)
+		}
+		vec := rf.machine.colvecs[outputIdx]
 
 		valTyp := &table.cols[idx].Type
 		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,

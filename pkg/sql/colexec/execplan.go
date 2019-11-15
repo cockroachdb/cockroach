@@ -257,8 +257,11 @@ func NewColOperator(
 		if core.TableReader.IsCheck {
 			return result, errors.Newf("scrub table reader is unsupported in vectorized")
 		}
-		var scanOp *colBatchScan
-		scanOp, err = newColBatchScan(NewAllocator(), flowCtx, core.TableReader, post)
+		var (
+			scanOp     *colBatchScan
+			outputTyps []types.T
+		)
+		scanOp, outputTyps, err = newColBatchScan(NewAllocator(), flowCtx, core.TableReader, post)
 		if err != nil {
 			return result, err
 		}
@@ -277,8 +280,7 @@ func NewColOperator(
 		// still responsible for doing the cancellation check on their own while
 		// performing long operations.
 		result.Op = NewCancelChecker(result.Op)
-		returnMutations := core.TableReader.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-		result.ColumnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
+		result.ColumnTypes = outputTyps
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err

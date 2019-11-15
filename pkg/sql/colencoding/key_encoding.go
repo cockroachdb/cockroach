@@ -159,7 +159,11 @@ func DecodeKeyValsToCols(
 // to the idx'th slot of the input colexec.Vec.
 // See the analog, DecodeTableKey, in sqlbase/column_type_encoding.go.
 func decodeTableKeyToCol(
-	vec coldata.Vec, idx uint16, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
+	vec coldata.Vec,
+	idx uint16,
+	valType *types.T,
+	key []byte,
+	dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
 		return nil, errors.AssertionFailedf("invalid direction: %d", log.Safe(dir))
@@ -243,8 +247,7 @@ func decodeTableKeyToCol(
 
 // skipTableKey skips a value of type valType in key, returning the remainder
 // of the key.
-// TODO(jordan): each type could be optimized here.
-// TODO(jordan): should use this approach in the normal row fetcher.
+// TODO(jordan): should use this approach in the normal row fetcher. Wait, why?
 func skipTableKey(
 	valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
@@ -255,40 +258,11 @@ func skipTableKey(
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
 		return key, nil
 	}
-	var rkey []byte
-	var err error
-	switch valType.Family() {
-	case types.BoolFamily, types.IntFamily, types.DateFamily, types.OidFamily:
-		if dir == sqlbase.IndexDescriptor_ASC {
-			rkey, _, err = encoding.DecodeVarintAscending(key)
-		} else {
-			rkey, _, err = encoding.DecodeVarintDescending(key)
-		}
-	case types.FloatFamily:
-		if dir == sqlbase.IndexDescriptor_ASC {
-			rkey, _, err = encoding.DecodeFloatAscending(key)
-		} else {
-			rkey, _, err = encoding.DecodeFloatDescending(key)
-		}
-	case types.BytesFamily, types.StringFamily, types.UuidFamily:
-		if dir == sqlbase.IndexDescriptor_ASC {
-			rkey, _, err = encoding.DecodeBytesAscending(key, nil)
-		} else {
-			rkey, _, err = encoding.DecodeBytesDescending(key, nil)
-		}
-	case types.DecimalFamily:
-		if dir == sqlbase.IndexDescriptor_ASC {
-			rkey, _, err = encoding.DecodeDecimalAscending(key, nil)
-		} else {
-			rkey, _, err = encoding.DecodeDecimalDescending(key, nil)
-		}
-	default:
-		return key, errors.AssertionFailedf("unsupported type %+v", log.Safe(valType))
-	}
+	n, err := encoding.PeekLength(key)
 	if err != nil {
-		return key, err
+		return nil, err
 	}
-	return rkey, nil
+	return key[n:], nil
 }
 
 // UnmarshalColumnValueToCol decodes the value from a roachpb.Value using the

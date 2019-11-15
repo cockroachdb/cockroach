@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
@@ -104,9 +105,9 @@ func newColBatchScan(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
-) (*colBatchScan, error) {
+) (*colBatchScan, []types.T, error) {
 	if flowCtx.NodeID == 0 {
-		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
+		return nil, nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
 	}
 
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
@@ -120,7 +121,7 @@ func newColBatchScan(
 		flowCtx.NewEvalCtx(),
 		nil,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	neededColumns := helper.NeededColumns()
@@ -131,7 +132,7 @@ func newColBatchScan(
 		allocator, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, spec.Visibility,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	nSpans := len(spec.Spans)
@@ -139,13 +140,21 @@ func newColBatchScan(
 	for i := range spans {
 		spans[i] = spec.Spans[i].Span
 	}
+
+	// TODO(asubiotto): Does this actually work? Are scans where we have coltypes with mutations tested?
+	outputTyps := make([]types.T, 0, len(spec.Table.Columns))
+	for i, typ := range spec.Table.ColumnTypesWithMutations(spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC) {
+		if neededColumns.Contains(i) {
+			outputTyps = append(outputTyps, typ)
+		}
+	}
 	return &colBatchScan{
 		spans:      spans,
 		flowCtx:    flowCtx,
 		rf:         &fetcher,
 		limitHint:  limitHint,
 		maxResults: spec.MaxResults,
-	}, nil
+	}, outputTyps, nil
 }
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
