@@ -68,6 +68,7 @@ interface TableProps {
   // i.e. each row has an expand/collapse arrow on its left, and renders
   // a full-width area below it when expanded.
   expandableConfig?: ExpandableConfig;
+  drawer?: boolean;
 }
 
 export interface ExpandableConfig {
@@ -108,6 +109,7 @@ export class SortableTable extends React.Component<TableProps> {
       statement: "",
       search: "",
     },
+    activeIndex: NaN
   };
 
   clickSort(clickedSortKey: any) {
@@ -143,11 +145,11 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   renderRow = (rowIndex: number) => {
-    const { columns, expandableConfig } = this.props;
-
+    const { columns, expandableConfig, drawer } = this.props;
     const classes = classNames(
       "sort-table__row",
       "sort-table__row--body",
+      this.state.activeIndex === rowIndex ? "drawer-active" : "",
       this.props.rowClass(rowIndex),
       { "sort-table__row--expandable": !!expandableConfig },
     );
@@ -158,7 +160,10 @@ export class SortableTable extends React.Component<TableProps> {
         key={rowIndex}
         className={classes}
         onClick={() => {
-          this.showDrawer(rowIndex);
+          if (drawer) {
+            this.setState({ activeIndex: rowIndex })
+            this.showDrawer(rowIndex);
+          }
           if (onClickExpand) {
             onClickExpand(rowIndex, !expanded);
           }
@@ -200,9 +205,12 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   showDrawer = (rowIndex: number) => {
+    const { drawer, columns } = this.props;
+    const { drawerData } = this.state;
+    const values: any = columns[0].cell(rowIndex);
     this.setState({
       visible: true,
-      drawerData: this.props.columns[0].cell(rowIndex).props,
+      drawerData: drawer ? values.props : drawerData,
     });
   }
 
@@ -213,6 +221,7 @@ export class SortableTable extends React.Component<TableProps> {
         statement: "",
         search: "",
       },
+      activeIndex: NaN
     });
   }
 
@@ -223,7 +232,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
@@ -260,9 +269,11 @@ export class SortableTable extends React.Component<TableProps> {
             {_.times(this.props.count, this.renderRow)}
           </tbody>
         </table>
-        <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
-          <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search)}</span>
-        </DrawerComponent>
+        {drawer && (
+          <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
+            <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search)}</span>
+          </DrawerComponent>
+        )}
       </React.Fragment>
     );
   }

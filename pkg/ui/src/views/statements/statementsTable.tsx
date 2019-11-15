@@ -29,13 +29,14 @@ export interface AggregateStatistics {
   label: string;
   implicitTxn: boolean;
   stats: StatementStatistics;
+  drawer?: boolean;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
 function StatementLink(props: { statement: string, app: string, implicitTxn: boolean, search: string }) {
   const summary = summarize(props.statement);
-  const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
+  // const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
     // <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="statement__tooltip">
@@ -47,7 +48,7 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
           </div>
         </Tooltip>
       </div>
-    {/* </Link> */}
+    // </Link>
   );
 }
 

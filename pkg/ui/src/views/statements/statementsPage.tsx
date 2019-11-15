@@ -201,6 +201,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
             columns={makeStatementsColumns(statements, selectedApp, search)}
             sortSetting={this.state.sortSetting}
             onChangeSortSetting={this.changeSortSetting}
+            drawer
           />
         </section>
         <Pagination
