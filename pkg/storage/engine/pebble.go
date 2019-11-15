@@ -95,6 +95,209 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
+// These interfaces would replace TablePropertyCollector, since we don't want to parse the same key
+// repeatedly during a compaction. They would live inside Pebble -- they are here for this partial
+// strawman implementation.
+//
+// Called for each compaction to construct an enforcer specific to the key range of the compaction.
+// One could potentially construct a stronger policy on a per-file basis but the file bounds are
+// not known up front. When using this when flushing a memtable, pass the empty bounds.
+type TableCompactionPolicyCreator interface {
+	GetPolicyEnforcer(SmallestKey pebble.InternalKey, LargestKey pebble.InternalKey) (TablePolicyEnforcer)
+}
+
+// Used sequentially across multiple tables in a compaction or for a single table being flushed.
+type TablePolicyEnforcer interface {
+	// Add is called with each new entry that could be added to the sstable. The point and range tombstone
+	// entries are each added in order, but the relative ordering across these two categories
+	// is unspecified. This is called after Pebble has applied its own policies (based on sequence
+	// numbers on keys, range tombstones and snapshots), and decided the entry can be written.
+	// Returns true iff the entry should be written.
+	Add(key pebble.InternalKey, value []byte) (bool, error)
+
+	// Finish is called when all entries have been added to the sstable. The
+	// collected properties (if any) should be added to the specified map. Note
+	// that in case of an error during sstable construction, Finish may not be
+	// called.
+	Finish(userProps map[string]string) error
+
+	// The name of the property collector/enforcer.
+	Name() string
+}
+
+// This has knowledge of the GC TTL, and PROTECT_AT and PROTECT_AFTER timestamps as outlined
+// in https://github.com/cockroachdb/cockroach/pull/41806. It uses these and the key range of the
+// compaction to construct the most restrictive simplified policy. A simplified policy has:
+// - one expiredTime such that any non-live versions < expiredTime can be deleted.
+// - at most one protectedTime, where protectedTime < expiredTime, such that the highest version
+//   < protectedTime must be preserved.
+// Policy composition to construct a simplified policy is straightforward:
+// - Take the min of now - GC TTL and all the PROTECT_AFTER timestamps (relevant to the compaction
+//   bounds) to construct the expiredTime.
+// - If there is more than one PROTECT_AT timestamp, take all the ones greater than the smallest
+//   and compose them into expiredTime by taking the min. If the smallest PROTECT_AT timestamp is
+//   >= this expiredTime, drop it, else keep it as the protectedTime.
+type pebbleCompactionPolicyCreator struct {
+	// TODO
+}
+
+func (*pebbleCompactionPolicyCreator) GetPolicyEnforcer(
+	SmallestKey pebble.InternalKey, LargestKey pebble.InternalKey) (TablePolicyEnforcer) {
+	// TODO
+	return &pebbleTablePolicyEnforcer{}
+}
+
+type pebbleTablePolicyEnforcer struct {
+	// For GC.
+	//
+	// Policy to enforce.
+	expiredTime []byte
+	hasProtected bool
+	protectedTime []byte
+	// Internal state.
+	lastKey []byte  // Unfortunately cannot avoid a copy.
+	ignoreNextIntent bool
+	skipUntilProtected bool
+	skipRemaining bool
+
+	// For property collection.
+	min, max  []byte
+	lastValue []byte
+}
+
+// DANGER: this logic is broken. It assumes two things:
+// - For a Set, one will not see the same InternalKey.UserKey multiple times. This could happen
+//   because of snapshots. Say we have a@25#20, a@20#15, a@20#7, a@20#3, and a snapshot at #8.
+//   The first 3 keys will be seen by Add, and it is ok to remove a@20#15 but not a@20#7. This
+//   is easy to fix by passing a pinnedBySnapshot bool to Add().
+// - One can discover whether a value is provisional by seeing the intent metadata. The problem
+//   is that there can be an arbitrary number of provisional values in a compaction with no
+//   corresponding intent. Consider the sequence of mutations:
+//   SET a@12#5, SET a@0#6, DEL a@12#19, DEL a@0#20, SET a@30#25, SET a@0#31. The first two mutations
+//   are provisional value and intent metadata, then both are deleted because of the transaction failure,
+//   and then another transaction adds a provisional value and intent metadata. In the key order
+//   these are
+//     SET a@0#31, DEL a@0#20, SET a@0#6, SET a@30#25, DEL a@12#19, SET a@12#5
+//   The @0 values are not close in the key space to the non-zero versions, so lets ignore the
+//   intent metadata -- there is no guarantee that we will see it in the compaction. Does this
+//   mean that the first versioned value we see can be pessimistically assumed to be provisional
+//   and the rest are non-provisional? Not quite.
+//   The SET a@12#5 could be at level 5 while the DEL a@12#19 is at level 2. Now the SET a#30#25
+//   could sink down to level 4 (the DEL could still be at level 2 since they are different user
+//   keys from Pebble's perspective). Now both SET a@30#25, SET a@0#31 are involved in a compaction
+//   and both are provisional (and the older one has been deleted), but we have no way of knowing.
+//   If we don't know which values are provisional we don't know if they actually mask older
+//   versions, so nothing can be deleted.
+//   The basic problem is that the level age invarient (lower levels have older values) only applies
+//   to the Pebble UserKey, not the real key (a). a@30#25 is younger than a@12#19 for key a, but
+//   the former has moved to a lower level without the latter. If we considered sstables to be
+//   overlapping for compaction purposes if these real keys overlapped it would enforce the stronger
+//   invariant.
+func (t *pebbleTablePolicyEnforcer) Add(key pebble.InternalKey, value []byte) (bool, error) {
+	k, ts, ok := enginepb.SplitMVCCKey(key.UserKey)
+	if !ok {
+		return true, errors.Errorf("failed to split MVCC key")
+	}
+
+	rv := true
+	// GC. The kinds are Set, Delete, SingleDelete, Merge, RangeDelete, LogData (?).
+	// - 0 timestamped keys are Set (write intent metadata) and Merge (timeseries). They should be kept.
+	//   Additionally intents may not be committed so we pessimistically assume that they do not
+	//   represent the live version.
+	// - RangeDelete, SingleDelete, Delete: They have been explicitly written to delete entries at the
+	//   Pebble level and should be kept.
+	// - Non-0 Set: The first Set we see for a particular k is potentially a provisional value.
+	kind := key.Kind()
+	if kind == pebble.InternalKeyKindSet {
+		if len(ts) == 0 {
+			// We know that k != lastKey, so don't bother comparing.
+			t.ignoreNextIntent = true
+			t.skipUntilProtected = false
+			t.skipRemaining = false
+			t.lastKey = append(t.lastKey[:0], k...)
+		} else {
+			cmp := bytes.Compare(t.lastKey, k)
+			if cmp == 0 {
+				if t.ignoreNextIntent {
+					t.ignoreNextIntent = false
+				} else if t.skipRemaining {
+					rv = false
+				} else {
+					if t.skipUntilProtected {
+						if bytes.Compare(ts, t.protectedTime) < 0 {
+							t.skipRemaining = true
+						} else {
+							rv = false
+						}
+					} else if bytes.Compare(ts, t.expiredTime) < 0 {
+						if !t.hasProtected || bytes.Compare(ts, t.protectedTime) < 0 {
+							t.skipRemaining = true
+						} else {
+							t.skipUntilProtected = true
+						}
+					}
+				}
+			} else {
+				// New key.
+				t.ignoreNextIntent = false
+				t.skipUntilProtected = false
+				t.skipRemaining = false
+				t.lastKey = append(t.lastKey[:0], k...)
+				if !t.hasProtected || bytes.Compare(ts, t.protectedTime) < 0 {
+					t.skipRemaining = true
+				} else {
+					t.skipUntilProtected = true
+				}
+			}
+		}
+	}
+	// Property collection.
+	if len(ts) > 0 {
+		t.lastValue = t.lastValue[:0]
+		t.updateBounds(ts)
+	} else {
+		t.lastValue = append(t.lastValue[:0], value...)
+	}
+	return rv, nil
+}
+
+func (t *pebbleTablePolicyEnforcer) Finish(userProps map[string]string) error {
+	if len(t.lastValue) > 0 {
+		// The last record in the sstable was an intent. Unmarshal the metadata and
+		// update the bounds with the timestamp it contains.
+		meta := &enginepb.MVCCMetadata{}
+		if err := protoutil.Unmarshal(t.lastValue, meta); err != nil {
+			// We're unable to parse the MVCCMetadata. Fail open by not setting the
+			// min/max timestamp properties. THis mimics the behavior of
+			// TimeBoundTblPropCollector.
+			return nil
+		}
+		if meta.Txn != nil {
+			ts := encodeTimestamp(hlc.Timestamp(meta.Timestamp))
+			t.updateBounds(ts)
+		}
+	}
+
+	userProps["crdb.ts.min"] = string(t.min)
+	userProps["crdb.ts.max"] = string(t.max)
+	return nil
+}
+
+func (t *pebbleTablePolicyEnforcer) updateBounds(ts []byte) {
+	if len(t.min) == 0 || bytes.Compare(ts, t.min) < 0 {
+		t.min = append(t.min[:0], ts...)
+	}
+	if len(t.max) == 0 || bytes.Compare(ts, t.max) > 0 {
+		t.max = append(t.max[:0], ts...)
+	}
+}
+
+func (t *pebbleTablePolicyEnforcer) Name() string {
+	// TODO: This constant needs to match the one used by the RocksDB version of this
+	// table property collector. DO NOT CHANGE.
+	return "TimeBoundTblPropCollectorFactory"
+}
+
 // pebbleTimeBoundPropCollector implements a property collector for MVCC
 // Timestamps. Its behavior matches TimeBoundTblPropCollector in
 // table_props.cc.
