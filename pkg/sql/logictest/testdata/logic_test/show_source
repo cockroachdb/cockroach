@@ -85,6 +85,18 @@ SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 variable              value  setting_type  public  sensitive  description
 cluster.organization  ·      s             true    false      organization name
 
+query TTTT colnames
+SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+----
+variable              value  setting_type  description
+cluster.organization  ·      s             organization name
+
+query TTTT colnames
+SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+----
+variable              value  setting_type  description
+cluster.organization  ·      s             organization name
+
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
 ----
