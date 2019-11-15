@@ -48,7 +48,7 @@ import (
 //
 // The "results_buffer_size" connection parameter can be used to override this
 // default for an individual connection.
-var connResultsBufferSize = settings.RegisterByteSizeSetting(
+var connResultsBufferSize = settings.RegisterPublicByteSizeSetting(
 	"sql.defaults.results_buffer.size",
 	"default size of the buffer that accumulates results for a statement or a batch "+
 		"of statements before they are sent to the client. This can be overridden on "+

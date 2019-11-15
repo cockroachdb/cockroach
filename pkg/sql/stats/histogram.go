@@ -24,7 +24,7 @@ import (
 
 // HistogramClusterMode controls the cluster setting for enabling
 // histogram collection.
-var HistogramClusterMode = settings.RegisterBoolSetting(
+var HistogramClusterMode = settings.RegisterPublicBoolSetting(
 	"sql.stats.histogram_collection.enabled",
 	"histogram collection mode",
 	true,

@@ -417,6 +417,7 @@ message SettingsResponse {
       string value = 1;
       string type = 2;
       string description = 3;
+      bool public = 4;
    }
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }

@@ -128,6 +128,7 @@ func registerClusterVersionSetting() clusterVersionSetting {
 		KeyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<unstable>,
 		&s.StateMachineSetting)
+	s.SetVisibility(settings.Public)
 	return s
 }
 
@@ -158,6 +159,7 @@ var preserveDowngradeVersion = func() *settings.StringSetting {
 		},
 	)
 	s.SetReportable(true)
+	s.SetVisibility(settings.Public)
 	return s
 }()
 

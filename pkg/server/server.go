@@ -98,26 +98,26 @@ var (
 	// for a graceful shutdown.
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
 
-	queryWait = settings.RegisterDurationSetting(
+	queryWait = settings.RegisterPublicDurationSetting(
 		"server.shutdown.query_wait",
 		"the server will wait for at least this amount of time for active queries to finish",
 		10*time.Second,
 	)
 
-	drainWait = settings.RegisterDurationSetting(
+	drainWait = settings.RegisterPublicDurationSetting(
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with the rest "+
 			"of the shutdown process",
 		0*time.Second,
 	)
 
-	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
+	forwardClockJumpCheckEnabled = settings.RegisterPublicBoolSetting(
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
 		false,
 	)
 
-	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
+	persistHLCUpperBoundInterval = settings.RegisterPublicDurationSetting(
 		"server.clock.persist_upper_bound_interval",
 		"the interval between persisting the wall time upper bound of the clock. The clock "+
 			"does not generate a wall time greater than the persisted timestamp and will panic if "+

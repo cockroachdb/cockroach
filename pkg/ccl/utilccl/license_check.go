@@ -33,6 +33,7 @@ var enterpriseLicense = func() *settings.StringSetting {
 	// still mark them explicitly in case a future code change flips the
 	// default.
 	s.SetReportable(false)
+	s.SetVisibility(settings.Public)
 	return s
 }()
 

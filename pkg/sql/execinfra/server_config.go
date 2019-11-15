@@ -67,18 +67,20 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 24
 // SettingUseTempStorageJoins is a cluster setting that configures whether
 // joins are allowed to spill to disk.
 // TODO(yuzefovich): remove this setting.
-var SettingUseTempStorageJoins = settings.RegisterBoolSetting(
+var SettingUseTempStorageJoins = settings.RegisterPublicBoolSetting(
 	"sql.distsql.temp_storage.joins",
-	"set to true to enable use of disk for distributed sql joins",
+	"set to true to enable use of disk for distributed sql joins. "+
+		"Note that disabling this can have negative impact on memory usage and performance.",
 	true,
 )
 
 // SettingUseTempStorageSorts is a cluster setting that configures whether
 // sorts are allowed to spill to disk.
 // TODO(yuzefovich): remove this setting.
-var SettingUseTempStorageSorts = settings.RegisterBoolSetting(
+var SettingUseTempStorageSorts = settings.RegisterPublicBoolSetting(
 	"sql.distsql.temp_storage.sorts",
-	"set to true to enable use of disk for distributed sql sorts",
+	"set to true to enable use of disk for distributed sql sorts. "+
+		"Note that disabling this can have negative impact on memory usage and performance.",
 	true,
 )
 

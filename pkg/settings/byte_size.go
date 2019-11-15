@@ -38,6 +38,13 @@ func RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSett
 	return RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterPublicByteSizeSetting defines a new setting with type bytesize and makes it public.
+func RegisterPublicByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
+	s := RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
+	s.SetVisibility(Public)
+	return s
+}
+
 // RegisterValidatedByteSizeSetting defines a new setting with type bytesize
 // with a validation function.
 func RegisterValidatedByteSizeSetting(

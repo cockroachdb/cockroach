@@ -203,6 +203,10 @@ Output the list of cluster settings known to this binary.
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}
+			if setting.Visibility() != settings.Public {
+				// We don't document non-public settings at this time.
+				continue
+			}
 
 			typ, ok := settings.ReadableTypes[setting.Typ()]
 			if !ok {

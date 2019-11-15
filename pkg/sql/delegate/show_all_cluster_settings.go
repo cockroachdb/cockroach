@@ -19,7 +19,7 @@ func (d *delegator) delegateShowAllClusterSettings(
 		return nil, err
 	}
 	return parse(
-		`SELECT variable, value, type AS setting_type, description
+		`SELECT variable, value, type AS setting_type, public, description
      FROM crdb_internal.cluster_settings`,
 	)
 }

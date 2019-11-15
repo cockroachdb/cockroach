@@ -103,7 +103,7 @@ var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 )
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
-var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
+var bulkIOWriteLimit = settings.RegisterPublicByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
 	1<<40,

@@ -40,7 +40,7 @@ class Settings extends React.Component<SettingsProps, {}> {
     this.refresh();
   }
 
-  renderTable() {
+  renderTable(wantPublic: boolean) {
     if (_.isNil(this.props.settings.data)) {
       return null;
     }
@@ -60,6 +60,7 @@ class Settings extends React.Component<SettingsProps, {}> {
         <tbody>
           {
             _.chain(data)
+              .filter(key => key_values[key].public === wantPublic)
               .sort()
               .map((key: number) => (
                 <tr key={key} className="settings-table__row">
@@ -88,7 +89,10 @@ class Settings extends React.Component<SettingsProps, {}> {
           render={() => (
             <div>
               <p className="settings-note">Note that some settings have been redacted for security purposes.</p>
-              {this.renderTable()}
+              {this.renderTable(true)}
+              <h3>Reserved settings</h3>
+              <p className="settings-note">Note that changes to the following settings can yield unpredictable or negative effects on the entire cluster. Use at your own risk.</p>
+              {this.renderTable(false)}
             </div>
           )}
         />
