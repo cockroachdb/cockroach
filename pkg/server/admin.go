@@ -1126,6 +1126,7 @@ func (s *adminServer) Settings(
 			Type:        v.Typ(),
 			Value:       settings.RedactedValue(k, &s.server.st.SV),
 			Description: v.Description(),
+			Public:      v.Visibility() == settings.Public,
 		}
 	}
 

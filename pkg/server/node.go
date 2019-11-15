@@ -90,25 +90,29 @@ var (
 // Cluster settings.
 var (
 	// graphiteEndpoint is host:port, if any, of Graphite metrics server.
-	graphiteEndpoint = settings.RegisterStringSetting(
+	graphiteEndpoint = settings.RegisterPublicStringSetting(
 		"external.graphite.endpoint",
 		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
 		"",
 	)
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
-	graphiteInterval = settings.RegisterValidatedDurationSetting(
-		graphiteIntervalKey,
-		"the interval at which metrics are pushed to Graphite (if enabled)",
-		10*time.Second,
-		func(v time.Duration) error {
-			if v < 0 {
-				return errors.Errorf("cannot set %s to a negative duration: %s", graphiteIntervalKey, v)
-			} else if v > maxGraphiteInterval {
-				return errors.Errorf("cannot set %s to more than %v: %s", graphiteIntervalKey, maxGraphiteInterval, v)
-			}
-			return nil
-		},
-	)
+	graphiteInterval = func() *settings.DurationSetting {
+		s := settings.RegisterValidatedDurationSetting(
+			graphiteIntervalKey,
+			"the interval at which metrics are pushed to Graphite (if enabled)",
+			10*time.Second,
+			func(v time.Duration) error {
+				if v < 0 {
+					return errors.Errorf("cannot set %s to a negative duration: %s", graphiteIntervalKey, v)
+				} else if v > maxGraphiteInterval {
+					return errors.Errorf("cannot set %s to more than %v: %s", graphiteIntervalKey, maxGraphiteInterval, v)
+				}
+				return nil
+			},
+		)
+		s.SetVisibility(settings.Public)
+		return s
+	}()
 )
 
 type nodeMetrics struct {
