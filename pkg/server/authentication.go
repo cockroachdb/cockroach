@@ -47,7 +47,7 @@ const (
 	sessionCookieName = "session"
 )
 
-var webSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+var webSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,

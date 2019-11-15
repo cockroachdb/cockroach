@@ -50,7 +50,7 @@ var followerReadMultiple = func() *settings.FloatSetting {
 			return nil
 		},
 	)
-	s.SetSensitive()
+	s.SetVisibility(settings.Sensitive)
 	return s
 }()
 

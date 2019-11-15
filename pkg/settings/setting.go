@@ -197,6 +197,9 @@ type Setting interface {
 	EncodedDefault() string
 
 	Description() string
+
+	Visibility() Visibility
+
 	setDescription(desc string)
 	setSlotIdx(slotIdx int)
 	getSlotIdx() int
@@ -213,9 +216,35 @@ type Setting interface {
 	SetOnChange(sv *Values, fn func())
 }
 
+// Visibility describes how a user should feel confident that
+// they can customize the setting.  See the constant definitions below
+// for details.
+type Visibility int
+
+const (
+	// Restricted - which is the default - indicates that a setting is
+	// not documented and the CockroachDB team has not developed
+	// internal experience about the impact of customizing it to other
+	// values.
+	// In short: "Use at your own risk."
+	Restricted Visibility = iota
+	// Sensitive indicates that a setting is not documented and the CockroachDB
+	// team is aware of ways a cluster can become severely disrupted by
+	// customization of this setting.
+	// In short: "Please don't touch this."
+	Sensitive
+	// Public indicates that a setting is documented, the range of
+	// possible values yields predictable results, and the CockroachDB
+	// team is there to assist if issues occur as a result of the
+	// customization.
+	// In short: "Go ahead but be careful."
+	Public
+)
+
 type common struct {
 	description   string
 	nonReportable bool
+	visibility    Visibility
 	// Each setting has a slotIdx which is used as a handle with Values.
 	slotIdx int
 }
@@ -240,6 +269,11 @@ func (i *common) setDescription(s string) {
 func (i common) Description() string {
 	return i.description
 }
+
+func (i common) Visibility() Visibility {
+	return i.visibility
+}
+
 func (i common) IsReportable() bool {
 	return !i.nonReportable
 }
@@ -253,9 +287,9 @@ func (i *common) SetNonReportable() {
 	i.nonReportable = true
 }
 
-// SetSensitive marks the setting as dangerous to modify.
-func (i *common) SetSensitive() {
-	i.description += " (WARNING: may compromise cluster stability or correctness; do not edit without supervision)"
+// SetVisibility customizes the visibility of a setting.
+func (i *common) SetVisibility(v Visibility) {
+	i.visibility = v
 }
 
 // SetDeprecated marks the setting as obsolete. It also hides

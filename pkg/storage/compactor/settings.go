@@ -42,7 +42,7 @@ var minInterval = func() *settings.DurationSetting {
 		"minimum time interval to wait before compacting",
 		15*time.Second,
 	)
-	s.SetSensitive()
+	s.SetVisibility(settings.Sensitive)
 	return s
 }()
 
@@ -59,7 +59,7 @@ var thresholdBytes = func() *settings.ByteSizeSetting {
 		"minimum expected logical space reclamation required before considering an aggregated suggestion",
 		256<<20, // more than 256MiB will trigger
 	)
-	s.SetSensitive()
+	s.SetVisibility(settings.Sensitive)
 	return s
 }()
 
@@ -77,7 +77,7 @@ var thresholdBytesUsedFraction = func() *settings.FloatSetting {
 		0.10, // more than 10% of space will trigger
 		validateFraction,
 	)
-	s.SetSensitive()
+	s.SetVisibility(settings.Sensitive)
 	return s
 }()
 
@@ -94,7 +94,7 @@ var thresholdBytesAvailableFraction = func() *settings.FloatSetting {
 		0.10, // more than 10% of space will trigger
 		validateFraction,
 	)
-	s.SetSensitive()
+	s.SetVisibility(settings.Sensitive)
 	return s
 }()
 
@@ -107,6 +107,6 @@ var maxSuggestedCompactionRecordAge = func() *settings.DurationSetting {
 		"discard suggestions not processed within this duration",
 		24*time.Hour,
 	)
-	s.SetSensitive()
+	s.SetVisibility(settings.Sensitive)
 	return s
 }()

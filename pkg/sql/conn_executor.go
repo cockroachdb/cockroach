@@ -660,7 +660,7 @@ func (s *Server) newConnExecutorWithTxn(
 	return ex, nil
 }
 
-var maxSQLStatReset = settings.RegisterNonNegativeDurationSetting(
+var maxSQLStatReset = settings.RegisterPublicNonNegativeDurationSetting(
 	"diagnostics.forced_stat_reset.interval",
 	"interval after which pending diagnostics statistics should be discarded even if not reported",
 	time.Hour*2, // 2 x diagnosticReportFrequency

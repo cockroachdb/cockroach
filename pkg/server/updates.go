@@ -82,7 +82,7 @@ const (
 	updateCheckJitterSeconds = 120
 )
 
-var diagnosticReportFrequency = settings.RegisterNonNegativeDurationSetting(
+var diagnosticReportFrequency = settings.RegisterPublicNonNegativeDurationSetting(
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)",
 	time.Hour,

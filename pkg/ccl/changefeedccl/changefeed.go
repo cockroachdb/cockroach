@@ -32,7 +32,7 @@ var changefeedPollInterval = func() *settings.DurationSetting {
 		"polling interval for the prototype changefeed implementation",
 		1*time.Second,
 	)
-	s.SetSensitive()
+	s.SetVisibility(settings.Sensitive)
 	return s
 }()
 

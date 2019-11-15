@@ -98,6 +98,13 @@ func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterPublicIntSetting defines a new setting with type int and makes it public.
+func RegisterPublicIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	s := RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+	s.SetVisibility(Public)
+	return s
+}
+
 // RegisterNonNegativeIntSetting defines a new setting with type int.
 func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {

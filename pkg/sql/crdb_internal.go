@@ -785,6 +785,8 @@ CREATE TABLE crdb_internal.cluster_settings (
   variable      STRING NOT NULL,
   value         STRING NOT NULL,
   type          STRING NOT NULL,
+  public        BOOL NOT NULL, -- whether the setting is documented, which implies the user can expect support.
+  sensitive     BOOL NOT NULL, -- whether a non-public setting is known to cause serious problems if customized without supervision.
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -793,11 +795,19 @@ CREATE TABLE crdb_internal.cluster_settings (
 		}
 		for _, k := range settings.Keys() {
 			setting, _ := settings.Lookup(k)
+			isPublic := setting.Visibility() == settings.Public
+			isSensitive := setting.Visibility() == settings.Sensitive
+			desc := setting.Description()
+			if isSensitive {
+				desc += " (WARNING: may compromise cluster stability or correctness; do not edit without supervision!)"
+			}
 			if err := addRow(
 				tree.NewDString(k),
 				tree.NewDString(setting.String(&p.ExecCfg().Settings.SV)),
 				tree.NewDString(setting.Typ()),
-				tree.NewDString(setting.Description()),
+				tree.MakeDBool(tree.DBool(isPublic)),
+				tree.MakeDBool(tree.DBool(isSensitive)),
+				tree.NewDString(desc),
 			); err != nil {
 				return err
 			}

@@ -29,6 +29,7 @@ var enterpriseLicense = func() *settings.StringSetting {
 			return err
 		},
 	)
+	s.SetVisibility(settings.Public)
 	s.SetNonReportable()
 	return s
 }()
