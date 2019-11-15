@@ -65,14 +65,14 @@ func (u NoopUpdater) ResetRemaining() {}
 // NewUpdater makes an Updater.
 func NewUpdater(sv *Values) Updater {
 	return updater{
-		m:  make(map[string]struct{}, len(Registry)),
+		m:  make(map[string]struct{}, len(registry)),
 		sv: sv,
 	}
 }
 
 // Set attempts to parse and update a setting and notes that it was updated.
 func (u updater) Set(key, rawValue string, vt string) error {
-	d, ok := Registry[key]
+	d, ok := registry[key]
 	if !ok {
 		if _, ok := retiredSettings[key]; ok {
 			return nil
@@ -123,7 +123,7 @@ func (u updater) Set(key, rawValue string, vt string) error {
 
 // ResetRemaining sets all settings not updated by the updater to their default values.
 func (u updater) ResetRemaining() {
-	for k, v := range Registry {
+	for k, v := range registry {
 		if _, ok := u.m[k]; !ok {
 			v.setToDefault(u.sv)
 		}

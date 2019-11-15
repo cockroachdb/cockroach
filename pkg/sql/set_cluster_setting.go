@@ -27,14 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
 type setClusterSettingNode struct {
 	name    string
 	st      *cluster.Settings
-	setting settings.Setting
+	setting settings.WritableSetting
 	// If value is nil, the setting should be reset.
 	value tree.TypedExpr
 }
@@ -50,9 +50,14 @@ func (p *planner) SetClusterSetting(
 
 	name := strings.ToLower(n.Name)
 	st := p.EvalContext().Settings
-	setting, ok := settings.Lookup(name)
+	v, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+	}
+
+	setting, ok := v.(settings.WritableSetting)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
 	var value tree.TypedExpr

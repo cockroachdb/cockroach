@@ -25,7 +25,7 @@ type DurationSetting struct {
 	validateFn   func(time.Duration) error
 }
 
-var _ Setting = &DurationSetting{}
+var _ extendedSetting = &DurationSetting{}
 
 // Get retrieves the duration value in the setting.
 func (d *DurationSetting) Get(sv *Values) time.Duration {
