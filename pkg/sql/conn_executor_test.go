@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -32,10 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAnonymizeStatementsForReporting(t *testing.T) {
@@ -458,4 +461,89 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	if counts["mytest:SELECT version()"] == 0 {
 		t.Fatalf("query was not counted properly: %+v", counts)
 	}
+}
+
+func TestQueryProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const rows = 50000
+	defer row.TestingSetKVBatchSize(rows / 100)()
+
+	const stallAfterScans = 40
+	var queryRunningAtomic, scannedBatchesAtomic int64
+	stalled, unblock := make(chan struct{}), make(chan struct{})
+
+	tableKey := roachpb.Key(keys.MakeTablePrefix(keys.MinNonPredefinedUserDescID + 1))
+	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+
+	// Install a store filter which, if queryRunningAtomic is 1, will count scan
+	// requests issued to the test table and then, on the `stallAfterScans`
+	// request will stall so the test can inspect the query progress. The filter
+	// signals the test that it has reached the stall point by closign `stalled`
+	// and then waits for the test to run its check by waiting on the `unblock`
+	// channel.
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				TestingRequestFilter: func(req roachpb.BatchRequest) *roachpb.Error {
+					if req.IsSingleRequest() {
+						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+						if ok && tableSpan.ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
+							i := atomic.AddInt64(&scannedBatchesAtomic, 1)
+							if i == stallAfterScans {
+								close(stalled)
+								t.Logf("stalling on scan %d at %s and waiting for test to unblock...", i, scan.Key)
+								<-unblock
+							}
+						}
+					}
+					return nil
+				},
+			},
+		},
+	}
+	s, rawDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	db := sqlutils.MakeSQLRunner(rawDB)
+
+	db.Exec(t, `CREATE DATABASE t; CREATE TABLE t.test (x INT PRIMARY KEY);`)
+	db.Exec(t, `INSERT INTO t.test SELECT generate_series(1, $1)::INT`, rows)
+	db.Exec(t, `CREATE STATISTICS __auto__ FROM t.test`)
+	const query = `SELECT count(*) FROM t.test WHERE x > $1 and x % 2 = 0`
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		// Ensure that after query execution, we've actually hit and closed the
+		// stalled ch as expected.
+		defer func() {
+			select {
+			case <-stalled: //stalled was closed as expected.
+			default:
+				panic("expected stalled to have been closed during execution")
+			}
+		}()
+		atomic.StoreInt64(&queryRunningAtomic, 1)
+		_, err := rawDB.ExecContext(ctx, query, rows/2)
+		return err
+	})
+
+	t.Log("waiting for query to make progress...")
+	<-stalled
+	t.Log("query is now stalled. checking progress...")
+
+	var progress string
+	err := rawDB.QueryRow(`SELECT phase FROM [SHOW QUERIES] WHERE query LIKE 'SELECT count(*) FROM t.test%'`).Scan(&progress)
+
+	// Unblock the KV requests first, regardless of what we found in the progress.
+	close(unblock)
+	require.NoError(t, g.Wait())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Regexp(t, `executing \([5,6,7]\d\.`, progress)
 }
