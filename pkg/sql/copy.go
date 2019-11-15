@@ -13,8 +13,12 @@ package sql
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -29,6 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
+)
+
+const (
+	fileUploadTable = "crdb_internal.file_upload"
+	copyOptionDest  = "destination"
 )
 
 // copyMachine supports the Copy-in pgwire subprotocol (COPY...FROM STDIN). The
@@ -83,6 +93,9 @@ type copyMachine struct {
 	// parsing. Is it not correctly initialized with timestamps, transactions and
 	// other things that statements more generally need.
 	parsingEvalCtx *tree.EvalContext
+
+	processRows func(ctx context.Context) error
+	writeToFile *os.File
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -131,7 +144,63 @@ func newCopyMachine(
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.processRows = func(ctx context.Context) error {
+		return c.insertRows(ctx)
+	}
 	return c, nil
+}
+
+func newFileUploadMachine(
+	conn pgwirebase.Conn,
+	n *tree.CopyFrom,
+	execCfg *ExecutorConfig,
+	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time),
+) (c *copyMachine, retErr error) {
+	if n.Options == nil || len(n.Options) < 1 || n.Options[0].Key != copyOptionDest {
+		return nil, errors.New("expected exactly 1 option specified, destination")
+	}
+	c = &copyMachine{
+		conn:    conn,
+		table:   &n.Table,
+		columns: n.Columns,
+		// The planner will be prepared before use.
+		p:            planner{execCfg: execCfg},
+		resetPlanner: resetPlanner,
+	}
+
+	destination := strings.Trim(n.Options[0].Value.String(), `'"`)
+	filename := filepath.Join(c.p.execCfg.Settings.ExternalIODir, destination)
+	_, err := os.Stat(filename)
+	if !os.IsNotExist(err) {
+		return nil, errors.Newf(`a file already exists at the destination %s, cannot upload`, destination)
+	}
+	retErr = os.MkdirAll(filepath.Dir(filename), 0755)
+	if retErr != nil {
+		return
+	}
+	c.writeToFile, retErr = os.Create(filename)
+	if retErr != nil {
+		return
+	}
+
+	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
+	c.resultColumns = make(sqlbase.ResultColumns, 1)
+	c.resultColumns[0] = sqlbase.ResultColumn{Typ: types.Bytes}
+	c.parsingEvalCtx = c.p.EvalContext()
+	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.processRows = func(ctx context.Context) error {
+		return c.writeFile(ctx)
+	}
+	return
+}
+
+func CopyInStmt(destination, schema, table string, columns ...string) string {
+	return fmt.Sprintf(
+		`%s WITH destination = '%s'`,
+		pq.CopyInSchema(schema, table, columns...),
+		destination,
+	)
 }
 
 // copyTxnOpt contains information about the transaction in which the copying
@@ -193,6 +262,7 @@ Loop:
 
 	// Finalize execution by sending the statement tag and number of rows
 	// inserted.
+	c.writeToFile.Close()
 	dummy := tree.CopyFrom{}
 	tag := []byte(dummy.StatementTag())
 	tag = append(tag, ' ')
@@ -265,7 +335,7 @@ func (c *copyMachine) processCopyData(
 	if ln := len(c.rows); ln == 0 || (ln < copyBatchRowSize && !final) {
 		return nil
 	}
-	return c.insertRows(ctx)
+	return c.processRows(ctx)
 }
 
 // preparePlanner resets the planner so that it can be used for execution.
@@ -395,6 +465,20 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 	}
 
 	c.rows = append(c.rows, exprs)
+	return nil
+}
+
+func (c *copyMachine) writeFile(ctx context.Context) error {
+	for _, r := range c.rows {
+		b := []byte(*r[0].(*tree.DBytes))
+		n, err := c.writeToFile.Write(b)
+		if err != nil || n < len(b) {
+			return err
+		}
+	}
+	c.insertedRows += len(c.rows)
+	c.rows = c.rows[:0]
+	c.rowsMemAcc.Clear(ctx)
 	return nil
 }
 

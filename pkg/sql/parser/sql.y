@@ -2055,13 +2055,14 @@ opt_with_options:
   }
 
 copy_from_stmt:
-  COPY table_name opt_column_list FROM STDIN
+  COPY table_name opt_column_list FROM STDIN opt_with_options
   {
     name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.CopyFrom{
        Table: name,
        Columns: $3.nameList(),
        Stdin: true,
+       Options: $6.kvOptions(),
     }
   }
 
