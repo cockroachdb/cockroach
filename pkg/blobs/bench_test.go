@@ -76,7 +76,7 @@ func BenchmarkStreamingReadFile(b *testing.B) {
 
 func benchmarkStreamingReadFile(b *testing.B, tc *benchmarkTestCase) {
 	writeLargeFile(b, filepath.Join(tc.remoteExternalDir, tc.fileName), tc.fileSize)
-	writeTo := localStorage{externalIODir: tc.localExternalDir}
+	writeTo := LocalStorage{externalIODir: tc.localExternalDir}
 	b.ResetTimer()
 	b.SetBytes(tc.fileSize)
 	for i := 0; i < b.N; i++ {
