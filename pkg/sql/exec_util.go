@@ -910,6 +910,8 @@ type queryMeta struct {
 	// If set, this query will not be reported as part of SHOW QUERIES. This is
 	// set based on the statement implementing tree.HiddenFromShowQueries.
 	hidden bool
+
+	progressAtomic uint64
 }
 
 // cancel cancels the query associated with this queryMeta, by closing the associated

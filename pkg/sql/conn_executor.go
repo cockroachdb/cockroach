@@ -1650,7 +1650,7 @@ func (ex *connExecutor) execCopyIn(
 
 		// execInsertPlan
 		func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
-			_, _, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, false /* distribute */)
+			_, _, err := ex.execWithDistSQLEngine(ctx, p, tree.RowsAffected, res, false /* distribute */, nil /* progressAtomic */)
 			return err
 		},
 	)
@@ -2158,12 +2158,14 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			continue
 		}
 		sql := truncateSQL(query.stmt.String())
+		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			ID:            id.String(),
 			Start:         query.start.UTC(),
 			Sql:           sql,
 			IsDistributed: query.isDistributed,
 			Phase:         (serverpb.ActiveQuery_Phase)(query.phase),
+			Progress:      float32(progress),
 		})
 	}
 	lastActiveQuery := ""
