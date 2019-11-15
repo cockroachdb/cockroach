@@ -946,6 +946,11 @@ func populateQueriesTable(
 					isDistributedDatum = tree.DBoolTrue
 				}
 			}
+
+			if query.Progress > 0 {
+				phase = fmt.Sprintf("%s (%.2f%%)", phase, query.Progress*100)
+			}
+
 			if err := addRow(
 				tree.NewDString(query.ID),
 				tree.NewDInt(tree.DInt(session.NodeID)),

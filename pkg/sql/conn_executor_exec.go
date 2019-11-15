@@ -746,6 +746,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	queryMeta.phase = executing
 	queryMeta.isDistributed = distributePlan
+	progAtomic := &queryMeta.progressAtomic
 	ex.mu.Unlock()
 
 	// We need to set the "exec done" flag early because
@@ -766,7 +767,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagDistSQLLocal)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan, progAtomic)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 
@@ -829,6 +830,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	stmtType tree.StatementType,
 	res RestrictedCommandResult,
 	distribute bool,
+	progressAtomic *uint64,
 ) (bytesRead, rowsRead int64, _ error) {
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
@@ -839,6 +841,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		},
 		&ex.sessionTracing,
 	)
+	recv.progressAtomic = progressAtomic
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()

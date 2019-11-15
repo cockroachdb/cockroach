@@ -438,6 +438,8 @@ message ActiveQuery {
   }
   // phase stores the current phase of execution for this query.
   Phase phase = 5;
+
+  float progress = 6;
 }
 
 // Request object for ListSessions and ListLocalSessions.
