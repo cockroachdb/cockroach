@@ -191,9 +191,20 @@ func (tr *tableReader) Release() {
 	trPool.Put(tr)
 }
 
+const tableReaderProgressFrequency = 5000
+
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
+		// Check if it is time to emit a progress update.
+		if tr.rowsRead > tableReaderProgressFrequency {
+			meta := execinfrapb.GetProducerMeta()
+			meta.Metrics = execinfrapb.GetMetricsMeta()
+			meta.Metrics.RowsRead = tr.rowsRead
+			tr.rowsRead = 0
+			return nil, meta
+		}
+
 		row, _, _, err := tr.fetcher.NextRow(tr.Ctx)
 		if row == nil || err != nil {
 			tr.MoveToDraining(err)
