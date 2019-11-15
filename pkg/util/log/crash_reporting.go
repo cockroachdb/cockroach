@@ -58,7 +58,7 @@ var (
 	//
 	// Doing this, rather than just using a default of `true`, means that a node
 	// will not errantly send a report using a default before loading settings.
-	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
+	DiagnosticsReportingEnabled = settings.RegisterPublicBoolSetting(
 		"diagnostics.reporting.enabled",
 		"enable reporting diagnostic metrics to cockroach labs",
 		false,
@@ -72,7 +72,7 @@ var (
 	)
 
 	// PanicOnAssertions wraps "debug.panic_on_failed_assertions"
-	PanicOnAssertions = settings.RegisterBoolSetting(
+	PanicOnAssertions = settings.RegisterPublicBoolSetting(
 		"debug.panic_on_failed_assertions",
 		"panic when an assertion fails rather than reporting",
 		false,

@@ -37,7 +37,7 @@ const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
 
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
-var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
+var AutomaticStatisticsClusterMode = settings.RegisterPublicBoolSetting(
 	AutoStatsClusterSettingName,
 	"automatic statistics collection mode",
 	true,

@@ -45,15 +45,11 @@ const (
 
 // MergeQueueInterval is a setting that controls how often the merge queue waits
 // between processing replicas.
-var MergeQueueInterval = func() *settings.DurationSetting {
-	s := settings.RegisterNonNegativeDurationSetting(
-		"kv.range_merge.queue_interval",
-		"how long the merge queue waits between processing replicas",
-		time.Second,
-	)
-	s.SetSensitive()
-	return s
-}()
+var MergeQueueInterval = settings.RegisterNonNegativeDurationSetting(
+	"kv.range_merge.queue_interval",
+	"how long the merge queue waits between processing replicas",
+	time.Second,
+)
 
 // mergeQueue manages a queue of ranges slated to be merged with their right-
 // hand neighbor.
