@@ -72,7 +72,7 @@ func register(key, desc string, s Setting) {
 func Keys() (res []string) {
 	res = make([]string, 0, len(Registry))
 	for k := range Registry {
-		if Registry[k].Hidden() {
+		if !Registry[k].IsReportable() {
 			continue
 		}
 		res = append(res, k)

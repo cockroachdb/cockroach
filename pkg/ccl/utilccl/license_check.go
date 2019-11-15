@@ -29,7 +29,7 @@ var enterpriseLicense = func() *settings.StringSetting {
 			return err
 		},
 	)
-	s.SetConfidential()
+	s.SetNonReportable()
 	return s
 }()
 

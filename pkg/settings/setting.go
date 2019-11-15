@@ -200,14 +200,22 @@ type Setting interface {
 	setDescription(desc string)
 	setSlotIdx(slotIdx int)
 	getSlotIdx() int
-	Hidden() bool
+
+	// IsReportable indicates whether the setting can be *listed*
+	// in user-facing reports such as that produced by SHOW ALL CLUSTER
+	// SETTINGS.
+	// This only affects *listings* though; direct access is unconstrained.
+	// For example, `enterprise.license` is confidential:
+	// it cannot be listed, but can be accessed with `SHOW CLUSTER
+	// SETTING enterprise.license` or SET CLUSTER SETTING.
+	IsReportable() bool
 
 	SetOnChange(sv *Values, fn func())
 }
 
 type common struct {
-	description string
-	hidden      bool
+	description   string
+	nonReportable bool
 	// Each setting has a slotIdx which is used as a handle with Values.
 	slotIdx int
 }
@@ -232,21 +240,20 @@ func (i *common) setDescription(s string) {
 func (i common) Description() string {
 	return i.description
 }
-func (i common) Hidden() bool {
-	return i.hidden
+func (i common) IsReportable() bool {
+	return !i.nonReportable
 }
 
-// SetConfidential prevents a setting from showing up in SHOW ALL
+// SetNonReportable prevents a setting from showing up in SHOW ALL
 // CLUSTER SETTINGS. It can still be used with SET and SHOW if the
-// exact setting name is known. Use SetConfidential for data that must
+// exact setting name is known. Use SetNonReportable for data that must
 // be hidden from standard setting report and troubleshooting
 // screenshots, such as license data or keys.
-func (i *common) SetConfidential() {
-	i.hidden = true
+func (i *common) SetNonReportable() {
+	i.nonReportable = true
 }
 
-// SetSensitive marks the setting as dangerous to modify. Use SetConfidential for settings
-// where the user must be strongly discouraged to tweak the values.
+// SetSensitive marks the setting as dangerous to modify.
 func (i *common) SetSensitive() {
 	i.description += " (WARNING: may compromise cluster stability or correctness; do not edit without supervision)"
 }
@@ -255,7 +262,7 @@ func (i *common) SetSensitive() {
 // it from the output of SHOW CLUSTER SETTINGS.
 func (i *common) SetDeprecated() {
 	i.description = "do not use - " + i.description
-	i.hidden = true
+	i.nonReportable = true
 }
 
 // SetOnChange installs a callback to be called when a setting's value changes.
