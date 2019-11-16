@@ -389,13 +389,14 @@ func NewColOperator(
 		}
 
 		var distinctCols, orderedCols util.FastIntSet
+		allSorted := true
 
 		for _, col := range core.Distinct.OrderedColumns {
 			orderedCols.Add(int(col))
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				return result, errors.Newf("unsorted distinct not supported")
+				allSorted = false
 			}
 			distinctCols.Add(int(col))
 		}
@@ -409,8 +410,13 @@ func NewColOperator(
 		if err != nil {
 			return result, err
 		}
-		result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
-		result.IsStreaming = true
+		// TODO(yuzefovich): implement the distinct on partially ordered columns.
+		if allSorted {
+			result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+			result.IsStreaming = true
+		} else {
+			result.Op = NewUnorderedDistinct(NewAllocator(), inputs[0], core.Distinct.DistinctColumns, typs)
+		}
 
 	case core.Ordinality != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
