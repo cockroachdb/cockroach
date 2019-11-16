@@ -951,7 +951,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
 ·                         distributed  false                                      ·                         ·
-·                         vectorized   true                                       ·                         ·
+·                         vectorized   false                                      ·                         ·
 render                    ·            ·                                          (a int)                   ·
  │                        render 0     (1)[int]                                   ·                         ·
  └── distinct             ·            ·                                          (column5 decimal, v int)  ·
