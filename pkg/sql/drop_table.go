@@ -85,6 +85,10 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 				}
 			}
 		}
+		if err := p.canRemoveAllTableOwnedSequences(ctx, droppedDesc, n.DropBehavior); err != nil {
+			return nil, err
+		}
+
 	}
 
 	if len(td) == 0 {
@@ -273,6 +277,13 @@ func (p *planner) dropTableImpl(
 	// Remove sequence dependencies.
 	for i := range tableDesc.Columns {
 		if err := removeSequenceDependencies(tableDesc, &tableDesc.Columns[i], params); err != nil {
+			return droppedViews, err
+		}
+	}
+
+	// Drop sequences that the columns of the table own
+	for _, col := range tableDesc.Columns {
+		if err := dropSequencesOwnedByCol(&col, params); err != nil {
 			return droppedViews, err
 		}
 	}

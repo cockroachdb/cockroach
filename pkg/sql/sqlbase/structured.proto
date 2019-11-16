@@ -126,9 +126,11 @@ message ColumnDescriptor {
   reserved 7;
   // Ids of sequences used in this column's DEFAULT expression, in calls to nextval().
   repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];
+  // Ids of sequences that the column owns.
+  repeated uint32 owns_sequence_ids = 11 [(gogoproto.casttype) = "ID"];
   // Expression to use to compute the value of this column if this is a
   // computed column.
-  optional string compute_expr = 11;
+  optional string compute_expr = 12;
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
@@ -759,6 +761,20 @@ message TableDescriptor {
     optional int64 start = 4 [(gogoproto.nullable) = false];
     // Whether the sequence is virtual.
     optional bool virtual = 5 [(gogoproto.nullable) = false];
+
+    message SequenceOwner {
+      option (gogoproto.equal) = true;
+      // Sequence Owner's Column ID
+      optional uint32 owner_column_id = 1 [(gogoproto.nullable) = false,
+                                          (gogoproto.customname) = "OwnerColumnID",
+                                          (gogoproto.casttype) = "ColumnID"];
+      // Sequence Owner's Table ID
+      optional uint32 owner_table_id = 2 [(gogoproto.nullable) = false,
+                                         (gogoproto.customname) = "OwnerTableID",
+                                         (gogoproto.casttype) = "ID"];
+    }
+
+    optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
