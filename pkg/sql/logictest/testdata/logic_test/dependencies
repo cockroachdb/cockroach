@@ -136,4 +136,4 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blog_posts%'
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [0]
+63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [1]
