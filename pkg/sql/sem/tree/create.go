@@ -1097,6 +1097,15 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			ctx.Printf("%d", *option.IntVal)
 		case SeqOptVirtual:
 			ctx.WriteString(option.Name)
+		case SeqOptOwnedBy:
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
+			switch option.ColumnItemVal {
+			case nil:
+				ctx.WriteString("NONE")
+			default:
+				ctx.FormatNode(option.ColumnItemVal)
+			}
 		default:
 			panic(errors.AssertionFailedf("unexpected SequenceOption: %v", option))
 		}
@@ -1110,6 +1119,8 @@ type SequenceOption struct {
 	IntVal *int64
 
 	OptionalWord bool
+
+	ColumnItemVal *ColumnItem
 }
 
 // Names of options on CREATE SEQUENCE.
@@ -1127,7 +1138,6 @@ const (
 
 	// Avoid unused warning for constants.
 	_ = SeqOptAs
-	_ = SeqOptOwnedBy
 )
 
 // CreateUser represents a CREATE USER statement.

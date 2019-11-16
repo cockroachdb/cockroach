@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -83,7 +82,7 @@ func doCreateSequence(
 	privs := dbDesc.GetPrivileges()
 
 	desc, err := MakeSequenceTableDesc(name.Table(), opts,
-		dbDesc.ID, id, params.creationTimeForNewTableDescriptor(), privs, params.EvalContext().Settings)
+		dbDesc.ID, id, params.creationTimeForNewTableDescriptor(), privs, &params)
 	if err != nil {
 		return err
 	}
@@ -141,7 +140,7 @@ func MakeSequenceTableDesc(
 	id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
-	settings *cluster.Settings,
+	params *runParams,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges, false /* temporary */)
 
@@ -174,7 +173,7 @@ func MakeSequenceTableDesc(
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
-	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */)
+	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */, params, id)
 	if err != nil {
 		return desc, err
 	}
