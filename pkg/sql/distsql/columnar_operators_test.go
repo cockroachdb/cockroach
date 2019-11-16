@@ -129,9 +129,9 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 	seed := rand.Int()
 	rng := rand.New(rand.NewSource(int64(seed)))
 	nRuns := 10
-	nRows := 100
+	nRows := 10
 	maxCols := 3
-	maxNum := 10
+	maxNum := 3
 	intTyps := make([]types.T, maxCols)
 	for i := range intTyps {
 		intTyps[i] = *types.Int

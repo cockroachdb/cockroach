@@ -21,25 +21,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestSortedDistinct(t *testing.T) {
+func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		distinctCols []uint32
 		colTypes     []coltypes.T
-		numCols      int
 		tuples       []tuple
 		expected     []tuple
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
-			numCols:      4,
+			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
 			tuples: tuples{
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
 				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
-				{1.0, 2, "30", 5},
+				{1.0, 2, "30", 4},
 				{2.0, 2, "30", 4},
 				{2.0, 3, "30", 4},
 				{2.0, 3, "40", 4},
@@ -56,14 +54,13 @@ func TestSortedDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{1, 0, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
-			numCols:      4,
+			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
 			tuples: tuples{
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
 				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
-				{1.0, 2, "30", 5},
+				{1.0, 2, "30", 4},
 				{2.0, 2, "30", 4},
 				{2.0, 3, "30", 4},
 				{2.0, 3, "40", 4},
@@ -80,11 +77,10 @@ func TestSortedDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
-			numCols:      4,
+			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
 			tuples: tuples{
 				{1.0, 2, "30", 4},
-				{1.0, 2, "30", 5},
+				{1.0, 2, "30", 4},
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
 				{2.0, 2, "30", 4},
@@ -108,6 +104,10 @@ func TestSortedDistinct(t *testing.T) {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
 				return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
+			})
+		runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
+			func(input []Operator) (Operator, error) {
+				return NewUnorderedDistinct(testAllocator, input[0], tc.distinctCols, tc.colTypes), nil
 			})
 	}
 }
@@ -157,5 +157,41 @@ func BenchmarkSortedDistinct(b *testing.B) {
 				distinct.Next(ctx)
 			}
 		})
+	}
+}
+
+func BenchmarkUnorderedDistinct(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	for _, numCols := range []int{1, 2} {
+		for _, nulls := range []bool{false, true} {
+			for _, numBatches := range []int{1, 1 << 4, 1 << 8} {
+				b.Run(
+					fmt.Sprintf(
+						"numCols=%d/nulls=%t/numBatches=%d", numCols, nulls, numBatches,
+					), func(b *testing.B) {
+						var typs []coltypes.T
+						var distinctCols []uint32
+						for i := 0; i < numCols; i++ {
+							typs = append(typs, coltypes.Int64)
+							distinctCols = append(distinctCols, uint32(i))
+						}
+						b.SetBytes(int64(8 * int(coldata.BatchSize()) * numCols * numBatches))
+						b.ResetTimer()
+						for i := 0; i < b.N; i++ {
+							source := NewRandomDataOp(testAllocator, rng, RandomDataOpArgs{
+								DeterministicTyps: typs,
+								Nulls:             nulls,
+								NumBatches:        numBatches,
+							})
+							distinct := NewUnorderedDistinct(testAllocator, source, distinctCols, typs)
+							b.StartTimer()
+							for b := distinct.Next(ctx); b.Length() != 0; b = distinct.Next(ctx) {
+							}
+							b.StopTimer()
+						}
+					})
+			}
+		}
 	}
 }
