@@ -1035,7 +1035,7 @@ func MakeTableDesc(
 ) (sqlbase.MutableTableDescriptor, error) {
 	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
 	// been populated.
-	columnSequenceExprMap := make(map[int]tree.TypedExpr)
+	var columnDefaultExprs []tree.TypedExpr
 
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges, temporary)
 
@@ -1058,7 +1058,9 @@ func MakeTableDesc(
 			desc.AddColumn(col)
 			if d.HasDefaultExpr() {
 				// This resolution must be delayed until ColumnIDs have been populated.
-				columnSequenceExprMap[len(desc.Columns)-1] = expr
+				columnDefaultExprs = append(columnDefaultExprs, expr)
+			} else {
+				columnDefaultExprs = append(columnDefaultExprs, nil /* expr */)
 			}
 
 			if idx != nil {
@@ -1213,7 +1215,7 @@ func MakeTableDesc(
 	// Once all the IDs have been allocated, we can add the Sequence dependencies
 	// as maybeAddSequenceDependencies requires ColumnIDs to be correct.
 	for i := range desc.Columns {
-		if expr, ok := columnSequenceExprMap[i]; ok {
+		if expr := columnDefaultExprs[i]; expr != nil {
 			changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, &desc.Columns[i], expr, affected)
 			if err != nil {
 				return desc, err

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type dropSequenceNode struct {
@@ -105,6 +106,70 @@ func (p *planner) sequenceDependencyError(
 			"cannot drop sequence %s because other objects depend on it",
 			droppedDesc.Name,
 		)
+	}
+	return nil
+}
+
+func (p *planner) canRemoveAllTableOwnedSequences(
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, behavior tree.DropBehavior,
+) error {
+	for _, col := range desc.Columns {
+		err := p.canRemoveOwnedSequencesImpl(ctx, desc, &col, behavior, false /* isColumnDrop */)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) canRemoveAllColumnOwnedSequences(
+	ctx context.Context,
+	desc *sqlbase.MutableTableDescriptor,
+	col *sqlbase.ColumnDescriptor,
+	behavior tree.DropBehavior,
+) error {
+	return p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, true /* isColumnDrop */)
+}
+
+func (p *planner) canRemoveOwnedSequencesImpl(
+	ctx context.Context,
+	desc *sqlbase.MutableTableDescriptor,
+	col *sqlbase.ColumnDescriptor,
+	behavior tree.DropBehavior,
+	isColumnDrop bool,
+) error {
+	for _, sequenceID := range col.OwnsSequenceIds {
+		seqLookup, err := p.LookupTableByID(ctx, sequenceID)
+		if err != nil {
+			return err
+		}
+		seqDesc := seqLookup.Desc
+		affectsNoColumns := len(seqDesc.DependedOnBy) == 0
+		// It is okay if the sequence is depended on by columns that are being
+		// dropped in the same transaction
+		canBeSafelyRemoved := len(seqDesc.DependedOnBy) == 1 && seqDesc.DependedOnBy[0].ID == desc.ID
+		// If only the column is being dropped, no other columns of the table can
+		// depend on that sequence either
+		if isColumnDrop {
+			canBeSafelyRemoved = canBeSafelyRemoved && len(seqDesc.DependedOnBy[0].ColumnIDs) == 1 &&
+				seqDesc.DependedOnBy[0].ColumnIDs[0] == col.ID
+		}
+
+		canRemove := affectsNoColumns || canBeSafelyRemoved
+
+		// Once Drop Sequence Cascade actually respects the drop behavior, this
+		// check should go away.
+		if behavior == tree.DropCascade && !canRemove {
+			return unimplemented.NewWithIssue(20965, "DROP SEQUENCE CASCADE is currently unimplemented")
+		}
+		// If Cascade is not enabled, and more than 1 columns depend on it, and the
+		if behavior != tree.DropCascade && !canRemove {
+			return pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop table %s because other objects depend on it",
+				desc.Name,
+			)
+		}
 	}
 	return nil
 }
