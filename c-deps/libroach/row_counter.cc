@@ -91,6 +91,7 @@ bool RowCounter::Count(const rocksdb::Slice& key, cockroach::roachpb::BulkOpSumm
   if (decoded_key.data() == prev_key.data) {
     return true;
   }
+  free(prev_key.data);
   prev_key = ToDBString(decoded_key);
 
   uint64_t tbl;
