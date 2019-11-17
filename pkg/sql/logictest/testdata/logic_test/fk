@@ -2725,3 +2725,19 @@ user root
 
 statement ok
 COMMIT
+
+# Regression test for #42498: MATCH FULL validation should work when columns in
+# a composite FK reference have different types.
+subtest 42498_match_full_mixed_types
+
+statement ok
+CREATE TABLE table1_42498 (col1 REGPROC NOT NULL, col2 DATE NOT NULL)
+
+statement ok
+CREATE TABLE table2_42498 (col3 REGPROC NOT NULL, col4 DATE NOT NULL, UNIQUE (col4, col3))
+
+statement ok
+ALTER TABLE table1_42498 ADD FOREIGN KEY (col2, col1) REFERENCES table2_42498 (col4, col3) MATCH FULL
+
+statement ok
+DROP TABLE table1_42498, table2_42498 CASCADE
