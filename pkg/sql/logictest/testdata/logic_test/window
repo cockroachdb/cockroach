@@ -10,6 +10,7 @@ CREATE TABLE kv (
   d DECIMAL,
   s STRING,
   b BOOL,
+  i INTERVAL,
   FAMILY (k, v, w, f, b),
   FAMILY (d),
   FAMILY (s)
@@ -17,12 +18,12 @@ CREATE TABLE kv (
 
 statement OK
 INSERT INTO kv VALUES
-(1, 2, 3, 1.0, 1, 'a', true),
-(3, 4, 5, 2, 8, 'a', true),
-(5, NULL, 5, 9.9, -321, NULL, false),
-(6, 2, 3, 4.4, 4.4, 'b', true),
-(7, 2, 2, 6, 7.9, 'b', true),
-(8, 4, 2, 3, 3, 'A', false)
+(1, 2, 3, 1.0, 1, 'a', true, '1min'),
+(3, 4, 5, 2, 8, 'a', true, '2sec'),
+(5, NULL, 5, 9.9, -321, NULL, false, NULL),
+(6, 2, 3, 4.4, 4.4, 'b', true, '1ms'),
+(7, 2, 2, 6, 7.9, 'b', true, '4 days'),
+(8, 4, 2, 3, 3, 'A', false, '3 years')
 
 query error window functions are not allowed in GROUP BY
 SELECT * FROM kv GROUP BY v, count(w) OVER ()
@@ -208,38 +209,38 @@ SELECT avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 
 7
 8
 
-query IIIRRTBR colnames
+query IIIRRTBTR colnames
 SELECT *, avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 1
 ----
-k  v     w  f    d     s     b      avg
-1  2     3  1    1     a     true   4.6666666666666666667
-3  4     5  2    8     a     true   5.5
-5  NULL  5  9.9  -321  NULL  false  5
-6  2     3  4.4  4.4   b     true   4.6666666666666666667
-7  2     2  6    7.9   b     true   7
-8  4     2  3    3     A     false  8
+k  v     w  f    d     s     b      i             avg
+1  2     3  1    1     a     true   00:01:00      4.6666666666666666667
+3  4     5  2    8     a     true   00:00:02      5.5
+5  NULL  5  9.9  -321  NULL  false  NULL          5
+6  2     3  4.4  4.4   b     true   00:00:00.001  4.6666666666666666667
+7  2     2  6    7.9   b     true   4 days        7
+8  4     2  3    3     A     false  3 years       8
 
-query IIIRRTBR colnames
+query IIIRRTBTR colnames
 SELECT *, avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w, k
 ----
-k  v     w  f    d     s     b      avg
-1  2     3  1    1     a     true   4.6666666666666666667
-6  2     3  4.4  4.4   b     true   4.6666666666666666667
-5  NULL  5  9.9  -321  NULL  false  5
-3  4     5  2    8     a     true   5.5
-7  2     2  6    7.9   b     true   7
-8  4     2  3    3     A     false  8
+k  v     w  f    d     s     b      i             avg
+1  2     3  1    1     a     true   00:01:00      4.6666666666666666667
+6  2     3  4.4  4.4   b     true   00:00:00.001  4.6666666666666666667
+5  NULL  5  9.9  -321  NULL  false  NULL          5
+3  4     5  2    8     a     true   00:00:02      5.5
+7  2     2  6    7.9   b     true   4 days        7
+8  4     2  3    3     A     false  3 years       8
 
-query IIIRRTB colnames
+query IIIRRTBT colnames
 SELECT * FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w DESC, k
 ----
-k  v     w  f    d     s     b
-8  4     2  3    3     A     false
-7  2     2  6    7.9   b     true
-3  4     5  2    8     a     true
-5  NULL  5  9.9  -321  NULL  false
-1  2     3  1    1     a     true
-6  2     3  4.4  4.4   b     true
+k  v     w  f    d     s     b      i
+8  4     2  3    3     A     false  3 years
+7  2     2  6    7.9   b     true   4 days
+3  4     5  2    8     a     true   00:00:02
+5  NULL  5  9.9  -321  NULL  false  NULL
+1  2     3  1    1     a     true   00:01:00
+6  2     3  4.4  4.4   b     true   00:00:00.001
 
 query error window "w" is already defined
 SELECT avg(k) OVER w FROM kv WINDOW w AS (), w AS ()
@@ -1897,6 +1898,20 @@ DELETE FROM kv WHERE k = 12
 
 query error FILTER specified but rank\(\) is not an aggregate function
 SELECT k, rank() FILTER (WHERE k=1) OVER () FROM kv
+
+query TT
+SELECT i, avg(i) OVER (ORDER BY i) FROM kv ORDER BY i
+----
+NULL          NULL
+NULL          NULL
+NULL          NULL
+NULL          NULL
+00:00:00.001  00:00:00.001
+00:00:02      00:00:01.0005
+00:01:00      00:00:20.667
+4 days        1 day 00:00:15.50025
+3 years       7 mons 6 days 19:12:12.4002
+
 
 # Issue #14606: correctly handle aggregation functions above the windowing level
 query I

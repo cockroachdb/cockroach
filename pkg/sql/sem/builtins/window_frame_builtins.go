@@ -408,6 +408,8 @@ func (w *avgWindowFunc) Compute(
 		count := apd.New(int64(frameSize), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)
 		return &avg, err
+	case *tree.DInterval:
+		return &tree.DInterval{Duration: t.Duration.Div(int64(frameSize))}, nil
 	default:
 		return nil, errors.AssertionFailedf("unexpected SUM result type: %s", t)
 	}
