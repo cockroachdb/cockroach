@@ -102,7 +102,7 @@ func (rk RKey) Next() RKey {
 // PrefixEnd determines the end key given key as a prefix, that is the
 // key that sorts precisely behind all keys starting with prefix: "1"
 // is added to the final byte and the carry propagated. The special
-// cases of nil and KeyMin always returns KeyMax.
+// cases of nilo and KeyMin always returns KeyMax.
 func (rk RKey) PrefixEnd() RKey {
 	if len(rk) == 0 {
 		return RKeyMax

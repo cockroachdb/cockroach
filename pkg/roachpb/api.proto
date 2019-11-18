@@ -1474,6 +1474,36 @@ message AdminScatterResponse {
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }
 
+// AdminVerifyProtectedTimestampRequest is the argument to the
+// AdminVerifyProtectedTimestamp method which ensures that the specified record
+// will be seen before data can be garbage collected at the timestamp.
+message AdminVerifyProtectedTimestampRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  util.hlc.Timestamp protected = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp record_alive_at = 3 [(gogoproto.nullable) = false];
+
+  bytes record_id = 4 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "RecordID"
+  ];
+}
+
+
+// AdminVerifyProtectedTimestampResponse is the argument to the
+// AdminVerifyProtectedTimestamp method which ensures that the specified record
+// will be seen before data can be garbage collected at the timestamp.
+message AdminVerifyProtectedTimestampResponse {
+  
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bool verified = 2;
+
+  repeated RangeDescriptor failed_ranges = 3 [(gogoproto.nullable) = false];
+}
+
 // AddSSTableRequest is arguments to the AddSSTable() method, to link a file
 // into the RocksDB log-structured merge-tree.
 message AddSSTableRequest {
@@ -1674,6 +1704,7 @@ message RequestUnion {
     RefreshRangeRequest refresh_range = 41;
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
+    AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
   }
   reserved 15, 23, 25, 27;
 }
@@ -1725,6 +1756,7 @@ message ResponseUnion {
     RefreshRangeResponse refresh_range = 41;
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
+    AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
   }
   reserved 15, 23, 25, 27, 28;
 }
