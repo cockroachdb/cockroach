@@ -279,7 +279,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 			return nil, err
 		}
 	} else {
-		auxDir = cfg.Opts.FS.PathJoin(cfg.Dir, "auxiliary")
+		auxDir = cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
 		if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
 			return nil, err
 		}

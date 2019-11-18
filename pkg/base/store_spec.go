@@ -13,7 +13,9 @@ package base
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -355,6 +357,51 @@ func (ssl StoreSpecList) String() string {
 		buffer.Truncate(l - 1)
 	}
 	return buffer.String()
+}
+
+// AuxiliaryDir is the path of the auxiliary dir relative to an engine.Engine's
+// root directory. It must not be changed without a proper migration.
+const AuxiliaryDir = "auxiliary"
+
+// PreventedStartupFile is the filename (relative to 'dir') used for files that
+// can block server startup.
+func PreventedStartupFile(dir string) string {
+	return filepath.Join(dir, "_CRITICAL_ALERT.txt")
+}
+
+// GetPreventedStartupMessage attempts to read the PreventedStartupFile for each
+// store directory and returns their concatenated contents. These files
+// typically request operator intervention after a corruption event by
+// preventing the affected node(s) from starting back up.
+func (ssl StoreSpecList) GetPreventedStartupMessage() (string, error) {
+	var buf strings.Builder
+	for _, ss := range ssl.Specs {
+		path := ss.PreventedStartupFile()
+		if path == "" {
+			continue
+		}
+		b, err := ioutil.ReadFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return "", err
+			}
+			continue
+		}
+		fmt.Fprintf(&buf, "From %s:\n\n", path)
+		_, _ = buf.Write(b)
+		fmt.Fprintln(&buf)
+	}
+	return buf.String(), nil
+}
+
+// PreventedStartupFile returns the path to a file which, if it exists, should
+// prevent the server from starting up. Returns an empty string for in-memory
+// engines.
+func (ss StoreSpec) PreventedStartupFile() string {
+	if ss.InMemory {
+		return ""
+	}
+	return PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
 }
 
 // Type returns the underlying type in string form. This is part of pflag's

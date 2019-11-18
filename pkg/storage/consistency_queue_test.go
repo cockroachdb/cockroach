@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"path/filepath"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConsistencyQueueRequiresLive verifies the queue will not
@@ -356,6 +358,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
 	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
 	assert.Contains(t, resp.Result[0].Detail, `stats`)
+
+	// A death rattle should have been written on s2 (store index 1).
+	b, err := ioutil.ReadFile(base.PreventedStartupFile(mtc.stores[1].Engine().GetAuxiliaryDir()))
+	require.NoError(t, err)
+	require.NotEmpty(t, b)
 }
 
 // TestConsistencyQueueRecomputeStats is an end-to-end test of the mechanism CockroachDB

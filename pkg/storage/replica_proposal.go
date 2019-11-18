@@ -13,12 +13,14 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -256,14 +258,33 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 			// holder and thus won't be printed to the logs. Since we're already
 			// in a goroutine that's about to end, simply sleep for a few seconds
 			// and then terminate.
+			auxDir := r.store.engine.GetAuxiliaryDir()
+			_ = os.MkdirAll(auxDir, 0755)
+			path := base.PreventedStartupFile(auxDir)
+
+			preventStartupMsg := fmt.Sprintf(`ATTENTION:
+
+this node is terminating because a replica inconsistency was detected between %s
+and its other replicas. Please check your cluster-wide log files for more
+information and contact the CockroachDB support team. It is not necessarily safe
+to replace this node; cluster data may still be at risk of corruption.
+
+A checkpoints directory to aid (expert) debugging should be present in:
+%s
+
+A file preventing this node from restarting was placed at:
+%s
+`, r, auxDir, path)
+
+			if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
+				log.Warning(ctx, err)
+			}
+
 			if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
 				p(*r.store.Ident)
 			} else {
 				time.Sleep(10 * time.Second)
-				log.Fatalf(r.AnnotateCtx(context.Background()),
-					"this node is terminating because a replica inconsistency was detected "+
-						"between %s and its other replicas. Please check your cluster-wide log files for "+
-						"more information and contact the CockroachDB support team.", r)
+				log.Fatalf(r.AnnotateCtx(context.Background()), preventStartupMsg)
 			}
 		}
 

@@ -437,11 +437,17 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// First things first: if the user wants background processing,
 	// relinquish the terminal ASAP by forking and exiting.
 	//
-	// If executing in the backround, the function returns ok == true in
+	// If executing in the background, the function returns ok == true in
 	// the parent process (regardless of err) and the parent exits at
 	// this point.
 	if ok, err := maybeRerunBackground(); ok {
 		return err
+	}
+
+	if s, err := serverCfg.Stores.GetPreventedStartupMessage(); err != nil {
+		return err
+	} else if s != "" {
+		log.Fatal(context.Background(), s)
 	}
 
 	// Set up the signal handlers. This also ensures that any of these
