@@ -128,3 +128,7 @@ func (t *clockTracker) ProtectedBy(
 ) (asOf hlc.Timestamp) {
 	return (*hlc.Clock)(t).Now()
 }
+
+func (t *clockTracker) Start(context.Context, *stop.Stopper) error {
+	return nil
+}
