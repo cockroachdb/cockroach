@@ -78,12 +78,28 @@ func (l *LocalStorage) WriteFile(filename string, content io.Reader) error {
 }
 
 // ReadFile prepends IO dir to filename and reads the content of that local file.
-func (l *LocalStorage) ReadFile(filename string) (io.ReadCloser, error) {
+func (l *LocalStorage) ReadFile(filename string) (res io.ReadCloser, err error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return nil, err
 	}
-	return os.Open(fullPath)
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = f.Close()
+		}
+	}()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if fi.IsDir() {
+		return nil, errors.Errorf("expected a file but %q is a directory", fi.Name())
+	}
+	return f, nil
 }
 
 // List prepends IO dir to pattern and glob matches all local files against that pattern.
