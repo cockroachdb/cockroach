@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS seed AS
 
 INSERT INTO seed DEFAULT VALUES;
 CREATE INDEX on seed (_int8, _float8, _date);
+CREATE INVERTED INDEX on seed (_jsonb);
 `
 
 	vecSeedTable = `

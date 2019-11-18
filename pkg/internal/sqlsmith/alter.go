@@ -13,6 +13,7 @@ package sqlsmith
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 var (
@@ -194,6 +195,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	}
 	var cols tree.IndexElemList
 	seen := map[tree.Name]bool{}
+	inverted := false
 	for len(cols) < 1 || s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
@@ -204,6 +206,12 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 			Column:    col.Name,
 			Direction: s.randDirection(),
 		})
+		// If this is the first column and it's JSON, then usually make
+		// this an inverted index.
+		if len(cols) == 1 && col.Type.Family() == types.JsonFamily && s.rnd.Intn(3) > 0 {
+			inverted = true
+			break
+		}
 	}
 	var storing tree.NameList
 	for s.coin() {
@@ -216,11 +224,12 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	}
 
 	return &tree.CreateIndex{
-		Name:    s.name("idx"),
-		Table:   *tableRef.TableName,
-		Unique:  s.coin(),
-		Columns: cols,
-		Storing: storing,
+		Name:     s.name("idx"),
+		Table:    *tableRef.TableName,
+		Unique:   s.coin(),
+		Columns:  cols,
+		Storing:  storing,
+		Inverted: inverted,
 	}, true
 }
 
