@@ -9,12 +9,12 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React from "react";
-
+import React, { Fragment } from "react";
 import { cockroach } from "src/js/protos";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 const WARNING_ICON = (
   <svg className="warning-icon" width="17" height="17" viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg">
@@ -230,6 +230,19 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
   }
 }
 
+function PlanNodes(props: {
+  nodes: FlatPlanNode[],
+}): React.ReactElement<{}> {
+  const nodes = props.nodes;
+  return (
+    <ul>
+      {nodes.map( (node) => {
+        return <PlanNode node={node}/>;
+      })}
+    </ul>
+  );
+}
+
 interface PlanNodeProps {
   node: FlatPlanNode;
 }
@@ -254,19 +267,6 @@ class PlanNode extends React.Component<PlanNodeProps> {
       </li>
     );
   }
-}
-
-function PlanNodes(props: {
-  nodes: FlatPlanNode[],
-}): React.ReactElement<{}> {
-  const nodes = props.nodes;
-  return (
-    <ul>
-      {nodes.map( (node) => {
-        return <PlanNode node={node}/>;
-      })}
-    </ul>
-  );
 }
 
 interface PlanViewProps {
@@ -310,7 +310,7 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
     const flattenedPlanNodes = flattenTree(this.props.plan);
 
     const lastSampledHelpText = (
-      <React.Fragment>
+      <Fragment>
         If the time from the last sample is greater than 5 minutes, a new
         plan will be sampled. This frequency can be configured
         with the cluster setting{" "}
@@ -319,7 +319,7 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
           sql.metrics.statement_details.plan_collection.period
         </pre>
         </code>.
-      </React.Fragment>
+      </Fragment>
     );
 
     return (

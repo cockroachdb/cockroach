@@ -28,6 +28,7 @@ import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants
 import NonTableSummary from "./nonTableSummary";
 
 import "./databases.styl";
+import { Dispatch, bindActionCreators } from "redux";
 
 const databasePages = [
   { value: "tables", label: "Tables" },
@@ -157,28 +158,28 @@ export const selectDatabasesByType = createSelector(
   },
 );
 
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  databasesByType: selectDatabasesByType(state),
+});
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshDatabases,
+    },
+    dispatch,
+  );
+
 // Connect the DatabaseTablesList class with our redux store.
 const databaseTablesListConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      databasesByType: selectDatabasesByType(state),
-    };
-  },
-  {
-    refreshDatabases,
-  },
+  mapStateToProps,
+  mapDispatchToProps,
 )(DatabaseTablesList);
 
 // Connect the DatabaseGrantsList class with our redux store.
 const databaseGrantsListConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      databasesByType: selectDatabasesByType(state),
-    };
-  },
-  {
-    refreshDatabases,
-  },
+  mapStateToProps,
+  mapDispatchToProps,
 )(DatabaseGrantsList);
 
 export {

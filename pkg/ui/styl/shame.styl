@@ -35,6 +35,7 @@
   box-shadow 0 0 0 black !important
   border-radius 0 3px 3px 0 !important
   background-color transparent !important
+  width auto !important 
 
 .Select-input
   line-height inherit !important
@@ -130,3 +131,124 @@
 .nvd3 text
   opacity .6
   font-size 10px
+
+.ant-divider
+  background #c8cbd4
+  margin-left 0
+  margin-right 22px
+  &.ant-divider-vertical
+    height auto
+.ant-tooltip-inner
+  font-size 12px
+.ant-input, .ant-time-picker-input
+  height 40px
+  padding 0px 11px
+  border-radius 3px
+  border solid 1px #c8cbd4
+  &:focus
+    border solid 1px #3a7ce1
+    box-shadow none
+  &:hover
+    border-color #3a7ce1
+
+.ant-time-picker-panel-combobox
+  display flex
+
+.ant-calendar-picker:hover .ant-calendar-picker-input:not(.ant-input-disabled)
+  border-color #3a7ce1
+
+.ant-calendar
+  font-size 12px
+  font-family Lato-Regular
+
+.ant-calendar-input
+  font-family: Lato-Regular
+
+.ant-calendar-selected-day
+  .ant-calendar-date
+    background #eff5fe
+    color #3a7ce1
+    &:hover
+      background #e0efff
+      color #2367cd
+
+.ant-calendar-today 
+  &.ant-calendar-date
+    color #3a7ce1
+    border-color #3a7ce1
+    &:hover
+      background #eff5fd
+  &.ant-calendar-selected-day
+    .ant-calendar-date
+      background #eff5fd
+      &:hover
+        background #e0efff
+        font-weight bold
+  &.ant-calendar-disabled-cell
+    .ant-calendar-date
+      background #f5f5f5
+      &:hover
+        background #f5f5f5
+
+.ant-calendar-date, .ant-time-picker-panel li
+  color #5F6C87
+  font-family Lato-Regular
+  font-size 12px
+  &.ant-time-picker-panel-addon-option-disabled
+    color #a3a5af
+  &:hover
+    background #f6f6f6
+  &:focus
+    color #3a7ce1
+
+.ant-time-picker-panel li
+  display flex
+  align-items center
+
+.ant-calendar-disabled-cell .ant-calendar-date
+  background #f5f5f5
+
+.ant-calendar-disabled-cell.ant-calendar-today .ant-calendar-date
+  color #a3a5af
+  font-weight bold
+  border-color transparent
+  &:before
+    border 1px solid #a3a5af
+
+.disabled-year
+  .ant-calendar-header
+    .ant-calendar-next-month-btn
+      right 15px
+    .ant-calendar-prev-month-btn
+      left 15px
+    .ant-calendar-month-select, .ant-calendar-year-select
+      font-size 14px
+      color #5f6c87
+      &:hover
+        color #3a7ce1
+  .ant-calendar-prev-year-btn, .ant-calendar-next-year-btn
+    display none
+
+.ant-btn-defult, .ant-calendar-today-btn 
+  width 100%
+  font-family Lato-Bold
+  color $link-color
+  text-align center
+  font-size 14px
+  margin 0
+  padding 0
+  text-transform none
+  span
+    line-height 1.71
+    letter-spacing 0.1px
+
+.ant-calendar-footer-extra, .ant-time-picker-panel-addon
+  text-align center
+
+.ant-divider, .ant-divider-vertical
+  height auto
+
+.ant-btn
+  &-default, .active, &:focus, &:hover
+    border none
+

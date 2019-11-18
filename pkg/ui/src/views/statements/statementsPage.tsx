@@ -9,41 +9,28 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React from "react";
+import React, { Fragment } from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
-
+import * as protos from "src/js/protos";
+import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
+import { StatementsResponseMessage } from "src/util/api";
+import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, flattenStatementStats, StatementStatistics } from "src/util/appStats";
+import { appAttr } from "src/util/constants";
+import { TimestampToMoment } from "src/util/convert";
+import { Pick } from "src/util/pick";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { refreshStatements } from "src/redux/apiReducers";
-import { StatementsResponseMessage } from "src/util/api";
-import {
-  aggregateStatementStats,
-  flattenStatementStats,
-  combineStatementStats,
-  ExecutionStatistics,
-  StatementStatistics,
-} from "src/util/appStats";
-import { appAttr } from "src/util/constants";
-import { TimestampToMoment } from "src/util/convert";
-import { Pick } from "src/util/pick";
-
-import {
-  AggregateStatistics,
-  StatementsSortedTable,
-  makeStatementsColumns,
-} from "./statementsTable";
-
-import * as protos from "src/js/protos";
 import "./statements.styl";
+import { makeStatementsColumns, StatementsSortedTable, AggregateStatistics } from "./statementsTable";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type RouteProps = RouteComponentProps<any, any>;
@@ -97,15 +84,15 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
 
     const lastClearedHelpText = (
-      <React.Fragment>
+      <Fragment>
         Statement history is cleared once an hour by default, which can be
         configured with the cluster setting{" "}
         <code><pre style={{ display: "inline-block" }}>diagnostics.reporting.interval</pre></code>.
-      </React.Fragment>
+      </Fragment>
     );
 
     return (
-      <React.Fragment>
+      <Fragment>
         <PageConfig layout="spread">
           <PageConfigItem>
             <Dropdown
@@ -145,13 +132,13 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
             onChangeSortSetting={this.changeSortSetting}
           />
         </section>
-      </React.Fragment>
+      </Fragment>
     );
   }
 
   render() {
     return (
-      <React.Fragment>
+      <Fragment>
         <Helmet>
           <title>
             { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
@@ -167,7 +154,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
           error={this.props.statementsError}
           render={this.renderStatements}
         />
-      </React.Fragment>
+      </Fragment>
     );
   }
 }
@@ -286,18 +273,24 @@ export const selectLastReset = createSelector(
   },
 );
 
-// tslint:disable-next-line:variable-name
-const StatementsPageConnected = connect(
-  (state: StatementsState, props: RouteProps) => ({
-    statements: selectStatements(state, props),
-    statementsError: state.cachedData.statements.lastError,
-    apps: selectApps(state),
-    totalFingerprints: selectTotalFingerprints(state),
-    lastReset: selectLastReset(state),
-  }),
+const mapStateToProps = (state: StatementsState, props: RouteProps) => ({
+  statements: selectStatements(state, props),
+  statementsError: state.cachedData.statements.lastError,
+  apps: selectApps(state),
+  totalFingerprints: selectTotalFingerprints(state),
+  lastReset: selectLastReset(state),
+});
+
+const mapDispatchToProps = () => (
   {
     refreshStatements,
-  },
+  }
+);
+
+// tslint:disable-next-line:variable-name
+const StatementsPageConnected = connect(
+  mapStateToProps,
+  mapDispatchToProps,
 )(StatementsPage);
 
 export default StatementsPageConnected;

@@ -8,31 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import tableIcon from "!!raw-loader!assets/tableIcon.svg";
 import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router";
-
-import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
-import { SortSetting } from "src/views/shared/components/sortabletable";
-import { SortedTable } from "src/views/shared/components/sortedtable";
-
-import { AdminUIState } from "src/redux/state";
+import { bindActionCreators, Dispatch } from "redux";
+import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
-import {
-    refreshDatabaseDetails, refreshTableDetails, refreshTableStats,
-} from "src/redux/apiReducers";
-
+import { AdminUIState } from "src/redux/state";
 import { Bytes } from "src/util/format";
 import { trustIcon } from "src/util/trust";
-
+import { databaseDetails, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { TableInfo } from "src/views/databases/data/tableInfo";
-
-import {
-    DatabaseSummaryBase, DatabaseSummaryExplicitData, databaseDetails, tableInfos as selectTableInfos, grants,
-} from "src/views/databases/containers/databaseSummary";
-
-import tableIcon from "!!raw-loader!assets/tableIcon.svg";
+import { SortSetting } from "src/views/shared/components/sortabletable";
+import { SortedTable } from "src/views/shared/components/sortedtable";
+import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import "./databaseTables.styl";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -174,20 +165,26 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
   }
 }
 
+const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => ({ // RootState contains declaration for whole state
+  tableInfos: selectTableInfos(state, ownProps.name),
+  sortSetting: databaseTablesSortSetting.selector(state),
+  dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
+  grants: grants(state, ownProps.name),
+});
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      setSort: databaseTablesSortSetting.set,
+      refreshDatabaseDetails,
+      refreshTableDetails,
+      refreshTableStats,
+    },
+    dispatch,
+  );
+
 // Connect the DatabaseSummaryTables class with redux store.
 export default connect(
-  (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => {
-    return {
-      tableInfos: selectTableInfos(state, ownProps.name),
-      sortSetting: databaseTablesSortSetting.selector(state),
-      dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
-      grants: grants(state, ownProps.name),
-    };
-  },
-  {
-    setSort: databaseTablesSortSetting.set,
-    refreshDatabaseDetails,
-    refreshTableDetails,
-    refreshTableStats,
-  },
-)(DatabaseSummaryTables);
+  mapStateToProps,
+  mapDispatchToProps,
+)(DatabaseSummaryTables as any);

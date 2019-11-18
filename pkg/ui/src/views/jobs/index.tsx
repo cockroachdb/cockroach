@@ -8,35 +8,35 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import succeededIcon from "!!raw-loader!assets/jobStatusIcons/checkMark.svg";
+import failedIcon from "!!raw-loader!assets/jobStatusIcons/exclamationPoint.svg";
 import _ from "lodash";
 import moment from "moment";
 import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-
+import { bindActionCreators, Dispatch } from "redux";
 import { cockroach } from "src/js/protos";
-import { CachedDataReducerState, jobsKey, refreshJobs } from "src/redux/apiReducers";
+import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import * as docsURL from "src/util/docs";
+import { trustIcon } from "src/util/trust";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { trustIcon } from "src/util/trust";
 import "./index.styl";
-
-import succeededIcon from "!!raw-loader!assets/jobStatusIcons/checkMark.svg";
-import failedIcon from "!!raw-loader!assets/jobStatusIcons/exclamationPoint.svg";
 
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 const statusOptions = [
   { value: "", label: "All" },
@@ -382,12 +382,16 @@ const mapStateToProps = (state: AdminUIState) => {
   };
 };
 
-const actions = {
-  setSort: sortSetting.set,
-  setStatus: statusSetting.set,
-  setShow: showSetting.set,
-  setType: typeSetting.set,
-  refreshJobs,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      setSort: sortSetting.set,
+      setStatus: statusSetting.set,
+      setShow: showSetting.set,
+      setType: typeSetting.set,
+      refreshJobs,
+    },
+    dispatch,
+  );
 
-export default connect(mapStateToProps, actions)(JobsTable);
+export default connect(mapStateToProps, mapDispatchToProps)(JobsTable as any);

@@ -10,21 +10,20 @@
 
 import React from "react";
 import { Helmet } from "react-helmet";
-import { Link, RouterState } from "react-router";
 import { connect } from "react-redux";
-
+import { Link, RouterState } from "react-router";
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
+import { generateTableID, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
+import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { Bytes } from "src/util/format";
-import { AdminUIState } from "src/redux/state";
-import { LocalSetting } from "src/redux/localsettings";
-import { refreshTableDetails, refreshTableStats, generateTableID } from "src/redux/apiReducers";
-import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
-
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { SqlBox } from "src/views/shared/components/sql/box";
+import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -146,19 +145,25 @@ function selectTableInfo(state: AdminUIState, props: RouterState): TableInfo {
   return new TableInfo(table, details && details.data, stats && stats.data);
 }
 
+const mapStateToProps = (state: AdminUIState, ownProps: RouterState) => ({
+  tableInfo: selectTableInfo(state, ownProps),
+  grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
+});
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      setSort: databaseTableGrantsSortSetting.set,
+      refreshTableDetails,
+      refreshTableStats,
+    },
+    dispatch,
+  );
+
 // Connect the TableMain class with our redux store.
 const tableMainConnected = connect(
-  (state: AdminUIState, ownProps: RouterState) => {
-    return {
-      tableInfo: selectTableInfo(state, ownProps),
-      grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
-    };
-  },
-  {
-    setSort: databaseTableGrantsSortSetting.set,
-    refreshTableDetails,
-    refreshTableStats,
-  },
+  mapStateToProps,
+  mapDispatchToProps,
 )(TableMain);
 
 export default tableMainConnected;

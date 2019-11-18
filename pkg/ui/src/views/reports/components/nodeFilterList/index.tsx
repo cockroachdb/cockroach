@@ -9,9 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import { Location } from "history";
 import React from "react";
-
 import * as protos from "src/js/protos";
 
 export interface NodeFilterListProps {
@@ -19,7 +17,7 @@ export interface NodeFilterListProps {
   localityRegex?: RegExp;
 }
 
-export function getFilters(location: Location) {
+export function getFilters(location: any) {
   const filters: NodeFilterListProps = {};
 
   // Node id list.

@@ -16,10 +16,10 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
-
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
+import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
@@ -315,7 +315,7 @@ class Nodes extends React.Component<NodesProps, {}> {
     const filters = getFilters(this.props.location);
 
     let nodeIDsContext = _.chain(nodesSummary.nodeIDs)
-      .map(nodeID => Number.parseInt(nodeID, 10));
+      .map((nodeID: string) => Number.parseInt(nodeID, 10));
     if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
       nodeIDsContext = nodeIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
     }
@@ -370,15 +370,17 @@ class Nodes extends React.Component<NodesProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    nodesSummary: nodesSummarySelector(state),
-  };
-}
+const mapStateToProps = (state: AdminUIState) => ({
+  nodesSummary: nodesSummarySelector(state),
+});
 
-const actions = {
-  refreshNodes,
-  refreshLiveness,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNodes,
+      refreshLiveness,
+    },
+    dispatch,
+  );
 
-export default connect(mapStateToProps, actions)(Nodes);
+export default connect(mapStateToProps, mapDispatchToProps)(Nodes);

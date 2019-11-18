@@ -1,0 +1,104 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+
+.click-zone 
+  position: absolute
+  top 0
+  left 0
+  right 0
+  bottom 0
+  z-index 100
+
+.trigger-container
+  width 100%
+  height 100%
+  position fixed
+  left 0
+  top 0
+  z-index 98
+  background-color transparent
+
+.trigger-wrapper
+  z-index 99
+
+.range-selector
+  position absolute
+  top: 50px
+  background-color white
+  box-shadow 0px 0px 7px 1px rgba(0,0,0,0.10)
+  padding 20px
+  border-radius 2px
+  display flex
+  flex-direction row
+  align-items flex-start
+  cursor default
+  min-width 530px
+  z-index 99
+  &>div
+    display flex
+    flex-direction column
+    &:not(:last-child)
+      border-right 1px solid #e5e5e5
+  ._title
+    color $body-color
+    font-family Lato-Bold
+    font-size 12px
+    margin-bottom 8px
+    line-height 2
+    letter-spacing 0.1px
+  ._time-button
+    text-align left
+    padding 0
+    margin 0
+    span
+      color $body-color
+      font-family Lato-Regular
+      font-size 14px
+      font-weight normal
+      font-style normal
+      font-stretch normal
+      line-height 1.57
+      letter-spacing 0.1px
+      text-transform none
+    &.active
+      span
+        font-family Lato-Bold
+        font-weight bold
+        line-height 1.71
+        color $link-color
+
+.trigger
+  &.Select
+    display flex
+  .Select-value-label
+    margin-right 10px
+    font-family Lato-Regular
+    font-size 14px
+    color $link-color
+  ._label-time
+    font-size: 13.5px
+    font-family Lato-Bold
+
+.ant-calendar-today-btn
+  color $link-color
+._quick-view
+  padding-right 20px
+._start
+  padding 0 20px
+._end
+  padding-left 20px
+
+.ant-calendar-picker
+  margin-bottom 16px
+
+.ant-calendar-picker, .ant-time-picker
+  width 100%

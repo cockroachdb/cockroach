@@ -12,14 +12,13 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import Loading from "src/views/shared/components/loading";
-
 import "./index.styl";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface SettingsOwnProps {
   settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
@@ -47,6 +46,7 @@ class Settings extends React.Component<SettingsProps, {}> {
     }
 
     const { key_values } = this.props.settings.data;
+    const data: any = _.keys(key_values);
 
     return (
       <table className="settings-table">
@@ -59,9 +59,9 @@ class Settings extends React.Component<SettingsProps, {}> {
         </thead>
         <tbody>
           {
-            _.chain(_.keys(key_values))
+            _.chain(data)
               .sort()
-              .map(key => (
+              .map((key: number) => (
                 <tr key={key} className="settings-table__row">
                   <td className="settings-table__cell">{key}</td>
                   <td className="settings-table__cell">{key_values[key].value}</td>
@@ -97,14 +97,17 @@ class Settings extends React.Component<SettingsProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    settings: state.cachedData.settings,
-  };
-}
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  settings: state.cachedData.settings,
+});
 
-const actions = {
-  refreshSettings,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      // actionCreators returns objects with type and payload
+      refreshSettings,
+    },
+    dispatch,
+  );
 
-export default connect(mapStateToProps, actions)(Settings);
+export default connect(mapStateToProps, mapDispatchToProps)(Settings);

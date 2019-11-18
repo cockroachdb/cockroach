@@ -14,7 +14,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
-
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { problemRangesRequestKey, refreshProblemRanges } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -212,14 +212,23 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   }
 }
 
+const mapStateToProps = (state: AdminUIState, props: ProblemRangesProps) => {
+  const nodeIDKey = problemRangesRequestKey(problemRangeRequestFromProps(props));
+  return {
+    problemRanges: state.cachedData.problemRanges[nodeIDKey],
+  };
+};
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      // actionCreators returns objects with type and payload
+      refreshProblemRanges,
+    },
+    dispatch,
+  );
+
 export default connect(
-  (state: AdminUIState, props: ProblemRangesProps) => {
-    const nodeIDKey = problemRangesRequestKey(problemRangeRequestFromProps(props));
-    return {
-      problemRanges: state.cachedData.problemRanges[nodeIDKey],
-    };
-  },
-  {
-    refreshProblemRanges,
-  },
+  mapStateToProps,
+  mapDispatchToProps,
 )(ProblemRanges);

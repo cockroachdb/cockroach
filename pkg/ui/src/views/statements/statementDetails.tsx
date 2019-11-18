@@ -10,32 +10,30 @@
 
 import d3 from "d3";
 import _ from "lodash";
-import React, { ReactNode } from "react";
+import React, { Fragment, ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
+import { Params } from "react-router/lib/Router";
+import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
-
-import Loading from "src/views/shared/components/loading";
 import { refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
-import { statementAttr, appAttr, implicitTxnAttr } from "src/util/constants";
+import { combineStatementStats, ExecutionStatistics, flattenStatementStats, NumericStat, StatementStatistics, stdDev } from "src/util/appStats";
+import { appAttr, implicitTxnAttr, statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { intersperse } from "src/util/intersperse";
 import { Pick } from "src/util/pick";
-import { PlanView } from "src/views/statements/planView";
+import Loading from "src/views/shared/components/loading";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-
-import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
-import { AggregateStatistics, StatementsSortedTable, makeNodesColumns } from "./statementsTable";
-import { Params } from "react-router/lib/Router";
-import { ListIterateeBoolean } from "lodash";
+import { PlanView } from "src/views/statements/planView";
+import { approximify, countBreakdown, latencyBreakdown, rowsBreakdown } from "./barCharts";
+import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 
 interface Fraction {
   numerator: number;
@@ -201,7 +199,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
       const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
 
       return (
-        <React.Fragment>
+        <Fragment>
           <section className="section">
             <SqlBox value={ statement } />
           </section>
@@ -212,7 +210,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
               Back to Statements
             </Link>
           </section>
-        </React.Fragment>
+        </Fragment>
       );
     }
 
@@ -448,7 +446,7 @@ function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: Execut
   return { numerator, denominator };
 }
 
-function filterByRouterParamsPredicate(params: Params): ListIterateeBoolean<ExecutionStatistics> {
+function filterByRouterParamsPredicate(params: Params) {
   const statement = params[statementAttr];
   const implicitTxn = (params[implicitTxnAttr] === "true");
   let app = params[appAttr];
@@ -489,16 +487,24 @@ export const selectStatement = createSelector(
   },
 );
 
+const mapStateToProps = (state: AdminUIState, props: RouterState) => ({
+  statement: selectStatement(state, props),
+  statementsError: state.cachedData.statements.lastError,
+  nodeNames: nodeDisplayNameByIDSelector(state),
+});
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshStatements,
+    },
+    dispatch,
+);
+
 // tslint:disable-next-line:variable-name
 const StatementDetailsConnected = connect(
-  (state: AdminUIState, props: RouterState) => ({
-    statement: selectStatement(state, props),
-    statementsError: state.cachedData.statements.lastError,
-    nodeNames: nodeDisplayNameByIDSelector(state),
-  }),
-  {
-    refreshStatements,
-  },
+  mapStateToProps,
+  mapDispatchToProps,
 )(StatementDetails);
 
 export default StatementDetailsConnected;
