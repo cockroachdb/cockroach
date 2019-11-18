@@ -14,13 +14,13 @@ import (
 	"encoding/binary"
 	gojson "encoding/json"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -422,7 +422,9 @@ func (e *confluentAvroEncoder) register(schema *avroRecord, subject string) (int
 		return 0, err
 	}
 
-	resp, err := http.Post(url.String(), confluentSchemaContentType, &buf)
+	// TODO(someone): connect the context to the caller to obey
+	// cancellation.
+	resp, err := httputil.Post(context.TODO(), url.String(), confluentSchemaContentType, &buf)
 	if err != nil {
 		return 0, err
 	}

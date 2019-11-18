@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -56,7 +57,7 @@ func TestHandleCSV(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			res, err := http.Get(ts.URL + `/bank/bank` + test.params)
+			res, err := httputil.Get(context.TODO(), ts.URL+`/bank/bank`+test.params)
 			if err != nil {
 				t.Fatal(err)
 			}
