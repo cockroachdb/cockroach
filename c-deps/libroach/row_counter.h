@@ -29,6 +29,6 @@ struct RowCounter {
  private:
   void EnsureSafeSplitKey(rocksdb::Slice* key);
   int GetRowPrefixLength(rocksdb::Slice* key);
-  DBString prev_key;
+  std::string prev_key;
   rocksdb::Slice prev;
 };
