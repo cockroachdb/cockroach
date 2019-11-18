@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/errors"
 )
 
 // txnSeqNumAllocator is a txnInterceptor in charge of allocating sequence
@@ -57,7 +58,21 @@ import (
 //
 type txnSeqNumAllocator struct {
 	wrapped lockedSender
-	seqGen  enginepb.TxnSeq
+
+	// writeSeq is the current write seqnum, or the value last assigned
+	// to a write operation in a batch. It remains at 0 until the first
+	// write operation is encountered.
+	writeSeq enginepb.TxnSeq
+
+	// readSeqPlusOne is either:
+	// - 0 to indicate that read operations should read at the latest
+	//   write seqnum (read-own-write behavior).
+	// - >0 to indicate that read operations should read at a
+	//   fixed readSeq = (readSeqPlusOne - 1), also called
+	//   "step-wise" behavior.
+	// We use a +1 offset so that the default value 0 can be
+	// used as sentinel to disable step-wise behavior.
+	readSeqPlusOne enginepb.TxnSeq
 
 	// commandCount indicates how many requests have been sent through
 	// this transaction. Reset on retryable txn errors.
@@ -76,11 +91,18 @@ func (s *txnSeqNumAllocator) SendLocked(
 		// This enables ba.IsCompleteTransaction to work properly.
 		req := ru.GetInner()
 		if roachpb.IsTransactionWrite(req) || req.Method() == roachpb.EndTransaction {
-			s.seqGen++
+			s.writeSeq++
 		}
 
 		oldHeader := req.Header()
-		oldHeader.Sequence = s.seqGen
+		// Default case: operate at the current seqnum.
+		oldHeader.Sequence = s.writeSeq
+		if s.readSeqPlusOne > 0 && roachpb.IsReadOnly(req) {
+			// For read operations, if the step-wise execution mode has been
+			// enabled, then we want the read operation to read at the read
+			// seqnum, not the latest write seqnum.
+			oldHeader.Sequence = s.readSeqPlusOne - 1
+		}
 		ru.GetInner().SetHeader(oldHeader)
 	}
 
@@ -95,21 +117,48 @@ func (s *txnSeqNumAllocator) setWrapped(wrapped lockedSender) { s.wrapped = wrap
 // populateMetaLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 	meta.CommandCount = s.commandCount
-	meta.Txn.Sequence = s.seqGen
+	meta.Txn.Sequence = s.writeSeq
+	meta.ReadSeqNumPlusOne = s.readSeqPlusOne
 }
 
 // augmentMetaLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 	s.commandCount += meta.CommandCount
-	if meta.Txn.Sequence > s.seqGen {
-		s.seqGen = meta.Txn.Sequence
+	if meta.Txn.Sequence > s.writeSeq {
+		s.writeSeq = meta.Txn.Sequence
 	}
+	if meta.ReadSeqNumPlusOne > s.readSeqPlusOne {
+		s.readSeqPlusOne = meta.ReadSeqNumPlusOne
+	}
+}
+
+// stepLocked bumps the read seqnum to the current write seqnum.
+// Used by the TxnCoordSender's Step() method.
+func (s *txnSeqNumAllocator) stepLocked() error {
+	if s.readSeqPlusOne-1 > s.writeSeq {
+		return errors.AssertionFailedf("cannot step() after mistaken initialization (%d,%d)", s.writeSeq, s.readSeqPlusOne)
+	}
+	s.readSeqPlusOne = s.writeSeq + 1
+	return nil
+}
+
+// disableSteppingLocked cancels the stepping behavior and
+// restores read-latest-write behavior.
+// Used by the TxnCoordSender's DisableStepping() method.
+func (s *txnSeqNumAllocator) disableSteppingLocked() error {
+	s.readSeqPlusOne = 0
+	return nil
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) epochBumpedLocked() {
-	s.seqGen = 0
 	s.commandCount = 0
+	s.writeSeq = 0
+	if s.readSeqPlusOne > 0 {
+		s.readSeqPlusOne = 1
+	} else {
+		s.readSeqPlusOne = 0
+	}
 }
 
 // closeLocked is part of the txnInterceptor interface.

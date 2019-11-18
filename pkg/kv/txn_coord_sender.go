@@ -1296,3 +1296,17 @@ func (tc *TxnCoordSender) IsTracking() bool {
 	defer tc.mu.Unlock()
 	return tc.interceptorAlloc.txnHeartbeater.heartbeatLoopRunningLocked()
 }
+
+// Step is part of the TxnSender interface.
+func (tc *TxnCoordSender) Step() error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked()
+}
+
+// DisableStepping is part of the TxnSender interface.
+func (tc *TxnCoordSender) DisableStepping() error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.interceptorAlloc.txnSeqNumAllocator.disableSteppingLocked()
+}

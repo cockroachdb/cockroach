@@ -631,4 +631,11 @@ message TxnCoordMeta {
   // overlaps with them must chain on to their success using a QueryIntent
   // request.
   repeated SequencedWrite in_flight_writes = 8 [(gogoproto.nullable) = false];
+  // Current read seqnum, plus 1. The special value of zero indicates synchronous
+  // read-own-writes, where every KV read is able to observe the latest writes.
+  // As soon as the value is increased past 0, (value - 1) becomes the sequence number
+  // used for reads, regardless of the current seqnum generated for writes.
+  // This is updated via the (client.TxnSender).Step() operation.
+  int32 read_seq_num_plus_one = 9 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"];
 }

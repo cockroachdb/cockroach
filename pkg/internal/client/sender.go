@@ -206,6 +206,26 @@ type TxnSender interface {
 	// However, this is used by DistSQL for sending the transaction over the wire
 	// when it creates flows.
 	SerializeTxn() *roachpb.Transaction
+
+	// Step creates a sequencing point in the current transaction. A
+	// sequencing point establishes a snapshot baseline for subsequent
+	// read operations: until the next sequencing point, read operations
+	// observe the data at the time the snapshot was established and
+	// ignore writes performed since.
+	//
+	// Before the first step is taken, the transaction operates as if
+	// there was a step after every write: each read to a key is able to
+	// see the latest write before it. This makes the step behavior
+	// opt-in and backward-compatible with existing code which does not
+	// need it.
+	// The method is idempotent.
+	Step() error
+
+	// DisableStepping disables the sequencing point behavior and
+	// ensures that every read can read the latest write. The
+	// effect remains disabled until the next call to Step().
+	// The method is idempotent.
+	DisableStepping() error
 }
 
 // TxnStatusOpt represents options for TxnSender.GetMeta().
@@ -363,6 +383,12 @@ func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool
 
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
+
+// Step is part of the TxnSender interface.
+func (m *MockTransactionalSender) Step() error { panic("unimplemented") }
+
+// DisableStepping is part of the TxnSender interface.
+func (m *MockTransactionalSender) DisableStepping() error { panic("unimplemented") }
 
 // SerializeTxn is part of the TxnSender interface.
 func (m *MockTransactionalSender) SerializeTxn() *roachpb.Transaction {

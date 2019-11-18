@@ -5560,6 +5560,7 @@ const int TxnCoordMeta::kRefreshReadsFieldNumber;
 const int TxnCoordMeta::kRefreshWritesFieldNumber;
 const int TxnCoordMeta::kRefreshInvalidFieldNumber;
 const int TxnCoordMeta::kInFlightWritesFieldNumber;
+const int TxnCoordMeta::kReadSeqNumPlusOneFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TxnCoordMeta::TxnCoordMeta()
@@ -5582,15 +5583,15 @@ TxnCoordMeta::TxnCoordMeta(const TxnCoordMeta& from)
     txn_ = NULL;
   }
   ::memcpy(&command_count_, &from.command_count_,
-    static_cast<size_t>(reinterpret_cast<char*>(&refresh_invalid_) -
-    reinterpret_cast<char*>(&command_count_)) + sizeof(refresh_invalid_));
+    static_cast<size_t>(reinterpret_cast<char*>(&read_seq_num_plus_one_) -
+    reinterpret_cast<char*>(&command_count_)) + sizeof(read_seq_num_plus_one_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.TxnCoordMeta)
 }
 
 void TxnCoordMeta::SharedCtor() {
   ::memset(&txn_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&refresh_invalid_) -
-      reinterpret_cast<char*>(&txn_)) + sizeof(refresh_invalid_));
+      reinterpret_cast<char*>(&read_seq_num_plus_one_) -
+      reinterpret_cast<char*>(&txn_)) + sizeof(read_seq_num_plus_one_));
 }
 
 TxnCoordMeta::~TxnCoordMeta() {
@@ -5625,8 +5626,8 @@ void TxnCoordMeta::Clear() {
   }
   txn_ = NULL;
   ::memset(&command_count_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&refresh_invalid_) -
-      reinterpret_cast<char*>(&command_count_)) + sizeof(refresh_invalid_));
+      reinterpret_cast<char*>(&read_seq_num_plus_one_) -
+      reinterpret_cast<char*>(&command_count_)) + sizeof(read_seq_num_plus_one_));
   _internal_metadata_.Clear();
 }
 
@@ -5718,6 +5719,19 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
         break;
       }
 
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &read_seq_num_plus_one_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -5783,6 +5797,10 @@ void TxnCoordMeta::SerializeWithCachedSizes(
       output);
   }
 
+  if (this->read_seq_num_plus_one() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(9, this->read_seq_num_plus_one(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.TxnCoordMeta)
@@ -5842,6 +5860,12 @@ size_t TxnCoordMeta::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  if (this->read_seq_num_plus_one() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->read_seq_num_plus_one());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -5871,6 +5895,9 @@ void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
   if (from.refresh_invalid() != 0) {
     set_refresh_invalid(from.refresh_invalid());
   }
+  if (from.read_seq_num_plus_one() != 0) {
+    set_read_seq_num_plus_one(from.read_seq_num_plus_one());
+  }
 }
 
 void TxnCoordMeta::CopyFrom(const TxnCoordMeta& from) {
@@ -5896,6 +5923,7 @@ void TxnCoordMeta::InternalSwap(TxnCoordMeta* other) {
   swap(txn_, other->txn_);
   swap(command_count_, other->command_count_);
   swap(refresh_invalid_, other->refresh_invalid_);
+  swap(read_seq_num_plus_one_, other->read_seq_num_plus_one_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
