@@ -4,12 +4,6 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_test "Check cockroach demo --with-load runs the movr workload"
 
-# Disable trying to acquire the demo license. This test does not
-# need enterprise features, and sometimes if the licensing server
-# is unavailable, the error message from failing to receive the
-# testing license pollutes the test output.
-set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "true"
-
 # Start demo with movr and the movr workload.
 spawn $argv demo movr --with-load
 
