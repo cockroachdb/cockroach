@@ -53,7 +53,7 @@ COCKROACH_BUILDER_CCACHE= build/builder.sh \
 	stdbuf -eL -oL \
 	make lint 2>&1 \
 	| tee artifacts/lint.log \
-	| go-test-teamcity
+	| go-test-teamcity -artifacts artifacts/failures.txt
 tc_end_block "Lint"
 
 tc_start_block "Test web UI"

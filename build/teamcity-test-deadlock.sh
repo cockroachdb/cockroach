@@ -19,5 +19,5 @@ run build/builder.sh \
 	stdbuf -oL -eL \
 	make test TAGS=deadlock TESTFLAGS='-v' 2>&1 \
 	| tee artifacts/test.log \
-	| go-test-teamcity
+	| go-test-teamcity -artifacts artifacts/failures.txt
 tc_end_block "Run Go tests with deadlock detection enabled"

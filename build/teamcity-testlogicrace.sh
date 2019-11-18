@@ -16,7 +16,7 @@ build/builder.sh \
 	ENABLE_ROCKSDB_ASSERTIONS=1 \
 	2>&1 \
 	| tee artifacts/testlogicrace.log \
-	| go-test-teamcity
+	| go-test-teamcity -artifacts artifacts/failures.txt
 
 # Run each of the optimizer tests again with randomized alternate query plans.
 
@@ -30,6 +30,7 @@ build/builder.sh \
 	ENABLE_ROCKSDB_ASSERTIONS=1 \
 	2>&1 \
 	| tee artifacts/altplan-testlogicrace.log \
+	| go-test-teamcity -artifacts artifacts/failures.txt
 	| go-test-teamcity
 
 LOGICTESTS=`ls -A pkg/sql/logictest/testdata/logic_test/`
@@ -53,6 +54,6 @@ for file in $LOGICTESTS; do
 	        ENABLE_ROCKSDB_ASSERTIONS=1 \
 	        2>&1 \
 	        | tee artifacts/disablerules-testlogicrace-${file}.log \
-	        | go-test-teamcity
+		| go-test-teamcity -artifacts artifacts/failures.txt
 	  fi
 done

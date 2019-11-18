@@ -20,5 +20,5 @@ run build/builder.sh \
 	stdbuf -oL -eL \
 	make benchshort TESTFLAGS='-v' 2>&1 \
 	| tee artifacts/bench.log \
-	| go-test-teamcity
+	| go-test-teamcity -artifacts artifacts/failures.txt
 tc_end_block "Run Benchmarks"

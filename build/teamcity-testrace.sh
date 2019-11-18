@@ -57,6 +57,6 @@ for pkg in $pkgspec; do
 		ENABLE_ROCKSDB_ASSERTIONS=1 2>&1 \
 		ENABLE_LIBROACH_ASSERTIONS=1 2>&1 \
 		| tee -a artifacts/testrace.log \
-		| go-test-teamcity
+		| go-test-teamcity -artifacts artifacts/failures.txt
 done
 tc_end_block "Run Go tests under race detector"

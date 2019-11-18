@@ -32,6 +32,6 @@ run env TZ=America/New_York \
 	stdbuf -eL -oL \
 	./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m 2>&1 \
 	| tee "$TMPDIR/acceptance.log" \
-	| go-test-teamcity
+	| go-test-teamcity -artifacts artifacts/failures.txt
 run cd ../..
 tc_end_block "Run acceptance tests"

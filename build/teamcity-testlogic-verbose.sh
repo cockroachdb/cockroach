@@ -18,5 +18,5 @@ run build/builder.sh \
 	stdbuf -oL -eL \
 	make testlogic TESTTIMEOUT=1h TESTFLAGS='--vmodule=*=10 -show-sql -test.v' 2>&1 \
 	| tee artifacts/test.log \
-	| go-test-teamcity
+	| go-test-teamcity -artifacts artifacts/failures.txt
 tc_end_block "Run TestLogic tests under verbose"

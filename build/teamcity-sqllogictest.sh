@@ -17,7 +17,7 @@ build/builder.sh \
   stdbuf -oL -eL \
   make test TESTFLAGS="-v -bigtest" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$' 2>&1 \
   | tee "artifacts/sqllite-logic.log" \
-  | go-test-teamcity
+  | go-test-teamcity -artifacts artifacts/failures.txt
 
 # Need to specify the flex-types flag in order to skip past variations that have
 # numeric typing differences.
@@ -25,4 +25,4 @@ build/builder.sh \
   stdbuf -oL -eL \
   make test TESTFLAGS="-v -bigtest -config local,fakedist -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteCorrelatedLogic$$' 2>&1 \
   | tee "artifacts/sqllite-correlated.log" \
-  | go-test-teamcity
+  | go-test-teamcity -artifacts artifacts/failures.txt
