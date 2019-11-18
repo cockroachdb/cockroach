@@ -96,8 +96,8 @@ func TestValidateAddrs(t *testing.T) {
 			addrs{hostAddr + ":26257", hostname + ":12345", hostAddr + ":8080", hostname + ":8080", hostAddr + ":5432", hostname + ":5432"}},
 
 		// Use a non-numeric port number.
-		{addrs{":postgresql", "", ":http", "", ":postgresql", ""}, "",
-			addrs{":5432", hostname + ":5432", ":80", hostname + ":80", ":5432", hostname + ":5432"}},
+		{addrs{":pop3", "", ":http", "", ":pop3", ""}, "",
+			addrs{":110", hostname + ":110", ":80", hostname + ":80", ":110", hostname + ":110"}},
 
 		// Make HTTP local only.
 		{addrs{":26257", "", "localhost:8080", "", ":5432", ""}, "",

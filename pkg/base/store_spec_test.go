@@ -12,6 +12,7 @@ package base_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -153,6 +154,10 @@ func TestNewStoreSpec(t *testing.T) {
 		if len(testCase.expectedErr) > 0 {
 			t.Errorf("%d(%s): expected error %s but there was none", i, testCase.value, testCase.expectedErr)
 			continue
+		}
+		if testCase.expected.Path != "" {
+			// In case that the testCase has relative path
+			testCase.expected.Path, _ = filepath.Abs(testCase.expected.Path)
 		}
 		if !reflect.DeepEqual(testCase.expected, storeSpec) {
 			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %+v\nexpected: %+v", i,

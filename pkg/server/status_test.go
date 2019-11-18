@@ -443,8 +443,12 @@ func TestStatusGetFiles(t *testing.T) {
 
 	// Testing path separators in pattern.
 	t.Run("path separators", func(t *testing.T) {
+		// pattern/with/separators on unix
+		// pattern\with\separators on windows
+		sep := string(os.PathSeparator)
+		pattern := "pattern" + sep + "with" + sep + "separators"
 		request := serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
-			Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
+			Type: serverpb.FileType_HEAP, Patterns: []string{pattern}}
 		_, err = client.GetFiles(context.Background(), &request)
 		if !testutils.IsError(err, "invalid pattern: cannot have path seperators") {
 			t.Errorf("GetFiles: path separators allowed in pattern")
