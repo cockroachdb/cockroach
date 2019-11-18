@@ -269,6 +269,8 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.ReplicationCriticalLocalitiesTableID: privilege.ReadWriteData,
 	keys.ReplicationStatsTableID:              privilege.ReadWriteData,
 	keys.ReportsMetaTableID:                   privilege.ReadWriteData,
+	keys.ProtectedTimestampsMetaTableID:       privilege.ReadWriteData,
+	keys.ProtectedTimestampsRecordsTableID:    privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -351,6 +353,7 @@ var (
 	}
 
 	falseBoolString = "false"
+	trueBoolString  = "true"
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = TableDescriptor{
@@ -1050,6 +1053,95 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	ProtectedTimestampsMetaTable = TableDescriptor{
+		Name:     "protected_ts_meta",
+		ID:       keys.ProtectedTimestampsMetaTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{
+				Name:        "_exists",
+				ID:          1,
+				Type:        *types.Bool,
+				Hidden:      true,
+				DefaultExpr: &trueBoolString,
+			}, // TODO(ajwerner): what should this pk be?
+			{Name: "version", ID: 2, Type: *types.Int},
+			{Name: "num_records", ID: 3, Type: *types.Int4},
+			{Name: "num_spans", ID: 4, Type: *types.Int4},
+			{Name: "total_bytes", ID: 5, Type: *types.Int4},
+		},
+		Checks: []*TableDescriptor_CheckConstraint{
+			{
+				Name:      "check_exists",
+				Expr:      "true",
+				ColumnIDs: []ColumnID{1},
+			},
+		},
+		NextColumnID: 6,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"_exists", "version", "num_records", "num_spans", "total_bytes"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Unique:      true,
+			ColumnNames: []string{"_exists"},
+			ColumnIDs:   []ColumnID{1},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC,
+			},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	ProtectedTimestampsRecordsTable = TableDescriptor{
+		Name:     "protected_ts_records",
+		ID:       keys.ProtectedTimestampsRecordsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: *types.Uuid},
+			{Name: "ts", ID: 2, Type: *types.Decimal},
+			{Name: "meta_type", ID: 3, Type: *types.String},
+			{Name: "meta", ID: 4, Type: *types.Bytes, Nullable: true},
+			{Name: "num_spans", ID: 5, Type: *types.Int},
+			{Name: "spans", ID: 6, Type: *types.Bytes},
+			{Name: "verified", ID: 7, Type: *types.Bool, DefaultExpr: &falseBoolString},
+		},
+		NextColumnID: 8,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5, 6, 7},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Unique:      true,
+			ColumnNames: []string{"id"},
+			ColumnIDs:   []ColumnID{1},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC,
+			},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -1099,6 +1191,8 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationConstraintStatsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationStatsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationCriticalLocalitiesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsMetaTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsRecordsTable)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
