@@ -88,10 +88,12 @@ bool RowCounter::Count(const rocksdb::Slice& key, cockroach::roachpb::BulkOpSumm
   }
 
   // no change key prefix => no new row.
-  if (decoded_key.data() == prev_key.data) {
+  if (decoded_key == prev_key) {
     return true;
   }
-  prev_key = ToDBString(decoded_key);
+
+
+  prev_key.assign(decoded_key.data(), decoded_key.size());
 
   uint64_t tbl;
   if (!DecodeTablePrefix(&decoded_key, &tbl)) {
