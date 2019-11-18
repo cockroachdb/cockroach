@@ -17,6 +17,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/cliccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/followerreadsccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/importccl"
@@ -24,5 +25,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/roleccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 )
