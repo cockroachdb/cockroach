@@ -300,7 +300,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c, finish, err := getAdminClient(ctx)
+	c, finish, err := getAdminClient(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
@@ -417,7 +417,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	c, finish, err := getAdminClient(ctx)
+	c, finish, err := getAdminClient(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
