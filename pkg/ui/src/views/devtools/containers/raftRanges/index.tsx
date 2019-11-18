@@ -11,14 +11,13 @@
 import _ from "lodash";
 import React from "react";
 import ReactPaginate from "react-paginate";
-import { Link } from "react-router";
 import { connect } from "react-redux";
-
+import { Link } from "react-router";
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
-
-import { AdminUIState } from "src/redux/state";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { AdminUIState } from "src/redux/state";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 /******************************
@@ -283,16 +282,22 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
 // Base selectors to extract data from redux state.
 const selectRaftState = (state: AdminUIState): CachedDataReducerState<protos.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  state: selectRaftState(state),
+});
+
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshRaft,
+    },
+    dispatch,
+  );
+
 // Connect the RangesMain class with our redux store.
 const rangesMainConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      state: selectRaftState(state),
-    };
-  },
-  {
-    refreshRaft: refreshRaft,
-  },
+  mapStateToProps,
+  mapDispatchToProps,
 )(RangesMain);
 
 export { rangesMainConnected as default };

@@ -13,24 +13,20 @@ import PropTypes from "prop-types";
 import React from "react";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
+import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
-
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import { hoverStateSelector, HoverState, hoverOn as hoverOnAction, hoverOff as hoverOffAction } from "src/redux/hover";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector, HoverState } from "src/redux/hover";
+import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
-import {
-  GraphDashboardProps, storeIDsForNode,
-} from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
+import { GraphDashboardProps, storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
-
 import messagesDashboard from "./messages";
 
-// The properties required by a NodeGraphs component.
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
@@ -43,7 +39,6 @@ interface NodeGraphsOwnProps {
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
-
 /**
  * NodeGraphs renders the main content of the cluster graphs page.
  */
@@ -174,19 +169,22 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     );
   }
 }
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  nodesSummary: nodesSummarySelector(state),
+  nodesQueryValid: state.cachedData.nodes.valid,
+  livenessQueryValid: state.cachedData.nodes.valid,
+  hoverState: hoverStateSelector(state),
+});
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    nodesSummary: nodesSummarySelector(state),
-    nodesQueryValid: state.cachedData.nodes.valid,
-    livenessQueryValid: state.cachedData.nodes.valid,
-    hoverState: hoverStateSelector(state),
-  };
-}
-const actions = {
-  refreshNodes,
-  refreshLiveness,
-  hoverOn: hoverOnAction,
-  hoverOff: hoverOffAction,
-};
-export default connect(mapStateToProps, actions)(NodeGraphs);
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNodes,
+      refreshLiveness,
+      hoverOn: hoverOnAction,
+      hoverOff: hoverOffAction,
+    },
+    dispatch,
+  );
+
+export default connect(mapStateToProps, mapDispatchToProps)(NodeGraphs);

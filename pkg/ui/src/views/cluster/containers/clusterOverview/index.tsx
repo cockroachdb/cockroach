@@ -149,14 +149,18 @@ const mapStateToReplicationStatusProps = createSelector(
   },
 );
 
-interface ClusterSummaryProps {
+interface ClusterSummaryStateProps {
   capacityUsage: CapacityUsageProps;
   nodeLiveness: NodeLivenessProps;
   replicationStatus: ReplicationStatusProps;
   loading: boolean;
-  refreshLiveness: typeof refreshLiveness;
-  refreshNodes: typeof refreshNodes;
 }
+interface ClusterSummaryActionsProps {
+  refreshLiveness: () => void;
+  refreshNodes: () => void;
+}
+
+type ClusterSummaryProps = ClusterSummaryStateProps & ClusterSummaryActionsProps;
 
 class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
   componentWillMount() {

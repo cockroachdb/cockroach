@@ -263,7 +263,7 @@ export const analytics = new AnalyticsSync(analyticsInstance, store, defaultReda
 // Attach a listener to the history object which will track a 'page' event
 // whenever the user navigates to a new path.
 let lastPageLocation: Location;
-history.listen((location) => {
+history.listen((location: Location) => {
   // Do not log if the pathname is the same as the previous.
   // Needed because history.listen() fires twice when using hash history, this
   // bug is "won't fix" in the version of history we are using, and upgrading

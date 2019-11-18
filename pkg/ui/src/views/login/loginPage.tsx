@@ -63,7 +63,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
       .then(() => {
         const { location, router } = this.props;
         if (location.query && location.query.redirectTo) {
-          router.push(location.query.redirectTo);
+          router.push(location.query.redirectTo as any);
         } else {
           router.push("/");
         }

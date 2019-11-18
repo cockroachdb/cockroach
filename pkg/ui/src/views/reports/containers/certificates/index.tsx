@@ -9,11 +9,11 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React from "react";
+import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
-
+import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -166,11 +166,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     const nodeID = this.props.params[nodeIDAttr];
 
     if (_.isEmpty(certificates.certificates)) {
-      return (
-        <React.Fragment>
-          <h2>No certificates were found on node {this.props.params[nodeIDAttr]}.</h2>
-        </React.Fragment>
-      );
+      return <h2>No certificates were found on node {this.props.params[nodeIDAttr]}.</h2>;
     }
 
     let header: string = null;
@@ -181,14 +177,14 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     }
 
     return (
-      <React.Fragment>
+      <Fragment>
         <h2>{header} certificates</h2>
         {
           _.map(certificates.certificates, (cert, key) => (
             this.renderCert(cert, key)
           ))
         }
-      </React.Fragment>
+      </Fragment>
     );
   }
 
@@ -212,16 +208,20 @@ class Certificates extends React.Component<CertificatesProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState, props: CertificatesProps) {
+const mapStateToProps = (state: AdminUIState, props: CertificatesProps) => {
   const nodeIDKey = certificatesRequestKey(certificatesRequestFromProps(props));
   return {
     certificates: state.cachedData.certificates[nodeIDKey] && state.cachedData.certificates[nodeIDKey].data,
     lastError: state.cachedData.certificates[nodeIDKey] && state.cachedData.certificates[nodeIDKey].lastError,
   };
-}
-
-const actions = {
-  refreshCertificates,
 };
 
-export default connect(mapStateToProps, actions)(Certificates);
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshCertificates,
+    },
+    dispatch,
+  );
+
+export default connect(mapStateToProps, mapDispatchToProps)(Certificates);

@@ -19,6 +19,19 @@ import * as docsURL from "src/util/docs";
 import "./needEnterpriseLicense.styl";
 
 // This takes the same props as the NodeCanvasContainer which it is swapped out with.
+
+function Step(props: { num: number, img: string, children: React.ReactNode }) {
+  return (
+    <div className="license-step">
+      <img src={props.img} className="license-step__image" />
+      <div className="license-step__text">
+        <span className="license-step__stepnum">Step {props.num}:</span>{" "}
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
 export default class NeedEnterpriseLicense extends React.Component<NodeCanvasContainerOwnProps> {
   render() {
     return (
@@ -53,16 +66,4 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
       </section>
     );
   }
-}
-
-function Step(props: { num: number, img: string, children: React.ReactNode }) {
-  return (
-    <div className="license-step">
-      <img src={props.img} className="license-step__image" />
-      <div className="license-step__text">
-        <span className="license-step__stepnum">Step {props.num}:</span>{" "}
-        {props.children}
-      </div>
-    </div>
-  );
 }

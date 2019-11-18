@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import * as React from "react";
+import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, WithRouterProps } from "react-router";
@@ -29,11 +29,13 @@ import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
 
 import { INodeStatus } from "src/util/proto";
+import { Dispatch, bindActionCreators } from "redux";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
   nodesSummary: NodesSummary;
+  location: Location;
 }
 
 interface UrlState {
@@ -99,10 +101,11 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
   }
 
   currentCharts(): CustomChartState[] {
+    const { location } = this.props;
     if ("metrics" in this.props.location.query) {
       try {
         return [{
-          metrics: JSON.parse(this.props.location.query.metrics),
+          metrics: JSON.parse(location.query.metrics as any),
           axisUnits: AxisUnits.Count,
         }];
       } catch (e) {
@@ -111,7 +114,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     }
 
     try {
-      return JSON.parse(this.props.location.query.charts);
+      return JSON.parse(location.query.charts as any);
     } catch (e) {
       return [new CustomChartState()];
     }
@@ -208,11 +211,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
       );
     }
 
-    return (
-      <React.Fragment>
-        { charts.map(this.renderChart) }
-      </React.Fragment>
-    );
+    return charts.map(this.renderChart);
   }
 
   // Render a table containing all of the currently added metrics, with editing
@@ -221,7 +220,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     const charts = this.currentCharts();
 
     return (
-      <React.Fragment>
+      <Fragment>
         {
           charts.map((chart, i) => (
             <CustomChartTable
@@ -234,13 +233,13 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
             />
           ))
         }
-      </React.Fragment>
+      </Fragment>
     );
   }
 
   render() {
     return (
-      <React.Fragment>
+      <Fragment>
         <Helmet>
           <title>Custom Chart | Debug</title>
         </Helmet>
@@ -263,21 +262,23 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
         <section className="section">
           { this.renderChartTables() }
         </section>
-      </React.Fragment>
+      </Fragment>
     );
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
-  return {
-    nodesSummary: nodesSummarySelector(state),
-    nodesQueryValid: state.cachedData.nodes.valid,
-  };
-}
+const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+  nodesSummary: nodesSummarySelector(state),
+  nodesQueryValid: state.cachedData.nodes.valid,
+});
 
-const mapDispatchToProps = {
-  refreshNodes,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNodes,
+    },
+    dispatch,
+  );
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
 

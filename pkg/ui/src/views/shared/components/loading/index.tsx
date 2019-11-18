@@ -18,7 +18,7 @@ interface LoadingProps {
   error?: Error | Error[] | null;
   className?: string;
   image?: string;
-  render: () => React.ReactNode;
+  render: () => any;
 }
 
 /**
@@ -75,9 +75,5 @@ export default function Loading(props: LoadingProps) {
   if (props.loading) {
     return <div className={className} style={image} />;
   }
-  return (
-    <React.Fragment>
-      {props.render()}
-    </React.Fragment>
-  );
+  return props.render();
 }

@@ -60,7 +60,7 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
   axis = createSelector(
     (props: {children?: React.ReactNode}) => props.children,
     (children) => {
-      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children, Axis);
+      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children as any, Axis);
       if (axes.length === 0) {
         console.warn("LineGraph requires the specification of at least one axis.");
         return null;
@@ -74,7 +74,7 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
   metrics = createSelector(
     (props: {children?: React.ReactNode}) => props.children,
     (children) => {
-      return findChildrenOfType(children, Metric) as React.ReactElement<MetricProps>[];
+      return findChildrenOfType(children as any, Metric) as React.ReactElement<MetricProps>[];
     });
 
   initChart() {

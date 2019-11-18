@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { Fragment } from "react";
 import { Route } from "react-router";
 import { Store } from "redux";
 
@@ -31,9 +31,9 @@ export default function createLoginRoutes(store: Store<AdminUIState>): JSX.Eleme
   }
 
   return (
-    <React.Fragment>
+    <Fragment>
       <Route path={LOGIN_PAGE} component={ LoginPage } />
       <Route path={LOGOUT_PAGE} onEnter={ handleLogout } />
-    </React.Fragment>
+    </Fragment>
   );
 }

@@ -76,9 +76,7 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
     } else {
       // Set a timeout to reset the window when the current window expires.
       const newTimeout = setTimeout(() => this.setWindow(props), expires.diff(now).valueOf());
-      this.setState({
-        timeout: newTimeout,
-      });
+      this.setState({ timeout: newTimeout });
     }
   }
 
@@ -88,11 +86,13 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
    */
   setWindow(props: TimeWindowManagerProps) {
     if (!props.timeWindow.scale.windowEnd) {
-      const now = props.now ? props.now() : moment();
-      props.setTimeWindow({
-        start: now.clone().subtract(props.timeWindow.scale.windowSize),
-        end: now,
-      });
+      if (!props.timeWindow.useTimeRage) {
+        const now = props.now ? props.now() : moment();
+        props.setTimeWindow({
+          start: now.clone().subtract(props.timeWindow.scale.windowSize),
+          end: now,
+        });
+      }
     } else {
       const windowEnd = props.timeWindow.scale.windowEnd;
       props.setTimeWindow({

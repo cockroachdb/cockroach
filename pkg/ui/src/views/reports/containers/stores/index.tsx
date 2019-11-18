@@ -21,6 +21,7 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 import Loading from "src/views/shared/components/loading";
+import { Dispatch, bindActionCreators } from "redux";
 
 interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.IStoreDetails[];
@@ -90,11 +91,7 @@ class Stores extends React.Component<StoresProps, {}> {
       );
     }
 
-    return (
-      <React.Fragment>
-        { _.map(this.props.stores,  this.renderStore) }
-      </React.Fragment>
-    );
+    return _.map(this.props.stores,  this.renderStore);
   }
 
   render() {
@@ -155,16 +152,18 @@ const selectStoresLastError = createSelector(
   },
 );
 
-function mapStateToProps(state: AdminUIState, props: StoresProps) {
-  return {
-    stores: selectSortedStores(state, props),
-    loading: selectStoresLoading(state, props),
-    lastError: selectStoresLastError(state, props),
-  };
-}
+const mapStateToProps = (state: AdminUIState, props: StoresProps) => ({
+  stores: selectSortedStores(state, props),
+  loading: selectStoresLoading(state, props),
+  lastError: selectStoresLastError(state, props),
+});
 
-const actions = {
-  refreshStores,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshStores,
+    },
+    dispatch,
+  );
 
-export default connect(mapStateToProps, actions)(Stores);
+export default connect(mapStateToProps, mapDispatchToProps)(Stores);

@@ -8,10 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import "nvd3/build/nv.d3.min.css";
-import "react-select/dist/react-select.css";
-import "styl/app.styl";
-
 import "src/polyfills";
 import "src/protobufInit";
 
@@ -58,6 +54,11 @@ import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
+
+import "nvd3/build/nv.d3.min.css";
+import "react-select/dist/react-select.css";
+
+import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the

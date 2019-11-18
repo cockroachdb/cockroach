@@ -11,10 +11,10 @@
 import _ from "lodash";
 import React from "react";
 import { assert } from "chai";
-import {mount, ReactWrapper} from "enzyme";
 
 import "src/enzymeInit";
 import Loading from "src/views/shared/components/loading";
+import { ReactWrapper, mount } from "enzyme";
 
 const LOADING_CLASS_NAME = "loading-class-name";
 const RENDER_CLASS_NAME = "render-class-name";
@@ -31,6 +31,15 @@ interface AssertExpectedProps {
   onlyVisibleClass: string;
   errorCount?: number;
 }
+
+const makeLoadingComponent = (props: MakeLoadingProps) => mount(
+  <Loading
+    loading={props.loading}
+    error={props.error}
+    className={LOADING_CLASS_NAME}
+    render={() => (<div className={props.renderClassName || RENDER_CLASS_NAME}>Hello, world!</div>)}
+  />,
+);
 
 describe("<Loading>", () => {
 
@@ -165,17 +174,4 @@ function assertExpectedState(
       props.errorCount,
     );
   }
-}
-
-function makeLoadingComponent(
-  props: MakeLoadingProps,
-) {
-  return mount(<Loading
-    loading={props.loading}
-    error={props.error}
-    className={LOADING_CLASS_NAME}
-    render={() => (
-      <div className={props.renderClassName || RENDER_CLASS_NAME}>Hello, world!</div>
-    )}
-    />);
 }
