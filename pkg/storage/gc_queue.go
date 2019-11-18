@@ -148,7 +148,16 @@ func (r gcQueueScore) String() string {
 func (gcq *gcQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (bool, float64) {
-	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+
+	// We're going to need to read the protected timestamp state and check the
+	// variety of conditions which disallow GC.
+	// TODO(ajwerner): think about races with changing replica descriptors as they
+	// pertain to protected timestamps.
+	canGC, gcTimestamp := repl.checkProtectedTimestampsForGC(ctx, now)
+	if !canGC {
+		return false, 0
+	}
+	r := makeGCQueueScore(ctx, repl, gcTimestamp, sysCfg)
 	return r.ShouldQueue, r.FinalScore
 }
 
@@ -523,13 +532,17 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 	return r.send(ctx, req)
 }
 
-// process iterates through all keys in a replica's range, calling the garbage
-// collector for each key and associated set of values. GC'd keys are batched
-// into GC calls. Extant intents are resolved if intents are older than
-// intentAgeThreshold. The transaction and AbortSpan records are also
-// scanned and old entries evicted. During normal operation, both of these
-// records are cleaned up when their respective transaction finishes, so the
-// amount of work done here is expected to be small.
+// process first determines whether the replica can run GC given its view of
+// the protected timestamp subsystem and its current state. This check also
+// determines the most recent time we can use for the purposes of running GC.
+//
+// If it is safe to GC, process iterates through all keys in a replica's range,
+// calling the garbage collector for each key and associated set of
+// values. GC'd keys are batched into GC calls. Extant intents are resolved if
+// intents are older than intentAgeThreshold. The transaction and AbortSpan
+// records are also scanned and old entries evicted. During normal operation,
+// both of these records are cleaned up when their respective transaction
+// finishes, so the amount of work done here is expected to be small.
 //
 // Some care needs to be taken to avoid cyclic recreation of entries during GC:
 // * a Push initiated due to an intent may recreate a transaction entry
@@ -548,19 +561,30 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
+	// Lookup the descriptor and GC policy for the zone containing this key range.
+	// TODO(ajwerner): think about races in terms of merges and other badness for this validation.
 	now := repl.store.Clock().Now()
-	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	canGC, gcTimestamp := repl.checkProtectedTimestampsForGC(ctx, now)
+	if !canGC {
+		return nil
+	}
+
+	desc, zone := repl.DescAndZone()
+	r := makeGCQueueScore(ctx, repl, gcTimestamp, sysCfg)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
 
+	if err := repl.markPendingGC(gcTimestamp,
+		engine.MakeGarbageCollector(gcTimestamp, *zone.GC).Threshold); err != nil {
+		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
+		return nil
+	}
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
 
-	// Lookup the descriptor and GC policy for the zone containing this key range.
-	desc, zone := repl.DescAndZone()
-
-	info, err := RunGC(ctx, desc, snap, now, *zone.GC, &replicaGCer{repl: repl},
+	info, err := RunGC(ctx, desc, snap, gcTimestamp, *zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
-			intentCount, err := repl.store.intentResolver.CleanupIntents(ctx, intents, now, roachpb.PUSH_ABORT)
+			intentCount, err := repl.store.intentResolver.
+				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
 			if err == nil {
 
 				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
@@ -568,14 +592,16 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 			return err
 		},
 		func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent) error {
-			err := repl.store.intentResolver.CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, intents, now, func(pushed, succeeded bool) {
-				if pushed {
-					gcq.store.metrics.GCPushTxn.Inc(1)
-				}
-				if succeeded {
-					gcq.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
-				}
-			})
+			err := repl.store.intentResolver.
+				CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, intents, gcTimestamp,
+					func(pushed, succeeded bool) {
+						if pushed {
+							gcq.store.metrics.GCPushTxn.Inc(1)
+						}
+						if succeeded {
+							gcq.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
+						}
+					})
 			if errors.Cause(err) == stop.ErrThrottled {
 				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
 				return nil

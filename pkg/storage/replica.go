@@ -489,6 +489,17 @@ type Replica struct {
 		syncutil.Mutex
 		remotes map[roachpb.ReplicaID]struct{}
 	}
+
+	// r.mu < r.protectedTimestampMu
+	protectedTimestampMu struct {
+		syncutil.Mutex
+		minStateReadTimestamp hlc.Timestamp
+		pendingGCThreshold    hlc.Timestamp
+		// promisedIDs is a set of protected timestamp records which this replica
+		// has promised to wait to see before it will run GC. Once the value
+		// timestamp passes, the IDs can be removed.
+		promisedIDs map[uuid.UUID]hlc.Timestamp
+	}
 }
 
 var _ batcheval.EvalContext = &Replica{}
@@ -1443,7 +1454,6 @@ func (r *Replica) executeAdminBatch(
 		reply, err := r.adminScatter(ctx, *tArgs)
 		pErr = roachpb.NewError(err)
 		resp = &reply
-
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
 	}
