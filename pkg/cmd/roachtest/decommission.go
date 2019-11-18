@@ -260,6 +260,9 @@ func execCLI(
 	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
 	buf, err := c.RunWithBuffer(ctx, t.l, c.Node(runNode), args...)
 	t.l.Printf("%s\n", buf)
+	if err != nil {
+		err = errors.Wrap(err, string(buf))
+	}
 	return string(buf), err
 }
 
