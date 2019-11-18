@@ -163,6 +163,12 @@ func (m *MockTransactionalSender) PrepareRetryableError(ctx context.Context, msg
 	return roachpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
 }
 
+// Step is part of the TxnSender interface.
+func (m *MockTransactionalSender) Step() error { panic("unimplemented") }
+
+// DisableStepping is part of the TxnSender interface.
+func (m *MockTransactionalSender) DisableStepping() error { panic("unimplemented") }
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
