@@ -14,13 +14,13 @@ import (
 	"encoding/binary"
 	gojson "encoding/json"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -56,16 +56,16 @@ type Encoder interface {
 	// datums are expected to match 1:1 with the `Columns` field of the
 	// `TableDescriptor`, but only the primary key fields will be used. The
 	// returned bytes are only valid until the next call to Encode*.
-	EncodeKey(encodeRow) ([]byte, error)
+	EncodeKey(context.Context, encodeRow) ([]byte, error)
 	// EncodeValue encodes the primary key of the given row. The columns of the
 	// datums are expected to match 1:1 with the `Columns` field of the
 	// `TableDescriptor`. The returned bytes are only valid until the next call
 	// to Encode*.
-	EncodeValue(encodeRow) ([]byte, error)
+	EncodeValue(context.Context, encodeRow) ([]byte, error)
 	// EncodeResolvedTimestamp encodes a resolved timestamp payload for the
 	// given topic name. The returned bytes are only valid until the next call
 	// to Encode*.
-	EncodeResolvedTimestamp(string, hlc.Timestamp) ([]byte, error)
+	EncodeResolvedTimestamp(context.Context, string, hlc.Timestamp) ([]byte, error)
 }
 
 func getEncoder(opts map[string]string) (Encoder, error) {
@@ -107,7 +107,7 @@ func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *jsonEncoder) EncodeKey(row encodeRow) ([]byte, error) {
+func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error) {
 	jsonEntries, err := e.encodeKeyRaw(row)
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 }
 
 // EncodeValue implements the Encoder interface.
-func (e *jsonEncoder) EncodeValue(row encodeRow) ([]byte, error) {
+func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, error) {
 	if e.keyOnly || (!e.wrapped && row.deleted) {
 		return nil, nil
 	}
@@ -205,7 +205,9 @@ func (e *jsonEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 }
 
 // EncodeResolvedTimestamp implements the Encoder interface.
-func (e *jsonEncoder) EncodeResolvedTimestamp(_ string, resolved hlc.Timestamp) ([]byte, error) {
+func (e *jsonEncoder) EncodeResolvedTimestamp(
+	_ context.Context, _ string, resolved hlc.Timestamp,
+) ([]byte, error) {
 	meta := map[string]interface{}{
 		`resolved`: tree.TimestampToDecimal(resolved).Decimal.String(),
 	}
@@ -280,7 +282,7 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *confluentAvroEncoder) EncodeKey(row encodeRow) ([]byte, error) {
+func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
 	cacheKey := makeTableIDAndVersion(row.tableDesc.ID, row.tableDesc.Version)
 	registered, ok := e.keyCache[cacheKey]
 	if !ok {
@@ -293,7 +295,7 @@ func (e *confluentAvroEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
 		subject := SQLNameToKafkaName(row.tableDesc.Name) + confluentSubjectSuffixKey
-		registered.registryID, err = e.register(&registered.schema.avroRecord, subject)
+		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -311,7 +313,7 @@ func (e *confluentAvroEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 }
 
 // EncodeValue implements the Encoder interface.
-func (e *confluentAvroEncoder) EncodeValue(row encodeRow) ([]byte, error) {
+func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) ([]byte, error) {
 	if e.keyOnly {
 		return nil, nil
 	}
@@ -333,7 +335,7 @@ func (e *confluentAvroEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
 		subject := SQLNameToKafkaName(row.tableDesc.Name) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(&registered.schema.avroRecord, subject)
+		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -361,7 +363,7 @@ func (e *confluentAvroEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 
 // EncodeResolvedTimestamp implements the Encoder interface.
 func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
-	topic string, resolved hlc.Timestamp,
+	ctx context.Context, topic string, resolved hlc.Timestamp,
 ) ([]byte, error) {
 	registered, ok := e.resolvedCache[topic]
 	if !ok {
@@ -375,7 +377,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
 		subject := SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(&registered.schema.avroRecord, subject)
+		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -397,7 +399,9 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	return registered.schema.BinaryFromRow(header, meta, nil /* row */)
 }
 
-func (e *confluentAvroEncoder) register(schema *avroRecord, subject string) (int32, error) {
+func (e *confluentAvroEncoder) register(
+	ctx context.Context, schema *avroRecord, subject string,
+) (int32, error) {
 	type confluentSchemaVersionRequest struct {
 		Schema string `json:"schema"`
 	}
@@ -422,7 +426,9 @@ func (e *confluentAvroEncoder) register(schema *avroRecord, subject string) (int
 		return 0, err
 	}
 
-	resp, err := http.Post(url.String(), confluentSchemaContentType, &buf)
+	// TODO(someone): connect the context to the caller to obey
+	// cancellation.
+	resp, err := httputil.Post(ctx, url.String(), confluentSchemaContentType, &buf)
 	if err != nil {
 		return 0, err
 	}

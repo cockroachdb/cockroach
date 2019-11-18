@@ -16,13 +16,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -132,6 +133,10 @@ func (opts Options) filename() string {
 	return filepath.Base(opts.URL.Path[:len(opts.URL.Path)-len(opts.Suffix)])
 }
 
+// Downloading binaries may take some time, so give ourselves
+// some room before the timeout expires.
+var httpClient = httputil.NewClientWithTimeout(30 * time.Second)
+
 // Download downloads the binary for the given version, and skips the download
 // if the archive is already present in `destDir`.
 //
@@ -161,7 +166,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 	}
 
 	log.Infof(ctx, "downloading %s to %s", opts.URL.String(), destFileName)
-	resp, err := http.Get(opts.URL.String())
+	resp, err := httpClient.Get(ctx, opts.URL.String())
 	if err != nil {
 		return "", err
 	}

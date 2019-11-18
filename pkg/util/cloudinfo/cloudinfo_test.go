@@ -12,11 +12,13 @@ package cloudinfo
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -27,9 +29,9 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req), nil
 }
 
-//NewTestClient returns *http.Client with Transport replaced to avoid making real calls
-func NewInstanceMetadataTestClient() *http.Client {
-	return &http.Client{
+// NewInstanceMetadataTestclient returns *http.Client with Transport replaced to avoid making real calls
+func NewInstanceMetadataTestClient() *httputil.Client {
+	return &httputil.Client{Client: &http.Client{
 		Transport: RoundTripFunc(func(req *http.Request) *http.Response {
 			// Test request parameters
 			res := &http.Response{
@@ -142,7 +144,7 @@ func NewInstanceMetadataTestClient() *http.Client {
 
 			return res
 		}),
-	}
+	}}
 }
 
 func TestAWSInstanceMetadataParsing(t *testing.T) {
@@ -150,7 +152,7 @@ func TestAWSInstanceMetadataParsing(t *testing.T) {
 
 	cli := client{NewInstanceMetadataTestClient()}
 
-	s, p, i := cli.getAWSInstanceMetadata(instanceClass)
+	s, p, i := cli.getAWSInstanceMetadata(context.TODO(), instanceClass)
 
 	if !s {
 		t.Fatalf("expected parsing to succeed")
@@ -164,7 +166,7 @@ func TestAWSInstanceMetadataParsing(t *testing.T) {
 		t.Fatalf("expected parsing to get instanceType m5a.large")
 	}
 
-	_, _, r := cli.getAWSInstanceMetadata(region)
+	_, _, r := cli.getAWSInstanceMetadata(context.TODO(), region)
 
 	if r != "us-east-1" {
 		t.Fatalf("expected parsing to get region us-east-1")
@@ -176,7 +178,7 @@ func TestGCPInstanceMetadataParsing(t *testing.T) {
 
 	cli := client{NewInstanceMetadataTestClient()}
 
-	s, p, i := cli.getGCPInstanceMetadata(instanceClass)
+	s, p, i := cli.getGCPInstanceMetadata(context.TODO(), instanceClass)
 
 	if !s {
 		t.Fatalf("expected parsing to succeed")
@@ -190,7 +192,7 @@ func TestGCPInstanceMetadataParsing(t *testing.T) {
 		t.Fatalf("expected parsing to get machineTypes g1-small")
 	}
 
-	_, _, r := cli.getGCPInstanceMetadata(region)
+	_, _, r := cli.getGCPInstanceMetadata(context.TODO(), region)
 
 	if r != "us-east4-c" {
 		t.Fatalf("expected parsing to get region us-east4-c")
@@ -202,7 +204,7 @@ func TestAzureInstanceMetadataParsing(t *testing.T) {
 
 	cli := client{NewInstanceMetadataTestClient()}
 
-	s, p, i := cli.getAzureInstanceMetadata(instanceClass)
+	s, p, i := cli.getAzureInstanceMetadata(context.TODO(), instanceClass)
 
 	if !s {
 		t.Fatalf("expected parsing to succeed")
@@ -216,7 +218,7 @@ func TestAzureInstanceMetadataParsing(t *testing.T) {
 		t.Fatalf("expected parsing to get machineTypes Standard_D2s_v3")
 	}
 
-	_, _, r := cli.getAzureInstanceMetadata(region)
+	_, _, r := cli.getAzureInstanceMetadata(context.TODO(), region)
 
 	if r != "eastus" {
 		t.Fatalf("expected parsing to get region eastus")
