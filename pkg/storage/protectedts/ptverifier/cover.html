@@ -1,0 +1,213 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go (97.6%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package ptverifier
+
+import (
+        "context"
+
+        "github.com/cockroachdb/cockroach/pkg/internal/client"
+        "github.com/cockroachdb/cockroach/pkg/roachpb"
+        "github.com/cockroachdb/cockroach/pkg/storage/protectedts"
+        "github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
+        "github.com/cockroachdb/cockroach/pkg/util/hlc"
+        "github.com/cockroachdb/cockroach/pkg/util/uuid"
+        "github.com/pkg/errors"
+)
+
+// verifier implements protectedts.verifier.
+type verifier struct {
+        db *client.DB
+        s  protectedts.Storage
+}
+
+// New returns a new Verifier.
+func New(db *client.DB, s protectedts.Storage) protectedts.Verifier <span class="cov8" title="1">{
+        return &amp;verifier{db: db, s: s}
+}</span>
+
+// Verify verifies that a record with the provided id is verified.
+// If it is not verified this call will perform verification and mark the
+// record as verified.
+func (v *verifier) Verify(ctx context.Context, id uuid.UUID) error <span class="cov8" title="1">{
+        // First we go read the record.
+        txn := v.db.NewTxn(ctx, "verify")
+        r, err := v.s.GetRecord(ctx, txn, id)
+
+        if err != nil </span><span class="cov8" title="1">{
+                _ = txn.Rollback(ctx) // don't care
+                return errors.Wrapf(err, "failed to fetch record %s", id)
+        }</span>
+
+        // Keep track of the timestamp at which we read the record. We know that
+        // all reads at a later timestamp will read this record. This timestamp
+        // will serve as the causality token used in verification if we need to
+        // verify.
+        <span class="cov8" title="1">ts := txn.Serialize().Timestamp
+        if err = txn.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return errors.Wrapf(err, "failed to fetch fetch %s", id)
+        }</span>
+
+        <span class="cov8" title="1">if r.Verified </span><span class="cov8" title="1">{ // already verified
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">b := makeBatch(r, ts)
+        if err := v.db.Run(ctx, &amp;b); err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        // Check the responses and synthesize an error if one occurred.
+        <span class="cov8" title="1">if err := parseResponse(&amp;b, r); err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        // Mark the record as verified.
+        <span class="cov8" title="1">return errors.Wrapf(v.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error </span><span class="cov8" title="1">{
+                return v.s.MarkVerified(ctx, txn, id)
+        }</span>), "failed to mark %v as verified", id)
+}
+
+func makeBatch(r *ptpb.Record, aliveAt hlc.Timestamp) client.Batch <span class="cov8" title="1">{
+        // Need to perform validation, build a batch and run it.
+        mergedSpans, _ := roachpb.MergeSpans(r.Spans)
+        var b client.Batch
+        for _, s := range mergedSpans </span><span class="cov8" title="1">{
+                var req roachpb.AdminVerifyProtectedTimestampRequest
+                req.RecordAliveAt = aliveAt
+                req.Protected = r.Timestamp
+                req.RecordID = r.ID
+                req.Key = s.Key
+                req.EndKey = s.EndKey
+                b.AddRawRequest(&amp;req)
+        }</span>
+        <span class="cov8" title="1">return b</span>
+}
+
+func parseResponse(b *client.Batch, r *ptpb.Record) error <span class="cov8" title="1">{
+        rawResponse := b.RawResponse()
+        var failed []roachpb.RangeDescriptor
+        for _, r := range rawResponse.Responses </span><span class="cov8" title="1">{
+                resp := r.GetInner().(*roachpb.AdminVerifyProtectedTimestampResponse)
+                if len(resp.FailedRanges) == 0 </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">if len(failed) == 0 </span><span class="cov8" title="1">{
+                        failed = resp.FailedRanges
+                }</span> else<span class="cov8" title="1"> {
+                        failed = append(failed, resp.FailedRanges...)
+                }</span>
+        }
+        <span class="cov8" title="1">if len(failed) &gt; 0 </span><span class="cov8" title="1">{
+                return errors.Errorf("failed to verify protection %v on %v", r, failed)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

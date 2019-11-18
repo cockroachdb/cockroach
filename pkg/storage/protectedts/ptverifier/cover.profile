@@ -1,0 +1,26 @@
+mode: set
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:32.69,34.2 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:39.68,44.16 3 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:53.2,54.39 2 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:58.2,58.16 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:62.2,63.42 2 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:68.2,68.45 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:72.2,72.85 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:44.16,47.3 2 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:54.39,56.3 1 0
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:58.16,60.3 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:63.42,65.3 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:68.45,70.3 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:72.85,74.3 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:77.68,81.32 3 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:90.2,90.10 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:81.32,89.3 7 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:93.59,96.42 3 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:107.2,107.21 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:110.2,110.12 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:96.42,98.34 2 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:101.3,101.23 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:98.34,99.12 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:101.23,103.4 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:103.9,105.4 1 1
+github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptverifier/verifier.go:107.21,109.3 1 1
