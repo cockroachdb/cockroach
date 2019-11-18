@@ -5578,6 +5578,7 @@ void LeafTxnInputState::InitAsDefaultInstance() {
 const int LeafTxnInputState::kTxnFieldNumber;
 const int LeafTxnInputState::kRefreshInvalidFieldNumber;
 const int LeafTxnInputState::kInFlightWritesFieldNumber;
+const int LeafTxnInputState::kReadSeqNumPlusOneFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 LeafTxnInputState::LeafTxnInputState()
@@ -5597,14 +5598,16 @@ LeafTxnInputState::LeafTxnInputState(const LeafTxnInputState& from)
   } else {
     txn_ = NULL;
   }
-  refresh_invalid_ = from.refresh_invalid_;
+  ::memcpy(&refresh_invalid_, &from.refresh_invalid_,
+    static_cast<size_t>(reinterpret_cast<char*>(&read_seq_num_plus_one_) -
+    reinterpret_cast<char*>(&refresh_invalid_)) + sizeof(read_seq_num_plus_one_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.LeafTxnInputState)
 }
 
 void LeafTxnInputState::SharedCtor() {
   ::memset(&txn_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&refresh_invalid_) -
-      reinterpret_cast<char*>(&txn_)) + sizeof(refresh_invalid_));
+      reinterpret_cast<char*>(&read_seq_num_plus_one_) -
+      reinterpret_cast<char*>(&txn_)) + sizeof(read_seq_num_plus_one_));
 }
 
 LeafTxnInputState::~LeafTxnInputState() {
@@ -5636,7 +5639,9 @@ void LeafTxnInputState::Clear() {
     delete txn_;
   }
   txn_ = NULL;
-  refresh_invalid_ = false;
+  ::memset(&refresh_invalid_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&read_seq_num_plus_one_) -
+      reinterpret_cast<char*>(&refresh_invalid_)) + sizeof(read_seq_num_plus_one_));
   _internal_metadata_.Clear();
 }
 
@@ -5692,6 +5697,19 @@ bool LeafTxnInputState::MergePartialFromCodedStream(
         break;
       }
 
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &read_seq_num_plus_one_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -5736,6 +5754,10 @@ void LeafTxnInputState::SerializeWithCachedSizes(
       output);
   }
 
+  if (this->read_seq_num_plus_one() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(9, this->read_seq_num_plus_one(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.LeafTxnInputState)
@@ -5768,6 +5790,12 @@ size_t LeafTxnInputState::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  if (this->read_seq_num_plus_one() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->read_seq_num_plus_one());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -5792,6 +5820,9 @@ void LeafTxnInputState::MergeFrom(const LeafTxnInputState& from) {
   if (from.refresh_invalid() != 0) {
     set_refresh_invalid(from.refresh_invalid());
   }
+  if (from.read_seq_num_plus_one() != 0) {
+    set_read_seq_num_plus_one(from.read_seq_num_plus_one());
+  }
 }
 
 void LeafTxnInputState::CopyFrom(const LeafTxnInputState& from) {
@@ -5814,6 +5845,7 @@ void LeafTxnInputState::InternalSwap(LeafTxnInputState* other) {
   CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
   swap(txn_, other->txn_);
   swap(refresh_invalid_, other->refresh_invalid_);
+  swap(read_seq_num_plus_one_, other->read_seq_num_plus_one_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

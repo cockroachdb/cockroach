@@ -2605,6 +2605,11 @@ class LeafTxnInputState : public ::google::protobuf::MessageLite /* @@protoc_ins
   bool refresh_invalid() const;
   void set_refresh_invalid(bool value);
 
+  void clear_read_seq_num_plus_one();
+  static const int kReadSeqNumPlusOneFieldNumber = 9;
+  ::google::protobuf::int32 read_seq_num_plus_one() const;
+  void set_read_seq_num_plus_one(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.LeafTxnInputState)
  private:
 
@@ -2612,6 +2617,7 @@ class LeafTxnInputState : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
   ::cockroach::roachpb::Transaction* txn_;
   bool refresh_invalid_;
+  ::google::protobuf::int32 read_seq_num_plus_one_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -5370,6 +5376,19 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Sequenc
 LeafTxnInputState::in_flight_writes() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.LeafTxnInputState.in_flight_writes)
   return in_flight_writes_;
+}
+
+inline void LeafTxnInputState::clear_read_seq_num_plus_one() {
+  read_seq_num_plus_one_ = 0;
+}
+inline ::google::protobuf::int32 LeafTxnInputState::read_seq_num_plus_one() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeafTxnInputState.read_seq_num_plus_one)
+  return read_seq_num_plus_one_;
+}
+inline void LeafTxnInputState::set_read_seq_num_plus_one(::google::protobuf::int32 value) {
+  
+  read_seq_num_plus_one_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LeafTxnInputState.read_seq_num_plus_one)
 }
 
 // -------------------------------------------------------------------

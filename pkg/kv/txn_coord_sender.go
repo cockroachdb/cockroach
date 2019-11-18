@@ -290,7 +290,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		mu:                      &tc.mu.Mutex,
 		allowConcurrentRequests: typ == client.LeafTxn,
 	}
-	tc.interceptorAlloc.txnSeqNumAllocator.seqGen = txn.Sequence
+	tc.interceptorAlloc.txnSeqNumAllocator.writeSeq = txn.Sequence
 }
 
 func (tc *TxnCoordSender) connectInterceptors() {
@@ -334,6 +334,8 @@ func newLeafTxnCoordSender(
 
 	// Load the in-flight writes in the pipeliner.
 	tcs.interceptorAlloc.txnPipeliner.initializeLeaf(tis)
+	// Load the read seqnum into the seq num allocator.
+	tcs.interceptorAlloc.txnSeqNumAllocator.initializeLeaf(tis)
 
 	// Once the interceptors are initialized, piece them all together in the
 	// correct order.
@@ -1071,4 +1073,18 @@ func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string)
 	defer tc.mu.Unlock()
 	return roachpb.NewTransactionRetryWithProtoRefreshError(
 		msg, tc.mu.txn.ID, tc.mu.txn)
+}
+
+// Step is part of the TxnSender interface.
+func (tc *TxnCoordSender) Step() error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked()
+}
+
+// DisableStepping is part of the TxnSender interface.
+func (tc *TxnCoordSender) DisableStepping() error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.interceptorAlloc.txnSeqNumAllocator.disableSteppingLocked()
 }

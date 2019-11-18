@@ -245,18 +245,11 @@ func evaluateBatch(
 		// Execute the command.
 		args := union.GetInner()
 		if baHeader.Txn != nil {
-			// Sequence numbers used to be set on each BatchRequest instead of
-			// on each individual Request. This meant that all Requests in a
-			// BatchRequest shared the same sequence number, so a BatchIndex was
-			// augmented to provide an ordering between them. Individual
-			// Requests were later given their own sequence numbers, so the
-			// BatchIndex was no longer necessary.
-			if seqNum := args.Header().Sequence; seqNum != 0 {
-				// Set the Request's sequence number on the TxnMeta for this
-				// request. Each request will set their own sequence number on
-				// the TxnMeta, which is stored as part of an intent.
-				baHeader.Txn.Sequence = seqNum
-			}
+			// Set the Request's sequence number on the TxnMeta for this
+			// request. The MVCC layer (currently) uses TxnMeta to
+			// pass input arguments, such as the seqnum at which a
+			// request operates.
+			baHeader.Txn.Sequence = args.Header().Sequence
 		}
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
