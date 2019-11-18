@@ -12,13 +12,10 @@ package sqlsmith
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 var (
@@ -211,39 +208,7 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	}
 	datum = sqlbase.RandDatumWithNullChance(s.rnd, typ, nullChance)
 	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
-		switch f {
-		case types.TupleFamily:
-			// TODO(mjibson): improve
-			datum = tree.DNull
-		case types.StringFamily:
-			p := make([]byte, s.rnd.Intn(5))
-			for i := range p {
-				p[i] = byte('A' + s.rnd.Intn(26))
-			}
-			datum = tree.NewDString(string(p))
-		case types.BytesFamily:
-			p := make([]byte, s.rnd.Intn(5))
-			for i := range p {
-				p[i] = byte('A' + s.rnd.Intn(26))
-			}
-			datum = tree.NewDBytes(tree.DBytes(p))
-		case types.IntervalFamily:
-			datum = &tree.DInterval{Duration: duration.MakeDuration(
-				s.rnd.Int63n(3),
-				s.rnd.Int63n(3),
-				s.rnd.Int63n(3),
-			)}
-		case types.JsonFamily:
-			p := make([]byte, s.rnd.Intn(5))
-			for i := range p {
-				p[i] = byte('A' + s.rnd.Intn(26))
-			}
-			datum = tree.NewDJSON(json.FromString(string(p)))
-		case types.TimestampFamily:
-			datum = tree.MakeDTimestamp(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Microsecond)
-		case types.TimestampTZFamily:
-			datum = tree.MakeDTimestampTZ(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Microsecond)
-		}
+		datum = sqlbase.RandDatumSimple(s.rnd, typ)
 	}
 	s.lock.Unlock()
 
