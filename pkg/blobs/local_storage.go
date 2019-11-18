@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -74,7 +75,7 @@ func (l *LocalStorage) WriteFile(filename string, content io.Reader) error {
 	if err = os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return errors.Wrap(err, "creating local external storage path")
 	}
-	return errors.Wrapf(os.Rename(tmpFile.Name(), fullPath), "renaming to local export file %q", fullPath)
+	return errors.Wrapf(fileutil.Move(tmpFile.Name(), fullPath), "renaming to local export file %q", fullPath)
 }
 
 // ReadFile prepends IO dir to filename and reads the content of that local file.
