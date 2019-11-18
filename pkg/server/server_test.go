@@ -184,7 +184,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	if !strings.HasPrefix(url, "http://") {
 		t.Fatalf("expected insecure admin url to start with http://, but got %s", url)
 	}
-	if resp, err := http.Get(url); err != nil {
+	if resp, err := httputil.Get(context.TODO(), url); err != nil {
 		t.Error(err)
 	} else {
 		if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
@@ -197,7 +197,7 @@ func TestPlainHTTPServer(t *testing.T) {
 
 	// Attempting to connect to the insecure server with HTTPS doesn't work.
 	secureURL := strings.Replace(url, "http://", "https://", 1)
-	if _, err := http.Get(secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+	if _, err := httputil.Get(context.TODO(), secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
 		t.Error(err)
 	}
 }

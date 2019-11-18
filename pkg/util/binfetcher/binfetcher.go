@@ -16,13 +16,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -161,7 +161,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 	}
 
 	log.Infof(ctx, "downloading %s to %s", opts.URL.String(), destFileName)
-	resp, err := http.Get(opts.URL.String())
+	resp, err := httputil.Get(ctx, opts.URL.String())
 	if err != nil {
 		return "", err
 	}
