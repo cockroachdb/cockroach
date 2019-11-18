@@ -1454,6 +1454,43 @@ message AdminScatterResponse {
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }
 
+// AdminVerifyProtectedTimestampRequest is the argument to the
+// AdminVerifyProtectedTimestamp method which ensures that the specified record
+// will be seen before data can be garbage collected at the timestamp.
+message AdminVerifyProtectedTimestampRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // RecordID is the ID of the protected timestamp Record being verified.
+  bytes record_id = 4 [
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "RecordID"
+  ];
+
+  // Protected is the timestamp at which the record with RecordID protects.
+  util.hlc.Timestamp protected = 2 [(gogoproto.nullable) = false];
+
+  // RecordAliveAt is a an hlc timestamp at which the record being verified is
+  // known to exist. A value for RecordAliveAt is generally determined by
+  // reading a Record from the database and using the timestamp at which that
+  // read occurred.
+  util.hlc.Timestamp record_alive_at = 3 [(gogoproto.nullable) = false];
+}
+
+
+// AdminVerifyProtectedTimestampResponse is the argument to the
+// AdminVerifyProtectedTimestamp method which ensures that the specified record
+// will be seen before data can be garbage collected at the timestamp.
+message AdminVerifyProtectedTimestampResponse {
+  
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bool verified = 2;
+
+  repeated RangeDescriptor failed_ranges = 3 [(gogoproto.nullable) = false];
+}
+
 // AddSSTableRequest is arguments to the AddSSTable() method, to link a file
 // into the RocksDB log-structured merge-tree.
 message AddSSTableRequest {
@@ -1660,6 +1697,7 @@ message RequestUnion {
     RefreshRangeRequest refresh_range = 41;
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
+    AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
   }
   reserved 8, 15, 23, 25, 27;
 }
@@ -1710,6 +1748,7 @@ message ResponseUnion {
     RefreshRangeResponse refresh_range = 41;
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
+    AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
   }
   reserved 8, 15, 23, 25, 27, 28;
 }
