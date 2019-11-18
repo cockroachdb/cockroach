@@ -49,7 +49,7 @@ func NewNonNullViolationError(columnName string) error {
 // NewInvalidSchemaDefinitionError creates an error for an invalid schema
 // definition such as a schema definition that doesn't parse.
 func NewInvalidSchemaDefinitionError(err error) error {
-	return pgerror.New(pgcode.InvalidSchemaDefinition, err.Error())
+	return pgerror.WithCandidateCode(err, pgcode.InvalidSchemaDefinition)
 }
 
 // NewUnsupportedSchemaUsageError creates an error for an invalid

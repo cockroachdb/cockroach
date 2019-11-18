@@ -15,7 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // DummySequenceOperators implements the tree.SequenceOperators interface by
@@ -24,7 +25,7 @@ type DummySequenceOperators struct{}
 
 var _ tree.EvalDatabase = &DummySequenceOperators{}
 
-var errSequenceOperators = errors.New("cannot backfill such sequence operation")
+var errSequenceOperators = unimplemented.NewWithIssue(42508, "cannot backfill such sequence operation")
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
 func (so *DummySequenceOperators) ParseQualifiedTableName(
