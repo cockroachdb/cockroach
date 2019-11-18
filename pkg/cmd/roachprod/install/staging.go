@@ -11,10 +11,12 @@
 package install
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 const (
@@ -39,7 +41,7 @@ func getEdgeBinaryURL(binaryName, SHA, arch string) (*url.URL, error) {
 		edgeBinaryLocation.Path += ".LATEST"
 		// Otherwise, find the latest SHA binary available. This works because
 		// "[executable].LATEST" redirects to the latest SHA.
-		resp, err := http.Head(edgeBinaryLocation.String())
+		resp, err := httputil.Head(context.TODO(), edgeBinaryLocation.String())
 		if err != nil {
 			return nil, err
 		}
