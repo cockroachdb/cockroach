@@ -2534,6 +2534,17 @@ func (r *Replica) adminScatter(
 	}, nil
 }
 
+func (r *Replica) adminVerifyProtectedTimestamp(
+	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
+) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
+	resp.Verified, err = r.protectedTimestampRecordApplies(ctx, args.Protected,
+		args.RecordAliveAt, args.RecordID)
+	if err == nil && !resp.Verified {
+		resp.FailedRanges = append(resp.FailedRanges, *r.Desc())
+	}
+	return resp, err
+}
+
 // maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
 // a high enough version such that GenerationComparable won't be lost.
 func maybeMarkGenerationComparable(
