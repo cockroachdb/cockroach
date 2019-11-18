@@ -173,7 +173,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
         <PageConfig>
           <PageConfigItem>
             <Search
-              onSubmit={this.onSubmitSearchField}
+              onSubmit={this.onSubmitSearchField as any}
               onClear={this.onClearSearchField}
             />
           </PageConfigItem>

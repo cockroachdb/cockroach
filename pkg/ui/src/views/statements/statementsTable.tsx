@@ -44,7 +44,7 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
           <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
         }>
           <div className="statement__tooltip-hover-area">
-            { getHighlightedText(shortStatement(summary, props.statement), props.search) }
+            { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }
           </div>
         </Tooltip>
       </div>

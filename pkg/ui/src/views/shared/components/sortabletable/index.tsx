@@ -14,7 +14,6 @@ import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
 import { DrawerComponent } from "../drawer";
 import "./sortabletable.styl";
-import { Link } from "react-router";
 
 /**
  * SortableColumn describes the contents a single column of a
@@ -109,7 +108,7 @@ export class SortableTable extends React.Component<TableProps> {
       statement: "",
       search: "",
     },
-    activeIndex: NaN
+    activeIndex: NaN,
   };
 
   clickSort(clickedSortKey: any) {
@@ -161,7 +160,7 @@ export class SortableTable extends React.Component<TableProps> {
         className={classes}
         onClick={() => {
           if (drawer) {
-            this.setState({ activeIndex: rowIndex })
+            this.setState({ activeIndex: rowIndex });
             this.showDrawer(rowIndex);
           }
           if (onClickExpand) {
@@ -221,7 +220,7 @@ export class SortableTable extends React.Component<TableProps> {
         statement: "",
         search: "",
       },
-      activeIndex: NaN
+      activeIndex: NaN,
     });
   }
 
@@ -271,7 +270,7 @@ export class SortableTable extends React.Component<TableProps> {
         </table>
         {drawer && (
           <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
-            <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search)}</span>
+            <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
           </DrawerComponent>
         )}
       </React.Fragment>

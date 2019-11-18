@@ -14,13 +14,19 @@ import React from "react";
 import "./search.styl";
 
 interface ISearchProps {
-  onSubmit?: (value: string) => void;
+  onSubmit: (value: string) => void;
   onClear?: () => void;
+}
+
+interface ISearchState {
+  value: string;
+  submitted: boolean;
+  submit?: boolean;
 }
 
 type TSearchProps = ISearchProps & InputProps;
 
-export class Search extends React.Component<TSearchProps> {
+export class Search extends React.Component<TSearchProps, ISearchState> {
   state = {
     value: "",
     submitted: false,
@@ -38,7 +44,7 @@ export class Search extends React.Component<TSearchProps> {
   }
 
   onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value;
+    const value: string = event.target.value;
     const submitted = value.length === 0;
     this.setState({ value, submitted }, () => submitted && this.onSubmit());
   }

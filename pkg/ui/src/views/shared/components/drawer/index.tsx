@@ -19,7 +19,7 @@ const openDetails = (data: any) => {
 };
 
 // tslint:disable-next-line: variable-name
-export const DrawerComponent = ({ visible, onClose, children, data, details }: IDrawerProps) => (
+export const DrawerComponent = ({ visible, onClose, children, data, details, ...props }: IDrawerProps) => (
   <Drawer
     title={
       <div className="__actions">
@@ -40,6 +40,7 @@ export const DrawerComponent = ({ visible, onClose, children, data, details }: I
     visible={visible}
     className="drawer--preset-black"
     getContainer={false}
+    {...props}
   >
     {children}
   </Drawer>
