@@ -1,0 +1,24 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.protectedts;
+option go_package = "ptstorage";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "roachpb/data.proto";
+
+// Spans is the format of the message encoded in the spans column of a the
+// system.protectedts_records table.
+message Spans {
+  // Spans are the set of spans protected by a Record.
+  repeated roachpb.Span spans = 7 [(gogoproto.nullable) = false];
+}
