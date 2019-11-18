@@ -575,4 +575,31 @@ describe("rest api", function() {
       });
     });
   });
+
+  describe("metrics metadata request", function() {
+    const metricMetadataUrl = `${api.API_PREFIX}/metricmetadata`;
+    const metadata = {};
+
+    afterEach(fetchMock.restore);
+
+    it("returns list of metadata metrics", () => {
+      this.timeout(1000);
+      fetchMock.mock({
+         matcher: metricMetadataUrl,
+         method: "GET",
+         response: (_url: string, requestObj: RequestInit) => {
+           assert.isUndefined(requestObj.body);
+           const encodedResponse = protos.cockroach.server.serverpb.MetricMetadataResponse.encode({ metadata }).finish();
+           return {
+             body: api.toArrayBuffer(encodedResponse),
+           };
+         },
+       });
+
+      return api.getAllMetricMetadata(new protos.cockroach.server.serverpb.MetricMetadataRequest()).then((result) => {
+        assert.lengthOf(fetchMock.calls(metricMetadataUrl), 1);
+        assert.deepEqual(result.metadata, metadata);
+      });
+    });
+  });
 });
