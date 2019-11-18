@@ -3269,6 +3269,10 @@ func TestSnapshotRateLimit(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("bam", func(t *testing.T) {
+		panic("boom")
+	})
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {
