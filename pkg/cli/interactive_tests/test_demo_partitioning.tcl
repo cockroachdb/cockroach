@@ -2,6 +2,9 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
+# The following tests want to access the licensing server.
+set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "false"
+
 start_test "Expect partitioning succeeds"
 # test that partitioning works if a license could be acquired
 spawn $argv demo --geo-partitioned-replicas
