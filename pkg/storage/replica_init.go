@@ -74,6 +74,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
+	r.protectedTimestampMu.promisedIDs = make(map[uuid.UUID]hlc.Timestamp)
 	return r
 }
 
