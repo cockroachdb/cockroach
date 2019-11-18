@@ -38,7 +38,6 @@ export function queryToObj(location: Location, key: string, value: string) {
       delete paramObj[key];
     }
   }
-  console.log(paramObj);
   return paramObj;
 }
 
