@@ -51,11 +51,12 @@ func _() {
 	_ = x[RefreshRange-40]
 	_ = x[Subsume-41]
 	_ = x[RangeStats-42]
+	_ = x[AdminVerifyProtectedTimestamp-43]
 }
 
-const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTransactionAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableRecomputeStatsRefreshRefreshRangeSubsumeRangeStats"
+const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTransactionAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableRecomputeStatsRefreshRefreshRangeSubsumeRangeStatsAdminVerifyProtectedTimestamp"
 
-var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 96, 106, 118, 128, 146, 165, 183, 195, 197, 204, 214, 222, 233, 246, 264, 269, 280, 292, 305, 314, 329, 345, 352, 362, 368, 374, 386, 396, 410, 417, 429, 436, 446}
+var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 96, 106, 118, 128, 146, 165, 183, 195, 197, 204, 214, 222, 233, 246, 264, 269, 280, 292, 305, 314, 329, 345, 352, 362, 368, 374, 386, 396, 410, 417, 429, 436, 446, 475}
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {

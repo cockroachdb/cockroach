@@ -152,4 +152,7 @@ const (
 	Subsume
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
+	// VerifyProtectedTimestamp determines whether the specified protection record
+	// will be respected by this Range.
+	AdminVerifyProtectedTimestamp
 )
