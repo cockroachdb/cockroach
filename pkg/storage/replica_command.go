@@ -2541,6 +2541,22 @@ func (r *Replica) adminScatter(
 	}, nil
 }
 
+func (r *Replica) adminVerifyProtectedTimestamp(
+	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
+) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
+	// If the GC threshold is already above our timestamp then we're screwed
+	// then we need to check under the mutex to see if
+	//
+	// 1) The lease started after our timestamp, in which case we're golden
+	// 2) put under the protectedts mu that we'll preserve this timestamp
+	resp.Verified, err = r.protectedTimestampRecordWillApply(ctx, args.Protected,
+		args.RecordAliveAt, args.RecordID)
+	if err == nil && !resp.Verified {
+		resp.FailedRanges = append(resp.FailedRanges, *r.Desc())
+	}
+	return resp, err
+}
+
 // maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
 // a high enough version such that GenerationComparable won't be lost.
 func maybeMarkGenerationComparable(
