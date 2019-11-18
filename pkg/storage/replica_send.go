@@ -457,6 +457,11 @@ func (r *Replica) executeAdminBatch(
 		pErr = roachpb.NewError(err)
 		resp = &reply
 
+	case *roachpb.AdminVerifyProtectedTimestampRequest:
+		reply, err := r.adminVerifyProtectedTimestamp(ctx, *tArgs)
+		pErr = roachpb.NewError(err)
+		resp = &reply
+
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
 	}
