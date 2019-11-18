@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // LocalStorage wraps all operations with the local file system
@@ -37,11 +37,17 @@ func NewLocalStorage(externalIODir string) (*LocalStorage, error) {
 	return &LocalStorage{externalIODir: absPath}, nil
 }
 
+// prependExternalIODir makes `path` relative to the configured external I/O directory.
+//
+// Note that we purposefully only rely on the simplified cleanup
+// performed by filepath.Join() - which is limited to stripping out
+// occurrences of "../" - because we intendedly want to allow
+// operators to "open up" their I/O directory via symlinks. Therefore,
+// a full check via filepath.Abs() would be inadequate.
 func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 	localBase := filepath.Join(l.externalIODir, path)
-	// Make sure we didn't ../ our way back out.
 	if !strings.HasPrefix(localBase, l.externalIODir) {
-		return "", errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
+		return "", errors.Errorf("local file access to paths outside of external-io-dir is not allowed: %s", path)
 	}
 	return localBase, nil
 }
