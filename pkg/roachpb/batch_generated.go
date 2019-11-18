@@ -164,6 +164,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.Subsume
 	case *RequestUnion_RangeStats:
 		return t.RangeStats
+	case *RequestUnion_AdminVerifyProtectedTimestamp:
+		return t.AdminVerifyProtectedTimestamp
 	default:
 		return nil
 	}
@@ -256,6 +258,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.Subsume
 	case *ResponseUnion_RangeStats:
 		return t.RangeStats
+	case *ResponseUnion_AdminVerifyProtectedTimestamp:
+		return t.AdminVerifyProtectedTimestamp
 	default:
 		return nil
 	}
@@ -420,6 +424,8 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 		union = &RequestUnion_Subsume{t}
 	case *RangeStatsRequest:
 		union = &RequestUnion_RangeStats{t}
+	case *AdminVerifyProtectedTimestampRequest:
+		union = &RequestUnion_AdminVerifyProtectedTimestamp{t}
 	default:
 		return false
 	}
@@ -515,6 +521,8 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 		union = &ResponseUnion_Subsume{t}
 	case *RangeStatsResponse:
 		union = &ResponseUnion_RangeStats{t}
+	case *AdminVerifyProtectedTimestampResponse:
+		union = &ResponseUnion_AdminVerifyProtectedTimestamp{t}
 	default:
 		return false
 	}
@@ -522,7 +530,7 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 	return true
 }
 
-type reqCounts [43]int32
+type reqCounts [44]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -616,6 +624,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[41]++
 		case *RequestUnion_RangeStats:
 			counts[42]++
+		case *RequestUnion_AdminVerifyProtectedTimestamp:
+			counts[43]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -667,6 +677,7 @@ var requestNames = []string{
 	"RefreshRng",
 	"Subsume",
 	"RngStats",
+	"AdmVerifyProtectedTimestamp",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -870,6 +881,10 @@ type rangeStatsResponseAlloc struct {
 	union ResponseUnion_RangeStats
 	resp  RangeStatsResponse
 }
+type adminVerifyProtectedTimestampResponseAlloc struct {
+	union ResponseUnion_AdminVerifyProtectedTimestamp
+	resp  AdminVerifyProtectedTimestampResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -923,6 +938,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf40 []refreshRangeResponseAlloc
 	var buf41 []subsumeResponseAlloc
 	var buf42 []rangeStatsResponseAlloc
+	var buf43 []adminVerifyProtectedTimestampResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1227,6 +1243,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf42[0].union.RangeStats = &buf42[0].resp
 			br.Responses[i].Value = &buf42[0].union
 			buf42 = buf42[1:]
+		case *RequestUnion_AdminVerifyProtectedTimestamp:
+			if buf43 == nil {
+				buf43 = make([]adminVerifyProtectedTimestampResponseAlloc, counts[43])
+			}
+			buf43[0].union.AdminVerifyProtectedTimestamp = &buf43[0].resp
+			br.Responses[i].Value = &buf43[0].union
+			buf43 = buf43[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
