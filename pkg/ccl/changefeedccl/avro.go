@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 )
 
 // The file contains a very specific marriage between avro and our SQL schemas.
@@ -619,7 +619,9 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 			native[`resolved`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
 		}
 	}
-	// WIP verify that meta is now empty
+	for k := range meta {
+		return nil, errors.AssertionFailedf(`unhandled meta key: %s`, k)
+	}
 	return r.codec.BinaryFromNative(buf, native)
 }
 
