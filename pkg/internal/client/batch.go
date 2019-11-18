@@ -266,6 +266,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.ImportRequest:
 			case *roachpb.AdminScatterRequest:
 			case *roachpb.AddSSTableRequest:
+			case *roachpb.FastGCRequest:
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {

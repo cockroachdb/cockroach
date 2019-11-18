@@ -600,6 +600,9 @@ func (*SubsumeRequest) Method() Method { return Subsume }
 // Method implements the Request interface.
 func (*RangeStatsRequest) Method() Method { return RangeStats }
 
+// Method implements the Request interface.
+func (*FastGCRequest) Method() Method { return FastGC }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -860,6 +863,17 @@ func (r *SubsumeRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *RangeStatsRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *FastGCRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+func (r *CorrectMVCCStatsRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1129,6 +1143,7 @@ func (*AdminScatterRequest) flags() int     { return isAdmin | isRange | isAlone
 func (*AddSSTableRequest) flags() int {
 	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
 }
+func (*FastGCRequest) flags() int           { return isWrite }
 
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
 // they update based on their Write parameter.

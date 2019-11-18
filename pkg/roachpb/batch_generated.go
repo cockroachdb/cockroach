@@ -116,6 +116,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.HeartbeatTxn
 	case *RequestUnion_Gc:
 		return t.Gc
+	case *RequestUnion_FastGC:
+		return t.FastGc
 	case *RequestUnion_PushTxn:
 		return t.PushTxn
 	case *RequestUnion_RecoverTxn:
@@ -212,6 +214,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.HeartbeatTxn
 	case *ResponseUnion_Gc:
 		return t.Gc
+	case *ResponseUnion_FastGc:
+		return t.FastGc
 	case *ResponseUnion_PushTxn:
 		return t.PushTxn
 	case *ResponseUnion_RecoverTxn:
@@ -376,6 +380,8 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 		union = &RequestUnion_HeartbeatTxn{t}
 	case *GCRequest:
 		union = &RequestUnion_Gc{t}
+	case *FastGCRequest:
+		union = &RequestUnion_FastGc{t}
 	case *PushTxnRequest:
 		union = &RequestUnion_PushTxn{t}
 	case *RecoverTxnRequest:
@@ -475,6 +481,8 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 		union = &ResponseUnion_HeartbeatTxn{t}
 	case *GCResponse:
 		union = &ResponseUnion_Gc{t}
+	case *FastGCResponse:
+		union = &ResponseUnion_FastGc{t}
 	case *PushTxnResponse:
 		union = &ResponseUnion_PushTxn{t}
 	case *RecoverTxnResponse:

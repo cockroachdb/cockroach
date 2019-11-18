@@ -158,6 +158,18 @@ func (ri *ReplicaDataIterator) advance() {
 	}
 }
 
+func (ri *ReplicaDataIterator) Seek(key engine.MVCCKey) {
+	ri.it.SeekGE(key)
+	for i, rng := range ri.ranges {
+		if ok, _ := ri.it.Valid(); ok && !ri.it.UnsafeKey().Less(rng.Start) && ri.it.UnsafeKey().Less(rng.End) {
+			ri.curIndex = i
+			return
+		}
+	}
+	// invalid
+	ri.curIndex = len(ri.ranges)
+}
+
 // Valid returns true if the iterator currently points to a valid value.
 func (ri *ReplicaDataIterator) Valid() (bool, error) {
 	ok, err := ri.it.Valid()
@@ -177,6 +189,16 @@ func (ri *ReplicaDataIterator) Value() []byte {
 	value := ri.it.UnsafeValue()
 	ri.a, value = ri.a.Copy(value, 0)
 	return value
+}
+
+// Key returns the current key.
+func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
+	return ri.it.UnsafeKey()
+}
+
+// Value returns the current value.
+func (ri *ReplicaDataIterator) UnsafeValue() []byte {
+	return ri.it.UnsafeValue()
 }
 
 // ResetAllocator resets the ReplicaDataIterator's internal byte allocator.
