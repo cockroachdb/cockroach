@@ -212,19 +212,17 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
 	snap := r.store.engine.NewSnapshot()
 	if cc.Checkpoint {
-		checkpointBase := filepath.Join(r.store.engine.GetAuxiliaryDir(), "checkpoints")
-		_ = os.MkdirAll(checkpointBase, 0700)
 		sl := stateloader.Make(r.RangeID)
 		rai, _, err := sl.LoadAppliedIndex(ctx, snap)
 		if err != nil {
 			log.Warningf(ctx, "unable to load applied index, continuing anyway")
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
-		checkpointDir := filepath.Join(checkpointBase, fmt.Sprintf("r%d_at_%d", r.RangeID, rai))
-		if err := r.store.engine.CreateCheckpoint(checkpointDir); err != nil {
-			log.Warningf(ctx, "unable to create checkpoint %s: %+v", checkpointDir, err)
+		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, rai)
+		if dir, err := r.store.checkpoint(ctx, tag); err != nil {
+			log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
 		} else {
-			log.Infof(ctx, "created checkpoint %s", checkpointDir)
+			log.Warningf(ctx, "created checkpoint %s", dir)
 		}
 	}
 
