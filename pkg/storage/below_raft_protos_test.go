@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -116,6 +117,23 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     5531676819244041709,
 		populatedSum: 14781226418259198098,
 	},
+}
+
+func init() {
+	if engine.DefaultStorageEngine != enginepb.EngineTypeRocksDB {
+		// This is marshaled below Raft by the Pebble merge operator. The Pebble
+		// merge operator can be called below Raft whenever a Pebble Iterator is
+		// used. Note that we only see this proto marshaled below Raft when the
+		// engine type is not RocksDB. If the engine type is RocksDB the marshaling
+		// occurs in C++ which is invisible to the tracking mechanism.
+		belowRaftGoldenProtos[reflect.TypeOf(&roachpb.InternalTimeSeriesData{})] = fixture{
+			populatedConstructor: func(r *rand.Rand) protoutil.Message {
+				return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
+			},
+			emptySum:     5531676819244041709,
+			populatedSum: 8911200268508796945,
+		}
+	}
 }
 
 func TestBelowRaftProtos(t *testing.T) {
