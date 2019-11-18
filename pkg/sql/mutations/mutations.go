@@ -323,6 +323,15 @@ func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 				},
 			})
 
+			match := tree.MatchSimple
+			// TODO(mjibson): Set match once #42498 is fixed.
+			var actions tree.ReferenceActions
+			if rng.Intn(2) == 0 {
+				actions.Delete = randAction(rng, table)
+			}
+			if rng.Intn(2) == 0 {
+				actions.Update = randAction(rng, table)
+			}
 			additional = append(additional, &tree.AlterTable{
 				Table: table.Table.ToUnresolvedObjectName(),
 				Cmds: tree.AlterTableCmds{&tree.AlterTableAddConstraint{
@@ -330,6 +339,8 @@ func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 						Table:    ref.Table,
 						FromCols: toNames(fkCols),
 						ToCols:   toNames(usingCols),
+						Actions:  actions,
+						Match:    match,
 					},
 				}},
 			})
@@ -338,6 +349,33 @@ func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 	}
 
 	return additional
+}
+
+func randAction(rng *rand.Rand, table *tree.CreateTable) tree.ReferenceAction {
+	const highestAction = tree.Cascade
+	// Find a valid action. Depending on the random action chosen, we have
+	// to verify some validity conditions.
+Loop:
+	for {
+		action := tree.ReferenceAction(rng.Intn(int(highestAction + 1)))
+		for _, def := range table.Defs {
+			col, ok := def.(*tree.ColumnTableDef)
+			if !ok {
+				continue
+			}
+			switch action {
+			case tree.SetNull:
+				if col.Nullable.Nullability == tree.NotNull {
+					continue Loop
+				}
+			case tree.SetDefault:
+				if col.DefaultExpr.Expr == nil && col.Nullable.Nullability == tree.NotNull {
+					continue Loop
+				}
+			}
+		}
+		return action
+	}
 }
 
 func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
