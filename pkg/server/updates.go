@@ -17,7 +17,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -212,8 +212,8 @@ func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
 		n.Hardware.Loadavg15 = float32(l.Load15)
 	}
 
-	n.Hardware.Provider, n.Hardware.InstanceClass = cloudinfo.GetInstanceClass()
-	n.Topology.Provider, n.Topology.Region = cloudinfo.GetInstanceRegion()
+	n.Hardware.Provider, n.Hardware.InstanceClass = cloudinfo.GetInstanceClass(ctx)
+	n.Topology.Provider, n.Topology.Region = cloudinfo.GetInstanceRegion(ctx)
 }
 
 // checkForUpdates calls home to check for new versions for the current platform
@@ -231,7 +231,7 @@ func (s *Server) checkForUpdates(ctx context.Context, runningTime time.Duration)
 
 	addInfoToURL(ctx, updatesURL, s, nodeInfo)
 
-	res, err := http.Get(updatesURL.String())
+	res, err := httputil.Get(ctx, updatesURL.String())
 	if err != nil {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
@@ -455,18 +455,7 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 	}
 	addInfoToURL(ctx, reportingURL, s, report.Node)
 
-	const timeout = 3 * time.Second
-	client := &http.Client{
-		Transport: &http.Transport{
-			// Don't leak a goroutine on OSX (the TCP level timeout is probably
-			// much higher than on linux) when the connection fails in weird ways.
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-			DisableKeepAlives: true,
-		},
-		Timeout: timeout,
-	}
-
-	res, err := client.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
+	res, err := httputil.Post(ctx, reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 	if err != nil {
 		if log.V(2) {
 			// This is probably going to be relatively common in production

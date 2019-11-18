@@ -178,12 +178,12 @@ func emitEntries(
 			return nil
 		}
 		var keyCopy, valueCopy []byte
-		encodedKey, err := encoder.EncodeKey(row)
+		encodedKey, err := encoder.EncodeKey(ctx, row)
 		if err != nil {
 			return err
 		}
 		scratch, keyCopy = scratch.Copy(encodedKey, 0 /* extraCap */)
-		encodedValue, err := encoder.EncodeValue(row)
+		encodedValue, err := encoder.EncodeValue(ctx, row)
 		if err != nil {
 			return err
 		}

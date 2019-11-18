@@ -45,10 +45,14 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 		urlMap[i+1] = `http://` + addr
 	}
 
+	// The status endpoints below may take a while to produce their answer, maybe more
+	// than the 3 second timeout of the default http client.
+	httpClient := httputil.NewClientWithTimeout(15 * time.Second)
+
 	// get performs an HTTP GET to the specified path for a specific node.
 	get := func(base, rel string) []byte {
 		url := base + rel
-		resp, err := http.Get(url)
+		resp, err := httpClient.Get(context.TODO(), url)
 		if err != nil {
 			t.Fatalf("could not GET %s - %s", url, err)
 		}

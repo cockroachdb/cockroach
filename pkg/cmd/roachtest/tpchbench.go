@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
 	"github.com/lib/pq"
 )
@@ -149,8 +149,11 @@ func getNumQueriesInFile(filename, url string) (int, error) {
 
 // downloadFile will download a url as a local temporary file.
 func downloadFile(filename string, url string) (*os.File, error) {
+	// These files may be a bit large, so give ourselves
+	// some room before the timeout expires.
+	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
 	// Get the data.
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(context.TODO(), url)
 	if err != nil {
 		return nil, err
 	}
