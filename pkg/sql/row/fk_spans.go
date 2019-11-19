@@ -11,6 +11,7 @@
 package row
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -23,6 +24,13 @@ func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.S
 	if values != nil {
 		span, _, err := sqlbase.EncodePartialIndexSpan(
 			f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
+
+		if f.searchIdx.ID == f.searchTable.PrimaryIndex.ID && len(f.searchTable.Families) > 1 {
+			// Only scan family 0.
+			span.Key = keys.MakeFamilyKey(span.Key, 0)
+			span.EndKey = span.Key.PrefixEnd()
+		}
+
 		return span, err
 	}
 	key = roachpb.Key(f.searchPrefix)
