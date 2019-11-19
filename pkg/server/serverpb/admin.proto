@@ -253,6 +253,12 @@ message EventsRequest {
   // returned. When set to > 0, at most only that number of results are
   // returned. When set to < 0, an unlimited number of results are returned.
   int32 limit = 3;
+  // unredacted_events indicates that the values in the events should
+  // not be redacted. The default is to redact, so that older versions
+  // of `cockroach zip` do not see un-redacted values by default.
+  // For good security, this field is only obeyed by the server after
+  // checking that the client of the RPC is an admin user.
+  bool unredacted_events = 4;
 }
 
 // EventsResponse contains a set of event log entries. This is always limited
