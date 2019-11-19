@@ -16,6 +16,8 @@ import * as protos from  "src/js/protos";
 import { AxisUnits } from "src/views/shared/components/metricQuery";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
+import { MetricOption } from "./metricOption";
+
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 
@@ -132,6 +134,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
               options={metricOptions}
               onChange={this.changeMetric}
               placeholder="Select a metric..."
+              optionComponent={MetricOption}
             />
           </div>
         </td>
