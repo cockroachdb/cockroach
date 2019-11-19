@@ -1,8 +1,3 @@
-# LogicTest: local fakedist fakedist-metadata fakedist-disk
-# The local-mixed-19.1-19.2 configuration is excluded for this file because
-# there's an difference in the mixed-version state in the ordering of FKs in
-# CREATE TABLE statements. See #39504.
-
 statement ok
 CREATE TABLE t (
   a INT REFERENCES t,
