@@ -416,3 +416,21 @@ ORDER BY key, f
 SELECT crdb_internal.force_retry(_)  true  false
 SELECT crdb_internal.force_retry(_)  true  true
 SET application_name = DEFAULT       false false
+
+
+subtest builtin_is_admin
+
+user root
+
+query B
+SELECT crdb_internal.is_admin()
+----
+true
+
+user testuser
+
+query B
+SELECT crdb_internal.is_admin()
+----
+false
+
