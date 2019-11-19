@@ -336,6 +336,10 @@ func UnmarshalColumnValueToCol(
 		var v int64
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
+	case types.TimestampFamily:
+		var v time.Time
+		v, err = value.GetTime()
+		vec.Timestamp()[idx] = v
 	default:
 		return errors.AssertionFailedf("unsupported column type: %s", log.Safe(typ.Family()))
 	}
