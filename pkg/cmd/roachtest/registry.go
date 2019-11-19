@@ -39,6 +39,7 @@ func registerTests(r *testRegistry) {
 	registerHotSpotSplits(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
+	registerInconsistency(r)
 	registerIndexes(r)
 	registerInterleaved(r)
 	registerJepsen(r)
