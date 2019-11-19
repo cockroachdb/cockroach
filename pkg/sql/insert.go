@@ -14,7 +14,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -46,26 +45,13 @@ type insertNode struct {
 
 // insertRun contains the run-time state of insertNode during local execution.
 type insertRun struct {
-	ti          tableInserter
-	checkHelper *sqlbase.CheckHelper
-	rowsNeeded  bool
+	ti         tableInserter
+	rowsNeeded bool
+
+	checkOrds checkSet
 
 	// insertCols are the columns being inserted into.
 	insertCols []sqlbase.ColumnDescriptor
-
-	// defaultExprs are the expressions used to generate default values.
-	defaultExprs []tree.TypedExpr
-
-	// computedCols are the columns that need to be (re-)computed as
-	// the result of updating some of the columns in updateCols.
-	computedCols []sqlbase.ColumnDescriptor
-	// computeExprs are the expressions to evaluate to re-compute the
-	// columns in computedCols.
-	computeExprs []tree.TypedExpr
-	// iVarContainerForComputedCols is used as a temporary buffer that
-	// holds the updated values for every column in the source, to
-	// serve as input for indexed vars contained in the computeExprs.
-	iVarContainerForComputedCols sqlbase.RowIndexedVarContainer
 
 	// rowCount is the number of rows in the current batch.
 	rowCount int
@@ -239,47 +225,24 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
-func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
-	// Process the incoming row tuple and generate the full inserted
-	// row. This fills in the defaults, computes computed columns, and
-	// check the data width complies with the schema constraints.
-	rowVals, err := row.GenerateInsertRow(
-		n.run.defaultExprs,
-		n.run.computeExprs,
-		n.run.insertCols,
-		n.run.computedCols,
-		params.EvalContext().Copy(),
-		n.run.ti.tableDesc(),
-		sourceVals,
-		&n.run.iVarContainerForComputedCols,
-	)
-	if err != nil {
+func (n *insertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
+	if err := enforceLocalColumnConstraints(rowVals, n.run.insertCols); err != nil {
 		return err
 	}
 
 	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
 	// constraints itself, or else inspect boolean columns from the input that
 	// contain the results of evaluation.
-	if n.run.checkHelper != nil {
-		if n.run.checkHelper.NeedsEval() {
-			if err := n.run.checkHelper.LoadEvalRow(
-				n.run.ti.ri.InsertColIDtoRowIndex, rowVals, false); err != nil {
-				return err
-			}
-			if err := n.run.checkHelper.CheckEval(params.EvalContext()); err != nil {
-				return err
-			}
-		} else {
-			checkVals := rowVals[len(n.run.insertCols):]
-			if err := n.run.checkHelper.CheckInput(checkVals); err != nil {
-				return err
-			}
-			rowVals = rowVals[:len(n.run.insertCols)]
+	if !n.run.checkOrds.Empty() {
+		checkVals := rowVals[len(n.run.insertCols):]
+		if err := checkMutationInput(n.run.ti.tableDesc(), n.run.checkOrds, checkVals); err != nil {
+			return err
 		}
+		rowVals = rowVals[:len(n.run.insertCols)]
 	}
 
 	// Queue the insert in the KV batch.
-	if err = n.run.ti.row(params.ctx, rowVals, n.run.traceKV); err != nil {
+	if err := n.run.ti.row(params.ctx, rowVals, n.run.traceKV); err != nil {
 		return err
 	}
 
