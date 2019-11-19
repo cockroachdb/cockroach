@@ -816,9 +816,11 @@ limit
  ├── select
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    ├── ordering: +1,+2
+ │    ├── limit hint: 10.00
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    │    └── ordering: +1,+2
+ │    │    ├── ordering: +1,+2
+ │    │    └── limit hint: 10.00
  │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
@@ -861,9 +863,11 @@ sort
       ├── select
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    ├── ordering: +1,+2
+      │    ├── limit hint: 10.00
       │    ├── scan abc
       │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    │    └── ordering: +1,+2
+      │    │    ├── ordering: +1,+2
+      │    │    └── limit hint: 10.00
       │    └── filters
       │         └── c < (a + b) [type=bool]
       └── const: 10 [type=int]
@@ -904,9 +908,11 @@ limit
  ├── select
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    ├── ordering: +1,+2
+ │    ├── limit hint: 10.00
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    │    └── ordering: +1,+2
+ │    │    ├── ordering: +1,+2
+ │    │    └── limit hint: 10.00
  │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
@@ -944,9 +950,11 @@ limit
  ├── select
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    ├── ordering: +1,+2,+3
+ │    ├── limit hint: 10.00
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    │    └── ordering: +1,+2,+3
+ │    │    ├── ordering: +1,+2,+3
+ │    │    └── limit hint: 10.00
  │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
@@ -1171,6 +1179,7 @@ insert abc
       ├── sort
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    ├── ordering: +5,+6
+      │    ├── limit hint: 2.00
       │    └── scan xyz
       │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       └── const: 2 [type=int]
@@ -1414,6 +1423,7 @@ sort
            │    │    ├── sort
            │    │    │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
            │    │    │    ├── ordering: +5,+6
+           │    │    │    ├── limit hint: 2.00
            │    │    │    └── scan xyz
            │    │    │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
            │    │    └── const: 2 [type=int]

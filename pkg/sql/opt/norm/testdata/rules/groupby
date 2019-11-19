@@ -575,6 +575,7 @@ limit
  │    ├── columns: b:2(int!null) c:3(int!null)
  │    ├── fd: ()-->(2)
  │    ├── ordering: +3 opt(2) [actual: +3]
+ │    ├── limit hint: 1.00
  │    └── select
  │         ├── columns: b:2(int!null) c:3(int!null)
  │         ├── fd: ()-->(2)

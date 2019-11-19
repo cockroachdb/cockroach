@@ -574,7 +574,7 @@ func importPlanHook(
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
 
-		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
+		_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
 			Details: jobspb.ImportDetails{

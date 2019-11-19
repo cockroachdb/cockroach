@@ -20,6 +20,7 @@ limit
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── limit hint: 1.00
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 1 [type=int]
@@ -38,6 +39,7 @@ limit
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(5)
+ │    ├── limit hint: 10.00
  │    ├── prune: (5)
  │    ├── project
  │    │    └── scan xyzs

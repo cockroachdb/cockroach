@@ -98,17 +98,20 @@ project
       │    ├── key: (1)
       │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       │    ├── ordering: +1 opt(9) [actual: +1]
+      │    ├── limit hint: 50.00
       │    └── select
       │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
       │         ├── key: (1)
       │         ├── fd: ()-->(9), (1)-->(2,3)
       │         ├── ordering: +1 opt(9) [actual: +1]
+      │         ├── limit hint: 50.00
       │         ├── scan article@article_idx_read_key
       │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
       │         │    ├── constraint: /1: [/1 - ]
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2,3,9)
-      │         │    └── ordering: +1 opt(9) [actual: +1]
+      │         │    ├── ordering: +1 opt(9) [actual: +1]
+      │         │    └── limit hint: 50.00
       │         └── filters
       │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
       └── const: 50 [type=int]
@@ -137,18 +140,21 @@ project
       │    ├── key: (1)
       │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       │    ├── ordering: +1 opt(9) [actual: +1]
+      │    ├── limit hint: 50.00
       │    └── select
       │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
       │         ├── key: (1)
       │         ├── fd: ()-->(9), (1)-->(2,3)
       │         ├── ordering: +1 opt(9) [actual: +1]
+      │         ├── limit hint: 50.00
       │         ├── scan article@article_idx_read_key
       │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
       │         │    ├── constraint: /1: [/1 - ]
       │         │    ├── flags: force-index=article_idx_read_key
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2,3,9)
-      │         │    └── ordering: +1 opt(9) [actual: +1]
+      │         │    ├── ordering: +1 opt(9) [actual: +1]
+      │         │    └── limit hint: 50.00
       │         └── filters
       │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
       └── const: 50 [type=int]
@@ -169,12 +175,14 @@ limit
  │    ├── key: (1)
  │    ├── fd: ()-->(9)
  │    ├── ordering: +1 opt(9) [actual: +1]
+ │    ├── limit hint: 5.00
  │    ├── scan article@article_idx_read_key
  │    │    ├── columns: id:1(int!null) read:9(bool)
  │    │    ├── constraint: /1: [/1 - ]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
- │    │    └── ordering: +1 opt(9) [actual: +1]
+ │    │    ├── ordering: +1 opt(9) [actual: +1]
+ │    │    └── limit hint: 5.00
  │    └── filters
  │         └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
  └── const: 5 [type=int]
@@ -380,6 +388,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
  │    ├── ordering: +4 opt(3,5) [actual: +4]
+ │    ├── limit hint: 50.00
  │    └── select
  │         ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
  │         ├── key: (1)

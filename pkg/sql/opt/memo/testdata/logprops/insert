@@ -53,6 +53,7 @@ insert abcde
       │    │    ├── sort
       │    │    │    ├── columns: y:8(int!null) z:9(float)
       │    │    │    ├── ordering: +8,+9
+      │    │    │    ├── limit hint: 10.00
       │    │    │    ├── prune: (8,9)
       │    │    │    └── project
       │    │    │         ├── columns: y:8(int!null) z:9(float)
@@ -120,6 +121,7 @@ project
            │    │    ├── sort
            │    │    │    ├── columns: y:8(int!null) z:9(float)
            │    │    │    ├── ordering: +8,+9
+           │    │    │    ├── limit hint: 10.00
            │    │    │    ├── prune: (8,9)
            │    │    │    └── project
            │    │    │         ├── columns: y:8(int!null) z:9(float)

@@ -37,6 +37,7 @@ limit
  ├── sort
  │    ├── columns: column1:1(int!null)
  │    ├── ordering: -1
+ │    ├── limit hint: 3.00
  │    └── values
  │         ├── columns: column1:1(int!null)
  │         ├── tuple [type=tuple{int}]

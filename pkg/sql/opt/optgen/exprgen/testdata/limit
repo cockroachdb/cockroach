@@ -22,6 +22,7 @@ limit
  │    ├── stats: [rows=1000]
  │    ├── cost: 1050.02
  │    ├── ordering: +1
+ │    ├── limit hint: 10.00
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1,+2)
  └── const: 10 [type=int]
@@ -45,6 +46,7 @@ limit
  │    ├── stats: [rows=1000]
  │    ├── cost: 1279.34569
  │    ├── ordering: +1
+ │    ├── limit hint: 10.00
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │         ├── stats: [rows=1000]

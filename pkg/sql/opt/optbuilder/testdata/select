@@ -379,7 +379,8 @@ limit
  ├── ordering: +1
  ├── scan xyzw
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── ordering: +1
+ │    ├── ordering: +1
+ │    └── limit hint: 1.00
  └── const: 1 [type=int]
 
 build
@@ -394,7 +395,8 @@ SELECT * FROM xyzw LIMIT -100
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── scan xyzw
- │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    └── limit hint: -100.00
  └── const: -100 [type=int]
 
 # At execution time, this will cause the error: negative value for OFFSET
@@ -449,7 +451,8 @@ limit
  ├── ordering: +1
  ├── scan xyzw
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── ordering: +1
+ │    ├── ordering: +1
+ │    └── limit hint: 1.00
  └── const: 1 [type=int]
 
 build
@@ -463,9 +466,11 @@ limit
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── internal-ordering: +1
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    ├── scan xyzw
  │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    │    └── ordering: +1
+ │    │    ├── ordering: +1
+ │    │    └── limit hint: 2.00
  │    └── const: 1 [type=int]
  └── const: 1 [type=int]
 
@@ -494,9 +499,11 @@ limit
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── internal-ordering: +2
  │    ├── ordering: +2
+ │    ├── limit hint: 1.00
  │    ├── sort
  │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    │    ├── ordering: +2
+ │    │    ├── limit hint: 2.00
  │    │    └── scan xyzw
  │    │         └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    └── const: 1 [type=int]
@@ -549,7 +556,8 @@ offset
  ├── limit
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── scan xyzw
- │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    │    └── limit hint: 5.00
  │    └── const: 5 [type=int]
  └── const: 5 [type=int]
 
@@ -1251,12 +1259,14 @@ with &1 (cte)
  │    ├── columns: b:2(int)
  │    ├── project
  │    │    ├── columns: b:2(int)
+ │    │    ├── limit hint: 1.00
  │    │    └── insert abc
  │    │         ├── columns: a:1(int!null) b:2(int) c:3(int)
  │    │         ├── insert-mapping:
  │    │         │    ├──  column1:4 => a:1
  │    │         │    ├──  column5:5 => b:2
  │    │         │    └──  column5:5 => c:3
+ │    │         ├── limit hint: 1.00
  │    │         └── project
  │    │              ├── columns: column5:5(int) column1:4(int!null)
  │    │              ├── values

@@ -1037,7 +1037,9 @@ project
  │         │    │    │    │    │    │    ├── cardinality: [0 - 10]
  │         │    │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    │    ├── outer: (4)
+ │         │    │    │    │    │    │    │    ├── limit hint: 10.00
  │         │    │    │    │    │    │    │    ├── scan b
+ │         │    │    │    │    │    │    │    │    └── limit hint: 10.00
  │         │    │    │    │    │    │    │    └── filters
  │         │    │    │    │    │    │    │         └── s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
  │         │    │    │    │    │    │    └── const: 10 [type=int]
