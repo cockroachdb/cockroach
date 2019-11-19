@@ -373,6 +373,9 @@ describe("rest api", function() {
                 assert.equal(req.type, v);
                 break;
 
+              case "unredacted_events":
+                break;
+
               default:
                  throw new Error(`Unknown property ${k}`);
             }
