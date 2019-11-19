@@ -388,6 +388,8 @@ func (h *hasher) hashDatumsWithType(datums tree.Datums, typ *types.T, alwaysHash
 }
 
 func (h *hasher) HashType(val *types.T) {
+	// NOTE: type.String() is not a perfect hash of the type, as items such as
+	// precision and width may be lost. Collision handling must still occur.
 	h.HashString(val.String())
 }
 
@@ -661,7 +663,7 @@ func (h *hasher) IsOperatorEqual(l, r opt.Operator) bool {
 }
 
 func (h *hasher) IsTypeEqual(l, r *types.T) bool {
-	return l.String() == r.String()
+	return l.Identical(r)
 }
 
 func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
