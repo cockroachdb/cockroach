@@ -221,7 +221,7 @@ export function setUIData(req: SetUIDataRequestMessage, timeout?: moment.Duratio
 // getEvents gets event data
 export function getEvents(req: EventsRequestMessage, timeout?: moment.Duration): Promise<EventsResponseMessage> {
   const queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
-  return timeoutFetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`, null, timeout);
+  return timeoutFetch(serverpb.EventsResponse, `${API_PREFIX}/events?unredacted_events=true&${queryString}`, null, timeout);
 }
 
 export function getLocations(_req: LocationsRequestMessage, timeout?: moment.Duration): Promise<LocationsResponseMessage> {
