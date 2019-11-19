@@ -1,3 +1,5 @@
+# LogicTest: local-vec
+
 # Check that all types supported by the vectorized engine can be read correctly.
 statement ok
 CREATE TABLE all_types (
