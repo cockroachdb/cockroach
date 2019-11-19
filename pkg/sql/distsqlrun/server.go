@@ -17,12 +17,8 @@ package distsqlrun
 import (
 	"context"
 	"io"
-	"time"
-
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -36,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -45,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // DistSQLVersion identifies DistSQL engine versions.
@@ -397,6 +396,7 @@ func (ds *ServerImpl) setupFlow(
 			Txn:              txn,
 			Planner:          evalPlanner,
 			Sequence:         sequence,
+			SessionAccessor:  &sqlbase.DummySessionAccessor{},
 			InternalExecutor: ie,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))

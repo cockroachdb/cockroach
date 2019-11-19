@@ -22,8 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -47,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 var schemaChangeLeaseDuration = settings.RegisterNonNegativeDurationSetting(
@@ -1524,6 +1523,7 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp, tracing *SessionTracing) extend
 	evalCtx := extendedEvalContext{
 		Tracing: tracing,
 		EvalContext: tree.EvalContext{
+			SessionAccessor: &sqlbase.DummySessionAccessor{},
 			SessionData: &sessiondata.SessionData{
 				SearchPath: sqlbase.DefaultSearchPath,
 				// The database is not supposed to be needed in schema changes, as there
