@@ -15,11 +15,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
+	"math/bits"
 	"math/rand"
 	"sort"
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -34,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -245,6 +249,72 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	default:
 		panic(fmt.Sprintf("invalid type %v", typ.DebugString()))
 	}
+}
+
+// RandDatumSimple generates a random Datum of the given type. The generated
+// datums will be simple (i.e., only one character or an integer between 0
+// and 9), such that repeated calls to this function will regularly return a
+// previously generated datum.
+func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
+	const simpleRange = 10
+	datum := tree.DNull
+	switch typ.Family() {
+	case types.BitFamily:
+		datum, _ = tree.NewDBitArrayFromInt(rng.Int63n(simpleRange), uint(bits.Len(simpleRange)))
+	case types.BoolFamily:
+		if rng.Intn(2) == 1 {
+			datum = tree.DBoolTrue
+		} else {
+			datum = tree.DBoolFalse
+		}
+	case types.BytesFamily:
+		p := string(rng.Intn(simpleRange))
+		datum = tree.NewDBytes(tree.DBytes(p))
+	case types.DateFamily:
+		date, _ := pgdate.MakeDateFromPGEpoch(rng.Int31n(simpleRange))
+		datum = tree.NewDDate(date)
+	case types.DecimalFamily:
+		datum = &tree.DDecimal{
+			Decimal: apd.Decimal{
+				Coeff: *big.NewInt(rng.Int63n(simpleRange)),
+			},
+		}
+	case types.IntFamily:
+		datum = tree.NewDInt(tree.DInt(rng.Intn(simpleRange)))
+	case types.IntervalFamily:
+		datum = &tree.DInterval{Duration: duration.MakeDuration(
+			rng.Int63n(simpleRange)*1e9,
+			0,
+			0,
+		)}
+	case types.FloatFamily:
+		datum = tree.NewDFloat(tree.DFloat(rng.Intn(simpleRange)))
+	case types.INetFamily:
+		datum = tree.NewDIPAddr(tree.DIPAddr{
+			IPAddr: ipaddr.IPAddr{
+				Addr: ipaddr.Addr(uint128.FromInts(0, uint64(rng.Intn(simpleRange)))),
+			},
+		})
+	case types.JsonFamily:
+		p := string('A' + rng.Intn(simpleRange))
+		datum = tree.NewDJSON(json.FromString(p))
+	case types.OidFamily:
+		datum = tree.NewDOid(tree.DInt(rng.Intn(simpleRange)))
+	case types.StringFamily:
+		p := string('A' + rng.Intn(simpleRange))
+		datum = tree.NewDString(p)
+	case types.TimeFamily:
+		datum = tree.MakeDTime(timeofday.New(0, rng.Intn(simpleRange), 0, 0))
+	case types.TimestampFamily:
+		datum = tree.MakeDTimestamp(time.Date(2000, 1, 1, rng.Intn(simpleRange), 0, 0, 0, time.UTC), time.Microsecond)
+	case types.TimestampTZFamily:
+		datum = tree.MakeDTimestampTZ(time.Date(2000, 1, 1, rng.Intn(simpleRange), 0, 0, 0, time.UTC), time.Microsecond)
+	case types.UuidFamily:
+		datum = tree.NewDUuid(tree.DUuid{
+			UUID: uuid.FromUint128(uint128.FromInts(0, uint64(rng.Intn(simpleRange)))),
+		})
+	}
+	return datum
 }
 
 var (
