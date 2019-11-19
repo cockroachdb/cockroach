@@ -2881,3 +2881,49 @@ INSERT INTO match_simple VALUES (1, 1)
 
 statement ok
 UPDATE match_simple SET a = NULL
+
+# Test that when the foreign key is a primary index we only look up the primary
+# family.
+subtest families
+
+statement ok
+CREATE TABLE fam_parent (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY (k, a),
+  FAMILY (b)
+)
+
+statement ok
+CREATE TABLE fam_child (
+  k INT PRIMARY KEY,
+  fk INT REFERENCES fam_parent(k)
+)
+
+statement ok
+INSERT INTO fam_parent VALUES (1, 1, 1)
+
+statement ok
+GRANT ALL ON fam_parent TO testuser;
+GRANT ALL ON fam_child TO testuser;
+
+# Open a transaction that modifies b.
+statement ok
+BEGIN
+
+statement count 1
+UPDATE fam_parent SET b = b+1 WHERE k = 1
+
+user testuser
+
+# Run an INSERT which needs to check existence of the row. If we try to scan
+# the entire row, this blocks on the other transaction. We should only be
+# scanning the primary column family.
+statement ok
+INSERT INTO fam_child VALUES (1, 1)
+
+user root
+
+statement ok
+COMMIT
