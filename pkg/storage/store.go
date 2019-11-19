@@ -163,6 +163,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 		ClosedTimestamp:             container.NoopContainer(),
+		ProtectedTimestampCache:     protectedts.EmptyCache(clock),
 	}
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
@@ -747,10 +748,6 @@ func (sc *StoreConfig) SetDefaults() {
 
 	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
-	}
-
-	if sc.ProtectedTimestampCache == nil {
-		sc.ProtectedTimestampCache = protectedts.EmptyCache(sc.Clock)
 	}
 }
 
