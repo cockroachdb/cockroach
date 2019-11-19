@@ -1,9 +1,3 @@
-# LogicTest: local fakedist fakedist-metadata fakedist-disk
-# The local-mixed-19.1-19.2 configuration is excluded for this file because of
-# 1) remaining bugs that need to be fixed in the 19.1/19.2 mixed state, and 2)
-# different FK behavior between 19.1 and 19.2. Tests to be run in that
-# configuration are in fk-local-mixed-19.1-19.2.
-
 # The tests in this file target the legacy FK paths.
 statement ok
 SET experimental_optimizer_foreign_keys = false
