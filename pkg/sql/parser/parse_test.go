@@ -1553,6 +1553,8 @@ func TestParse2(t *testing.T) {
 			`SELECT current_database()`},
 		{`SELECT CURRENT_TIMESTAMP`,
 			`SELECT current_timestamp()`},
+		{`SELECT current_timestamp(6)`,
+			`SELECT current_timestamp(6)`},
 		{`SELECT CURRENT_DATE`,
 			`SELECT current_date()`},
 		{`SELECT POSITION(a IN b)`,
