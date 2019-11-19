@@ -382,7 +382,7 @@ type testClusterConfig struct {
 	name                string
 	numNodes            int
 	useFakeSpanResolver bool
-	// if non-empty, overrides the default optimizer mode.
+	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
 	// if non-empty, overrides the default vectorize mode.
 	overrideVectorize string

@@ -239,6 +239,17 @@ func (f *stubFactory) ConstructInsert(
 	return struct{}{}, nil
 }
 
+func (f *stubFactory) ConstructInsertFastPath(
+	rows [][]tree.TypedExpr,
+	table cat.Table,
+	insertCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
+	checkCols exec.CheckOrdinalSet,
+	fkChecks []exec.InsertFastPathFKCheck,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
 func (f *stubFactory) ConstructUpdate(
 	input exec.Node,
 	table cat.Table,

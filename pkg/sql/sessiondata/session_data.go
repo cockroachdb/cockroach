@@ -96,6 +96,9 @@ type SessionData struct {
 	SaveTablesPrefix string
 	// TempTablesEnabled indicates whether temporary tables can be created or not.
 	TempTablesEnabled bool
+	// InsertFastPath is true if the fast path for insert (with VALUES input) may
+	// be used.
+	InsertFastPath bool
 }
 
 // DataConversionConfig contains the parameters that influence
