@@ -75,6 +75,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *insertNode:
 		return n.columns
+	case *insertFastPathNode:
+		return n.columns
 	case *upsertNode:
 		return n.columns
 	case *indexJoinNode:

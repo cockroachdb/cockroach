@@ -5,6 +5,10 @@
 statement ok
 SET experimental_optimizer_foreign_keys = true
 
+# Randomize the use of insert fast path.
+statement ok
+SET enable_insert_fast_path = (random() < 0.5)
+
 # Insert
 # ------
 
