@@ -163,6 +163,7 @@ var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}
 var _ planNode = &indexJoinNode{}
 var _ planNode = &insertNode{}
+var _ planNode = &insertFastPathNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &max1RowNode{}

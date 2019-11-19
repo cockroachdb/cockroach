@@ -138,6 +138,7 @@ type Memo struct {
 	optimizerFKs      bool
 	safeUpdates       bool
 	saveTablesPrefix  string
+	insertFastPath    bool
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
@@ -170,6 +171,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.optimizerFKs = evalCtx.SessionData.OptimizerFKs
 	m.safeUpdates = evalCtx.SessionData.SafeUpdates
 	m.saveTablesPrefix = evalCtx.SessionData.SaveTablesPrefix
+	m.insertFastPath = evalCtx.SessionData.InsertFastPath
 
 	m.curID = 0
 	m.curWithID = 0
@@ -277,7 +279,8 @@ func (m *Memo) IsStale(
 		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
 		m.optimizerFKs != evalCtx.SessionData.OptimizerFKs ||
 		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
-		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix {
+		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix ||
+		m.insertFastPath != evalCtx.SessionData.InsertFastPath {
 		return true, nil
 	}
 
