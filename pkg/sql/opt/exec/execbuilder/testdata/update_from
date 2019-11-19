@@ -14,6 +14,7 @@ count                      ·                   ·
       │                    table               abc
       │                    set                 b, c
       │                    strategy            updater
+      │                    auto commit         ·
       └── render           ·                   ·
            └── merge-join  ·                   ·
                 │          type                inner
@@ -42,6 +43,7 @@ count                          ·                  ·
       │                        table              abc
       │                        set                b, c
       │                        strategy           updater
+      │                        auto commit        ·
       └── render               ·                  ·
            └── distinct        ·                  ·
                 │              distinct on        a
@@ -76,6 +78,7 @@ render                          ·                   ·
            │                    table               abc
            │                    set                 b, c
            │                    strategy            updater
+           │                    auto commit         ·
            └── render           ·                   ·
                 └── merge-join  ·                   ·
                      │          type                inner
@@ -101,6 +104,7 @@ run                        ·                   ·            (a, b, c, a, b, c)
       │                    table               abc          ·                                       ·
       │                    set                 b, c         ·                                       ·
       │                    strategy            updater      ·                                       ·
+      │                    auto commit         ·            ·                                       ·
       └── render           ·                   ·            (a, b, c, column10, column11, a, b, c)  ·
            │               render 0            a            ·                                       ·
            │               render 1            b            ·                                       ·
@@ -134,6 +138,7 @@ count                            ·                      ·
       │                          table                  abc
       │                          set                    b, c
       │                          strategy               updater
+      │                          auto commit            ·
       └── render                 ·                      ·
            └── distinct          ·                      ·
                 │                distinct on            a
@@ -163,6 +168,7 @@ count                               ·                   ·
       │                             table               abc
       │                             set                 b, c
       │                             strategy            updater
+      │                             auto commit         ·
       └── render                    ·                   ·
            └── distinct             ·                   ·
                 │                   distinct on         a
@@ -203,6 +209,7 @@ run                                 ·                   ·
       │                             table               abc
       │                             set                 b, c
       │                             strategy            updater
+      │                             auto commit         ·
       └── render                    ·                   ·
            └── distinct             ·                   ·
                 │                   distinct on         a
