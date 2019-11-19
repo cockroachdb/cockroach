@@ -326,9 +326,31 @@ type Factory interface {
 		table cat.Table,
 		insertCols ColumnOrdinalSet,
 		returnCols ColumnOrdinalSet,
-		checks CheckOrdinalSet,
+		checkCols CheckOrdinalSet,
 		allowAutoCommit bool,
 		skipFKChecks bool,
+	) (Node, error)
+
+	// ConstructInsertFastPath creates a node that implements a special (but very
+	// common) case of insert, satisfying the following conditions:
+	//  - the input is Values with at most InsertFastPathMaxRows, and there are no
+	//    subqueries;
+	//  - there are no other mutations in the statement, and the output of the
+	//    insert is not processed through side-effecting expressions (see
+	//    allowAutoCommit flag for ConstructInsert);
+	//  - there are no self-referencing foreign keys;
+	//  - all FK checks can be performed using direct lookups into unique indexes.
+	//
+	// In this case, the foreign-key checks can run before (or even concurrently
+	// with) the insert. If they are run before, the insert is allowed to
+	// auto-commit.
+	ConstructInsertFastPath(
+		rows [][]tree.TypedExpr,
+		table cat.Table,
+		insertCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
+		checkCols CheckOrdinalSet,
+		fkChecks []InsertFastPathFKCheck,
 	) (Node, error)
 
 	// ConstructUpdate creates a node that implements an UPDATE statement. The
@@ -645,7 +667,30 @@ type KVOption struct {
 	Value tree.TypedExpr
 }
 
+// InsertFastPathMaxRows is the maximum number of rows for which we can use the
+// insert fast path.
+const InsertFastPathMaxRows = 10000
+
 // RecursiveCTEIterationFn creates a plan for an iteration of WITH RECURSIVE,
 // given the result of the last iteration (as a Buffer that can be used with
 // ConstructScanBuffer).
 type RecursiveCTEIterationFn func(bufferRef Node) (Plan, error)
+
+// InsertFastPathFKCheck contains information about a foreign key check to be
+// performed by the insert fast-path (see ConstructInsertFastPath). It
+// identifies the index into which we can perform the lookup.
+type InsertFastPathFKCheck struct {
+	ReferencedTable cat.Table
+	ReferencedIndex cat.Index
+
+	// InsertCols contains the FK columns from the origin table, in the order of
+	// the ReferencedIndex columns.
+	InsertCols []ColumnOrdinal
+
+	MatchMethod tree.CompositeKeyMatchMethod
+
+	// MkErr is called when a violation is detected (i.e. the index has no entries
+	// for a given inserted row). The values passed correspond to InsertCols
+	// above.
+	MkErr func(tree.Datums) error
+}
