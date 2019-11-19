@@ -59,6 +59,7 @@ limit
  │    ├── columns: i:2(int) s:4(string)
  │    ├── cardinality: [0 - 10]
  │    ├── ordering: +4,+2
+ │    ├── limit hint: 1.00
  │    └── scan a@s_idx
  │         ├── columns: i:2(int) s:4(string)
  │         ├── limit: 10
@@ -78,6 +79,7 @@ limit
  ├── sort
  │    ├── columns: f:3(float) s:4(string)
  │    ├── ordering: +3
+ │    ├── limit hint: 1.00
  │    └── scan a@s_idx
  │         └── columns: f:3(float) s:4(string)
  └── const: 1 [type=int]
@@ -107,12 +109,12 @@ memo (optimized, ~6KB, required=[presentation: s:4])
  │         ├── best: (scan a@s_idx,cols=(4),constrained,lim=1)
  │         └── cost: 1.06
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(4),constrained) (scan a@si_idx,cols=(4),constrained)
- │    └── []
+ │    └── [limit hint: 1.00]
  │         ├── best: (scan a@s_idx,cols=(4),constrained)
  │         └── cost: 10.51
  ├── G3: (const 1)
  ├── G4: (scan a,cols=(4)) (scan a@s_idx,cols=(4)) (scan a@si_idx,cols=(4))
- │    └── []
+ │    └── [limit hint: 1.00]
  │         ├── best: (scan a@s_idx,cols=(4))
  │         └── cost: 1050.02
  ├── G5: (filters G6)
@@ -161,6 +163,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── ordering: +2,+3
+ │    ├── limit hint: 5.00
  │    └── index-join kuv
  │         ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  │         ├── key: (1)
@@ -204,6 +207,7 @@ explain
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
       │    ├── ordering: -2
+      │    ├── limit hint: 5.00
       │    └── select
       │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
       │         ├── cardinality: [0 - 11]
@@ -249,6 +253,7 @@ Initial expression
              │    ├── key: (1)
              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
              │    ├── ordering: -2
+             │    ├── limit hint: 5.00
              │    └── select
              │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
              │         ├── cardinality: [0 - 11]
@@ -286,6 +291,7 @@ SimplifySelectFilters
               │    ├── key: (1)
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
+              │    ├── limit hint: 5.00
               │    └── select
               │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
   -           │         ├── cardinality: [0 - 11]
@@ -325,6 +331,7 @@ ConsolidateSelectFilters
               │    ├── key: (1)
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
+              │    ├── limit hint: 5.00
               │    └── select
               │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
   +           │         ├── cardinality: [0 - 11]
@@ -366,6 +373,7 @@ GenerateIndexScans
   -           │    ├── key: (1)
   -           │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   -           │    ├── ordering: -2
+  -           │    ├── limit hint: 5.00
   -           │    └── select
   -           │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
   -           │         ├── cardinality: [0 - 11]
@@ -385,6 +393,7 @@ GenerateIndexScans
   +      │    ├── key: (1)
   +      │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
   +      │    ├── ordering: -2
+  +      │    ├── limit hint: 5.00
   +      │    └── select
   +      │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
   +      │         ├── cardinality: [0 - 11]
@@ -427,6 +436,7 @@ Final best expression
         │    ├── key: (1)
         │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
         │    ├── ordering: -2
+        │    ├── limit hint: 5.00
         │    └── select
         │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
         │         ├── cardinality: [0 - 11]

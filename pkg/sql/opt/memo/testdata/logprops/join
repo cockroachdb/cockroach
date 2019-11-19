@@ -672,8 +672,10 @@ semi-join-apply
  │    │    ├── columns: u:5(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(5)
+ │    │    ├── limit hint: 5.00
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int)
+ │    │    │    ├── limit hint: 5.00
  │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -732,8 +734,10 @@ anti-join-apply
  │    │    ├── columns: u:5(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(5)
+ │    │    ├── limit hint: 5.00
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int)
+ │    │    │    ├── limit hint: 5.00
  │    │    │    └── prune: (5)
  │    │    └── filters
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -764,11 +768,13 @@ inner-join (hash)
  │    ├── prune: (2,3)
  │    ├── project
  │    │    ├── columns: u:2(int) v:3(int!null)
+ │    │    ├── limit hint: 2.00
  │    │    ├── prune: (2,3)
  │    │    └── scan uv
  │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── key: (4)
  │    │         ├── fd: (4)-->(2,3)
+ │    │         ├── limit hint: 2.00
  │    │         ├── prune: (2-4)
  │    │         └── interesting orderings: (+4)
  │    └── const: 2 [type=int]
@@ -800,11 +806,13 @@ left-join (hash)
  │    ├── prune: (2,3)
  │    ├── project
  │    │    ├── columns: u:2(int) v:3(int!null)
+ │    │    ├── limit hint: 2.00
  │    │    ├── prune: (2,3)
  │    │    └── scan uv
  │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── key: (4)
  │    │         ├── fd: (4)-->(2,3)
+ │    │         ├── limit hint: 2.00
  │    │         ├── prune: (2-4)
  │    │         └── interesting orderings: (+4)
  │    └── const: 2 [type=int]
@@ -826,11 +834,13 @@ right-join (hash)
  │    ├── prune: (1,2)
  │    ├── project
  │    │    ├── columns: u:1(int) v:2(int!null)
+ │    │    ├── limit hint: 2.00
  │    │    ├── prune: (1,2)
  │    │    └── scan uv
  │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │         ├── key: (3)
  │    │         ├── fd: (3)-->(1,2)
+ │    │         ├── limit hint: 2.00
  │    │         ├── prune: (1-3)
  │    │         └── interesting orderings: (+3)
  │    └── const: 2 [type=int]
@@ -955,6 +965,7 @@ full-join (hash)
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    ├── limit hint: 1.00
  │    │    ├── prune: (1-4)
  │    │    └── interesting orderings: (+1) (-3,+4,+1)
  │    └── const: 1 [type=int]
@@ -969,6 +980,7 @@ full-join (hash)
  │    │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    │    ├── key: (5)
  │    │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    │    ├── limit hint: 1.00
  │    │    ├── prune: (5-8)
  │    │    └── interesting orderings: (+5) (-7,+8,+5)
  │    └── const: 1 [type=int]

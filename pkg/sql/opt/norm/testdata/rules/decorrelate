@@ -707,8 +707,10 @@ semi-join-apply
  │    │    ├── columns: y:7(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(7)
+ │    │    ├── limit hint: 1.00
  │    │    ├── scan xy
- │    │    │    └── columns: y:7(int)
+ │    │    │    ├── columns: y:7(int)
+ │    │    │    └── limit hint: 1.00
  │    │    └── filters
  │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    └── const: 1 [type=int]
@@ -737,8 +739,10 @@ anti-join-apply
  │    │    ├── columns: y:7(int!null)
  │    │    ├── outer: (1)
  │    │    ├── fd: ()-->(7)
+ │    │    ├── limit hint: 1.00
  │    │    ├── scan xy
- │    │    │    └── columns: y:7(int)
+ │    │    │    ├── columns: y:7(int)
+ │    │    │    └── limit hint: 1.00
  │    │    └── filters
  │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    └── const: 1 [type=int]
@@ -2071,6 +2075,7 @@ project
  │    │    │    ├── outer: (6)
  │    │    │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31,41), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
  │    │    │    ├── ordering: +26 opt(25) [actual: +26]
+ │    │    │    ├── limit hint: 66.00
  │    │    │    └── inner-join (hash)
  │    │    │         ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
  │    │    │         ├── outer: (6)
@@ -3489,6 +3494,7 @@ project
       │    │    ├── left ordering: +1
       │    │    ├── right ordering: +7
       │    │    ├── fd: ()-->(1-5), ()~~>(7)
+      │    │    ├── limit hint: 1.00
       │    │    ├── select
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    ├── cardinality: [0 - 1]
@@ -4122,6 +4128,7 @@ values
                 ├── left-join (hash)
                 │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
                 │    ├── fd: (12)-->(2), ()~~>(9)
+                │    ├── limit hint: 1.00
                 │    ├── ordinality
                 │    │    ├── columns: i:2(int) rownum:12(int!null)
                 │    │    ├── key: (12)
@@ -4856,6 +4863,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-9)
  │    ├── ordering: +8
+ │    ├── limit hint: 10.00
  │    └── group-by
  │         ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
  │         ├── grouping columns: id:1(int!null)
@@ -5135,8 +5143,10 @@ select
                 ├── select
                 │    ├── columns: y:7(int!null)
                 │    ├── fd: ()-->(7)
+                │    ├── limit hint: 1.00
                 │    ├── scan xy
-                │    │    └── columns: y:7(int)
+                │    │    ├── columns: y:7(int)
+                │    │    └── limit hint: 1.00
                 │    └── filters
                 │         └── y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
                 └── const: 1 [type=int]
@@ -5267,8 +5277,10 @@ select
                      ├── fd: ()-->(7)
                      ├── select
                      │    ├── columns: y:7(int)
+                     │    ├── limit hint: 1.00
                      │    ├── scan xy
-                     │    │    └── columns: y:7(int)
+                     │    │    ├── columns: y:7(int)
+                     │    │    └── limit hint: 1.00
                      │    └── filters
                      │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
                      └── const: 1 [type=int]

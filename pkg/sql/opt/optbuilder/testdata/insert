@@ -151,6 +151,7 @@ insert abcde
       │    │    ├── sort
       │    │    │    ├── columns: y:8(int) z:9(float)
       │    │    │    ├── ordering: +8,+9
+      │    │    │    ├── limit hint: 10.00
       │    │    │    └── project
       │    │    │         ├── columns: y:8(int) z:9(float)
       │    │    │         └── scan xyz

@@ -511,9 +511,12 @@ limit
  ├── columns: "?column?":4(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  ├── project
  │    ├── columns: "?column?":4(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
+ │    ├── limit hint: 1.00
  │    ├── project-set
  │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
+ │    │    ├── limit hint: 1.00
  │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
  │    │    │    └── tuple [type=tuple]
  │    │    └── zip
  │    │         └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
@@ -533,9 +536,12 @@ limit
  ├── columns: "?column?":4(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  ├── project
  │    ├── columns: "?column?":4(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
+ │    ├── limit hint: 1.00
  │    ├── project-set
  │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
+ │    │    ├── limit hint: 1.00
  │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
  │    │    │    └── tuple [type=tuple]
  │    │    └── zip
  │    │         └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
@@ -557,8 +563,11 @@ limit
  ├── columns: "?column?":1(string!null) b:2(tuple) "?column?":3(string!null)
  ├── project
  │    ├── columns: "?column?":1(string!null) b:2(tuple) "?column?":3(string!null)
+ │    ├── limit hint: 1.00
  │    ├── project-set
+ │    │    ├── limit hint: 1.00
  │    │    ├── values
+ │    │    │    ├── limit hint: 1.00
  │    │    │    └── tuple [type=tuple]
  │    │    └── zip
  │    │         └── function: crdb_internal.unary_table [type=tuple]
@@ -863,10 +872,13 @@ project
                                ├── columns: generate_series:8(int)
                                ├── project
                                │    ├── columns: generate_series:8(int)
+                               │    ├── limit hint: 1.00
                                │    └── project-set
                                │         ├── columns: b:6(string) u.rowid:7(int!null) generate_series:8(int)
+                               │         ├── limit hint: 1.00
                                │         ├── scan u
-                               │         │    └── columns: b:6(string) u.rowid:7(int!null)
+                               │         │    ├── columns: b:6(string) u.rowid:7(int!null)
+                               │         │    └── limit hint: 1.00
                                │         └── zip
                                │              └── function: generate_series [type=int]
                                │                   ├── const: 0 [type=int]

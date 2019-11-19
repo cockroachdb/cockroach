@@ -193,38 +193,57 @@ func (r *Registry) makeJobID() int64 {
 	return int64(builtins.GenerateUniqueInt(r.nodeID.Get()))
 }
 
-// StartJob creates and asynchronously starts a job from record. An error is
-// returned if the job type has not been registered with RegisterConstructor.
-// The ctx passed to this function is not the context the job will be started
-// with (canceling ctx will not causing the job to cancel).
-func (r *Registry) StartJob(
+// CreateAndStartJob creates and asynchronously starts a job from record. An
+// error is returned if the job type has not been registered with
+// RegisterConstructor. The ctx passed to this function is not the context the
+// job will be started with (canceling ctx will not cause the job to cancel).
+func (r *Registry) CreateAndStartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
 	j := r.NewJob(record)
+	errCh, err := r.StartJob(ctx, resultsCh, j)
+	return j, errCh, err
+}
+
+// StartJob starts a previously unstarted job. The job may already have been
+// created but must not have ever been started. The ctx passed to this function
+// is not the context the job will be started with (canceling ctx will not
+// cause the job to cancel).
+func (r *Registry) StartJob(
+	ctx context.Context, resultsCh chan<- tree.Datums, j *Job,
+) (<-chan error, error) {
 	resumer, err := r.createResumer(j, r.settings)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	// We create the job with a known ID, rather than relying on the column's
-	// DEFAULT unique_rowid(), to avoid a race condition where the job exists
-	// in the jobs table but is not yet present in our registry, which would
-	// allow another node to adopt it.
-	id := r.makeJobID()
+
+	// NB: We create the job here rather than in CreateAndStartJob because
+	// we want to verify that we can create the resumer before we write the
+	// record.
+	if j.ID() == nil {
+		// In the case where we're creating a new job, we create the job
+		// with a known ID, rather than relying on the column's DEFAULT
+		// unique_rowid(), to avoid a race condition where the job exists
+		// in the jobs table but is not yet present in our registry, which
+		// would allow another node to adopt it.
+		id := r.makeJobID()
+		if err := j.insert(ctx, id, r.newLease()); err != nil {
+			return nil, err
+		}
+	}
+
 	resumeCtx, cancel := r.makeCtx()
-	r.register(id, cancel)
-	if err := j.insert(ctx, id, r.newLease()); err != nil {
-		r.unregister(id)
-		return nil, nil, err
-	}
+	r.register(*j.ID(), cancel)
+
 	if err := j.Started(ctx); err != nil {
-		r.unregister(id)
-		return nil, nil, err
+		r.unregister(*j.ID())
+		return nil, err
 	}
 	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return j, errCh, nil
+	return errCh, nil
 }
 
 // NewJob creates a new Job.
@@ -244,6 +263,19 @@ func (r *Registry) NewJob(record Record) *Job {
 		RunningStatus: string(record.RunningStatus),
 	}
 	return job
+}
+
+// CreateJobWithTxn creates a job to be started later with StartJob.
+// It stores the job in the jobs table, marks it pending and gives the
+// current node a lease.
+func (r *Registry) CreateJobWithTxn(
+	ctx context.Context, record Record, txn *client.Txn,
+) (*Job, error) {
+	j := r.NewJob(record)
+	if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
 // LoadJob loads an existing job with the given jobID from the system.jobs

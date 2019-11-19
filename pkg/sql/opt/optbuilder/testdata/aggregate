@@ -905,6 +905,7 @@ limit
  ├── columns: count:6(int)
  ├── scalar-group-by
  │    ├── columns: count:6(int)
+ │    ├── limit hint: 1.00
  │    ├── project
  │    │    ├── columns: column5:5(tuple{int, int})
  │    │    ├── scan kv
@@ -1724,8 +1725,10 @@ limit
  ├── columns: r:6(bool)
  ├── project
  │    ├── columns: r:6(bool)
+ │    ├── limit hint: 1.00
  │    ├── scan xyz
- │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(float)
+ │    │    └── limit hint: 1.00
  │    └── projections
  │         └── gt [type=bool]
  │              ├── variable: x [type=int]
@@ -1752,8 +1755,10 @@ limit
  ├── columns: r:8(bool)
  ├── project
  │    ├── columns: r:8(bool)
+ │    ├── limit hint: 1.00
  │    ├── scan xyz
- │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(float)
+ │    │    └── limit hint: 1.00
  │    └── projections
  │         └── gt [type=bool]
  │              ├── variable: x [type=int]

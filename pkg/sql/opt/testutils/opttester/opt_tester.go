@@ -547,7 +547,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 				"hide-cost":        memo.ExprFmtHideCost,
 				"hide-qual":        memo.ExprFmtHideQualifications,
 				"hide-scalars":     memo.ExprFmtHideScalars,
-				"hide-orderings":   memo.ExprFmtHideOrderings,
+				"hide-physprops":   memo.ExprFmtHidePhysProps,
 				"hide-types":       memo.ExprFmtHideTypes,
 				"hide-columns":     memo.ExprFmtHideColumns,
 				"hide-all":         memo.ExprFmtHideAll,

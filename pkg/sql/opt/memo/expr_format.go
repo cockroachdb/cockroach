@@ -66,8 +66,9 @@ const (
 	// them with the SQL expression (if possible).
 	ExprFmtHideScalars
 
-	// ExprFmtHideOrderings hides all orderings.
-	ExprFmtHideOrderings
+	// ExprFmtHidePhysProps hides all required physical properties, except for
+	// Presentation (see ExprFmtHideColumns).
+	ExprFmtHidePhysProps
 
 	// ExprFmtHideTypes hides type information from columns and scalar
 	// expressions.
@@ -274,17 +275,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !f.HasFlags(ExprFmtHideColumns) && !private.GroupingCols.Empty() {
 			f.formatColList(e, tp, "grouping columns:", opt.ColSetToList(private.GroupingCols))
 		}
-		if !f.HasFlags(ExprFmtHideOrderings) && !private.Ordering.Any() {
+		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
 		}
 
 	case *LimitExpr:
-		if !f.HasFlags(ExprFmtHideOrderings) && !t.Ordering.Any() {
+		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}
 
 	case *OffsetExpr:
-		if !f.HasFlags(ExprFmtHideOrderings) && !t.Ordering.Any() {
+		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", t.Ordering)
 		}
 
@@ -356,7 +357,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !t.Flags.Empty() {
 			tp.Childf("flags: %s", t.Flags.String())
 		}
-		if !f.HasFlags(ExprFmtHideOrderings) {
+		if !f.HasFlags(ExprFmtHidePhysProps) {
 			tp.Childf("left ordering: %s", t.LeftEq)
 			tp.Childf("right ordering: %s", t.RightEq)
 		}
@@ -541,19 +542,24 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 	}
 
-	if !f.HasFlags(ExprFmtHideOrderings) && !required.Ordering.Any() {
-		if f.HasFlags(ExprFmtHideMiscProps) {
-			tp.Childf("ordering: %s", required.Ordering.String())
-		} else {
-			// Show the provided ordering as well, unless it's exactly the same.
-			provided := e.ProvidedPhysical().Ordering
-			reqStr := required.Ordering.String()
-			provStr := provided.String()
-			if provStr == reqStr {
+	if !f.HasFlags(ExprFmtHidePhysProps) {
+		if !required.Ordering.Any() {
+			if f.HasFlags(ExprFmtHideMiscProps) {
 				tp.Childf("ordering: %s", required.Ordering.String())
 			} else {
-				tp.Childf("ordering: %s [actual: %s]", required.Ordering.String(), provided.String())
+				// Show the provided ordering as well, unless it's exactly the same.
+				provided := e.ProvidedPhysical().Ordering
+				reqStr := required.Ordering.String()
+				provStr := provided.String()
+				if provStr == reqStr {
+					tp.Childf("ordering: %s", required.Ordering.String())
+				} else {
+					tp.Childf("ordering: %s [actual: %s]", required.Ordering.String(), provided.String())
+				}
 			}
+		}
+		if required.LimitHint != 0 {
+			tp.Childf("limit hint: %.2f", required.LimitHint)
 		}
 	}
 

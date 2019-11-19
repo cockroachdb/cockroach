@@ -140,6 +140,7 @@ project
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── limit hint: 10.00
       │    ├── prune: (1-4)
       │    └── interesting orderings: (+1) (-3,+4,+1)
       └── const: 10 [type=int]

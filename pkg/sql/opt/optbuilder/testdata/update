@@ -265,6 +265,7 @@ update abcde
       │    │    ├── sort
       │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    │    │    ├── ordering: +7
+      │    │    │    ├── limit hint: 10.00
       │    │    │    └── select
       │    │    │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    │    │         ├── scan abcde
@@ -668,6 +669,7 @@ project
                 │    │    ├── sort
                 │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
                 │    │    │    ├── ordering: +8
+                │    │    │    ├── limit hint: 10.00
                 │    │    │    └── select
                 │    │    │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
                 │    │    │         ├── scan abcde
@@ -1413,6 +1415,7 @@ update mutation
       │    │    │    ├── sort (segmented)
       │    │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
       │    │    │    │    ├── ordering: +6,+7
+      │    │    │    │    ├── limit hint: 10.00
       │    │    │    │    └── scan mutation
       │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
       │    │    │    │         └── ordering: +6

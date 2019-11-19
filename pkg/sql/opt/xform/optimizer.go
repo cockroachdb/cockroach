@@ -546,34 +546,31 @@ func (o *Optimizer) optimizeScalarExpr(
 // its way back here, at which point another physical property will be stripped
 // off, and so on. Afterwards, the group will have computed a lowest cost
 // expression for each sublist of physical properties, from all down to none.
+//
+// Right now, the only physical property that can be provided by an enforcer is
+// physical.Required.Ordering. When adding another enforceable property, also
+// update shouldExplore, which should return true if enforceProps will explore
+// the group by recursively calling optimizeGroup (by way of optimizeEnforcer).
 func (o *Optimizer) enforceProps(
 	state *groupState, member memo.RelExpr, required *physical.Required,
 ) (fullyOptimized bool) {
-	inner := *required
-
-	// Ignore the Presentation property, since any relational or enforcer
-	// operator can provide it.
-	inner.Presentation = nil
-
 	// Strip off one property that can be enforced. Other properties will be
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
-	var enforcer memo.RelExpr
-	if !inner.Ordering.Any() {
+	if !required.Ordering.Any() {
 		// Try Sort enforcer that requires no ordering from its input.
-		inner.Ordering = physical.OrderingChoice{}
-		interned := o.mem.InternPhysicalProps(&inner)
-		enforcer = &memo.SortExpr{Input: member}
-		fullyOptimized = o.optimizeEnforcer(state, enforcer, required, member, interned)
+		enforcer := &memo.SortExpr{Input: member}
+		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
+		fullyOptimized = o.optimizeEnforcer(state, enforcer, required, member, memberProps)
 
 		// Try Sort enforcer that requires a partial ordering from its input.
 		longestCommonPrefix := deriveInterestingOrderingPrefix(member, required.Ordering)
 		if len(longestCommonPrefix) > 0 && len(longestCommonPrefix) < len(required.Ordering.Columns) {
-			inner.Ordering.FromOrdering(longestCommonPrefix)
-			interned = o.mem.InternPhysicalProps(&inner)
-			enforcer := &memo.SortExpr{Input: state.best, InputOrdering: inner.Ordering}
-			if o.optimizeEnforcer(state, enforcer, required, member, interned) {
+			enforcer := &memo.SortExpr{Input: state.best}
+			enforcer.InputOrdering.FromOrdering(longestCommonPrefix)
+			memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
+			if o.optimizeEnforcer(state, enforcer, required, member, memberProps) {
 				fullyOptimized = true
 			}
 		}
@@ -581,10 +578,6 @@ func (o *Optimizer) enforceProps(
 		return fullyOptimized
 	}
 
-	// No remaining properties, so no more enforcers.
-	if inner.Defined() {
-		panic(errors.AssertionFailedf("unhandled physical property: %v", inner))
-	}
 	return true
 }
 

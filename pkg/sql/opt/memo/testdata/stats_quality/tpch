@@ -293,6 +293,7 @@ project
       │    ├── key: (17,18)
       │    ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
       │    ├── ordering: -15,+23,+11,+(1|17) [actual: -15,+23,+11,+1]
+      │    ├── limit hint: 100.00
       │    └── select
       │         ├── save-table-name: q2_select_4
       │         ├── columns: p_partkey:1(int) p_mfgr:3(char) s_name:11(char) s_address:12(varchar) s_phone:14(char) s_acctbal:15(float) s_comment:16(varchar) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_name:23(char) min:48(float!null)
@@ -1046,6 +1047,7 @@ limit
  │    ├── key: (18)
  │    ├── fd: (18)-->(13,16,35)
  │    ├── ordering: -35,+13
+ │    ├── limit hint: 10.00
  │    └── group-by
  │         ├── save-table-name: q3_group_by_3
  │         ├── columns: o_orderdate:13(date) o_shippriority:16(int) l_orderkey:18(int!null) sum:35(float)
@@ -3345,6 +3347,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3,5,6,8,35,39)
  │    ├── ordering: -39
+ │    ├── limit hint: 20.00
  │    └── group-by
  │         ├── save-table-name: q10_group_by_3
  │         ├── columns: c_custkey:1(int!null) c_name:2(varchar) c_address:3(varchar) c_phone:5(char) c_acctbal:6(float) c_comment:8(varchar) n_name:35(char) sum:39(float)
@@ -5427,6 +5430,7 @@ limit
  │    ├── key: (9)
  │    ├── fd: (1)-->(2), (9)-->(1,2,12,13,51)
  │    ├── ordering: -12,+13
+ │    ├── limit hint: 100.00
  │    └── group-by
  │         ├── save-table-name: q18_group_by_3
  │         ├── columns: c_custkey:1(int) c_name:2(varchar) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
@@ -6373,6 +6377,7 @@ limit
  │    ├── key: (2)
  │    ├── fd: (2)-->(69)
  │    ├── ordering: -69,+2
+ │    ├── limit hint: 100.00
  │    └── group-by
  │         ├── save-table-name: q21_group_by_3
  │         ├── columns: s_name:2(char!null) count_rows:69(int)

@@ -234,8 +234,6 @@ func (n *explainDistSQLNode) Close(ctx context.Context) {
 func willDistributePlan(
 	distSQLPlanner *DistSQLPlanner, plan planNode, params runParams,
 ) (bool, distRecommendation) {
-	// Trigger limit propagation.
-	params.p.prepareForDistSQLSupportCheck()
 	var recommendation distRecommendation
 	if _, ok := plan.(distSQLExplainable); ok {
 		recommendation = shouldDistribute

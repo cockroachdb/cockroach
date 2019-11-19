@@ -249,7 +249,28 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("normal success", func(t *testing.T) {
 		clear()
-		_, _, err := registry.StartJob(ctx, nil, mockJob)
+		_, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resumeExit++
+		e.success = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	t.Run("create separately success", func(t *testing.T) {
+		clear()
+		j, err := registry.CreateJobWithTxn(ctx, mockJob, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = registry.StartJob(ctx, nil, j)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -266,7 +287,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("pause", func(t *testing.T) {
 		clear()
-		job, _, err := registry.StartJob(ctx, nil, mockJob)
+		job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -292,7 +313,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("cancel", func(t *testing.T) {
 		clear()
-		job, _, err := registry.StartJob(ctx, nil, mockJob)
+		job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,7 +336,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	// Verify that pause and cancel in a rollback do nothing.
 	t.Run("rollback", func(t *testing.T) {
 		clear()
-		job, _, err := registry.StartJob(ctx, nil, mockJob)
+		job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -420,7 +441,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("failed running", func(t *testing.T) {
 		clear()
-		_, _, err := registry.StartJob(ctx, nil, mockJob)
+		_, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -440,7 +461,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		clear()
 		successErr = jobErr
 		defer func() { successErr = nil }()
-		_, _, err := registry.StartJob(ctx, nil, mockJob)
+		_, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -463,7 +484,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		successErr = jobErr
 		failErr = jobErr
 		defer func() { failErr = nil }()
-		_, _, err := registry.StartJob(ctx, nil, mockJob)
+		_, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -491,7 +512,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	t.Run("fail marking failed", func(t *testing.T) {
 		clear()
 		failErr = jobErr
-		_, _, err := registry.StartJob(ctx, nil, mockJob)
+		_, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -516,7 +537,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("fail 2.0 jobs with no progress", func(t *testing.T) {
 		clear()
-		job, _, err := registry.StartJob(ctx, nil, mockJob)
+		job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -595,7 +616,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.Job, expectation) {
 		beforeTime := timeutil.Now()
-		job, _, err := registry.StartJob(ctx, nil, record)
+		job, _, err := registry.CreateAndStartJob(ctx, nil, record)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -618,9 +639,6 @@ func TestJobLifecycle(t *testing.T) {
 			Progress:      jobspb.RestoreProgress{},
 		})
 
-		if err := woodyJob.Created(ctx); err != nil {
-			t.Fatal(err)
-		}
 		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
@@ -730,9 +748,6 @@ func TestJobLifecycle(t *testing.T) {
 			Progress:      jobspb.RestoreProgress{},
 		})
 
-		if err := sidJob.Created(ctx); err != nil {
-			t.Fatal(err)
-		}
 		if err := sidExp.verify(sidJob.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
@@ -940,9 +955,6 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("same state transition twice succeeds silently", func(t *testing.T) {
 		job, _ := createDefaultJob()
-		if err := job.Created(ctx); err != nil {
-			t.Fatal(err)
-		}
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -1505,7 +1517,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	t.Run("show job", func(t *testing.T) {
 		// Start a job and cancel it so it is in state finished and then query it with
 		// SHOW JOB WHEN COMPLETE.
-		job, _, err := registry.StartJob(ctx, nil, mockJob)
+		job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1543,7 +1555,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 		// query still blocks until the second job is also canceled.
 		var jobs [2]*jobs.Job
 		for i := range jobs {
-			job, _, err := registry.StartJob(ctx, nil, mockJob)
+			job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 			if err != nil {
 				t.Fatal(err)
 			}

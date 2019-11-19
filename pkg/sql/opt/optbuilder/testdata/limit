@@ -14,9 +14,11 @@ limit
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
  │    ├── ordering: +1
+ │    ├── limit hint: 5.00
  │    └── scan t
  │         ├── columns: k:1(int!null) v:2(int) w:3(int)
- │         └── ordering: +1
+ │         ├── ordering: +1
+ │         └── limit hint: 5.00
  └── const: 5 [type=int]
 
 build
@@ -29,6 +31,7 @@ limit
  ├── sort
  │    ├── columns: k:1(int!null) v:2(int)
  │    ├── ordering: +2
+ │    ├── limit hint: 5.00
  │    └── project
  │         ├── columns: k:1(int!null) v:2(int)
  │         └── scan t
@@ -42,8 +45,10 @@ limit
  ├── columns: k:1(int!null) v:2(int)
  ├── project
  │    ├── columns: k:1(int!null) v:2(int)
+ │    ├── limit hint: 3.00
  │    └── scan t
- │         └── columns: k:1(int!null) v:2(int) w:3(int)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── limit hint: 3.00
  └── const: 3 [type=int]
 
 build
@@ -56,9 +61,11 @@ limit
  ├── project
  │    ├── columns: k:1(int!null)
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    └── scan t
  │         ├── columns: k:1(int!null) v:2(int) w:3(int)
- │         └── ordering: +1
+ │         ├── ordering: +1
+ │         └── limit hint: 1.00
  └── const: 1 [type=int]
 
 build
@@ -72,12 +79,15 @@ limit
  │    ├── columns: k:1(int!null)
  │    ├── internal-ordering: +1
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    ├── project
  │    │    ├── columns: k:1(int!null)
  │    │    ├── ordering: +1
+ │    │    ├── limit hint: 4.00
  │    │    └── scan t
  │    │         ├── columns: k:1(int!null) v:2(int) w:3(int)
- │    │         └── ordering: +1
+ │    │         ├── ordering: +1
+ │    │         └── limit hint: 4.00
  │    └── const: 3 [type=int]
  └── const: 1 [type=int]
 
@@ -106,9 +116,11 @@ limit
  ├── project
  │    ├── columns: k:1(int!null)
  │    ├── ordering: +1
+ │    ├── limit hint: 2.00
  │    └── scan t
  │         ├── columns: k:1(int!null) v:2(int) w:3(int)
- │         └── ordering: +1
+ │         ├── ordering: +1
+ │         └── limit hint: 2.00
  └── const: 2 [type=int]
 
 build
@@ -131,10 +143,12 @@ limit
  ├── project
  │    ├── columns: v:2(int) sum:4(decimal)
  │    ├── ordering: -2
+ │    ├── limit hint: 10.00
  │    └── group-by
  │         ├── columns: k:1(int!null) v:2(int) sum:4(decimal)
  │         ├── grouping columns: k:1(int!null) v:2(int)
  │         ├── ordering: -2
+ │         ├── limit hint: 10.00
  │         ├── sort
  │         │    ├── columns: k:1(int!null) v:2(int) w:3(int)
  │         │    ├── ordering: -2
@@ -155,6 +169,7 @@ limit
  ├── sort
  │    ├── columns: v:2(int)
  │    ├── ordering: +2
+ │    ├── limit hint: 10.00
  │    └── distinct-on
  │         ├── columns: v:2(int)
  │         ├── grouping columns: v:2(int)
@@ -174,6 +189,7 @@ limit
  ├── sort
  │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── ordering: +1
+ │    ├── limit hint: 1.00
  │    └── values
  │         ├── columns: column1:1(int!null) column2:2(int!null)
  │         ├── tuple [type=tuple{int, int}]
@@ -194,6 +210,7 @@ limit
  ├── sort
  │    ├── columns: column1:3(int!null)
  │    ├── ordering: -3
+ │    ├── limit hint: 2.00
  │    └── union-all
  │         ├── columns: column1:3(int!null)
  │         ├── left columns: column1:1(int)
@@ -231,6 +248,7 @@ limit
  ├── sort
  │    ├── columns: column1:3(int!null)
  │    ├── ordering: -3
+ │    ├── limit hint: 2.00
  │    └── union-all
  │         ├── columns: column1:3(int!null)
  │         ├── left columns: column1:1(int)
@@ -268,6 +286,7 @@ project
       ├── sort
       │    ├── columns: k:1(int!null) v:2(int)
       │    ├── ordering: +2
+      │    ├── limit hint: 10.00
       │    └── project
       │         ├── columns: k:1(int!null) v:2(int)
       │         └── scan t
@@ -288,13 +307,16 @@ limit
  │    ├── columns: w:3(int)
  │    ├── grouping columns: w:3(int)
  │    ├── ordering: +3
+ │    ├── limit hint: 25.00
  │    └── limit
  │         ├── columns: w:3(int)
  │         ├── internal-ordering: +3
  │         ├── ordering: +3
+ │         ├── limit hint: 25.00
  │         ├── sort
  │         │    ├── columns: w:3(int)
  │         │    ├── ordering: +3
+ │         │    ├── limit hint: 100.00
  │         │    └── project
  │         │         ├── columns: w:3(int)
  │         │         └── scan t

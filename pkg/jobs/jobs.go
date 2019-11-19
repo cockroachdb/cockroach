@@ -120,6 +120,9 @@ func (j *Job) ID() *int64 {
 // remembers the assigned ID of the job in the Job. The job information is read
 // from the Record field at the time Created is called.
 func (j *Job) Created(ctx context.Context) error {
+	if j.ID() != nil {
+		return errors.Errorf("job already created with ID %v", *j.ID())
+	}
 	return j.insert(ctx, j.registry.makeJobID(), nil /* lease */)
 }
 
