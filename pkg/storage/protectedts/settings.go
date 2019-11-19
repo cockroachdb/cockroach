@@ -19,19 +19,12 @@ import (
 // Records and their spans are stored in memory on every host so it's best
 // not to let this data size be unbounded.
 
-// MaxRecords controls the maximum number of timestamp records which can
-// be created.
-var MaxRecords = settings.RegisterNonNegativeIntSetting(
-	"kv.protectedts.max_records",
-	"if non-zero the limit of the number of timestamps which can be protected",
-	4096)
-
 // MaxBytes controls the maximum number of bytes worth of spans and metadata
 // which can be protected by all protected timestamp records.
 var MaxBytes = settings.RegisterNonNegativeIntSetting(
 	"kv.protectedts.max_bytes",
 	"if non-zero the limit of the number of bytes of spans and metadata which can be protected",
-	8*(1<<20), // 8 MiB
+	1<<20, // 1 MiB
 )
 
 // MaxSpans controls the maximum number of spans which can be protected
@@ -51,6 +44,5 @@ var PollInterval = settings.RegisterNonNegativeDurationSetting(
 
 func init() {
 	MaxBytes.Hidden()
-	MaxRecords.Hidden()
 	MaxSpans.Hidden()
 }

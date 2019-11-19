@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package protectedts offers abstractions to prevent spans from having old
-// MVCC values live at a given timestamp from being GC'd.
+// Package protectedts exports abstractions to prevent GC of data which
+// may have passed its TTL.
 package protectedts
 
 import (
@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// ErrNotFound is returned from Get or Release if the record does
+// ErrNotExists is returned from Get or Release if the record does
 // not exist.
-var ErrNotFound = errors.New("protected timestamp record not found")
+var ErrNotExists = errors.New("protected timestamp record does not exist")
 
 // ErrExists returned from Protect when trying to protect a record
 // with an ID which already exists.
@@ -52,32 +52,34 @@ type Provider interface {
 type Storage interface {
 
 	// Protect will durably create a protected timestamp, if no error is returned
-	// then no data in the specified spans at which are live at the specified
-	// timestamp can be garbage collected until the this ProtectedTimestamp is
-	// released.
+	// then no data in the specified spans are live at the specified timestamp
+	// can be garbage collected until the this ProtectedTimestamp is released.
 	//
 	// Protect may succeed and yet data may be or already have been garbage
 	// collected in the spans specified by the Record. However, the protected
 	// timestamp subsystem guarantees that if all possible zone configs which
 	// could have applied have GC TTLs which would not have allowed data at
-	// the timestamp which the passed Txn commits have been GC'd then that
+	// the timestamp which the passed Txn commits to be GC'd then that
 	// data will not be GC'd until this *Record is released.
 	//
 	// An error will be returned if the ID of the provided record already exists
 	// so callers should be sure to generate new IDs when creating records.
 	Protect(context.Context, *client.Txn, *ptpb.Record) error
 
-	// Get retreives the record at with the specified UUID as well as the MVCC
+	// GetRecord retreives the record with the specified UUID as well as the MVCC
 	// timestamp at which it was written.	If no corresponding record exists
 	// ErrNotFound is returned.
 	//
-	// Get exists to work in coordination with the EnsureProtected field of
-	// import requests. In order to use EnsureProtected a client must provide
-	// both the timestamp which should be protected as well as the timestamp
-	// at which the Record providing that protection was created.
+	// GetRecord exists to work in coordination with verification. In order
+	// to use Verifier.Verify a client must provide	both the timestamp which
+	// should be protected as well as the timestamp	at which the Record providing
+	// that protection is known to be alive. The ReadTimestamp of the Txn used in
+	// this method can be used to provide such a timestamp.
 	GetRecord(context.Context, *client.Txn, uuid.UUID) (*ptpb.Record, error)
 
 	// MarkVerified will mark a protected timestamp as verified.
+	//
+	// This method is generally used by an implementation of Verifier.
 	MarkVerified(context.Context, *client.Txn, uuid.UUID) error
 
 	// Release allows spans which were previously protected to now be garbage
@@ -90,16 +92,21 @@ type Storage interface {
 	// GetMetadata retreives the metadata with the provided Txn.
 	GetMetadata(context.Context, *client.Txn) (ptpb.Metadata, error)
 
-	// GetState retreives the entire state of storage with the provided Txn.
+	// GetState retreives the entire state of protectedts.Storage with the
+	// provided Txn.
 	GetState(context.Context, *client.Txn) (ptpb.State, error)
 }
 
-// Tracker will be used in the storage package to determine a safe
-// timestamp for garbage collection.
+// Tracker is used in the storage package to determine a safe timestamp for
+// garbage collection of expired data. A storage.Replica can remove data when
+// it has a proof from the Tracker that there was no Record providing
+// protection. For example, a Replica which determines that it is not protected
+// by any Records at a given asOf can move its GC threshold up to that
+// timestamp less its GC TTL.
 type Tracker interface {
 
 	// ProtectedBy calls the passed function for each record which overlaps the
-	// pass Span. The return value is the MVCC timestamp at which this set of
+	// provided Span. The return value is the MVCC timestamp at which this set of
 	// records is known to be valid.
 	ProtectedBy(context.Context, roachpb.Span, func(*ptpb.Record)) (asOf hlc.Timestamp)
 }
