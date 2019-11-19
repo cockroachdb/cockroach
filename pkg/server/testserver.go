@@ -252,7 +252,7 @@ type TestServer struct {
 	*Server
 	// authClient is an http.Client that has been authenticated to access the
 	// Admin UI.
-	authClient struct {
+	authClient [2]struct {
 		httpClient http.Client
 		cookie     *serverpb.SessionCookie
 		once       sync.Once
@@ -475,24 +475,41 @@ func (ts *TestServer) GetHTTPClient() (http.Client, error) {
 }
 
 const authenticatedUserName = "authentic_user"
+const authenticatedUserNameNoAdmin = "authentic_user_noadmin"
 
-// GetAuthenticatedHTTPClient implements the TestServerInterface.
-func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie()
+// GetAdminAuthenticatedHTTPClient implements the TestServerInterface.
+func (ts *TestServer) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName, true)
 	return httpClient, err
 }
 
-func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (
-	http.Client,
-	*serverpb.SessionCookie,
-	error,
-) {
-	ts.authClient.once.Do(func() {
-		// Create an authentication session for an arbitrary user. We do not
-		// currently have an authorization mechanism, so a specific user is not
-		// necessary.
-		ts.authClient.err = func() error {
-			id, secret, err := ts.authentication.newAuthSession(context.TODO(), authenticatedUserName)
+// GetAuthenticatedHTTPClient implements the TestServerInterface.
+func (ts *TestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error) {
+	authUser := authenticatedUserName
+	if !isAdmin {
+		authUser = authenticatedUserNameNoAdmin
+	}
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
+	return httpClient, err
+}
+
+func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
+	authUser string, isAdmin bool,
+) (http.Client, *serverpb.SessionCookie, error) {
+	authIdx := 0
+	if isAdmin {
+		authIdx = 1
+	}
+	authClient := &ts.authClient[authIdx]
+	authClient.once.Do(func() {
+		// Create an authentication session for an arbitrary admin user.
+		authClient.err = func() error {
+			// The user needs to exist as the admin endpoints will check its role.
+			if err := ts.createAuthUser(authUser, isAdmin); err != nil {
+				return err
+			}
+
+			id, secret, err := ts.authentication.newAuthSession(context.TODO(), authUser)
 			if err != nil {
 				return err
 			}
@@ -515,17 +532,36 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
 			// Create an httpClient and attach the cookie jar to the client.
-			ts.authClient.httpClient, err = ts.Cfg.GetHTTPClient()
+			authClient.httpClient, err = ts.Cfg.GetHTTPClient()
 			if err != nil {
 				return err
 			}
-			ts.authClient.httpClient.Jar = cookieJar
-			ts.authClient.cookie = rawCookie
+			authClient.httpClient.Jar = cookieJar
+			authClient.cookie = rawCookie
 			return nil
 		}()
 	})
 
-	return ts.authClient.httpClient, ts.authClient.cookie, ts.authClient.err
+	return authClient.httpClient, authClient.cookie, authClient.err
+}
+
+func (ts *TestServer) createAuthUser(userName string, isAdmin bool) error {
+	if _, err := ts.Server.internalExecutor.Exec(context.TODO(),
+		"create-auth-user", nil, "CREATE USER $1", userName,
+	); err != nil {
+		return err
+	}
+	if isAdmin {
+		// We can't use the GRANT statement here because we don't want
+		// to rely on CCL code.
+		if _, err := ts.Server.internalExecutor.Exec(context.TODO(),
+			"grant-admin", nil,
+			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // MustGetSQLCounter implements TestServerInterface.

@@ -115,9 +115,13 @@ type TestServerInterface interface {
 	// GetHTTPClient returns an http client configured with the client TLS
 	// config required by the TestServer's configuration.
 	GetHTTPClient() (http.Client, error)
+	// GetAdminAuthenticatedHTTPClient returns an http client which has been
+	// authenticated to access Admin API methods (via a cookie).
+	// The user has admin privileges.
+	GetAdminAuthenticatedHTTPClient() (http.Client, error)
 	// GetAuthenticatedHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
-	GetAuthenticatedHTTPClient() (http.Client, error)
+	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
 
 	// MustGetSQLCounter returns the value of a counter metric from the server's
 	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
@@ -220,7 +224,15 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
 func GetJSONProto(ts TestServerInterface, path string, response protoutil.Message) error {
-	httpClient, err := ts.GetAuthenticatedHTTPClient()
+	return GetJSONProtoWithAdminOption(ts, path, response, true)
+}
+
+// GetJSONProtoWithAdminOption is like GetJSONProto but the caller can customize
+// whether the request is performed with admin privilege
+func GetJSONProtoWithAdminOption(
+	ts TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+) error {
+	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin)
 	if err != nil {
 		return err
 	}
@@ -230,7 +242,7 @@ func GetJSONProto(ts TestServerInterface, path string, response protoutil.Messag
 // PostJSONProto uses the supplied client to POST request to the URL specified by
 // the parameters and unmarshals the result into response.
 func PostJSONProto(ts TestServerInterface, path string, request, response protoutil.Message) error {
-	httpClient, err := ts.GetAuthenticatedHTTPClient()
+	httpClient, err := ts.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		return err
 	}

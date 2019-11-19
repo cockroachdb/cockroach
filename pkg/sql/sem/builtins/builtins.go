@@ -3297,6 +3297,31 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Returns true iff the current user has admin role.
+	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
+	"crdb_internal.is_admin": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlacklist: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				if evalCtx.SessionAccessor == nil {
+					return nil, errors.AssertionFailedf("session accessor not set")
+				}
+				ctx := evalCtx.Ctx()
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(isAdmin)), nil
+			},
+			Info: "Retrieves the current user's admin status.",
+		},
+	),
+
 	"crdb_internal.round_decimal_values": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
