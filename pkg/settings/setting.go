@@ -207,7 +207,7 @@ type WritableSetting interface {
 type extendedSetting interface {
 	WritableSetting
 
-	isDeprecated() bool
+	isRetired() bool
 	setToDefault(sv *Values)
 	setDescription(desc string)
 	setSlotIdx(slotIdx int)
@@ -248,11 +248,11 @@ type common struct {
 	// Each setting has a slotIdx which is used as a handle with Values.
 	slotIdx       int
 	nonReportable bool
-	deprecated    bool
+	retired       bool
 }
 
-func (i *common) isDeprecated() bool {
-	return i.deprecated
+func (i *common) isRetired() bool {
+	return i.retired
 }
 
 func (i *common) setSlotIdx(slotIdx int) {
@@ -303,11 +303,11 @@ func (i *common) SetVisibility(v Visibility) {
 	i.visibility = v
 }
 
-// SetDeprecated marks the setting as obsolete. It also hides
+// SetRetired marks the setting as obsolete. It also hides
 // it from the output of SHOW CLUSTER SETTINGS.
-func (i *common) SetDeprecated() {
+func (i *common) SetRetired() {
 	i.description = "do not use - " + i.description
-	i.deprecated = true
+	i.retired = true
 }
 
 // SetOnChange installs a callback to be called when a setting's value changes.
