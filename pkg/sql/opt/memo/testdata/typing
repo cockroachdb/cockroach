@@ -434,3 +434,17 @@ project
  │    └── columns: b.x:1(string!null) z:2(decimal!null)
  └── projections
       └── b.x::VARCHAR(2) [type=varchar]
+
+# Cast same type with different precisions.
+# See #42571.
+build
+SELECT z::decimal(10, 3), z::decimal(10, 1), z::decimal(10, 4) FROM b
+----
+project
+ ├── columns: z:3(decimal) z:4(decimal) z:5(decimal)
+ ├── scan b
+ │    └── columns: x:1(string!null) b.z:2(decimal!null)
+ └── projections
+      ├── b.z::DECIMAL(10,3) [type=decimal]
+      ├── b.z::DECIMAL(10,1) [type=decimal]
+      └── b.z::DECIMAL(10,4) [type=decimal]
