@@ -13,12 +13,14 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -228,17 +230,64 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
-		defer snap.Close()
-		var snapshot *roachpb.RaftSnapshotData
-		if cc.SaveSnapshot {
-			snapshot = &roachpb.RaftSnapshotData{}
+		func() {
+			defer snap.Close()
+			var snapshot *roachpb.RaftSnapshotData
+			if cc.SaveSnapshot {
+				snapshot = &roachpb.RaftSnapshotData{}
+			}
+			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode)
+			if err != nil {
+				log.Errorf(ctx, "%v", err)
+				result = nil
+			}
+			r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
+		}()
+
+		var shouldFatal bool
+		for _, rDesc := range cc.Terminate {
+			if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.mu.replicaID {
+				shouldFatal = true
+			}
 		}
-		result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode)
-		if err != nil {
-			log.Errorf(ctx, "%v", err)
-			result = nil
+
+		if shouldFatal {
+			// This node should fatal as a result of a previous consistency
+			// check (i.e. this round is carried out only to obtain a diff).
+			// If we fatal too early, the diff won't make it back to the lease-
+			// holder and thus won't be printed to the logs. Since we're already
+			// in a goroutine that's about to end, simply sleep for a few seconds
+			// and then terminate.
+			auxDir := r.store.engine.GetAuxiliaryDir()
+			_ = os.MkdirAll(auxDir, 0755)
+			path := base.PreventedStartupFile(auxDir)
+
+			preventStartupMsg := fmt.Sprintf(`ATTENTION:
+
+this node is terminating because a replica inconsistency was detected between %s
+and its other replicas. Please check your cluster-wide log files for more
+information and contact the CockroachDB support team. It is not necessarily safe
+to replace this node; cluster data may still be at risk of corruption.
+
+A checkpoints directory to aid (expert) debugging should be present in:
+%s
+
+A file preventing this node from restarting was placed at:
+%s
+`, r, auxDir, path)
+
+			if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
+				log.Warning(ctx, err)
+			}
+
+			if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
+				p(*r.store.Ident)
+			} else {
+				time.Sleep(10 * time.Second)
+				log.Fatalf(r.AnnotateCtx(context.Background()), preventStartupMsg)
+			}
 		}
-		r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
+
 	}); err != nil {
 		defer snap.Close()
 		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", cc.ChecksumID))

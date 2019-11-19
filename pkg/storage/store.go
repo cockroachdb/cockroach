@@ -699,9 +699,9 @@ type StoreConfig struct {
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
 // behavior of the consistency checker for tests.
 type ConsistencyTestingKnobs struct {
-	// If non-nil, BadChecksumPanic is called by CheckConsistency() instead of
-	// panicking on a checksum mismatch.
-	BadChecksumPanic func(roachpb.StoreIdent)
+	// If non-nil, OnBadChecksumFatal is called by CheckConsistency() (instead of
+	// calling log.Fatal) on a checksum mismatch.
+	OnBadChecksumFatal func(roachpb.StoreIdent)
 	// If non-nil, BadChecksumReportDiff is called by CheckConsistency() on a
 	// checksum mismatch to report the diff between snapshots.
 	BadChecksumReportDiff      func(roachpb.StoreIdent, ReplicaSnapshotDiffSlice)

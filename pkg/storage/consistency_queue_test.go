@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"path/filepath"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConsistencyQueueRequiresLive verifies the queue will not
@@ -202,7 +204,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		mtc.engines = append(mtc.engines, eng)
 	}
 
-	// Store 0 will report a diff with inconsistent key "e".
+	// s1 will report a diff with inconsistent key "e", and only s2 has that
+	// write (s3 agrees with s1).
 	diffKey := []byte("e")
 	var diffTimestamp hlc.Timestamp
 	notifyReportDiff := make(chan struct{}, 1)
@@ -214,6 +217,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			}
 			if len(diff) != 1 {
 				t.Errorf("diff length = %d, diff = %v", len(diff), diff)
+				return
 			}
 			d := diff[0]
 			if d.LeaseHolder || !bytes.Equal(diffKey, d.Key) || diffTimestamp != d.Timestamp {
@@ -238,14 +242,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 			notifyReportDiff <- struct{}{}
 		}
-	// Store 0 will panic.
-	notifyPanic := make(chan struct{}, 1)
-	sc.TestingKnobs.ConsistencyTestingKnobs.BadChecksumPanic = func(s roachpb.StoreIdent) {
-		if s != *mtc.Store(0).Ident {
-			t.Errorf("BadChecksumPanic called from follower (StoreIdent = %v)", s)
+	// s2 (index 1) will panic.
+	notifyFatal := make(chan struct{}, 1)
+	sc.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal = func(s roachpb.StoreIdent) {
+		if s != *mtc.Store(1).Ident {
+			t.Errorf("OnBadChecksumFatal called from %v", s)
 			return
 		}
-		notifyPanic <- struct{}{}
+		notifyFatal <- struct{}{}
 	}
 
 	defer mtc.Stop()
@@ -293,7 +297,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	select {
 	case <-notifyReportDiff:
 		t.Fatal("unexpected diff")
-	case <-notifyPanic:
+	case <-notifyFatal:
 		t.Fatal("unexpected panic")
 	default:
 	}
@@ -322,7 +326,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		t.Fatal("CheckConsistency() failed to report a diff as expected")
 	}
 	select {
-	case <-notifyPanic:
+	case <-notifyFatal:
 	case <-time.After(5 * time.Second):
 		t.Fatal("CheckConsistency() failed to panic as expected")
 	}
@@ -348,8 +352,13 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	assert.Len(t, resp.Result, 1)
 	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
-	assert.Contains(t, resp.Result[0].Detail, `is inconsistent`)
-	assert.Contains(t, resp.Result[0].Detail, `persisted stats`)
+	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
+	assert.Contains(t, resp.Result[0].Detail, `stats`)
+
+	// A death rattle should have been written on s2 (store index 1).
+	b, err := ioutil.ReadFile(base.PreventedStartupFile(mtc.stores[1].Engine().GetAuxiliaryDir()))
+	require.NoError(t, err)
+	require.NotEmpty(t, b)
 }
 
 // TestConsistencyQueueRecomputeStats is an end-to-end test of the mechanism CockroachDB
@@ -553,7 +562,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 
 	select {
 	case resp := <-ccCh:
-		assert.Contains(t, resp.Result[0].Detail, `stats delta`)
+		assert.Contains(t, resp.Result[0].Detail, `KeyBytes`) // contains printed stats
 		assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT, resp.Result[0].Status)
 	default:
 		t.Errorf("no response indicating the incorrect stats")

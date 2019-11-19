@@ -26,6 +26,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -565,7 +566,7 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 		cache: cache.ref(),
 	}
 
-	if err := r.setAuxiliaryDir(filepath.Join(cfg.Dir, "auxiliary")); err != nil {
+	if err := r.setAuxiliaryDir(filepath.Join(cfg.Dir, base.AuxiliaryDir)); err != nil {
 		return nil, err
 	}
 

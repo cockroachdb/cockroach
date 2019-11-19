@@ -111,8 +111,9 @@ func (q *consistencyQueue) process(
 
 	req := roachpb.CheckConsistencyRequest{
 		// Tell CheckConsistency that the caller is the queue. This triggers
-		// code to handle inconsistencies by recomputing with a diff and exiting
-		// with a fatal error, and triggers a stats readjustment if there is no
+		// code to handle inconsistencies by recomputing with a diff and
+		// instructing the nodes in the minority to terminate with a fatal
+		// error. It also triggers a stats readjustment if there is no
 		// inconsistency but the persisted stats are found to disagree with
 		// those reflected in the data. All of this really ought to be lifted
 		// into the queue in the future.

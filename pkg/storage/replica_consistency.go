@@ -85,6 +85,7 @@ func (r *Replica) CheckConsistency(
 		Snapshot:      args.WithDiff,
 		Mode:          args.Mode,
 		Checkpoint:    args.Checkpoint,
+		Terminate:     args.Terminate,
 	}
 
 	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
@@ -94,56 +95,89 @@ func (r *Replica) CheckConsistency(
 		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
 	}
 
-	var inconsistencyCount int
-	var missingCount int
-
 	res := roachpb.CheckConsistencyResponse_Result{}
 	res.RangeID = r.RangeID
+
+	shaToIdxs := map[string][]int{}
+	var missing []ConsistencyCheckResult
 	for i, result := range results {
-		expResponse := results[0].Response
 		if result.Err != nil {
-			res.Detail += fmt.Sprintf("%s: %v\n", result.Replica, result.Err)
-			missingCount++
+			missing = append(missing, result)
 			continue
 		}
-		if bytes.Equal(expResponse.Checksum, result.Response.Checksum) {
-			// Replica is consistent (or rather, agrees with the local result).
-			if i == 0 {
-				res.Detail += fmt.Sprintf("stats: %+v\n", expResponse.Persisted)
+		s := string(result.Response.Checksum)
+		shaToIdxs[s] = append(shaToIdxs[s], i)
+	}
+
+	// When replicas diverge, anecdotally often the minority (usually of size
+	// one) is in the wrong. If there's more than one smallest minority (for
+	// example, if three replicas all return different hashes) we pick any of
+	// them.
+	var minoritySHA string
+	if len(shaToIdxs) > 1 {
+		for sha, idxs := range shaToIdxs {
+			if minoritySHA == "" || len(shaToIdxs[minoritySHA]) > len(idxs) {
+				minoritySHA = sha
 			}
-			continue
 		}
-		inconsistencyCount++
+	}
+
+	// There is an inconsistency if and only if there is a minority SHA.
+
+	if minoritySHA != "" {
 		var buf bytes.Buffer
-		_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x\n"+
-			"persisted stats: exp %+v, got %+v\n"+
-			"stats delta: exp %+v, got %+v\n",
-			result.Replica,
-			expResponse.Checksum, result.Response.Checksum,
-			expResponse.Persisted, result.Response.Persisted,
-			expResponse.Delta, result.Response.Delta,
-		)
-		if expResponse.Snapshot != nil && result.Response.Snapshot != nil {
-			diff := diffRange(expResponse.Snapshot, result.Response.Snapshot)
-			if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
-				report(*r.store.Ident, diff)
+		for sha, idxs := range shaToIdxs {
+			minority := ""
+			if sha == minoritySHA {
+				minority = " [minority]"
 			}
-			_, _ = diff.WriteTo(&buf)
+			for _, idx := range idxs {
+				_, _ = fmt.Fprintf(&buf, "%s: checksum %x%s\n"+
+					"- stats: %+v\n"+
+					"- stats.Sub(recomputation): %+v\n",
+					&results[idx].Replica,
+					sha,
+					minority,
+					&results[idx].Response.Persisted,
+					&results[idx].Response.Delta,
+				)
+			}
+			minoritySnap := results[shaToIdxs[minoritySHA][0]].Response.Snapshot
+			curSnap := results[shaToIdxs[sha][0]].Response.Snapshot
+			if sha != minoritySHA && minoritySnap != nil && curSnap != nil {
+				diff := diffRange(curSnap, minoritySnap)
+				if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
+					report(*r.store.Ident, diff)
+				}
+				_, _ = fmt.Fprintf(&buf, "====== diff(%x, [minority]) ======\n", sha)
+				_, _ = diff.WriteTo(&buf)
+			}
 		}
+
 		if isQueue {
 			log.Error(ctx, buf.String())
 		}
 		res.Detail += buf.String()
+	} else {
+		res.Detail += fmt.Sprintf("stats: %+v\n", results[0].Response.Persisted)
+	}
+	for _, result := range missing {
+		res.Detail += fmt.Sprintf("%s: error: %v\n", result.Replica, result.Err)
 	}
 
 	delta := enginepb.MVCCStats(results[0].Response.Delta)
-	delta.LastUpdateNanos = 0
+	var haveDelta bool
+	{
+		d2 := delta
+		d2.AgeTo(0)
+		haveDelta = d2 != enginepb.MVCCStats{}
+	}
 
 	res.StartKey = []byte(startKey)
 	res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT
-	if inconsistencyCount != 0 {
+	if minoritySHA != "" {
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
-	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && delta != (enginepb.MVCCStats{}) {
+	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && haveDelta {
 		if delta.ContainsEstimates {
 			// When ContainsEstimates is set, it's generally expected that we'll get a different
 			// result when we recompute from scratch.
@@ -153,8 +187,9 @@ func (r *Replica) CheckConsistency(
 			// result when we recompute from scratch.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT
 		}
-		res.Detail += fmt.Sprintf("stats delta: %+v\n", enginepb.MVCCStats(results[0].Response.Delta))
-	} else if missingCount > 0 {
+		res.Detail += fmt.Sprintf("stats - recomputation: %+v\n", enginepb.MVCCStats(results[0].Response.Delta))
+	} else if len(missing) > 0 {
+		// No inconsistency was detected, but we didn't manage to inspect all replicas.
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE
 	}
 	var resp roachpb.CheckConsistencyResponse
@@ -167,7 +202,7 @@ func (r *Replica) CheckConsistency(
 		return resp, nil
 	}
 
-	if inconsistencyCount == 0 {
+	if minoritySHA == "" {
 		// The replicas were in sync. Check that the MVCCStats haven't diverged from
 		// what they should be. This code originated in the realization that there
 		// were many bugs in our stats computations. These are being fixed, but it
@@ -175,7 +210,7 @@ func (r *Replica) CheckConsistency(
 		// logging below is relatively timid.
 
 		// If there's no delta, there's nothing else to do.
-		if delta == (enginepb.MVCCStats{}) {
+		if !haveDelta {
 			return resp, nil
 		}
 
@@ -204,45 +239,38 @@ func (r *Replica) CheckConsistency(
 		return resp, roachpb.NewError(err)
 	}
 
-	logFunc := log.Fatalf
-	if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumPanic; p != nil {
-		if !args.WithDiff {
-			// We'll call this recursively with WithDiff==true; let's let that call
-			// be the one to trigger the handler.
-			p(*r.store.Ident)
-		}
-		logFunc = log.Errorf
-	}
-
-	// Diff was printed above, so call logFunc with a short message only.
 	if args.WithDiff {
-		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
+		// A diff was already printed. Return because all the code below will do
+		// is request another consistency check, with a diff and with
+		// instructions to terminate the minority nodes.
+		log.Errorf(ctx, "consistency check failed")
 		return resp, nil
 	}
 
 	// No diff was printed, so we want to re-run with diff.
-	// Note that this will call Fatal recursively in `CheckConsistency` (in the code above).
-	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
-		inconsistencyCount)
+	// Note that this recursive call will be terminated in the `args.WithDiff`
+	// branch above.
 	args.WithDiff = true
 	args.Checkpoint = true
+	for _, idxs := range shaToIdxs[minoritySHA] {
+		args.Terminate = append(args.Terminate, results[idxs].Replica)
+	}
+	log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", args.Terminate)
 
-	// We've noticed in practice that if the diff is large, the log file in it
-	// is promptly rotated away. We already know we're going to fatal, and so we
-	// can afford disabling the log size limit altogether so that the diff can
-	// stick around. For reasons of cleanliness we try to reset things to normal
-	// in tests but morally speaking we're really just disabling it for good
-	// until the process crashes.
+	// We've noticed in practice that if the snapshot diff is large, the log
+	// file in it is promptly rotated away, so up the limits while the diff
+	// printing occurs.
 	//
 	// See:
 	// https://github.com/cockroachdb/cockroach/issues/36861
 	oldLogLimit := atomic.LoadInt64(&log.LogFilesCombinedMaxSize)
 	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
+	defer atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
+
 	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
-		log.Fatalf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
+		log.Errorf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}
-	// Not reached except in tests.
-	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
+
 	return resp, nil
 }
 
@@ -374,6 +402,9 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 	r.gcOldChecksumEntriesLocked(now)
 	c, ok := r.mu.checksums[id]
 	if !ok {
+		// TODO(tbg): we need to unconditionally set a gcTimestamp or this
+		// request can simply get stuck forever or cancel anyway and leak an
+		// entry in r.mu.checksums.
 		if d, dOk := ctx.Deadline(); dOk {
 			c.gcTimestamp = d
 		}
