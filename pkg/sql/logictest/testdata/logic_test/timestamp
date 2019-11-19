@@ -74,6 +74,11 @@ select '1-1-18 1:00:00.001-8':::TIMESTAMPTZ(6)
 ----
 2001-01-18 01:00:00.001 -0800 PST
 
+query B
+select current_timestamp(3) - current_timestamp <= '1ms'::interval
+----
+true
+
 statement ok
 CREATE TABLE timestamp_test (
   id integer PRIMARY KEY,
