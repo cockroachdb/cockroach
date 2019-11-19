@@ -1480,8 +1480,12 @@ func (s *statusServer) ListLocalSessions(
 		return nil, err
 	}
 
-	ok := s.hasAdminRole(ctx, sessionUser)
-	if !ok {
+	isAdmin, err := s.admin.hasAdminRole(ctx, sessionUser)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isAdmin {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
 		if req.Username == "" {
@@ -1859,27 +1863,6 @@ func userFromContext(ctx context.Context) (string, error) {
 			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
 	}
 	return usernames[0], nil
-}
-
-type superUserChecker interface {
-	RequireAdminRole(ctx context.Context, action string) error
-}
-
-func (s *statusServer) hasAdminRole(ctx context.Context, username string) bool {
-	if username == security.RootUser {
-		return true
-	}
-	planner, cleanup := sql.NewInternalPlanner(
-		"check-superuser",
-		client.NewTxn(ctx, s.db, s.gossip.NodeID.Get(), client.RootTxn),
-		username,
-		&sql.MemoryMetrics{},
-		s.admin.server.execCfg)
-	defer cleanup()
-	if err := planner.(superUserChecker).RequireAdminRole(ctx, "access status server endpoint"); err != nil {
-		return false
-	}
-	return true
 }
 
 type systemInfoOnce struct {

@@ -589,3 +589,21 @@ SELECT
 	)
 FROM
 	table41834;
+
+
+subtest builtin_is_admin
+
+user root
+
+query B
+SELECT crdb_internal.is_admin()
+----
+true
+
+user testuser
+
+query B
+SELECT crdb_internal.is_admin()
+----
+false
+

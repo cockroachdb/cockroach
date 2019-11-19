@@ -71,7 +71,7 @@ func postAdminJSONProto(
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
 func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
-	httpClient, err := ts.GetAuthenticatedHTTPClient()
+	httpClient, err := ts.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		return nil, err
 	}
@@ -747,6 +747,7 @@ VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
 	expResult := serverpb.UsersResponse{
 		Users: []serverpb.UsersResponse_User{
 			{Username: "adminUser"},
+			{Username: "authentic_user"},
 			{Username: "bob"},
 			{Username: "root"},
 		},
@@ -783,22 +784,26 @@ func TestAdminAPIEvents(t *testing.T) {
 
 	const allEvents = ""
 	type testcase struct {
-		eventType sql.EventLogType
-		hasLimit  bool
-		limit     int
-		expCount  int
+		eventType  sql.EventLogType
+		hasLimit   bool
+		limit      int
+		unredacted bool
+		expCount   int
 	}
 	testcases := []testcase{
-		{sql.EventLogNodeJoin, false, 0, 1},
-		{sql.EventLogNodeRestart, false, 0, 0},
-		{sql.EventLogDropDatabase, false, 0, 0},
-		{sql.EventLogCreateDatabase, false, 0, 3},
-		{sql.EventLogDropTable, false, 0, 2},
-		{sql.EventLogCreateTable, false, 0, 3},
-		{sql.EventLogSetClusterSetting, false, 0, 4},
-		{sql.EventLogCreateTable, true, 0, 3},
-		{sql.EventLogCreateTable, true, -1, 3},
-		{sql.EventLogCreateTable, true, 2, 2},
+		{sql.EventLogNodeJoin, false, 0, false, 1},
+		{sql.EventLogNodeRestart, false, 0, false, 0},
+		{sql.EventLogDropDatabase, false, 0, false, 0},
+		{sql.EventLogCreateDatabase, false, 0, false, 3},
+		{sql.EventLogDropTable, false, 0, false, 2},
+		{sql.EventLogCreateTable, false, 0, false, 3},
+		{sql.EventLogSetClusterSetting, false, 0, false, 4},
+		// We use limit=true with no limit here because otherwise the
+		// expCount will mess up the expected total count below.
+		{sql.EventLogSetClusterSetting, true, 0, true, 4},
+		{sql.EventLogCreateTable, true, 0, false, 3},
+		{sql.EventLogCreateTable, true, -1, false, 3},
+		{sql.EventLogCreateTable, true, 2, false, 2},
 	}
 	minTotalEvents := 0
 	for _, tc := range testcases {
@@ -806,7 +811,7 @@ func TestAdminAPIEvents(t *testing.T) {
 			minTotalEvents += tc.expCount
 		}
 	}
-	testcases = append(testcases, testcase{allEvents, false, 0, minTotalEvents})
+	testcases = append(testcases, testcase{allEvents, false, 0, false, minTotalEvents})
 
 	for i, tc := range testcases {
 		url := "events"
@@ -814,6 +819,9 @@ func TestAdminAPIEvents(t *testing.T) {
 			url += "?type=" + string(tc.eventType)
 			if tc.hasLimit {
 				url += fmt.Sprintf("&limit=%d", tc.limit)
+			}
+			if tc.unredacted {
+				url += fmt.Sprintf("&unredacted_events=true")
 			}
 		}
 
@@ -862,8 +870,16 @@ func TestAdminAPIEvents(t *testing.T) {
 				if len(e.Info) == 0 {
 					t.Errorf("%d: missing/empty Info", i)
 				}
-				if isSettingChange && strings.Contains(e.Info, "somestring") {
-					t.Errorf("%d: un-redacted 'somestring' in Info", i)
+				if isSettingChange && strings.Contains(e.Info, "cluster.organization") {
+					if tc.unredacted {
+						if !strings.Contains(e.Info, "somestring") {
+							t.Errorf("%d: require 'somestring' in Info", i)
+						}
+					} else {
+						if strings.Contains(e.Info, "somestring") {
+							t.Errorf("%d: un-redacted 'somestring' in Info", i)
+						}
+					}
 				}
 				if len(e.UniqueID) == 0 {
 					t.Errorf("%d: missing/empty UniqueID", i)

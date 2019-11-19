@@ -359,7 +359,7 @@ describe("rest api", function() {
         method: "GET",
         response: (url: string, requestObj: RequestInit) => {
           const params = url.split("?")[1].split("&");
-          assert.lengthOf(params, 2);
+          assert.lengthOf(params, 3);
           _.each(params, (param) => {
             let [k, v] = param.split("=");
             k = decodeURIComponent(k);
@@ -371,6 +371,9 @@ describe("rest api", function() {
 
               case "type":
                 assert.equal(req.type, v);
+                break;
+
+              case "unredacted_events":
                 break;
 
               default:

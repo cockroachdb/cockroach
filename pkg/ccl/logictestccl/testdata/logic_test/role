@@ -219,6 +219,12 @@ user root
 statement ok
 GRANT admin TO testuser
 
+# Verify that is_admin reports the right value.
+query B
+SELECT crdb_internal.is_admin()
+----
+true
+
 # Dropping users/roles deletes all their memberships.
 query TTB colnames
 SELECT * FROM system.role_members
@@ -735,3 +741,5 @@ REVOKE public FROM testuser
 
 statement error user or role public does not exist
 REVOKE admin FROM public
+
+
