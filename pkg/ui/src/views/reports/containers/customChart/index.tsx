@@ -18,6 +18,7 @@ import { createSelector } from "reselect";
 import { refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
+import { MetricsMetadata, metricsMetadataActions, metricsMetadataSelector } from "src/redux/metricsMetadata";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import { DropdownOption } from "src/views/shared/components/dropdown";
@@ -27,14 +28,14 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 
 import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
-
 import { INodeStatus } from "src/util/proto";
-import { Dispatch, bindActionCreators } from "redux";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
   nodesSummary: NodesSummary;
+  requestMetricsMetadata: () => void;
+  metricsMetadata: MetricsMetadata;
   location: Location;
 }
 
@@ -67,7 +68,8 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
   // currently being stored on the cluster.
   private metricOptions = createSelector(
     (summary: NodesSummary) => summary.nodeStatuses,
-    (nodeStatuses): DropdownOption[] => {
+    (_summary: NodesSummary, metricsMetadata: MetricsMetadata) => metricsMetadata,
+    (nodeStatuses, metadata = {}): DropdownOption[] => {
       if (_.isEmpty(nodeStatuses)) {
         return [];
       }
@@ -81,6 +83,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
         return {
           value: fullMetricName,
           label: k,
+          description: metadata[k] && metadata[k].help,
         };
       });
     },
@@ -94,6 +97,10 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
 
   componentWillMount() {
     this.refresh();
+  }
+
+  componentDidMount() {
+    this.props.requestMetricsMetadata();
   }
 
   componentWillReceiveProps(props: CustomChartProps & WithRouterProps) {
@@ -217,6 +224,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
   // Render a table containing all of the currently added metrics, with editing
   // inputs for each metric.
   renderChartTables() {
+    const { nodesSummary, metricsMetadata } = this.props;
     const charts = this.currentCharts();
 
     return (
@@ -224,8 +232,8 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
         {
           charts.map((chart, i) => (
             <CustomChartTable
-              metricOptions={ this.metricOptions(this.props.nodesSummary) }
-              nodeOptions={ this.nodeOptions(this.props.nodesSummary) }
+              metricOptions={ this.metricOptions(nodesSummary, metricsMetadata) }
+              nodeOptions={ this.nodeOptions(nodesSummary) }
               index={ i }
               chartState={ chart }
               onChange={ this.updateChartRow }
@@ -268,17 +276,15 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
 }
 
 const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
-  nodesSummary: nodesSummarySelector(state),
-  nodesQueryValid: state.cachedData.nodes.valid,
-});
+    nodesSummary: nodesSummarySelector(state),
+    nodesQueryValid: state.cachedData.nodes.valid,
+    metricsMetadata: metricsMetadataSelector(state),
+  });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshNodes,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshNodes,
+  requestMetricsMetadata: metricsMetadataActions.request,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
 
