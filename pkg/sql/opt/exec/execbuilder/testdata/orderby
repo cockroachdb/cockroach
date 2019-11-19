@@ -575,6 +575,7 @@ render                 ·              ·                   (b)              ·
       └── insert       ·              ·                   (a, b)           ·
            │           into           t(a, b, c)          ·                ·
            │           strategy       inserter            ·                ·
+           │           auto commit    ·                   ·                ·
            └── values  ·              ·                   (x, y, column6)  ·
 ·                      size           3 columns, 1 row    ·                ·
 ·                      row 0, expr 0  1                   ·                ·
@@ -592,6 +593,7 @@ render               ·            ·          (b)     ·
       └── delete     ·            ·          (a, b)  ·
            │         from         t          ·       ·
            │         strategy     deleter    ·       ·
+           │         auto commit  ·          ·       ·
            └── scan  ·            ·          (a, b)  ·
 ·                    table        t@primary  ·       ·
 ·                    spans        /3-/3/#    ·       ·
@@ -608,6 +610,7 @@ render                    ·            ·          (b)                 ·
            │              table        t          ·                   ·
            │              set          c          ·                   ·
            │              strategy     updater    ·                   ·
+           │              auto commit  ·          ·                   ·
            └── render     ·            ·          (a, b, c, column7)  ·
                 │         render 0     a          ·                   ·
                 │         render 1     b          ·                   ·

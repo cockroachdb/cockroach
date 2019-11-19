@@ -1,8 +1,10 @@
 # LogicTest: local
 
 # This file tests against mutations that we expect to be handled with one-phase
-# commit transactions. Any change to the kv batches produced by these statements
-# should be treated with care.
+# commit transactions. In addition to checking the planning part, we also check
+# (using traces) that this is implemented correctly in terms of KV operations.
+# Any change to the kv batches produced by these statements should be treated
+# with care.
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT, FAMILY f1 (a, b))
@@ -17,15 +19,17 @@ SELECT * FROM ab
 # ------------
 
 # Single-row insert should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (1, 1)
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (1, 1);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -36,15 +40,17 @@ WHERE message     LIKE '%sending batch%'
 dist sender send  r24: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 
 # Multi-row insert should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (2, 2), (3, 3)
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (2, 2), (3, 3);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -58,15 +64,17 @@ dist sender send  r24: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 statement ok
 BEGIN
 
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (4, 4), (5, 5)
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (4, 4), (5, 5);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -80,15 +88,17 @@ statement ok
 ROLLBACK
 
 # Insert with simple RETURNING statement should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -99,15 +109,17 @@ WHERE message     LIKE '%sending batch%'
 dist sender send  r24: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -121,15 +133,17 @@ dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -156,15 +170,17 @@ SELECT count(*) FROM ab WHERE b=0
 # ------------
 
 # Single-row upsert should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (1, 1)
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (1, 1);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -175,15 +191,17 @@ WHERE message     LIKE '%sending batch%'
 dist sender send  r24: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 
 # Multi-row upsert should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (2, 2), (3, 3)
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (2, 2), (3, 3);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -197,15 +215,17 @@ dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 statement ok
 BEGIN
 
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (4, 4), (5, 5)
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (4, 4), (5, 5);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -219,15 +239,17 @@ statement ok
 ROLLBACK
 
 # Upsert with simple RETURNING statement should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -238,15 +260,17 @@ WHERE message     LIKE '%sending batch%'
 dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -260,15 +284,17 @@ dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Upsert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -295,15 +321,17 @@ SELECT count(*) FROM ab WHERE b=0
 # ------------
 
 # Simple update should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -318,15 +346,17 @@ dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 statement ok
 BEGIN
 
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -341,15 +371,17 @@ statement ok
 ROLLBACK
 
 # Update with simple RETURNING statement should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a, b
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a, b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -361,15 +393,17 @@ dist sender send  r24: sending batch 1 Scan to (n1,s1):1
 dist sender send  r24: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a + b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a + b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -384,15 +418,17 @@ dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Update with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a / b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a / b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -420,15 +456,17 @@ SELECT count(*) FROM ab WHERE b=0
 # ------------
 
 # Single-row delete should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) DELETE FROM ab WHERE a = 1
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a = 1;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -439,15 +477,17 @@ WHERE message     LIKE '%sending batch%'
 dist sender send  r24: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 # Multi-row delete should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (2, 3)
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (2, 3);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -461,15 +501,17 @@ dist sender send  r24: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 statement ok
 BEGIN
 
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (4, 5)
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (4, 5);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -483,15 +525,17 @@ statement ok
 ROLLBACK
 
 # Delete with simple RETURNING statement should auto-commit.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (6, 7) RETURNING a, b
+] WHERE field = 'auto commit'
+----
+true
+
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (6, 7) RETURNING a, b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-true
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -503,15 +547,17 @@ dist sender send  r24: sending batch 1 Scan to (n1,s1):1
 dist sender send  r24: sending batch 2 Del, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (8, 9) RETURNING a + b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (8, 9) RETURNING a + b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -526,15 +572,17 @@ dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) DELETE FROM ab WHERE a IN (10, 11) RETURNING a / b
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (10, 11) RETURNING a / b;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -571,19 +619,20 @@ CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p), FAMILY f1 (a, b));
 SET experimental_optimizer_foreign_keys = true
 
 # Populate table descriptor cache.
-query IIII
+statement ok
 SELECT * FROM fk_parent JOIN fk_child ON p = b
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO fk_child VALUES (1, 1), (2, 2)
+] WHERE field = 'auto commit'
 ----
+false
 
 statement ok
 SET TRACING=ON;
   INSERT INTO fk_child VALUES (1, 1), (2, 2);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -596,15 +645,17 @@ dist sender send  r24: sending batch 2 CPut, 2 InitPut to (n1,s1):1
 dist sender send  r24: sending batch 2 Scan to (n1,s1):1
 dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) UPDATE fk_child SET b=b+1 WHERE a < 2
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   UPDATE fk_child SET b=b+1 WHERE a < 2;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -618,15 +669,18 @@ dist sender send  r24: sending batch 1 Put, 1 CPut, 1 Del to (n1,s1):1
 dist sender send  r24: sending batch 1 Scan to (n1,s1):1
 dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) DELETE FROM fk_parent WHERE p = 3
+] WHERE field = 'auto commit'
+----
+false
+
+
 statement ok
 SET TRACING=ON;
   DELETE FROM fk_parent WHERE p = 3;
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -643,6 +697,14 @@ dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 # -----------------------
 # Multiple mutation tests
 # -----------------------
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO ab (
+    SELECT a*10, b*10 FROM [ INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b ]
+  )
+] WHERE field = 'auto commit'
+----
+false
 
 statement ok
 SET TRACING=ON;
@@ -650,11 +712,6 @@ SET TRACING=ON;
     SELECT a*10, b*10 FROM [ INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b ]
   );
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
@@ -667,16 +724,19 @@ dist sender send  r24: sending batch 2 CPut to (n1,s1):1
 dist sender send  r24: sending batch 2 CPut to (n1,s1):1
 dist sender send  r24: sending batch 1 EndTxn to (n1,s1):1
 
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) WITH cte AS (INSERT INTO ab VALUES (3, 3), (4, 4) RETURNING a, b)
+    INSERT INTO ab (SELECT a*10, b*10 FROM cte)
+] WHERE field = 'auto commit'
+----
+false
+
 statement ok
 SET TRACING=ON;
   WITH cte AS (INSERT INTO ab VALUES (3, 3), (4, 4) RETURNING a, b)
   INSERT INTO ab (SELECT a*10, b*10 FROM cte);
 SET TRACING=OFF
-
-query B
-SELECT count(*) > 0 FROM [ SHOW TRACE FOR SESSION ] WHERE message = 'autocommit enabled'
-----
-false
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]

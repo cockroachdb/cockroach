@@ -114,6 +114,14 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 			return execPlan{}, err
 		}
 	} else {
+
+		// The auto commit flag should reflect what would happen if this statement
+		// was run without the explain, so recalculate it.
+		defer func(oldVal bool) {
+			b.autoCommit = oldVal
+		}(b.autoCommit)
+		b.autoCommit = b.canAutoCommit(explain.Input)
+
 		input, err := b.buildRelational(explain.Input)
 		if err != nil {
 			return execPlan{}, err

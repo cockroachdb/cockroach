@@ -275,6 +275,7 @@ run             ·            ·
  └── insert     ·            ·
       │         into         t(x)
       │         strategy     inserter
+      │         auto commit  ·
       └── scan  ·            ·
 ·               table        t2@primary
 ·               spans        ALL
