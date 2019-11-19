@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { MetricMetadataResponseMessage } from "src/util/api";
+import { MetricsMetadata } from "./reducer";
 
 export const METRICS_METADATA_REQUEST = "cockroachui/metricsMetadata/REQUEST";
 export const METRICS_METADATA_REQUEST_ERROR = "cockroachui/metricsMetadata/REQUEST_ERROR";
@@ -21,7 +21,7 @@ type MetricsMetadataErrorAction = {
 
 type MetricsMetadataReceivedAction = {
   type: typeof METRICS_METADATA_REQUEST_COMPLETE;
-  payload: MetricMetadataResponseMessage
+  payload: MetricsMetadata
 };
 
 type MetricsMetadataRequestAction = {
@@ -39,7 +39,7 @@ const request = (): MetricsMetadataRequestAction => {
   };
 };
 
-const requestCompleted = (metrics: MetricMetadataResponseMessage): MetricsMetadataReceivedAction => {
+const requestCompleted = (metrics: MetricsMetadata): MetricsMetadataReceivedAction => {
   return {
     type: METRICS_METADATA_REQUEST_COMPLETE,
     payload: metrics,

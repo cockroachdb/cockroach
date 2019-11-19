@@ -17,14 +17,16 @@ import {
   MetricsMetadataAction,
 } from "./actions";
 
+export type MetricsMetadata = MetricMetadataResponseMessage["metadata"];
+
 export interface MetricsMetadataState {
-  metadata: MetricMetadataResponseMessage;
+  metadata: MetricsMetadata;
   error: Error;
 }
 
 const initialState: MetricsMetadataState = {
-  metadata: null,
-  error: null,
+  metadata: undefined,
+  error: undefined,
 };
 
 export function metricsMetadataReducer(
@@ -34,6 +36,7 @@ export function metricsMetadataReducer(
     case METRICS_METADATA_REQUEST: {
       return {
         ...state,
+        error: undefined,
       };
     }
     case METRICS_METADATA_REQUEST_ERROR: {
@@ -45,7 +48,7 @@ export function metricsMetadataReducer(
     case METRICS_METADATA_REQUEST_COMPLETE: {
       return {
         metadata: action.payload,
-        error: null,
+        error: undefined,
       };
     }
     default:
