@@ -29,7 +29,7 @@ import (
 type Config struct {
 	Settings         *cluster.Settings
 	DB               *client.DB
-	InternalExecutor sqlutil.InternalExecutorWithUser
+	InternalExecutor sqlutil.InternalExecutor
 }
 
 type provider struct {
