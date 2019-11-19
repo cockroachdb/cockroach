@@ -65,6 +65,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/storage/reports"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -201,7 +203,8 @@ type Server struct {
 	internalMemMetrics  sql.MemoryMetrics
 	adminMemMetrics     sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
-	sqlMemMetrics sql.MemoryMetrics
+	sqlMemMetrics       sql.MemoryMetrics
+	protectedtsProvider protectedts.Provider
 }
 
 // NewServer creates a Server from a server.Config.
@@ -475,6 +478,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		)
 	}
 
+	s.protectedtsProvider = ptprovider.New(ptprovider.Config{
+		DB:               s.db,
+		InternalExecutor: internalExecutor,
+		Settings:         st,
+	})
+
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
 
@@ -523,9 +532,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			Dialer: s.nodeDialer.CTDialer(),
 		}),
 
-		EnableEpochRangeLeases: true,
-		ExternalStorage:        externalStorage,
-		ExternalStorageFromURI: externalStorageFromURI,
+		EnableEpochRangeLeases:  true,
+		ExternalStorage:         externalStorage,
+		ExternalStorageFromURI:  externalStorageFromURI,
+		ProtectedTimestampCache: s.protectedtsProvider,
 	}
 	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*storage.StoreTestingKnobs)
@@ -738,7 +748,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
-		QueryCache: querycache.New(s.cfg.SQLQueryCacheSize),
+		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
+		ProtectedTimestampProvider: s.protectedtsProvider,
 	}
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1588,6 +1599,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start the background thread for periodically refreshing table statistics.
 	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
+		return err
+	}
+
+	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
 		return err
 	}
 
