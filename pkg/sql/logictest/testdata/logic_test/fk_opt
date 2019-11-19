@@ -128,13 +128,22 @@ DROP TABLE parent2
 # --- Tests that follow are copied from the fk tests and adjusted as needed.
 
 statement ok
-CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE)
+CREATE TABLE customers (
+  id INT PRIMARY KEY,
+  email STRING UNIQUE,
+  FAMILY (id, email)
+)
 
 statement ok
 INSERT INTO customers VALUES (1, 'a@co.tld'), (2, 'b@co.tld')
 
 statement ok
-CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
+CREATE TABLE products (
+  sku STRING PRIMARY KEY,
+  upc STRING UNIQUE,
+  vendor STRING,
+  FAMILY (sku, upc, vendor)
+)
 
 statement ok
 INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot')
@@ -172,7 +181,8 @@ CREATE TABLE orders (
   customer INT CONSTRAINT valid_customer REFERENCES customers (id),
   CONSTRAINT fk FOREIGN KEY (product) REFERENCES products,
   INDEX (product),
-  INDEX (customer)
+  INDEX (customer),
+  FAMILY (id, product, customer)
 )
 
 statement ok
@@ -183,7 +193,8 @@ CREATE TABLE orders (
   customer INT CONSTRAINT valid_customer REFERENCES customers (id),
   PRIMARY KEY (id, shipment),
   INDEX (product),
-  INDEX (customer)
+  INDEX (customer),
+  FAMILY (id, shipment, product, customer)
 )
 
 statement ok
@@ -2881,3 +2892,51 @@ INSERT INTO match_simple VALUES (1, 1)
 
 statement ok
 UPDATE match_simple SET a = NULL
+
+# Test that when the foreign key is a primary index we only look up the primary
+# family.
+subtest families
+
+statement ok
+CREATE TABLE fam_parent (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY (k, a),
+  FAMILY (b)
+)
+
+statement ok
+CREATE TABLE fam_child (
+  k INT PRIMARY KEY,
+  fk INT REFERENCES fam_parent(k)
+)
+
+statement ok
+INSERT INTO fam_parent VALUES (1, 1, 1)
+
+statement ok
+GRANT ALL ON fam_parent TO testuser;
+GRANT ALL ON fam_child TO testuser;
+
+# Open a transaction that modifies b.
+statement ok
+BEGIN
+
+query III
+UPDATE fam_parent SET b = b+1 WHERE k = 1 RETURNING k, a, b;
+----
+1 1 2
+
+user testuser
+
+# Run an INSERT which needs to check existence of the row. If we try to scan
+# the entire row, this blocks on the other transaction. We should only be
+# scanning the primary column family.
+statement ok
+INSERT INTO fam_child VALUES (1, 1)
+
+user root
+
+statement ok
+COMMIT
