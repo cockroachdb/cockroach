@@ -12,11 +12,13 @@ import { createSelector } from "reselect";
 
 import { AdminUIState } from "src/redux/state";
 
+import { MetricsMetadata } from "./reducer";
 import { MetricsMetadataState } from "./reducer";
 
 const metricsMetadataStateSelector = (state: AdminUIState) => state.metricsMetadata;
 
 export const metricsMetadataSelector = createSelector(
   metricsMetadataStateSelector,
-  (metricsMetadata: MetricsMetadataState) => metricsMetadata ? metricsMetadata.metadata : undefined,
+  (metricsMetadata: MetricsMetadataState): MetricsMetadata =>
+    metricsMetadata ? metricsMetadata.metadata : undefined,
 );
