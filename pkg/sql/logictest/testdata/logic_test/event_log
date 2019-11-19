@@ -1,7 +1,3 @@
-# LogicTest: local fakedist
-# This test file fails with the local-mixed-19.1-19.2 config because some extra
-# migrations run in that configuration and create unexpected events.
-
 ##################
 # TABLE DDL
 ##################
