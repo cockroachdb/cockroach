@@ -87,7 +87,7 @@ func NumRegisteredSettings() int { return len(registry) }
 func Keys() (res []string) {
 	res = make([]string, 0, len(registry))
 	for k := range registry {
-		if registry[k].isDeprecated() {
+		if registry[k].isRetired() {
 			continue
 		}
 		res = append(res, k)

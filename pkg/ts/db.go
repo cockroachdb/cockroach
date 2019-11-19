@@ -60,7 +60,7 @@ var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
 		"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
 		resolution30mDefaultPruneThreshold,
 	)
-	s.SetDeprecated()
+	s.SetRetired()
 	return s
 }()
 
