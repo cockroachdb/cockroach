@@ -358,6 +358,6 @@ export function enqueueRange(req: EnqueueRangeRequestMessage, timeout?: moment.D
   return timeoutFetch(serverpb.EnqueueRangeResponse, `${API_PREFIX}/enqueue_range`, req as any, timeout);
 }
 
-export function getAllMetricMetadata(_req: MetricMetadataRequestMessage, timeout?: moment.Duration): Promise<MetricMetadataResponseMessage> {
+export function getAllMetricMetadata(_req: MetricMetadataRequestMessage = null, timeout?: moment.Duration): Promise<MetricMetadataResponseMessage> {
   return timeoutFetch(serverpb.MetricMetadataResponse, `${API_PREFIX}/metricmetadata`, null, timeout);
 }
