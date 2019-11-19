@@ -5,6 +5,14 @@
 statement ok
 SET experimental_optimizer_foreign_keys = true
 
+# Randomize the use of insert fast path.
+# The let statement will also log the value.
+let $enable_insert_fast_path
+SELECT random() < 0.5
+
+statement ok
+SET enable_insert_fast_path = $enable_insert_fast_path
+
 # Insert
 # ------
 

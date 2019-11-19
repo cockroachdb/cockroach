@@ -1562,6 +1562,7 @@ default_tablespace                   ·                   NULL      NULL        
 default_transaction_isolation        serializable        NULL      NULL        NULL        string
 default_transaction_read_only        off                 NULL      NULL        NULL        string
 distsql                              off                 NULL      NULL        NULL        string
+enable_insert_fast_path              on                  NULL      NULL        NULL        string
 enable_zigzag_join                   on                  NULL      NULL        NULL        string
 experimental_enable_temp_tables      off                 NULL      NULL        NULL        string
 experimental_force_split_at          off                 NULL      NULL        NULL        string
@@ -1618,6 +1619,7 @@ default_tablespace                   ·                   NULL  user     NULL   
 default_transaction_isolation        serializable        NULL  user     NULL      default             default
 default_transaction_read_only        off                 NULL  user     NULL      off                 off
 distsql                              off                 NULL  user     NULL      off                 off
+enable_insert_fast_path              on                  NULL  user     NULL      on                  on
 enable_zigzag_join                   on                  NULL  user     NULL      on                  on
 experimental_enable_temp_tables      off                 NULL  user     NULL      off                 off
 experimental_force_split_at          off                 NULL  user     NULL      off                 off
@@ -1670,6 +1672,7 @@ default_tablespace                   NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation        NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only        NULL    NULL     NULL     NULL        NULL
 distsql                              NULL    NULL     NULL     NULL        NULL
+enable_insert_fast_path              NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                   NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables      NULL    NULL     NULL     NULL        NULL
 experimental_force_split_at          NULL    NULL     NULL     NULL        NULL

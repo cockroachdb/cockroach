@@ -1264,6 +1264,78 @@ func (ef *execFactory) ConstructInsert(
 	return &rowCountNode{source: ins}, nil
 }
 
+func (ef *execFactory) ConstructInsertFastPath(
+	rows [][]tree.TypedExpr,
+	table cat.Table,
+	insertColOrdSet exec.ColumnOrdinalSet,
+	returnColOrdSet exec.ColumnOrdinalSet,
+	checkOrdSet exec.CheckOrdinalSet,
+	fkChecks []exec.InsertFastPathFKCheck,
+) (exec.Node, error) {
+	// Derive insert table and column descriptors.
+	rowsNeeded := !returnColOrdSet.Empty()
+	tabDesc := table.(*optTable).desc
+	colDescs := makeColDescList(table, insertColOrdSet)
+
+	// Create the table inserter, which does the bulk of the work.
+	ri, err := row.MakeInserter(
+		ef.planner.txn, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, &ef.planner.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Regular path for INSERT.
+	ins := insertFastPathNodePool.Get().(*insertFastPathNode)
+	*ins = insertFastPathNode{
+		input: rows,
+		run: insertFastPathRun{
+			insertRun: insertRun{
+				ti:         tableInserter{ri: ri},
+				checkOrds:  checkOrdSet,
+				insertCols: ri.InsertCols,
+			},
+		},
+	}
+
+	if len(fkChecks) > 0 {
+		ins.run.fkChecks = make([]insertFastPathFKCheck, len(fkChecks))
+		for i := range fkChecks {
+			ins.run.fkChecks[i].InsertFastPathFKCheck = fkChecks[i]
+		}
+	}
+
+	// If rows are not needed, no columns are returned.
+	if rowsNeeded {
+		returnColDescs := makeColDescList(table, returnColOrdSet)
+		ins.columns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
+		// non-mutation columns in the same order they are defined in the table.
+		ins.run.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
+		ins.run.rowsNeeded = true
+	}
+
+	if len(rows) == 0 {
+		return &zeroNode{columns: ins.columns}, nil
+	}
+
+	if ef.planner.autoCommit {
+		ins.enableAutoCommit()
+	}
+
+	// serialize the data-modifying plan to ensure that no data is
+	// observed that hasn't been validated first. See the comments
+	// on BatchedNext() in plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{source: &serializeNode{source: ins}}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: ins}, nil
+}
+
 func (ef *execFactory) ConstructUpdate(
 	input exec.Node,
 	table cat.Table,

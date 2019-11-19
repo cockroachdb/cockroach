@@ -150,29 +150,15 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	switch n := plan.(type) {
 	case *valuesNode:
 		if v.observer.attr != nil {
-			suffix := "not yet populated"
+			numRows := len(n.tuples)
 			if n.rows != nil {
-				suffix = fmt.Sprintf("%d row%s",
-					n.rows.Len(), util.Pluralize(int64(n.rows.Len())))
-			} else if n.tuples != nil {
-				suffix = fmt.Sprintf("%d row%s",
-					len(n.tuples), util.Pluralize(int64(len(n.tuples))))
+				numRows = n.rows.Len()
 			}
-			description := fmt.Sprintf("%d column%s, %s",
-				len(n.columns), util.Pluralize(int64(len(n.columns))), suffix)
-			v.observer.attr(name, "size", description)
+			v.observer.attr(name, "size", formatValuesSize(numRows, len(n.columns)))
 		}
 
 		if v.observer.expr != nil {
-			for i, tuple := range n.tuples {
-				for j, expr := range tuple {
-					var fieldName string
-					if v.observer.attr != nil {
-						fieldName = fmt.Sprintf("row %d, expr", i)
-					}
-					v.metadataExpr(name, fieldName, j, expr)
-				}
-			}
+			v.metadataTuples(name, n.tuples)
 		}
 
 	case *scanNode:
@@ -456,26 +442,54 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *relocateNode:
 		n.rows = v.visit(n.rows)
 
-	case *insertNode:
+	case *insertNode, *insertFastPathNode:
+		var run *insertRun
+		if ins, ok := n.(*insertNode); ok {
+			run = &ins.run
+		} else {
+			run = &n.(*insertFastPathNode).run.insertRun
+		}
+
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
-			buf.WriteString(n.run.ti.tableDesc().Name)
+			buf.WriteString(run.ti.tableDesc().Name)
 			buf.WriteByte('(')
-			for i := range n.run.insertCols {
+			for i := range run.insertCols {
 				if i > 0 {
 					buf.WriteString(", ")
 				}
-				buf.WriteString(n.run.insertCols[i].Name)
+				buf.WriteString(run.insertCols[i].Name)
 			}
 			buf.WriteByte(')')
 			v.observer.attr(name, "into", buf.String())
-			v.observer.attr(name, "strategy", n.run.ti.desc())
-			if n.run.ti.autoCommit == autoCommitEnabled {
+			v.observer.attr(name, "strategy", run.ti.desc())
+			if run.ti.autoCommit == autoCommitEnabled {
 				v.observer.attr(name, "auto commit", "")
 			}
 		}
 
-		n.source = v.visit(n.source)
+		if ins, ok := n.(*insertNode); ok {
+			ins.source = v.visit(ins.source)
+		} else {
+			ins := n.(*insertFastPathNode)
+			if v.observer.attr != nil {
+				for i := range ins.run.fkChecks {
+					c := &ins.run.fkChecks[i]
+					tabDesc := c.ReferencedTable.(*optTable).desc
+					idxDesc := c.ReferencedIndex.(*optIndex).desc
+					v.observer.attr(name, "FK check", fmt.Sprintf("%s@%s", tabDesc.Name, idxDesc.Name))
+				}
+			}
+			if len(ins.input) != 0 {
+				if v.observer.attr != nil {
+					v.observer.attr(name, "size", formatValuesSize(len(ins.input), len(ins.input[0])))
+				}
+
+				if v.observer.expr != nil {
+					v.metadataTuples(name, ins.input)
+				}
+			}
+		}
 
 	case *upsertNode:
 		if v.observer.attr != nil {
@@ -673,13 +687,26 @@ func (v *planVisitor) expr(nodeName string, fieldName string, n int, expr tree.E
 	v.observer.expr(observeAlways, nodeName, fieldName, n, expr)
 }
 
-// metadata wraps observer.expr() and provides it with the current node's
+// metadataExpr wraps observer.expr() and provides it with the current node's
 // name, with verbosity = metadata.
 func (v *planVisitor) metadataExpr(nodeName string, fieldName string, n int, expr tree.Expr) {
 	if v.err != nil {
 		return
 	}
 	v.observer.expr(observeMetadata, nodeName, fieldName, n, expr)
+}
+
+// metadataTuples calls metadataExpr for each expression in a matrix.
+func (v *planVisitor) metadataTuples(nodeName string, tuples [][]tree.TypedExpr) {
+	for i := range tuples {
+		for j, expr := range tuples[i] {
+			var fieldName string
+			if v.observer.attr != nil {
+				fieldName = fmt.Sprintf("row %d, expr", i)
+			}
+			v.metadataExpr(nodeName, fieldName, j, expr)
+		}
+	}
 }
 
 func formatOrdering(ordering sqlbase.ColumnOrdering, columns sqlbase.ResultColumns) string {
@@ -700,6 +727,15 @@ func formatOrdering(ordering sqlbase.ColumnOrdering, columns sqlbase.ResultColum
 	}
 	fmtCtx.Close()
 	return buf.String()
+}
+
+// formatValuesSize returns a string of the form "5 columns, 1 row".
+func formatValuesSize(numRows, numCols int) string {
+	return fmt.Sprintf(
+		"%d column%s, %d row%s",
+		numCols, util.Pluralize(int64(numCols)),
+		numRows, util.Pluralize(int64(numRows)),
+	)
 }
 
 // nodeName returns the name of the given planNode as string.  The
@@ -799,6 +835,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&hookFnNode{}):               "plugin",
 	reflect.TypeOf(&indexJoinNode{}):            "index-join",
 	reflect.TypeOf(&insertNode{}):               "insert",
+	reflect.TypeOf(&insertFastPathNode{}):       "insert-fast-path",
 	reflect.TypeOf(&joinNode{}):                 "join",
 	reflect.TypeOf(&limitNode{}):                "limit",
 	reflect.TypeOf(&lookupJoinNode{}):           "lookup-join",
