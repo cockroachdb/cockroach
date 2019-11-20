@@ -192,7 +192,7 @@ func (s LeaseStore) acquire(
 		if err != nil {
 			return err
 		}
-		if err := filterTableState(tableDesc); err != nil {
+		if err := FilterTableState(tableDesc); err != nil {
 			return err
 		}
 		if err := tableDesc.MaybeFillInDescriptor(ctx, txn); err != nil {

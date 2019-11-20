@@ -32,6 +32,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 1, Name: "foo", ParentID: 0}),
 		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 2, Name: "bar", ParentID: 0}),
 		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 4, Name: "baz", ParentID: 3}),
+		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 6, Name: "offline", ParentID: 0, State: sqlbase.TableDescriptor_OFFLINE}),
 		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 3, Name: "data"}),
 		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 5, Name: "empty"}),
 	}
@@ -102,6 +103,10 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"", `TABLE system."foo"`, []string{"system", "foo"}, nil, ``},
 		{"", `TABLE system.public."foo"`, []string{"system", "foo"}, nil, ``},
 		{"system", `TABLE "foo"`, []string{"system", "foo"}, nil, ``},
+
+		{"system", `TABLE offline`, nil, nil, `table "offline" does not exist`},
+		{"", `TABLE system.offline`, []string{"system", "foo"}, nil, `table "system.public.offline" does not exist`},
+		{"system", `TABLE *`, []string{"system", "foo", "bar"}, nil, ``},
 	}
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {
