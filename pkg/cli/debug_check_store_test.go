@@ -79,14 +79,12 @@ func TestDebugCheckStore(t *testing.T) {
 
 	// Introduce a stats divergence on s1.
 	func() {
-		cache := engine.NewRocksDBCache(10 << 20 /* 10mb */)
-		defer cache.Release()
-		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
-			StorageConfig: base.StorageConfig{
+		eng, err := engine.NewDefaultEngine(
+			10<<20, /* 10mb */
+			base.StorageConfig{
 				Dir:       storePaths[0],
 				MustExist: true,
-			},
-		}, cache)
+			})
 		require.NoError(t, err)
 		defer eng.Close()
 		sl := stateloader.Make(1)
