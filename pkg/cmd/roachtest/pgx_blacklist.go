@@ -23,7 +23,7 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestConnBeginBatchDeferredError":                                      "31632",
 	"v4.TestConnCopyFromCopyFromSourceErrorEnd":                               "5807",
 	"v4.TestConnCopyFromCopyFromSourceErrorMidway":                            "5807",
-	"v4.TestConnCopyFromFailServerSideMidway":                                 "unknown",
+	"v4.TestConnCopyFromFailServerSideMidway":                                 "5807",
 	"v4.TestConnCopyFromFailServerSideMidwayAbortsWithoutWaiting":             "5807",
 	"v4.TestConnCopyFromJSON":                                                 "5807",
 	"v4.TestConnCopyFromLarge":                                                "5807",
