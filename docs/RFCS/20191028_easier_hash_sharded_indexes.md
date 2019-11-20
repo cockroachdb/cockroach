@@ -328,8 +328,39 @@ with regards to being able to change primary keys?
 
 - **SHOW CREATE TABLE**
 
-How much do we want to hide from the user? How do we ensure roundtrip-ability? How do we
-make sure all this is sound in presence of schema changes?, etc.
+A `SHOW CREATE...` statement is supposed to produce syntactically valid SQL and it's
+output must create the exact same table that it was called on (ie. it must be
+_roundtripable_). Given this, how much do we want the user to know about what this new
+syntax does? Broadly speaking, we have two options:
+
+1. ***Be very explicit about the existence of a computed shard column*** 
+
+For example:
+
+```sql
+CREATE TABLE abc (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=4);
+```
+
+would simply be an alias for
+
+```sql
+CREATE TABLE abc (a INT, a_shard INT AS MOD(hash(a), 4)
+    STORED
+    CHECK (a_shard IN (0,1,2,3)))
+```
+
+2. ***Keep things transparent from the user***
+
+This is the approach that the prototype attached with this RFC takes. If we choose to go
+this route, we keep the computed shard column hidden and `SHOW CREATE TABLE` output simply
+returns the syntax that was used to create it. This also means that the check constraint
+that is placed on the shard column will also be hidden.
+
+- **Pre-splitting table ranges at the shard points**
+
+In theory, this shouldn't be necessary load based splitting should provide more accurate
+split points based on the actual distribution of traffic on the table's ranges. However,
+if there is a good use case, we should be able to easily support this.
 
 - **Add ability to specify the column set to be used to compute the shard**
 

@@ -45,7 +45,9 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 }
 
 // MakeIndexDescriptor creates an index descriptor from a CreateIndex node.
-func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) {
+func MakeIndexDescriptor(
+	params runParams, n *tree.CreateIndex, tableDesc *sqlbase.MutableTableDescriptor,
+) (*sqlbase.IndexDescriptor, error) {
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
@@ -76,32 +78,77 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
 	}
 
+	if n.Sharded != nil {
+		colNames := make([]string, 0, len(n.Columns))
+		for _, c := range n.Columns {
+			colNames = append(colNames, string(c.Column))
+		}
+		buckets, err := sqlbase.EvalShardBucketCount(n.Sharded.ShardBuckets)
+		if err != nil {
+			return nil, err
+		}
+		shardCol, err := createAndAddShardColToTable(int(buckets), tableDesc, colNames)
+		if err != nil {
+			return nil, err
+		}
+		shardIdxElem := tree.IndexElem{
+			Column:    tree.Name(shardCol.Name),
+			Direction: tree.Ascending,
+		}
+		n.Columns = append(tree.IndexElemList{shardIdxElem}, n.Columns...)
+		sqlbase.AddShardToIndexDesc(&indexDesc, shardCol.Name, colNames, buckets)
+
+		// TODO DURING REVIEW (aayush): Not sure if we should be creating the check
+		// constraint here, but doing it above this function would lead to a bunch of code
+		// duplication.
+		ckDef, err := makeShardCheckConstraintDef(tableDesc, int(buckets), shardCol)
+
+		if err := tableDesc.AllocateIDs(); err != nil {
+			return nil, err
+		}
+
+		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		inuseNames := make(map[string]struct{}, len(info))
+		for k := range info {
+			inuseNames[k] = struct{}{}
+		}
+
+		ckName, err := generateMaybeDuplicateNameForCheckConstraint(tableDesc, ckDef.Expr)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := inuseNames[ckName]; !ok {
+			// Avoid creating duplicate check constraints.
+			ck, err := MakeCheckConstraint(params.ctx, tableDesc, ckDef, inuseNames,
+				&params.p.semaCtx, params.p.tableName)
+			if err != nil {
+				return nil, err
+			}
+			tableDesc.Checks = append(tableDesc.Checks, ck)
+		}
+	}
+
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
 		return nil, err
 	}
 	return &indexDesc, nil
 }
 
-func createAndAddShardColumn(shardBuckets tree.Expr, desc *sqlbase.MutableTableDescriptor, colNames []string) error {
-	cst, ok := shardBuckets.(*tree.NumVal)
-	if !ok {
-		return pgerror.New(pgcode.InvalidParameterValue,
-			`BUCKET_COUNT must be a strictly positive integer value.`)
-	}
-	buckets, err := cst.AsInt32()
+func createAndAddShardColToTable(
+	shardBuckets int, desc *sqlbase.MutableTableDescriptor, colNames []string,
+) (*sqlbase.ColumnDescriptor, error) {
+	shardCol, err := makeShardColumnDesc(colNames, shardBuckets, false)
 	if err != nil {
-		return pgerror.Wrap(err, pgcode.InvalidParameterValue,
-			`BUCKET_COUNT must be a strictly positive integer value.`)
+		return nil, err
 	}
-	shardCol, err := makeShardColumnDesc(colNames, int(buckets), false)
-	if err != nil {
-		return err
-	}
-
 	if !hasColumn(*desc, shardCol.Name) {
 		desc.AddColumn(shardCol)
 	}
-	return nil
+	return shardCol, nil
 }
 
 func (n *createIndexNode) startExec(params runParams) error {
@@ -122,18 +169,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
 		return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
 	}
-
-	if n.n.Sharded != nil {
-		colNames := make([]string, 0, len(n.n.Columns))
-		for _, c := range n.n.Columns {
-			colNames = append(colNames, string(c.Column))
-		}
-		if err := createAndAddShardColumn(n.n.Sharded.ShardBuckets, n.tableDesc,
-			colNames); err != nil {
-			return err
-		}
-	}
-	indexDesc, err := MakeIndexDescriptor(n.n)
+	indexDesc, err := MakeIndexDescriptor(params, n.n, n.tableDesc)
 	if err != nil {
 		return err
 	}

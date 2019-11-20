@@ -145,6 +145,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	ctx.WriteString(" (")
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
+	if node.Sharded != nil {
+		ctx.FormatNode(node.Sharded)
+	}
 	if len(node.Storing) > 0 {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
@@ -561,14 +564,13 @@ type ColumnFamilyConstraint struct {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name         Name
-	Columns      IndexElemList
-	Storing      NameList
-	Interleave   *InterleaveDef
-	Inverted     bool
-	PartitionBy  *PartitionBy
-	Sharded      bool
-	ShardBuckets Expr
+	Name        Name
+	Columns     IndexElemList
+	Sharded     *ShardedIndexDef
+	Storing     NameList
+	Interleave  *InterleaveDef
+	Inverted    bool
+	PartitionBy *PartitionBy
 }
 
 // SetName implements the TableDef interface.
@@ -589,6 +591,9 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
+	if node.Sharded != nil {
+		ctx.FormatNode(node.Sharded)
+	}
 	if node.Storing != nil {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
@@ -762,8 +767,9 @@ func (node *ForeignKeyConstraintTableDef) SetName(name Name) {
 // CheckConstraintTableDef represents a check constraint within a CREATE
 // TABLE statement.
 type CheckConstraintTableDef struct {
-	Name Name
-	Expr Expr
+	Name   Name
+	Expr   Expr
+	Hidden bool
 }
 
 // SetName implements the TableDef interface.
@@ -811,6 +817,12 @@ func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 // TABLE or CREATE INDEX statement.
 type ShardedIndexDef struct {
 	ShardBuckets Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShardedIndexDef) Format(ctx *FmtCtx) {
+	ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
+	ctx.FormatNode(node.ShardBuckets)
 }
 
 // InterleaveDef represents an interleave definition within a CREATE TABLE

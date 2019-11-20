@@ -1047,6 +1047,7 @@ func MakeTableDesc(
 	columnSequenceExprMap := make(map[int]tree.TypedExpr)
 
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges, temporary)
+	generatedNames := map[string]struct{}{}
 
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
@@ -1060,10 +1061,20 @@ func MakeTableDesc(
 				}
 			}
 			if d.PrimaryKey.Sharded {
-				if err := createAndAddShardColumn(d.PrimaryKey.ShardBuckets, &desc,
-					[]string{string(d.Name)}); err != nil {
+				buckets, err := sqlbase.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+				if err != nil {
 					return desc, err
 				}
+				shardCol, err := createAndAddShardColToTable(int(buckets), &desc, []string{string(d.Name)})
+				if err != nil {
+					return desc, err
+				}
+				checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
+				// Add the shard's check constraint to the list of TableDefs to treat it
+				// like it's been "hoisted" like the explicitly added check constraints.
+				// It'll then be added to this table's resulting table descriptor below in
+				// the constraint pass.
+				n.Defs = append(n.Defs, checkConstraint)
 			}
 			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx)
 			if err != nil {
@@ -1119,7 +1130,6 @@ func MakeTableDesc(
 	}
 
 	var primaryIndexColumnSet map[string]struct{}
-	generatedNames := map[string]struct{}{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
@@ -1133,7 +1143,36 @@ func MakeTableDesc(
 			if d.Inverted {
 				idx.Type = sqlbase.IndexDescriptor_INVERTED
 			}
-			if err := idx.FillColumns(d.Columns); err != nil {
+			idxColumns := d.Columns
+			if d.Sharded != nil {
+				var colNames []string
+				for _, c := range d.Columns {
+					colNames = append(colNames, string(c.Column))
+				}
+				buckets, err := sqlbase.EvalShardBucketCount(d.Sharded.ShardBuckets)
+				if err != nil {
+					return desc, err
+				}
+				shardCol, err := createAndAddShardColToTable(int(buckets), &desc, colNames)
+				if err != nil {
+					return desc, err
+				}
+				sqlbase.AddShardToIndexDesc(&idx, shardCol.Name, colNames, buckets)
+				// Prepend the shard column because we want the shard values, which we
+				// assume to be roughly uniformly distributed, to determine the underlying
+				// layout of this table's ranges.
+				idxColumns = append(tree.IndexElemList{
+					tree.IndexElem{
+						Column:    tree.Name(shardCol.Name),
+						Direction: tree.Ascending,
+					}}, idxColumns...)
+				checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
+				if err != nil {
+					return desc, err
+				}
+				n.Defs = append(n.Defs, checkConstraint)
+			}
+			if err := idx.FillColumns(idxColumns); err != nil {
 				return desc, err
 			}
 			if d.PartitionBy != nil {
@@ -1155,7 +1194,6 @@ func MakeTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 			}
-			idxColumns := d.Columns
 			if d.PartitionBy != nil {
 				partitioning, err := CreatePartitioning(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
@@ -1163,29 +1201,18 @@ func MakeTableDesc(
 				}
 				idx.Partitioning = partitioning
 			}
-			if d.PrimaryKey && d.Sharded {
-				cst, ok := d.ShardBuckets.(*tree.NumVal)
-				if !ok {
-					return desc, pgerror.Newf(pgcode.InvalidParameterValue,
-						`BUCKET_COUNT must be a strictly positive integer.`)
-				}
-				buckets, err := cst.AsInt32()
-				if err != nil {
-					return desc, err
-				}
-				if buckets < 1 {
-					return desc, pgerror.Newf(pgcode.InvalidParameterValue,
-						`BUCKET_COUNT must be a strictly positive integer.`)
-				}
+			idxColumns := d.Columns
+			if d.PrimaryKey && d.Sharded != nil {
 				var colNames []string
 				for _, c := range d.IndexTableDef.Columns {
 					colNames = append(colNames, string(c.Column))
 				}
-				shardCol, err := makeShardColumnDesc(colNames, int(buckets), true)
+				buckets, err := sqlbase.EvalShardBucketCount(d.Sharded.ShardBuckets)
 				if err != nil {
 					return desc, err
 				}
-				desc.AddColumn(shardCol)
+				shardCol, err := createAndAddShardColToTable(int(buckets), &desc, colNames)
+				sqlbase.AddShardToIndexDesc(&idx, shardCol.Name, colNames, buckets)
 				// Prepend the shard column because we want the shard values, which we
 				// assume to be roughly uniformly distributed, to determine the underlying
 				// layout of this table's ranges.
@@ -1194,12 +1221,11 @@ func MakeTableDesc(
 						Column:    tree.Name(shardCol.Name),
 						Direction: tree.Ascending,
 					}}, idxColumns...)
-				checkConstraint, err := makeCheckConstraintForShard(ctx, &desc,
-					generatedNames, semaCtx, int(buckets), n.Table, shardCol)
+				checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
 				if err != nil {
 					return desc, err
 				}
-				desc.Checks = append(desc.Checks, checkConstraint)
+				n.Defs = append(n.Defs, checkConstraint)
 			}
 			if err := idx.FillColumns(idxColumns); err != nil {
 				return desc, err
@@ -1454,8 +1480,7 @@ func makeShardColumnDesc(
 	col.Type = *types.Int4
 	computeExprBuilder := strings.Builder{}
 	// TODO(aayush): Write a universal hash function that can take a set of
-	// columns, hash them all individually and sum their results. It should then return
-	// this sum of hash values.
+	// columns, hash them all individually and sum their results.
 	computeExprBuilder.WriteString(`MOD(fnv32(`)
 	for i, c := range colNames {
 		if i != 0 {
@@ -1474,8 +1499,8 @@ func makeShardColumnDesc(
 	return col, nil
 }
 
-func generateNameForCheckConstraint(
-	desc *MutableTableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
+func generateMaybeDuplicateNameForCheckConstraint(
+	desc *MutableTableDescriptor, expr tree.Expr,
 ) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
@@ -1487,8 +1512,16 @@ func generateNameForCheckConstraint(
 	}); err != nil {
 		return "", err
 	}
-	name := nameBuf.String()
+	return nameBuf.String(), nil
+}
+func generateNameForCheckConstraint(
+	desc *MutableTableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
+) (string, error) {
 
+	name, err := generateMaybeDuplicateNameForCheckConstraint(desc, expr)
+	if err != nil {
+		return "", err
+	}
 	// If generated name isn't unique, attempt to add a number to the end to
 	// get a unique name.
 	if _, ok := inuseNames[name]; ok {
@@ -1509,18 +1542,12 @@ func generateNameForCheckConstraint(
 	return name, nil
 }
 
-func makeCheckConstraintForShard(
-	ctx context.Context,
-	desc *MutableTableDescriptor,
-	generatedNames map[string]struct{},
-	semaCtx *tree.SemaContext,
-	shardBuckets int,
-	table tree.TableName,
-	col *sqlbase.ColumnDescriptor,
-) (*sqlbase.TableDescriptor_CheckConstraint, error) {
-	checkConstraintBuilder := strings.Builder{}
-	fmt.Fprintf(&checkConstraintBuilder, `%s in (`, col.Name)
-	for i := 0; i < shardBuckets; i++ {
+func makeShardCheckConstraintDef(
+	desc *MutableTableDescriptor, buckets int, shardCol *sqlbase.ColumnDescriptor,
+) (*tree.CheckConstraintTableDef, error) {
+	var checkConstraintBuilder strings.Builder
+	fmt.Fprintf(&checkConstraintBuilder, `%s in (`, shardCol.Name)
+	for i := 0; i < buckets; i++ {
 		if i != 0 {
 			checkConstraintBuilder.WriteString(`, `)
 		}
@@ -1531,9 +1558,13 @@ func makeCheckConstraintForShard(
 	if err != nil {
 		return nil, err
 	}
-	constraint := &tree.CheckConstraintTableDef{Expr: parsed}
-	return MakeCheckConstraint(ctx, desc, constraint, generatedNames, semaCtx, table)
+	constraint := &tree.CheckConstraintTableDef{
+		Expr:   parsed,
+		Hidden: true,
+	}
+	return constraint, nil
 }
+
 func iterColDescriptorsInExpr(
 	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(*sqlbase.ColumnDescriptor) error,
 ) error {
@@ -1693,6 +1724,7 @@ func MakeCheckConstraint(
 	}
 
 	expr, colIDsUsed, err := replaceVars(desc, d.Expr)
+	fmt.Printf(`colIDsUsed %v`, colIDsUsed)
 	if err != nil {
 		return nil, err
 	}
@@ -1723,5 +1755,6 @@ func MakeCheckConstraint(
 		Expr:      tree.Serialize(expr),
 		Name:      name,
 		ColumnIDs: colIDs,
+		Hidden:    d.Hidden,
 	}, nil
 }

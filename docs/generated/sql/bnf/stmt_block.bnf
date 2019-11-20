@@ -1477,8 +1477,8 @@ column_def ::=
 	column_name typename col_qual_list
 
 index_def ::=
-	'INDEX' opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
+	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
 	| 'INVERTED' 'INDEX' opt_name '(' index_params ')'
 
 family_def ::=
@@ -1806,8 +1806,7 @@ constraint_name ::=
 constraint_elem ::=
 	'CHECK' '(' a_expr ')'
 	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'PRIMARY' 'KEY' '(' index_params ')'
-	| 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
+	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 
 const_typename ::=

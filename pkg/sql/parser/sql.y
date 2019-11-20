@@ -4577,25 +4577,27 @@ col_qualification_elem:
  }
 
 index_def:
-  INDEX opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.IndexTableDef{
       Name:    tree.Name($2),
       Columns: $4.idxElems(),
-      Storing: $6.nameList(),
-      Interleave: $7.interleave(),
-      PartitionBy: $8.partitionBy(),
+      Sharded: $6.shardedIndexDef(),
+      Storing: $7.nameList(),
+      Interleave: $8.interleave(),
+      PartitionBy: $9.partitionBy(),
     }
   }
-| UNIQUE INDEX opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
         Name:    tree.Name($3),
         Columns: $5.idxElems(),
-        Storing: $7.nameList(),
-        Interleave: $8.interleave(),
-        PartitionBy: $9.partitionBy(),
+        Sharded: $7.shardedIndexDef(),
+        Storing: $8.nameList(),
+        Interleave: $9.interleave(),
+        PartitionBy: $10.partitionBy(),
       },
     }
   }
@@ -4649,22 +4651,12 @@ constraint_elem:
       },
     }
   }
-| PRIMARY KEY '(' index_params ')'
+| PRIMARY KEY '(' index_params ')' opt_hash_sharded
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
-      },
-      PrimaryKey:    true,
-    }
-  }
-| PRIMARY KEY '(' index_params ')' USING HASH WITH BUCKET_COUNT '=' a_expr
-  {
-    $$.val = &tree.UniqueConstraintTableDef{
-      IndexTableDef: tree.IndexTableDef{
-        Columns: $4.idxElems(),
-        Sharded: true,
-        ShardBuckets: $11.expr(),
+        Sharded: $6.shardedIndexDef(),
       },
       PrimaryKey:    true,
     }
