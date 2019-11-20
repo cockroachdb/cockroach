@@ -1,7 +1,3 @@
-# Pebble does not support ignored seqnums for now.
-skip pebble
-----
-
 
 ## We'll check the behavior of cput in the following circumstances:
 ## A. last write is ignored, no intent history (need to go to store)

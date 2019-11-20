@@ -1,6 +1,3 @@
-# Pebble does not support ignored seqnums for now.
-skip pebble
-----
 
 # Perform some writes at various sequence numbers.
 
