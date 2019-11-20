@@ -1434,27 +1434,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestRoachLint", func(t *testing.T) {
-		t.Parallel()
-
-		vetCmd(t, crdb.Dir, "roachlint", []string{pkgScope}, []stream.Filter{
-			// Ignore generated files.
-			stream.GrepNot(`pkg/.*\.pb\.go:`),
-			stream.GrepNot(`pkg/col/coldata/.*\.eg\.go:`),
-			stream.GrepNot(`pkg/col/colserde/arrowserde/.*_generated\.go:`),
-			stream.GrepNot(`pkg/sql/colexec/.*\.eg\.go:`),
-			stream.GrepNot(`pkg/sql/colexec/.*_generated\.go:`),
-			stream.GrepNot(`pkg/sql/pgwire/hba/conf.go:`),
-
-			// Ignore types that can change by system.
-			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
-
-			// Ignore tests.
-			// TODO(mjibson): remove this ignore.
-			stream.GrepNot(`pkg/.*_test\.go:`),
-		})
-	})
-
 	t.Run("TestVectorizedPanics", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
