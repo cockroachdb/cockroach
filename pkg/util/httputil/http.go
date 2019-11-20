@@ -46,6 +46,7 @@ const (
 
 // GetJSON uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
+// TODO(someone): make this context-aware, see client.go.
 func GetJSON(httpClient http.Client, path string, response protoutil.Message) error {
 	req, err := http.NewRequest("GET", path, nil)
 	if err != nil {
@@ -57,6 +58,7 @@ func GetJSON(httpClient http.Client, path string, response protoutil.Message) er
 
 // PostJSON uses the supplied client to POST request to the URL specified by
 // the parameters and unmarshals the result into response.
+// TODO(someone): make this context-aware, see client.go.
 func PostJSON(httpClient http.Client, path string, request, response protoutil.Message) error {
 	// Hack to avoid upsetting TestProtoMarshal().
 	marshalFn := (&jsonpb.Marshaler{}).Marshal
@@ -78,6 +80,7 @@ func PostJSON(httpClient http.Client, path string, request, response protoutil.M
 //
 // The response is returned to the caller, though its body will have been
 // closed.
+// TODO(someone): make this context-aware, see client.go.
 func PostJSONWithRequest(
 	httpClient http.Client, path string, request, response protoutil.Message,
 ) (*http.Response, error) {

@@ -390,7 +390,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	}
 
 	var noTopic string
-	payload, err := encoder.EncodeResolvedTimestamp(noTopic, resolved)
+	payload, err := encoder.EncodeResolvedTimestamp(ctx, noTopic, resolved)
 	if err != nil {
 		return err
 	}

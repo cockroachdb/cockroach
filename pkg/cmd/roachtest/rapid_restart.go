@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -90,13 +91,17 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 			}
 		}
 
+		// The var dump below may take a while to generate, maybe more
+		// than the 3 second timeout of the default http client.
+		httpClient := httputil.NewClientWithTimeout(15 * time.Second)
+
 		// Verify the cluster is ok by torturing the prometheus endpoint until it
 		// returns success. A side-effect is to prevent regression of #19559.
 		for !done() {
 			base := `http://` + c.ExternalAdminUIAddr(ctx, nodes)[0]
 			// Torture the prometheus endpoint to prevent regression of #19559.
 			url := base + `/_status/vars`
-			resp, err := http.Get(url)
+			resp, err := httpClient.Get(ctx, url)
 			if err == nil {
 				if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusOK {
 					t.Fatalf("unexpected status code from %s: %d", url, resp.StatusCode)

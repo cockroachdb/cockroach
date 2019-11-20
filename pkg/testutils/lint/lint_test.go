@@ -330,6 +330,47 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestHttputil", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			re       string
+			excludes []string
+		}{
+			{re: `\bhttp\.(Get|Put|Head)\(`},
+		} {
+			cmd, stderr, filter, err := dirCmd(
+				pkgDir,
+				"git",
+				append([]string{
+					"grep",
+					"-nE",
+					tc.re,
+					"--",
+					"*.go",
+				}, tc.excludes...)...,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := stream.ForEach(filter, func(s string) {
+				t.Errorf("\n%s <- forbidden; use 'httputil' instead", s)
+			}); err != nil {
+				t.Error(err)
+			}
+
+			if err := cmd.Wait(); err != nil {
+				if out := stderr.String(); len(out) > 0 {
+					t.Fatalf("err=%s, stderr=%s", err, out)
+				}
+			}
+		}
+	})
+
 	t.Run("TestEnvutil", func(t *testing.T) {
 		t.Parallel()
 		for _, tc := range []struct {
@@ -1221,7 +1262,6 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestVet", func(t *testing.T) {
-		t.Parallel()
 		runVet := func(t *testing.T, args ...string) {
 			args = append(append([]string{"vet"}, args...), pkgScope)
 			vetCmd(t, crdb.Dir, "go", args, []stream.Filter{
@@ -1289,7 +1329,7 @@ func TestLint(t *testing.T) {
 		//    A function may be a Printf or Print wrapper if its last argument is ...interface{}.
 		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
 		//    Otherwise it may be a Print wrapper.
-		runVet(t, "-all", "-printfuncs", printfuncs)
+		t.Run("vet", func(t *testing.T) { runVet(t, "-all", "-printfuncs", printfuncs) })
 	})
 
 	// TODO(tamird): replace this with errcheck.NewChecker() when

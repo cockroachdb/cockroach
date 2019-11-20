@@ -166,10 +166,10 @@ func TestEncoders(t *testing.T) {
 				updated:   ts,
 				tableDesc: tableDesc,
 			}
-			keyInsert, err := e.EncodeKey(rowInsert)
+			keyInsert, err := e.EncodeKey(context.TODO(), rowInsert)
 			require.NoError(t, err)
 			keyInsert = append([]byte(nil), keyInsert...)
-			valueInsert, err := e.EncodeValue(rowInsert)
+			valueInsert, err := e.EncodeValue(context.TODO(), rowInsert)
 			require.NoError(t, err)
 			require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
 
@@ -179,14 +179,14 @@ func TestEncoders(t *testing.T) {
 				updated:   ts,
 				tableDesc: tableDesc,
 			}
-			keyDelete, err := e.EncodeKey(rowDelete)
+			keyDelete, err := e.EncodeKey(context.TODO(), rowDelete)
 			require.NoError(t, err)
 			keyDelete = append([]byte(nil), keyDelete...)
-			valueDelete, err := e.EncodeValue(rowDelete)
+			valueDelete, err := e.EncodeValue(context.TODO(), rowDelete)
 			require.NoError(t, err)
 			require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
 
-			resolved, err := e.EncodeResolvedTimestamp(tableDesc.Name, ts)
+			resolved, err := e.EncodeResolvedTimestamp(context.TODO(), tableDesc.Name, ts)
 			require.NoError(t, err)
 			require.Equal(t, expected.resolved, resolvedStringFn(resolved))
 		})

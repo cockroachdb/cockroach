@@ -130,9 +130,9 @@ func (s *benchSink) EmitRow(
 ) error {
 	return s.emit(int64(len(k) + len(v)))
 }
-func (s *benchSink) EmitResolvedTimestamp(_ context.Context, e Encoder, ts hlc.Timestamp) error {
+func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc.Timestamp) error {
 	var noTopic string
-	p, err := e.EncodeResolvedTimestamp(noTopic, ts)
+	p, err := e.EncodeResolvedTimestamp(ctx, noTopic, ts)
 	if err != nil {
 		return err
 	}

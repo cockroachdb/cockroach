@@ -13,10 +13,10 @@ package extract
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os/exec"
 	"regexp"
@@ -24,6 +24,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -76,7 +77,7 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 	v.Add("options", "factoring")
 	v.Add("options", "inline")
 
-	resp, err := http.Post(rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
+	resp, err := httputil.Post(context.TODO(), rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 func GenerateBNF(addr string) (ebnf []byte, err error) {
 	var b []byte
 	if strings.HasPrefix(addr, "http") {
-		resp, err := http.Get(addr)
+		resp, err := httputil.Get(context.TODO(), addr)
 		if err != nil {
 			return nil, err
 		}
