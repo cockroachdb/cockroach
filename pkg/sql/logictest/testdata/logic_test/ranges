@@ -227,7 +227,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1, 2, 3)
 statement error could not parse "foo" as type int
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[4], 'foo')
 
-statement error EXPERIMENTAL_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string
+statement error pq: could not parse "foo" as type int\[\]: array must be enclosed in \{ and \}
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES ('foo', 1)
 
 statement error too many columns in EXPERIMENTAL_RELOCATE LEASE data
