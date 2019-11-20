@@ -46,3 +46,29 @@ query TTI
 SELECT a::string, b::string, c FROM timetz_test WHERE a = b ORDER BY c
 ----
 15:00:00+03:00:00  15:00:00+03:00:00  5
+
+# Test various casts involving different timezones.
+subtest cast_tests
+
+statement ok
+SET TIME ZONE -5
+
+query T
+SELECT '11:00+03:00'::timetz::time
+----
+0000-01-01 11:00:00 +0000 UTC
+
+# This should take the timezone in the background.
+query T
+SELECT '11:00'::time::timetz
+----
+0000-01-01 11:00:00 -0500 -0500
+
+# This should observe the time and zone from the timestamp.
+query T
+SELECT '2001-01-01 11:00+04:00'::timestamptz::timetz
+----
+0000-01-01 11:00:00 +0400 +0400
+
+statement ok
+SET TIME ZONE UTC

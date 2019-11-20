@@ -3442,6 +3442,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDTime(ctx, d.Contents)
 		case *DTime:
 			return d, nil
+		case *DTimeTZ:
+			return MakeDTime(d.TimeOfDay), nil
 		case *DTimestamp:
 			return MakeDTime(timeofday.FromTime(d.Time)), nil
 		case *DTimestampTZ:
@@ -3457,7 +3459,12 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDTimeTZ(ctx, string(*d))
 		case *DCollatedString:
 			return ParseDTimeTZ(ctx, d.Contents)
-			// TODO(otan#26097): expand for other valid types.
+		case *DTime:
+			return NewDTimeTZFromLocation(timeofday.TimeOfDay(*d), ctx.GetLocation()), nil
+		case *DTimeTZ:
+			return d, nil
+		case *DTimestampTZ:
+			return NewDTimeTZFromTime(d.Time), nil
 		}
 
 	case types.TimestampFamily:
