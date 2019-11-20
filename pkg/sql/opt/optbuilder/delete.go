@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -47,16 +48,36 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	// DELETE FROM xx AS yy - we want to know about xx (tn) because
 	// that's what we get the descriptor with, and yy (alias) because
 	// that's what RETURNING will use.
-	tn, alias := getAliasedTableName(del.Table)
+	n, alias := getAliasedTableExpr(del.Table)
 
-	// Find which table we're working on, check the permissions.
-	tab, resName := b.resolveTable(tn, privilege.DELETE)
-	if alias == nil {
-		alias = &resName
+	var tab cat.Table
+	var depName opt.MDDepName
+	switch t := n.(type) {
+	case *tree.TableName:
+		// Find which table we're working on, check the permissions.
+		var resName tree.TableName
+		tab, resName = b.resolveTable(t, privilege.DELETE)
+		if alias == nil {
+			alias = &resName
+		}
+		depName = opt.DepByName(t)
+	case *tree.TableRef:
+		tab = b.resolveTableRef(t, privilege.DELETE)
+		if alias == nil {
+			alias = tree.NewUnqualifiedTableName(t.As.Alias)
+		}
+		depName = opt.DepByID(cat.StableID(t.TableID))
+
+		if t.Columns != nil {
+			panic(pgerror.Newf(pgcode.Syntax,
+				"cannot specify a list of column IDs with DELETE"))
+		}
+	default:
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%q does not resolve to a table", tree.ErrString(n)))
 	}
-
 	// Check Select permission as well, since existing values must be read.
-	b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
+	b.checkPrivilege(depName, tab, privilege.SELECT)
 
 	var mb mutationBuilder
 	mb.init(b, "delete", tab, *alias)

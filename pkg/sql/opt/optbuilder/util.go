@@ -445,9 +445,9 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	return sch, resName
 }
 
-// resolveTable returns the data source in the catalog with the given name. If
-// the name does not resolve to a table, or if the current user does not have
-// the given privilege, then resolveTable raises an error.
+// resolveTable returns the table in the catalog with the given name. If the
+// name does not resolve to a table, or if the current user does not have the
+// given privilege, then resolveTable raises an error.
 func (b *Builder) resolveTable(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.Table, tree.TableName) {
@@ -457,6 +457,18 @@ func (b *Builder) resolveTable(
 		panic(sqlbase.NewWrongObjectTypeError(tn, "table"))
 	}
 	return tab, resName
+}
+
+// resolveTableRef returns the table in the catalog that matches the given
+// TableRef spec. If the name does not resolve to a table, or if the current
+// user does not have the given privilege, then resolveTableRef raises an error.
+func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.Table {
+	ds := b.resolveDataSourceRef(ref, priv)
+	tab, ok := ds.(cat.Table)
+	if !ok {
+		panic(sqlbase.NewWrongObjectTypeError(ref, "table"))
+	}
+	return tab
 }
 
 // resolveDataSource returns the data source in the catalog with the given name.

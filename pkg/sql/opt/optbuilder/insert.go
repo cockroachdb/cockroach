@@ -162,23 +162,73 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// INSERT INTO xx AS yy - we want to know about xx (tn) because
 	// that's what we get the descriptor with, and yy (alias) because
 	// that's what RETURNING will use.
-	tn, alias := getAliasedTableName(ins.Table)
+	n, alias := getAliasedTableExpr(ins.Table)
 
 	// Find which table we're working on, check the permissions.
-	tab, resName := b.resolveTable(tn, privilege.INSERT)
-	if alias == nil {
-		alias = &resName
+	var tab cat.Table
+	var depName opt.MDDepName
+	switch t := n.(type) {
+	case *tree.TableName:
+		var resName tree.TableName
+		tab, resName = b.resolveTable(t, privilege.INSERT)
+		if alias == nil {
+			alias = &resName
+		}
+		depName = opt.DepByName(t)
+	case *tree.TableRef:
+		tab = b.resolveTableRef(t, privilege.INSERT)
+		if alias == nil {
+			alias = tree.NewUnqualifiedTableName(t.As.Alias)
+		}
+		depName = opt.DepByID(cat.StableID(t.TableID))
+
+		// It is possible to insert into specific columns using table reference
+		// syntax:
+		// INSERT INTO [<table_id>(<col1_id>,<col2_id>) AS <alias>] ...
+		// is equivalent to
+		// INSERT INTO [<table_id> AS <alias>] (col1_name, col2_name) ...
+		if t.Columns != nil {
+			if len(t.Columns) == 0 {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"an explicit list of column IDs must include at least one column"))
+			}
+
+			if len(ins.Columns) != 0 {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"cannot specify both a list of column IDs and a list of column names "))
+			}
+			ins.Columns = make(tree.NameList, len(t.Columns))
+
+			for i, c := range t.Columns {
+				ord := 0
+				cnt := tab.ColumnCount()
+				for ord < cnt {
+					if tab.Column(ord).ColID() == cat.StableID(c) {
+						break
+					}
+					ord++
+				}
+				if ord >= cnt {
+					panic(pgerror.Newf(pgcode.UndefinedColumn,
+						"column [%d] does not exist", c))
+				}
+				ins.Columns[i] = tab.Column(ord).ColName()
+			}
+		}
+	default:
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%q does not resolve to a table", tree.ErrString(n)))
 	}
 
 	if ins.OnConflict != nil {
 		// UPSERT and INDEX ON CONFLICT will read from the table to check for
 		// duplicates.
-		b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
+		b.checkPrivilege(depName, tab, privilege.SELECT)
 
 		if !ins.OnConflict.DoNothing {
 			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows if the
 			// DO NOTHING clause is not present.
-			b.checkPrivilege(opt.DepByName(tn), tab, privilege.UPDATE)
+			b.checkPrivilege(depName, tab, privilege.UPDATE)
 		}
 	}
 
