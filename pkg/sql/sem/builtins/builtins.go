@@ -4819,9 +4819,14 @@ func truncateTimestamp(
 		day, hour, min, sec, nsec = dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
 
 	case "week", "weeks":
-		// Subtract (day of week * nanoseconds per day) to get date as of previous Sunday.
-		previousSunday := fromTime.Add(time.Duration(-1 * int64(fromTime.Weekday()) * int64(time.Hour) * 24))
-		year, month, day = previousSunday.Year(), previousSunday.Month(), previousSunday.Day()
+		// Subtract (day of week * nanoseconds per day) to get Sunday, then add a day to get Monday.
+		previousMonday := fromTime.Add(-1 * time.Hour * 24 * time.Duration(fromTime.Weekday()-1))
+		if fromTime.Weekday() == time.Sunday {
+			// The math above does not work for Sunday, as it roll forward to the next Monday.
+			// As such, subtract six days instead.
+			previousMonday = fromTime.Add(-6 * time.Hour * 24)
+		}
+		year, month, day = previousMonday.Year(), previousMonday.Month(), previousMonday.Day()
 		hour, min, sec, nsec = hourTrunc, minTrunc, secTrunc, nsecTrunc
 
 	case "day", "days":
