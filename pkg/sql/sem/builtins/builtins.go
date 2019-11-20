@@ -1805,12 +1805,13 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTSTZ := args[1].(*tree.DTimestampTZ)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				return extractStringFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
 				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
-				"hour, minute, second, millisecond, microsecond, epoch",
+				"hour, minute, second, millisecond, microsecond, epoch,\n" +
+				"timezone, timezone_hour, timezone_minute",
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
@@ -4502,16 +4503,25 @@ func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, e
 	return extractStringFromTimeOfDay(t, timeSpan)
 }
 
-func extractStringFromTimeTZ(fromTime *tree.DTimeTZ, timeSpan string) (tree.Datum, error) {
+func extractTimezoneFromOffset(offsetSecs int32, timeSpan string) tree.Datum {
 	switch timeSpan {
 	case "timezone":
-		return tree.NewDFloat(tree.DFloat(float64(-fromTime.OffsetSecs))), nil
+		return tree.NewDFloat(tree.DFloat(float64(offsetSecs)))
 	case "timezone_hour", "timezone_hours":
-		numHours := -fromTime.OffsetSecs / secsPerHour
-		return tree.NewDFloat(tree.DFloat(float64(numHours))), nil
+		numHours := offsetSecs / secsPerHour
+		return tree.NewDFloat(tree.DFloat(float64(numHours)))
 	case "timezone_minute", "timezone_minutes":
-		numMinutes := -fromTime.OffsetSecs / secsPerMinute
-		return tree.NewDFloat(tree.DFloat(float64(numMinutes % 60))), nil
+		numMinutes := offsetSecs / secsPerMinute
+		return tree.NewDFloat(tree.DFloat(float64(numMinutes % 60)))
+	}
+	return nil
+}
+
+func extractStringFromTimeTZ(fromTime *tree.DTimeTZ, timeSpan string) (tree.Datum, error) {
+	if ret := extractTimezoneFromOffset(-fromTime.OffsetSecs, timeSpan); ret != nil {
+		return ret, nil
+	}
+	switch timeSpan {
 	case "epoch":
 		// Epoch should additionally add the zone offset.
 		seconds := float64(time.Duration(fromTime.TimeOfDay))*float64(time.Microsecond)/float64(time.Second) + float64(fromTime.OffsetSecs)
@@ -4557,6 +4567,22 @@ func dateToJulianDay(year int, month int, day int) int {
 	jd += 7834*month/256 + day
 
 	return jd
+}
+
+func extractStringFromTimestampTZ(
+	ctx *tree.EvalContext, fromTime time.Time, timeSpan string,
+) (tree.Datum, error) {
+	_, offsetSecs := fromTime.Zone()
+	if ret := extractTimezoneFromOffset(int32(offsetSecs), timeSpan); ret != nil {
+		return ret, nil
+	}
+
+	// time.Time's Year(), Month(), Day(), ISOWeek(), etc. all deal in terms
+	// of UTC, rather than as the timezone.
+	// Remedy this by assuming that the timezone is UTC (to prevent confusion)
+	// and offsetting time when using extractStringFromTimestamp.
+	pretendTime := fromTime.In(time.UTC).Add(time.Duration(offsetSecs) * time.Second)
+	return extractStringFromTimestamp(ctx, pretendTime, timeSpan)
 }
 
 func extractStringFromTimestamp(
