@@ -14,6 +14,7 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
+import { DatePicker } from "antd";
 
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
@@ -92,6 +93,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   }
 
   renderStatements = () => {
+    const { RangePicker } = DatePicker;
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
@@ -133,6 +135,9 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
               </div>
               Last cleared {this.props.lastReset}.
             </h4>
+          </PageConfigItem>
+          <PageConfigItem>
+            <RangePicker onChange={() => {}} />
           </PageConfigItem>
         </PageConfig>
 
