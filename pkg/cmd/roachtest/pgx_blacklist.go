@@ -62,7 +62,7 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestListenNotify": "41522",
 	"v4.TestListenNotifySelfNotification": "41522",
 	"v4.TestListenNotifyWhileBusyIsSafe": "41522",
-	"v4.TestQueryContextErrorWhileReceivingRows": "unknown",
+	"v4.TestQueryContextErrorWhileReceivingRows": "unknown", // expects some rows returned before error
 	"v4.TestQueryEncodeError": "unknown", // error doesn't match
 	"v4.TestRowDecode": "unknown",
 	"v4.TestTransactionSuccessfulCommit": "31632",
