@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"golang.org/x/sync/errgroup"
 )
@@ -100,7 +101,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 			// Wait for the servers to bind their ports.
 			if err := retry.ForDuration(10*time.Second, func() error {
 				for i := 1; i <= c.spec.NodeCount; i++ {
-					resp, err := http.Get(urlMap[i] + "/health")
+					resp, err := httputil.Get(ctx, urlMap[i]+"/health")
 					if err != nil {
 						return err
 					}

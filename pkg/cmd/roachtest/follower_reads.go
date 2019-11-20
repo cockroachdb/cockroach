@@ -304,7 +304,7 @@ func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
 			url := "http://" + c.ExternalAdminUIAddr(ctx, c.Node(node))[0] + "/_status/vars"
-			resp, err := http.Get(url)
+			resp, err := httputil.Get(ctx, url)
 			if err != nil {
 				return err
 			}

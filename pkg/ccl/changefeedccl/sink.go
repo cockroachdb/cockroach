@@ -485,7 +485,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 	}
 
 	for topic := range s.topics {
-		payload, err := encoder.EncodeResolvedTimestamp(topic, resolved)
+		payload, err := encoder.EncodeResolvedTimestamp(ctx, topic, resolved)
 		if err != nil {
 			return err
 		}
@@ -707,7 +707,7 @@ func (s *sqlSink) EmitResolvedTimestamp(
 ) error {
 	var noKey, noValue []byte
 	for topic := range s.topics {
-		payload, err := encoder.EncodeResolvedTimestamp(topic, resolved)
+		payload, err := encoder.EncodeResolvedTimestamp(ctx, topic, resolved)
 		if err != nil {
 			return err
 		}
@@ -811,13 +811,13 @@ func (s *bufferSink) EmitRow(
 
 // EmitResolvedTimestamp implements the Sink interface.
 func (s *bufferSink) EmitResolvedTimestamp(
-	_ context.Context, encoder Encoder, resolved hlc.Timestamp,
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	if s.closed {
 		return errors.New(`cannot EmitResolvedTimestamp on a closed sink`)
 	}
 	var noTopic string
-	payload, err := encoder.EncodeResolvedTimestamp(noTopic, resolved)
+	payload, err := encoder.EncodeResolvedTimestamp(ctx, noTopic, resolved)
 	if err != nil {
 		return err
 	}
