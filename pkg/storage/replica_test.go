@@ -636,7 +636,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				ba.Txn.WriteTooOld = true
 			}
 			if c.isTSOff {
-				ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
+				ba.Txn.WriteTimestamp = ba.Txn.ReadTimestamp.Add(1, 0)
 			}
 		} else {
 			require.False(t, c.isRestarted)
@@ -1626,7 +1626,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	}
 	// Execute a get to resolve the intent.
 	req3 := getArgs(key)
-	if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: txn.Timestamp}, &req3); pErr != nil {
+	if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: txn.WriteTimestamp}, &req3); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1790,7 +1790,7 @@ func pushTxnArgs(
 		RequestHeader: roachpb.RequestHeader{
 			Key: pushee.Key,
 		},
-		PushTo:    pusher.Timestamp.Next(),
+		PushTo:    pusher.WriteTimestamp.Next(),
 		PusherTxn: *pusher,
 		PusheeTxn: pushee.TxnMeta,
 		PushType:  pushType,
@@ -2834,8 +2834,8 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	// Read at tNew to populate the read timestamp cache.
 	// DeleteRange at tNew to populate the write timestamp cache.
 	txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-	txnNew.OrigTimestamp = tsNew
-	txnNew.Timestamp = tsNew
+	txnNew.ReadTimestamp = tsNew
+	txnNew.WriteTimestamp = tsNew
 	keyGet := roachpb.Key("get")
 	keyDeleteRange := roachpb.Key("delete-range")
 	gArgs := getArgs(keyGet)
@@ -2851,8 +2851,8 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	// Write under the timestamp cache within the transaction, and verify that
 	// the intents are written above the timestamp cache.
 	txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-	txnOld.OrigTimestamp = tsOld
-	txnOld.Timestamp = tsOld
+	txnOld.ReadTimestamp = tsOld
+	txnOld.WriteTimestamp = tsOld
 	for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
 		t.Run(string(key), func(t *testing.T) {
 			pArgs := putArgs(key, []byte("foo"))
@@ -2904,12 +2904,12 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	// Try a transactional conditional put at a lower timestamp and
 	// ensure it is pushed.
 	txnEarly := newTransaction("test", key, 1, tc.Clock())
-	txnEarly.OrigTimestamp, txnEarly.Timestamp = t1, t1
+	txnEarly.ReadTimestamp, txnEarly.WriteTimestamp = t1, t1
 	cpArgs2 := cPutArgs(key, []byte("value"), nil)
 	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
 		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 
@@ -2937,11 +2937,11 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 	abortIntent(cpArgs2.Span(), txnEarly)
 	txnLater := *txnEarly
-	txnLater.OrigTimestamp, txnLater.Timestamp = t3, t3
+	txnLater.ReadTimestamp, txnLater.WriteTimestamp = t3, t3
 	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.Timestamp; respTS != t3 {
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t3 {
 		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
 	}
 
@@ -2953,7 +2953,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
 		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 }
@@ -2994,11 +2994,11 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	// Try a transactional init put at a lower timestamp and
 	// ensure it is pushed.
 	txnEarly := newTransaction("test", key, 1, tc.Clock())
-	txnEarly.OrigTimestamp, txnEarly.Timestamp = t1, t1
+	txnEarly.ReadTimestamp, txnEarly.WriteTimestamp = t1, t1
 	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
 		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 
@@ -3026,11 +3026,11 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 	abortIntent(ipArgs1.Span(), txnEarly)
 	txnLater := *txnEarly
-	txnLater.OrigTimestamp, txnLater.Timestamp = t3, t3
+	txnLater.ReadTimestamp, txnLater.WriteTimestamp = t3, t3
 	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.Timestamp; respTS != t3 {
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t3 {
 		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
 	}
 
@@ -3042,7 +3042,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
-	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
 		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 }
@@ -3136,8 +3136,8 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		if br.Txn.Timestamp != txn.Timestamp {
-			t.Errorf("expected timestamp not to advance %s != %s", br.Timestamp, txn.Timestamp)
+		if br.Txn.WriteTimestamp != txn.WriteTimestamp {
+			t.Errorf("expected timestamp not to advance %s != %s", br.Timestamp, txn.WriteTimestamp)
 		}
 	}
 }
@@ -3176,8 +3176,8 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if br.Txn.Timestamp != txn.Timestamp {
-		t.Errorf("expected timestamp to remain %s; got %s", txn.Timestamp, br.Timestamp)
+	if br.Txn.WriteTimestamp != txn.WriteTimestamp {
+		t.Errorf("expected timestamp to remain %s; got %s", txn.WriteTimestamp, br.Timestamp)
 	}
 
 	// Resolve the intent.
@@ -3186,12 +3186,12 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 		IntentTxn:     txn.TxnMeta,
 		Status:        roachpb.COMMITTED,
 	}
-	if _, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: txn.Timestamp}, rArgs); pErr != nil {
+	if _, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: txn.WriteTimestamp}, rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Finally, try a non-transactional write and verify timestamp is incremented.
-	ts := txn.Timestamp
+	ts := txn.WriteTimestamp
 	expTS := ts
 	expTS.Logical++
 
@@ -3269,7 +3269,7 @@ func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 	txn.Sequence = 100
 	entry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
-		Timestamp: txn.Timestamp,
+		Timestamp: txn.WriteTimestamp,
 		Priority:  0,
 	}
 	if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
@@ -3601,7 +3601,7 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			name: "reissued write at lower timestamp",
 			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
 				txnHighTS := txn.Clone()
-				txnHighTS.Timestamp = txnHighTS.Timestamp.Add(1, 0)
+				txnHighTS.WriteTimestamp = txnHighTS.WriteTimestamp.Add(1, 0)
 
 				args := putArgs(key, val1)
 				args.Sequence = 2
@@ -3634,7 +3634,7 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, key []byte) error {
 				txnHighTS := txn.Clone()
-				txnHighTS.Timestamp = txnHighTS.Timestamp.Add(1, 0)
+				txnHighTS.WriteTimestamp = txnHighTS.WriteTimestamp.Add(1, 0)
 
 				args := putArgs(key, val1)
 				args.Sequence = 2
@@ -3742,14 +3742,14 @@ func TestEndTransactionDeadline(t *testing.T) {
 			// No deadline.
 		case 1:
 			// Past deadline.
-			ts := txn.Timestamp.Prev()
+			ts := txn.WriteTimestamp.Prev()
 			etArgs.Deadline = &ts
 		case 2:
 			// Equal deadline.
-			etArgs.Deadline = &txn.Timestamp
+			etArgs.Deadline = &txn.WriteTimestamp
 		case 3:
 			// Future deadline.
-			ts := txn.Timestamp.Next()
+			ts := txn.WriteTimestamp.Next()
 			etArgs.Deadline = &ts
 		}
 
@@ -3814,7 +3814,7 @@ func TestSerializableDeadline(t *testing.T) {
 	// Send an EndTransaction with a deadline below the point where the txn
 	// has been pushed.
 	etArgs, etHeader := endTxnArgs(txn, true /* commit */)
-	deadline := updatedPushee.Timestamp
+	deadline := updatedPushee.WriteTimestamp
 	deadline.Logical--
 	etArgs.Deadline = &deadline
 	_, pErr = tc.SendWrappedWith(etHeader, &etArgs)
@@ -3964,7 +3964,7 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 	put := putArgs(key, []byte("value"))
 	et, etH := endTxnArgs(txn, true)
 	// Past deadline.
-	ts := txn.Timestamp.Prev()
+	ts := txn.WriteTimestamp.Prev()
 	et.Deadline = &ts
 
 	var ba roachpb.BatchRequest
@@ -3982,7 +3982,7 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 // timestamp is used when writing values in a 1PC transaction. We
 // verify this by updating the timestamp cache for the key being
 // written so that the timestamp there is greater than the txn's
-// OrigTimestamp.
+// ReadTimestamp.
 func Test1PCTransactionWriteTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -4311,51 +4311,50 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 func TestEndTransactionWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
-	regressTS := tc.Clock().Now()
 	txn := newTransaction("test", roachpb.Key(""), 1, tc.Clock())
 
 	testCases := []struct {
 		key          roachpb.Key
 		existStatus  roachpb.TransactionStatus
 		existEpoch   enginepb.TxnEpoch
-		existTS      hlc.Timestamp
 		expErrRegexp string
 	}{
-		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "already committed"},
-		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp,
+		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, "already committed"},
+		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch,
 			regexp.QuoteMeta("TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)")},
-		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "epoch regression: 0"},
-		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, `timestamp regression: 0`},
+		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, "epoch regression: 0"},
 	}
-	for i, test := range testCases {
-		// Establish existing txn state by writing directly to range engine.
-		existTxn := txn.Clone()
-		existTxn.Key = test.key
-		existTxn.Status = test.existStatus
-		existTxn.Epoch = test.existEpoch
-		existTxn.Timestamp = test.existTS
-		existTxnRecord := existTxn.AsRecord()
-		txnKey := keys.TransactionKey(test.key, txn.ID)
-		if err := engine.MVCCPutProto(context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
-			nil, &existTxnRecord); err != nil {
-			t.Fatal(err)
-		}
+	for _, test := range testCases {
+		t.Run("", func(t *testing.T) {
+			// Establish existing txn state by writing directly to range engine.
+			existTxn := txn.Clone()
+			existTxn.Key = test.key
+			existTxn.Status = test.existStatus
+			existTxn.Epoch = test.existEpoch
+			existTxnRecord := existTxn.AsRecord()
+			txnKey := keys.TransactionKey(test.key, txn.ID)
+			if err := engine.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
+				nil, &existTxnRecord); err != nil {
+				t.Fatal(err)
+			}
 
-		// End the transaction, verify expected error.
-		txn.Key = test.key
-		args, h := endTxnArgs(txn, true)
-		args.Sequence = 2
+			// End the transaction, verify expected error.
+			txn.Key = test.key
+			args, h := endTxnArgs(txn, true)
+			args.Sequence = 2
 
-		if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
-			t.Errorf("%d: expected error:\n%s\nto match:\n%s", i, pErr, test.expErrRegexp)
-		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == (uuid.UUID{}) {
-			// Prevent regression of #5591.
-			t.Fatalf("%d: received empty Transaction proto in error", i)
-		}
+			if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
+				t.Fatalf("expected error:\n%s\nto match:\n%s", pErr, test.expErrRegexp)
+			} else if txn := pErr.GetTxn(); txn != nil && txn.ID == (uuid.UUID{}) {
+				// Prevent regression of #5591.
+				t.Fatalf("received empty Transaction proto in error")
+			}
+		})
 	}
 }
 
@@ -5263,10 +5262,10 @@ func TestAbortSpanError(t *testing.T) {
 	txn.ID = uuid.MakeV4()
 	txn.Priority = 1
 	txn.Sequence = 1
-	txn.Timestamp = tc.Clock().Now().Add(1, 0)
+	txn.WriteTimestamp = tc.Clock().Now().Add(1, 0)
 
 	key := roachpb.Key("k")
-	ts := txn.Timestamp.Next()
+	ts := txn.WriteTimestamp.Next()
 	priority := enginepb.TxnPriority(10)
 	entry := roachpb.AbortSpanEntry{
 		Key:       key,
@@ -5281,7 +5280,7 @@ func TestAbortSpanError(t *testing.T) {
 	pErr := checkIfTxnAborted(context.Background(), rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
-		expected.Timestamp = txn.Timestamp
+		expected.WriteTimestamp = txn.WriteTimestamp
 		expected.Priority = priority
 		expected.Status = roachpb.ABORTED
 		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), expected) {
@@ -5412,21 +5411,21 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		pusher.Priority = enginepb.MaxTxnPriority // Pusher will win
 
 		// First, establish "start" of existing pushee's txn via HeartbeatTxn.
-		pushee.Timestamp = test.startTS
+		pushee.WriteTimestamp = test.startTS
 		pushee.LastHeartbeat = test.startTS
-		pushee.OrigTimestamp = test.startTS
-		hb, hbH := heartbeatArgs(pushee, pushee.Timestamp)
+		pushee.ReadTimestamp = test.startTS
+		hb, hbH := heartbeatArgs(pushee, pushee.WriteTimestamp)
 		if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), hbH, &hb); pErr != nil {
 			t.Fatal(pErr)
 		}
 
 		// Now, attempt to push the transaction using updated timestamp.
-		pushee.Timestamp = test.ts
+		pushee.WriteTimestamp = test.ts
 		args := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 
 		// Set header timestamp to the maximum of the pusher and pushee timestamps.
 		h := roachpb.Header{Timestamp: args.PushTo}
-		h.Timestamp.Forward(pushee.Timestamp)
+		h.Timestamp.Forward(pushee.WriteTimestamp)
 		resp, pErr := tc.SendWrappedWith(h, &args)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -5436,7 +5435,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn := expTxnRecord.AsTransaction()
 		expTxn.Priority = enginepb.MaxTxnPriority - 1
 		expTxn.Epoch = pushee.Epoch // no change
-		expTxn.Timestamp = test.expTS
+		expTxn.WriteTimestamp = test.expTS
 		expTxn.LastHeartbeat = test.expTS
 		expTxn.Status = roachpb.ABORTED
 
@@ -5461,7 +5460,7 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	pushee.Epoch = 12345
 	pushee.Sequence = 2
 	ts := tc.Clock().Now()
-	pushee.Timestamp = ts
+	pushee.WriteTimestamp = ts
 	pushee.LastHeartbeat = ts
 
 	pusher := newTransaction("test", key, 1, tc.Clock())
@@ -5593,7 +5592,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			if test.status == -1 {
 				t.Fatal("cannot heartbeat transaction record if it doesn't exist")
 			}
-			pushee.LastHeartbeat = pushee.OrigTimestamp.Add(test.heartbeatOffset, 0)
+			pushee.LastHeartbeat = pushee.ReadTimestamp.Add(test.heartbeatOffset, 0)
 		}
 
 		switch test.status {
@@ -5602,7 +5601,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		case roachpb.PENDING:
 			// Establish "start" of existing pushee's txn via HeartbeatTxn request
 			// if the test case wants an existing transaction record.
-			hb, hbH := heartbeatArgs(pushee, pushee.Timestamp)
+			hb, hbH := heartbeatArgs(pushee, pushee.WriteTimestamp)
 			if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), hbH, &hb); pErr != nil {
 				t.Fatalf("%d: %s", i, pErr)
 			}
@@ -5620,7 +5619,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Now, attempt to push the transaction with Now set to the txn start time + offset.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
-		args.PushTo = pushee.OrigTimestamp.Add(test.timeOffset, 0)
+		args.PushTo = pushee.ReadTimestamp.Add(test.timeOffset, 0)
 
 		reply, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
 		if !testutils.IsPError(pErr, test.expErr) {
@@ -5728,8 +5727,8 @@ func TestPushTxnPriorities(t *testing.T) {
 		pushee := newTransaction("test", key, 1, tc.Clock())
 		pusher.Priority = test.pusherPriority
 		pushee.Priority = test.pusheePriority
-		pusher.Timestamp = test.pusherTS
-		pushee.Timestamp = test.pusheeTS
+		pusher.WriteTimestamp = test.pusherTS
+		pushee.WriteTimestamp = test.pusheeTS
 		// Make sure pusher ID is greater; if priorities and timestamps are the same,
 		// the greater ID succeeds with push.
 		if bytes.Compare(pusher.ID.GetBytes(), pushee.ID.GetBytes()) < 0 {
@@ -5746,7 +5745,7 @@ func TestPushTxnPriorities(t *testing.T) {
 
 		// Set header timestamp to the maximum of the pusher and pushee timestamps.
 		h := roachpb.Header{Timestamp: args.PushTo}
-		h.Timestamp.Forward(pushee.Timestamp)
+		h.Timestamp.Forward(pushee.WriteTimestamp)
 		_, pErr := tc.SendWrappedWith(h, &args)
 
 		if test.expSuccess != (pErr == nil) {
@@ -5775,8 +5774,8 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	pusher.Priority = enginepb.MaxTxnPriority
 	pushee.Priority = enginepb.MinTxnPriority // pusher will win
 	now := tc.Clock().Now()
-	pusher.Timestamp = now.Add(50, 25)
-	pushee.Timestamp = now.Add(5, 1)
+	pusher.WriteTimestamp = now.Add(50, 25)
+	pushee.WriteTimestamp = now.Add(5, 1)
 
 	key := roachpb.Key("a")
 	put := putArgs(key, key)
@@ -5792,11 +5791,11 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 	if pErr != nil {
 		t.Fatalf("unexpected error on push: %s", pErr)
 	}
-	expTS := pusher.Timestamp
+	expTS := pusher.WriteTimestamp
 	expTS.Logical++
 	reply := resp.(*roachpb.PushTxnResponse)
-	if reply.PusheeTxn.Timestamp != expTS {
-		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.Timestamp)
+	if reply.PusheeTxn.WriteTimestamp != expTS {
+		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.WriteTimestamp)
 	}
 	if reply.PusheeTxn.Status != roachpb.PENDING {
 		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
@@ -5817,8 +5816,8 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 	pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
 	now := tc.Clock().Now()
-	pusher.Timestamp = now.Add(50, 0)
-	pushee.Timestamp = now.Add(50, 1)
+	pusher.WriteTimestamp = now.Add(50, 0)
+	pushee.WriteTimestamp = now.Add(50, 1)
 
 	key := roachpb.Key("a")
 	put := putArgs(key, key)
@@ -5835,8 +5834,8 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 		t.Fatalf("unexpected pError on push: %s", pErr)
 	}
 	reply := resp.(*roachpb.PushTxnResponse)
-	if reply.PusheeTxn.Timestamp != pushee.Timestamp {
-		t.Errorf("expected timestamp to be equal to original %+v; got %+v", pushee.Timestamp, reply.PusheeTxn.Timestamp)
+	if reply.PusheeTxn.WriteTimestamp != pushee.WriteTimestamp {
+		t.Errorf("expected timestamp to be equal to original %+v; got %+v", pushee.WriteTimestamp, reply.PusheeTxn.WriteTimestamp)
 	}
 	if reply.PusheeTxn.Status != roachpb.PENDING {
 		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
@@ -5887,10 +5886,10 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 		t.Fatalf("expected retry error; got %s", pErr)
 	}
 	pusheeCopy := *pushee
-	pushee.Restart(1, 1, pusher.Timestamp)
+	pushee.Restart(1, 1, pusher.WriteTimestamp)
 
 	// Next push pushee to advance timestamp of txn record.
-	pusher.Timestamp = tc.repl.store.Clock().Now()
+	pusher.WriteTimestamp = tc.repl.store.Clock().Now()
 	args := pushTxnArgs(pusher, &pusheeCopy, roachpb.PUSH_TIMESTAMP)
 	if _, pErr := tc.SendWrapped(&args); pErr != nil {
 		t.Fatal(pErr)
@@ -5911,8 +5910,8 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	// Verify that the returned transaction has timestamp equal to the
 	// pushed timestamp. This verifies that the BeginTransaction found
 	// the pushed record and propagated it.
-	if txn := pErr.GetTxn(); txn.Timestamp != pusher.Timestamp.Next() {
-		t.Errorf("expected retry error txn timestamp %s; got %s", pusher.Timestamp, txn.Timestamp)
+	if txn := pErr.GetTxn(); txn.WriteTimestamp != pusher.WriteTimestamp.Next() {
+		t.Errorf("expected retry error txn timestamp %s; got %s", pusher.WriteTimestamp, txn.WriteTimestamp)
 	}
 }
 
@@ -5949,7 +5948,7 @@ func TestQueryIntentRequest(t *testing.T) {
 			qiRes, pErr := tc.SendWrappedWith(roachpb.Header{Txn: baTxn}, &qiArgs)
 			if errIfMissing && !expectIntent {
 				ownIntent := baTxn != nil && baTxn.ID == txnMeta.ID
-				if ownIntent && txnMeta.Timestamp.Less(txn.Timestamp) {
+				if ownIntent && txnMeta.WriteTimestamp.Less(txn.WriteTimestamp) {
 					if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 						t.Fatalf("expected TransactionRetryError, found %v %v", txnMeta, pErr)
 					}
@@ -5998,7 +5997,7 @@ func TestQueryIntentRequest(t *testing.T) {
 			// See the comment on QueryIntentRequest.Txn for an explanation of why
 			// the request behaves like this.
 			largerTSMeta := txn.TxnMeta
-			largerTSMeta.Timestamp = largerTSMeta.Timestamp.Next()
+			largerTSMeta.WriteTimestamp = largerTSMeta.WriteTimestamp.Next()
 			queryIntent(key1, largerTSMeta, baTxn, true)
 
 			// Query the intent with a smaller timestamp. Should not see an
@@ -6006,7 +6005,7 @@ func TestQueryIntentRequest(t *testing.T) {
 			// the smaller timestamp will be forwarded to the batch header
 			// transaction's timestamp.
 			smallerTSMeta := txn.TxnMeta
-			smallerTSMeta.Timestamp = smallerTSMeta.Timestamp.Prev()
+			smallerTSMeta.WriteTimestamp = smallerTSMeta.WriteTimestamp.Prev()
 			queryIntent(key1, smallerTSMeta, baTxn, baTxn == txn)
 
 			// Query the intent with a larger sequence number. Should not see an intent.
@@ -6034,7 +6033,7 @@ func TestQueryIntentRequest(t *testing.T) {
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
-			if br.Txn.Timestamp == br.Txn.OrigTimestamp {
+			if br.Txn.WriteTimestamp == br.Txn.ReadTimestamp {
 				t.Fatalf("transaction timestamp not bumped: %v", br.Txn)
 			}
 		}
@@ -8497,8 +8496,8 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		if !txn.Timestamp.Less(resp.Timestamp) {
-			t.Fatalf("expected txn ts %s < scan TS %s", txn.Timestamp, resp.Timestamp)
+		if !txn.WriteTimestamp.Less(resp.Timestamp) {
+			t.Fatalf("expected txn ts %s < scan TS %s", txn.WriteTimestamp, resp.Timestamp)
 		}
 		return resp.Timestamp
 	}()
@@ -8524,10 +8523,10 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	}
 	if resp.Txn == nil {
 		t.Fatal("no transaction in response")
-	} else if resp.Txn.Timestamp.Less(minNewTS) {
+	} else if resp.Txn.WriteTimestamp.Less(minNewTS) {
 		t.Fatalf(
 			"expected txn ts bumped at least to %s, but got %s",
-			minNewTS, txn.Timestamp,
+			minNewTS, txn.WriteTimestamp,
 		)
 	}
 }
@@ -8547,7 +8546,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Txn = txn
-	ba.Timestamp = txn.Timestamp
+	ba.Timestamp = txn.WriteTimestamp
 	txnPut := putArgs(key, []byte("foo"))
 	txnPut2 := txnPut
 	// Add two puts (the second one gets Sequence 2, which was a failure mode
@@ -9054,9 +9053,9 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			// Update the transaction's timestamps so that it
 			// doesn't run into issues with the new cluster.
 			now := tc.Clock().Now()
-			txn.Timestamp = now
+			txn.WriteTimestamp = now
 			txn.MinTimestamp = now
-			txn.OrigTimestamp = now
+			txn.ReadTimestamp = now
 
 			if c.setup != nil {
 				if pErr := c.setup(ctx, repl); pErr != nil {
@@ -9081,8 +9080,8 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			ba.RangeID = repl.RangeID
 			if c.useTxn {
 				ba.Txn = txn
-				ba.Txn.OrigTimestamp = markerTS
-				ba.Txn.Timestamp = markerTS
+				ba.Txn.ReadTimestamp = markerTS
+				ba.Txn.WriteTimestamp = markerTS
 				assignSeqNumsForReqs(txn, c.req)
 			}
 			ba.Add(c.req)
@@ -10098,7 +10097,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	ctx := context.Background()
 	k := roachpb.Key("key")
 
-	// Start a transaction and assign its OrigTimestamp.
+	// Start a transaction and assign its ReadTimestamp.
 	ts1 := tc.Clock().Now()
 	txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, ts1, 0)
 
@@ -10116,7 +10115,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// tricky.
 	tc.manualClock.Increment(10)
 	ts3 := tc.Clock().Now()
-	txn.Timestamp.Forward(ts3)
+	txn.WriteTimestamp.Forward(ts3)
 
 	// Execute the write phase of the transaction as a single batch,
 	// which must return a WRITE_TOO_OLD TransactionRetryError.
@@ -10457,7 +10456,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10555,7 +10554,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
-				record.Timestamp.Forward(pushTs)
+				record.WriteTimestamp.Forward(pushTs)
 				record.Priority = pusher.Priority - 1
 				return record
 			},
@@ -10672,8 +10671,8 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.RefreshedTimestamp.Forward(now)
-				clone.Timestamp.Forward(now)
+				clone.ReadTimestamp.Forward(now)
+				clone.WriteTimestamp.Forward(now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				// Add different in-flight writes to test whether they are
 				// replaced by the second EndTransaction request.
@@ -10683,7 +10682,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.InFlightWrites = otherInFlightWrites
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10710,7 +10709,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.InFlightWrites = otherInFlightWrites
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10813,14 +10812,14 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.Timestamp = clone.Timestamp.Add(0, 1)
+				clone.WriteTimestamp = clone.WriteTimestamp.Add(0, 1)
 				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
-				record.Timestamp.Forward(pushTs)
+				record.WriteTimestamp.Forward(pushTs)
 				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
@@ -10838,13 +10837,13 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.Timestamp = clone.Timestamp.Add(0, 1)
+				clone.WriteTimestamp = clone.WriteTimestamp.Add(0, 1)
 				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
-				record.Timestamp = record.Timestamp.Add(0, 1)
+				record.WriteTimestamp = record.WriteTimestamp.Add(0, 1)
 				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
@@ -10862,7 +10861,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.Restart(-1, 0, clone.Timestamp.Add(0, 1))
+				clone.Restart(-1, 0, clone.WriteTimestamp.Add(0, 1))
 				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
@@ -10870,7 +10869,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(pushTs)
+				record.WriteTimestamp.Forward(pushTs)
 				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
@@ -10888,14 +10887,14 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.Restart(-1, 0, clone.Timestamp.Add(0, 1))
+				clone.Restart(-1, 0, clone.WriteTimestamp.Add(0, 1))
 				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp = record.Timestamp.Add(0, 1)
+				record.WriteTimestamp = record.WriteTimestamp.Add(0, 1)
 				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
@@ -10935,7 +10934,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
-				// increment its OrigTimestamp as well. We used to check the GC
+				// increment its ReadTimestamp as well. We used to check the GC
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
@@ -11330,7 +11329,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11347,7 +11346,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				record.LastHeartbeat.Forward(now.Add(0, 5))
 				return record
 			},
@@ -11434,7 +11433,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
-				// increment its OrigTimestamp as well. We used to check the GC
+				// increment its ReadTimestamp as well. We used to check the GC
 				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
@@ -11525,8 +11524,8 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "recover transaction (implicitly committed) after end transaction (stage) with timestamp increase",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.RefreshedTimestamp.Forward(now)
-				clone.Timestamp.Forward(now)
+				clone.ReadTimestamp.Forward(now)
+				clone.WriteTimestamp.Forward(now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				et.InFlightWrites = inFlightWrites
 				return sendWrappedWithErr(etH, &et)
@@ -11538,7 +11537,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expError: "timestamp change by implicitly committed transaction",
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11560,7 +11559,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11654,7 +11653,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11686,8 +11685,8 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			name: "recover transaction (not implicitly committed) after end transaction (stage) with timestamp increase",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
-				clone.RefreshedTimestamp.Forward(now)
-				clone.Timestamp.Forward(now)
+				clone.ReadTimestamp.Forward(now)
+				clone.WriteTimestamp.Forward(now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				et.InFlightWrites = inFlightWrites
 				return sendWrappedWithErr(etH, &et)
@@ -11699,7 +11698,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				// Unchanged by the RecoverTxn request.
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11723,7 +11722,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(now)
+				record.WriteTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -12032,7 +12031,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 			Txn:     txn,
 		},
 	}
-	ba.Timestamp = txn.OrigTimestamp
+	ba.Timestamp = txn.ReadTimestamp
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
@@ -12125,7 +12124,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 			Txn:     txn,
 		},
 	}
-	ba.Timestamp = txn.OrigTimestamp
+	ba.Timestamp = txn.ReadTimestamp
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,

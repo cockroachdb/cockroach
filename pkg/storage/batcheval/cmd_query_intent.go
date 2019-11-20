@@ -85,11 +85,11 @@ func QueryIntent(
 			// If the request is querying an intent for its own transaction, forward
 			// the timestamp we compare against to the provisional commit timestamp
 			// in the batch header.
-			cmpTS := args.Txn.Timestamp
+			cmpTS := args.Txn.WriteTimestamp
 			if ownTxn {
-				cmpTS.Forward(h.Txn.Timestamp)
+				cmpTS.Forward(h.Txn.WriteTimestamp)
 			}
-			if cmpTS.Less(intent.Txn.Timestamp) {
+			if cmpTS.Less(intent.Txn.WriteTimestamp) {
 				// The intent matched but was pushed to a later timestamp. Consider a
 				// pushed intent a missing intent.
 				curIntentPushed = true
@@ -99,7 +99,7 @@ func QueryIntent(
 				// the response transaction.
 				if ownTxn {
 					reply.Txn = h.Txn.Clone()
-					reply.Txn.Timestamp.Forward(intent.Txn.Timestamp)
+					reply.Txn.WriteTimestamp.Forward(intent.Txn.WriteTimestamp)
 				}
 			}
 		}

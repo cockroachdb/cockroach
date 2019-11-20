@@ -168,29 +168,29 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			txn1ID := uuid.MakeV4()
 			txn1 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey1,
-					ID:        txn1ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey1,
+					ID:             txn1ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
-				OrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn1Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
 			txn2ID := uuid.MakeV4()
 			txn2 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey2,
-					ID:        txn2ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey2,
+					ID:             txn2ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
-				OrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn2Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("intents",
@@ -256,29 +256,29 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			txn1ID := uuid.MakeV4()
 			txn1 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey1,
-					ID:        txn1ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey1,
+					ID:             txn1ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
-				OrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn1Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.OrigTimestamp, txn1Val, &txn1); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
 			txn2ID := uuid.MakeV4()
 			txn2 := roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       testKey2,
-					ID:        txn2ID,
-					Epoch:     1,
-					Timestamp: ts4,
+					Key:            testKey2,
+					ID:             txn2ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
 				},
-				OrigTimestamp: ts4,
+				ReadTimestamp: ts4,
 			}
 			txn2Val := roachpb.Value{RawBytes: testValue4}
-			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.OrigTimestamp, txn2Val, &txn2); err != nil {
+			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("intents",
@@ -355,13 +355,13 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 			ts3 := hlc.Timestamp{WallTime: 3}
 			txn := &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Key:       roachpb.Key("b"),
-					ID:        uuid.MakeV4(),
-					Epoch:     1,
-					Timestamp: ts1,
-					Sequence:  1,
+					Key:            roachpb.Key("b"),
+					ID:             uuid.MakeV4(),
+					Epoch:          1,
+					WriteTimestamp: ts1,
+					Sequence:       1,
 				},
-				OrigTimestamp: ts1,
+				ReadTimestamp: ts1,
 			}
 			if err := MVCCPut(ctx, e, nil, kA, ts1, vA1, txn); err != nil {
 				t.Fatal(err)
@@ -373,7 +373,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 			g, _ := errgroup.WithContext(ctx)
 			g.Go(func() error {
 				// Re-write the intent with a higher timestamp.
-				txn.Timestamp = ts3
+				txn.WriteTimestamp = ts3
 				txn.Sequence = 2
 				return MVCCPut(ctx, e, nil, kA, ts1, vA2, txn)
 			})

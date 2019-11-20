@@ -99,7 +99,7 @@ func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
 				TxnID:           meta.Txn.ID,
 				TxnKey:          meta.Txn.Key,
 				TxnMinTimestamp: meta.Txn.MinTimestamp,
-				Timestamp:       meta.Txn.Timestamp,
+				Timestamp:       meta.Txn.WriteTimestamp,
 			})
 			s.p.sendEvent(event{ops: ops[:]}, 0 /* timeout */)
 		}
@@ -185,7 +185,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// forward the txn's timestamp in its unresolvedIntentQueue.
 			ops[i].SetValue(&enginepb.MVCCUpdateIntentOp{
 				TxnID:     txn.ID,
-				Timestamp: txn.Timestamp,
+				Timestamp: txn.WriteTimestamp,
 			})
 		case roachpb.COMMITTED:
 			// The transaction is committed and its timestamp may have moved
@@ -195,7 +195,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// transaction's intents to actually be resolved.
 			ops[i].SetValue(&enginepb.MVCCUpdateIntentOp{
 				TxnID:     txn.ID,
-				Timestamp: txn.Timestamp,
+				Timestamp: txn.WriteTimestamp,
 			})
 
 			// Asynchronously clean up the transaction's intents, which should

@@ -1779,8 +1779,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// If the pushee is already pushed, update the transaction record.
 			if tc.pusheeAlreadyPushed {
 				pushedTs := store.cfg.Clock.Now()
-				pushee.Timestamp.Forward(pushedTs)
-				pushee.RefreshedTimestamp.Forward(pushedTs)
+				pushee.WriteTimestamp.Forward(pushedTs)
+				pushee.ReadTimestamp.Forward(pushedTs)
 				hb, hbH := heartbeatArgs(pushee, store.cfg.Clock.Now())
 				if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), hbH, &hb); pErr != nil {
 					t.Fatal(pErr)
@@ -1801,8 +1801,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			}
 
 			// Now, try to read value using the pusher's txn.
-			pusher.OrigTimestamp.Forward(readTs)
-			pusher.Timestamp.Forward(readTs)
+			pusher.ReadTimestamp.Forward(readTs)
+			pusher.WriteTimestamp.Forward(readTs)
 			gArgs := getArgs(key)
 			assignSeqNumsForReqs(pusher, &gArgs)
 			repl, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: pusher}, &gArgs)
@@ -1850,7 +1850,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	pushee := newTransaction("test", key, 1, store.cfg.Clock)
 
 	// First, write the pushee's txn via HeartbeatTxn request.
-	hb, hbH := heartbeatArgs(pushee, pushee.Timestamp)
+	hb, hbH := heartbeatArgs(pushee, pushee.WriteTimestamp)
 	if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), hbH, &hb); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1904,8 +1904,8 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// former read, since we have it available in write intent error.
 	minExpTS := getTS
 	minExpTS.Logical++
-	if txn.Timestamp.Less(minExpTS) {
-		t.Errorf("expected pushee timestamp pushed to %s; got %s", minExpTS, txn.Timestamp)
+	if txn.WriteTimestamp.Less(minExpTS) {
+		t.Errorf("expected pushee timestamp pushed to %s; got %s", minExpTS, txn.WriteTimestamp)
 	}
 	// Similarly, verify that pushee's priority was moved from 0
 	// to MaxTxnPriority-1 during push.

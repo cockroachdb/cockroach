@@ -485,13 +485,13 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 	j.mu.payload.Lease = lease
 
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		// Note: although the following uses OrigTimestamp and
-		// OrigTimestamp can diverge from the value of now() throughout a
+		// Note: although the following uses ReadTimestamp and
+		// ReadTimestamp can diverge from the value of now() throughout a
 		// transaction, this may be OK -- we merely required ModifiedMicro
 		// to be equal *or greater* than previously inserted timestamps
-		// computed by now(). For now OrigTimestamp can only move forward
-		// and the assertion OrigTimestamp >= now() holds at all times.
-		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
+		// computed by now(). For now ReadTimestamp can only move forward
+		// and the assertion ReadTimestamp >= now() holds at all times.
+		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
 		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 		if err != nil {
 			return err

@@ -137,7 +137,7 @@ type TxnSender interface {
 	TxnStatus() roachpb.TransactionStatus
 
 	// SetFixedTimestamp makes the transaction run in an unusual way, at a "fixed
-	// timestamp": Timestamp and OrigTimestamp are set to ts, there's no clock
+	// timestamp": Timestamp and ReadTimestamp are set to ts, there's no clock
 	// uncertainty, and the txn's deadline is set to ts such that the transaction
 	// can't be pushed to a different timestamp.
 	//
@@ -168,11 +168,11 @@ type TxnSender interface {
 	// like the transaction that merges ranges together.
 	DisablePipelining() error
 
-	// OrigTimestamp returns the transaction's starting timestamp.
+	// ReadTimestamp returns the transaction's current read timestamp.
 	// Note a transaction can be internally pushed forward in time before
 	// committing so this is not guaranteed to be the commit timestamp.
 	// Use CommitTimestamp() when needed.
-	OrigTimestamp() hlc.Timestamp
+	ReadTimestamp() hlc.Timestamp
 
 	// CommitTimestamp returns the transaction's start timestamp.
 	// The start timestamp can get pushed but the use of this
@@ -318,14 +318,14 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 	m.txn.Name = name
 }
 
-// OrigTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) OrigTimestamp() hlc.Timestamp {
-	return m.txn.OrigTimestamp
+// ReadTimestamp is part of the TxnSender interface.
+func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
+	return m.txn.ReadTimestamp
 }
 
 // CommitTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
-	return m.txn.OrigTimestamp
+	return m.txn.ReadTimestamp
 }
 
 // CommitTimestampFixed is part of the TxnSender interface.
@@ -335,10 +335,14 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 
 // SetFixedTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
-	m.txn.Timestamp = ts
-	m.txn.OrigTimestamp = ts
+	m.txn.WriteTimestamp = ts
+	m.txn.ReadTimestamp = ts
 	m.txn.MaxTimestamp = ts
-	m.txn.OrigTimestampWasObserved = true
+	m.txn.CommitTimestampFixed = true
+
+	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too (although
+	// not really needed by this Mock sender).
+	m.txn.DeprecatedOrigTimestamp = ts
 }
 
 // ManualRestart is part of the TxnSender interface.

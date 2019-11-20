@@ -63,7 +63,7 @@ func TestCanSendToFollower(t *testing.T) {
 		WallTime: timeutil.Now().Add(2 * expectedFollowerReadOffset).UnixNano(),
 	}
 	oldHeader := roachpb.Header{Txn: &roachpb.Transaction{
-		OrigTimestamp: old,
+		ReadTimestamp: old,
 	}}
 	rw := roachpb.BatchRequest{Header: oldHeader}
 	rw.Add(&roachpb.PutRequest{})
@@ -88,7 +88,7 @@ func TestCanSendToFollower(t *testing.T) {
 	roRWTxnOld := roachpb.BatchRequest{Header: roachpb.Header{
 		Txn: &roachpb.Transaction{
 			TxnMeta:       enginepb.TxnMeta{Key: []byte("key")},
-			OrigTimestamp: old,
+			ReadTimestamp: old,
 		},
 	}}
 	roRWTxnOld.Add(&roachpb.GetRequest{})
@@ -102,7 +102,7 @@ func TestCanSendToFollower(t *testing.T) {
 	storage.FollowerReadsEnabled.Override(&st.SV, true)
 	roNew := roachpb.BatchRequest{Header: roachpb.Header{
 		Txn: &roachpb.Transaction{
-			OrigTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+			ReadTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 		},
 	}}
 	if canSendToFollower(uuid.MakeV4(), st, roNew) {

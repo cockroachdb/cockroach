@@ -516,6 +516,7 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx := context.Background()
 
 	writeSkewKey := "write-skew"
 	keys := []string{"a", "b", "c"}
@@ -524,7 +525,7 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 	// Launch goroutine to write the three keys on three successive epochs.
 	go func() {
 		var count int
-		errChan <- s.DB.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			// Read the write skew key, which will be written by another goroutine
 			// to ensure transaction restarts.
 			if _, err := txn.Get(ctx, writeSkewKey); err != nil {
@@ -541,6 +542,14 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 			count++
 			return nil
 		})
+		if err != nil {
+			errChan <- err
+		} else if count < len(keys) {
+			errChan <- fmt.Errorf(
+				"expected to have to retry %d times and only retried %d times", len(keys), count-1)
+		} else {
+			errChan <- nil
+		}
 	}()
 
 	step := func(key string, causeWriteSkew bool) {
@@ -548,12 +557,12 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 		<-ch
 		if causeWriteSkew {
 			// Write to the write skew key to ensure a restart.
-			if err := s.DB.Put(context.Background(), writeSkewKey, "skew-"+key); err != nil {
+			if err := s.DB.Put(ctx, writeSkewKey, "skew-"+key); err != nil {
 				t.Fatal(err)
 			}
 		}
 		// Read key to push txn's timestamp forward on its write.
-		if _, err := s.DB.Get(context.Background(), key); err != nil {
+		if _, err := s.DB.Get(ctx, key); err != nil {
 			t.Fatal(err)
 		}
 		// Signal the transaction to continue.
@@ -574,7 +583,7 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 
 	// Read values for three keys. The first two should be empty, the last should be "txn".
 	for i, k := range keys {
-		v, err := s.DB.Get(context.TODO(), k)
+		v, err := s.DB.Get(ctx, k)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -609,9 +618,9 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 				}
 				injected = true
 				txn := ba.Txn.Clone()
-				refreshTS = txn.Timestamp.Add(0, 1)
+				refreshTS = txn.WriteTimestamp.Add(0, 1)
 				pErr := roachpb.NewReadWithinUncertaintyIntervalError(
-					txn.OrigTimestamp,
+					txn.ReadTimestamp,
 					refreshTS,
 					txn)
 				return roachpb.NewErrorWithTxn(pErr, txn)

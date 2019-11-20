@@ -47,15 +47,15 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 
 	headerTxn := txn.Clone()
 	pushedHeaderTxn := txn.Clone()
-	pushedHeaderTxn.Timestamp.Forward(ts2)
+	pushedHeaderTxn.WriteTimestamp.Forward(ts2)
 	refreshedHeaderTxn := txn.Clone()
-	refreshedHeaderTxn.Timestamp.Forward(ts2)
-	refreshedHeaderTxn.RefreshedTimestamp.Forward(ts2)
+	refreshedHeaderTxn.WriteTimestamp.Forward(ts2)
+	refreshedHeaderTxn.ReadTimestamp.Forward(ts2)
 	restartedHeaderTxn := txn.Clone()
 	restartedHeaderTxn.Restart(-1, 0, ts2)
 	restartedAndPushedHeaderTxn := txn.Clone()
 	restartedAndPushedHeaderTxn.Restart(-1, 0, ts2)
-	restartedAndPushedHeaderTxn.Timestamp.Forward(ts3)
+	restartedAndPushedHeaderTxn.WriteTimestamp.Forward(ts3)
 
 	pendingRecord := func() *roachpb.TransactionRecord {
 		record := txn.AsRecord()
@@ -266,7 +266,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -284,7 +284,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -303,7 +303,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -321,7 +321,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -367,7 +367,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -385,7 +385,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -404,7 +404,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -422,7 +422,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -541,7 +541,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -558,7 +558,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -576,7 +576,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -593,7 +593,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -644,7 +644,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *abortedRecord
 				record.Epoch++
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -663,7 +663,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
 				record.Epoch++
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -681,7 +681,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
 				record.Epoch++
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -794,7 +794,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *abortedRecord
 				record.Epoch++
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -813,7 +813,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *stagingRecord
 				record.Epoch++
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -831,7 +831,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expTxn: func() *roachpb.TransactionRecord {
 				record := *committedRecord
 				record.Epoch++
-				record.Timestamp.Forward(ts2)
+				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -922,49 +922,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			commit:    true,
 			// Expected result.
 			expError: "programming error: epoch regression",
-		},
-		{
-			name: "record pending, try rollback at lower timestamp",
-			// Replica state.
-			existingTxn: func() *roachpb.TransactionRecord {
-				record := *pendingRecord
-				record.Timestamp = hlc.Timestamp{Logical: 1}
-				return &record
-			}(),
-			// Request state.
-			headerTxn: headerTxn,
-			commit:    false,
-			// Expected result.
-			expError: "programming error: timestamp regression",
-		},
-		{
-			name: "record pending, try stage at lower timestamp",
-			// Replica state.
-			existingTxn: func() *roachpb.TransactionRecord {
-				record := *pendingRecord
-				record.Timestamp = hlc.Timestamp{Logical: 1}
-				return &record
-			}(),
-			// Request state.
-			headerTxn:      headerTxn,
-			commit:         true,
-			inFlightWrites: writes,
-			// Expected result.
-			expError: "programming error: timestamp regression",
-		},
-		{
-			name: "record pending, try commit at lower timestamp",
-			// Replica state.
-			existingTxn: func() *roachpb.TransactionRecord {
-				record := *pendingRecord
-				record.Timestamp = hlc.Timestamp{Logical: 1}
-				return &record
-			}(),
-			// Request state.
-			headerTxn: headerTxn,
-			commit:    true,
-			// Expected result.
-			expError: "programming error: timestamp regression",
 		},
 		{
 			name: "record committed, try rollback",

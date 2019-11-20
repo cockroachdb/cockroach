@@ -343,7 +343,7 @@ func updateStatsOnPut(
 
 		// Note that there is an interesting special case here: it's possible that
 		// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
-		// outside of tests (due to our semantics of txn.OrigTimestamp, which never
+		// outside of tests (due to our semantics of txn.ReadTimestamp, which never
 		// decreases) but it sure does happen in randomized testing. An earlier
 		// version of the code used `Forward` here, which is incorrect as it would be
 		// a no-op and fail to subtract out the intent bytes/GC age incurred due to
@@ -821,8 +821,8 @@ func MVCCGetAsTxn(
 		Txn: &roachpb.Transaction{
 			TxnMeta:       txnMeta,
 			Status:        roachpb.PENDING,
-			OrigTimestamp: txnMeta.Timestamp,
-			MaxTimestamp:  txnMeta.Timestamp,
+			ReadTimestamp: txnMeta.WriteTimestamp,
+			MaxTimestamp:  txnMeta.WriteTimestamp,
 		}})
 }
 
@@ -1377,20 +1377,18 @@ func replayTransactionalWrite(
 // dictate the timestamp of the operation, and the timestamp parameter
 // is redundant. Specifically, the intent is written at the txn's
 // provisional commit timestamp, txn.Timestamp, unless it is
-// forwarded by an existing committed value beneath that timestamp.
+// forwarded by an existing committed value above that timestamp.
 // However, reads (e.g., for a ConditionalPut) are performed at the
-// txn's original timestamp, txn.OrigTimestamp, to ensure that the
+// txn's read timestamp (txn.ReadTimestamp) to ensure that the
 // client sees a consistent snapshot of the database. Any existing
-// committed writes that are newer than txn.OrigTimestamp will thus
-// generate a WriteTooOld error. If txn.RefreshedTimestamp is set,
-// it is used in place of txn.OrigTimestamp.
+// committed writes that are newer than the read timestamp will thus
+// generate a WriteTooOld error.
 //
-// In an attempt to reduce confusion about which timestamp applies,
-// when writing transactionally, the timestamp parameter must be
-// equal to txn.OrigTimestamp. (One could imagine instead requiring
-// that the timestamp parameter be set to hlc.Timestamp{} when writing
-// transactionally, but hlc.Timestamp{} is already used as a sentinel
-// for inline puts.)
+// In an attempt to reduce confusion about which timestamp applies, when writing
+// transactionally, the timestamp parameter must be equal to the transaction's
+// read timestamp. (One could imagine instead requiring that the timestamp
+// parameter be set to hlc.Timestamp{} when writing transactionally, but
+// hlc.Timestamp{} is already used as a sentinel for inline puts.)
 func mvccPutInternal(
 	ctx context.Context,
 	engine Writer,
@@ -1460,13 +1458,16 @@ func mvccPutInternal(
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
 	if txn != nil {
-		readTimestamp = txn.OrigTimestamp
-		readTimestamp.Forward(txn.RefreshedTimestamp)
+		readTimestamp = txn.ReadTimestamp
+		// For compatibility with 19.2 nodes which might not have set
+		// ReadTimestamp, fallback to DeprecatedOrigTimestamp.
+		readTimestamp.Forward(txn.DeprecatedOrigTimestamp)
 		if readTimestamp != timestamp {
-			return errors.Errorf("mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
-				txn.OrigTimestamp, timestamp)
+			return errors.AssertionFailedf(
+				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
+				readTimestamp, timestamp)
 		}
-		writeTimestamp = txn.Timestamp
+		writeTimestamp = txn.WriteTimestamp
 	}
 
 	timestamp = hlc.Timestamp{} // prevent accidental use below
@@ -2631,15 +2632,15 @@ func mvccResolveWriteIntent(
 			gbuf.meta = buf.meta
 
 			v, _, _, err := mvccGetInternal(ctx, iter, metaKey,
-				intent.Txn.Timestamp, false, unsafeValue, nil, gbuf)
+				intent.Txn.WriteTimestamp, false, unsafeValue, nil, gbuf)
 			if err != nil {
 				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
-					intent.Key, intent.Txn.Timestamp, err)
+					intent.Key, intent.Txn.WriteTimestamp, err)
 			} else if v == nil {
 				// This can happen if the committed value was already GCed.
 				log.Warningf(ctx, "unable to find value for %s @ %s (%+v vs %+v)",
-					intent.Key, intent.Txn.Timestamp, meta, intent.Txn)
-			} else if v.Timestamp != intent.Txn.Timestamp {
+					intent.Key, intent.Txn.WriteTimestamp, meta, intent.Txn)
+			} else if v.Timestamp != intent.Txn.WriteTimestamp {
 				// This should never happen. If we find a value when seeking
 				// to the intent's commit timestamp then that value should
 				// always have the correct timestamp. Finding a value without
@@ -2647,7 +2648,7 @@ func mvccResolveWriteIntent(
 				// committed value was already GCed, because we now found a
 				// version with an even lower timestamp.
 				log.Warningf(ctx, "unable to find value for %s @ %s: %s (txn=%+v)",
-					intent.Key, intent.Txn.Timestamp, v.Timestamp, intent.Txn)
+					intent.Key, intent.Txn.WriteTimestamp, v.Timestamp, intent.Txn)
 			}
 		}
 		return false, nil
@@ -2674,7 +2675,7 @@ func mvccResolveWriteIntent(
 	// combined with replays of intent resolution make this configuration a
 	// possibility. We treat such intents as uncommitted.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
-	timestampsValid := !intent.Txn.Timestamp.Less(hlc.Timestamp(meta.Timestamp))
+	timestampsValid := !intent.Txn.WriteTimestamp.Less(hlc.Timestamp(meta.Timestamp))
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
 
 	// Note the small difference to commit epoch handling here: We allow
@@ -2703,7 +2704,7 @@ func mvccResolveWriteIntent(
 	// TODO(tschottdorf): various epoch-related scenarios here deserve more
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
-	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.Timestamp)
+	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.WriteTimestamp)
 
 	// There's nothing to do if meta's epoch is greater than or equal txn's
 	// epoch and the state is still in progress but the intent was not pushed
@@ -2719,7 +2720,7 @@ func mvccResolveWriteIntent(
 	if commit || pushed {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
-		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.Timestamp)
+		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.WriteTimestamp)
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
@@ -2760,7 +2761,7 @@ func mvccResolveWriteIntent(
 			iter = nil // prevent accidental use below
 
 			// Rewrite the versioned value at the new timestamp.
-			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.Timestamp}
+			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
 			valBytes, err := engine.Get(latestKey)
 			if err != nil {
 				return false, err
@@ -2787,7 +2788,7 @@ func mvccResolveWriteIntent(
 		engine.LogLogicalOp(logicalOp, MVCCLogicalOpDetails{
 			Txn:       intent.Txn,
 			Key:       intent.Key,
-			Timestamp: intent.Txn.Timestamp,
+			Timestamp: intent.Txn.WriteTimestamp,
 		})
 
 		return true, nil

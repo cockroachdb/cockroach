@@ -794,17 +794,18 @@ func MakeTransaction(
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:          baseKey,
-			ID:           u,
-			Timestamp:    now,
-			MinTimestamp: now,
-			Priority:     MakePriority(userPriority),
-			Sequence:     0, // 1-indexed, incremented before each Request
+			Key:            baseKey,
+			ID:             u,
+			WriteTimestamp: now,
+			MinTimestamp:   now,
+			Priority:       MakePriority(userPriority),
+			Sequence:       0, // 1-indexed, incremented before each Request
 		},
-		Name:          name,
-		LastHeartbeat: now,
-		OrigTimestamp: now,
-		MaxTimestamp:  maxTS,
+		Name:                    name,
+		LastHeartbeat:           now,
+		ReadTimestamp:           now,
+		MaxTimestamp:            maxTS,
+		DeprecatedOrigTimestamp: now, // For compatibility with 19.2.
 	}
 }
 
@@ -831,12 +832,14 @@ func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
 }
 
 // LastActive returns the last timestamp at which client activity definitely
-// occurred, i.e. the maximum of OrigTimestamp and LastHeartbeat.
+// occurred, i.e. the maximum of ReadTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
-	if ts.Less(t.OrigTimestamp) {
-		ts = t.OrigTimestamp
-	}
+	ts.Forward(t.ReadTimestamp)
+
+	// For compatibility with 19.2, handle the case where ReadTimestamp isn't
+	// set.
+	ts.Forward(t.DeprecatedOrigTimestamp)
 	return ts
 }
 
@@ -848,7 +851,7 @@ func (t Transaction) Clone() *Transaction {
 
 // AssertInitialized crashes if the transaction is not initialized.
 func (t *Transaction) AssertInitialized(ctx context.Context) {
-	if t.ID == (uuid.UUID{}) || t.Timestamp == (hlc.Timestamp{}) {
+	if t.ID == (uuid.UUID{}) || t.WriteTimestamp == (hlc.Timestamp{}) {
 		log.Fatalf(ctx, "uninitialized txn: %s", *t)
 	}
 }
@@ -946,11 +949,11 @@ func (t *Transaction) Restart(
 	userPriority UserPriority, upgradePriority enginepb.TxnPriority, timestamp hlc.Timestamp,
 ) {
 	t.BumpEpoch()
-	if t.Timestamp.Less(timestamp) {
-		t.Timestamp = timestamp
+	if t.WriteTimestamp.Less(timestamp) {
+		t.WriteTimestamp = timestamp
 	}
-	// Set original timestamp to current timestamp on restart.
-	t.OrigTimestamp = t.Timestamp
+	t.ReadTimestamp = t.WriteTimestamp
+	t.DeprecatedOrigTimestamp = t.WriteTimestamp // For 19.2 compatibility.
 	// Upgrade priority to the maximum of:
 	// - the current transaction priority
 	// - a random priority created from userPriority
@@ -960,7 +963,7 @@ func (t *Transaction) Restart(
 	// Reset all epoch-scoped state.
 	t.Sequence = 0
 	t.WriteTooOld = false
-	t.OrigTimestampWasObserved = false
+	t.CommitTimestampFixed = false
 	t.IntentSpans = nil
 	t.InFlightWrites = nil
 }
@@ -969,9 +972,6 @@ func (t *Transaction) Restart(
 // restart. This invalidates all write intents previously written at lower
 // epochs.
 func (t *Transaction) BumpEpoch() {
-	if t.Epoch == 0 {
-		t.DeprecatedMinTimestamp = t.OrigTimestamp
-	}
 	t.Epoch++
 }
 
@@ -979,17 +979,9 @@ func (t *Transaction) BumpEpoch() {
 // part of this transaction have a timestamp in the interval [start, end].
 func (t *Transaction) InclusiveTimeBounds() (hlc.Timestamp, hlc.Timestamp) {
 	min := t.MinTimestamp
-	max := t.Timestamp
+	max := t.WriteTimestamp
 	if min.IsEmpty() {
-		// Backwards compatibility with pre-v19.2 nodes.
-		// TODO(nvanbenschoten): Remove in v20.1.
-		min = t.OrigTimestamp
-		if t.Epoch != 0 && t.DeprecatedMinTimestamp != (hlc.Timestamp{}) {
-			if min.Less(t.DeprecatedMinTimestamp) {
-				panic(fmt.Sprintf("orig timestamp %s less than deprecated min timestamp %s", min, t.DeprecatedMinTimestamp))
-			}
-			min = t.DeprecatedMinTimestamp
-		}
+		log.Fatalf(context.TODO(), "missing MinTimestamp on txn: %s", t)
 	}
 	return min, max
 }
@@ -1019,7 +1011,7 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Epoch = o.Epoch
 		t.Status = o.Status
 		t.WriteTooOld = o.WriteTooOld
-		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+		t.CommitTimestampFixed = o.CommitTimestampFixed
 		t.Sequence = o.Sequence
 		t.IntentSpans = o.IntentSpans
 		t.InFlightWrites = o.InFlightWrites
@@ -1042,12 +1034,12 @@ func (t *Transaction) Update(o *Transaction) {
 
 		// If the refreshed timestamp move forward, overwrite
 		// WriteTooOld, otherwise the flags are cumulative.
-		if t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
+		if t.ReadTimestamp.Less(o.ReadTimestamp) {
 			t.WriteTooOld = o.WriteTooOld
-			t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
+			t.CommitTimestampFixed = o.CommitTimestampFixed
 		} else {
 			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-			t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
+			t.CommitTimestampFixed = t.CommitTimestampFixed || o.CommitTimestampFixed
 		}
 
 		if t.Sequence < o.Sequence {
@@ -1067,11 +1059,11 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 
 	// Forward each of the transaction timestamps.
-	t.Timestamp.Forward(o.Timestamp)
+	t.WriteTimestamp.Forward(o.WriteTimestamp)
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
-	t.OrigTimestamp.Forward(o.OrigTimestamp)
+	t.DeprecatedOrigTimestamp.Forward(o.DeprecatedOrigTimestamp)
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
-	t.RefreshedTimestamp.Forward(o.RefreshedTimestamp)
+	t.ReadTimestamp.Forward(o.ReadTimestamp)
 
 	// On update, set lower bound timestamps to the minimum seen by either txn.
 	// These shouldn't differ unless one of them is empty, but we're careful
@@ -1080,11 +1072,6 @@ func (t *Transaction) Update(o *Transaction) {
 		t.MinTimestamp = o.MinTimestamp
 	} else if o.MinTimestamp != (hlc.Timestamp{}) {
 		t.MinTimestamp.Backward(o.MinTimestamp)
-	}
-	if t.DeprecatedMinTimestamp == (hlc.Timestamp{}) {
-		t.DeprecatedMinTimestamp = o.DeprecatedMinTimestamp
-	} else if o.DeprecatedMinTimestamp != (hlc.Timestamp{}) {
-		t.DeprecatedMinTimestamp.Backward(o.DeprecatedMinTimestamp)
 	}
 
 	// Absorb the collected clock uncertainty information.
@@ -1120,8 +1107,8 @@ func (t Transaction) String() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s orig=%s max=%s rts=%s wto=%t",
-		t.TxnMeta, t.IsWriting(), t.Status, t.OrigTimestamp, t.MaxTimestamp, t.RefreshedTimestamp, t.WriteTooOld)
+	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
+		t.TxnMeta, t.IsWriting(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1140,8 +1127,8 @@ func (t Transaction) SafeMessage() string {
 	if len(t.Name) > 0 {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
-	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s orig=%s max=%s rts=%s wto=%t",
-		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.OrigTimestamp, t.MaxTimestamp, t.RefreshedTimestamp, t.WriteTooOld)
+	fmt.Fprintf(&buf, "meta={%s} rw=%t stat=%s rts=%s wto=%t max=%s",
+		t.TxnMeta.SafeMessage(), t.IsWriting(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.MaxTimestamp)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1261,12 +1248,12 @@ func PrepareTransactionForRetry(
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri
 	case *ReadWithinUncertaintyIntervalError:
-		txn.Timestamp.Forward(
+		txn.WriteTimestamp.Forward(
 			readWithinUncertaintyIntervalRetryTimestamp(ctx, &txn, tErr, pErr.OriginNode))
 	case *TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're just ahead of
 		// the pushee.
-		txn.Timestamp.Forward(tErr.PusheeTxn.Timestamp)
+		txn.WriteTimestamp.Forward(tErr.PusheeTxn.WriteTimestamp)
 		txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
 	case *TransactionRetryError:
 		// Nothing to do. Transaction.Timestamp has already been forwarded to be
@@ -1274,7 +1261,7 @@ func PrepareTransactionForRetry(
 		// the restart.
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
-		txn.Timestamp.Forward(writeTooOldRetryTimestamp(&txn, tErr))
+		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(&txn, tErr))
 	default:
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
@@ -1282,23 +1269,24 @@ func PrepareTransactionForRetry(
 		if txn.Status.IsFinalized() {
 			log.Fatalf(ctx, "transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
 		}
-		txn.Restart(pri, txn.Priority, txn.Timestamp)
+		txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
 	}
 	return txn
 }
 
 // CanTransactionRetryAtRefreshedTimestamp returns whether the transaction
-// specified in the supplied error can be retried at a refreshed timestamp
-// to avoid a client-side transaction restart. If true, returns a cloned,
-// updated Transaction object with the refreshed timestamp set appropriately.
+// specified in the supplied error can be retried at a refreshed timestamp to
+// avoid a client-side transaction restart. If true, returns a cloned, updated
+// Transaction object with the provisional commit timestamp and refreshed
+// timestamp set appropriately.
 func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if txn == nil || txn.OrigTimestampWasObserved {
+	if txn == nil || txn.CommitTimestampFixed {
 		return false, nil
 	}
-	timestamp := txn.Timestamp
+	timestamp := txn.WriteTimestamp
 	switch err := pErr.GetDetail().(type) {
 	case *TransactionRetryError:
 		if err.Reason != RETRY_SERIALIZABLE && err.Reason != RETRY_WRITE_TOO_OLD {
@@ -1319,8 +1307,8 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	}
 
 	newTxn := txn.Clone()
-	newTxn.Timestamp.Forward(timestamp)
-	newTxn.RefreshedTimestamp.Forward(newTxn.Timestamp)
+	newTxn.WriteTimestamp.Forward(timestamp)
+	newTxn.ReadTimestamp.Forward(newTxn.WriteTimestamp)
 	newTxn.WriteTooOld = false
 
 	return true, newTxn

@@ -235,11 +235,11 @@ func newInternalPlanner(
 
 	var ts time.Time
 	if txn != nil {
-		origTimestamp := txn.OrigTimestamp()
-		if origTimestamp == (hlc.Timestamp{}) {
+		readTimestamp := txn.ReadTimestamp()
+		if readTimestamp == (hlc.Timestamp{}) {
 			panic("makeInternalPlanner called with a transaction without timestamps")
 		}
-		ts = origTimestamp.GoTime()
+		ts = readTimestamp.GoTime()
 	}
 
 	p := &planner{execCfg: execCfg}

@@ -107,7 +107,7 @@ func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timest
 func canSendToFollower(clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest) bool {
 	return batchCanBeEvaluatedOnFollower(ba) &&
 		txnCanPerformFollowerRead(ba.Txn) &&
-		canUseFollowerRead(clusterID, st, forward(ba.Txn.OrigTimestamp, ba.Txn.MaxTimestamp))
+		canUseFollowerRead(clusterID, st, forward(ba.Txn.ReadTimestamp, ba.Txn.MaxTimestamp))
 }
 
 func forward(ts hlc.Timestamp, to hlc.Timestamp) hlc.Timestamp {
@@ -133,7 +133,7 @@ func newOracleFactory(cfg replicaoracle.Config) replicaoracle.OracleFactory {
 }
 
 func (f oracleFactory) Oracle(txn *client.Txn) replicaoracle.Oracle {
-	if txn != nil && canUseFollowerRead(f.clusterID.Get(), f.st, txn.OrigTimestamp()) {
+	if txn != nil && canUseFollowerRead(f.clusterID.Get(), f.st, txn.ReadTimestamp()) {
 		return f.closest.Oracle(txn)
 	}
 	return f.binPacking.Oracle(txn)

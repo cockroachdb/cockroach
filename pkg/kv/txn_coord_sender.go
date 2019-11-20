@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -213,12 +213,47 @@ type txnInterceptor interface {
 type txnLockGatekeeper struct {
 	wrapped client.Sender
 	mu      sync.Locker // shared with TxnCoordSender
+
+	// If set, concurrent requests are allowed. If not set, concurrent requests
+	// result in an assertion error. Only leaf transactions are supposed allow
+	// concurrent requests - leaves don't restart the transaction and they don't
+	// bump the read timestamp through refreshes.
+	allowConcurrentRequests bool
+	// requestInFlight is set while a request is being processed by the wrapped
+	// sender. Used to detect and prevent concurrent txn use.
+	requestInFlight bool
 }
 
 // SendLocked implements the lockedSender interface.
 func (gs *txnLockGatekeeper) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	// If so configured, protect against concurrent use of the txn. Concurrent
+	// requests don't work generally because of races between clients sending
+	// requests and the TxnCoordSender restarting the transaction, and also
+	// concurrent requests are not compatible with the span refresher in
+	// particular since refreshing is invalid if done concurrently with requests
+	// in flight whose spans haven't been accounted for.
+	//
+	// As a special case, allow for async rollbacks and heartbeats to be sent
+	// whenever. As another special case, we allow concurrent requests on AS OF
+	// SYSTEM TIME transactions. I think these transactions can't experience
+	// retriable errors, so they're safe. And they're used concurrently by schema
+	// change code.
+	if !gs.allowConcurrentRequests && !ba.Txn.CommitTimestampFixed {
+		asyncRequest := ba.IsSingleAbortTransactionRequest() || ba.IsSingleHeartbeatTxnRequest()
+		if !asyncRequest {
+			if gs.requestInFlight {
+				return nil, roachpb.NewError(
+					errors.AssertionFailedf("concurrent txn use detected. ba: %s", ba))
+			}
+			gs.requestInFlight = true
+			defer func() {
+				gs.requestInFlight = false
+			}()
+		}
+	}
+
 	// Note the funky locking here: we unlock for the duration of the call and the
 	// lock again.
 	gs.mu.Unlock()
@@ -519,8 +554,9 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		autoRetryCounter: tcs.metrics.AutoRetries,
 	}
 	tcs.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
-		wrapped: tcs.wrapped,
-		mu:      &tcs.mu.Mutex,
+		wrapped:                 tcs.wrapped,
+		mu:                      &tcs.mu.Mutex,
+		allowConcurrentRequests: typ == client.LeafTxn,
 	}
 
 	// Once the interceptors are initialized, piece them all together in the
@@ -690,12 +726,10 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 func generateTxnDeadlineExceededErr(
 	txn *roachpb.Transaction, deadline hlc.Timestamp,
 ) *roachpb.Error {
-	exceededBy := txn.Timestamp.GoTime().Sub(deadline.GoTime())
-	fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
+	exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
 	extraMsg := fmt.Sprintf(
-		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
-			"original timestamp %s ago (%s)",
-		exceededBy, txn.Timestamp, deadline, fromStart, txn.OrigTimestamp)
+		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
+		exceededBy, txn.WriteTimestamp, deadline)
 	return roachpb.NewErrorWithTxn(
 		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
@@ -713,7 +747,7 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
 	deadline := ba.Requests[0].GetEndTransaction().Deadline
-	if deadline != nil && !tc.mu.txn.Timestamp.Less(*deadline) {
+	if deadline != nil && !tc.mu.txn.WriteTimestamp.Less(*deadline) {
 		txn := tc.mu.txn.Clone()
 		pErr := generateTxnDeadlineExceededErr(txn, *deadline)
 		// We need to bump the epoch and transform this retriable error.
@@ -768,7 +802,7 @@ func (tc *TxnCoordSender) Send(
 	}
 	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 	if log.V(2) {
-		ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.Timestamp)
+		ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.WriteTimestamp)
 	}
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
@@ -834,7 +868,7 @@ func (tc *TxnCoordSender) Send(
 func (tc *TxnCoordSender) maybeSleepForLinearizable(
 	ctx context.Context, br *roachpb.BatchResponse, startNs int64,
 ) {
-	if tsNS := br.Txn.Timestamp.WallTime; startNs > tsNS {
+	if tsNS := br.Txn.WriteTimestamp.WallTime; startNs > tsNS {
 		startNs = tsNS
 	}
 	maxOffset := tc.clock.MaxOffset()
@@ -1165,11 +1199,11 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 	tc.mu.txn.Name = name
 }
 
-// OrigTimestamp is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) OrigTimestamp() hlc.Timestamp {
+// ReadTimestamp is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.mu.txn.OrigTimestamp
+	return tc.mu.txn.ReadTimestamp
 }
 
 // CommitTimestamp is part of the client.TxnSender interface.
@@ -1177,26 +1211,28 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	txn := &tc.mu.txn
-	tc.mu.txn.OrigTimestampWasObserved = true
-	commitTS := txn.OrigTimestamp
-	commitTS.Forward(txn.RefreshedTimestamp)
-	return commitTS
+	tc.mu.txn.CommitTimestampFixed = true
+	return txn.ReadTimestamp
 }
 
 // CommitTimestampFixed is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.mu.txn.OrigTimestampWasObserved
+	return tc.mu.txn.CommitTimestampFixed
 }
 
 // SetFixedTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()
-	tc.mu.txn.Timestamp = ts
-	tc.mu.txn.OrigTimestamp = ts
+	tc.mu.txn.ReadTimestamp = ts
+	tc.mu.txn.WriteTimestamp = ts
 	tc.mu.txn.MaxTimestamp = ts
-	tc.mu.txn.OrigTimestampWasObserved = true
+	tc.mu.txn.CommitTimestampFixed = true
+
+	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too.
+	tc.mu.txn.DeprecatedOrigTimestamp = ts
+
 	tc.mu.Unlock()
 }
 
@@ -1230,12 +1266,10 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	origTimestamp := tc.mu.txn.OrigTimestamp
-	origTimestamp.Forward(tc.mu.txn.RefreshedTimestamp)
-	isTxnPushed := tc.mu.txn.Timestamp != origTimestamp
+	isTxnPushed := tc.mu.txn.WriteTimestamp != tc.mu.txn.ReadTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
-		tc.mu.txn.OrigTimestampWasObserved
-	// We check OrigTimestampWasObserved here because, if that's set, refreshing
+		tc.mu.txn.CommitTimestampFixed
+	// We check CommitTimestampFixed here because, if that's set, refreshing
 	// of reads is not performed.
 	return isTxnPushed && refreshAttemptNotPossible
 }

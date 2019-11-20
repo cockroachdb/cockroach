@@ -444,8 +444,10 @@ func TestGCQueueProcess(t *testing.T) {
 			var txn *roachpb.Transaction
 			if datum.txn {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
-				txn.OrigTimestamp = datum.ts
-				txn.Timestamp = datum.ts
+				// Overwrite the timestamps set by newTransaction().
+				txn.ReadTimestamp = datum.ts
+				txn.WriteTimestamp = datum.ts
+				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
@@ -459,8 +461,10 @@ func TestGCQueueProcess(t *testing.T) {
 			var txn *roachpb.Transaction
 			if datum.txn {
 				txn = newTransaction("test", datum.key, 1, tc.Clock())
-				txn.OrigTimestamp = datum.ts
-				txn.Timestamp = datum.ts
+				// Overwrite the timestamps set by newTransaction().
+				txn.ReadTimestamp = datum.ts
+				txn.WriteTimestamp = datum.ts
+				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
@@ -855,10 +859,10 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
-	txns[0].OrigTimestamp = intentResolveTS
-	txns[0].Timestamp = intentResolveTS
-	txns[1].OrigTimestamp = intentResolveTS
-	txns[1].Timestamp = intentResolveTS
+	txns[0].ReadTimestamp = intentResolveTS
+	txns[0].WriteTimestamp = intentResolveTS
+	txns[1].ReadTimestamp = intentResolveTS
+	txns[1].WriteTimestamp = intentResolveTS
 
 	// Two transactions.
 	for i := 0; i < 2; i++ {

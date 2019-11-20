@@ -163,7 +163,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
 		)
 	} else {
-		initialTS := tr.FlowCtx.Txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
+		initialTS := tr.FlowCtx.Txn.GetTxnCoordMeta(ctx).Txn.ReadTimestamp
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS,
 			tr.maxTimestampAge, tr.spans,

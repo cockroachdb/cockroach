@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -397,7 +396,7 @@ func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachp
 	}
 
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = txnMeta.Timestamp
+	ba.Timestamp = txnMeta.WriteTimestamp
 	ba.Add(qt)
 
 	db := txn.DB()
@@ -461,7 +460,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		pushedTimestamp := pusheeTxn.Timestamp
+		pushedTimestamp := pusheeTxn.WriteTimestamp
 
 		{
 			var err error
@@ -743,7 +742,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// the next attempt.
 			name: "TransactionAbortedError",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				txn.Timestamp = plus20
+				txn.WriteTimestamp = plus20
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
 			},
@@ -759,7 +758,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 					PusheeTxn: roachpb.Transaction{
-						TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: 10},
+						TxnMeta: enginepb.TxnMeta{WriteTimestamp: plus10, Priority: 10},
 					},
 				}, txn)
 			},
@@ -772,7 +771,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On retry, restart with new epoch, timestamp and priority.
 			name: "TransactionRetryError",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				txn.Timestamp = plus10
+				txn.WriteTimestamp = plus10
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{}, txn)
 			},
@@ -801,7 +800,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				} else if txn := pErr.GetTxn(); txn != nil {
 					// Update the manual clock to simulate an
 					// error updating a local hlc clock.
-					manual.Set(txn.Timestamp.WallTime)
+					manual.Set(txn.WriteTimestamp.WallTime)
 				}
 				return reply, pErr
 			}
@@ -854,13 +853,13 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				t.Errorf("expected priority = %d; got %d",
 					test.expPri, proto.Priority)
 			}
-			if proto.Timestamp != test.expTS {
+			if proto.WriteTimestamp != test.expTS {
 				t.Errorf("expected timestamp to be %s; got %s",
-					test.expTS, proto.Timestamp)
+					test.expTS, proto.WriteTimestamp)
 			}
-			if proto.OrigTimestamp != test.expOrigTS {
+			if proto.ReadTimestamp != test.expOrigTS {
 				t.Errorf("expected orig timestamp to be %s; got %s",
-					test.expOrigTS, proto.OrigTimestamp)
+					test.expOrigTS, proto.ReadTimestamp)
 			}
 			if ns := proto.ObservedTimestamps; (len(ns) != 0) != test.nodeSeen {
 				t.Errorf("expected nodeSeen=%t, but list of hosts is %v",
@@ -1177,12 +1176,12 @@ func TestTxnRestartCount(t *testing.T) {
 	}
 
 	// This put will lay down an intent, txn timestamp will increase
-	// beyond OrigTimestamp.
+	// beyond DeprecatedOrigTimestamp.
 	if err := txn.Put(ctx, writeKey, value); err != nil {
 		t.Fatal(err)
 	}
 	proto := txn.Serialize()
-	if !proto.OrigTimestamp.Less(proto.Timestamp) {
+	if !proto.ReadTimestamp.Less(proto.WriteTimestamp) {
 		t.Errorf("expected timestamp to increase: %s", proto)
 	}
 
@@ -1907,10 +1906,9 @@ func TestSequenceNumbers(t *testing.T) {
 	}
 }
 
-// TestConcurrentTxnRequests verifies that multiple requests can be executed on
-// a transaction at the same time from multiple goroutines. It makes sure that
-// exactly one BeginTxnRequest and one EndTxnRequest are sent.
-func TestConcurrentTxnRequests(t *testing.T) {
+// TestConcurrentTxnRequests verifies that multiple requests cannot be executed
+// on a transaction at the same time from multiple goroutines.
+func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -1919,15 +1917,13 @@ func TestConcurrentTxnRequests(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var callCountsMu syncutil.Mutex
-	callCounts := make(map[roachpb.Method]int)
+	putSync := make(chan struct{})
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		callCountsMu.Lock()
-		for _, m := range ba.Methods() {
-			callCounts[m]++
+		if _, ok := ba.GetArg(roachpb.Put); ok {
+			// Block the Put until the Get runs.
+			putSync <- struct{}{}
+			<-putSync
 		}
-		callCountsMu.Unlock()
-
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
@@ -1945,31 +1941,24 @@ func TestConcurrentTxnRequests(t *testing.T) {
 		},
 		sender,
 	)
-	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := client.NewDB(ambient, factory, clock)
 
-	const keys = "abcdefghijklmnopqrstuvwxyz"
-	const value = "value"
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		g, gCtx := errgroup.WithContext(ctx)
-		for _, keyChar := range keys {
-			key := string(keyChar)
-			g.Go(func() error {
-				return txn.Put(gCtx, key, value)
-			})
-		}
+		g.Go(func() error {
+			return txn.Put(gCtx, "test_put", "val")
+		})
+		g.Go(func() error {
+			// Wait for the Put to be blocked.
+			<-putSync
+			_, err := txn.Get(gCtx, "test_get")
+			// Unblock the Put.
+			putSync <- struct{}{}
+			return err
+		})
 		return g.Wait()
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	expectedCallCounts := map[roachpb.Method]int{
-		roachpb.Put:            26,
-		roachpb.QueryIntent:    26,
-		roachpb.EndTransaction: 1,
-	}
-	if !reflect.DeepEqual(expectedCallCounts, callCounts) {
-		t.Errorf("expected %v, got %v", expectedCallCounts, callCounts)
-	}
+	})
+	require.Error(t, err, "concurrent txn use detected")
 }
 
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is
@@ -2010,14 +1999,14 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		req := requests[curReq]
-		if req.expRequestTS != ba.Txn.Timestamp {
+		if req.expRequestTS != ba.Txn.WriteTimestamp {
 			return nil, roachpb.NewErrorf("%d: expected ts %s got %s",
-				curReq, req.expRequestTS, ba.Txn.Timestamp)
+				curReq, req.expRequestTS, ba.Txn.WriteTimestamp)
 		}
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		br.Txn.Timestamp.Forward(requests[curReq].responseTS)
+		br.Txn.WriteTimestamp.Forward(requests[curReq].responseTS)
 		return br, nil
 	})
 
@@ -2053,7 +2042,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 			manual.Increment(100)
 			br := ba.CreateReply()
 			br.Txn = ba.Txn.Clone()
-			br.Txn.Timestamp.Forward(clock.Now())
+			br.Txn.WriteTimestamp.Forward(clock.Now())
 			return br, nil
 		}
 		return nil, nil

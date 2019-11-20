@@ -215,13 +215,13 @@ func checkTxn(txn *client.Txn, exp expKVTxn) error {
 			*exp.userPriority, txn.UserPriority())
 	}
 	proto := txn.Serialize()
-	if exp.tsNanos != nil && *exp.tsNanos != proto.Timestamp.WallTime {
+	if exp.tsNanos != nil && *exp.tsNanos != proto.WriteTimestamp.WallTime {
 		return errors.Errorf("expected Timestamp: %d, but got: %s",
-			*exp.tsNanos, proto.Timestamp)
+			*exp.tsNanos, proto.WriteTimestamp)
 	}
-	if origTimestamp := txn.OrigTimestamp(); exp.origTSNanos != nil &&
+	if origTimestamp := txn.ReadTimestamp(); exp.origTSNanos != nil &&
 		*exp.origTSNanos != origTimestamp.WallTime {
-		return errors.Errorf("expected OrigTimestamp: %d, but got: %s",
+		return errors.Errorf("expected DeprecatedOrigTimestamp: %d, but got: %s",
 			*exp.origTSNanos, origTimestamp)
 	}
 	if exp.maxTSNanos != nil && *exp.maxTSNanos != proto.MaxTimestamp.WallTime {

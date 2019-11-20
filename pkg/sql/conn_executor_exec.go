@@ -386,9 +386,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if ts != nil {
-			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
+			if readTs := ex.state.getReadTimestamp(); *ts != readTs {
 				err = pgerror.Newf(pgcode.Syntax,
-					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", origTs)
+					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", readTs)
 				err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
 				return makeErrEvent(err)
 			}
@@ -503,7 +503,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
-	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.Serialize().Timestamp)
+	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.Serialize().WriteTimestamp)
 	if err != nil {
 		return err
 	}

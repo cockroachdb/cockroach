@@ -59,14 +59,14 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// Create an sstable containing an unresolved intent.
 	txn := &roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:       k,
-			ID:        uuid.MakeV4(),
-			Epoch:     1,
-			Timestamp: ts1,
+			Key:            k,
+			ID:             uuid.MakeV4(),
+			Epoch:          1,
+			WriteTimestamp: ts1,
 		},
-		OrigTimestamp: ts1,
+		ReadTimestamp: ts1,
 	}
-	if err := engine.MVCCPut(ctx, db, nil, k, txn.OrigTimestamp, v, txn); err != nil {
+	if err := engine.MVCCPut(ctx, db, nil, k, txn.ReadTimestamp, v, txn); err != nil {
 		t.Fatal(err)
 	}
 	if err := engine.MVCCPut(ctx, db, nil, roachpb.Key("unused1"), ts4, v, nil); err != nil {
@@ -139,14 +139,16 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 				Key:    k,
 				EndKey: keys.MaxKey,
 			},
+			RefreshFrom: ts2,
 		},
 		Header: roachpb.Header{
 			Txn: &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
-					Timestamp: ts3,
+					WriteTimestamp: ts3,
 				},
-				OrigTimestamp: ts2,
+				ReadTimestamp: ts2,
 			},
+			Timestamp: ts3,
 		},
 	}, &resp)
 	if err != nil {

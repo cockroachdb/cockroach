@@ -286,8 +286,8 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	origTimestamp := txn.OrigTimestamp()
-	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
+	readTimestamp := txn.ReadTimestamp()
+	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, dbID, tn.Table())
 	if err != nil {
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
@@ -300,15 +300,15 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 
-	if !origTimestamp.Less(expiration) {
-		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", origTimestamp, expiration)
+	if !readTimestamp.Less(expiration) {
+		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
 	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
+	// the deadline. We use ReadTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
 	txn.UpdateDeadlineMaybe(ctx, expiration)
@@ -353,8 +353,8 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	origTimestamp := txn.OrigTimestamp()
-	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
+	readTimestamp := txn.ReadTimestamp()
+	table, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
@@ -365,15 +365,15 @@ func (tc *TableCollection) getTableVersionByID(
 		return nil, err
 	}
 
-	if !origTimestamp.Less(expiration) {
-		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", origTimestamp, expiration)
+	if !readTimestamp.Less(expiration) {
+		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
 	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
+	// the deadline. We use ReadTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
 	txn.UpdateDeadlineMaybe(ctx, expiration)
