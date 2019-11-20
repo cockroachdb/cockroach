@@ -13,6 +13,7 @@ package sqlsmith
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 var (
@@ -27,6 +28,7 @@ func init() {
 		{1, makeDropTable},
 
 		{1, makeAddColumn},
+		{1, makeJSONComputedColumn},
 		{1, makeDropColumn},
 		{1, makeRenameColumn},
 		{1, makeAlterColumnType},
@@ -158,6 +160,44 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 			Expr: makeBoolExpr(s, colRefs),
 		})
 	}
+
+	return &tree.AlterTable{
+		Table: tableRef.TableName.ToUnresolvedObjectName(),
+		Cmds: tree.AlterTableCmds{
+			&tree.AlterTableAddColumn{
+				ColumnDef: col,
+			},
+		},
+	}, true
+}
+
+func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, colRefs, ok := s.getSchemaTable()
+	if !ok {
+		return nil, false
+	}
+	colRefs.stripTableName()
+	// Shuffle columns and find the first one that's JSON.
+	s.rnd.Shuffle(len(colRefs), func(i, j int) {
+		colRefs[i], colRefs[j] = colRefs[j], colRefs[i]
+	})
+	var ref *colRef
+	for _, c := range colRefs {
+		if c.typ.Family() == types.JsonFamily {
+			ref = c
+			break
+		}
+	}
+	// If we didn't find any JSON columns, return.
+	if ref == nil {
+		return nil, false
+	}
+	col, err := tree.NewColumnTableDef(s.name("col"), types.Jsonb, false /* isSerial */, nil)
+	if err != nil {
+		return nil, false
+	}
+	col.Computed.Computed = true
+	col.Computed.Expr = tree.NewTypedBinaryExpr(tree.JSONFetchText, ref.typedExpr(), sqlbase.RandDatumSimple(s.rnd, types.String), types.String)
 
 	return &tree.AlterTable{
 		Table: tableRef.TableName.ToUnresolvedObjectName(),
