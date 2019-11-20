@@ -11,7 +11,7 @@
 package main
 
 var pgxBlacklists = blacklistsForVersion{
-	{"v20.1", "pgxBlacklist20_1", pgxBlackList20_1, "", nil},
+	{"v20.1", "pgxBlacklist20_1", pgxBlackList20_1, "pgxIgnoreList20_1", nil},
 }
 
 // Please keep these lists alphabetized for easy diffing.
@@ -20,7 +20,6 @@ var pgxBlacklists = blacklistsForVersion{
 var pgxBlackList20_1 = blacklist{
 	"v4.Example_CustomType":                                                   "27796",
 	"v4.TestArrayDecoding":                                                    "unknown",
-	"v4.TestBeginIsoLevels":                                                   "unknown", // isolation levels not supported
 	"v4.TestConnBeginBatchDeferredError":                                      "31632",
 	"v4.TestConnCopyFromCopyFromSourceErrorEnd":                               "5807",
 	"v4.TestConnCopyFromCopyFromSourceErrorMidway":                            "5807",
@@ -48,7 +47,7 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestExecContextWithoutCancelation":                                    "5807",
 	"v4.TestExecExtendedProtocol":                                             "5807",
 	"v4.TestExecSimpleProtocol":                                               "5807",
-	"v4.TestFatalRxError":                                                     "unknown",
+	"v4.TestFatalRxError":                                                     "35897",
 	"v4.TestFatalTxError":                                                     "35897",
 	"v4.TestInetCIDRArrayTranscodeIP":                                         "18846",
 	"v4.TestInetCIDRArrayTranscodeIPNet":                                      "18846",
@@ -57,8 +56,8 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestInetCIDRTranscodeWithJustIP":                                      "18846",
 	"v4.TestInsertBoolArray":                                                  "5807",
 	"v4.TestInsertTimestampArray":                                             "5807",
-	"v4.TestLargeObjects":                                                     "unknown", // missing function lo_create
-	"v4.TestLargeObjectsMultipleTransactions":                                 "unknown", // missing function lo_create
+	"v4.TestLargeObjects":                                                     "42626",
+	"v4.TestLargeObjectsMultipleTransactions":                                 "42626",
 	"v4.TestListenNotify":                                                     "41522",
 	"v4.TestListenNotifySelfNotification":                                     "41522",
 	"v4.TestListenNotifyWhileBusyIsSafe":                                      "41522",
@@ -74,4 +73,8 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestTxSendBatch":                                                      "5807",
 	"v4.TestTxSendBatchRollback":                                              "5807",
 	"v4.TestUnregisteredTypeUsableAsStringArgumentAndBaseResult":              "27796",
+}
+
+var pgxIgnoreList20_1 = blacklist {
+	"v4.TestBeginIsoLevels":                                                   "we don't support isolation levels",
 }
