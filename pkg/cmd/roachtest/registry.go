@@ -55,6 +55,7 @@ func registerTests(r *testRegistry) {
 	registerLibPQ(r)
 	registerNetwork(r)
 	registerPgjdbc(r)
+	registerPgx(r)
 	registerPsycopg(r)
 	registerQueue(r)
 	registerRebalanceLoad(r)
