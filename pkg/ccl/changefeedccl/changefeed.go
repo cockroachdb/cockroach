@@ -194,12 +194,10 @@ func kvsToRows(
 					log.Infof(ctx, "changed key %s %s", input.kv.Key, input.kv.Value.Timestamp)
 				}
 				schemaTimestamp := input.kv.Value.Timestamp
-				if input.schemaTimestamp != (hlc.Timestamp{}) {
-					schemaTimestamp = input.schemaTimestamp
-				}
 				prevSchemaTimestamp := schemaTimestamp
-				if input.prevSchemaTimestamp != (hlc.Timestamp{}) {
-					prevSchemaTimestamp = input.prevSchemaTimestamp
+				if input.backfillTimestamp != (hlc.Timestamp{}) {
+					schemaTimestamp = input.backfillTimestamp
+					prevSchemaTimestamp = schemaTimestamp.Prev()
 				}
 				output, err = appendEmitEntryForKV(
 					ctx, output, input.kv, input.prevVal,

@@ -267,7 +267,7 @@ func (p *poller) rangefeedImplIter(ctx context.Context, i int) error {
 					if withDiff {
 						prevVal = t.PrevValue
 					}
-					if err := memBuf.AddKV(ctx, kv, prevVal, hlc.Timestamp{}); err != nil {
+					if err := memBuf.AddKV(ctx, kv, prevVal); err != nil {
 						return err
 					}
 				case *roachpb.RangeFeedCheckpoint:
@@ -309,7 +309,7 @@ func (p *poller) rangefeedImplIter(ctx context.Context, i int) error {
 				if pastBoundary {
 					continue
 				}
-				if err := p.buf.AddKV(ctx, e.kv, e.prevVal, e.schemaTimestamp, hlc.Timestamp{}); err != nil {
+				if err := p.buf.AddKV(ctx, e.kv, e.prevVal, e.backfillTimestamp); err != nil {
 					return err
 				}
 			} else if e.resolved != nil {
@@ -539,16 +539,14 @@ func (p *poller) slurpSST(
 		sort.Sort(byValueTimestamp(kvs))
 		for _, kv := range kvs {
 			var prevVal roachpb.Value
-			var prevSchemaTimestamp hlc.Timestamp
 			if withDiff {
 				// Include the same value for the "before" and "after" KV, but
 				// interpret them at different timestamp. Specifically, interpret
 				// the "before" KV at the timestamp immediately before the schema
-				// change.
+				// change. This is handled in kvsToRows.
 				prevVal = kv.Value
-				prevSchemaTimestamp = schemaTimestamp.Prev()
 			}
-			if err := p.buf.AddKV(ctx, kv, prevVal, schemaTimestamp, prevSchemaTimestamp); err != nil {
+			if err := p.buf.AddKV(ctx, kv, prevVal, schemaTimestamp); err != nil {
 				return err
 			}
 		}

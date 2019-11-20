@@ -31,14 +31,13 @@ type bufferEntry struct {
 	// and the before value of each change was requested (optDiff).
 	prevVal  roachpb.Value
 	resolved *jobspb.ResolvedSpan
-	// Timestamp of the schema that should be used to read this KV.
-	// If unset (zero-valued), the value's timestamp will be used instead.
-	schemaTimestamp hlc.Timestamp
-	// Timestamp of the schema that should be used to read the previous
-	// version of this KV.
-	// If unset (zero-valued), the previous value will be interpretted with
-	// the same timestamp as the current value.
-	prevSchemaTimestamp hlc.Timestamp
+	// backfillTimestamp overrides the timestamp of the schema that should be
+	// used to interpret this KV. If set and prevVal is provided, the previous
+	// timestamp will be used to interpret the previous value.
+	//
+	// If unset (zero-valued), the KV's timestamp will be used to interpret both
+	// of the current and previous values instead.
+	backfillTimestamp hlc.Timestamp
 	// bufferGetTimestamp is the time this entry came out of the buffer.
 	bufferGetTimestamp time.Time
 }
@@ -56,17 +55,12 @@ func makeBuffer() *buffer {
 // AddKV inserts a changed kv into the buffer. Individual keys must be added in
 // increasing mvcc order.
 func (b *buffer) AddKV(
-	ctx context.Context,
-	kv roachpb.KeyValue,
-	prevVal roachpb.Value,
-	schemaTimestamp hlc.Timestamp,
-	prevSchemaTimestamp hlc.Timestamp,
+	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
 ) error {
 	return b.addEntry(ctx, bufferEntry{
-		kv:                  kv,
-		prevVal:             prevVal,
-		schemaTimestamp:     schemaTimestamp,
-		prevSchemaTimestamp: prevSchemaTimestamp,
+		kv:                kv,
+		prevVal:           prevVal,
+		backfillTimestamp: backfillTimestamp,
 	})
 }
 
@@ -112,8 +106,6 @@ var memBufferColTypes = []types.T{
 	*types.Bytes, // span.EndKey
 	*types.Int,   // ts.WallTime
 	*types.Int,   // ts.Logical
-	*types.Int,   // schemaTimestamp.WallTime
-	*types.Int,   // schemaTimestamp.Logical
 }
 
 // memBuffer is an in-memory buffer for changed KV and resolved timestamp
@@ -153,9 +145,7 @@ func (b *memBuffer) Close(ctx context.Context) {
 
 // AddKV inserts a changed kv into the buffer. Individual keys must be added in
 // increasing mvcc order.
-func (b *memBuffer) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, schemaTimestamp hlc.Timestamp,
-) error {
+func (b *memBuffer) AddKV(ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value) error {
 	b.allocMu.Lock()
 	prevValDatum := tree.DNull
 	if prevVal.IsPresent() {
@@ -169,8 +159,6 @@ func (b *memBuffer) AddKV(
 		tree.DNull,
 		b.allocMu.a.NewDInt(tree.DInt(kv.Value.Timestamp.WallTime)),
 		b.allocMu.a.NewDInt(tree.DInt(kv.Value.Timestamp.Logical)),
-		b.allocMu.a.NewDInt(tree.DInt(schemaTimestamp.WallTime)),
-		b.allocMu.a.NewDInt(tree.DInt(schemaTimestamp.Logical)),
 	}
 	b.allocMu.Unlock()
 	return b.addRow(ctx, row)
@@ -187,8 +175,6 @@ func (b *memBuffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.T
 		b.allocMu.a.NewDBytes(tree.DBytes(span.EndKey)),
 		b.allocMu.a.NewDInt(tree.DInt(ts.WallTime)),
 		b.allocMu.a.NewDInt(tree.DInt(ts.Logical)),
-		tree.DNull,
-		tree.DNull,
 	}
 	b.allocMu.Unlock()
 	return b.addRow(ctx, row)
@@ -218,10 +204,6 @@ func (b *memBuffer) Get(ctx context.Context) (bufferEntry, error) {
 				RawBytes:  []byte(*row[1].(*tree.DBytes)),
 				Timestamp: ts,
 			},
-		}
-		e.schemaTimestamp = hlc.Timestamp{
-			WallTime: int64(*row[7].(*tree.DInt)),
-			Logical:  int32(*row[8].(*tree.DInt)),
 		}
 		return e, nil
 	}
