@@ -22,6 +22,10 @@ type colRef struct {
 	item *tree.ColumnItem
 }
 
+func (c *colRef) typedExpr() tree.TypedExpr {
+	return makeTypedExpr(c.item, c.typ)
+}
+
 type colRefs []*colRef
 
 func (t colRefs) extend(refs ...*colRef) colRefs {

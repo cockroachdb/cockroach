@@ -232,10 +232,7 @@ func getColRef(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef,
 		return nil, nil, false
 	}
 	col := cols[s.rnd.Intn(len(cols))]
-	return makeTypedExpr(
-		col.item,
-		col.typ,
-	), col, true
+	return col.typedExpr(), col, true
 }
 
 // castType tries to wrap expr in a CastExpr. This can be useful for times
