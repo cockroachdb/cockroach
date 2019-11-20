@@ -74,24 +74,95 @@ explain
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ]
 ----
-project
- ├── columns: tree:3(string)
- └── explain
-      ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
-      ├── mode: verbose
-      └── scan xy
-           └── columns: x:1(int!null) y:2(int)
+with &1
+ ├── columns: tree:10(string)
+ ├── explain
+ │    ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ │    ├── mode: verbose
+ │    └── scan xy
+ │         └── columns: x:1(int!null) y:2(int)
+ └── project
+      ├── columns: tree:10(string)
+      └── with-scan &1
+           ├── columns: tree:10(string) level:11(int) node_type:12(string) field:13(string) description:14(string) columns:15(string) ordering:16(string)
+           └── mapping:
+                ├──  tree:3(string) => tree:10(string)
+                ├──  level:4(int) => level:11(int)
+                ├──  node_type:5(string) => node_type:12(string)
+                ├──  field:6(string) => field:13(string)
+                ├──  description:7(string) => description:14(string)
+                ├──  columns:8(string) => columns:15(string)
+                └──  ordering:9(string) => ordering:16(string)
 
 build
 SELECT tree FROM [ EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y ]
 ----
-project
- ├── columns: tree:3(string)
- └── explain
-      ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
-      ├── mode: verbose
-      └── sort
-           ├── columns: x:1(int!null) x:1(int!null) y:2(int)
-           ├── ordering: +2
-           └── scan xy
-                └── columns: x:1(int!null) y:2(int)
+with &1
+ ├── columns: tree:10(string)
+ ├── explain
+ │    ├── columns: tree:3(string) level:4(int) node_type:5(string) field:6(string) description:7(string) columns:8(string) ordering:9(string)
+ │    ├── mode: verbose
+ │    └── sort
+ │         ├── columns: x:1(int!null) x:1(int!null) y:2(int)
+ │         ├── ordering: +2
+ │         └── scan xy
+ │              └── columns: x:1(int!null) y:2(int)
+ └── project
+      ├── columns: tree:10(string)
+      └── with-scan &1
+           ├── columns: tree:10(string) level:11(int) node_type:12(string) field:13(string) description:14(string) columns:15(string) ordering:16(string)
+           └── mapping:
+                ├──  tree:3(string) => tree:10(string)
+                ├──  level:4(int) => level:11(int)
+                ├──  node_type:5(string) => node_type:12(string)
+                ├──  field:6(string) => field:13(string)
+                ├──  description:7(string) => description:14(string)
+                ├──  columns:8(string) => columns:15(string)
+                └──  ordering:9(string) => ordering:16(string)
+
+build
+SELECT json FROM [EXPLAIN (DISTSQL) SELECT * FROM xy] WHERE false
+----
+with &1
+ ├── columns: json:8(string)
+ ├── explain
+ │    ├── columns: automatic:3(bool) url:4(string) json:5(string)
+ │    ├── mode: distsql
+ │    └── scan xy
+ │         └── columns: x:1(int!null) y:2(int)
+ └── project
+      ├── columns: json:8(string)
+      └── select
+           ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           ├── with-scan &1
+           │    ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           │    └── mapping:
+           │         ├──  automatic:3(bool) => automatic:6(bool)
+           │         ├──  url:4(string) => url:7(string)
+           │         └──  json:5(string) => json:8(string)
+           └── filters
+                └── false [type=bool]
+
+# Don't include hidden columns on a SELECT *.
+build
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM xy] WHERE false
+----
+with &1
+ ├── columns: automatic:6(bool) url:7(string)
+ ├── explain
+ │    ├── columns: automatic:3(bool) url:4(string) json:5(string)
+ │    ├── mode: distsql
+ │    └── scan xy
+ │         └── columns: x:1(int!null) y:2(int)
+ └── project
+      ├── columns: automatic:6(bool) url:7(string)
+      └── select
+           ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           ├── with-scan &1
+           │    ├── columns: automatic:6(bool) url:7(string) json:8(string)
+           │    └── mapping:
+           │         ├──  automatic:3(bool) => automatic:6(bool)
+           │         ├──  url:4(string) => url:7(string)
+           │         └──  json:5(string) => json:8(string)
+           └── filters
+                └── false [type=bool]

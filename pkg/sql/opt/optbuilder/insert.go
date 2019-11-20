@@ -154,11 +154,6 @@ func init() {
 // ON CONFLICT clause is present, since it joins a new set of rows to the input
 // and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
-	var ctes []cteSource
-	if ins.With != nil {
-		inScope, ctes = b.buildCTEs(ins.With, inScope)
-	}
-
 	// INSERT INTO xx AS yy - we want to know about xx (tn) because
 	// that's what we get the descriptor with, and yy (alias) because
 	// that's what RETURNING will use.
@@ -310,8 +305,6 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
 	}
-
-	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
 
 	return mb.outScope
 }
@@ -550,7 +543,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		}
 	}
 
-	mb.outScope = mb.b.buildSelect(inputRows, desiredTypes, inScope)
+	mb.outScope = mb.b.buildStmt(inputRows, desiredTypes, inScope)
 
 	if len(mb.targetColList) != 0 {
 		// Target columns already exist, so ensure that the number of input

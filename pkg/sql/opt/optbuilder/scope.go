@@ -101,6 +101,9 @@ type scope struct {
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages.
 	context string
+
+	// atRoot is whether we are currently at a root context.
+	atRoot bool
 }
 
 // cteSource represents a CTE in the given query.
@@ -276,6 +279,23 @@ func (s *scope) makePresentation() physical.Presentation {
 				ID:    col.id,
 			})
 		}
+	}
+	return presentation
+}
+
+// makePresentationWithHiddenCols is only used when constructing the
+// presentation for a [ ... ]-style data source.
+func (s *scope) makePresentationWithHiddenCols() physical.Presentation {
+	if len(s.cols) == 0 {
+		return nil
+	}
+	presentation := make(physical.Presentation, 0, len(s.cols))
+	for i := range s.cols {
+		col := &s.cols[i]
+		presentation = append(presentation, opt.AliasedColumn{
+			Alias: string(col.name),
+			ID:    col.id,
+		})
 	}
 	return presentation
 }

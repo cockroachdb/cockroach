@@ -345,35 +345,47 @@ memo (optimized, ~2KB, required=[presentation: array_agg:3])
 memo
 SELECT DISTINCT field FROM [EXPLAIN SELECT 123 AS k]
 ----
-memo (optimized, ~5KB, required=[presentation: field:3])
- ├── G1: (distinct-on G2 G3 cols=(3))
- │    └── [presentation: field:3]
- │         ├── best: (distinct-on G2 G3 cols=(3))
- │         └── cost: 0.34
- ├── G2: (explain G4 [presentation: k:1])
+memo (optimized, ~8KB, required=[presentation: field:6])
+ ├── G1: (distinct-on G2 G3 cols=(6))
+ │    └── [presentation: field:6]
+ │         ├── best: (distinct-on G2 G3 cols=(6))
+ │         └── cost: 0.46
+ ├── G2: (project G4 G5)
  │    └── []
- │         ├── best: (explain G4="[presentation: k:1]" [presentation: k:1])
- │         └── cost: 0.03
+ │         ├── best: (project G4 G5)
+ │         └── cost: 0.24
  ├── G3: (aggregations)
- ├── G4: (values G5 id=v1)
+ ├── G4: (explain G6 [presentation: k:1])
+ │    └── []
+ │         ├── best: (explain G6="[presentation: k:1]" [presentation: k:1])
+ │         └── cost: 0.03
+ ├── G5: (projections G7)
+ ├── G6: (values G8 id=v1)
  │    └── [presentation: k:1]
- │         ├── best: (values G5 id=v1)
+ │         ├── best: (values G8 id=v1)
  │         └── cost: 0.02
- ├── G5: (scalar-list G6)
- ├── G6: (tuple G7)
- ├── G7: (scalar-list G8)
- └── G8: (const 123)
+ ├── G7: (variable field)
+ ├── G8: (scalar-list G9)
+ ├── G9: (tuple G10)
+ ├── G10: (scalar-list G11)
+ └── G11: (const 123)
 
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
-memo (optimized, ~3KB, required=[presentation: tag:4])
- ├── G1: (distinct-on G2 G3 cols=(4))
- │    └── [presentation: tag:4]
- │         ├── best: (distinct-on G2 G3 cols=(4))
- │         └── cost: 0.32
- ├── G2: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
+memo (optimized, ~6KB, required=[presentation: tag:11])
+ ├── G1: (distinct-on G2 G3 cols=(11))
+ │    └── [presentation: tag:11]
+ │         ├── best: (distinct-on G2 G3 cols=(11))
+ │         └── cost: 0.44
+ ├── G2: (project G4 G5)
+ │    └── []
+ │         ├── best: (project G4 G5)
+ │         └── cost: 0.22
+ ├── G3: (aggregations)
+ ├── G4: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │    └── []
  │         ├── best: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │         └── cost: 0.01
- └── G3: (aggregations)
+ ├── G5: (projections G6)
+ └── G6: (variable tag)

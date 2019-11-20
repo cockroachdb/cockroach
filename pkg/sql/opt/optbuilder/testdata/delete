@@ -230,33 +230,42 @@ error (42703): statement source "DELETE FROM abcde WHERE a = 1" does not return 
 build
 WITH cte AS (SELECT b FROM [DELETE FROM abcde WHERE a=b RETURNING *]) DELETE FROM abcde WHERE a=b
 ----
-with &1 (cte)
+with &1
  ├── project
- │    ├── columns: b:2(int!null)
- │    └── project
- │         ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) e:5(int)
- │         └── delete abcde
- │              ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
- │              ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
- │              └── select
- │                   ├── columns: a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
- │                   ├── scan abcde
- │                   │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
- │                   └── filters
- │                        └── eq [type=bool]
- │                             ├── variable: a [type=int]
- │                             └── variable: b [type=int]
- └── delete abcde
-      ├── columns: <none>
-      ├── fetch columns: a:19(int) b:20(int) c:21(int) d:22(int) e:23(int) rowid:24(int)
-      └── select
-           ├── columns: a:19(int!null) b:20(int!null) c:21(int) d:22(int) e:23(int) rowid:24(int!null)
-           ├── scan abcde
-           │    └── columns: a:19(int!null) b:20(int) c:21(int) d:22(int) e:23(int) rowid:24(int!null)
-           └── filters
-                └── eq [type=bool]
-                     ├── variable: a [type=int]
-                     └── variable: b [type=int]
+ │    ├── columns: abcde.a:1(int!null) abcde.b:2(int!null) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int)
+ │    └── delete abcde
+ │         ├── columns: abcde.a:1(int!null) abcde.b:2(int!null) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int) rowid:6(int!null)
+ │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         └── select
+ │              ├── columns: abcde.a:7(int!null) abcde.b:8(int!null) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              ├── scan abcde
+ │              │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              └── filters
+ │                   └── eq [type=bool]
+ │                        ├── variable: abcde.a [type=int]
+ │                        └── variable: abcde.b [type=int]
+ └── with &2 (cte)
+      ├── project
+      │    ├── columns: b:14(int!null)
+      │    └── with-scan &1
+      │         ├── columns: a:13(int!null) b:14(int!null) c:15(int) d:16(int) e:17(int)
+      │         └── mapping:
+      │              ├──  abcde.a:1(int) => a:13(int)
+      │              ├──  abcde.b:2(int) => b:14(int)
+      │              ├──  abcde.c:3(int) => c:15(int)
+      │              ├──  abcde.d:4(int) => d:16(int)
+      │              └──  abcde.e:5(int) => e:17(int)
+      └── delete abcde
+           ├── columns: <none>
+           ├── fetch columns: abcde.a:24(int) abcde.b:25(int) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int)
+           └── select
+                ├── columns: abcde.a:24(int!null) abcde.b:25(int!null) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int!null)
+                ├── scan abcde
+                │    └── columns: abcde.a:24(int!null) abcde.b:25(int) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int!null)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: abcde.a [type=int]
+                          └── variable: abcde.b [type=int]
 
 # With alias, original table name should be inaccessible.
 build
@@ -321,29 +330,39 @@ project
 build
 SELECT a, d FROM [DELETE FROM abcde WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
 ----
-project
- ├── columns: a:1(int!null) d:4(int)
+with &1
+ ├── columns: a:13(int!null) d:16(int)
+ ├── project
+ │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int)
+ │    └── delete abcde
+ │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int) rowid:6(int!null)
+ │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         └── limit
+ │              ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              ├── internal-ordering: +8
+ │              ├── sort
+ │              │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── ordering: +8
+ │              │    ├── limit hint: 10.00
+ │              │    └── select
+ │              │         ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │         ├── scan abcde
+ │              │         │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │         └── filters
+ │              │              └── gt [type=bool]
+ │              │                   ├── variable: abcde.a [type=int]
+ │              │                   └── const: 0 [type=int]
+ │              └── const: 10 [type=int]
  └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
-      └── delete abcde
-           ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
-           ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
-           └── limit
-                ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                ├── internal-ordering: +8
-                ├── sort
-                │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │    ├── ordering: +8
-                │    ├── limit hint: 10.00
-                │    └── select
-                │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │         ├── scan abcde
-                │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │         └── filters
-                │              └── gt [type=bool]
-                │                   ├── variable: a [type=int]
-                │                   └── const: 0 [type=int]
-                └── const: 10 [type=int]
+      ├── columns: a:13(int!null) d:16(int)
+      └── with-scan &1
+           ├── columns: a:13(int!null) b:14(int) c:15(int) d:16(int) e:17(int)
+           └── mapping:
+                ├──  abcde.a:1(int) => a:13(int)
+                ├──  abcde.b:2(int) => b:14(int)
+                ├──  abcde.c:3(int) => c:15(int)
+                ├──  abcde.d:4(int) => d:16(int)
+                └──  abcde.e:5(int) => e:17(int)
 
 # ------------------------------------------------------------------------------
 # Tests with mutations.

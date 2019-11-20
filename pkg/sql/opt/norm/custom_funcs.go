@@ -2020,5 +2020,10 @@ func (c *CustomFuncs) deriveWithUses(r opt.Expr) map[opt.WithID]int {
 		}
 	}
 
+	// Don't allow the use count to escape the scope of the WITH itself.
+	if w, ok := r.(*memo.WithExpr); ok {
+		delete(result, w.ID)
+	}
+
 	return result
 }
