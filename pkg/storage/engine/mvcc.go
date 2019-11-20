@@ -2751,8 +2751,6 @@ func mvccResolveWriteIntent(
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
 	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.WriteTimestamp)
-	collapsedIntent := false
-	var rolledBackVal []byte
 	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 
 	// Handle partial txn rollbacks. If the current txn sequence
@@ -2761,7 +2759,9 @@ func mvccResolveWriteIntent(
 	// If _all_ the writes get removed in this way, the intent
 	// "collapses" and should be considered empty (i.e. can be removed altogether).
 	// If only part of the intent history was rolled back, but the intent still
-	// remains, updatedIntent is set to true.
+	// remains, the rolledBackVal is set to a non-nil value.
+	collapsedIntent := false
+	var rolledBackVal []byte
 	if len(intent.IgnoredSeqNums) > 0 {
 		collapsedIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, rw, intent.IgnoredSeqNums, meta, latestKey)
 		if err != nil {
@@ -2791,7 +2791,7 @@ func mvccResolveWriteIntent(
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
-		if pushed || (rolledBackVal != nil && !commit) {
+		if !commit {
 			// Keep existing intent if we're updating it. We keep the
 			// existing metadata instead of using the supplied intent meta
 			// to avoid overwriting a newer epoch (see comments above). The
@@ -2939,7 +2939,7 @@ func mvccResolveWriteIntent(
 // mvccMaybeRewriteIntentHistory rewrites the intent to reveal the latest
 // stored value, ignoring all values from the history that have an
 // ignored seqnum.
-// The cleared return value, when true, indicates that
+// The collapsed return value, when true, indicates that
 // all the writes in the intent are ignored and the intent should
 // not be considered to exist any more.
 // The updatedVal, when non-nil, indicates that the intent was updated
@@ -2950,7 +2950,7 @@ func mvccMaybeRewriteIntentHistory(
 	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
 	meta *enginepb.MVCCMetadata,
 	latestKey MVCCKey,
-) (cleared bool, updatedVal []byte, err error) {
+) (collapsed bool, updatedVal []byte, err error) {
 	if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, ignoredSeqNums) {
 		// The latest write was not ignored. Nothing to do here.  We'll
 		// proceed with the intent as usual.
