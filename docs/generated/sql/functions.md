@@ -366,6 +366,10 @@ hour, minute, second, millisecond, microsecond, epoch</p>
 quarter, month, week, dayofweek, isodow, dayofyear, julian,
 hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
+<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: timetz) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch,
+timezone, timezone_hour, timezone_minute</p>
+</span></td></tr>
 <tr><td><a name="extract_duration"></a><code>extract_duration(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.
 Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>

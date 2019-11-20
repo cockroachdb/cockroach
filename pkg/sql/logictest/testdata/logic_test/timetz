@@ -19,6 +19,24 @@ SELECT '24:00:00-1559'::timetz > '23:59:59-1559'::timetz;
 ----
 true
 
+query T
+select
+  extract('hour' from '11:12+03:01'::timetz)::string || ':' ||
+  extract('minute' from '11:12+03:01'::timetz)::string || 'Z' ||
+  extract('timezone_hour' from '11:12+03:01'::timetz)::string || ':' ||
+  extract('timezone_minute' from '11:12+03:01'::timetz)::string
+----
+11:12Z3:1
+
+query T
+select
+  extract('hour' from '11:12-03:01'::timetz)::string || ':' ||
+  extract('minute' from '11:12-03:01'::timetz)::string || 'Z' ||
+  extract('timezone_hour' from '11:12-03:01'::timetz)::string || ':' ||
+  extract('timezone_minute' from '11:12-03:01'::timetz)::string
+----
+11:12Z-3:-1
+
 query TTI
 SELECT a::string, b::string, c FROM timetz_test ORDER BY a, c ASC
 ----
