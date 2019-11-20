@@ -124,15 +124,13 @@ func TestEncoders(t *testing.T) {
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
 		`format=experimental_avro,envelope=key_only,updated`: {
-			insert:   `{"a":{"long":1}}->`,
-			delete:   `{"a":{"long":1}}->`,
-			resolved: `{"resolved":{"string":"1.0000000002"}}`,
+			err: `updated is only usable with envelope=wrapped`,
 		},
 		`format=experimental_avro,envelope=key_only,diff`: {
 			err: `diff is only usable with envelope=wrapped`,
 		},
 		`format=experimental_avro,envelope=key_only,updated,diff`: {
-			err: `diff is only usable with envelope=wrapped`,
+			err: `updated is only usable with envelope=wrapped`,
 		},
 		`format=experimental_avro,envelope=row`: {
 			err: `envelope=row is not supported with format=experimental_avro`,

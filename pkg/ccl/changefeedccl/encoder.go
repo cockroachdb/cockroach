@@ -303,6 +303,10 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 			optEnvelope, opts[optEnvelope], optFormat, optFormatAvro)
 	}
 	_, e.updatedField = opts[optUpdatedTimestamps]
+	if e.updatedField && e.keyOnly {
+		return nil, errors.Errorf(`%s is only usable with %s=%s`,
+			optUpdatedTimestamps, optEnvelope, optEnvelopeWrapped)
+	}
 	_, e.beforeField = opts[optDiff]
 	if e.beforeField && e.keyOnly {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
