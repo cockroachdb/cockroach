@@ -283,7 +283,7 @@ const mapStateToProps = (state: StatementsState, props: RouteProps) => ({
 
 const mapDispatchToProps = {
     refreshStatements,
-}
+};
 
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
