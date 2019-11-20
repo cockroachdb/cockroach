@@ -3707,13 +3707,11 @@ DROP TABLE c, b, a;
 # modifies the original table (#42117).
 subtest SelfReferencingCheckFail
 
-# TODO(radu): remove the FAMILY when #42120 is fixed.
 statement ok
 CREATE TABLE self_ab (
   a INT UNIQUE,
   b INT DEFAULT 1 CHECK (b != 1),
-  INDEX (b),
-  FAMILY (a, b)
+  INDEX (b)
 )
 
 statement ok
@@ -3739,3 +3737,43 @@ ALTER TABLE self_ab ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES self_ab_parent
 
 statement error failed to satisfy CHECK constraint \(b != 1\)
 UPDATE self_ab_parent SET p = 3 WHERE p = 2
+
+# Clean up.
+statement ok
+DROP TABLE self_ab, self_ab_parent
+
+# Extra test for self referencing foreign keys with set default.
+subtest SelfReferencingSetDefault
+
+statement ok
+CREATE TABLE self_abcd (
+  a INT DEFAULT 2,
+  b INT DEFAULT 2,
+  c INT DEFAULT 2,
+  d INT DEFAULT 2,
+  INDEX (c),
+  INDEX (d),
+  PRIMARY KEY (a), FAMILY (a, b, c, d)
+)
+
+statement ok
+INSERT INTO self_abcd VALUES (1, 2, 3, 4), (4, 1, 2, 3), (3, 4, 1, 2), (2, 3, 4, 1)
+
+statement ok
+ALTER TABLE self_abcd ADD CONSTRAINT fk1 FOREIGN KEY (c) REFERENCES self_abcd(a) ON UPDATE SET DEFAULT;
+ALTER TABLE self_abcd ADD CONSTRAINT fk2 FOREIGN KEY (d) REFERENCES self_abcd(a) ON UPDATE SET DEFAULT
+
+statement ok
+UPDATE self_abcd SET a = 5 WHERE a = 1
+
+query IIII
+SELECT * FROM self_abcd ORDER BY (a, b, c, d)
+----
+2  3  4  2
+3  4  2  2
+4  1  2  3
+5  2  3  4
+
+# Clean up.
+statement ok
+DROP TABLE self_abcd
