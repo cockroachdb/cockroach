@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func prepareExpr(t *testing.T, datumExpr string) tree.TypedExpr {
@@ -584,6 +586,120 @@ func TestMakeDJSON(t *testing.T) {
 	}
 	if j1.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), j2) != -1 {
 		t.Fatal("expected JSON 1 < 2")
+	}
+}
+
+func TestDTimeTZ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	maxTime, err := tree.ParseDTimeTZ(nil, "24:00:00-1559")
+	require.NoError(t, err)
+	minTime, err := tree.ParseDTimeTZ(nil, "00:00:00+1559")
+	require.NoError(t, err)
+
+	// These are all the same UTC time equivalents.
+	utcTime, err := tree.ParseDTimeTZ(nil, "11:14:15+0")
+	require.NoError(t, err)
+	sydneyTime, err := tree.ParseDTimeTZ(nil, "21:14:15+10")
+	require.NoError(t, err)
+
+	// No daylight savings in Hawaii!
+	hawaiiZone, err := time.LoadLocation("Pacific/Honolulu")
+	require.NoError(t, err)
+	hawaiiTime := tree.NewDTimeTZFromLocation(timeofday.New(1, 14, 15, 0), hawaiiZone)
+
+	weirdTimeZone := tree.NewDTimeTZFromOffset(timeofday.New(10, 0, 0, 0), -((5 * 60 * 60) + 30*60 + 15))
+
+	testCases := []struct {
+		t           *tree.DTimeTZ
+		largerThan  []tree.Datum
+		smallerThan []tree.Datum
+		equalTo     []tree.Datum
+		isMax       bool
+		isMin       bool
+	}{
+		{
+			t:           weirdTimeZone,
+			largerThan:  []tree.Datum{minTime, tree.DNull},
+			smallerThan: []tree.Datum{maxTime},
+			equalTo:     []tree.Datum{weirdTimeZone},
+			isMax:       false,
+			isMin:       false,
+		},
+		{
+			t:           utcTime,
+			largerThan:  []tree.Datum{minTime, sydneyTime, tree.DNull},
+			smallerThan: []tree.Datum{maxTime, hawaiiTime},
+			equalTo:     []tree.Datum{utcTime},
+			isMax:       false,
+			isMin:       false,
+		},
+		{
+			t:           sydneyTime,
+			largerThan:  []tree.Datum{minTime, tree.DNull},
+			smallerThan: []tree.Datum{maxTime, utcTime, hawaiiTime},
+			equalTo:     []tree.Datum{sydneyTime},
+			isMax:       false,
+			isMin:       false,
+		},
+		{
+			t:           hawaiiTime,
+			largerThan:  []tree.Datum{minTime, utcTime, sydneyTime, tree.DNull},
+			smallerThan: []tree.Datum{maxTime},
+			equalTo:     []tree.Datum{hawaiiTime},
+			isMax:       false,
+			isMin:       false,
+		},
+		{
+			t:           minTime,
+			largerThan:  []tree.Datum{tree.DNull},
+			smallerThan: []tree.Datum{maxTime, utcTime, sydneyTime, hawaiiTime},
+			equalTo:     []tree.Datum{minTime},
+			isMax:       false,
+			isMin:       true,
+		},
+		{
+			t:           maxTime,
+			largerThan:  []tree.Datum{minTime, utcTime, sydneyTime, hawaiiTime, tree.DNull},
+			smallerThan: []tree.Datum{},
+			equalTo:     []tree.Datum{maxTime},
+			isMax:       true,
+			isMin:       false,
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("#%d %s", i, tc.t.String()), func(t *testing.T) {
+			var largerThan []tree.Datum
+			prev, ok := tc.t.Prev(nil)
+			if !tc.isMin {
+				assert.True(t, ok)
+				largerThan = append(largerThan, prev)
+			} else {
+				assert.False(t, ok)
+			}
+			for _, largerThan := range append(largerThan, tc.largerThan...) {
+				assert.Equal(t, 1, tc.t.Compare(nil, largerThan), "%s > %s", tc.t.String(), largerThan.String())
+			}
+
+			var smallerThan []tree.Datum
+			next, ok := tc.t.Next(nil)
+			if !tc.isMax {
+				assert.True(t, ok)
+				smallerThan = append(smallerThan, next)
+			} else {
+				assert.False(t, ok)
+			}
+			for _, smallerThan := range append(smallerThan, tc.smallerThan...) {
+				assert.Equal(t, -1, tc.t.Compare(nil, smallerThan), "%s < %s", tc.t.String(), smallerThan.String())
+			}
+
+			for _, equalTo := range tc.equalTo {
+				assert.Equal(t, 0, tc.t.Compare(nil, equalTo), "%s = %s", tc.t.String(), equalTo.String())
+			}
+
+			assert.Equal(t, tc.isMax, tc.t.IsMax(nil))
+			assert.Equal(t, tc.isMin, tc.t.IsMin(nil))
+		})
 	}
 }
 

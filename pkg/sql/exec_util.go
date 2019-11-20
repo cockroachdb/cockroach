@@ -769,6 +769,7 @@ func checkResultType(typ *types.T) error {
 	case types.DateFamily:
 	case types.TimestampFamily:
 	case types.TimeFamily:
+	case types.TimeTZFamily:
 	case types.TimestampTZFamily:
 	case types.IntervalFamily:
 	case types.JsonFamily:

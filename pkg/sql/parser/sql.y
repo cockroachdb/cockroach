@@ -7301,7 +7301,7 @@ const_datetime:
     }
     $$.val = types.MakeTime(prec)
   }
-| TIMETZ                             { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
+| TIMETZ                             { $$.val = types.TimeTZ }
 | TIMETZ '(' ICONST ')'              { return unimplementedWithIssueDetail(sqllex, 26097, "type with precision") }
 | TIMESTAMP opt_timezone
   {

@@ -24,6 +24,7 @@ type DatumAlloc struct {
 	ddecimalAlloc     []tree.DDecimal
 	ddateAlloc        []tree.DDate
 	dtimeAlloc        []tree.DTime
+	dtimetzAlloc      []tree.DTimeTZ
 	dtimestampAlloc   []tree.DTimestamp
 	dtimestampTzAlloc []tree.DTimestampTZ
 	dintervalAlloc    []tree.DInterval
@@ -148,6 +149,18 @@ func (a *DatumAlloc) NewDTime(v tree.DTime) *tree.DTime {
 	buf := &a.dtimeAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DTime, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDTimeTZ allocates a DTimeTZ.
+func (a *DatumAlloc) NewDTimeTZ(v tree.DTimeTZ) *tree.DTimeTZ {
+	buf := &a.dtimetzAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DTimeTZ, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

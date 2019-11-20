@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -63,8 +64,8 @@ var (
 	// DZero is the zero-valued integer Datum.
 	DZero = NewDInt(0)
 
-	// DTimeRegex is a compiled regex for parsing the 24:00 time value
-	DTimeRegex = regexp.MustCompile("^24:00($|(:00$)|(:00.0+$))")
+	// DTimeMaxTimeRegex is a compiled regex for parsing the 24:00 time value.
+	DTimeMaxTimeRegex = regexp.MustCompile("^24:00($|(:00$)|(:00.0+$))")
 )
 
 // Datum represents a SQL value.
@@ -1866,11 +1867,11 @@ func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 
 	// special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
-	if DTimeRegex.MatchString(s) {
+	if DTimeMaxTimeRegex.MatchString(s) {
 		return MakeDTime(timeofday.Time2400), nil
 	}
 
-	t, err := pgdate.ParseTime(now, 0 /* mode */, s)
+	t, err := pgdate.ParseTime(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
 		return nil, makeParseError(s, types.Time, nil)
@@ -1948,6 +1949,118 @@ func (d *DTime) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// DTimeTZ is the time with time zone Datum.
+type DTimeTZ struct {
+	timetz.TimeTZ
+}
+
+var (
+	dMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
+	dMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Time2400, timetz.MaxTimeTZOffsetSecs)
+)
+
+// NewDTimeTZ creates a DTimeTZ from a timetz.TimeTZ.
+func NewDTimeTZ(t timetz.TimeTZ) *DTimeTZ {
+	return &DTimeTZ{t}
+}
+
+// NewDTimeTZFromTime creates a DTimeTZ from time.Time.
+func NewDTimeTZFromTime(t time.Time) *DTimeTZ {
+	return &DTimeTZ{timetz.MakeTimeTZFromTime(t)}
+}
+
+// NewDTimeTZFromOffset creates a DTimeTZ from a TimeOfDay and offset.
+func NewDTimeTZFromOffset(t timeofday.TimeOfDay, offsetSecs int32) *DTimeTZ {
+	return &DTimeTZ{timetz.MakeTimeTZ(t, offsetSecs)}
+}
+
+// NewDTimeTZFromLocation creates a DTimeTZ from a TimeOfDay and time.Location.
+func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ {
+	return &DTimeTZ{timetz.MakeTimeTZFromLocation(t, loc)}
+}
+
+// ParseDTimeTZ parses and returns the *DTime Datum value represented by the
+// provided string, or an error if parsing is unsuccessful.
+func ParseDTimeTZ(ctx ParseTimeContext, s string) (*DTimeTZ, error) {
+	now := relativeParseTime(ctx)
+	d, err := timetz.ParseTimeTZ(now, s)
+	if err != nil {
+		return nil, err
+	}
+	return NewDTimeTZ(d), nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DTimeTZ) ResolvedType() *types.T {
+	return types.TimeTZ
+}
+
+// Compare implements the Datum interface.
+func (d *DTimeTZ) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	return compareTimestamps(ctx, d, other)
+}
+
+// Prev implements the Datum interface.
+func (d *DTimeTZ) Prev(ctx *EvalContext) (Datum, bool) {
+	if d.IsMin(ctx) {
+		return nil, false
+	}
+	return NewDTimeTZFromOffset(d.TimeOfDay-1, d.OffsetSecs), true
+}
+
+// Next implements the Datum interface.
+func (d *DTimeTZ) Next(ctx *EvalContext) (Datum, bool) {
+	if d.IsMax(ctx) {
+		return nil, false
+	}
+	return NewDTimeTZFromOffset(d.TimeOfDay+1, d.OffsetSecs), true
+}
+
+// IsMax implements the Datum interface.
+func (d *DTimeTZ) IsMax(_ *EvalContext) bool {
+	return d.TimeOfDay == dMaxTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MaxTimeTZOffsetSecs
+}
+
+// IsMin implements the Datum interface.
+func (d *DTimeTZ) IsMin(_ *EvalContext) bool {
+	return d.TimeOfDay == dMinTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MinTimeTZOffsetSecs
+}
+
+// Max implements the Datum interface.
+func (d *DTimeTZ) Max(_ *EvalContext) (Datum, bool) {
+	return dMaxTimeTZ, true
+}
+
+// Min implements the Datum interface.
+func (d *DTimeTZ) Min(_ *EvalContext) (Datum, bool) {
+	return dMinTimeTZ, true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTimeTZ) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DTimeTZ) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.TimeTZ.String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DTimeTZ) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DTimestamp is the timestamp Datum.
 type DTimestamp struct {
 	time.Time
@@ -1968,7 +2081,7 @@ const (
 // the provided string in UTC, or an error if parsing is unsuccessful.
 func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*DTimestamp, error) {
 	now := relativeParseTime(ctx)
-	t, err := pgdate.ParseTimestamp(now, 0 /* mode */, s)
+	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		return nil, err
 	}
@@ -2022,6 +2135,8 @@ func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
 		return t.Time, true
 	case *DTime:
 		return timeofday.TimeOfDay(*t).ToTime(), true
+	case *DTimeTZ:
+		return t.ToTime(), true
 	default:
 		return time.Time{}, false
 	}
@@ -2038,6 +2153,23 @@ func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
 	}
 	if rTime.Before(lTime) {
 		return 1
+	}
+	// If either side is a TimeTZ, then we must compare timezones before
+	// when comparing.
+	// This is a special quirk of TimeTZ and does not apply to TimestampTZ.
+	lOffset := int32(0)
+	rOffset := int32(0)
+	if _, ok := l.(*DTimeTZ); ok {
+		lOffset = l.(*DTimeTZ).OffsetSecs
+	}
+	if _, ok := r.(*DTimeTZ); ok {
+		rOffset = r.(*DTimeTZ).OffsetSecs
+	}
+	if lOffset > rOffset {
+		return 1
+	}
+	if lOffset < rOffset {
+		return -1
 	}
 	return 0
 }
@@ -2133,7 +2265,7 @@ func ParseDTimestampTZ(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (*DTimestampTZ, error) {
 	now := relativeParseTime(ctx)
-	t, err := pgdate.ParseTimestamp(now, 0 /* mode */, s)
+	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		return nil, err
 	}
@@ -2573,7 +2705,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 	case *DTimestamp:
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil
-	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DBitArray:
+	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
 	default:
 		if d == DNull {
@@ -3719,6 +3851,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.BytesFamily:          {unsafe.Sizeof(DBytes("")), variableSize},
 	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
+	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
 	types.TimestampTZFamily:    {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},

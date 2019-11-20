@@ -297,6 +297,7 @@ func TestAvroSchema(t *testing.T) {
 			`JSONB`:        `["null","string"]`,
 			`STRING`:       `["null","string"]`,
 			`TIME`:         `["null",{"type":"long","logicalType":"time-micros"}]`,
+			`TIMETZ`:       `["null","string"]`,
 			`TIMESTAMP`:    `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`TIMESTAMPTZ`:  `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`UUID`:         `["null","string"]`,

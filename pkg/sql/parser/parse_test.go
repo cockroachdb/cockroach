@@ -111,6 +111,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b FLOAT8)`},
 		{`CREATE TABLE a (b SERIAL8)`},
 		{`CREATE TABLE a (b TIME)`},
+		{`CREATE TABLE a (b TIMETZ)`},
 		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INET)`},
 		{`CREATE TABLE a (b "char")`},
@@ -3149,7 +3150,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b TSVECTOR)`, 7821, `tsvector`},
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`},
 		{`CREATE TABLE a(b XML)`, 0, `xml`},
-		{`CREATE TABLE a(b TIMETZ)`, 26097, `type`},
 
 		{`INSERT INTO a VALUES (1) ON CONFLICT (x) WHERE x > 3 DO NOTHING`, 32557, ``},
 

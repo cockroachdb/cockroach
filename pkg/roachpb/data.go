@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -439,6 +440,14 @@ func (v *Value) SetTime(t time.Time) {
 	v.setTag(ValueType_TIME)
 }
 
+// SetTimeTZ encodes the specified time value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetTimeTZ(t timetz.TimeTZ) {
+	v.ensureRawBytes(headerSize + encoding.EncodedTimeTZMaxLen)
+	v.RawBytes = encoding.EncodeTimeTZAscending(v.RawBytes[:headerSize], t)
+	v.setTag(ValueType_TIMETZ)
+}
+
 // SetDuration encodes the specified duration value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetDuration(t duration.Duration) error {
@@ -560,6 +569,16 @@ func (v Value) GetTime() (time.Time, error) {
 		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
 	_, t, err := encoding.DecodeTimeAscending(v.dataBytes())
+	return t, err
+}
+
+// GetTimeTZ decodes a time value from the bytes field of the receiver. If the
+// tag is not TIMETZ an error will be returned.
+func (v Value) GetTimeTZ() (timetz.TimeTZ, error) {
+	if tag := v.GetTag(); tag != ValueType_TIMETZ {
+		return timetz.TimeTZ{}, fmt.Errorf("value type is not %s: %s", ValueType_TIMETZ, tag)
+	}
+	_, t, err := encoding.DecodeTimeTZAscending(v.dataBytes())
 	return t, err
 }
 

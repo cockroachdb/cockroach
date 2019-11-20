@@ -915,6 +915,8 @@ oid   typname        typnamespace  typowner  typlen  typbyval  typtype
 1186  interval       1307062959    NULL      24      true      b
 1187  _interval      1307062959    NULL      -1      false     b
 1231  _numeric       1307062959    NULL      -1      false     b
+1266  timetz         1307062959    NULL      16      true      b
+1270  _timetz        1307062959    NULL      -1      false     b
 1560  bit            1307062959    NULL      -1      false     b
 1561  _bit           1307062959    NULL      -1      false     b
 1562  varbit         1307062959    NULL      -1      false     b
@@ -989,6 +991,8 @@ oid   typname        typcategory  typispreferred  typisdefined  typdelim  typrel
 1186  interval       T            false           true          ,         0         0        1187
 1187  _interval      A            false           true          ,         0         1186     0
 1231  _numeric       A            false           true          ,         0         1700     0
+1266  timetz         D            false           true          ,         0         0        1270
+1270  _timetz        A            false           true          ,         0         1266     0
 1560  bit            V            false           true          ,         0         0        1561
 1561  _bit           A            false           true          ,         0         1560     0
 1562  varbit         V            false           true          ,         0         0        1563
@@ -1063,6 +1067,8 @@ oid   typname        typinput        typoutput        typreceive        typsend 
 1186  interval       interval_in     interval_out     interval_recv     interval_send     0         0          0
 1187  _interval      array_in        array_out        array_recv        array_send        0         0          0
 1231  _numeric       array_in        array_out        array_recv        array_send        0         0          0
+1266  timetz         timetz_in       timetz_out       timetz_recv       timetz_send       0         0          0
+1270  _timetz        array_in        array_out        array_recv        array_send        0         0          0
 1560  bit            bit_in          bit_out          bit_recv          bit_send          0         0          0
 1561  _bit           array_in        array_out        array_recv        array_send        0         0          0
 1562  varbit         varbit_in       varbit_out       varbit_recv       varbit_send       0         0          0
@@ -1137,6 +1143,8 @@ oid   typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
 1186  interval       NULL      NULL        false       0            -1
 1187  _interval      NULL      NULL        false       0            -1
 1231  _numeric       NULL      NULL        false       0            -1
+1266  timetz         NULL      NULL        false       0            -1
+1270  _timetz        NULL      NULL        false       0            -1
 1560  bit            NULL      NULL        false       0            -1
 1561  _bit           NULL      NULL        false       0            -1
 1562  varbit         NULL      NULL        false       0            -1
@@ -1211,6 +1219,8 @@ oid   typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 1186  interval       0         0             NULL           NULL        NULL
 1187  _interval      0         0             NULL           NULL        NULL
 1231  _numeric       0         0             NULL           NULL        NULL
+1266  timetz         0         0             NULL           NULL        NULL
+1270  _timetz        0         0             NULL           NULL        NULL
 1560  bit            0         0             NULL           NULL        NULL
 1561  _bit           0         0             NULL           NULL        NULL
 1562  varbit         0         0             NULL           NULL        NULL

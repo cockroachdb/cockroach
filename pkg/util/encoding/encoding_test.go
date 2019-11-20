@@ -24,9 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func testBasicEncodeDecode32(
@@ -1056,6 +1059,89 @@ func TestEncodeDecodeTime(t *testing.T) {
 		}
 	}
 }
+func TestEncodeDecodeTimeTZ(t *testing.T) {
+	// Test cases are in ascending order for TimeTZ, which means:
+	// * UTC timestamp first preference
+	// * Negative Zone Offset second preference
+	//
+	// Tests these UTC times:
+	//  05:06:07
+	//  10:11:12
+	//  15:16:17
+	//  20:21:22
+	// Over time zones (if not overflowing):
+	//  -12
+	//  -08
+	//  -04
+	//  0
+	//  +04
+	//  +08
+	//  +12
+	testCases := []string{
+		"00:00:00+1559", // minimum
+
+		"17:06:07+12",
+		"13:06:07+8",
+		"09:06:07+4",
+		"05:06:07+0",
+		"01:06:07-4",
+
+		"22:11:12+12",
+		"18:11:12+8",
+		"14:11:12+4",
+		"10:41:12+0030", // special check of .5 hour offsets
+		"10:11:12+0",
+		"06:11:12-4",
+		"04:11:12-8",
+
+		"23:16:17+8",
+		"19:16:17+4",
+		"15:16:17+0",
+		"11:16:17-4",
+		"09:16:17-8",
+		"05:16:17-12",
+
+		"20:21:22+0",
+		"16:21:22-4",
+		"12:21:22-8",
+		"08:21:22-12",
+
+		"24:00:00-1559", // maximum
+	}
+
+	var lastEncoded []byte
+	for _, dir := range []Direction{Ascending, Descending} {
+		t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+			for i := range testCases {
+				t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+					current, err := timetz.ParseTimeTZ(timeutil.Now(), testCases[i])
+					assert.NoError(t, err)
+
+					var b []byte
+					var decodedCurrent timetz.TimeTZ
+					if dir == Ascending {
+						b = EncodeTimeTZAscending(b, current)
+						_, decodedCurrent, err = DecodeTimeTZAscending(b)
+					} else {
+						b = EncodeTimeTZDescending(b, current)
+						_, decodedCurrent, err = DecodeTimeTZDescending(b)
+					}
+					assert.NoError(t, err)
+					assert.Equal(t, current, decodedCurrent)
+					testPeekLength(t, b)
+					if i > 0 {
+						if dir == Ascending {
+							assert.True(t, bytes.Compare(lastEncoded, b) < 0, "encodings %s, %s not increasing", testCases[i-1], testCases[i])
+						} else {
+							assert.True(t, bytes.Compare(lastEncoded, b) > 0, "encodings %s, %s not decreasing", testCases[i-1], testCases[i])
+						}
+					}
+					lastEncoded = b
+				})
+			}
+		})
+	}
+}
 
 type testCaseDuration struct {
 	value  duration.Duration
@@ -1154,6 +1240,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeBytesDescending(nil, []byte("")), BytesDesc},
 		{EncodeTimeAscending(nil, timeutil.Now()), Time},
 		{EncodeTimeDescending(nil, timeutil.Now()), Time},
+		{EncodeTimeTZAscending(nil, timetz.Now()), TimeTZ},
+		{EncodeTimeTZDescending(nil, timetz.Now()), TimeTZ},
 		{encodedDurationAscending, Duration},
 		{encodedDurationDescending, Duration},
 		{EncodeBitArrayAscending(nil, bitarray.BitArray{}), BitArray},
@@ -1192,6 +1280,13 @@ func (rd randData) decimal() *apd.Decimal {
 
 func (rd randData) time() time.Time {
 	return timeutil.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
+}
+
+func (rd randData) timetz() timetz.TimeTZ {
+	return timetz.MakeTimeTZ(
+		timeofday.FromInt(rd.Int63n(int64(timeofday.Max))),
+		rd.Int31n(timetz.MaxTimeTZOffsetSecs*2)-timetz.MaxTimeTZOffsetSecs,
+	)
 }
 
 func (rd randData) bitArray() bitarray.BitArray {
@@ -1676,6 +1771,25 @@ func TestValueEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+func TestValueEncodeDecodeTimeTZ(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]timetz.TimeTZ, 1000)
+	for i := range tests {
+		tests[i] = rd.timetz()
+	}
+	for _, test := range tests {
+		buf := EncodeTimeTZValue(nil, NoColumnID, test)
+		_, x, err := DecodeTimeTZValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x != test {
+			t.Errorf("seed %d: expected %v got %v", seed, test, x)
+		}
+	}
+}
+
 func TestValueEncodeDecodeBitArray(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	rd := randData{rng}
@@ -1910,6 +2024,9 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case Time:
 		x := rd.time()
 		return EncodeTimeValue(buf, colID, x), x, true
+	case TimeTZ:
+		x := rd.timetz()
+		return EncodeTimeTZValue(buf, colID, x), x, true
 	case Duration:
 		x := rd.duration()
 		return EncodeDurationValue(buf, colID, x), x, true
@@ -2066,6 +2183,8 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeBytesValue(buf)
 		case Time:
 			buf, decoded, err = DecodeTimeValue(buf)
+		case TimeTZ:
+			buf, decoded, err = DecodeTimeTZValue(buf)
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
 		case BitArray:
@@ -2135,6 +2254,8 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeDecimalValue(nil, NoColumnID, apd.New(628, -2)), "6.28"},
 		{EncodeTimeValue(nil, NoColumnID,
 			time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), "2016-06-29T16:02:50.000000005Z"},
+		{EncodeTimeTZValue(nil, NoColumnID,
+			timetz.MakeTimeTZ(timeofday.New(10, 11, 12, 0), 5*60*60+24)), "10:11:12-05:00:24"},
 		{EncodeDurationValue(nil, NoColumnID,
 			duration.DecodeDuration(1, 2, 3)), "1 mon 2 days 00:00:00+3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "0x01020fff"},
@@ -2317,6 +2438,40 @@ func BenchmarkDecodeTimeValue(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if _, _, err := DecodeTimeValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeTimeTZValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([]timetz.TimeTZ, 10000)
+	for i := range vals {
+		vals[i] = rd.timetz()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeTimeTZValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeTimeTZValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeTimeTZValue(nil, uint32(rng.Intn(100)), rd.timetz())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeTimeTZValue(vals[i%len(vals)]); err != nil {
 			b.Fatal(err)
 		}
 	}
