@@ -276,8 +276,19 @@ enum Family {
     //
     JsonFamily = 18;
 
-    // Reserved for TIMETZ if/when fully implemented. See #26097.
-    reserved 19;
+    // TimeTZFamily is the family of date types that store only hour/minute/second
+    // and timestamp components, with no date component. Seconds can have
+    // varying precision (defaults to microsecond precision). Currently, only
+    // microsecond precision is supported.
+    //
+    //   Canonical: types.TimeTZ
+    //   Oid      : T_timetz
+    //   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+    //
+    // Examples:
+    //   TIMETZ
+    //
+    TimeTZFamily = 19;
 
     // TupleFamily is a family of non-scalar structural types that describes the
     // fields of a row or record. The fields can be of any type, including nested

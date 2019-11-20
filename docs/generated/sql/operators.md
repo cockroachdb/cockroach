@@ -167,6 +167,7 @@
 <tr><td><a href="timestamp.html">timestamptz</a> <code><</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code><</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code><</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>timetz <code><</code> timetz</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code><</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code><</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>varbit <code><</code> varbit</td><td><a href="bool.html">bool</a></td></tr>
@@ -207,6 +208,7 @@
 <tr><td><a href="timestamp.html">timestamptz</a> <code><=</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code><=</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code><=</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>timetz <code><=</code> timetz</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code><=</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code><=</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>varbit <code><=</code> varbit</td><td><a href="bool.html">bool</a></td></tr>
@@ -259,6 +261,7 @@
 <tr><td><a href="timestamp.html">timestamptz</a> <code>=</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code>=</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>timestamptz <code>=</code> timestamptz</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>timetz <code>=</code> timetz</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>=</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>=</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid[]</a> <code>=</code> <a href="uuid.html">uuid[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -315,6 +318,7 @@
 <tr><td><a href="time.html">time</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>timetz <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>varbit <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
@@ -361,6 +365,7 @@
 <tr><td><a href="timestamp.html">timestamptz</a> <code>IS NOT DISTINCT FROM</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code>IS NOT DISTINCT FROM</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>timestamptz <code>IS NOT DISTINCT FROM</code> timestamptz</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>timetz <code>IS NOT DISTINCT FROM</code> timetz</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>IS NOT DISTINCT FROM</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>unknown <code>IS NOT DISTINCT FROM</code> unknown</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>IS NOT DISTINCT FROM</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -436,6 +441,7 @@
 <tr><td><a href="timestamp.html">timestamptz</a> <code>||</code> timestamptz</td><td>timestamptz</td></tr>
 <tr><td>timestamptz <code>||</code> <a href="timestamp.html">timestamptz</a></td><td>timestamptz</td></tr>
 <tr><td>timestamptz <code>||</code> timestamptz</td><td>timestamptz</td></tr>
+<tr><td>timetz <code>||</code> timetz</td><td>timetz</td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>||</code> <a href="uuid.html">uuid[]</a></td><td><a href="uuid.html">uuid[]</a></td></tr>
 <tr><td><a href="uuid.html">uuid[]</a> <code>||</code> <a href="uuid.html">uuid</a></td><td><a href="uuid.html">uuid[]</a></td></tr>
 <tr><td><a href="uuid.html">uuid[]</a> <code>||</code> <a href="uuid.html">uuid[]</a></td><td><a href="uuid.html">uuid[]</a></td></tr>

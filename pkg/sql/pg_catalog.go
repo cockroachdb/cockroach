@@ -2643,6 +2643,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.BytesFamily:       typCategoryUserDefined,
 	types.DateFamily:        typCategoryDateTime,
 	types.TimeFamily:        typCategoryDateTime,
+	types.TimeTZFamily:      typCategoryDateTime,
 	types.FloatFamily:       typCategoryNumeric,
 	types.IntFamily:         typCategoryNumeric,
 	types.IntervalFamily:    typCategoryTimespan,

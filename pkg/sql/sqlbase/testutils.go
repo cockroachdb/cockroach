@@ -163,6 +163,14 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return tree.NewDDate(d)
 	case types.TimeFamily:
 		return tree.MakeDTime(timeofday.Random(rng))
+	case types.TimeTZFamily:
+		return tree.NewDTimeTZFromOffset(
+			timeofday.Random(rng),
+			// We cannot randomize seconds, because lib/pq does NOT print the
+			// second offsets making some tests break when comparing
+			// results in == results out using string comparison.
+			(rng.Int31n(28*60+59)-(14*60+59))*60,
+		)
 	case types.TimestampFamily:
 		return tree.MakeDTimestamp(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)), time.Microsecond)
 	case types.IntervalFamily:

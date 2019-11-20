@@ -2086,6 +2086,7 @@ character_without_length ::=
 
 const_datetime ::=
 	'DATE'
+	| 'TIMETZ'
 	| 'TIMESTAMP' opt_timezone
 	| 'TIMESTAMPTZ'
 
