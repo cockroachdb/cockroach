@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -209,13 +210,21 @@ func descriptorsMatchingTargets(
 			if err != nil {
 				return ret, err
 			}
+			doesNotExistErr := errors.Errorf(`table %q does not exist`, tree.ErrString(p))
 			if !found {
-				return ret, errors.Errorf(`table %q does not exist`, tree.ErrString(p))
+				return ret, doesNotExistErr
 			}
 			desc := descI.(sqlbase.Descriptor)
+			tableDesc := desc.Table(hlc.Timestamp{})
 
-			// If the parent database is not requested already, request it now
-			parentID := desc.Table(hlc.Timestamp{}).GetParentID()
+			// Verify that the table is in the correct state.
+			if err := sql.FilterTableState(tableDesc); err != nil {
+				// Return a does not exist error if explicitly asking for this table.
+				return ret, doesNotExistErr
+			}
+
+			// If the parent database is not requested already, request it now.
+			parentID := tableDesc.GetParentID()
 			if _, ok := alreadyRequestedDBs[parentID]; !ok {
 				parentDesc := resolver.descByID[parentID]
 				ret.descs = append(ret.descs, parentDesc)
@@ -258,8 +267,16 @@ func descriptorsMatchingTargets(
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
 		for _, tblID := range resolver.objsByName[dbID] {
+			desc := resolver.descByID[tblID]
+			table := desc.Table(hlc.Timestamp{})
+			if err := sql.FilterTableState(table); err != nil {
+				// Don't include this table in the expansion since it's not in a valid
+				// state. Silently fail since this table was not directly requested,
+				// but was just part of an expansion.
+				continue
+			}
 			if _, ok := alreadyRequestedTables[tblID]; !ok {
-				ret.descs = append(ret.descs, resolver.descByID[tblID])
+				ret.descs = append(ret.descs, desc)
 			}
 		}
 	}
