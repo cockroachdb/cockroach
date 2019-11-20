@@ -184,7 +184,6 @@ func makeUpdaterWithoutCascader(
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		marshaled:             make([]roachpb.Value, len(updateCols)),
-		newValues:             make([]tree.Datum, len(tableCols)),
 	}
 
 	if primaryKeyColChange {
@@ -265,6 +264,11 @@ func makeUpdaterWithoutCascader(
 		}
 	}
 
+	// If we are fetching from specific families, we might get
+	// less columns than in the table. So we cannot assign this to
+	// have length len(tableCols).
+	ru.newValues = make(tree.Datums, len(ru.FetchCols))
+
 	if checkFKs == CheckFKs {
 		var err error
 		if primaryKeyColChange {
@@ -297,6 +301,9 @@ func (ru *Updater) UpdateRow(
 	if ru.cascader != nil {
 		batch = ru.cascader.txn.NewBatch()
 	}
+
+	// Prevent people from using b directly, as it does not get flushed.
+	b = nil
 
 	if len(oldValues) != len(ru.FetchCols) {
 		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.FetchCols))
@@ -405,7 +412,7 @@ func (ru *Updater) UpdateRow(
 	}
 
 	// Add the new values.
-	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, b,
+	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, batch,
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.marshaled, ru.UpdateColIDtoRowIndex,
@@ -480,7 +487,7 @@ func (ru *Updater) UpdateRow(
 	putFn := insertInvertedPutFn
 	// We're adding all of the inverted index entries from the row being updated.
 	for i := len(ru.Helper.Indexes); i < len(newSecondaryIndexEntries); i++ {
-		putFn(ctx, b, &newSecondaryIndexEntries[i].Key, &newSecondaryIndexEntries[i].Value, traceKV)
+		putFn(ctx, batch, &newSecondaryIndexEntries[i].Key, &newSecondaryIndexEntries[i].Value, traceKV)
 	}
 
 	if ru.cascader != nil {

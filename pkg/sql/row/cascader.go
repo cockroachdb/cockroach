@@ -672,6 +672,7 @@ func (c *cascader) updateRows(
 	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	action sqlbase.ForeignKeyReference_Action,
+	fk *sqlbase.ForeignKeyConstraint,
 	traceKV bool,
 ) (*rowcontainer.RowContainer, *rowcontainer.RowContainer, map[sqlbase.ColumnID]int, int, error) {
 	// Create the span to search for index values.
@@ -755,6 +756,26 @@ func (c *cascader) updateRows(
 	// values being updated will change based on both the original and updated
 	// values.
 	for i := values.startIndex; i < values.endIndex; i++ {
+		// If the rows are the same on the FK columns, then we don't want to continue the cascade.
+		// Due to some differences in startup vs steady state of this system, sometimes updatedValues is nil,
+		// and sometimes the lengths of the original and updated rows are different.
+		if values.updatedValues != nil {
+			allFKColsUnchanged := true
+			origValues := values.originalValues.At(i)
+			updatedValues := values.updatedValues.At(i)
+			if len(origValues) == len(updatedValues) {
+				for _, colID := range fk.ReferencedColumnIDs {
+					if origValues[values.colIDtoRowIndex[colID]].Compare(c.evalCtx, updatedValues[values.colIDtoRowIndex[colID]]) != 0 {
+						allFKColsUnchanged = false
+						break
+					}
+				}
+				if allFKColsUnchanged {
+					continue
+				}
+			}
+		}
+
 		// Extract a single value to update at a time.
 		req, valueColIDtoRowIndex, err := batchRequestForIndexValues(
 			ctx, referencedIndex, referencingTable, referencingIndex, match, cascadeQueueElement{
@@ -1099,6 +1120,7 @@ func (c *cascader) cascadeAll(
 						sqlbase.ForeignKeyReference_SIMPLE,
 						elem,
 						foundFK.OnDelete,
+						foundFK,
 						traceKV,
 					)
 					if err != nil {
@@ -1130,6 +1152,7 @@ func (c *cascader) cascadeAll(
 						sqlbase.ForeignKeyReference_SIMPLE,
 						elem,
 						foundFK.OnUpdate,
+						foundFK,
 						traceKV,
 					)
 					if err != nil {
