@@ -6,19 +6,20 @@
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.Ò
+// licenses/APL.txt.
 
 import { createSelector } from "reselect";
 
 import { AdminUIState } from "src/redux/state";
+import { MetricMetadataResponseMessage } from "src/util/api";
 
-import { MetricsMetadata } from "./reducer";
-import { MetricsMetadataState } from "./reducer";
+export type MetricsMetadata = MetricMetadataResponseMessage["metadata"];
 
-const metricsMetadataStateSelector = (state: AdminUIState) => state.metricsMetadata;
+// State selectors
+const metricsMetadataStateSelector = (state: AdminUIState) => state.cachedData.metricMetadata.data;
 
 export const metricsMetadataSelector = createSelector(
   metricsMetadataStateSelector,
-  (metricsMetadata: MetricsMetadataState): MetricsMetadata =>
+  (metricsMetadata): MetricsMetadata =>
     metricsMetadata ? metricsMetadata.metadata : undefined,
 );

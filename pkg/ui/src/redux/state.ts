@@ -18,13 +18,11 @@ import thunk from "redux-thunk";
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
-import { metricsReducer, MetricsState } from "./metrics";
+import { metricsReducer, MetricsState, queryMetricsSaga } from "./metrics";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
-import { metricsMetadataReducer, MetricsMetadataState } from "./metricsMetadata";
-import rootSaga from "./sagas";
 
 export interface AdminUIState {
     cachedData: APIReducersState;
@@ -36,7 +34,6 @@ export interface AdminUIState {
     timewindow: TimeWindowState;
     uiData: UIDataState;
     login: LoginAPIState;
-    metricsMetadata: MetricsMetadataState;
 }
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
@@ -55,7 +52,6 @@ export function createAdminUIStore() {
       timewindow: timeWindowReducer,
       uiData: uiDataReducer,
       login: loginReducer,
-      metricsMetadata: metricsMetadataReducer,
     }),
     compose(
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(hashHistory)),
@@ -76,7 +72,7 @@ export function createAdminUIStore() {
     ) as GenericStoreEnhancer,
   );
 
-  sagaMiddleware.run(rootSaga);
+  sagaMiddleware.run(queryMetricsSaga);
   return s;
 }
 
