@@ -96,13 +96,12 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 
 		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, nil, ``},
 		{"", "TABLE SyStEm.pUbLic.FoO", []string{"system", "foo"}, nil, ``},
+		{"", `TABLE system."FoO"`, nil, nil, `table "system.FoO" does not exist`},
+		{"system", `TABLE "FoO"`, nil, nil, `table "FoO" does not exist`},
 
 		{"", `TABLE system."foo"`, []string{"system", "foo"}, nil, ``},
 		{"", `TABLE system.public."foo"`, []string{"system", "foo"}, nil, ``},
 		{"system", `TABLE "foo"`, []string{"system", "foo"}, nil, ``},
-		// TODO(dan): Enable these tests once #8862 is fixed.
-		// {"", `TABLE system."FOO"`, []string{"system"}},
-		// {"system", `TABLE "FOO"`, []string{"system"}},
 	}
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {
