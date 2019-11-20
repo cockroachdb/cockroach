@@ -47,21 +47,15 @@ type ordinalityRun struct {
 }
 
 func (o *ordinalityNode) startExec(runParams) error {
-	return nil
+	panic("ordinalityNode can't be run in local mode")
 }
 
 func (o *ordinalityNode) Next(params runParams) (bool, error) {
-	hasNext, err := o.source.Next(params)
-	if !hasNext || err != nil {
-		return hasNext, err
-	}
-	copy(o.run.row, o.source.Values())
-	// o.run.row was allocated one spot larger than o.source.Values().
-	// Store the ordinality value there.
-	o.run.row[len(o.run.row)-1] = tree.NewDInt(tree.DInt(o.run.curCnt))
-	o.run.curCnt++
-	return true, nil
+	panic("ordinalityNode can't be run in local mode")
 }
 
-func (o *ordinalityNode) Values() tree.Datums       { return o.run.row }
+func (o *ordinalityNode) Values() tree.Datums {
+	panic("ordinalityNode can't be run in local mode")
+}
+
 func (o *ordinalityNode) Close(ctx context.Context) { o.source.Close(ctx) }

@@ -165,8 +165,8 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE 'FKScan%'
 ----
-FKScan /Table/54/1/"fake"{-/#}
-FKScan /Table/53/1/2{-/#}
+FKScan /Table/54/1/"fake"/{0-1}
+FKScan /Table/53/1/2/{0-1}
 
 statement error pgcode 23503 foreign key violation: values \['780'\] in columns \[sku\] referenced in table "orders"
 DELETE FROM products
@@ -715,8 +715,8 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE 'FKScan%'
 ----
-FKScan /Table/93/1/3{-/#}
-FKScan /Table/94/1/2{-/#}
+FKScan /Table/93/1/3/{0-1}
+FKScan /Table/94/1/2/{0-1}
 
 statement ok
 CREATE TABLE tx (
@@ -2679,3 +2679,49 @@ CREATE TABLE c_persistent(c INT PRIMARY KEY)
 
 statement error pq: constraints on temporary tables may reference only temporary tables
 CREATE TEMP TABLE c_temp(c INT, FOREIGN KEY (c) REFERENCES c_persistent(c))
+
+# Test that when the foreign key is a primary index we only look up the primary
+# family.
+subtest families
+
+statement ok
+CREATE TABLE fam_parent (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  FAMILY (k, a),
+  FAMILY (b)
+)
+
+statement ok
+CREATE TABLE fam_child (
+  k INT PRIMARY KEY,
+  fk INT REFERENCES fam_parent(k)
+)
+
+statement ok
+INSERT INTO fam_parent VALUES (1, 1, 1)
+
+statement ok
+GRANT ALL ON fam_parent TO testuser;
+GRANT ALL ON fam_child TO testuser;
+
+# Open a transaction that modifies b.
+statement ok
+BEGIN
+
+statement count 1
+UPDATE fam_parent SET b = b+1 WHERE k = 1
+
+user testuser
+
+# Run an INSERT which needs to check existence of the row. If we try to scan
+# the entire row, this blocks on the other transaction. We should only be
+# scanning the primary column family.
+statement ok
+INSERT INTO fam_child VALUES (1, 1)
+
+user root
+
+statement ok
+COMMIT
