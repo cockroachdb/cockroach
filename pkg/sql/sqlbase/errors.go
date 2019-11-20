@@ -111,7 +111,7 @@ func NewRelationAlreadyExistsError(name string) error {
 }
 
 // NewWrongObjectTypeError creates a wrong object type error.
-func NewWrongObjectTypeError(name *tree.TableName, desiredObjType string) error {
+func NewWrongObjectTypeError(name tree.NodeFormatter, desiredObjType string) error {
 	return pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
 		tree.ErrString(name), desiredObjType)
 }

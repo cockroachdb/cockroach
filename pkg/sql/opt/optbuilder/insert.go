@@ -154,34 +154,43 @@ func init() {
 // ON CONFLICT clause is present, since it joins a new set of rows to the input
 // and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
-	// INSERT INTO xx AS yy - we want to know about xx (tn) because
-	// that's what we get the descriptor with, and yy (alias) because
-	// that's what RETURNING will use.
-	tn, alias := getAliasedTableName(ins.Table)
-
 	// Find which table we're working on, check the permissions.
-	tab, resName := b.resolveTable(tn, privilege.INSERT)
-	if alias == nil {
-		alias = &resName
+	tab, depName, alias, refColumns := b.resolveTableForMutation(ins.Table, privilege.INSERT)
+
+	// It is possible to insert into specific columns using table reference
+	// syntax:
+	// INSERT INTO [<table_id>(<col1_id>,<col2_id>) AS <alias>] ...
+	// is equivalent to
+	// INSERT INTO [<table_id> AS <alias>] (col1_name, col2_name) ...
+	if refColumns != nil {
+		if len(ins.Columns) != 0 {
+			panic(pgerror.Newf(pgcode.Syntax,
+				"cannot specify both a list of column IDs and a list of column names"))
+		}
+
+		ins.Columns = make(tree.NameList, len(refColumns))
+		for i, ord := range cat.ConvertColumnIDsToOrdinals(tab, refColumns) {
+			ins.Columns[i] = tab.Column(ord).ColName()
+		}
 	}
 
 	if ins.OnConflict != nil {
 		// UPSERT and INDEX ON CONFLICT will read from the table to check for
 		// duplicates.
-		b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
+		b.checkPrivilege(depName, tab, privilege.SELECT)
 
 		if !ins.OnConflict.DoNothing {
 			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows if the
 			// DO NOTHING clause is not present.
-			b.checkPrivilege(opt.DepByName(tn), tab, privilege.UPDATE)
+			b.checkPrivilege(depName, tab, privilege.UPDATE)
 		}
 	}
 
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
-		mb.init(b, "upsert", tab, *alias)
+		mb.init(b, "upsert", tab, alias)
 	} else {
-		mb.init(b, "insert", tab, *alias)
+		mb.init(b, "insert", tab, alias)
 	}
 
 	// Compute target columns in two cases:
