@@ -452,36 +452,46 @@ project
 build
 SELECT * FROM [INSERT INTO abcde VALUES (1) RETURNING *]
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null)
- └── insert abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
-      ├── insert-mapping:
-      │    ├──  column1:7 => a:1
-      │    ├──  column8:8 => b:2
-      │    ├──  column9:9 => c:3
-      │    ├──  column11:11 => d:4
-      │    ├──  column1:7 => e:5
-      │    └──  column10:10 => rowid:6
-      └── project
-           ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
-           ├── project
-           │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
-           │    ├── values
-           │    │    ├── columns: column1:7(int!null)
-           │    │    └── tuple [type=tuple{int}]
-           │    │         └── const: 1 [type=int]
-           │    └── projections
-           │         ├── cast: INT8 [type=int]
-           │         │    └── null [type=unknown]
-           │         ├── const: 10 [type=int]
-           │         └── function: unique_rowid [type=int]
-           └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: column8 [type=int]
-                     │    └── variable: column9 [type=int]
-                     └── const: 1 [type=int]
+with &1
+ ├── columns: a:12(int!null) b:13(int) c:14(int!null) d:15(int) e:16(int!null)
+ ├── project
+ │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int!null) abcde.d:4(int) abcde.e:5(int!null)
+ │    └── insert abcde
+ │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int!null) abcde.d:4(int) abcde.e:5(int!null) rowid:6(int!null)
+ │         ├── insert-mapping:
+ │         │    ├──  column1:7 => abcde.a:1
+ │         │    ├──  column8:8 => abcde.b:2
+ │         │    ├──  column9:9 => abcde.c:3
+ │         │    ├──  column11:11 => abcde.d:4
+ │         │    ├──  column1:7 => abcde.e:5
+ │         │    └──  column10:10 => rowid:6
+ │         └── project
+ │              ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
+ │              ├── project
+ │              │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
+ │              │    ├── values
+ │              │    │    ├── columns: column1:7(int!null)
+ │              │    │    └── tuple [type=tuple{int}]
+ │              │    │         └── const: 1 [type=int]
+ │              │    └── projections
+ │              │         ├── cast: INT8 [type=int]
+ │              │         │    └── null [type=unknown]
+ │              │         ├── const: 10 [type=int]
+ │              │         └── function: unique_rowid [type=int]
+ │              └── projections
+ │                   └── plus [type=int]
+ │                        ├── plus [type=int]
+ │                        │    ├── variable: column8 [type=int]
+ │                        │    └── variable: column9 [type=int]
+ │                        └── const: 1 [type=int]
+ └── with-scan &1
+      ├── columns: a:12(int!null) b:13(int) c:14(int!null) d:15(int) e:16(int!null)
+      └── mapping:
+           ├──  abcde.a:1(int) => a:12(int)
+           ├──  abcde.b:2(int) => b:13(int)
+           ├──  abcde.c:3(int) => c:14(int)
+           ├──  abcde.d:4(int) => d:15(int)
+           └──  abcde.e:5(int) => e:16(int)
 
 # Try to use aggregate function in RETURNING clause.
 build
@@ -606,67 +616,76 @@ with &1 (a)
 build
 WITH cte AS (SELECT b FROM [INSERT INTO abcde VALUES (1) RETURNING *]) INSERT INTO abcde VALUES (1)
 ----
-with &1 (cte)
+with &1
  ├── project
- │    ├── columns: b:2(int)
- │    └── project
- │         ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null)
- │         └── insert abcde
- │              ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
- │              ├── insert-mapping:
- │              │    ├──  column1:7 => a:1
- │              │    ├──  column8:8 => b:2
- │              │    ├──  column9:9 => c:3
- │              │    ├──  column11:11 => d:4
- │              │    ├──  column1:7 => e:5
- │              │    └──  column10:10 => rowid:6
- │              └── project
- │                   ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
- │                   ├── project
- │                   │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
- │                   │    ├── values
- │                   │    │    ├── columns: column1:7(int!null)
- │                   │    │    └── tuple [type=tuple{int}]
- │                   │    │         └── const: 1 [type=int]
- │                   │    └── projections
- │                   │         ├── cast: INT8 [type=int]
- │                   │         │    └── null [type=unknown]
- │                   │         ├── const: 10 [type=int]
- │                   │         └── function: unique_rowid [type=int]
- │                   └── projections
- │                        └── plus [type=int]
- │                             ├── plus [type=int]
- │                             │    ├── variable: column8 [type=int]
- │                             │    └── variable: column9 [type=int]
- │                             └── const: 1 [type=int]
- └── insert abcde
-      ├── columns: <none>
-      ├── insert-mapping:
-      │    ├──  column1:18 => a:12
-      │    ├──  column19:19 => b:13
-      │    ├──  column20:20 => c:14
-      │    ├──  column22:22 => d:15
-      │    ├──  column1:18 => e:16
-      │    └──  column21:21 => rowid:17
-      └── project
-           ├── columns: column22:22(int) column1:18(int!null) column19:19(int) column20:20(int!null) column21:21(int)
-           ├── project
-           │    ├── columns: column19:19(int) column20:20(int!null) column21:21(int) column1:18(int!null)
-           │    ├── values
-           │    │    ├── columns: column1:18(int!null)
-           │    │    └── tuple [type=tuple{int}]
-           │    │         └── const: 1 [type=int]
-           │    └── projections
-           │         ├── cast: INT8 [type=int]
-           │         │    └── null [type=unknown]
-           │         ├── const: 10 [type=int]
-           │         └── function: unique_rowid [type=int]
-           └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: column19 [type=int]
-                     │    └── variable: column20 [type=int]
-                     └── const: 1 [type=int]
+ │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int!null) abcde.d:4(int) abcde.e:5(int!null)
+ │    └── insert abcde
+ │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int!null) abcde.d:4(int) abcde.e:5(int!null) rowid:6(int!null)
+ │         ├── insert-mapping:
+ │         │    ├──  column1:7 => abcde.a:1
+ │         │    ├──  column8:8 => abcde.b:2
+ │         │    ├──  column9:9 => abcde.c:3
+ │         │    ├──  column11:11 => abcde.d:4
+ │         │    ├──  column1:7 => abcde.e:5
+ │         │    └──  column10:10 => rowid:6
+ │         └── project
+ │              ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
+ │              ├── project
+ │              │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
+ │              │    ├── values
+ │              │    │    ├── columns: column1:7(int!null)
+ │              │    │    └── tuple [type=tuple{int}]
+ │              │    │         └── const: 1 [type=int]
+ │              │    └── projections
+ │              │         ├── cast: INT8 [type=int]
+ │              │         │    └── null [type=unknown]
+ │              │         ├── const: 10 [type=int]
+ │              │         └── function: unique_rowid [type=int]
+ │              └── projections
+ │                   └── plus [type=int]
+ │                        ├── plus [type=int]
+ │                        │    ├── variable: column8 [type=int]
+ │                        │    └── variable: column9 [type=int]
+ │                        └── const: 1 [type=int]
+ └── with &2 (cte)
+      ├── project
+      │    ├── columns: b:13(int)
+      │    └── with-scan &1
+      │         ├── columns: a:12(int!null) b:13(int) c:14(int!null) d:15(int) e:16(int!null)
+      │         └── mapping:
+      │              ├──  abcde.a:1(int) => a:12(int)
+      │              ├──  abcde.b:2(int) => b:13(int)
+      │              ├──  abcde.c:3(int) => c:14(int)
+      │              ├──  abcde.d:4(int) => d:15(int)
+      │              └──  abcde.e:5(int) => e:16(int)
+      └── insert abcde
+           ├── columns: <none>
+           ├── insert-mapping:
+           │    ├──  column1:23 => abcde.a:17
+           │    ├──  column24:24 => abcde.b:18
+           │    ├──  column25:25 => abcde.c:19
+           │    ├──  column27:27 => abcde.d:20
+           │    ├──  column1:23 => abcde.e:21
+           │    └──  column26:26 => rowid:22
+           └── project
+                ├── columns: column27:27(int) column1:23(int!null) column24:24(int) column25:25(int!null) column26:26(int)
+                ├── project
+                │    ├── columns: column24:24(int) column25:25(int!null) column26:26(int) column1:23(int!null)
+                │    ├── values
+                │    │    ├── columns: column1:23(int!null)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── projections
+                │         ├── cast: INT8 [type=int]
+                │         │    └── null [type=unknown]
+                │         ├── const: 10 [type=int]
+                │         └── function: unique_rowid [type=int]
+                └── projections
+                     └── plus [type=int]
+                          ├── plus [type=int]
+                          │    ├── variable: column24 [type=int]
+                          │    └── variable: column25 [type=int]
+                          └── const: 1 [type=int]
 
 # Insert CTE that returns no columns.
 build
@@ -977,38 +996,48 @@ insert abcde
 build
 SELECT * FROM [INSERT INTO abcde (a, b) SELECT y+1, y FROM xyz RETURNING *]
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
- └── insert abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
-      ├── insert-mapping:
-      │    ├──  "?column?":10 => a:1
-      │    ├──  y:8 => b:2
-      │    ├──  column11:11 => c:3
-      │    ├──  column13:13 => d:4
-      │    ├──  "?column?":10 => e:5
-      │    └──  column12:12 => rowid:6
-      └── project
-           ├── columns: column13:13(int) y:8(int) "?column?":10(int) column11:11(int!null) column12:12(int)
-           ├── project
-           │    ├── columns: column11:11(int!null) column12:12(int) y:8(int) "?column?":10(int)
-           │    ├── project
-           │    │    ├── columns: "?column?":10(int) y:8(int)
-           │    │    ├── scan xyz
-           │    │    │    └── columns: x:7(string!null) y:8(int) z:9(float)
-           │    │    └── projections
-           │    │         └── plus [type=int]
-           │    │              ├── variable: y [type=int]
-           │    │              └── const: 1 [type=int]
-           │    └── projections
-           │         ├── const: 10 [type=int]
-           │         └── function: unique_rowid [type=int]
-           └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: y [type=int]
-                     │    └── variable: column11 [type=int]
-                     └── const: 1 [type=int]
+with &1
+ ├── columns: a:14(int!null) b:15(int) c:16(int!null) d:17(int) e:18(int)
+ ├── project
+ │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int!null) abcde.d:4(int) abcde.e:5(int)
+ │    └── insert abcde
+ │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int!null) abcde.d:4(int) abcde.e:5(int) rowid:6(int!null)
+ │         ├── insert-mapping:
+ │         │    ├──  "?column?":10 => abcde.a:1
+ │         │    ├──  y:8 => abcde.b:2
+ │         │    ├──  column11:11 => abcde.c:3
+ │         │    ├──  column13:13 => abcde.d:4
+ │         │    ├──  "?column?":10 => abcde.e:5
+ │         │    └──  column12:12 => rowid:6
+ │         └── project
+ │              ├── columns: column13:13(int) y:8(int) "?column?":10(int) column11:11(int!null) column12:12(int)
+ │              ├── project
+ │              │    ├── columns: column11:11(int!null) column12:12(int) y:8(int) "?column?":10(int)
+ │              │    ├── project
+ │              │    │    ├── columns: "?column?":10(int) y:8(int)
+ │              │    │    ├── scan xyz
+ │              │    │    │    └── columns: x:7(string!null) y:8(int) z:9(float)
+ │              │    │    └── projections
+ │              │    │         └── plus [type=int]
+ │              │    │              ├── variable: y [type=int]
+ │              │    │              └── const: 1 [type=int]
+ │              │    └── projections
+ │              │         ├── const: 10 [type=int]
+ │              │         └── function: unique_rowid [type=int]
+ │              └── projections
+ │                   └── plus [type=int]
+ │                        ├── plus [type=int]
+ │                        │    ├── variable: y [type=int]
+ │                        │    └── variable: column11 [type=int]
+ │                        └── const: 1 [type=int]
+ └── with-scan &1
+      ├── columns: a:14(int!null) b:15(int) c:16(int!null) d:17(int) e:18(int)
+      └── mapping:
+           ├──  abcde.a:1(int) => a:14(int)
+           ├──  abcde.b:2(int) => b:15(int)
+           ├──  abcde.c:3(int) => c:16(int)
+           ├──  abcde.d:4(int) => d:17(int)
+           └──  abcde.e:5(int) => e:18(int)
 
 # ------------------------------------------------------------------------------
 # Propagate desired INSERT types.

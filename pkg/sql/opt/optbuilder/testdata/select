@@ -1253,57 +1253,79 @@ project
 build
 WITH cte AS (SELECT b FROM [INSERT INTO abc VALUES (1) RETURNING *] LIMIT 1) SELECT * FROM abc
 ----
-with &1 (cte)
- ├── columns: a:6(int!null) b:7(int) c:8(int)
- ├── limit
- │    ├── columns: b:2(int)
- │    ├── project
- │    │    ├── columns: b:2(int)
- │    │    ├── limit hint: 1.00
- │    │    └── insert abc
- │    │         ├── columns: a:1(int!null) b:2(int) c:3(int)
- │    │         ├── insert-mapping:
- │    │         │    ├──  column1:4 => a:1
- │    │         │    ├──  column5:5 => b:2
- │    │         │    └──  column5:5 => c:3
- │    │         ├── limit hint: 1.00
- │    │         └── project
- │    │              ├── columns: column5:5(int) column1:4(int!null)
- │    │              ├── values
- │    │              │    ├── columns: column1:4(int!null)
- │    │              │    └── tuple [type=tuple{int}]
- │    │              │         └── const: 1 [type=int]
- │    │              └── projections
- │    │                   └── cast: INT8 [type=int]
- │    │                        └── null [type=unknown]
- │    └── const: 1 [type=int]
- └── scan abc
-      └── columns: a:6(int!null) b:7(int) c:8(int)
+with &1
+ ├── columns: a:9(int!null) b:10(int) c:11(int)
+ ├── insert abc
+ │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    ├── insert-mapping:
+ │    │    ├──  column1:4 => abc.a:1
+ │    │    ├──  column5:5 => abc.b:2
+ │    │    └──  column5:5 => abc.c:3
+ │    └── project
+ │         ├── columns: column5:5(int) column1:4(int!null)
+ │         ├── values
+ │         │    ├── columns: column1:4(int!null)
+ │         │    └── tuple [type=tuple{int}]
+ │         │         └── const: 1 [type=int]
+ │         └── projections
+ │              └── cast: INT8 [type=int]
+ │                   └── null [type=unknown]
+ └── with &2 (cte)
+      ├── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int)
+      ├── limit
+      │    ├── columns: b:7(int)
+      │    ├── project
+      │    │    ├── columns: b:7(int)
+      │    │    ├── limit hint: 1.00
+      │    │    └── with-scan &1
+      │    │         ├── columns: a:6(int!null) b:7(int) c:8(int)
+      │    │         ├── mapping:
+      │    │         │    ├──  abc.a:1(int) => a:6(int)
+      │    │         │    ├──  abc.b:2(int) => b:7(int)
+      │    │         │    └──  abc.c:3(int) => c:8(int)
+      │    │         └── limit hint: 1.00
+      │    └── const: 1 [type=int]
+      └── scan abc
+           └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int)
 
 # Tests for the square bracket syntax.
 build
 SELECT * FROM [SELECT * FROM abc]
 ----
-scan abc
- └── columns: a:1(int!null) b:2(int) c:3(int)
+with &1
+ ├── columns: a:4(int!null) b:5(int) c:6(int)
+ ├── scan abc
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ └── with-scan &1
+      ├── columns: a:4(int!null) b:5(int) c:6(int)
+      └── mapping:
+           ├──  abc.a:1(int) => a:4(int)
+           ├──  abc.b:2(int) => b:5(int)
+           └──  abc.c:3(int) => c:6(int)
 
 build
 SELECT * FROM [INSERT INTO abc VALUES (1, 2, 3) RETURNING a]
 ----
-project
- ├── columns: a:1(int!null)
- └── insert abc
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      ├── insert-mapping:
-      │    ├──  column1:4 => a:1
-      │    ├──  column2:5 => b:2
-      │    └──  column3:6 => c:3
-      └── values
-           ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
-           └── tuple [type=tuple{int, int, int}]
-                ├── const: 1 [type=int]
-                ├── const: 2 [type=int]
-                └── const: 3 [type=int]
+with &1
+ ├── columns: a:7(int!null)
+ ├── project
+ │    ├── columns: abc.a:1(int!null)
+ │    └── insert abc
+ │         ├── columns: abc.a:1(int!null) b:2(int!null) c:3(int!null)
+ │         ├── insert-mapping:
+ │         │    ├──  column1:4 => abc.a:1
+ │         │    ├──  column2:5 => b:2
+ │         │    └──  column3:6 => c:3
+ │         └── values
+ │              ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
+ │              └── tuple [type=tuple{int, int, int}]
+ │                   ├── const: 1 [type=int]
+ │                   ├── const: 2 [type=int]
+ │                   └── const: 3 [type=int]
+ └── with-scan &1
+      ├── columns: a:7(int!null)
+      └── mapping:
+           └──  abc.a:1(int) => a:7(int)
 
 # Statement inside brackets cannot refer to outer column.
 build
@@ -1328,44 +1350,62 @@ build
 WITH cte AS (SELECT 1) SELECT 1 + (SELECT * FROM cte) FROM [SELECT * from xyzw]
 ----
 with &1 (cte)
- ├── columns: "?column?":7(int)
+ ├── columns: "?column?":11(int)
  ├── project
  │    ├── columns: "?column?":1(int!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
  │         └── const: 1 [type=int]
- └── project
-      ├── columns: "?column?":7(int)
+ └── with &2
+      ├── columns: "?column?":11(int)
       ├── scan xyzw
-      │    └── columns: x:2(int!null) y:3(int) z:4(int) w:5(int)
-      └── projections
-           └── plus [type=int]
-                ├── const: 1 [type=int]
-                └── subquery [type=int]
-                     └── max1-row
-                          ├── columns: "?column?":6(int!null)
-                          └── with-scan &1 (cte)
-                               ├── columns: "?column?":6(int!null)
-                               └── mapping:
-                                    └──  "?column?":1(int) => "?column?":6(int)
+      │    └── columns: xyzw.x:2(int!null) xyzw.y:3(int) xyzw.z:4(int) xyzw.w:5(int)
+      └── project
+           ├── columns: "?column?":11(int)
+           ├── with-scan &2
+           │    ├── columns: x:6(int!null) y:7(int) z:8(int) w:9(int)
+           │    └── mapping:
+           │         ├──  xyzw.x:2(int) => x:6(int)
+           │         ├──  xyzw.y:3(int) => y:7(int)
+           │         ├──  xyzw.z:4(int) => z:8(int)
+           │         └──  xyzw.w:5(int) => w:9(int)
+           └── projections
+                └── plus [type=int]
+                     ├── const: 1 [type=int]
+                     └── subquery [type=int]
+                          └── max1-row
+                               ├── columns: "?column?":10(int!null)
+                               └── with-scan &1 (cte)
+                                    ├── columns: "?column?":10(int!null)
+                                    └── mapping:
+                                         └──  "?column?":1(int) => "?column?":10(int)
 
 build
 SELECT a, (SELECT a+x FROM [SELECT * from xyzw]) FROM abc
 ----
-project
- ├── columns: a:1(int!null) "?column?":9(int)
- ├── scan abc
- │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── projections
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: "?column?":8(int)
-                └── project
-                     ├── columns: "?column?":8(int)
-                     ├── scan xyzw
-                     │    └── columns: x:4(int!null) y:5(int) z:6(int) w:7(int)
-                     └── projections
-                          └── plus [type=int]
-                               ├── variable: a [type=int]
-                               └── variable: x [type=int]
+with &1
+ ├── columns: a:1(int!null) "?column?":13(int)
+ ├── scan xyzw
+ │    └── columns: xyzw.x:4(int!null) xyzw.y:5(int) xyzw.z:6(int) xyzw.w:7(int)
+ └── project
+      ├── columns: "?column?":13(int) a:1(int!null)
+      ├── scan abc
+      │    └── columns: a:1(int!null) b:2(int) c:3(int)
+      └── projections
+           └── subquery [type=int]
+                └── max1-row
+                     ├── columns: "?column?":12(int)
+                     └── project
+                          ├── columns: "?column?":12(int)
+                          ├── with-scan &1
+                          │    ├── columns: x:8(int!null) y:9(int) z:10(int) w:11(int)
+                          │    └── mapping:
+                          │         ├──  xyzw.x:4(int) => x:8(int)
+                          │         ├──  xyzw.y:5(int) => y:9(int)
+                          │         ├──  xyzw.z:6(int) => z:10(int)
+                          │         └──  xyzw.w:7(int) => w:11(int)
+                          └── projections
+                               └── plus [type=int]
+                                    ├── variable: a [type=int]
+                                    └── variable: x [type=int]

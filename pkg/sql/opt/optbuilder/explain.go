@@ -26,9 +26,13 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		panic(err)
 	}
 
+	b.pushWithFrame()
+
 	// We don't allow the statement under Explain to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	stmtScope := b.buildStmt(explain.Statement, nil /* desiredTypes */, &scope{builder: b})
+	stmtScope := b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */, &scope{builder: b})
+
+	b.popWithFrame(stmtScope)
 	outScope = inScope.push()
 
 	var cols sqlbase.ResultColumns

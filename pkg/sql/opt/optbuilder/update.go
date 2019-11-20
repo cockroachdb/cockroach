@@ -74,11 +74,6 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 		panic(pgerror.DangerousStatementf("UPDATE without WHERE clause"))
 	}
 
-	var ctes []cteSource
-	if upd.With != nil {
-		inScope, ctes = b.buildCTEs(upd.With, inScope)
-	}
-
 	// UPDATE xx AS yy - we want to know about xx (tn) because
 	// that's what we get the descriptor with, and yy (alias) because
 	// that's what RETURNING will use.
@@ -121,8 +116,6 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	} else {
 		mb.buildUpdate(nil /* returning */)
 	}
-
-	mb.outScope.expr = b.wrapWithCTEs(mb.outScope.expr, ctes)
 
 	return mb.outScope
 }

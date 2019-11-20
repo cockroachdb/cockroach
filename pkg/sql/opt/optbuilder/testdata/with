@@ -38,6 +38,113 @@ with &1 (t)
                      └── variable: a [type=int]
 
 build
+EXPLAIN
+  WITH t AS (SELECT a FROM y WHERE a < 3)
+    SELECT * FROM x NATURAL JOIN t
+----
+explain
+ ├── columns: tree:7(string) field:8(string) description:9(string)
+ └── with &1 (t)
+      ├── columns: a:3(int!null) b:4(int)
+      ├── project
+      │    ├── columns: y.a:1(int!null)
+      │    └── select
+      │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+      │         ├── scan y
+      │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
+      │         └── filters
+      │              └── lt [type=bool]
+      │                   ├── variable: y.a [type=int]
+      │                   └── const: 3 [type=int]
+      └── project
+           ├── columns: x.a:3(int!null) b:4(int)
+           └── inner-join (hash)
+                ├── columns: x.a:3(int!null) b:4(int) x.rowid:5(int!null) a:6(int!null)
+                ├── scan x
+                │    └── columns: x.a:3(int) b:4(int) x.rowid:5(int!null)
+                ├── with-scan &1 (t)
+                │    ├── columns: a:6(int!null)
+                │    └── mapping:
+                │         └──  y.a:1(int) => a:6(int)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: x.a [type=int]
+                          └── variable: a [type=int]
+
+build
+WITH
+    q AS (SELECT NULL)
+SELECT
+    1 + (SELECT * FROM q)
+----
+with &1 (q)
+ ├── columns: "?column?":3(unknown)
+ ├── project
+ │    ├── columns: "?column?":1(unknown)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── null [type=unknown]
+ └── project
+      ├── columns: "?column?":3(unknown)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           └── null [type=unknown]
+
+build
+CREATE VIEW v1 AS
+  WITH t AS (SELECT a FROM y WHERE a < 3)
+    SELECT 1 FROM x NATURAL JOIN t
+----
+create-view t.public.v1
+ ├── WITH t AS (SELECT a FROM t.public.y WHERE a < 3) SELECT 1 FROM t.public.x NATURAL JOIN t
+ ├── columns: "?column?":7(int)
+ └── dependencies
+      ├── y [columns: (0,1)]
+      └── x [columns: (0-2)]
+
+build
+CREATE TABLE t1 AS
+  WITH t AS (SELECT a FROM y WHERE a < 3)
+    SELECT 1 FROM x NATURAL JOIN t
+----
+create-table
+ ├── CREATE TABLE t1 AS WITH t AS (SELECT a FROM t.public.y WHERE a < 3) SELECT 1 FROM t.public.x NATURAL JOIN t
+ └── project
+      ├── columns: rowid:8(int) "?column?":7(int!null)
+      ├── with &1 (t)
+      │    ├── columns: "?column?":7(int!null)
+      │    ├── project
+      │    │    ├── columns: y.a:1(int!null)
+      │    │    └── select
+      │    │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+      │    │         ├── scan y
+      │    │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
+      │    │         └── filters
+      │    │              └── lt [type=bool]
+      │    │                   ├── variable: y.a [type=int]
+      │    │                   └── const: 3 [type=int]
+      │    └── project
+      │         ├── columns: "?column?":7(int!null)
+      │         ├── inner-join (hash)
+      │         │    ├── columns: x.a:3(int!null) b:4(int) x.rowid:5(int!null) a:6(int!null)
+      │         │    ├── scan x
+      │         │    │    └── columns: x.a:3(int) b:4(int) x.rowid:5(int!null)
+      │         │    ├── with-scan &1 (t)
+      │         │    │    ├── columns: a:6(int!null)
+      │         │    │    └── mapping:
+      │         │    │         └──  y.a:1(int) => a:6(int)
+      │         │    └── filters
+      │         │         └── eq [type=bool]
+      │         │              ├── variable: x.a [type=int]
+      │         │              └── variable: a [type=int]
+      │         └── projections
+      │              └── const: 1 [type=int]
+      └── projections
+           └── function: unique_rowid [type=int]
+
+build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM t
 ----
@@ -449,31 +556,31 @@ build
 SELECT * FROM x WHERE a IN
   (WITH t AS (SELECT * FROM y WHERE a < 3) SELECT * FROM t)
 ----
-project
+with &1 (t)
  ├── columns: a:1(int) b:2(int)
- └── select
-      ├── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
-      ├── scan x
-      │    └── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
-      └── filters
-           └── any: eq [type=bool]
-                ├── with &1 (t)
-                │    ├── columns: a:6(int!null)
-                │    ├── project
-                │    │    ├── columns: y.a:4(int!null)
-                │    │    └── select
-                │    │         ├── columns: y.a:4(int!null) y.rowid:5(int!null)
-                │    │         ├── scan y
-                │    │         │    └── columns: y.a:4(int) y.rowid:5(int!null)
-                │    │         └── filters
-                │    │              └── lt [type=bool]
-                │    │                   ├── variable: y.a [type=int]
-                │    │                   └── const: 3 [type=int]
-                │    └── with-scan &1 (t)
-                │         ├── columns: a:6(int!null)
-                │         └── mapping:
-                │              └──  y.a:4(int) => a:6(int)
-                └── variable: x.a [type=int]
+ ├── project
+ │    ├── columns: y.a:4(int!null)
+ │    └── select
+ │         ├── columns: y.a:4(int!null) y.rowid:5(int!null)
+ │         ├── scan y
+ │         │    └── columns: y.a:4(int) y.rowid:5(int!null)
+ │         └── filters
+ │              └── lt [type=bool]
+ │                   ├── variable: y.a [type=int]
+ │                   └── const: 3 [type=int]
+ └── project
+      ├── columns: x.a:1(int) b:2(int)
+      └── select
+           ├── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
+           ├── scan x
+           │    └── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
+           └── filters
+                └── any: eq [type=bool]
+                     ├── with-scan &1 (t)
+                     │    ├── columns: a:6(int!null)
+                     │    └── mapping:
+                     │         └──  y.a:4(int) => a:6(int)
+                     └── variable: x.a [type=int]
 
 # Using a correlated subquery inside a CTE
 build
@@ -511,36 +618,36 @@ error (42P01): no data source matches prefix: x
 build
 WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
 ----
-with &2 (t)
+with &1 (t)
  ├── columns: "?column?":5(int)
- ├── with &1 (t)
- │    ├── columns: "?column?":3(int)
- │    ├── project
- │    │    ├── columns: "?column?":1(int!null)
- │    │    ├── values
- │    │    │    └── tuple [type=tuple]
- │    │    └── projections
- │    │         └── const: 1 [type=int]
- │    └── project
- │         ├── columns: "?column?":3(int)
- │         ├── with-scan &1 (t)
- │         │    ├── columns: x:2(int!null)
- │         │    └── mapping:
- │         │         └──  "?column?":1(int) => x:2(int)
- │         └── projections
- │              └── mult [type=int]
- │                   ├── variable: x [type=int]
- │                   └── const: 10 [type=int]
- └── project
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── const: 1 [type=int]
+ └── with &2 (t)
       ├── columns: "?column?":5(int)
-      ├── with-scan &2 (t)
-      │    ├── columns: x:4(int)
-      │    └── mapping:
-      │         └──  "?column?":3(int) => x:4(int)
-      └── projections
-           └── plus [type=int]
-                ├── variable: x [type=int]
-                └── const: 2 [type=int]
+      ├── project
+      │    ├── columns: "?column?":3(int)
+      │    ├── with-scan &1 (t)
+      │    │    ├── columns: x:2(int!null)
+      │    │    └── mapping:
+      │    │         └──  "?column?":1(int) => x:2(int)
+      │    └── projections
+      │         └── mult [type=int]
+      │              ├── variable: x [type=int]
+      │              └── const: 10 [type=int]
+      └── project
+           ├── columns: "?column?":5(int)
+           ├── with-scan &2 (t)
+           │    ├── columns: x:4(int)
+           │    └── mapping:
+           │         └──  "?column?":3(int) => x:4(int)
+           └── projections
+                └── plus [type=int]
+                     ├── variable: x [type=int]
+                     └── const: 2 [type=int]
 
 build
 WITH one AS (SELECT a AS u FROM x),
@@ -1168,51 +1275,169 @@ WITH RECURSIVE cte(a, b) AS (
     (WITH foo AS (SELECT * FROM cte) SELECT c1.a+c2.a, c1.b+c2.b FROM foo AS c1, foo AS c2)
 ) SELECT * FROM cte;
 ----
-with &3 (cte)
+with &2 (foo)
  ├── columns: a:13(int) b:14(int)
- ├── recursive-c-t-e
- │    ├── columns: a:3(int) b:4(int)
- │    ├── working table binding: &1
- │    ├── initial columns: "?column?":1(int) "?column?":2(int)
- │    ├── recursive columns: "?column?":11(int) "?column?":12(int)
- │    ├── project
- │    │    ├── columns: "?column?":1(int!null) "?column?":2(int!null)
- │    │    ├── values
- │    │    │    └── tuple [type=tuple]
- │    │    └── projections
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 2 [type=int]
- │    └── with &2 (foo)
- │         ├── columns: "?column?":11(int) "?column?":12(int)
- │         ├── with-scan &1 (cte)
- │         │    ├── columns: a:5(int) b:6(int)
- │         │    └── mapping:
- │         │         ├──  a:3(int) => a:5(int)
- │         │         └──  b:4(int) => b:6(int)
- │         └── project
- │              ├── columns: "?column?":11(int) "?column?":12(int)
- │              ├── inner-join (hash)
- │              │    ├── columns: a:7(int) b:8(int) a:9(int) b:10(int)
- │              │    ├── with-scan &2 (foo)
- │              │    │    ├── columns: a:7(int) b:8(int)
- │              │    │    └── mapping:
- │              │    │         ├──  a:5(int) => a:7(int)
- │              │    │         └──  b:6(int) => b:8(int)
- │              │    ├── with-scan &2 (foo)
- │              │    │    ├── columns: a:9(int) b:10(int)
- │              │    │    └── mapping:
- │              │    │         ├──  a:5(int) => a:9(int)
- │              │    │         └──  b:6(int) => b:10(int)
- │              │    └── filters (true)
- │              └── projections
- │                   ├── plus [type=int]
- │                   │    ├── variable: a [type=int]
- │                   │    └── variable: a [type=int]
- │                   └── plus [type=int]
- │                        ├── variable: b [type=int]
- │                        └── variable: b [type=int]
- └── with-scan &3 (cte)
+ ├── with-scan &1 (cte)
+ │    ├── columns: a:5(int) b:6(int)
+ │    └── mapping:
+ │         ├──  a:3(int) => a:5(int)
+ │         └──  b:4(int) => b:6(int)
+ └── with &3 (cte)
       ├── columns: a:13(int) b:14(int)
-      └── mapping:
-           ├──  a:3(int) => a:13(int)
-           └──  b:4(int) => b:14(int)
+      ├── recursive-c-t-e
+      │    ├── columns: a:3(int) b:4(int)
+      │    ├── working table binding: &1
+      │    ├── initial columns: "?column?":1(int) "?column?":2(int)
+      │    ├── recursive columns: "?column?":11(int) "?column?":12(int)
+      │    ├── project
+      │    │    ├── columns: "?column?":1(int!null) "?column?":2(int!null)
+      │    │    ├── values
+      │    │    │    └── tuple [type=tuple]
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
+      │    └── project
+      │         ├── columns: "?column?":11(int) "?column?":12(int)
+      │         ├── inner-join (hash)
+      │         │    ├── columns: a:7(int) b:8(int) a:9(int) b:10(int)
+      │         │    ├── with-scan &2 (foo)
+      │         │    │    ├── columns: a:7(int) b:8(int)
+      │         │    │    └── mapping:
+      │         │    │         ├──  a:5(int) => a:7(int)
+      │         │    │         └──  b:6(int) => b:8(int)
+      │         │    ├── with-scan &2 (foo)
+      │         │    │    ├── columns: a:9(int) b:10(int)
+      │         │    │    └── mapping:
+      │         │    │         ├──  a:5(int) => a:9(int)
+      │         │    │         └──  b:6(int) => b:10(int)
+      │         │    └── filters (true)
+      │         └── projections
+      │              ├── plus [type=int]
+      │              │    ├── variable: a [type=int]
+      │              │    └── variable: a [type=int]
+      │              └── plus [type=int]
+      │                   ├── variable: b [type=int]
+      │                   └── variable: b [type=int]
+      └── with-scan &3 (cte)
+           ├── columns: a:13(int) b:14(int)
+           └── mapping:
+                ├──  a:3(int) => a:13(int)
+                └──  b:4(int) => b:14(int)
+
+# Mutating WITHs not allowed at non-root positions.
+build
+SELECT * FROM (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+build
+SELECT (WITH foo AS (UPDATE y SET a = 4 RETURNING *) SELECT * FROM foo)
+----
+error (0A000): WITH clause containing a data-modifying statement must be at the top level
+
+# Certain contexts besides the literal root allow mutating CTEs, like
+# underneath an EXPLAIN.
+build
+EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
+----
+explain
+ ├── columns: tree:6(string) field:7(string) description:8(string)
+ └── with &1 (foo)
+      ├── columns: a:5(int!null)
+      ├── project
+      │    ├── columns: y.a:1(int!null)
+      │    └── insert y
+      │         ├── columns: y.a:1(int!null) rowid:2(int!null)
+      │         ├── insert-mapping:
+      │         │    ├──  column1:3 => y.a:1
+      │         │    └──  column4:4 => rowid:2
+      │         └── project
+      │              ├── columns: column4:4(int) column1:3(int!null)
+      │              ├── values
+      │              │    ├── columns: column1:3(int!null)
+      │              │    └── tuple [type=tuple{int}]
+      │              │         └── const: 1 [type=int]
+      │              └── projections
+      │                   └── function: unique_rowid [type=int]
+      └── with-scan &1 (foo)
+           ├── columns: a:5(int!null)
+           └── mapping:
+                └──  y.a:1(int) => a:5(int)
+
+exec-ddl
+CREATE TABLE a(x INT);
+----
+
+build
+INSERT INTO a(x)
+        (WITH b(z) AS (VALUES (1),(2),(3)) SELECT z+1 AS w FROM b)
+----
+with &1 (b)
+ ├── values
+ │    ├── columns: column1:3(int!null)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 3 [type=int]
+ └── insert a
+      ├── columns: <none>
+      ├── insert-mapping:
+      │    ├──  w:5 => x:1
+      │    └──  column6:6 => rowid:2
+      └── project
+           ├── columns: column6:6(int) w:5(int)
+           ├── project
+           │    ├── columns: w:5(int)
+           │    ├── with-scan &1 (b)
+           │    │    ├── columns: z:4(int!null)
+           │    │    └── mapping:
+           │    │         └──  column1:3(int) => z:4(int)
+           │    └── projections
+           │         └── plus [type=int]
+           │              ├── variable: z [type=int]
+           │              └── const: 1 [type=int]
+           └── projections
+                └── function: unique_rowid [type=int]
+
+build
+SELECT
+    *
+FROM
+    (VALUES (1), (2)) AS v (x),
+    LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
+----
+error (0A000): CTEs may not be correlated
+
+# Subquery as a whole is correlated, but the WITH is not.
+build
+SELECT (WITH foo as (VALUES (1)) SELECT x) FROM (VALUES (1)) AS v(x)
+----
+with &1 (foo)
+ ├── columns: x:4(int)
+ ├── values
+ │    ├── columns: column1:2(int!null)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── project
+      ├── columns: x:4(int)
+      ├── values
+      │    ├── columns: column1:1(int!null)
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 1 [type=int]
+      └── projections
+           └── subquery [type=int]
+                └── max1-row
+                     ├── columns: x:3(int)
+                     └── project
+                          ├── columns: x:3(int)
+                          ├── values
+                          │    └── tuple [type=tuple]
+                          └── projections
+                               └── variable: column1 [type=int]

@@ -513,45 +513,54 @@ error (42703): statement source "UPDATE abcde SET a = 1" does not return any col
 build
 WITH cte AS (SELECT b FROM [UPDATE abcde SET a=b RETURNING *]) UPDATE abcde SET a=b
 ----
-with &1 (cte)
+with &1
  ├── project
- │    ├── columns: b:2(int)
- │    └── project
- │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
- │         └── update abcde
- │              ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
- │              ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
- │              ├── update-mapping:
- │              │    ├──  b:8 => a:1
- │              │    ├──  column13:13 => d:4
- │              │    └──  b:8 => e:5
- │              └── project
- │                   ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
- │                   ├── scan abcde
- │                   │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
- │                   └── projections
- │                        └── plus [type=int]
- │                             ├── plus [type=int]
- │                             │    ├── variable: b [type=int]
- │                             │    └── variable: c [type=int]
- │                             └── const: 1 [type=int]
- └── update abcde
-      ├── columns: <none>
-      ├── fetch columns: a:20(int) b:21(int) c:22(int) d:23(int) e:24(int) rowid:25(int)
-      ├── update-mapping:
-      │    ├──  b:21 => a:14
-      │    ├──  column26:26 => d:17
-      │    └──  b:21 => e:18
-      └── project
-           ├── columns: column26:26(int) a:20(int!null) b:21(int) c:22(int) d:23(int) e:24(int) rowid:25(int!null)
-           ├── scan abcde
-           │    └── columns: a:20(int!null) b:21(int) c:22(int) d:23(int) e:24(int) rowid:25(int!null)
-           └── projections
-                └── plus [type=int]
-                     ├── plus [type=int]
-                     │    ├── variable: b [type=int]
-                     │    └── variable: c [type=int]
-                     └── const: 1 [type=int]
+ │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int)
+ │    └── update abcde
+ │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int) rowid:6(int!null)
+ │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         ├── update-mapping:
+ │         │    ├──  abcde.b:8 => abcde.a:1
+ │         │    ├──  column13:13 => abcde.d:4
+ │         │    └──  abcde.b:8 => abcde.e:5
+ │         └── project
+ │              ├── columns: column13:13(int) abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              ├── scan abcde
+ │              │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              └── projections
+ │                   └── plus [type=int]
+ │                        ├── plus [type=int]
+ │                        │    ├── variable: abcde.b [type=int]
+ │                        │    └── variable: abcde.c [type=int]
+ │                        └── const: 1 [type=int]
+ └── with &2 (cte)
+      ├── project
+      │    ├── columns: b:15(int)
+      │    └── with-scan &1
+      │         ├── columns: a:14(int!null) b:15(int) c:16(int) d:17(int) e:18(int)
+      │         └── mapping:
+      │              ├──  abcde.a:1(int) => a:14(int)
+      │              ├──  abcde.b:2(int) => b:15(int)
+      │              ├──  abcde.c:3(int) => c:16(int)
+      │              ├──  abcde.d:4(int) => d:17(int)
+      │              └──  abcde.e:5(int) => e:18(int)
+      └── update abcde
+           ├── columns: <none>
+           ├── fetch columns: abcde.a:25(int) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int)
+           ├── update-mapping:
+           │    ├──  abcde.b:26 => abcde.a:19
+           │    ├──  column31:31 => abcde.d:22
+           │    └──  abcde.b:26 => abcde.e:23
+           └── project
+                ├── columns: column31:31(int) abcde.a:25(int!null) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int!null)
+                ├── scan abcde
+                │    └── columns: abcde.a:25(int!null) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int!null)
+                └── projections
+                     └── plus [type=int]
+                          ├── plus [type=int]
+                          │    ├── variable: abcde.b [type=int]
+                          │    └── variable: abcde.c [type=int]
+                          └── const: 1 [type=int]
 
 # With alias, original table name should be inaccessible.
 build
@@ -648,45 +657,55 @@ project
 build
 SELECT a, d FROM [UPDATE abcde SET a=2 WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
 ----
-project
- ├── columns: a:1(int!null) d:4(int)
+with &1
+ ├── columns: a:15(int!null) d:18(int)
+ ├── project
+ │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int!null)
+ │    └── update abcde
+ │         ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int) abcde.d:4(int) abcde.e:5(int!null) rowid:6(int!null)
+ │         ├── fetch columns: abcde.a:7(int) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int)
+ │         ├── update-mapping:
+ │         │    ├──  column13:13 => abcde.a:1
+ │         │    ├──  column14:14 => abcde.d:4
+ │         │    └──  column13:13 => abcde.e:5
+ │         └── project
+ │              ├── columns: column14:14(int) abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null) column13:13(int!null)
+ │              ├── project
+ │              │    ├── columns: column13:13(int!null) abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── limit
+ │              │    │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    ├── internal-ordering: +8
+ │              │    │    ├── sort
+ │              │    │    │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │    ├── ordering: +8
+ │              │    │    │    ├── limit hint: 10.00
+ │              │    │    │    └── select
+ │              │    │    │         ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │         ├── scan abcde
+ │              │    │    │         │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │         └── filters
+ │              │    │    │              └── gt [type=bool]
+ │              │    │    │                   ├── variable: abcde.a [type=int]
+ │              │    │    │                   └── const: 0 [type=int]
+ │              │    │    └── const: 10 [type=int]
+ │              │    └── projections
+ │              │         └── const: 2 [type=int]
+ │              └── projections
+ │                   └── plus [type=int]
+ │                        ├── plus [type=int]
+ │                        │    ├── variable: abcde.b [type=int]
+ │                        │    └── variable: abcde.c [type=int]
+ │                        └── const: 1 [type=int]
  └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null)
-      └── update abcde
-           ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
-           ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
-           ├── update-mapping:
-           │    ├──  column13:13 => a:1
-           │    ├──  column14:14 => d:4
-           │    └──  column13:13 => e:5
-           └── project
-                ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
-                ├── project
-                │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │    ├── limit
-                │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │    │    ├── internal-ordering: +8
-                │    │    ├── sort
-                │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │    │    │    ├── ordering: +8
-                │    │    │    ├── limit hint: 10.00
-                │    │    │    └── select
-                │    │    │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │    │    │         ├── scan abcde
-                │    │    │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
-                │    │    │         └── filters
-                │    │    │              └── gt [type=bool]
-                │    │    │                   ├── variable: a [type=int]
-                │    │    │                   └── const: 0 [type=int]
-                │    │    └── const: 10 [type=int]
-                │    └── projections
-                │         └── const: 2 [type=int]
-                └── projections
-                     └── plus [type=int]
-                          ├── plus [type=int]
-                          │    ├── variable: b [type=int]
-                          │    └── variable: c [type=int]
-                          └── const: 1 [type=int]
+      ├── columns: a:15(int!null) d:18(int)
+      └── with-scan &1
+           ├── columns: a:15(int!null) b:16(int) c:17(int) d:18(int) e:19(int!null)
+           └── mapping:
+                ├──  abcde.a:1(int) => a:15(int)
+                ├──  abcde.b:2(int) => b:16(int)
+                ├──  abcde.c:3(int) => c:17(int)
+                ├──  abcde.d:4(int) => d:18(int)
+                └──  abcde.e:5(int) => e:19(int)
 
 # Return hidden column.
 build

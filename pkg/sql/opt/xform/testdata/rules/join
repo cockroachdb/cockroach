@@ -2207,44 +2207,40 @@ SELECT
 FROM
     abc AS x JOIN [INSERT INTO abc (a) SELECT 1 FROM abc RETURNING 1] JOIN abc AS y ON true ON false
 ----
-project
- ├── columns: bool:21(bool!null)
+with &1
+ ├── columns: bool:22(bool!null)
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- ├── fd: ()-->(21)
- ├── inner-join (hash)
- │    ├── columns: abc.rowid:8(int!null)
- │    ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(22)
+ ├── project
+ │    ├── columns: "?column?":16(int!null)
  │    ├── side-effects, mutations
- │    ├── select
+ │    ├── fd: ()-->(16)
+ │    ├── insert abc
  │    │    ├── columns: abc.rowid:8(int!null)
- │    │    ├── cardinality: [0 - 0]
+ │    │    ├── insert-mapping:
+ │    │    │    ├──  "?column?":13 => abc.a:5
+ │    │    │    ├──  column14:14 => abc.b:6
+ │    │    │    ├──  column14:14 => abc.c:7
+ │    │    │    └──  column15:15 => abc.rowid:8
  │    │    ├── side-effects, mutations
- │    │    ├── insert abc
- │    │    │    ├── columns: abc.rowid:8(int!null)
- │    │    │    ├── insert-mapping:
- │    │    │    │    ├──  "?column?":13 => abc.a:5
- │    │    │    │    ├──  column14:14 => abc.b:6
- │    │    │    │    ├──  column14:14 => abc.c:7
- │    │    │    │    └──  column15:15 => abc.rowid:8
- │    │    │    ├── side-effects, mutations
- │    │    │    └── project
- │    │    │         ├── columns: column14:14(int) column15:15(int) "?column?":13(int!null)
- │    │    │         ├── side-effects
- │    │    │         ├── fd: ()-->(13,14)
- │    │    │         ├── scan abc
- │    │    │         └── projections
- │    │    │              ├── null [type=int]
- │    │    │              ├── unique_rowid() [type=int, side-effects]
- │    │    │              └── const: 1 [type=int]
- │    │    └── filters
- │    │         └── false [type=bool]
- │    ├── values
- │    │    ├── cardinality: [0 - 0]
- │    │    └── key: ()
- │    └── filters (true)
- └── projections
-      └── false [type=bool]
+ │    │    └── project
+ │    │         ├── columns: column14:14(int) column15:15(int) "?column?":13(int!null)
+ │    │         ├── side-effects
+ │    │         ├── fd: ()-->(13,14)
+ │    │         ├── scan abc
+ │    │         └── projections
+ │    │              ├── null [type=int]
+ │    │              ├── unique_rowid() [type=int, side-effects]
+ │    │              └── const: 1 [type=int]
+ │    └── projections
+ │         └── const: 1 [type=int]
+ └── values
+      ├── columns: bool:22(bool!null)
+      ├── cardinality: [0 - 0]
+      ├── key: ()
+      └── fd: ()-->(22)
 
 opt join-limit=3
 SELECT 1 FROM ((VALUES (1), (1)) JOIN ((VALUES (1), (1), (1)) JOIN (VALUES (1), (1), (1), (1)) ON true) ON true)

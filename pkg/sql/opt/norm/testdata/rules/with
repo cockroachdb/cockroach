@@ -279,7 +279,7 @@ with &1 (foo)
       ├── key: ()
       ├── fd: ()-->(3-6)
       ├── prune: (3-6)
-      ├── cte-uses: map[1:2 2:2]
+      ├── cte-uses: map[1:2]
       ├── values
       │    ├── columns: "?column?":2(int!null)
       │    ├── cardinality: [1 - 1]

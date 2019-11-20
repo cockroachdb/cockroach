@@ -128,7 +128,7 @@ func (b *Builder) buildCTE(
 		numRefs++
 	}
 
-	recursiveScope := b.buildSelect(recursive, initialTypes /* desiredTypes */, cteScope)
+	recursiveScope := b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
 
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.

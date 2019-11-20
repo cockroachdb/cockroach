@@ -357,98 +357,106 @@ FROM [INSERT INTO abc (a, b) VALUES (1,2), (3,4) ON CONFLICT (a) DO UPDATE SET b
 ORDER BY a, b DESC
 ----
 sort
- ├── columns: a:1(int!null) b:2(int) c:3(int)
- ├── ordering: +1,-2
- └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
-      └── upsert abc
-           ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
-           ├── canary column: 12
-           ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
-           ├── insert-mapping:
-           │    ├──  column1:5 => a:1
-           │    ├──  column2:6 => b:2
-           │    ├──  column8:8 => c:3
-           │    └──  column7:7 => rowid:4
-           ├── update-mapping:
-           │    ├──  upsert_b:16 => b:2
-           │    └──  upsert_c:17 => c:3
-           ├── return-mapping:
-           │    ├──  upsert_a:15 => a:1
-           │    ├──  upsert_b:16 => b:2
-           │    ├──  upsert_c:17 => c:3
-           │    └──  upsert_rowid:18 => rowid:4
-           └── project
-                ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int)
-                ├── project
-                │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null)
-                │    ├── project
-                │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-                │    │    ├── left-join (hash)
-                │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-                │    │    │    ├── project
-                │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
-                │    │    │    │    ├── project
-                │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-                │    │    │    │    │    ├── values
-                │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-                │    │    │    │    │    │    ├── tuple [type=tuple{int, int}]
-                │    │    │    │    │    │    │    ├── const: 1 [type=int]
-                │    │    │    │    │    │    │    └── const: 2 [type=int]
-                │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
-                │    │    │    │    │    │         ├── const: 3 [type=int]
-                │    │    │    │    │    │         └── const: 4 [type=int]
-                │    │    │    │    │    └── projections
-                │    │    │    │    │         └── function: unique_rowid [type=int]
-                │    │    │    │    └── projections
-                │    │    │    │         └── plus [type=int]
-                │    │    │    │              ├── variable: column2 [type=int]
-                │    │    │    │              └── const: 1 [type=int]
-                │    │    │    ├── scan abc
-                │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-                │    │    │    └── filters
-                │    │    │         └── eq [type=bool]
-                │    │    │              ├── variable: column1 [type=int]
-                │    │    │              └── variable: a [type=int]
-                │    │    └── projections
-                │    │         └── const: 1 [type=int]
-                │    └── projections
-                │         └── plus [type=int]
-                │              ├── variable: column13 [type=int]
-                │              └── const: 1 [type=int]
-                └── projections
-                     ├── case [type=int]
-                     │    ├── true [type=bool]
-                     │    ├── when [type=int]
-                     │    │    ├── is [type=bool]
-                     │    │    │    ├── variable: rowid [type=int]
-                     │    │    │    └── null [type=unknown]
-                     │    │    └── variable: column1 [type=int]
-                     │    └── variable: a [type=int]
-                     ├── case [type=int]
-                     │    ├── true [type=bool]
-                     │    ├── when [type=int]
-                     │    │    ├── is [type=bool]
-                     │    │    │    ├── variable: rowid [type=int]
-                     │    │    │    └── null [type=unknown]
-                     │    │    └── variable: column2 [type=int]
-                     │    └── variable: column13 [type=int]
-                     ├── case [type=int]
-                     │    ├── true [type=bool]
-                     │    ├── when [type=int]
-                     │    │    ├── is [type=bool]
-                     │    │    │    ├── variable: rowid [type=int]
-                     │    │    │    └── null [type=unknown]
-                     │    │    └── variable: column8 [type=int]
-                     │    └── variable: column14 [type=int]
-                     └── case [type=int]
-                          ├── true [type=bool]
-                          ├── when [type=int]
-                          │    ├── is [type=bool]
-                          │    │    ├── variable: rowid [type=int]
-                          │    │    └── null [type=unknown]
-                          │    └── variable: column7 [type=int]
-                          └── variable: rowid [type=int]
+ ├── columns: a:19(int!null) b:20(int) c:21(int)
+ ├── ordering: +19,-20
+ └── with &1
+      ├── columns: a:19(int!null) b:20(int) c:21(int)
+      ├── project
+      │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      │    └── upsert abc
+      │         ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int) rowid:4(int!null)
+      │         ├── canary column: 12
+      │         ├── fetch columns: abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+      │         ├── insert-mapping:
+      │         │    ├──  column1:5 => abc.a:1
+      │         │    ├──  column2:6 => abc.b:2
+      │         │    ├──  column8:8 => abc.c:3
+      │         │    └──  column7:7 => rowid:4
+      │         ├── update-mapping:
+      │         │    ├──  upsert_b:16 => abc.b:2
+      │         │    └──  upsert_c:17 => abc.c:3
+      │         ├── return-mapping:
+      │         │    ├──  upsert_a:15 => abc.a:1
+      │         │    ├──  upsert_b:16 => abc.b:2
+      │         │    ├──  upsert_c:17 => abc.c:3
+      │         │    └──  upsert_rowid:18 => rowid:4
+      │         └── project
+      │              ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int) column13:13(int!null) column14:14(int)
+      │              ├── project
+      │              │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int) column13:13(int!null)
+      │              │    ├── project
+      │              │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+      │              │    │    ├── left-join (hash)
+      │              │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+      │              │    │    │    ├── project
+      │              │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │              │    │    │    │    ├── project
+      │              │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+      │              │    │    │    │    │    ├── values
+      │              │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+      │              │    │    │    │    │    │    ├── tuple [type=tuple{int, int}]
+      │              │    │    │    │    │    │    │    ├── const: 1 [type=int]
+      │              │    │    │    │    │    │    │    └── const: 2 [type=int]
+      │              │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
+      │              │    │    │    │    │    │         ├── const: 3 [type=int]
+      │              │    │    │    │    │    │         └── const: 4 [type=int]
+      │              │    │    │    │    │    └── projections
+      │              │    │    │    │    │         └── function: unique_rowid [type=int]
+      │              │    │    │    │    └── projections
+      │              │    │    │    │         └── plus [type=int]
+      │              │    │    │    │              ├── variable: column2 [type=int]
+      │              │    │    │    │              └── const: 1 [type=int]
+      │              │    │    │    ├── scan abc
+      │              │    │    │    │    └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
+      │              │    │    │    └── filters
+      │              │    │    │         └── eq [type=bool]
+      │              │    │    │              ├── variable: column1 [type=int]
+      │              │    │    │              └── variable: abc.a [type=int]
+      │              │    │    └── projections
+      │              │    │         └── const: 1 [type=int]
+      │              │    └── projections
+      │              │         └── plus [type=int]
+      │              │              ├── variable: column13 [type=int]
+      │              │              └── const: 1 [type=int]
+      │              └── projections
+      │                   ├── case [type=int]
+      │                   │    ├── true [type=bool]
+      │                   │    ├── when [type=int]
+      │                   │    │    ├── is [type=bool]
+      │                   │    │    │    ├── variable: rowid [type=int]
+      │                   │    │    │    └── null [type=unknown]
+      │                   │    │    └── variable: column1 [type=int]
+      │                   │    └── variable: abc.a [type=int]
+      │                   ├── case [type=int]
+      │                   │    ├── true [type=bool]
+      │                   │    ├── when [type=int]
+      │                   │    │    ├── is [type=bool]
+      │                   │    │    │    ├── variable: rowid [type=int]
+      │                   │    │    │    └── null [type=unknown]
+      │                   │    │    └── variable: column2 [type=int]
+      │                   │    └── variable: column13 [type=int]
+      │                   ├── case [type=int]
+      │                   │    ├── true [type=bool]
+      │                   │    ├── when [type=int]
+      │                   │    │    ├── is [type=bool]
+      │                   │    │    │    ├── variable: rowid [type=int]
+      │                   │    │    │    └── null [type=unknown]
+      │                   │    │    └── variable: column8 [type=int]
+      │                   │    └── variable: column14 [type=int]
+      │                   └── case [type=int]
+      │                        ├── true [type=bool]
+      │                        ├── when [type=int]
+      │                        │    ├── is [type=bool]
+      │                        │    │    ├── variable: rowid [type=int]
+      │                        │    │    └── null [type=unknown]
+      │                        │    └── variable: column7 [type=int]
+      │                        └── variable: rowid [type=int]
+      └── with-scan &1
+           ├── columns: a:19(int!null) b:20(int) c:21(int)
+           └── mapping:
+                ├──  abc.a:1(int) => a:19(int)
+                ├──  abc.b:2(int) => b:20(int)
+                └──  abc.c:3(int) => c:21(int)
 
 # Use table alias.
 build
@@ -1183,60 +1191,68 @@ upsert uv
 build
 SELECT * FROM [UPSERT INTO abc VALUES (1, 2) RETURNING *]
 ----
-project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int)
- └── upsert abc
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int) rowid:4(int!null)
-      ├── canary column: 12
-      ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
-      ├── insert-mapping:
-      │    ├──  column1:5 => a:1
-      │    ├──  column2:6 => b:2
-      │    ├──  column8:8 => c:3
-      │    └──  column7:7 => rowid:4
-      ├── update-mapping:
-      │    ├──  column1:5 => a:1
-      │    ├──  column2:6 => b:2
-      │    └──  column8:8 => c:3
-      ├── return-mapping:
-      │    ├──  column1:5 => a:1
-      │    ├──  column2:6 => b:2
-      │    ├──  column8:8 => c:3
-      │    └──  upsert_rowid:13 => rowid:4
-      └── project
-           ├── columns: upsert_rowid:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-           ├── left-join (hash)
-           │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
-           │    ├── project
-           │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
-           │    │    ├── project
-           │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
-           │    │    │    ├── values
-           │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
-           │    │    │    │    └── tuple [type=tuple{int, int}]
-           │    │    │    │         ├── const: 1 [type=int]
-           │    │    │    │         └── const: 2 [type=int]
-           │    │    │    └── projections
-           │    │    │         └── function: unique_rowid [type=int]
-           │    │    └── projections
-           │    │         └── plus [type=int]
-           │    │              ├── variable: column2 [type=int]
-           │    │              └── const: 1 [type=int]
-           │    ├── scan abc
-           │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
-           │    └── filters
-           │         └── eq [type=bool]
-           │              ├── variable: column7 [type=int]
-           │              └── variable: rowid [type=int]
-           └── projections
-                └── case [type=int]
-                     ├── true [type=bool]
-                     ├── when [type=int]
-                     │    ├── is [type=bool]
-                     │    │    ├── variable: rowid [type=int]
-                     │    │    └── null [type=unknown]
-                     │    └── variable: column7 [type=int]
-                     └── variable: rowid [type=int]
+with &1
+ ├── columns: a:14(int!null) b:15(int!null) c:16(int)
+ ├── project
+ │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int)
+ │    └── upsert abc
+ │         ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int) rowid:4(int!null)
+ │         ├── canary column: 12
+ │         ├── fetch columns: abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+ │         ├── insert-mapping:
+ │         │    ├──  column1:5 => abc.a:1
+ │         │    ├──  column2:6 => abc.b:2
+ │         │    ├──  column8:8 => abc.c:3
+ │         │    └──  column7:7 => rowid:4
+ │         ├── update-mapping:
+ │         │    ├──  column1:5 => abc.a:1
+ │         │    ├──  column2:6 => abc.b:2
+ │         │    └──  column8:8 => abc.c:3
+ │         ├── return-mapping:
+ │         │    ├──  column1:5 => abc.a:1
+ │         │    ├──  column2:6 => abc.b:2
+ │         │    ├──  column8:8 => abc.c:3
+ │         │    └──  upsert_rowid:13 => rowid:4
+ │         └── project
+ │              ├── columns: upsert_rowid:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+ │              ├── left-join (hash)
+ │              │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+ │              │    ├── project
+ │              │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+ │              │    │    ├── project
+ │              │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
+ │              │    │    │    ├── values
+ │              │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
+ │              │    │    │    │    └── tuple [type=tuple{int, int}]
+ │              │    │    │    │         ├── const: 1 [type=int]
+ │              │    │    │    │         └── const: 2 [type=int]
+ │              │    │    │    └── projections
+ │              │    │    │         └── function: unique_rowid [type=int]
+ │              │    │    └── projections
+ │              │    │         └── plus [type=int]
+ │              │    │              ├── variable: column2 [type=int]
+ │              │    │              └── const: 1 [type=int]
+ │              │    ├── scan abc
+ │              │    │    └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
+ │              │    └── filters
+ │              │         └── eq [type=bool]
+ │              │              ├── variable: column7 [type=int]
+ │              │              └── variable: rowid [type=int]
+ │              └── projections
+ │                   └── case [type=int]
+ │                        ├── true [type=bool]
+ │                        ├── when [type=int]
+ │                        │    ├── is [type=bool]
+ │                        │    │    ├── variable: rowid [type=int]
+ │                        │    │    └── null [type=unknown]
+ │                        │    └── variable: column7 [type=int]
+ │                        └── variable: rowid [type=int]
+ └── with-scan &1
+      ├── columns: a:14(int!null) b:15(int!null) c:16(int)
+      └── mapping:
+           ├──  abc.a:1(int) => a:14(int)
+           ├──  abc.b:2(int) => b:15(int)
+           └──  abc.c:3(int) => c:16(int)
 
 # Use explicitly specified column names with secondary indexes present. Existing
 # values of other columns need to be fetched to delete existing index rows.
