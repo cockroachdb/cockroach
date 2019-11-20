@@ -264,6 +264,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
 	// cfg.FS and cfg.ReadOnly later on.
 	cfg.Opts.EnsureDefaults()
+	cfg.Opts.ErrorIfNotExists = cfg.MustExist
 
 	var auxDir string
 	if cfg.Dir == "" {
