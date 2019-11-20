@@ -623,12 +623,12 @@ SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
 query R
 SELECT extract(hour from '2016-02-10 19:46:33.306157519-04'::timestamptz)
 ----
-19
+23
 
 query R
 SELECT extract(hours from '2016-02-10 19:46:33.306157519-04'::timestamptz)
 ----
-19
+23
 
 query ITTBT
 SELECT k, element, input, date_trunc(element, input::timestamp) = date_trunc_result, date_trunc(element, input::timestamp)::string
