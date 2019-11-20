@@ -81,7 +81,7 @@ func TestOpenExistingStore(t *testing.T) {
 		},
 		{
 			dir:    dirMissing,
-			expErr: `could not open rocksdb instance: .* does not exist \(create_if_missing is false\)`,
+			expErr: `does not exist|no such file or directory`,
 		},
 	} {
 		t.Run(fmt.Sprintf("dir=%s", test.dir), func(t *testing.T) {
@@ -114,7 +114,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 		},
 		{
 			readOnly: true,
-			expErr:   `Not supported operation in read only mode.`,
+			expErr:   `Not supported operation in read only mode|pebble: read-only`,
 		},
 	} {
 		t.Run(fmt.Sprintf("readOnly=%t", test.readOnly), func(t *testing.T) {
