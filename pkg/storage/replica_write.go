@@ -267,7 +267,7 @@ func (r *Replica) evaluateWriteBatch(
 		// Try executing with transaction stripped. We use the transaction timestamp
 		// to write any values as it may have been advanced by the timestamp cache.
 		strippedBa := *ba
-		strippedBa.Timestamp = strippedBa.Txn.Timestamp
+		strippedBa.Timestamp = strippedBa.Txn.WriteTimestamp
 		strippedBa.Txn = nil
 		if hasBegin {
 			strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
@@ -292,7 +292,7 @@ func (r *Replica) evaluateWriteBatch(
 			// Make sure the returned txn has the actual commit
 			// timestamp. This can be different if the stripped batch was
 			// executed at the server's hlc now timestamp.
-			clonedTxn.Timestamp = br.Timestamp
+			clonedTxn.WriteTimestamp = br.Timestamp
 
 			// If the end transaction is not committed, clear the batch and mark the status aborted.
 			if !etArg.Commit {

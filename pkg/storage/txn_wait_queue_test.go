@@ -451,7 +451,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	})
 
 	updatedTxn := *txn
-	updatedTxn.Timestamp = txn.Timestamp.Add(1, 0)
+	updatedTxn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0)
 	q.UpdateTxn(context.Background(), &updatedTxn)
 
 	respWithErr := <-retCh

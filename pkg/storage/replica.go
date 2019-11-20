@@ -1475,7 +1475,7 @@ func (r *Replica) executeAdminBatch(
 // 2. begin; read(unrelated key on n2); gateway chooses t=0.98
 // 3. pick up observed timestamp for n2 of t=0.99
 // 4. n1 transfers lease for range with k to n2 @ t=1.1
-// 5. read(k) on leaseholder n2 at OrigTimestamp=0.98 should get
+// 5. read(k) on leaseholder n2 at ReadTimestamp=0.98 should get
 //    ReadWithinUncertaintyInterval because of the write in step 1, so
 //    even though we observed n2's timestamp in step 3 we must expand
 //    the uncertainty interval to the lease's start time, which is
@@ -1491,7 +1491,7 @@ func (r *Replica) limitTxnMaxTimestamp(
 	// observed from the various participating nodes' HLC clocks. If we have
 	// a timestamp on file for this Node which is smaller than MaxTimestamp,
 	// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
-	// OrigTimestamp, we effectively can't see uncertainty restarts anymore.
+	// ReadTimestamp, we effectively can't see uncertainty restarts anymore.
 	// TODO(nvanbenschoten): This should use the lease's node id.
 	obsTS, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID)
 	if !ok {
@@ -1510,9 +1510,9 @@ func (r *Replica) limitTxnMaxTimestamp(
 	if obsTS.Less(ba.Txn.MaxTimestamp) {
 		// Copy-on-write to protect others we might be sharing the Txn with.
 		txnClone := ba.Txn.Clone()
-		// The uncertainty window is [OrigTimestamp, maxTS), so if that window
+		// The uncertainty window is [ReadTimestamp, maxTS), so if that window
 		// is empty, there won't be any uncertainty restarts.
-		if !ba.Txn.OrigTimestamp.Less(obsTS) {
+		if !ba.Txn.ReadTimestamp.Less(obsTS) {
 			log.Event(ctx, "read has no clock uncertainty")
 		}
 		txnClone.MaxTimestamp.Backward(obsTS)
@@ -1534,7 +1534,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		return nil
 	}
 	val, _, err := engine.MVCCGetAsTxn(
-		ctx, r.Engine(), descKey, intent.Txn.Timestamp, intent.Txn)
+		ctx, r.Engine(), descKey, intent.Txn.WriteTimestamp, intent.Txn)
 	if err != nil {
 		return err
 	} else if val != nil {

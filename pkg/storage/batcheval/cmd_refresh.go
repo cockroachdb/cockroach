@@ -24,9 +24,8 @@ func init() {
 	RegisterCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
 }
 
-// Refresh checks the key for more recently written values than the
-// txn's original timestamp and less recently than the txn's current
-// timestamp.
+// Refresh checks whether the key has any values written in the interval
+// [args.RefreshFrom, header.Timestamp].
 func Refresh(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -37,11 +36,26 @@ func Refresh(
 		return result.Result{}, errors.Errorf("no transaction specified to %s", args.Method())
 	}
 
+	// We're going to refresh up to the transaction's read timestamp.
+	if h.Timestamp != h.Txn.WriteTimestamp {
+		// We're expecting the read and write timestamp to have converged before the
+		// Refresh request was sent.
+		log.Fatalf(ctx, "expected provisional commit ts %s == read ts %s. txn: %s", h.Timestamp,
+			h.Txn.WriteTimestamp, h.Txn)
+	}
+	refreshTo := h.Timestamp
+
+	refreshFrom := args.RefreshFrom
+	if refreshFrom.IsEmpty() {
+		// Compatibility with 19.2 nodes, which didn't set the args.RefreshFrom field.
+		refreshFrom = h.Txn.DeprecatedOrigTimestamp
+	}
+
 	// Get the most recent committed value and return any intent by
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
-	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
-	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Txn.Timestamp, engine.MVCCGetOptions{
+	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
+	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, refreshTo, engine.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
 	})
@@ -49,12 +63,7 @@ func Refresh(
 	if err != nil {
 		return result.Result{}, err
 	} else if val != nil {
-		// TODO(nvanbenschoten): This is pessimistic. We only need to check
-		//   !ts.Less(h.Txn.PrevRefreshTimestamp)
-		// This could avoid failed refreshes due to requests performed after
-		// earlier refreshes (which read at the refresh ts) that already
-		// observed writes between the orig ts and the refresh ts.
-		if ts := val.Timestamp; !ts.Less(h.Txn.OrigTimestamp) {
+		if ts := val.Timestamp; !ts.Less(refreshFrom) {
 			return result.Result{}, errors.Errorf("encountered recently written key %s @%s", args.Key, ts)
 		}
 	}
@@ -63,7 +72,7 @@ func Refresh(
 	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
 		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
-			intent.Span.Key, intent.Txn.Timestamp)
+			intent.Span.Key, intent.Txn.WriteTimestamp)
 	}
 
 	return result.Result{}, nil

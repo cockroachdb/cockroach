@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -2275,7 +2276,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				// Write again to make sure the timestamp of the second intent
 				// is correctly set to the txn's advanced timestamp. There was
-				// previously a bug where the txn's OrigTimestamp would be used
+				// previously a bug where the txn's DeprecatedOrigTimestamp would be used
 				// and so on the txn refresh caused by the WriteTooOld flag, the
 				// out-of-band Put's value would be missed (see #23032).
 				return txn.Put(ctx, "a", "txn-value2")
@@ -2876,4 +2877,52 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test that we're being smart about the timestamp ranges that need to be
+// refreshed: when span are refreshed, they only need to be checked for writes
+// above the previous time when they've been refreshed, not from the
+// transaction's original read timestamp. To wit, the following scenario should
+// NOT result in a failed refresh:
+// - txn starts at ts 100
+// - someone else writes "a" @ 200
+// - txn attempts to write "a" and is pushed to (200,1). The refresh succeeds.
+// - txn reads something that has a value in [100,200]. For example, "a", which
+//   it just wrote.
+// - someone else writes "b" @ 300
+// - txn attempts to write "b" and is pushed to (300,1). This refresh must also
+//   succeed. If this Refresh request would check for values in the range
+//   [100-300], it would fail (as it would find a@200). But since it only checks
+//   for values in the range [200-300] (i.e. values written beyond the timestamp
+//   that was refreshed before), we're good.
+func TestRefreshNoFalsePositive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	txn := db.NewTxn(ctx, "test")
+	origTimestamp := txn.ReadTimestamp()
+	log.Infof(ctx, "test txn starting @ %s", origTimestamp)
+	require.NoError(t, db.Put(ctx, "a", "test"))
+	// Attempt to overwrite b, which will result in a push.
+	require.NoError(t, txn.Put(ctx, "a", "test2"))
+	afterPush := txn.ReadTimestamp()
+	require.True(t, origTimestamp.Less(afterPush))
+	log.Infof(ctx, "txn pushed to %s", afterPush)
+
+	// Read a so that we have to refresh it when we're pushed again.
+	_, err := txn.Get(ctx, "a")
+	require.NoError(t, err)
+
+	require.NoError(t, db.Put(ctx, "b", "test"))
+
+	// Attempt to overwrite b, which will result in another push. The point of the
+	// test is to check that this push succeeds in refreshing "a".
+	log.Infof(ctx, "test txn writing b")
+	require.NoError(t, txn.Put(ctx, "b", "test2"))
+	require.True(t, afterPush.Less(txn.ReadTimestamp()))
+	log.Infof(ctx, "txn pushed to %s", txn.ReadTimestamp())
+
+	require.NoError(t, txn.Commit(ctx))
 }

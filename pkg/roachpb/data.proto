@@ -320,53 +320,35 @@ message Transaction {
   // coordinator to indicate client activity. Concurrent transactions will
   // avoid aborting a transaction if it observes recent-enough activity.
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
-  // The timestamp at which the transaction's current epoch started. For
-  // serializable transactions, if the timestamp drifts from the original
-  // timestamp, the transaction will retry unless we manage to "refresh the
-  // reads" - see refreshed_timestamp.
-  //
-  // This timestamp is the one at which all reads occur, unless
-  // refreshed_timestamp is set. Intent writes do not occur at this timestamp;
-  // they instead occur at the provisional commit timestamp, meta.Timestamp.
-  util.hlc.Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
-  // This flag is set if the transaction's original timestamp was
-  // "leaked" beyond the transaction (i.e. if returned via NOW() or
-  // transaction_timestamp()). If true, this prevents optimizations
-  // which commit at a higher timestamp without resorting to a
-  // client-side retry.
-  bool orig_timestamp_was_observed = 16;
-  // The refreshed timestamp is the timestamp at which the transaction
-  // can commit without necessitating a serializable restart. This
-  // value is forwarded to the transaction's current timestamp (meta.timestamp)
-  // if the transaction coordinator is able to refresh all refreshable spans
-  // encountered during the course of the txn. If set, this takes precedence
-  // over orig_timestamp and is the timestamp at which the transaction reads
-  // going forward.
-  //
-  // We need to keep track of both refresh_timestamp and orig_timestamp (instead
-  // of simply overwriting the orig_timestamp after refreshes) because the
-  // orig_timestamp needs to be used as a lower bound timestamp for the
-  // time-bound iterator used to resolve intents - i.e. there can be intents to
-  // resolve up to the timestamp that the txn started with.
-  //
-  // TODO(nvanbenschoten): this second paragraph is no longer true. The only
-  // place that relies on orig_timestamp being fixed over an entire epoch is
-  // v19.1 nodes use of Transaction.InclusiveTimeBounds. In v20.1 we can remove
-  // this field and update orig_timestamp in place, removing a lot of awkward
-  // code where we forward orig_timestamp by refreshed_timestamp. Doing so will
-  // also address the TODOs in cmd_refresh.go and cmd_refresh_range.go.
-  // Additionally, it will present a good opportunity to rename the field to
-  // read_timestamp.
-  util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
-  // Deprecated min timestamp was used to keep track of the earliest timestamp
-  // that any epoch of the transaction used. This was set only if the
-  // transaction is restarted and the epoch is bumped. It was used during
-  // intent resolution to more efficiently scan for intents.
-  //
-  // The timestamp has since been replaced by TxnMeta.MinTimestamp.
-  //
-  // TODO(nvanbenschoten): remove in v20.1.
-  util.hlc.Timestamp deprecated_min_timestamp = 14 [(gogoproto.nullable) = false];
+  // The timestamp at which the transaction's current epoch started. Up until
+  // version 19.2, this was used in conjunction with read_timestamp to
+  // determine a transaction's read timestamp. In 20.1, read_timestamp
+  // alone is sufficient. This is just maintained for compatibility with 19.2.
+  // TODO(andrei): Remove in 20.2.
+  util.hlc.Timestamp deprecated_orig_timestamp = 6 [(gogoproto.nullable) = false];
+  // This flag is set if the transaction's timestamp was "leaked" beyond the
+  // transaction (e.g. via cluster_logical_timestamp()). If true, this prevents
+  // the transaction's timestamp from being pushed, which means that the txn
+  // can't commit at a higher timestamp without resorting to a client-side
+  // retry.
+  bool commit_timestamp_fixed = 16;
+  // The transaction's read timestamp. All reads are performed at this
+  // timestamp, ensuring that the transaction runs on top of a consistent
+  // snapshot of the database.
+  // Writes are performed at the transaction's write timestamp (meta.timestamp).
+  // The write timestamp can diverge from the read timestamp when a write is
+  // "pushed": for example in case a write runs into the timestamp cache, we're
+  // forced to write at a higher timestamp. Being serializable, the transaction
+  // can't commit if the write timestamp diverged from the read timestamp unless
+  // we prove that the read timestamp can also be advanced to match the
+  // write timestamp; it can be advanced if the two timestamps are equivalent
+  // for everything that the transaction has read (meaning that there's no
+  // values in between the read timestamp and the write timestamp for any key in
+  // the txn's read set). We call checking whether the read timestamp can
+  // advance "refreshing the read set". So, the read timestamp advances after a
+  // successful refresh or, if the refresh is unsuccessful, after a transaction
+  // restart.
+  util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
   // retry error, unless the node being read is listed in observed_timestamps
@@ -384,7 +366,7 @@ message Transaction {
   // Morally speaking, having an entry for a node in this list means that this
   // node has been visited before, and that no more uncertainty restarts are
   // expected for operations served from it. However, this is not entirely
-  // accurate. For example, say a txn starts with orig_timestamp=1 (and some
+  // accurate. For example, say a txn starts with read_timestamp=1 (and some
   // large max_timestamp). It then reads key "a" from node A, registering an
   // entry `A -> 5` in the process (`5` happens to be a timestamp taken off
   // that node's clock at the start of the read).
@@ -392,7 +374,7 @@ message Transaction {
   // Now assume that some other transaction writes and commits a value at key "b"
   // and timestamp 4 (again, served by node A), and our transaction attempts to
   // read that key. Since there is an entry in its observed_timestamps for A,
-  // our uncertainty window is `[orig_timestamp, 5) = [1, 5)` but the value at
+  // our uncertainty window is `[read_timestamp, 5) = [1, 5)` but the value at
   // key "b" is in that window, and so we will restart. However, we will restart
   // with a timestamp that is at least high as our entry in the list for node A,
   // so no future operation on node A will be uncertain.
@@ -402,7 +384,7 @@ message Transaction {
   // Thus, expressed properly, we can say that when a node has been read from
   // successfully before by a transaction, uncertainty for values written by a
   // leaseholder on that node is restricted to values with timestamps in the
-  // interval [orig_timestamp, first_visit_timestamp). An upper bound can be
+  // interval [read_timestamp, first_visit_timestamp). An upper bound can be
   // placed on the uncertainty window because we are guaranteed that at the time
   // that the transaction first visited the node, none of the Ranges that it was
   // a leaseholder for had served any writes at higher timestamps than the clock
@@ -454,7 +436,7 @@ message Transaction {
   //
   // When a transaction is first initialized on a node, it may use a timestamp
   // from the local hybrid logical clock to initialize the corresponding entry
-  // in the list. In particular, if `orig_timestamp` is taken from that node's
+  // in the list. In particular, if `read_timestamp` is taken from that node's
   // clock, we may add that to the list, which eliminates read uncertainty for
   // reads on that node.
   //
@@ -466,7 +448,7 @@ message Transaction {
   // If this is true, the transaction must retry. Relevant only for
   // SNAPSHOT transactions: a SERIALIZABLE transaction would have to
   // retry anyway due to its commit timestamp having moved forward (whenever
-  // write_too_old is set, meta.Timestamp has been pushed above orig_timestamp).
+  // write_too_old is set, meta.Timestamp has been pushed above read_timestamp).
   // This bool is set instead of immediately returning a txn retry
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
@@ -499,7 +481,7 @@ message Transaction {
   // slice.
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
 
-  reserved 3, 9, 13;
+  reserved 3, 9, 13, 14;
 }
 
 // A TransactionRecord message contains the subset of the fields in a

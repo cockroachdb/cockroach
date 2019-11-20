@@ -49,9 +49,9 @@ message TxnMeta {
   // commit timestamp.
   //
   // Note that reads do not occur at this timestamp; they instead occur at
-  // OrigTimestamp, which is tracked in the containing roachpb.Transaction.
+  // ReadTimestamp, which is tracked in the containing roachpb.Transaction.
   //
-  // Writes used to be performed at the txn's original timestamp, which was
+  // Writes used to be performed at the txn's read timestamp, which was
   // necessary to avoid lost update anomalies in snapshot isolation mode. We no
   // longer support snapshot isolation mode, and there are now several important
   // reasons that writes are performed at this timestamp instead of the txn's
@@ -88,7 +88,7 @@ message TxnMeta {
   //       value will need to be rewritten at the forwarded timestamp if the
   //       transaction commits.
   //
-  util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp write_timestamp = 5 [(gogoproto.nullable) = false];
   // The timestamp that the transaction was assigned by its gateway when it
   // began its first epoch. This is the earliest timestamp that the transaction
   // could have written any of its intents at.

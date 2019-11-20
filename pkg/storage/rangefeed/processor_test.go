@@ -600,25 +600,25 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Create a set of transactions.
 	txn1, txn2, txn3 := uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()
-	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts10, MinTimestamp: ts10}
-	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts20, MinTimestamp: ts20}
-	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts30, MinTimestamp: ts30}
+	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts10, MinTimestamp: ts10}
+	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts20, MinTimestamp: ts20}
+	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts30, MinTimestamp: ts30}
 	txn1Proto := roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
 	txn2Proto := roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.PENDING}
 	txn3Proto := roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.PENDING}
 
 	// Modifications for test 2.
-	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts25, MinTimestamp: ts10}
-	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts50, MinTimestamp: ts10}
-	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts20}
-	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts70, MinTimestamp: ts30}
+	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts25, MinTimestamp: ts10}
+	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts50, MinTimestamp: ts10}
+	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts60, MinTimestamp: ts20}
+	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts70, MinTimestamp: ts30}
 	txn1ProtoT2 := roachpb.Transaction{TxnMeta: txn1MetaT2Post, Status: roachpb.COMMITTED}
 	txn2ProtoT2 := roachpb.Transaction{TxnMeta: txn2MetaT2Post, Status: roachpb.PENDING}
 	txn3ProtoT2 := roachpb.Transaction{TxnMeta: txn3MetaT2Post, Status: roachpb.PENDING}
 
 	// Modifications for test 3.
-	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts20}
-	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts90, MinTimestamp: ts30}
+	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts60, MinTimestamp: ts20}
+	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts90, MinTimestamp: ts30}
 	txn2ProtoT3 := roachpb.Transaction{TxnMeta: txn2MetaT3Post, Status: roachpb.ABORTED}
 	txn3ProtoT3 := roachpb.Transaction{TxnMeta: txn3MetaT3Post, Status: roachpb.PENDING}
 
@@ -689,7 +689,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Add a few intents and move the closed timestamp forward.
 	writeIntentOpFromMeta := func(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
-		return writeIntentOpWithDetails(txn.ID, txn.Key, txn.MinTimestamp, txn.Timestamp)
+		return writeIntentOpWithDetails(txn.ID, txn.Key, txn.MinTimestamp, txn.WriteTimestamp)
 	}
 	p.ConsumeLogicalOps(
 		writeIntentOpFromMeta(txn1Meta),
@@ -730,14 +730,14 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Txn1's first intent is committed. Resolved timestamp doesn't change.
 	p.ConsumeLogicalOps(
-		commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.Timestamp),
+		commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.WriteTimestamp),
 	)
 	p.syncEventC()
 	require.Equal(t, hlc.Timestamp{WallTime: 49}, p.rts.Get())
 
 	// Txn1's second intent is committed. Resolved timestamp moves forward.
 	p.ConsumeLogicalOps(
-		commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.Timestamp),
+		commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.WriteTimestamp),
 	)
 	p.syncEventC()
 	require.Equal(t, hlc.Timestamp{WallTime: 59}, p.rts.Get())
@@ -758,7 +758,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Commit txn3's only intent. Resolved timestamp moves forward.
 	p.ConsumeLogicalOps(
-		commitIntentOp(txn3MetaT3Post.ID, txn3MetaT3Post.Timestamp),
+		commitIntentOp(txn3MetaT3Post.ID, txn3MetaT3Post.WriteTimestamp),
 	)
 	p.syncEventC()
 	require.Equal(t, hlc.Timestamp{WallTime: 100}, p.rts.Get())

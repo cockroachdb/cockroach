@@ -219,16 +219,16 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::std::string* release_key();
   void set_allocated_key(::std::string* key);
 
-  bool has_timestamp() const;
-  void clear_timestamp();
-  static const int kTimestampFieldNumber = 5;
+  bool has_write_timestamp() const;
+  void clear_write_timestamp();
+  static const int kWriteTimestampFieldNumber = 5;
   private:
-  const ::cockroach::util::hlc::Timestamp& _internal_timestamp() const;
+  const ::cockroach::util::hlc::Timestamp& _internal_write_timestamp() const;
   public:
-  const ::cockroach::util::hlc::Timestamp& timestamp() const;
-  ::cockroach::util::hlc::Timestamp* release_timestamp();
-  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
-  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+  const ::cockroach::util::hlc::Timestamp& write_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_write_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_write_timestamp();
+  void set_allocated_write_timestamp(::cockroach::util::hlc::Timestamp* write_timestamp);
 
   bool has_min_timestamp() const;
   void clear_min_timestamp();
@@ -262,7 +262,7 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
-  ::cockroach::util::hlc::Timestamp* timestamp_;
+  ::cockroach::util::hlc::Timestamp* write_timestamp_;
   ::cockroach::util::hlc::Timestamp* min_timestamp_;
   ::google::protobuf::int32 epoch_;
   ::google::protobuf::int32 priority_;
@@ -1842,51 +1842,51 @@ inline void TxnMeta::set_epoch(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.epoch)
 }
 
-inline bool TxnMeta::has_timestamp() const {
-  return this != internal_default_instance() && timestamp_ != NULL;
+inline bool TxnMeta::has_write_timestamp() const {
+  return this != internal_default_instance() && write_timestamp_ != NULL;
 }
-inline const ::cockroach::util::hlc::Timestamp& TxnMeta::_internal_timestamp() const {
-  return *timestamp_;
+inline const ::cockroach::util::hlc::Timestamp& TxnMeta::_internal_write_timestamp() const {
+  return *write_timestamp_;
 }
-inline const ::cockroach::util::hlc::Timestamp& TxnMeta::timestamp() const {
-  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
+inline const ::cockroach::util::hlc::Timestamp& TxnMeta::write_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = write_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.write_timestamp)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
       &::cockroach::util::hlc::_Timestamp_default_instance_);
 }
-inline ::cockroach::util::hlc::Timestamp* TxnMeta::release_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
+inline ::cockroach::util::hlc::Timestamp* TxnMeta::release_write_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.write_timestamp)
   
-  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
-  timestamp_ = NULL;
+  ::cockroach::util::hlc::Timestamp* temp = write_timestamp_;
+  write_timestamp_ = NULL;
   return temp;
 }
-inline ::cockroach::util::hlc::Timestamp* TxnMeta::mutable_timestamp() {
+inline ::cockroach::util::hlc::Timestamp* TxnMeta::mutable_write_timestamp() {
   
-  if (timestamp_ == NULL) {
+  if (write_timestamp_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
-    timestamp_ = p;
+    write_timestamp_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
-  return timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.write_timestamp)
+  return write_timestamp_;
 }
-inline void TxnMeta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+inline void TxnMeta::set_allocated_write_timestamp(::cockroach::util::hlc::Timestamp* write_timestamp) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(timestamp_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(write_timestamp_);
   }
-  if (timestamp) {
+  if (write_timestamp) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      timestamp = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, timestamp, submessage_arena);
+      write_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, write_timestamp, submessage_arena);
     }
     
   } else {
     
   }
-  timestamp_ = timestamp;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
+  write_timestamp_ = write_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.write_timestamp)
 }
 
 inline bool TxnMeta::has_min_timestamp() const {

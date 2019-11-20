@@ -133,7 +133,7 @@ func (r *Replica) updateTimestampCache(
 				continue
 			}
 			key := keys.TransactionKey(start, pushee.ID)
-			addToTSCache(key, nil, pushee.Timestamp, t.PusherTxn.ID, readCache)
+			addToTSCache(key, nil, pushee.WriteTimestamp, t.PusherTxn.ID, readCache)
 		case *roachpb.ConditionalPutRequest:
 			// ConditionalPut only updates on ConditionFailedErrors. On other
 			// errors, no information is returned. On successful writes, the
@@ -196,7 +196,7 @@ func (r *Replica) updateTimestampCache(
 				// an empty transaction ID so that we block the intent
 				// regardless of whether it is part of the current batch's
 				// transaction or not.
-				addToTSCache(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
+				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{}, true /* readCache */)
 			}
 		default:
 			addToTSCache(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
@@ -274,9 +274,9 @@ func (r *Replica) applyTimestampCache(
 			var bumpedCurReq bool
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
-					if ba.Txn.Timestamp.Less(nextRTS) {
+					if ba.Txn.WriteTimestamp.Less(nextRTS) {
 						txn := ba.Txn.Clone()
-						bumpedCurReq = txn.Timestamp.Forward(nextRTS)
+						bumpedCurReq = txn.WriteTimestamp.Forward(nextRTS)
 						ba.Txn = txn
 					}
 				}
@@ -296,9 +296,9 @@ func (r *Replica) applyTimestampCache(
 			nextWTS := wTS.Next()
 			if ba.Txn != nil {
 				if ba.Txn.ID != wTxnID {
-					if ba.Txn.Timestamp.Less(nextWTS) {
+					if ba.Txn.WriteTimestamp.Less(nextWTS) {
 						txn := ba.Txn.Clone()
-						bumpedCurReq = txn.Timestamp.Forward(nextWTS)
+						bumpedCurReq = txn.WriteTimestamp.Forward(nextWTS)
 						txn.WriteTooOld = true
 						ba.Txn = txn
 					}

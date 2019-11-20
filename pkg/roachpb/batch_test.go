@@ -309,13 +309,12 @@ func TestRefreshSpanIterate(t *testing.T) {
 
 	var readSpans []Span
 	var writeSpans []Span
-	fn := func(span Span, write bool) bool {
+	fn := func(span Span, write bool) {
 		if write {
 			writeSpans = append(writeSpans, span)
 		} else {
 			readSpans = append(readSpans, span)
 		}
-		return true
 	}
 	ba.RefreshSpanIterate(&br, fn)
 	// The conditional put and init put are not considered read spans.

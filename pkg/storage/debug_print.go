@@ -91,7 +91,7 @@ func tryIntent(kv engine.MVCCKeyValue) (string, error) {
 	}
 	s := fmt.Sprintf("%+v", meta)
 	if meta.Txn != nil {
-		s = meta.Txn.Timestamp.String() + " " + s
+		s = meta.Txn.WriteTimestamp.String() + " " + s
 	}
 	return s, nil
 }

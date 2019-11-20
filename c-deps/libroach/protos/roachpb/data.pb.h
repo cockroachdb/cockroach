@@ -1735,16 +1735,16 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* mutable_last_heartbeat();
   void set_allocated_last_heartbeat(::cockroach::util::hlc::Timestamp* last_heartbeat);
 
-  bool has_orig_timestamp() const;
-  void clear_orig_timestamp();
-  static const int kOrigTimestampFieldNumber = 6;
+  bool has_deprecated_orig_timestamp() const;
+  void clear_deprecated_orig_timestamp();
+  static const int kDeprecatedOrigTimestampFieldNumber = 6;
   private:
-  const ::cockroach::util::hlc::Timestamp& _internal_orig_timestamp() const;
+  const ::cockroach::util::hlc::Timestamp& _internal_deprecated_orig_timestamp() const;
   public:
-  const ::cockroach::util::hlc::Timestamp& orig_timestamp() const;
-  ::cockroach::util::hlc::Timestamp* release_orig_timestamp();
-  ::cockroach::util::hlc::Timestamp* mutable_orig_timestamp();
-  void set_allocated_orig_timestamp(::cockroach::util::hlc::Timestamp* orig_timestamp);
+  const ::cockroach::util::hlc::Timestamp& deprecated_orig_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_deprecated_orig_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_deprecated_orig_timestamp();
+  void set_allocated_deprecated_orig_timestamp(::cockroach::util::hlc::Timestamp* deprecated_orig_timestamp);
 
   bool has_max_timestamp() const;
   void clear_max_timestamp();
@@ -1757,27 +1757,16 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* mutable_max_timestamp();
   void set_allocated_max_timestamp(::cockroach::util::hlc::Timestamp* max_timestamp);
 
-  bool has_deprecated_min_timestamp() const;
-  void clear_deprecated_min_timestamp();
-  static const int kDeprecatedMinTimestampFieldNumber = 14;
+  bool has_read_timestamp() const;
+  void clear_read_timestamp();
+  static const int kReadTimestampFieldNumber = 15;
   private:
-  const ::cockroach::util::hlc::Timestamp& _internal_deprecated_min_timestamp() const;
+  const ::cockroach::util::hlc::Timestamp& _internal_read_timestamp() const;
   public:
-  const ::cockroach::util::hlc::Timestamp& deprecated_min_timestamp() const;
-  ::cockroach::util::hlc::Timestamp* release_deprecated_min_timestamp();
-  ::cockroach::util::hlc::Timestamp* mutable_deprecated_min_timestamp();
-  void set_allocated_deprecated_min_timestamp(::cockroach::util::hlc::Timestamp* deprecated_min_timestamp);
-
-  bool has_refreshed_timestamp() const;
-  void clear_refreshed_timestamp();
-  static const int kRefreshedTimestampFieldNumber = 15;
-  private:
-  const ::cockroach::util::hlc::Timestamp& _internal_refreshed_timestamp() const;
-  public:
-  const ::cockroach::util::hlc::Timestamp& refreshed_timestamp() const;
-  ::cockroach::util::hlc::Timestamp* release_refreshed_timestamp();
-  ::cockroach::util::hlc::Timestamp* mutable_refreshed_timestamp();
-  void set_allocated_refreshed_timestamp(::cockroach::util::hlc::Timestamp* refreshed_timestamp);
+  const ::cockroach::util::hlc::Timestamp& read_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_read_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_read_timestamp();
+  void set_allocated_read_timestamp(::cockroach::util::hlc::Timestamp* read_timestamp);
 
   // .cockroach.roachpb.TransactionStatus status = 4;
   void clear_status();
@@ -1785,11 +1774,11 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // bool orig_timestamp_was_observed = 16;
-  void clear_orig_timestamp_was_observed();
-  static const int kOrigTimestampWasObservedFieldNumber = 16;
-  bool orig_timestamp_was_observed() const;
-  void set_orig_timestamp_was_observed(bool value);
+  // bool commit_timestamp_fixed = 16;
+  void clear_commit_timestamp_fixed();
+  static const int kCommitTimestampFixedFieldNumber = 16;
+  bool commit_timestamp_fixed() const;
+  void set_commit_timestamp_fixed(bool value);
 
   // bool write_too_old = 12;
   void clear_write_too_old();
@@ -1807,12 +1796,11 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::google::protobuf::internal::ArenaStringPtr name_;
   ::cockroach::storage::engine::enginepb::TxnMeta* meta_;
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
-  ::cockroach::util::hlc::Timestamp* orig_timestamp_;
+  ::cockroach::util::hlc::Timestamp* deprecated_orig_timestamp_;
   ::cockroach::util::hlc::Timestamp* max_timestamp_;
-  ::cockroach::util::hlc::Timestamp* deprecated_min_timestamp_;
-  ::cockroach::util::hlc::Timestamp* refreshed_timestamp_;
+  ::cockroach::util::hlc::Timestamp* read_timestamp_;
   int status_;
-  bool orig_timestamp_was_observed_;
+  bool commit_timestamp_fixed_;
   bool write_too_old_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
@@ -4184,159 +4172,112 @@ inline void Transaction::set_allocated_last_heartbeat(::cockroach::util::hlc::Ti
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.last_heartbeat)
 }
 
-inline bool Transaction::has_orig_timestamp() const {
-  return this != internal_default_instance() && orig_timestamp_ != NULL;
+inline bool Transaction::has_deprecated_orig_timestamp() const {
+  return this != internal_default_instance() && deprecated_orig_timestamp_ != NULL;
 }
-inline const ::cockroach::util::hlc::Timestamp& Transaction::_internal_orig_timestamp() const {
-  return *orig_timestamp_;
+inline const ::cockroach::util::hlc::Timestamp& Transaction::_internal_deprecated_orig_timestamp() const {
+  return *deprecated_orig_timestamp_;
 }
-inline const ::cockroach::util::hlc::Timestamp& Transaction::orig_timestamp() const {
-  const ::cockroach::util::hlc::Timestamp* p = orig_timestamp_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.orig_timestamp)
+inline const ::cockroach::util::hlc::Timestamp& Transaction::deprecated_orig_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = deprecated_orig_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.deprecated_orig_timestamp)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
       &::cockroach::util::hlc::_Timestamp_default_instance_);
 }
-inline ::cockroach::util::hlc::Timestamp* Transaction::release_orig_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.orig_timestamp)
+inline ::cockroach::util::hlc::Timestamp* Transaction::release_deprecated_orig_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.deprecated_orig_timestamp)
   
-  ::cockroach::util::hlc::Timestamp* temp = orig_timestamp_;
-  orig_timestamp_ = NULL;
+  ::cockroach::util::hlc::Timestamp* temp = deprecated_orig_timestamp_;
+  deprecated_orig_timestamp_ = NULL;
   return temp;
 }
-inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_orig_timestamp() {
+inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_deprecated_orig_timestamp() {
   
-  if (orig_timestamp_ == NULL) {
+  if (deprecated_orig_timestamp_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
-    orig_timestamp_ = p;
+    deprecated_orig_timestamp_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.orig_timestamp)
-  return orig_timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.deprecated_orig_timestamp)
+  return deprecated_orig_timestamp_;
 }
-inline void Transaction::set_allocated_orig_timestamp(::cockroach::util::hlc::Timestamp* orig_timestamp) {
+inline void Transaction::set_allocated_deprecated_orig_timestamp(::cockroach::util::hlc::Timestamp* deprecated_orig_timestamp) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(orig_timestamp_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deprecated_orig_timestamp_);
   }
-  if (orig_timestamp) {
+  if (deprecated_orig_timestamp) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      orig_timestamp = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, orig_timestamp, submessage_arena);
+      deprecated_orig_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, deprecated_orig_timestamp, submessage_arena);
     }
     
   } else {
     
   }
-  orig_timestamp_ = orig_timestamp;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.orig_timestamp)
+  deprecated_orig_timestamp_ = deprecated_orig_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.deprecated_orig_timestamp)
 }
 
-// bool orig_timestamp_was_observed = 16;
-inline void Transaction::clear_orig_timestamp_was_observed() {
-  orig_timestamp_was_observed_ = false;
+// bool commit_timestamp_fixed = 16;
+inline void Transaction::clear_commit_timestamp_fixed() {
+  commit_timestamp_fixed_ = false;
 }
-inline bool Transaction::orig_timestamp_was_observed() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
-  return orig_timestamp_was_observed_;
+inline bool Transaction::commit_timestamp_fixed() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.commit_timestamp_fixed)
+  return commit_timestamp_fixed_;
 }
-inline void Transaction::set_orig_timestamp_was_observed(bool value) {
+inline void Transaction::set_commit_timestamp_fixed(bool value) {
   
-  orig_timestamp_was_observed_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
+  commit_timestamp_fixed_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.commit_timestamp_fixed)
 }
 
-inline bool Transaction::has_refreshed_timestamp() const {
-  return this != internal_default_instance() && refreshed_timestamp_ != NULL;
+inline bool Transaction::has_read_timestamp() const {
+  return this != internal_default_instance() && read_timestamp_ != NULL;
 }
-inline const ::cockroach::util::hlc::Timestamp& Transaction::_internal_refreshed_timestamp() const {
-  return *refreshed_timestamp_;
+inline const ::cockroach::util::hlc::Timestamp& Transaction::_internal_read_timestamp() const {
+  return *read_timestamp_;
 }
-inline const ::cockroach::util::hlc::Timestamp& Transaction::refreshed_timestamp() const {
-  const ::cockroach::util::hlc::Timestamp* p = refreshed_timestamp_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.refreshed_timestamp)
+inline const ::cockroach::util::hlc::Timestamp& Transaction::read_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = read_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.read_timestamp)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
       &::cockroach::util::hlc::_Timestamp_default_instance_);
 }
-inline ::cockroach::util::hlc::Timestamp* Transaction::release_refreshed_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.refreshed_timestamp)
+inline ::cockroach::util::hlc::Timestamp* Transaction::release_read_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.read_timestamp)
   
-  ::cockroach::util::hlc::Timestamp* temp = refreshed_timestamp_;
-  refreshed_timestamp_ = NULL;
+  ::cockroach::util::hlc::Timestamp* temp = read_timestamp_;
+  read_timestamp_ = NULL;
   return temp;
 }
-inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_refreshed_timestamp() {
+inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_read_timestamp() {
   
-  if (refreshed_timestamp_ == NULL) {
+  if (read_timestamp_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
-    refreshed_timestamp_ = p;
+    read_timestamp_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.refreshed_timestamp)
-  return refreshed_timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.read_timestamp)
+  return read_timestamp_;
 }
-inline void Transaction::set_allocated_refreshed_timestamp(::cockroach::util::hlc::Timestamp* refreshed_timestamp) {
+inline void Transaction::set_allocated_read_timestamp(::cockroach::util::hlc::Timestamp* read_timestamp) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(refreshed_timestamp_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(read_timestamp_);
   }
-  if (refreshed_timestamp) {
+  if (read_timestamp) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      refreshed_timestamp = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, refreshed_timestamp, submessage_arena);
+      read_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, read_timestamp, submessage_arena);
     }
     
   } else {
     
   }
-  refreshed_timestamp_ = refreshed_timestamp;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.refreshed_timestamp)
-}
-
-inline bool Transaction::has_deprecated_min_timestamp() const {
-  return this != internal_default_instance() && deprecated_min_timestamp_ != NULL;
-}
-inline const ::cockroach::util::hlc::Timestamp& Transaction::_internal_deprecated_min_timestamp() const {
-  return *deprecated_min_timestamp_;
-}
-inline const ::cockroach::util::hlc::Timestamp& Transaction::deprecated_min_timestamp() const {
-  const ::cockroach::util::hlc::Timestamp* p = deprecated_min_timestamp_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.deprecated_min_timestamp)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
-      &::cockroach::util::hlc::_Timestamp_default_instance_);
-}
-inline ::cockroach::util::hlc::Timestamp* Transaction::release_deprecated_min_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.deprecated_min_timestamp)
-  
-  ::cockroach::util::hlc::Timestamp* temp = deprecated_min_timestamp_;
-  deprecated_min_timestamp_ = NULL;
-  return temp;
-}
-inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_deprecated_min_timestamp() {
-  
-  if (deprecated_min_timestamp_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
-    deprecated_min_timestamp_ = p;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.deprecated_min_timestamp)
-  return deprecated_min_timestamp_;
-}
-inline void Transaction::set_allocated_deprecated_min_timestamp(::cockroach::util::hlc::Timestamp* deprecated_min_timestamp) {
-  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
-  if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deprecated_min_timestamp_);
-  }
-  if (deprecated_min_timestamp) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
-    if (message_arena != submessage_arena) {
-      deprecated_min_timestamp = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, deprecated_min_timestamp, submessage_arena);
-    }
-    
-  } else {
-    
-  }
-  deprecated_min_timestamp_ = deprecated_min_timestamp;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.deprecated_min_timestamp)
+  read_timestamp_ = read_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.read_timestamp)
 }
 
 inline bool Transaction::has_max_timestamp() const {

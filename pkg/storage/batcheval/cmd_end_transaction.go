@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/pkg/errors"
 )
 
 // TxnAutoGC controls whether Transaction entries are automatically gc'ed
@@ -235,22 +235,12 @@ func EndTransaction(
 
 		case roachpb.PENDING, roachpb.STAGING:
 			if h.Txn.Epoch < reply.Txn.Epoch {
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-					"programming error: epoch regression: %d", h.Txn.Epoch,
-				))
-			} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
-				// The transaction record can only ever be pushed forward, so it's an
-				// error if somehow the transaction record has an earlier timestamp
-				// than the original transaction timestamp.
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-					"programming error: timestamp regression: %s", h.Txn.OrigTimestamp,
-				))
+				return result.Result{}, errors.AssertionFailedf(
+					"programming error: epoch regression: %d", h.Txn.Epoch)
 			}
 
 		default:
-			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("bad txn status: %s", reply.Txn),
-			)
+			return result.Result{}, errors.AssertionFailedf("bad txn status: %s", reply.Txn)
 		}
 
 		// Update the existing txn with the supplied txn.
@@ -279,7 +269,7 @@ func EndTransaction(
 			}
 
 			reply.Txn.Status = roachpb.STAGING
-			reply.StagingTimestamp = reply.Txn.Timestamp
+			reply.StagingTimestamp = reply.Txn.WriteTimestamp
 			if err := updateStagingTxn(ctx, batch, ms, key, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
@@ -301,7 +291,7 @@ func EndTransaction(
 		// transactions and thus the pre-intent value can safely be used.
 		if mt := args.InternalCommitTrigger.GetMergeTrigger(); mt != nil {
 			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
-				ms, mt, reply.Txn.Timestamp)
+				ms, mt, reply.Txn.WriteTimestamp)
 			if err != nil {
 				return result.Result{}, err
 			}
@@ -387,9 +377,11 @@ func IsEndTransactionTriggeringRetryError(
 	if txn.WriteTooOld {
 		retry, reason = true, roachpb.RETRY_WRITE_TOO_OLD
 	} else {
-		origTimestamp := txn.OrigTimestamp
-		origTimestamp.Forward(txn.RefreshedTimestamp)
-		isTxnPushed := txn.Timestamp != origTimestamp
+		readTimestamp := txn.ReadTimestamp
+		// For compatibility with 19.2 nodes which might not have set
+		// ReadTimestamp, fallback to DeprecatedOrigTimestamp.
+		readTimestamp.Forward(txn.DeprecatedOrigTimestamp)
+		isTxnPushed := txn.WriteTimestamp != readTimestamp
 
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
@@ -404,13 +396,11 @@ func IsEndTransactionTriggeringRetryError(
 	}
 
 	// However, a transaction must obey its deadline, if set.
-	if !retry && IsEndTransactionExceedingDeadline(txn.Timestamp, args) {
-		exceededBy := txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
-		fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
+	if !retry && IsEndTransactionExceedingDeadline(txn.WriteTimestamp, args) {
+		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
 		extraMsg = fmt.Sprintf(
-			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
-				"original timestamp %s ago (%s)",
-			exceededBy, txn.Timestamp, args.Deadline, fromStart, txn.OrigTimestamp)
+			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
+			exceededBy, txn.WriteTimestamp, args.Deadline)
 		retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
 	}
 	return retry, reason, extraMsg
@@ -426,7 +416,7 @@ func IsEndTransactionTriggeringRetryError(
 func CanForwardCommitTimestampWithoutRefresh(
 	txn *roachpb.Transaction, args *roachpb.EndTransactionRequest,
 ) bool {
-	return !txn.OrigTimestampWasObserved && args.NoRefreshSpans
+	return !txn.CommitTimestampFixed && args.NoRefreshSpans
 }
 
 const intentResolutionBatchSize = 500
@@ -583,7 +573,7 @@ func RunCommitTrigger(
 
 	if ct.GetSplitTrigger() != nil {
 		newMS, trigger, err := splitTrigger(
-			ctx, rec, batch, *ms, ct.SplitTrigger, txn.Timestamp,
+			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
 		*ms = newMS
 		return trigger, err

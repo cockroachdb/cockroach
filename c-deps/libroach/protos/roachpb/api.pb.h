@@ -13072,6 +13072,17 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
 
+  bool has_refresh_from() const;
+  void clear_refresh_from();
+  static const int kRefreshFromFieldNumber = 3;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_refresh_from() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& refresh_from() const;
+  ::cockroach::util::hlc::Timestamp* release_refresh_from();
+  ::cockroach::util::hlc::Timestamp* mutable_refresh_from();
+  void set_allocated_refresh_from(::cockroach::util::hlc::Timestamp* refresh_from);
+
   // bool write = 2;
   void clear_write();
   static const int kWriteFieldNumber = 2;
@@ -13083,6 +13094,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
+  ::cockroach::util::hlc::Timestamp* refresh_from_;
   bool write_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -13291,6 +13303,17 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
 
+  bool has_refresh_from() const;
+  void clear_refresh_from();
+  static const int kRefreshFromFieldNumber = 3;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_refresh_from() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& refresh_from() const;
+  ::cockroach::util::hlc::Timestamp* release_refresh_from();
+  ::cockroach::util::hlc::Timestamp* mutable_refresh_from();
+  void set_allocated_refresh_from(::cockroach::util::hlc::Timestamp* refresh_from);
+
   // bool write = 2;
   void clear_write();
   static const int kWriteFieldNumber = 2;
@@ -13302,6 +13325,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
+  ::cockroach::util::hlc::Timestamp* refresh_from_;
   bool write_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -27995,6 +28019,53 @@ inline void RefreshRequest::set_write(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RefreshRequest.write)
 }
 
+inline bool RefreshRequest::has_refresh_from() const {
+  return this != internal_default_instance() && refresh_from_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& RefreshRequest::_internal_refresh_from() const {
+  return *refresh_from_;
+}
+inline const ::cockroach::util::hlc::Timestamp& RefreshRequest::refresh_from() const {
+  const ::cockroach::util::hlc::Timestamp* p = refresh_from_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RefreshRequest.refresh_from)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* RefreshRequest::release_refresh_from() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RefreshRequest.refresh_from)
+  
+  ::cockroach::util::hlc::Timestamp* temp = refresh_from_;
+  refresh_from_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* RefreshRequest::mutable_refresh_from() {
+  
+  if (refresh_from_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    refresh_from_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RefreshRequest.refresh_from)
+  return refresh_from_;
+}
+inline void RefreshRequest::set_allocated_refresh_from(::cockroach::util::hlc::Timestamp* refresh_from) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(refresh_from_);
+  }
+  if (refresh_from) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      refresh_from = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, refresh_from, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  refresh_from_ = refresh_from;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RefreshRequest.refresh_from)
+}
+
 // -------------------------------------------------------------------
 
 // RefreshResponse
@@ -28121,6 +28192,53 @@ inline void RefreshRangeRequest::set_write(bool value) {
   
   write_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RefreshRangeRequest.write)
+}
+
+inline bool RefreshRangeRequest::has_refresh_from() const {
+  return this != internal_default_instance() && refresh_from_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& RefreshRangeRequest::_internal_refresh_from() const {
+  return *refresh_from_;
+}
+inline const ::cockroach::util::hlc::Timestamp& RefreshRangeRequest::refresh_from() const {
+  const ::cockroach::util::hlc::Timestamp* p = refresh_from_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RefreshRangeRequest.refresh_from)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* RefreshRangeRequest::release_refresh_from() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RefreshRangeRequest.refresh_from)
+  
+  ::cockroach::util::hlc::Timestamp* temp = refresh_from_;
+  refresh_from_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* RefreshRangeRequest::mutable_refresh_from() {
+  
+  if (refresh_from_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    refresh_from_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RefreshRangeRequest.refresh_from)
+  return refresh_from_;
+}
+inline void RefreshRangeRequest::set_allocated_refresh_from(::cockroach::util::hlc::Timestamp* refresh_from) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(refresh_from_);
+  }
+  if (refresh_from) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      refresh_from = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, refresh_from, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  refresh_from_ = refresh_from;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RefreshRangeRequest.refresh_from)
 }
 
 // -------------------------------------------------------------------

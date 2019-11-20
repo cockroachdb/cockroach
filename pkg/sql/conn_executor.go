@@ -644,7 +644,7 @@ func (s *Server) newConnExecutorWithTxn(
 	ex.state.resetForNewSQLTxn(
 		ctx,
 		explicitTxn,
-		txn.OrigTimestamp().GoTime(),
+		txn.ReadTimestamp().GoTime(),
 		nil, /* historicalTimestamp */
 		txn.UserPriority(),
 		tree.ReadWrite,

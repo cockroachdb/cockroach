@@ -84,7 +84,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 				t.Fatal(pErr)
 			}
 			found = true
-			if !ts.Less(resp.Txn.Timestamp) || resp.Txn.OrigTimestamp == resp.Txn.Timestamp {
+			if !ts.Less(resp.Txn.WriteTimestamp) || resp.Txn.ReadTimestamp == resp.Txn.WriteTimestamp {
 				t.Fatal("timestamp did not get bumped")
 			}
 			break

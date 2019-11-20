@@ -136,7 +136,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,
 	// like the outter one.
 	if params.p.semaCtx.AsOfTimestamp != nil {
-		ts := params.p.txn.OrigTimestamp()
+		ts := params.p.txn.ReadTimestamp()
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
 

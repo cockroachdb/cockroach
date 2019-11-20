@@ -23,12 +23,11 @@ import (
 
 //go:generate go run -tags gen-batch gen_batch.go
 
-// SetActiveTimestamp sets the correct timestamp at which the request
-// is to be carried out. For transactional requests, ba.Timestamp must
-// be zero initially and it will be set to txn.OrigTimestamp (and
-// forwarded to txn.SafeTimestamp if non-zero). For non-transactional
-// requests, if no timestamp is specified, nowFn is used to create and
-// set one.
+// SetActiveTimestamp sets the correct timestamp at which the request is to be
+// carried out. For transactional requests, ba.Timestamp must be zero initially
+// and it will be set to txn.ReadTimestamp (note though this mostly impacts
+// reads; writes use txn.Timestamp). For non-transactional requests, if no
+// timestamp is specified, nowFn is used to create and set one.
 func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	if txn := ba.Txn; txn != nil {
 		if ba.Timestamp != (hlc.Timestamp{}) {
@@ -36,27 +35,17 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		}
 
 		// The batch timestamp is the timestamp at which reads are performed. We set
-		// this to the txn's original timestamp, even if the txn's provisional
+		// this to the txn's read timestamp, even if the txn's provisional
 		// commit timestamp has been forwarded, so that all reads within a txn
-		// observe the same snapshot of the database.
-		//
-		// In other words, we want to preserve the invariant that reading the same
-		// key multiple times in the same transaction will always return the same
-		// value. If we were to read at the latest provisional commit timestamp,
-		// txn.Timestamp, instead, reading the same key twice in the same txn might
-		// yield different results, e.g., if an intervening write caused the
-		// provisional commit timestamp to be advanced. Such a txn would fail to
-		// commit, as its reads would not successfully be refreshed, but only after
-		// confusing the client with spurious data.
+		// observe the same snapshot of the database regardless of how the
+		// provisional commit timestamp evolves.
 		//
 		// Note that writes will be performed at the provisional commit timestamp,
 		// txn.Timestamp, regardless of the batch timestamp.
-		ba.Timestamp = txn.OrigTimestamp
-		// If a refreshed timestamp is set for the transaction, forward
-		// the batch timestamp to it. The refreshed timestamp indicates a
-		// future timestamp at which the transaction would like to commit
-		// to safely avoid a serializable transaction restart.
-		ba.Timestamp.Forward(txn.RefreshedTimestamp)
+		ba.Timestamp = txn.ReadTimestamp
+		// For compatibility with 19.2 nodes which might not have set ReadTimestamp,
+		// fallback to DeprecatedOrigTimestamp.
+		ba.Timestamp.Forward(txn.DeprecatedOrigTimestamp)
 	} else {
 		// When not transactional, allow empty timestamp and use nowFn instead
 		if ba.Timestamp == (hlc.Timestamp{}) {
@@ -397,10 +386,7 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 // minimal span of keys affected by the request. The supplied function
 // is called with each span and a bool indicating whether the span
 // updates the write timestamp cache.
-//
-// The function can return false if it wants the iteration to break. In that
-// case, RefreshSpanIterate also returns false.
-func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool) bool) bool {
+func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool)) {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !NeedsRefresh(req) {
@@ -411,12 +397,9 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool
 			resp = br.Responses[i].GetInner()
 		}
 		if span, ok := ActualSpan(req, resp); ok {
-			if !fn(span, UpdatesWriteTimestampCache(req)) {
-				return false
-			}
+			fn(span, UpdatesWriteTimestampCache(req))
 		}
 	}
-	return true
 }
 
 // ActualSpan returns the actual request span which was operated on,

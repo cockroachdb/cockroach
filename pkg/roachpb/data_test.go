@@ -389,15 +389,10 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
 	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	// Advance the txn timestamp.
-	txn.Timestamp = txn.Timestamp.Add(10, 2)
+	txn.WriteTimestamp = txn.WriteTimestamp.Add(10, 2)
 	txn.BumpEpoch()
 	if a, e := txn.Epoch, enginepb.TxnEpoch(1); a != e {
 		t.Errorf("expected epoch %d; got %d", e, a)
-	}
-	if txn.DeprecatedMinTimestamp == (hlc.Timestamp{}) {
-		t.Errorf("expected non-nil deprecated min timestamp")
-	} else if txn.DeprecatedMinTimestamp != origNow {
-		t.Errorf("expected deprecated min timestamp == origNow; %s != %s", txn.DeprecatedMinTimestamp, origNow)
 	}
 }
 
@@ -410,11 +405,11 @@ func TestTransactionInclusiveTimeBounds(t *testing.T) {
 	origNow := makeTS(1, 1)
 	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	verify(txn, origNow, origNow)
-	txn.Timestamp.Forward(makeTS(1, 2))
+	txn.WriteTimestamp.Forward(makeTS(1, 2))
 	verify(txn, origNow, makeTS(1, 2))
 	txn.Restart(1, 1, makeTS(2, 1))
 	verify(txn, origNow, makeTS(2, 1))
-	txn.Timestamp.Forward(makeTS(3, 1))
+	txn.WriteTimestamp.Forward(makeTS(3, 1))
 	verify(txn, origNow, makeTS(3, 1))
 }
 
@@ -476,26 +471,25 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Key:          Key("foo"),
-		ID:           uuid.MakeV4(),
-		Epoch:        2,
-		Timestamp:    makeTS(20, 21),
-		MinTimestamp: makeTS(10, 11),
-		Priority:     957356782,
-		Sequence:     123,
+		Key:            Key("foo"),
+		ID:             uuid.MakeV4(),
+		Epoch:          2,
+		WriteTimestamp: makeTS(20, 21),
+		MinTimestamp:   makeTS(10, 11),
+		Priority:       957356782,
+		Sequence:       123,
 	},
-	Name:                     "name",
-	Status:                   COMMITTED,
-	LastHeartbeat:            makeTS(1, 2),
-	OrigTimestamp:            makeTS(30, 31),
-	RefreshedTimestamp:       makeTS(20, 22),
-	MaxTimestamp:             makeTS(40, 41),
-	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
-	WriteTooOld:              true,
-	IntentSpans:              []Span{{Key: []byte("a"), EndKey: []byte("b")}},
-	InFlightWrites:           []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
-	DeprecatedMinTimestamp:   makeTS(1, 1),
-	OrigTimestampWasObserved: true,
+	Name:                    "name",
+	Status:                  COMMITTED,
+	LastHeartbeat:           makeTS(1, 2),
+	DeprecatedOrigTimestamp: makeTS(30, 31),
+	ReadTimestamp:           makeTS(20, 22),
+	MaxTimestamp:            makeTS(40, 41),
+	ObservedTimestamps:      []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
+	WriteTooOld:             true,
+	IntentSpans:             []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	InFlightWrites:          []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
+	CommitTimestampFixed:    true,
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -557,7 +551,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.IntentSpans = nil
 	expTxn5.InFlightWrites = nil
 	expTxn5.WriteTooOld = false
-	expTxn5.OrigTimestampWasObserved = false
+	expTxn5.CommitTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
 
 	// Updating a different transaction fatals.
@@ -582,20 +576,13 @@ func TestTransactionUpdateMinTimestamp(t *testing.T) {
 	if a, e := txn2.MinTimestamp, txn.MinTimestamp; a != e {
 		t.Errorf("expected min timestamp %s; got %s", e, a)
 	}
-	if a, e := txn2.DeprecatedMinTimestamp, txn.DeprecatedMinTimestamp; a != e {
-		t.Errorf("expected deprecated min timestamp %s; got %s", e, a)
-	}
 
 	txn3 := nonZeroTxn
 	txn3.MinTimestamp = nonZeroTxn.MinTimestamp.Prev()
-	txn3.DeprecatedMinTimestamp = nonZeroTxn.DeprecatedMinTimestamp.Prev()
 	txn.Update(&txn3)
 
 	if a, e := txn.MinTimestamp, txn3.MinTimestamp; a != e {
 		t.Errorf("expected min timestamp %s; got %s", e, a)
-	}
-	if a, e := txn.DeprecatedMinTimestamp, txn3.DeprecatedMinTimestamp; a != e {
-		t.Errorf("expected deprecated min timestamp %s; got %s", e, a)
 	}
 }
 
@@ -672,10 +659,11 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn := nonZeroTxn
 	expTxn.Epoch++
 	expTxn.Sequence = 0
-	expTxn.Timestamp = makeTS(25, 1)
-	expTxn.OrigTimestamp = makeTS(25, 1)
+	expTxn.WriteTimestamp = makeTS(25, 1)
+	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.DeprecatedOrigTimestamp = expTxn.ReadTimestamp
 	expTxn.WriteTooOld = false
-	expTxn.OrigTimestampWasObserved = false
+	expTxn.CommitTimestampFixed = false
 	expTxn.IntentSpans = nil
 	expTxn.InFlightWrites = nil
 	require.Equal(t, expTxn, txn)

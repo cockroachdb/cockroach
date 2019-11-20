@@ -125,8 +125,8 @@ func setupMVCCData(
 		counts[idx]++
 		ts := hlc.Timestamp{WallTime: int64(counts[idx] * 5)}
 		if txn != nil {
-			txn.OrigTimestamp = ts
-			txn.Timestamp = ts
+			txn.ReadTimestamp = ts
+			txn.WriteTimestamp = ts
 		}
 		if err := MVCCPut(ctx, batch, nil /* ms */, key, ts, value, txn); err != nil {
 			b.Fatal(err)
@@ -136,7 +136,7 @@ func setupMVCCData(
 	resolveLastIntent := func(batch Batch, idx int) {
 		key := keys[idx]
 		txnMeta := txn.TxnMeta
-		txnMeta.Timestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
+		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
 		if err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.Intent{
 			Span:   roachpb.Span{Key: key},
 			Status: roachpb.COMMITTED,

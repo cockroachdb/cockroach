@@ -100,10 +100,10 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			// Delete the value at ts=3. We'll commit this at ts=4 later.
 			ts3 := hlc.Timestamp{WallTime: 3 * 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts3},
-				OrigTimestamp: ts3,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts3},
+				ReadTimestamp: ts3,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.OrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -111,7 +111,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			// push-commit as it would happen for a SNAPSHOT txn)
 			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 			txn.Status = roachpb.COMMITTED
-			txn.Timestamp.Forward(ts4)
+			txn.WriteTimestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
 				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
 			}); err != nil {
@@ -155,8 +155,8 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			key := roachpb.Key("a")
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				OrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 			// Write an intent at t=1s.
 			value := roachpb.MakeValueFromString("value")
@@ -191,7 +191,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			// push-commit as it would happen for a SNAPSHOT txn)
 			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 			txn.Status = roachpb.COMMITTED
-			txn.Timestamp.Forward(ts4)
+			txn.WriteTimestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
 				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
 			}); err != nil {
@@ -234,12 +234,12 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			key := roachpb.Key("a")
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				OrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 			// Write an intent.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -269,7 +269,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			// Now push the value, but with a timestamp gap (i.e. this is a
 			// push as it would happen for a SNAPSHOT txn)
 			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
-			txn.Timestamp.Forward(ts4)
+			txn.WriteTimestamp.Forward(ts4)
 			if err := MVCCResolveWriteIntent(ctx, engine, aggMS, roachpb.Intent{
 				Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
 			}); err != nil {
@@ -317,13 +317,13 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				OrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write an intent.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -367,7 +367,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			// Now replace our intent with a deletion intent, but with a timestamp gap.
 			// This could happen if a transaction got restarted with a higher timestamp
 			// and ran logic different from that in the first attempt.
-			txn.Timestamp.Forward(ts2)
+			txn.WriteTimestamp.Forward(ts2)
 
 			txn.Sequence++
 
@@ -383,7 +383,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, m2ValSize, 64)
 
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.OrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -429,12 +429,12 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				OrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write a deletion tombstone intent.
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.OrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -481,7 +481,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			// Now replace our deletion with a value intent, but with a timestamp gap.
 			// This could happen if a transaction got restarted with a higher timestamp
 			// and ran logic different from that in the first attempt.
-			txn.Timestamp.Forward(ts2)
+			txn.WriteTimestamp.Forward(ts2)
 
 			txn.Sequence++
 
@@ -497,7 +497,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, m2ValSize, 54)
 
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -568,10 +568,10 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 			// Write an tombstone intent at t=2s.
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2},
-				OrigTimestamp: ts2,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
+				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.OrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -604,7 +604,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 				txnCommit := txn.Clone()
 				txnCommit.Status = roachpb.COMMITTED
-				txnCommit.Timestamp.Forward(ts3)
+				txnCommit.WriteTimestamp.Forward(ts3)
 				if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
 					Span: roachpb.Span{Key: key}, Status: txnCommit.Status, Txn: txnCommit.TxnMeta,
 				}); err != nil {
@@ -633,7 +633,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 				txnAbort := txn.Clone()
 				txnAbort.Status = roachpb.ABORTED
-				txnAbort.Timestamp.Forward(ts3)
+				txnAbort.WriteTimestamp.Forward(ts3)
 				if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
 					Span: roachpb.Span{Key: key}, Status: txnAbort.Status, Txn: txnAbort.TxnMeta,
 				}); err != nil {
@@ -714,10 +714,10 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 			// Write a tombstone intent at t=2s.
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts2},
-				OrigTimestamp: ts2,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
+				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.OrigTimestamp, txn); err != nil {
+			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -745,7 +745,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			// Now commit or abort the intent, but with a timestamp gap (i.e. this is a push-commit as it
 			// would happen for a SNAPSHOT txn)
 
-			txn.Timestamp.Forward(ts3)
+			txn.WriteTimestamp.Forward(ts3)
 			txn.Sequence++
 
 			// Annoyingly, the new meta value is actually a little larger thanks to the
@@ -795,8 +795,8 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				vVal2Size := int64(len(val2.RawBytes))
 				require.EqualValues(t, vVal2Size, 14)
 
-				txn.Timestamp.Forward(ts3)
-				if err := MVCCPut(ctx, engine, &aggMS, key, txn.OrigTimestamp, val2, txn); err != nil {
+				txn.WriteTimestamp.Forward(ts3)
+				if err := MVCCPut(ctx, engine, &aggMS, key, txn.ReadTimestamp, val2, txn); err != nil {
 					t.Fatal(err)
 				}
 
@@ -928,12 +928,12 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			ts201 := hlc.Timestamp{WallTime: 2e9 + 1}
 			ts099 := hlc.Timestamp{WallTime: 1e9 - 1}
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts201},
-				OrigTimestamp: ts099,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts201},
+				ReadTimestamp: ts099,
 			}
 			// Write an intent at 2s+1.
 			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -963,9 +963,9 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			// the txn (which is, perhaps surprisingly, only really used when
 			// committing/aborting intents), and the timestamp passed directly to
 			// MVCCPut (which is where the intent will actually end up being written at,
-			// and which usually corresponds to txn.OrigTimestamp).
+			// and which usually corresponds to txn.ReadTimestamp).
 			txn.Sequence++
-			txn.Timestamp = ts099
+			txn.WriteTimestamp = ts099
 
 			// Annoyingly, the new meta value is actually a little larger thanks to the
 			// sequence number.
@@ -976,7 +976,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 					{Sequence: 0, Value: value.RawBytes},
 				},
 			}).Size())
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, value, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, value, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1108,13 +1108,13 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				OrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write an intent at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, val1, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val1, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1146,7 +1146,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			assertEq(t, engine, "after first put", aggMS, &expMS)
 
 			// Rewrite the intent to ts2 with a different value.
-			txn.Timestamp.Forward(ts2)
+			txn.WriteTimestamp.Forward(ts2)
 			txn.Sequence++
 
 			// The new meta value grows because we've bumped `txn.Sequence`.
@@ -1162,7 +1162,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			}).Size())
 			require.EqualValues(t, mVal2Size, 64)
 
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, val2, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val2, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1196,13 +1196,13 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1},
-				OrigTimestamp: ts1,
+				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+				ReadTimestamp: ts1,
 			}
 
 			// Write a system intent at ts1.
 			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, val1, txn); err != nil {
+			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, val1, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1410,7 +1410,7 @@ func (s *randomTest) step(t *testing.T) {
 
 	txnS := "<none>"
 	if preTxn != nil {
-		txnS = preTxn.Timestamp.String()
+		txnS = preTxn.WriteTimestamp.String()
 	}
 
 	if info != "" {

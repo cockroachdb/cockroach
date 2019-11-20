@@ -193,7 +193,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		qiReq := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		require.Equal(t, keyA, qiReq.Key)
 		require.Equal(t, txn.ID, qiReq.Txn.ID)
-		require.Equal(t, txn.Timestamp, qiReq.Txn.Timestamp)
+		require.Equal(t, txn.WriteTimestamp, qiReq.Txn.WriteTimestamp)
 		require.Equal(t, enginepb.TxnSeq(1), qiReq.Txn.Sequence)
 		require.True(t, qiReq.ErrorIfMissing)
 

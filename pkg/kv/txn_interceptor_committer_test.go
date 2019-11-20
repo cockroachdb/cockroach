@@ -336,7 +336,7 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.STAGING
-		br.Responses[1].GetInner().(*roachpb.EndTransactionResponse).StagingTimestamp = br.Txn.Timestamp
+		br.Responses[1].GetInner().(*roachpb.EndTransactionResponse).StagingTimestamp = br.Txn.WriteTimestamp
 
 		// Before returning, mock out the sender again to test against the async
 		// task that should be sent to make the implicit txn commit explicit.
@@ -399,7 +399,7 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.STAGING
-		br.Responses[1].GetInner().(*roachpb.EndTransactionResponse).StagingTimestamp = br.Txn.Timestamp
+		br.Responses[1].GetInner().(*roachpb.EndTransactionResponse).StagingTimestamp = br.Txn.WriteTimestamp
 
 		// Pretend the PutRequest was split and sent to a different Range. It
 		// could hit a WriteTooOld error (which marks the WriteTooOld flag) and
@@ -407,7 +407,7 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 		// value. The intent will be written but the response transaction's
 		// timestamp will be larger than the staging timestamp.
 		br.Txn.WriteTooOld = true
-		br.Txn.Timestamp = br.Txn.Timestamp.Add(1, 0)
+		br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.Add(1, 0)
 		return br, nil
 	})
 

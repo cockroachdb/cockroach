@@ -1486,7 +1486,7 @@ func pushTxnArgs(
 		RequestHeader: roachpb.RequestHeader{
 			Key: pushee.Key,
 		},
-		PushTo:    pusher.Timestamp.Next(),
+		PushTo:    pusher.WriteTimestamp.Next(),
 		PusherTxn: *pusher,
 		PusheeTxn: pushee.TxnMeta,
 		PushType:  pushType,

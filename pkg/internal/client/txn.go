@@ -237,18 +237,18 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// OrigTimestamp returns the transaction's starting timestamp.
+// ReadTimestamp returns the transaction's current read timestamp.
 // Note a transaction can be internally pushed forward in time before
 // committing so this is not guaranteed to be the commit timestamp.
 // Use CommitTimestamp() when needed.
-func (txn *Txn) OrigTimestamp() hlc.Timestamp {
+func (txn *Txn) ReadTimestamp() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.origTimestampLocked()
+	return txn.readTimestampLocked()
 }
 
-func (txn *Txn) origTimestampLocked() hlc.Timestamp {
-	return txn.mu.sender.OrigTimestamp()
+func (txn *Txn) readTimestampLocked() hlc.Timestamp {
+	return txn.mu.sender.ReadTimestamp()
 }
 
 // CommitTimestamp returns the transaction's start timestamp.
@@ -558,14 +558,16 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 // UpdateDeadlineMaybe sets the transactions deadline to the lower of the
 // current one (if any) and the passed value.
 //
-// The deadline cannot be lower than txn.OrigTimestamp.
+// The deadline cannot be lower than txn.ReadTimestamp.
 func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
-		if deadline.Less(txn.origTimestampLocked()) {
-			log.Fatalf(ctx, "deadline below txn.OrigTimestamp() is nonsensical; "+
-				"txn has would have no change to commit. Deadline: %s", deadline)
+		readTimestamp := txn.readTimestampLocked()
+		if deadline.Less(txn.readTimestampLocked()) {
+			log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
+				"txn has would have no change to commit. Deadline: %s. Read timestamp: %s.",
+				deadline, readTimestamp)
 		}
 		txn.mu.deadline = new(hlc.Timestamp)
 		*txn.mu.deadline = deadline
@@ -936,7 +938,7 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 }
 
 // SetFixedTimestamp makes the transaction run in an unusual way, at a "fixed
-// timestamp": Timestamp and OrigTimestamp are set to ts, there's no clock
+// timestamp": Timestamp and RefreshedTimestamp are set to ts, there's no clock
 // uncertainty, and the txn's deadline is set to ts such that the transaction
 // can't be pushed to a different timestamp.
 //
@@ -952,7 +954,7 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on retriable errors. The transaction's timestamp is only
-// bumped to the extent that txn.OrigTimestamp is racheted up to txn.Timestamp.
+// bumped to the extent that txn.ReadTimestamp is racheted up to txn.Timestamp.
 // TODO(andrei): This method should take in an up-to-date timestamp, but
 // unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {

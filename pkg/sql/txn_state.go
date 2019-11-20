@@ -290,10 +290,11 @@ func (ts *txnState) setHistoricalTimestamp(ctx context.Context, historicalTimest
 	ts.isHistorical = true
 }
 
-func (ts *txnState) getOrigTimestamp() hlc.Timestamp {
+// getReadTimestamp returns the transaction's current read timestamp.
+func (ts *txnState) getReadTimestamp() hlc.Timestamp {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-	return ts.mu.txn.OrigTimestamp()
+	return ts.mu.txn.ReadTimestamp()
 }
 
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
