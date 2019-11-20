@@ -55,7 +55,9 @@ type inactiveTableError struct {
 	error
 }
 
-func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
+// FilterTableState inspects the state of a given table and returns an error if
+// the state is anything but PUBLIC. The error describes the state of the table.
+func FilterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	switch tableDesc.State {
 	case sqlbase.TableDescriptor_DROP:
 		return inactiveTableError{errors.New("table is being dropped")}
@@ -326,7 +328,7 @@ func (tc *TableCollection) getTableVersionByID(
 		if err != nil {
 			return nil, err
 		}
-		if err := filterTableState(table); err != nil {
+		if err := FilterTableState(table); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*table), nil
@@ -593,7 +595,7 @@ func (tc *TableCollection) getUncommittedTable(
 		if mutTbl.Name == string(tn.TableName) &&
 			mutTbl.ParentID == dbID {
 			// Right state?
-			if err = filterTableState(mutTbl.TableDesc()); err != nil && err != errTableAdding {
+			if err = FilterTableState(mutTbl.TableDesc()); err != nil && err != errTableAdding {
 				if !required {
 					// If it's not required here, we simply say we don't have it.
 					err = nil
