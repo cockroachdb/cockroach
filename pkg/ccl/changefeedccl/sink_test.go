@@ -167,9 +167,11 @@ func TestKafkaSinkEscaping(t *testing.T) {
 
 type testEncoder struct{}
 
-func (testEncoder) EncodeKey(encodeRow) ([]byte, error)   { panic(`unimplemented`) }
-func (testEncoder) EncodeValue(encodeRow) ([]byte, error) { panic(`unimplemented`) }
-func (testEncoder) EncodeResolvedTimestamp(_ string, ts hlc.Timestamp) ([]byte, error) {
+func (testEncoder) EncodeKey(context.Context, encodeRow) ([]byte, error)   { panic(`unimplemented`) }
+func (testEncoder) EncodeValue(context.Context, encodeRow) ([]byte, error) { panic(`unimplemented`) }
+func (testEncoder) EncodeResolvedTimestamp(
+	_ context.Context, _ string, ts hlc.Timestamp,
+) ([]byte, error) {
 	return []byte(ts.String()), nil
 }
 

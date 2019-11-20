@@ -15,10 +15,10 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	_ "github.com/lib/pq"
 )
 
@@ -154,9 +154,12 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 
 		uiAddrs := c.ExternalAdminUIAddr(ctx, serverNodes)
 		var maxSeen int
+		// The goroutine dump may take a while to generate, maybe more
+		// than the 3 second timeout of the default http client.
+		httpClient := httputil.NewClientWithTimeout(15 * time.Second)
 		for _, addr := range uiAddrs {
 			url := "http://" + addr + "/debug/pprof/goroutine?debug=2"
-			resp, err := http.Get(url)
+			resp, err := httpClient.Get(ctx, url)
 			if err != nil {
 				t.Fatal(err)
 			}

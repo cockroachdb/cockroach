@@ -11,12 +11,13 @@
 package cloudinfo
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
-	"net"
-	"net/http"
 	"regexp"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 const (
@@ -33,7 +34,7 @@ const (
 // client is necessary to provide a struct for mocking http requests
 // in testing.
 type client struct {
-	httpClient *http.Client
+	httpClient *httputil.Client
 }
 
 type metadataReqHeader struct {
@@ -45,9 +46,10 @@ type metadataReqHeader struct {
 // endpoint to provide metadata about the node. The metadata structure
 // is described at:
 // https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-identity-documents.html
-func (cli *client) getAWSInstanceMetadata(metadataElement string) (bool, string, string) {
-
-	body, err := cli.getInstanceMetadata(awsMetadataEndpoint, []metadataReqHeader{})
+func (cli *client) getAWSInstanceMetadata(
+	ctx context.Context, metadataElement string,
+) (bool, string, string) {
+	body, err := cli.getInstanceMetadata(ctx, awsMetadataEndpoint, []metadataReqHeader{})
 
 	if err != nil {
 		return false, "", ""
@@ -76,7 +78,9 @@ func (cli *client) getAWSInstanceMetadata(metadataElement string) (bool, string,
 // endpoint to provide metadata about the node. The metadata structure
 // is described at:
 // https://cloud.google.com/compute/docs/storing-retrieving-metadata
-func (cli *client) getGCPInstanceMetadata(metadataElement string) (bool, string, string) {
+func (cli *client) getGCPInstanceMetadata(
+	ctx context.Context, metadataElement string,
+) (bool, string, string) {
 	var endpointPattern string
 	var requestEndpoint = gcpMetadataEndpoint
 
@@ -91,7 +95,7 @@ func (cli *client) getGCPInstanceMetadata(metadataElement string) (bool, string,
 		return false, "", ""
 	}
 
-	body, err := cli.getInstanceMetadata(requestEndpoint, []metadataReqHeader{{
+	body, err := cli.getInstanceMetadata(ctx, requestEndpoint, []metadataReqHeader{{
 		"Metadata-Flavor", "Google",
 	}})
 
@@ -117,9 +121,10 @@ func (cli *client) getGCPInstanceMetadata(metadataElement string) (bool, string,
 // endpoint to provide metadata about the node. The metadata structure
 // is described at:
 // https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service
-func (cli *client) getAzureInstanceMetadata(metadataElement string) (bool, string, string) {
-
-	body, err := cli.getInstanceMetadata(azureMetadataEndpoint, []metadataReqHeader{{
+func (cli *client) getAzureInstanceMetadata(
+	ctx context.Context, metadataElement string,
+) (bool, string, string) {
+	body, err := cli.getInstanceMetadata(ctx, azureMetadataEndpoint, []metadataReqHeader{{
 		"Metadata", "true",
 	}})
 
@@ -148,9 +153,10 @@ func (cli *client) getAzureInstanceMetadata(metadataElement string) (bool, strin
 	}
 }
 
-func (cli *client) getInstanceMetadata(url string, headers []metadataReqHeader) ([]byte, error) {
-
-	req, err := http.NewRequest("GET", url, nil)
+func (cli *client) getInstanceMetadata(
+	ctx context.Context, url string, headers []metadataReqHeader,
+) ([]byte, error) {
+	req, err := httputil.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -174,23 +180,14 @@ func (cli *client) getInstanceMetadata(url string, headers []metadataReqHeader) 
 // defined cloud functions, attempting to determine which platform
 // the node is running on, as well as the value of the requested metadata
 // element.
-func getCloudInfo(metadataElement string) (provider string, element string) {
-
+func getCloudInfo(ctx context.Context, metadataElement string) (provider string, element string) {
 	const timeout = 500 * time.Millisecond
-	cli := client{&http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			// Don't leak a goroutine on OSX (the TCP level timeout is probably
-			// much higher than on linux).
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-			DisableKeepAlives: true,
-		},
-	}}
+	cli := client{httputil.NewClientWithTimeout(timeout)}
 
 	// getCloudMetadata lets us iterate over all of the functions to check
 	// the defined clouds for the metadata element we're looking for.
 	getCloudMetadata := []struct {
-		get func(string) (bool, string, string)
+		get func(context.Context, string) (bool, string, string)
 	}{
 		{cli.getAWSInstanceMetadata},
 		{cli.getGCPInstanceMetadata},
@@ -200,7 +197,7 @@ func getCloudInfo(metadataElement string) (provider string, element string) {
 	var success bool
 
 	for _, c := range getCloudMetadata {
-		success, provider, element = c.get(metadataElement)
+		success, provider, element = c.get(ctx, metadataElement)
 		if success {
 			return provider, element
 		}
@@ -210,12 +207,12 @@ func getCloudInfo(metadataElement string) (provider string, element string) {
 
 // GetInstanceClass returns the node's instance provider (e.g. AWS) and
 // the name given to its instance class (e.g. m5a.large).
-func GetInstanceClass() (providerName string, instanceClassName string) {
-	return getCloudInfo(instanceClass)
+func GetInstanceClass(ctx context.Context) (providerName string, instanceClassName string) {
+	return getCloudInfo(ctx, instanceClass)
 }
 
 // GetInstanceRegion returns the node's instance provider (e.g. AWS) and
 // the name given to its region (e.g. us-east-1d).
-func GetInstanceRegion() (providerName string, regionName string) {
-	return getCloudInfo(region)
+func GetInstanceRegion(ctx context.Context) (providerName string, regionName string) {
+	return getCloudInfo(ctx, region)
 }
