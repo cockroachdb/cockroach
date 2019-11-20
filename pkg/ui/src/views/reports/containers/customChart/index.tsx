@@ -16,16 +16,16 @@ import { withRouter, WithRouterProps } from "react-router";
 import { createSelector } from "reselect";
 import { Dispatch, bindActionCreators } from "redux";
 
-import { refreshNodes } from "src/redux/apiReducers";
+import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { MetricsMetadata, metricsMetadataActions, metricsMetadataSelector } from "src/redux/metricsMetadata";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
+import { MetricsMetadata, metricsMetadataSelector } from "src/redux/metricMetadata";
 import { INodeStatus } from "src/util/proto";
 
 import { CustomChartState, CustomChartTable } from "./customMetric";
@@ -35,7 +35,7 @@ export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
   nodesSummary: NodesSummary;
-  requestMetricsMetadata: () => void;
+  refreshMetricMetadata: typeof refreshMetricMetadata;
   metricsMetadata: MetricsMetadata;
   location: Location;
 }
@@ -98,10 +98,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
 
   componentWillMount() {
     this.refresh();
-  }
-
-  componentDidMount() {
-    this.props.requestMetricsMetadata();
+    this.props.refreshMetricMetadata();
   }
 
   componentWillReceiveProps(props: CustomChartProps & WithRouterProps) {
@@ -286,7 +283,7 @@ const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
   bindActionCreators(
     {
       refreshNodes,
-      requestMetricsMetadata: metricsMetadataActions.request,
+      refreshMetricMetadata,
     },
     dispatch,
   );
