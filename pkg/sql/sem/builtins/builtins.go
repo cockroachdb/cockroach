@@ -1823,6 +1823,18 @@ may increase either contention or retry errors, or both.`,
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
 		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTime := args[1].(*tree.DTimeTZ)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractStringFromTimeTZ(fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
+				"timezone, timezone_hour, timezone_minute",
+		},
 	),
 
 	"extract_duration": makeBuiltin(
@@ -4487,6 +4499,28 @@ const secsPerDay = 86400
 
 func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*fromTime)
+	return extractStringFromTimeOfDay(t, timeSpan)
+}
+
+func extractStringFromTimeTZ(fromTime *tree.DTimeTZ, timeSpan string) (tree.Datum, error) {
+	switch timeSpan {
+	case "timezone":
+		return tree.NewDFloat(tree.DFloat(float64(-fromTime.OffsetSecs))), nil
+	case "timezone_hour", "timezone_hours":
+		numHours := -fromTime.OffsetSecs / secsPerHour
+		return tree.NewDFloat(tree.DFloat(float64(numHours))), nil
+	case "timezone_minute", "timezone_minutes":
+		numMinutes := -fromTime.OffsetSecs / secsPerMinute
+		return tree.NewDFloat(tree.DFloat(float64(numMinutes % 60))), nil
+	case "epoch":
+		// Epoch should additionally add the zone offset.
+		seconds := float64(time.Duration(fromTime.TimeOfDay))*float64(time.Microsecond)/float64(time.Second) + float64(fromTime.OffsetSecs)
+		return tree.NewDFloat(tree.DFloat(seconds)), nil
+	}
+	return extractStringFromTimeOfDay(fromTime.TimeOfDay, timeSpan)
+}
+
+func extractStringFromTimeOfDay(t timeofday.TimeOfDay, timeSpan string) (tree.Datum, error) {
 	switch timeSpan {
 	case "hour", "hours":
 		return tree.NewDFloat(tree.DFloat(t.Hour())), nil
