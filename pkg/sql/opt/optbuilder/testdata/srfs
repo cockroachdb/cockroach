@@ -1016,13 +1016,28 @@ SELECT 0, information_schema._pg_expandarray(ARRAY[0]) GROUP BY 1
 error (42803): column "x" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Regression test for #31755.
+exec-ddl
+CREATE TABLE tab31755 (a STRING)
+----
+
 build
-SELECT * FROM ROWS FROM (CAST('string' AS SERIAL2[])) AS ident
+SELECT * FROM ROWS FROM (CAST((SELECT a FROM tab31755 LIMIT 1) AS SERIAL2[])) AS ident
 ----
 project-set
- ├── columns: ident:1(int2[])
+ ├── columns: ident:3(int2[])
  ├── values
  │    └── tuple [type=tuple]
  └── zip
       └── cast: INT2[] [type=int2[]]
-           └── const: 'string' [type=string]
+           └── subquery [type=string]
+                └── max1-row
+                     ├── columns: tab31755.a:1(string)
+                     └── limit
+                          ├── columns: tab31755.a:1(string)
+                          ├── project
+                          │    ├── columns: tab31755.a:1(string)
+                          │    ├── limit hint: 1.00
+                          │    └── scan tab31755
+                          │         ├── columns: tab31755.a:1(string) rowid:2(int!null)
+                          │         └── limit hint: 1.00
+                          └── const: 1 [type=int]
