@@ -13,7 +13,6 @@ package sqlsmith
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 var (
@@ -196,25 +195,31 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	var cols tree.IndexElemList
 	seen := map[tree.Name]bool{}
 	inverted := false
+	unique := s.coin()
 	for len(cols) < 1 || s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
 		}
 		seen[col.Name] = true
-		cols = append(cols, tree.IndexElem{
-			Column:    col.Name,
-			Direction: s.randDirection(),
-		})
-		// If this is the first column and it's JSON, then usually make
-		// this an inverted index.
-		if len(cols) == 1 && col.Type.Family() == types.JsonFamily && s.rnd.Intn(3) > 0 {
+		// If this is the first column and it's invertable (i.e., JSONB), make an inverted index.
+		if len(cols) == 0 && sqlbase.ColumnTypeIsInvertedIndexable(col.Type) {
 			inverted = true
+			unique = false
+			cols = append(cols, tree.IndexElem{
+				Column: col.Name,
+			})
 			break
+		}
+		if sqlbase.ColumnTypeIsIndexable(col.Type) {
+			cols = append(cols, tree.IndexElem{
+				Column:    col.Name,
+				Direction: s.randDirection(),
+			})
 		}
 	}
 	var storing tree.NameList
-	for s.coin() {
+	for !inverted && s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
@@ -226,7 +231,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	return &tree.CreateIndex{
 		Name:     s.name("idx"),
 		Table:    *tableRef.TableName,
-		Unique:   s.coin(),
+		Unique:   unique,
 		Columns:  cols,
 		Storing:  storing,
 		Inverted: inverted,
