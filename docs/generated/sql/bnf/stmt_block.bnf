@@ -109,7 +109,7 @@ create_stmt ::=
 	| create_stats_stmt
 
 delete_stmt ::=
-	opt_with_clause 'DELETE' 'FROM' table_name_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 drop_stmt ::=
 	drop_ddl_stmt
@@ -197,7 +197,7 @@ truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
-	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'UPDATE' table_expr_opt_alias_idx 'SET' set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 upsert_stmt ::=
 	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
@@ -350,10 +350,10 @@ opt_with_clause ::=
 	with_clause
 	| 
 
-table_name_expr_opt_alias_idx ::=
-	table_name_expr_with_index
-	| table_name_expr_with_index table_alias_name
-	| table_name_expr_with_index 'AS' table_alias_name
+table_expr_opt_alias_idx ::=
+	table_name_opt_idx
+	| table_name_opt_idx table_alias_name
+	| table_name_opt_idx 'AS' table_alias_name
 
 opt_where_clause ::=
 	where_clause
@@ -1054,7 +1054,7 @@ with_clause ::=
 	'WITH' cte_list
 	| 'WITH' 'RECURSIVE' cte_list
 
-table_name_expr_with_index ::=
+table_name_opt_idx ::=
 	table_name opt_index_flags
 
 where_clause ::=

@@ -931,12 +931,12 @@ func newNameFromStr(s string) *tree.Name {
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem create_as_param
-%type <tree.TableExpr> table_ref func_table
+%type <tree.TableExpr> table_ref numeric_table_ref func_table
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
 %type <tree.TableExpr> joined_table
 %type <*tree.UnresolvedObjectName> relation_expr
-%type <tree.TableExpr> table_name_expr_opt_alias_idx table_name_expr_with_index
+%type <tree.TableExpr> table_expr_opt_alias_idx table_name_opt_idx
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
@@ -1022,7 +1022,7 @@ func newNameFromStr(s string) *tree.Name {
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
-%nonassoc  SET                 // see table_name_expr_opt_alias_idx
+%nonassoc  SET                 // see table_expr_opt_alias_idx
 %left      UNION EXCEPT
 %left      INTERSECT
 %left      OR
@@ -2444,7 +2444,7 @@ opt_changefeed_sink:
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE FROM table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
       With: $1.with(),
@@ -5684,6 +5684,10 @@ insert_target:
     name := $1.unresolvedObjectName().ToTableName()
     $$.val = &tree.AliasedTableExpr{Expr: &name, As: tree.AliasClause{Alias: tree.Name($3)}}
   }
+| numeric_table_ref
+  {
+    $$.val = $1.tblExpr()
+  }
 
 insert_rest:
   select_stmt
@@ -5775,7 +5779,7 @@ returning_clause:
 //        [RETURNING <exprs...>]
 // %SeeAlso: INSERT, UPSERT, DELETE, WEBDOCS/update.html
 update_stmt:
-  opt_with_clause UPDATE table_name_expr_opt_alias_idx
+  opt_with_clause UPDATE table_expr_opt_alias_idx
     SET set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Update{
@@ -6521,18 +6525,14 @@ opt_index_flags:
 //
 // %SeeAlso: WEBDOCS/table-expressions.html
 table_ref:
-  '[' iconst64 opt_tableref_col_list alias_clause ']' opt_index_flags opt_ordinality opt_alias_clause
+  numeric_table_ref opt_index_flags opt_ordinality opt_alias_clause
   {
     /* SKIP DOC */
     $$.val = &tree.AliasedTableExpr{
-        Expr: &tree.TableRef{
-           TableID: $2.int64(),
-           Columns: $3.tableRefCols(),
-           As:      $4.aliasClause(),
-        },
-        IndexFlags: $6.indexFlags(),
-        Ordinality: $7.bool(),
-        As:         $8.aliasClause(),
+        Expr:       $1.tblExpr(),
+        IndexFlags: $2.indexFlags(),
+        Ordinality: $3.bool(),
+        As:         $4.aliasClause(),
     }
   }
 | relation_expr opt_index_flags opt_ordinality opt_alias_clause
@@ -6608,6 +6608,17 @@ table_ref:
 | '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
+  }
+
+numeric_table_ref:
+  '[' iconst64 opt_tableref_col_list alias_clause ']'
+  {
+    /* SKIP DOC */
+    $$.val = &tree.TableRef{
+      TableID: $2.int64(),
+      Columns: $3.tableRefCols(),
+      As:      $4.aliasClause(),
+    }
   }
 
 func_table:
@@ -6830,28 +6841,36 @@ relation_expr_list:
 // further ahead whether the first "set" is an alias or the UPDATE's SET
 // keyword. Since "set" is allowed as a column name both interpretations are
 // feasible. We resolve the shift/reduce conflict by giving the first
-// table_name_expr_opt_alias_idx production a higher precedence than the SET token
+// table_expr_opt_alias_idx production a higher precedence than the SET token
 // has, causing the parser to prefer to reduce, in effect assuming that the SET
 // is not an alias.
-table_name_expr_opt_alias_idx:
-  table_name_expr_with_index %prec UMINUS
+table_expr_opt_alias_idx:
+  table_name_opt_idx %prec UMINUS
   {
      $$.val = $1.tblExpr()
   }
-| table_name_expr_with_index table_alias_name
+| table_name_opt_idx table_alias_name
   {
      alias := $1.tblExpr().(*tree.AliasedTableExpr)
      alias.As = tree.AliasClause{Alias: tree.Name($2)}
      $$.val = alias
   }
-| table_name_expr_with_index AS table_alias_name
+| table_name_opt_idx AS table_alias_name
   {
      alias := $1.tblExpr().(*tree.AliasedTableExpr)
      alias.As = tree.AliasClause{Alias: tree.Name($3)}
      $$.val = alias
   }
+| numeric_table_ref opt_index_flags
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AliasedTableExpr{
+      Expr: $1.tblExpr(),
+      IndexFlags: $2.indexFlags(),
+    }
+  }
 
-table_name_expr_with_index:
+table_name_opt_idx:
   table_name opt_index_flags
   {
     name := $1.unresolvedObjectName().ToTableName()

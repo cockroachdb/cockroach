@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1405,32 +1404,6 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	default:
 		panic(errors.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
-}
-
-// getAliasedTableName returns the underlying table name for a TableExpr that
-// could be either an alias or a normal table name. It also returns the alias,
-// if there is one.
-//
-// This is not meant to perform name resolution, but rather simply to extract
-// the name indicated after FROM in DELETE/INSERT/UPDATE/UPSERT.
-func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
-	var alias *tree.TableName
-	if ate, ok := n.(*tree.AliasedTableExpr); ok {
-		n = ate.Expr
-		// It's okay to ignore the As columns here, as they're not permitted in
-		// DML aliases where this function is used. The grammar does not allow
-		// them, so the parser would have reported an error if they were present.
-		if ate.As.Alias != "" {
-			alias = tree.NewUnqualifiedTableName(ate.As.Alias)
-		}
-	}
-	tn, ok := n.(*tree.TableName)
-	if !ok {
-		panic(unimplemented.New(
-			"complex table expression in UPDATE/DELETE",
-			"cannot use a complex table name with DELETE/UPDATE"))
-	}
-	return tn, alias
 }
 
 // checkDatumTypeFitsColumnType verifies that a given scalar value type is valid
