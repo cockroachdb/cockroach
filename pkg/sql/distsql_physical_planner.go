@@ -297,23 +297,24 @@ var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING 
 // TODO(jordan): refactor these to use the observer pattern to avoid duplication.
 func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) bool {
 	switch n := node.(type) {
-	case *scanNode:
-	case *indexJoinNode:
-	case *lookupJoinNode:
-	case *zigzagJoinNode:
-	case *joinNode:
-	case *renderNode:
-	case *groupNode:
-	case *sortNode:
-	case *filterNode:
-	case *limitNode:
 	case *distinctNode:
+	case *filterNode:
+	case *groupNode:
+	case *indexJoinNode:
+	case *joinNode:
+	case *limitNode:
+	case *lookupJoinNode:
+	case *ordinalityNode:
+	case *projectSetNode:
+	case *renderNode:
+	case *scanNode:
+	case *sortNode:
+	case *unaryNode:
 	case *unionNode:
 	case *virtualTableNode:
-	case *projectSetNode:
-	case *unaryNode:
 	case *windowNode:
 	case *zeroNode:
+	case *zigzagJoinNode:
 	case *valuesNode:
 		// This is unfortunately duplicated by createPlanForNode, and must be kept
 		// in sync with its implementation.
