@@ -175,11 +175,8 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 		}
 	}
 
-	numCheckConstraints := tabMeta.ConstraintCount()
-	checkFilters := make(memo.FiltersExpr, 0, numCheckConstraints)
-	for i := 0; i < numCheckConstraints; i++ {
-		checkConstraint := tabMeta.Constraint(i)
-
+	checkFilters := make(memo.FiltersExpr, 0, len(tabMeta.Constraints))
+	for _, checkConstraint := range tabMeta.Constraints {
 		// Check constraints that are guaranteed to not evaluate to NULL
 		// are the only ones converted into filters.
 		if memo.ExprIsNeverNull(checkConstraint, notNullCols) {
