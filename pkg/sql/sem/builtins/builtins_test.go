@@ -246,6 +246,48 @@ func TestLPadRPad(t *testing.T) {
 	}
 }
 
+func TestExtractStringFromTimeTZ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		timeTZString  string
+		timeSpan      string
+		expected      tree.DFloat
+		expectedError string
+	}{
+		{timeTZString: "11:12:13+01:02", timeSpan: "hour", expected: 11},
+		{timeTZString: "11:12:13+01:02", timeSpan: "minute", expected: 12},
+		{timeTZString: "11:12:13+01:02", timeSpan: "second", expected: 13},
+		{timeTZString: "11:12:13.123456+01:02", timeSpan: "millisecond", expected: 13123.456},
+		{timeTZString: "11:12:13.123456+01:02", timeSpan: "microsecond", expected: 13123456},
+		{timeTZString: "11:12:13+01:02", timeSpan: "timezone", expected: 3720},
+		{timeTZString: "11:12:13+01:02", timeSpan: "timezone_hour", expected: 1},
+		{timeTZString: "11:12:13+01:02", timeSpan: "timezone_minute", expected: 2},
+		{timeTZString: "11:12:13-01:02", timeSpan: "timezone", expected: -3720},
+		{timeTZString: "11:12:13-01:02", timeSpan: "timezone_hour", expected: -1},
+		{timeTZString: "11:12:13-01:02", timeSpan: "timezone_minute", expected: -2},
+		{timeTZString: "11:12:13.5+01:02", timeSpan: "epoch", expected: 36613.5},
+		{timeTZString: "11:12:13.5-01:02", timeSpan: "epoch", expected: 44053.5},
+
+		{timeTZString: "11:12:13-01:02", timeSpan: "epoch2", expectedError: "unsupported timespan: epoch2"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s_%s", tc.timeSpan, tc.timeTZString), func(t *testing.T) {
+			timeTZ, err := tree.ParseDTimeTZ(nil, tc.timeTZString)
+			assert.NoError(t, err)
+
+			datum, err := extractStringFromTimeTZ(timeTZ, tc.timeSpan)
+			if tc.expectedError != "" {
+				assert.EqualError(t, err, tc.expectedError)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expected, *(datum.(*tree.DFloat)))
+			}
+		})
+	}
+}
+
 func TestTruncateTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
