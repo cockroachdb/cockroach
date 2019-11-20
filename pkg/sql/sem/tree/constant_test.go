@@ -247,6 +247,14 @@ func mustParseDStringArray(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDIntArray(t *testing.T, s string) tree.Datum {
+	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	d, err := tree.ParseDArrayFromString(&evalContext, s, types.Int)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 
 var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.String:      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
@@ -258,6 +266,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
 	types.Jsonb:       mustParseDJSON,
+	types.IntArray: 	 mustParseDIntArray,
 	types.StringArray: mustParseDStringArray,
 }
 
@@ -327,6 +336,10 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c:            tree.NewStrVal(`{"a": 1}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
+		},
+		{
+			c:            tree.NewStrVal(`{1,2}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.IntArray),
 		},
 		{
 			c:            tree.NewStrVal(`{a,b}`),
