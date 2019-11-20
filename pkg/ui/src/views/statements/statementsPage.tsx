@@ -281,11 +281,9 @@ const mapStateToProps = (state: StatementsState, props: RouteProps) => ({
   lastReset: selectLastReset(state),
 });
 
-const mapDispatchToProps = () => (
-  {
+const mapDispatchToProps = {
     refreshStatements,
-  }
-);
+};
 
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
