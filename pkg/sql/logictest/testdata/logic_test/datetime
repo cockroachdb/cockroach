@@ -499,121 +499,6 @@ INSERT INTO ex VALUES
 query IBR
 SELECT k, extract(element, input::timestamp) = extract_result, extract(element, input::timestamp) FROM ex ORDER BY k
 ----
-1  true 2001
-2  true 2016
-3  true 2016
-4  true 2
-5  true 1
-6  true 2
-7  true 3
-8  true 4
-9  true 4
-10 true 2
-11 true 2
-12 true 15
-13 true 1
-14 true 10
-15 true 10
-16 true 10
-17 true 2
-18 true 4
-19 true 100
-20 true 102
-21 true 86401.000001
-22 true 100801.000001
-23 true 9.86904299e+08
-24 true 12
-25 true 19
-26 true 23
-27 true 19
-28 true 23
-29 true 4
-30 true 46
-31 true 46
-35 true 59234
-36 true 33306
-37 true 33306
-38 true 59345654
-39 true 33306158
-40 true 33306158
-32 true 59.234
-33 true 33.306158
-34 true 33.306158
-35 true 59234.567
-36 true 33306.158
-37 true 33306.158
-38 true 5.9345654e+07
-39 true 3.3306158e+07
-40 true 3.3306158e+07
-41 true 2
-42 true 7
-43 true 2008
-44 true 2008
-45 true 200
-46 true -202
-47 true 21
-48 true -1
-49 true 3
-50 true -2
-51 true 0
-<<<<<<< HEAD
-52 true 2457429
-52 true 2.4574298239966e+06
-
-query error extract\(\): unsupported timespan: nansecond
-SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
-
-query error unknown unit "nanosecond"
-SELECT INTERVAL '1 nanosecond';
-
-query error unknown unit "ns"
-SELECT INTERVAL '1 ns';
-
-query IBR
-SELECT k, extract(element, input::timestamptz) = extract_result, extract(element, input::timestamptz) FROM ex ORDER BY k
-----
-<<<<<<< HEAD
-1  true 2001
-2  true 2016
-3  true 2016
-4  true 2
-5  true 1
-6  true 2
-7  true 3
-8  true 4
-9  true 4
-10 true 2
-11 true 2
-12 true 15
-13 true 1
-14 true 10
-15 true 10
-16 true 10
-17 true 2
-18 true 4
-19 true 100
-20 true 102
-21 true 86401
-22 true 100801
-23 true 986904299
-24 true 12
-25 true 19
-26 true 23
-27 true 19
-28 true 23
-29 true 4
-30 true 46
-31 true 46
-32 true 59
-33 true 33
-34 true 33
-35 true 234
-36 true 306
-37 true 306
-38 true 345654
-39 true 306158
-40 true 306158
-=======
 1   true  2001
 2   true  2016
 3   true  2016
@@ -665,12 +550,72 @@ SELECT k, extract(element, input::timestamptz) = extract_result, extract(element
 49  true  3
 50  true  -2
 51  true  0
-<<<<<<< HEAD
-52  true  2457429
->>>>>>> 17e744ebb7... sql/sem/builtins: support more time spans for EXTRACT and DATE_TRUNC
-=======
 52  true  2.4574298239966e+06
->>>>>>> b632ab9aee... sql/sem/builtins: make EXTRACT return float
+
+query error extract\(\): unsupported timespan: nansecond
+SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
+
+query error unknown unit "nanosecond"
+SELECT INTERVAL '1 nanosecond';
+
+query error unknown unit "ns"
+SELECT INTERVAL '1 ns';
+
+query IBR
+SELECT k, extract(element, input::timestamptz) = extract_result, extract(element, input::timestamptz) FROM ex ORDER BY k
+----
+1   true  2001
+2   true  2016
+3   true  2016
+4   true  2
+5   true  1
+6   true  2
+7   true  3
+8   true  4
+9   true  4
+10  true  2
+11  true  2
+12  true  15
+13  true  1
+14  true  10
+15  true  10
+16  true  10
+17  true  2
+18  true  4
+19  true  100
+20  true  102
+21  true  86401.000001
+22  true  100801.000001
+23  true  9.86904299e+08
+24  true  12
+25  true  19
+26  true  23
+27  true  19
+28  true  23
+29  true  4
+30  true  46
+31  true  46
+32  true  59.234
+33  true  33.306158
+34  true  33.306158
+35  true  59234.567
+36  true  33306.158
+37  true  33306.158
+38  true  5.9345654e+07
+39  true  3.3306158e+07
+40  true  3.3306158e+07
+41  true  2
+42  true  7
+43  true  2008
+44  true  2008
+45  true  200
+46  true  -202
+47  true  21
+48  true  -1
+49  true  3
+50  true  -2
+51  true  0
+52  true  2.4574298239966e+06
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
@@ -678,12 +623,12 @@ SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
 query R
 SELECT extract(hour from '2016-02-10 19:46:33.306157519-04'::timestamptz)
 ----
-19
+23
 
 query R
 SELECT extract(hours from '2016-02-10 19:46:33.306157519-04'::timestamptz)
 ----
-19
+23
 
 query ITTBT
 SELECT k, element, input, date_trunc(element, input::timestamp) = date_trunc_result, date_trunc(element, input::timestamp)::string
