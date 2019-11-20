@@ -672,6 +672,7 @@ func (c *cascader) updateRows(
 	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	action sqlbase.ForeignKeyReference_Action,
+	fk *sqlbase.ForeignKeyConstraint,
 	traceKV bool,
 ) (*rowcontainer.RowContainer, *rowcontainer.RowContainer, map[sqlbase.ColumnID]int, int, error) {
 	// Create the span to search for index values.
@@ -755,6 +756,28 @@ func (c *cascader) updateRows(
 	// values being updated will change based on both the original and updated
 	// values.
 	for i := values.startIndex; i < values.endIndex; i++ {
+		// If the rows are the same on the FK columns, then we don't want to continue the cascade.
+		// We skip this check when values.updatedValues is nil. This happens when a cascade is started
+		// because of a delete, upon which a row container is not created because there is not an
+		// updated value when a row is deleted.
+		// TODO (rohany): this check could be sped up greatly by storing a mask/map of what
+		//  actually changed instead of having to check every FK column.
+		if values.updatedValues != nil {
+			allFKColsUnchanged := true
+			origValues := values.originalValues.At(i)
+			updatedValues := values.updatedValues.At(i)
+			for _, colID := range fk.ReferencedColumnIDs {
+				colIdx := values.colIDtoRowIndex[colID]
+				if origValues[colIdx].Compare(c.evalCtx, updatedValues[colIdx]) != 0 {
+					allFKColsUnchanged = false
+					break
+				}
+			}
+			if allFKColsUnchanged {
+				continue
+			}
+		}
+
 		// Extract a single value to update at a time.
 		req, valueColIDtoRowIndex, err := batchRequestForIndexValues(
 			ctx, referencedIndex, referencingTable, referencingIndex, match, cascadeQueueElement{
@@ -1099,6 +1122,7 @@ func (c *cascader) cascadeAll(
 						sqlbase.ForeignKeyReference_SIMPLE,
 						elem,
 						foundFK.OnDelete,
+						foundFK,
 						traceKV,
 					)
 					if err != nil {
@@ -1130,6 +1154,7 @@ func (c *cascader) cascadeAll(
 						sqlbase.ForeignKeyReference_SIMPLE,
 						elem,
 						foundFK.OnUpdate,
+						foundFK,
 						traceKV,
 					)
 					if err != nil {
