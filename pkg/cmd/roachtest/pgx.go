@@ -90,6 +90,11 @@ func registerPgx(r *testRegistry) {
 			t.Fatal(err)
 		}
 
+		// This is expected to fail because the feature is unsupported by Cockroach, but pgx expects it.
+		_, _ = db.ExecContext(
+			ctx, `create domain uint64 as numeric(20,0);`,
+		)
+
 		t.Status("running pgx test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
@@ -97,7 +102,7 @@ func registerPgx(r *testRegistry) {
 			ctx, c, t.l, node,
 			"run pgx test suite",
 			"cd `go env GOPATH`/src/github.com/jackc/pgx && " +
-				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v | "+
+				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
 
