@@ -247,18 +247,36 @@ func mustParseDStringArray(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDIntArray(t *testing.T, s string) tree.Datum {
+	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	d, err := tree.ParseDArrayFromString(&evalContext, s, types.Int)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+func mustParseDDecimalArray(t *testing.T, s string) tree.Datum {
+	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	d, err := tree.ParseDArrayFromString(&evalContext, s, types.Decimal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 
 var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
-	types.String:      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
-	types.Bytes:       func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
-	types.Bool:        mustParseDBool,
-	types.Date:        mustParseDDate,
-	types.Time:        mustParseDTime,
-	types.Timestamp:   mustParseDTimestamp,
-	types.TimestampTZ: mustParseDTimestampTZ,
-	types.Interval:    mustParseDInterval,
-	types.Jsonb:       mustParseDJSON,
-	types.StringArray: mustParseDStringArray,
+	types.String:       func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
+	types.Bytes:        func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
+	types.Bool:         mustParseDBool,
+	types.Date:         mustParseDDate,
+	types.Time:         mustParseDTime,
+	types.Timestamp:    mustParseDTimestamp,
+	types.TimestampTZ:  mustParseDTimestampTZ,
+	types.Interval:     mustParseDInterval,
+	types.Jsonb:        mustParseDJSON,
+	types.DecimalArray: mustParseDDecimalArray,
+	types.IntArray:     mustParseDIntArray,
+	types.StringArray:  mustParseDStringArray,
 }
 
 func typeSet(tys ...*types.T) map[*types.T]struct{} {
@@ -327,6 +345,14 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c:            tree.NewStrVal(`{"a": 1}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
+		},
+		{
+			c:            tree.NewStrVal(`{1,2}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.IntArray, types.DecimalArray),
+		},
+		{
+			c:            tree.NewStrVal(`{1.5,2.0}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.DecimalArray),
 		},
 		{
 			c:            tree.NewStrVal(`{a,b}`),
