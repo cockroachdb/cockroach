@@ -13,6 +13,7 @@ package sessiondata
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,11 @@ type SessionData struct {
 	// ForceSplitAt indicates whether checks to prevent incorrect usage of ALTER
 	// TABLE ... SPLIT AT should be skipped.
 	ForceSplitAt bool
+	// OptimizerAlternate is a session variable that is used to indicate which alternate
+	// plan should be executed by the optimizer. By default the value is 0, indicating
+	// the optimizer picks the best plan. A value of 1 would indicate that the
+	// next best plan for each query would be picked instead.
+	OptimizerAlternate OptimizerAlternate
 	// OptimizerFKs indicates whether we should use the new paths to plan foreign
 	// key checks in the optimizer.
 	OptimizerFKs bool
@@ -301,6 +307,34 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 		return 0, false
 	}
 	return m, true
+}
+
+// OptimizerAlternate controls which alternate plan is picked by the optimizer.
+type OptimizerAlternate int
+
+// OptimizerAlternateUpperBound is an upper bound to how many alternate plans
+// are allowed. This must be kept the same as the value in xform/state.go.
+const OptimizerAlternateUpperBound = 5
+
+func (n OptimizerAlternate) String() string {
+	if n >= 0 && n <= OptimizerAlternateUpperBound {
+		return strconv.FormatInt(int64(n), 10)
+	}
+	return fmt.Sprintf("alternate value (%d) too high, must be lower than (%d)", n, OptimizerAlternateUpperBound)
+}
+
+// OptimizerAlternateFromString converts a string into a OptimizerMode
+func OptimizerAlternateFromString(val string) (_ OptimizerAlternate, ok bool) {
+	alternateVal, err := strconv.Atoi(val)
+	if err != nil {
+		return 0, false
+	}
+
+	if alternateVal <= OptimizerAlternateUpperBound && alternateVal >= 0 {
+		return OptimizerAlternate(alternateVal), true
+	}
+
+	return 0, false
 }
 
 // SerialNormalizationMode controls if and when the Executor uses DistSQL.

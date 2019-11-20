@@ -444,6 +444,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_alternate`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			alternate, ok := sessiondata.OptimizerAlternateFromString(s)
+			if !ok {
+				return newVarValueError(`optimizer_alternate`, s, "0 to 5")
+			}
+			m.SetOptimizerAlternate(alternate)
+			return nil
+		},
+		GetStringVal: makeIntGetStringValFn("optimizer_alternate"),
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.OptimizerAlternate.String()
+		},
+		GlobalDefault: func(sv *settings.Values) string { return "0" },
+	},
+
+	// CockroachDB extension.
 	`experimental_optimizer_foreign_keys`: {
 		GetStringVal: makeBoolGetStringValFn(`experimental_optimizer_foreign_keys`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

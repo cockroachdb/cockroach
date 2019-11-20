@@ -333,6 +333,19 @@ func (m *Memo) SetBestProps(
 	bp.cost = cost
 }
 
+// ForceSetBestProps sets the pops similar to SetBestProps above but updates the
+// best cost even if we are making it worse.
+// It is called by the optimizer once it determines the expression in the group
+// that is part of the appropriate alternate tree (for the overall query).
+func (m *Memo) ForceSetBestProps(
+	e RelExpr, required *physical.Required, provided *physical.Provided, cost Cost,
+) {
+	bp := e.bestProps()
+	bp.required = required
+	bp.provided = *provided
+	bp.cost = cost
+}
+
 // ResetCost updates the cost of a relational expression's memo group. It
 // should *only* be called by Optimizer.RecomputeCost() for testing purposes.
 func (m *Memo) ResetCost(e RelExpr, cost Cost) {

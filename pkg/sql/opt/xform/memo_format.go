@@ -88,9 +88,9 @@ func (mf *memoFormatter) format() string {
 		for _, s := range e.states {
 			mf.buf.Reset()
 			c := tpChild.Childf("%s", s.required)
-			mf.formatBest(s.best, s.required)
+			mf.formatBest(s.bestExpr(), s.required)
 			c.Childf("best: %s", mf.buf.String())
-			c.Childf("cost: %.2f", s.cost)
+			c.Childf("cost: %.2f", s.bestCost())
 		}
 	}
 
@@ -173,7 +173,7 @@ func (mf *memoFormatter) numberExpr(expr opt.Expr) {
 }
 
 func (mf *memoFormatter) populateStates() {
-	for groupStateKey, groupState := range mf.o.stateMap {
+	for groupStateKey, groupState := range mf.o.optState.stateMap {
 		if !groupState.fullyOptimized {
 			continue
 		}

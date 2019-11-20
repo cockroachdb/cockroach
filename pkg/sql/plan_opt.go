@@ -365,7 +365,8 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ error) {
 	prepared := opc.p.stmt.Prepared
 	p := opc.p
-	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
+	alternatePlanUsed := int(p.EvalContext().SessionData.OptimizerAlternate) > 0
+	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil && !alternatePlanUsed {
 		// We are executing a previously prepared statement and a reusable memo is
 		// available.
 
@@ -385,7 +386,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		return memo, err
 	}
 
-	if opc.useCache {
+	if opc.useCache && !alternatePlanUsed {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {

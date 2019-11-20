@@ -377,3 +377,110 @@ memo (optimized, ~3KB, required=[presentation: tag:4])
  │         ├── best: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │         └── cost: 0.01
  └── G3: (aggregations)
+
+exec-ddl
+CREATE TABLE alternate (
+    a INT,
+    b INT,
+    c INT,
+    d INT,
+    e INT,
+    f INT,
+    PRIMARY KEY (d, a, b),
+    INDEX second (d, e, f),
+    INDEX third (a, d, e, f)
+)
+----
+
+opt
+SELECT a.a, a.b FROM alternate as a JOIN alternate as b ON a.a = b.a JOIN alternate as c ON a.a = c.a
+----
+project
+ ├── columns: a:1(int!null) b:2(int!null)
+ └── inner-join (merge)
+      ├── columns: a.a:1(int!null) a.b:2(int!null) b.a:7(int!null) c.a:13(int!null)
+      ├── left ordering: +1
+      ├── right ordering: +13
+      ├── fd: (1)==(7,13), (7)==(1,13), (13)==(1,7)
+      ├── inner-join (merge)
+      │    ├── columns: a.a:1(int!null) a.b:2(int!null) b.a:7(int!null)
+      │    ├── left ordering: +1
+      │    ├── right ordering: +7
+      │    ├── fd: (1)==(7), (7)==(1)
+      │    ├── ordering: +(1|7) [actual: +1]
+      │    ├── scan a@third
+      │    │    ├── columns: a.a:1(int!null) a.b:2(int!null)
+      │    │    └── ordering: +1
+      │    ├── scan b@third
+      │    │    ├── columns: b.a:7(int!null)
+      │    │    └── ordering: +7
+      │    └── filters (true)
+      ├── scan c@third
+      │    ├── columns: c.a:13(int!null)
+      │    └── ordering: +13
+      └── filters (true)
+
+memo
+SELECT a.a, a.b FROM alternate as a JOIN alternate as b ON a.a = b.a JOIN alternate as c ON a.a = c.a
+----
+memo (optimized, ~30KB, required=[presentation: a:1,b:2])
+ ├── G1: (project G2 G3 a b)
+ │    └── [presentation: a:1,b:2]
+ │         ├── best: (project G2 G3 a b)
+ │         └── cost: 5420.09
+ ├── G2: (inner-join G4 G5 G6) (inner-join G5 G4 G6) (merge-join G4 G5 G7 inner-join,+1,+13) (lookup-join G4 G7 alternate@third,keyCols=[1],outCols=(1,2,7,13)) (inner-join G8 G9 G10) (inner-join G11 G12 G13) (merge-join G5 G4 G7 inner-join,+13,+1) (inner-join G9 G8 G10) (merge-join G8 G9 G6 inner-join,+1,+7) (inner-join G12 G11 G13) (merge-join G11 G12 G7 inner-join,+7,+1) (merge-join G9 G8 G6 inner-join,+7,+1) (lookup-join G9 G6 alternate@third,keyCols=[7],outCols=(1,2,7,13)) (merge-join G12 G11 G7 inner-join,+1,+7) (lookup-join G12 G7 alternate@third,keyCols=[1],outCols=(1,2,7,13))
+ │    └── []
+ │         ├── best: (merge-join G4="[ordering: +(1|7)]" G5="[ordering: +13]" G7 inner-join,+1,+13)
+ │         └── cost: 4420.08
+ ├── G3: (projections)
+ ├── G4: (inner-join G8 G11 G13) (inner-join G11 G8 G13) (merge-join G8 G11 G7 inner-join,+1,+7) (lookup-join G8 G7 alternate@third,keyCols=[1],outCols=(1,2,7)) (merge-join G11 G8 G7 inner-join,+7,+1) (lookup-join G11 G7 alternate@third,keyCols=[7],outCols=(1,2,7))
+ │    ├── [ordering: +(1|7)]
+ │    │    ├── best: (merge-join G8="[ordering: +1]" G11="[ordering: +7]" G7 inner-join,+1,+7)
+ │    │    └── cost: 2250.05
+ │    └── []
+ │         ├── best: (merge-join G8="[ordering: +1]" G11="[ordering: +7]" G7 inner-join,+1,+7)
+ │         └── cost: 2250.05
+ ├── G5: (scan c,cols=(13)) (scan c@second,cols=(13)) (scan c@third,cols=(13))
+ │    ├── [ordering: +13]
+ │    │    ├── best: (scan c@third,cols=(13))
+ │    │    └── cost: 1060.02
+ │    └── []
+ │         ├── best: (scan c@second,cols=(13))
+ │         └── cost: 1060.02
+ ├── G6: (filters G14)
+ ├── G7: (filters)
+ ├── G8: (scan a,cols=(1,2)) (scan a@second,cols=(1,2)) (scan a@third,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan a@third,cols=(1,2))
+ │    │    └── cost: 1070.02
+ │    └── []
+ │         ├── best: (scan a@second,cols=(1,2))
+ │         └── cost: 1070.02
+ ├── G9: (inner-join G11 G5 G7) (inner-join G5 G11 G7)
+ │    ├── [ordering: +7]
+ │    │    ├── best: (sort G9)
+ │    │    └── cost: 430781.43
+ │    └── []
+ │         ├── best: (inner-join G11 G5 G7)
+ │         └── cost: 12150.05
+ ├── G10: (filters G15 G14)
+ ├── G11: (scan b,cols=(7)) (scan b@second,cols=(7)) (scan b@third,cols=(7))
+ │    ├── [ordering: +7]
+ │    │    ├── best: (scan b@third,cols=(7))
+ │    │    └── cost: 1060.02
+ │    └── []
+ │         ├── best: (scan b@second,cols=(7))
+ │         └── cost: 1060.02
+ ├── G12: (inner-join G8 G5 G6) (inner-join G5 G8 G6) (merge-join G8 G5 G7 inner-join,+1,+13) (lookup-join G8 G7 alternate@third,keyCols=[1],outCols=(1,2,13)) (merge-join G5 G8 G7 inner-join,+13,+1) (lookup-join G5 G7 alternate@third,keyCols=[13],outCols=(1,2,13))
+ │    ├── [ordering: +(1|13)]
+ │    │    ├── best: (merge-join G8="[ordering: +1]" G5="[ordering: +13]" G7 inner-join,+1,+13)
+ │    │    └── cost: 2250.05
+ │    └── []
+ │         ├── best: (merge-join G8="[ordering: +1]" G5="[ordering: +13]" G7 inner-join,+1,+13)
+ │         └── cost: 2250.05
+ ├── G13: (filters G15)
+ ├── G14: (eq G16 G17)
+ ├── G15: (eq G16 G18)
+ ├── G16: (variable a.a)
+ ├── G17: (variable c.a)
+ └── G18: (variable b.a)
