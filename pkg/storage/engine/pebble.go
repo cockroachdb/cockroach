@@ -1017,5 +1017,11 @@ func pebbleExportToSst(
 		return nil, roachpb.BulkOpSummary{}, err
 	}
 
+	if rows.BulkOpSummary.DataSize == 0 {
+		// If no records were added to the sstable, return an empty sstable. This
+		// is used by export code to avoid ingestion of empty sstables.
+		return nil, roachpb.BulkOpSummary{}, nil
+	}
+
 	return sstFile.Data(), rows.BulkOpSummary, nil
 }
