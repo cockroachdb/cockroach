@@ -14,6 +14,7 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, WithRouterProps } from "react-router";
 import { createSelector } from "reselect";
+import { Dispatch, bindActionCreators } from "redux";
 
 import { refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
@@ -25,10 +26,10 @@ import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
+import { INodeStatus } from "src/util/proto";
 
 import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
-import { INodeStatus } from "src/util/proto";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -275,16 +276,20 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
   }
 }
 
-const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+const mapStateToProps = (state: AdminUIState) => ({
     nodesSummary: nodesSummarySelector(state),
     nodesQueryValid: state.cachedData.nodes.valid,
     metricsMetadata: metricsMetadataSelector(state),
   });
 
-const mapDispatchToProps = {
-  refreshNodes,
-  requestMetricsMetadata: metricsMetadataActions.request,
-};
+const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNodes,
+      requestMetricsMetadata: metricsMetadataActions.request,
+    },
+    dispatch,
+  );
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
 
