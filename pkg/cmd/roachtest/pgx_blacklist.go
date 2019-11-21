@@ -11,7 +11,7 @@
 package main
 
 var pgxBlacklists = blacklistsForVersion{
-	{"v20.1", "pgxBlacklist20_1", pgxBlackList20_1, "pgxIgnoreList20_1", nil},
+	{"v20.1", "pgxBlacklist20_1", pgxBlackList20_1, "pgxIgnoreList20_1", pgxIgnoreList20_1},
 }
 
 // Please keep these lists alphabetized for easy diffing.
@@ -75,6 +75,6 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestUnregisteredTypeUsableAsStringArgumentAndBaseResult":              "27796",
 }
 
-var pgxIgnoreList20_1 = blacklist {
-	"v4.TestBeginIsoLevels":                                                   "we don't support isolation levels",
+var pgxIgnoreList20_1 = blacklist{
+	"v4.TestBeginIsoLevels": "we don't support isolation levels",
 }
