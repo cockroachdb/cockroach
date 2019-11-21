@@ -2088,7 +2088,9 @@ const_datetime ::=
 	'DATE'
 	| 'TIMETZ'
 	| 'TIMESTAMP' opt_timezone
+	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone
 	| 'TIMESTAMPTZ'
+	| 'TIMESTAMPTZ' '(' iconst32 ')'
 
 const_json ::=
 	'JSON'

@@ -3468,44 +3468,46 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		}
 
 	case types.TimestampFamily:
+		roundTo := TimeFamilyPrecisionToRoundDuration(t.Precision())
 		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestamp(ctx, string(*d), time.Microsecond)
+			return ParseDTimestamp(ctx, string(*d), roundTo)
 		case *DCollatedString:
-			return ParseDTimestamp(ctx, d.Contents, time.Microsecond)
+			return ParseDTimestamp(ctx, d.Contents, roundTo)
 		case *DDate:
 			t, err := d.ToTime()
-			return MakeDTimestamp(t, time.Microsecond), err
+			return MakeDTimestamp(t, roundTo), err
 		case *DInt:
-			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), time.Second), nil
+			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), roundTo), nil
 		case *DTimestamp:
-			return d, nil
+			return d.Round(roundTo), nil
 		case *DTimestampTZ:
 			// Strip time zone. Timestamps don't carry their location.
-			return d.stripTimeZone(ctx), nil
+			return d.stripTimeZone(ctx).Round(roundTo), nil
 		}
 
 	case types.TimestampTZFamily:
+		roundTo := TimeFamilyPrecisionToRoundDuration(t.Precision())
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestampTZ(ctx, string(*d), time.Microsecond)
+			return ParseDTimestampTZ(ctx, string(*d), roundTo)
 		case *DCollatedString:
-			return ParseDTimestampTZ(ctx, d.Contents, time.Microsecond)
+			return ParseDTimestampTZ(ctx, d.Contents, roundTo)
 		case *DDate:
 			t, err := d.ToTime()
 			_, before := t.Zone()
 			_, after := t.In(ctx.GetLocation()).Zone()
-			return MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), time.Microsecond), err
+			return MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), roundTo), err
 		case *DTimestamp:
 			_, before := d.Time.Zone()
 			_, after := d.Time.In(ctx.GetLocation()).Zone()
-			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), time.Microsecond), nil
+			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), roundTo), nil
 		case *DInt:
-			return MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), time.Second), nil
+			return MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo), nil
 		case *DTimestampTZ:
-			return d, nil
+			return d.Round(roundTo), nil
 		}
 
 	case types.IntervalFamily:

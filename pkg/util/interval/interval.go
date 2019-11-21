@@ -180,7 +180,7 @@ func (c Comparable) Equal(o Comparable) bool {
 // should traverse no further.
 type Operation func(Interface) (done bool)
 
-// Tree is an interval tree. For all the functions which have a fast argment,
+// Tree is an interval tree. For all the functions which have a fast argument,
 // fast being true means a fast operation which does not adjust node ranges. If
 // fast is false, node ranges are adjusted.
 type Tree interface {

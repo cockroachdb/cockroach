@@ -12,6 +12,7 @@ package types
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -230,19 +231,35 @@ func TestTypes(t *testing.T) {
 		{MakeTimeTZ(6), MakeScalar(TimeTZFamily, oid.T_timetz, 6, 0, emptyLocale)},
 
 		// TIMESTAMP
-		{MakeTimestamp(0), Timestamp},
+		{MakeTimestamp(0), MakeScalar(TimestampFamily, oid.T_timestamp, 0, 0, emptyLocale)},
 		{MakeTimestamp(0), &T{InternalType: InternalType{
-			Family: TimestampFamily, Oid: oid.T_timestamp, Locale: &emptyLocale}}},
+			Family:             TimestampFamily,
+			Precision:          0,
+			TimePrecisionIsSet: true,
+			Oid:                oid.T_timestamp,
+			Locale:             &emptyLocale,
+		}}},
+		{MakeTimestamp(3), &T{InternalType: InternalType{
+			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: 3, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
+		{MakeTimestamp(3), MakeScalar(TimestampFamily, oid.T_timestamp, 3, 0, emptyLocale)},
 		{MakeTimestamp(6), &T{InternalType: InternalType{
-			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: 6, Locale: &emptyLocale}}},
+			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: 6, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
 		{MakeTimestamp(6), MakeScalar(TimestampFamily, oid.T_timestamp, 6, 0, emptyLocale)},
 
 		// TIMESTAMPTZ
-		{MakeTimestampTZ(0), TimestampTZ},
+		{MakeTimestampTZ(0), MakeScalar(TimestampTZFamily, oid.T_timestamptz, 0, 0, emptyLocale)},
 		{MakeTimestampTZ(0), &T{InternalType: InternalType{
-			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Locale: &emptyLocale}}},
+			Family:             TimestampTZFamily,
+			Precision:          0,
+			TimePrecisionIsSet: true,
+			Oid:                oid.T_timestamptz,
+			Locale:             &emptyLocale,
+		}}},
+		{MakeTimestampTZ(3), &T{InternalType: InternalType{
+			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Precision: 3, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
+		{MakeTimestampTZ(3), MakeScalar(TimestampTZFamily, oid.T_timestamptz, 3, 0, emptyLocale)},
 		{MakeTimestampTZ(6), &T{InternalType: InternalType{
-			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Precision: 6, Locale: &emptyLocale}}},
+			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Precision: 6, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
 		{MakeTimestampTZ(6), MakeScalar(TimestampTZFamily, oid.T_timestamptz, 6, 0, emptyLocale)},
 
 		// TUPLE
@@ -268,50 +285,52 @@ func TestTypes(t *testing.T) {
 		{Uuid, MakeScalar(UuidFamily, oid.T_uuid, 0, 0, emptyLocale)},
 	}
 
-	for _, tc := range testCases {
-		// Test that actual, expected types are identical.
-		if !tc.actual.Identical(tc.expected) {
-			t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
-		}
-		if !reflect.DeepEqual(tc.actual, tc.expected) {
-			t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
-		}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("#%d: %s", i, tc.actual.String()), func(t *testing.T) {
+			// Test that actual, expected types are identical.
+			if !tc.actual.Identical(tc.expected) {
+				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
+			}
+			if !reflect.DeepEqual(tc.actual, tc.expected) {
+				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
+			}
 
-		// Roundtrip type by marshaling, then unmarshaling. Only do this for non-
-		// nested array types (since we don't yet support marshaling/ummarshaling
-		// nested arrays).
-		if tc.actual.Family() == ArrayFamily && tc.actual.ArrayContents().Family() == ArrayFamily {
-			continue
-		}
+			// Roundtrip type by marshaling, then unmarshaling. Only do this for non-
+			// nested array types (since we don't yet support marshaling/ummarshaling
+			// nested arrays).
+			if tc.actual.Family() == ArrayFamily && tc.actual.ArrayContents().Family() == ArrayFamily {
+				return
+			}
 
-		data, err := protoutil.Marshal(tc.actual)
-		if err != nil {
-			t.Errorf("error during marshal of type <%v>: %v", tc.actual.DebugString(), err)
-		}
-		if len(data) != tc.actual.Size() {
-			t.Errorf("expected %d bytes, got %d bytes", len(data), tc.actual.Size())
-		}
+			data, err := protoutil.Marshal(tc.actual)
+			if err != nil {
+				t.Errorf("error during marshal of type <%v>: %v", tc.actual.DebugString(), err)
+			}
+			if len(data) != tc.actual.Size() {
+				t.Errorf("expected %d bytes, got %d bytes", len(data), tc.actual.Size())
+			}
 
-		data2 := make([]byte, len(data))
-		i, err := tc.actual.MarshalTo(data2)
-		if err != nil {
-			t.Errorf("error during marshal of type <%v>: %v", tc.actual.DebugString(), err)
-		}
-		if i != len(data) {
-			t.Errorf("expected %d bytes, got %d bytes", len(data), i)
-		}
-		if !bytes.Equal(data, data2) {
-			t.Error("Marshal and MarshalTo bytes are not equal")
-		}
+			data2 := make([]byte, len(data))
+			i, err := tc.actual.MarshalTo(data2)
+			if err != nil {
+				t.Errorf("error during marshal of type <%v>: %v", tc.actual.DebugString(), err)
+			}
+			if i != len(data) {
+				t.Errorf("expected %d bytes, got %d bytes", len(data), i)
+			}
+			if !bytes.Equal(data, data2) {
+				t.Error("Marshal and MarshalTo bytes are not equal")
+			}
 
-		var roundtrip T
-		err = protoutil.Unmarshal(data, &roundtrip)
-		if err != nil {
-			t.Errorf("error during unmarshal of type <%v>: %v", tc.actual.DebugString(), err)
-		}
-		if !tc.actual.Identical(&roundtrip) {
-			t.Errorf("expected <%v>, got <%v>", tc.actual.DebugString(), roundtrip.DebugString())
-		}
+			var roundtrip T
+			err = protoutil.Unmarshal(data, &roundtrip)
+			if err != nil {
+				t.Errorf("error during unmarshal of type <%v>: %v", tc.actual.DebugString(), err)
+			}
+			if !tc.actual.Identical(&roundtrip) {
+				t.Errorf("expected <%v>, got <%v>", tc.actual.DebugString(), roundtrip.DebugString())
+			}
+		})
 	}
 }
 

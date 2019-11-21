@@ -48,7 +48,7 @@ func writeValueOpWithKV(key roachpb.Key, ts hlc.Timestamp, val []byte) enginepb.
 }
 
 func writeValueOp(ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return writeValueOpWithKV(roachpb.Key("a"), ts, nil /* val */)
+	return writeValueOpWithKV(roachpb.Key("a"), ts, []byte("val"))
 }
 
 func writeIntentOpWithDetails(
