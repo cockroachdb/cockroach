@@ -115,7 +115,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
   }
 
-  renderPage = (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
+  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
     switch (type) {
       case "jump-prev":
         return (
