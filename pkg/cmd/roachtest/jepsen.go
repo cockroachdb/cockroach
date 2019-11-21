@@ -239,7 +239,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException `+
 				// And one more ssh failure we've seen, apparently encountered when
 				// downloading logs.
-				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure"`,
+				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure "`+
+				// And sometimes the analysis succeeds and yet we still get an error code for some reason.
+				`-e "Everything looks good"`,
 		); err == nil {
 			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
 				"Ignoring it and considering the test successful. " +
@@ -250,11 +252,13 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
-			"tar -chj --ignore-failed-read -f- /mnt/data1/jepsen/cockroachdb/store/latest /mnt/data1/jepsen/cockroachdb/invoke.log")
+			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log")
 		if output, err := cmd.Output(); err != nil {
 			t.l.Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
 		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
+		} else {
+			t.l.Printf("downloaded jepsen logs in failure-logs.tbz")
 		}
 		if ignoreErr {
 			t.Skip("recognized known error", testErr.Error())
