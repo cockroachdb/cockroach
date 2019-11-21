@@ -14,12 +14,12 @@ import (
 	"context"
 	"errors"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {
@@ -59,7 +59,7 @@ func FastGC(
 	if !desc.ContainsKey(roachpb.RKey(args.GcKey.Key)) {
 		return result.Result{}, errors.New("range not contains key")
 	}
-	from := engine.MVCCKey{Key:args.GcKey.Key, Timestamp: args.GcKey.Timestamp}
+	from := engine.MVCCKey{Key: args.GcKey.Key, Timestamp: args.GcKey.Timestamp}
 	to := engine.MVCCKey{Key: from.Key.PrefixEnd()}
 	var pd result.Result
 

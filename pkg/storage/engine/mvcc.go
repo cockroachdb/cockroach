@@ -3604,11 +3604,14 @@ func checkForKeyCollisionsGo(
 // When optional callbacks are specified, they are invoked for each physical
 // key-value pair (i.e. not for implicit meta records), and iteration is aborted
 // on the first error returned from any of them.
-func MVCCGCStats(ctx context.Context,
+func MVCCGCStats(
+	ctx context.Context,
 	engine Reader,
 	ms *enginepb.MVCCStats,
 	key MVCCKey,
-	timestamp hlc.Timestamp, callbacks ...func(MVCCKey, []byte)error) error {
+	timestamp hlc.Timestamp,
+	callbacks ...func(MVCCKey, []byte) error,
+) error {
 
 	it := engine.NewIterator(IterOptions{LowerBound: key.Key})
 	defer it.Close()

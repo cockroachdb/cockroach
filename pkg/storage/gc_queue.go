@@ -17,7 +17,6 @@ import (
 	"math/rand"
 	"sync/atomic"
 	"time"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -59,7 +58,7 @@ const (
 	gcKeyVersionChunkBytes = base.ChunkRaftCommandThresholdBytes
 	gcKeyVersionChunkLimit = 1024
 	hotKeyVersionThreshold = 500 * time.Millisecond
-	fastGCBytesThreshold = 512 << 10 // 512KiB
+	fastGCBytesThreshold   = 512 << 10 // 512KiB
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -479,7 +478,7 @@ func (NoopGCer) SetGCThreshold(context.Context, GCThreshold) error { return nil 
 func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
 
 // FastGC implements storage.GCer.
-func (NoopGCer) FastGC(context.Context, engine.MVCCKey, enginepb.MVCCStats) error {return nil}
+func (NoopGCer) FastGC(context.Context, engine.MVCCKey, enginepb.MVCCStats) error { return nil }
 
 type replicaGCer struct {
 	repl  *Replica
@@ -544,7 +543,6 @@ func (r *replicaGCer) FastGC(ctx context.Context, key engine.MVCCKey, ms enginep
 	req.Delta = ms
 	return r.send(ctx, &req)
 }
-
 
 // process iterates through all keys in a replica's range, calling the garbage
 // collector for each key and associated set of values. GC'd keys are batched
@@ -905,7 +903,7 @@ func RunGC(
 	}
 	// Iterate through the keys and values of this replica's range.
 	log.Event(ctx, "iterating through range")
-	Loop:
+Loop:
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return GCInfo{}, err
@@ -1022,20 +1020,22 @@ func (*gcQueue) purgatoryChan() <-chan time.Time {
 
 // only for Fast GC
 type hijackContext struct {
-	lock         sync.RWMutex
-	parent       context.Context
-	ctx          context.Context
-	cancel       context.CancelFunc
-	done         chan struct{}
-	err          error
+	lock   syncutil.RWMutex
+	parent context.Context
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
+	err    error
 }
 
-func newHijackContext(parent, child context.Context, cancel context.CancelFunc) (context.Context, context.CancelFunc) {
+func newHijackContext(
+	parent, child context.Context, cancel context.CancelFunc,
+) (context.Context, context.CancelFunc) {
 	// default cancel for hijack context
 	if cancel == nil {
 		child, cancel = context.WithCancel(child)
 	}
-	c := &hijackContext{parent: parent, ctx: child, cancel:cancel, done: make(chan struct{})}
+	c := &hijackContext{parent: parent, ctx: child, cancel: cancel, done: make(chan struct{})}
 	cancelWithError := func(err error) {
 		c.lock.Lock()
 		defer c.lock.Unlock()
@@ -1075,13 +1075,8 @@ func newHijackContextWithCancel(ctx context.Context) (context.Context, context.C
 	return newHijackContext(ctx, c, cancel)
 }
 
-func newHijackContextWithTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc ){
-	c, cancel := context.WithTimeout(context.Background(), timeout)
-	return newHijackContext(ctx, c, cancel)
-}
-
 func (hijack *hijackContext) Deadline() (deadline time.Time, ok bool) {
-	deadline, ok =  hijack.ctx.Deadline()
+	deadline, ok = hijack.ctx.Deadline()
 	if !ok {
 		return hijack.parent.Deadline()
 	}

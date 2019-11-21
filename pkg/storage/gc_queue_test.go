@@ -1065,15 +1065,15 @@ func TestGCQueueProcessFastGC(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	tc.manualClock.Increment(48 * 60 * 60 * 1E9) // 2d past the epoch
+	tc.manualClock.Increment(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
-	ts1 := makeTS(now-2*24*60*60*1E9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
-	ts2 := makeTS(now-25*60*60*1E9, 0)                         // GC will occur at time=25 hours
+	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1e9, 0)                         // GC will occur at time=25 hours
 	ts2m1 := ts2.Prev()                                        // ts2 - 1 so we have something not right at the GC time
 	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
 	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
-	ts5 := makeTS(now-1E9, 0)                                  // 1s old
+	ts5 := makeTS(now-1e9, 0)                                  // 1s old
 	key1 := roachpb.Key("a")
 	key2 := roachpb.Key("b")
 	key3 := roachpb.Key("c")
@@ -1194,9 +1194,9 @@ func TestGCQueueProcessFastGC(t *testing.T) {
 			ts = ts5
 		default:
 			pArgs = putArgs(key1, make([]byte, 1024))
-			ts = makeTS(now-2*24*60*60*1E9+int64(i+1)*1E9, 0)
+			ts = makeTS(now-2*24*60*60*1e9+int64(i+1)*1e9, 0)
 			expectedVersionsKeyBytes += 14
-			expectedVersionsValBytes += 1024+5
+			expectedVersionsValBytes += 1024 + 5
 		}
 		var txn *roachpb.Transaction
 		if _, err := tc.SendWrappedWith(roachpb.Header{
