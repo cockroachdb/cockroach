@@ -30,10 +30,10 @@ func TestParseTimeTZToStringRoundTrip(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc, func(t *testing.T) {
-			exampleTime, err := ParseTimeTZ(timeutil.Now(), tc)
+			exampleTime, err := ParseTimeTZ(timeutil.Now(), tc, time.Microsecond)
 			assert.NoError(t, err)
 
-			exampleTimeFromString, err := ParseTimeTZ(timeutil.Now(), exampleTime.String())
+			exampleTimeFromString, err := ParseTimeTZ(timeutil.Now(), exampleTime.String(), time.Microsecond)
 			assert.NoError(t, err)
 
 			assert.True(t, exampleTime.Equal(exampleTimeFromString))
@@ -63,15 +63,18 @@ func TestTimeTZString(t *testing.T) {
 }
 
 func TestTimeTZ(t *testing.T) {
-	maxTime, err := ParseTimeTZ(timeutil.Now(), "24:00:00-1559")
+	maxTime, err := ParseTimeTZ(timeutil.Now(), "24:00:00-1559", time.Microsecond)
 	require.NoError(t, err)
-	minTime, err := ParseTimeTZ(timeutil.Now(), "00:00:00+1559")
+	minTime, err := ParseTimeTZ(timeutil.Now(), "00:00:00+1559", time.Microsecond)
 	require.NoError(t, err)
 
 	// These are all the same UTC time equivalents.
-	utcTime, err := ParseTimeTZ(timeutil.Now(), "11:14:15+0")
+	utcTime, err := ParseTimeTZ(timeutil.Now(), "11:14:15+0", time.Microsecond)
 	require.NoError(t, err)
-	sydneyTime, err := ParseTimeTZ(timeutil.Now(), "21:14:15+10")
+	sydneyTime, err := ParseTimeTZ(timeutil.Now(), "21:14:15+10", time.Microsecond)
+	require.NoError(t, err)
+
+	sydneyTimeWithMillisecond, err := ParseTimeTZ(timeutil.Now(), "21:14:15.001+10", time.Microsecond)
 	require.NoError(t, err)
 
 	// No daylight savings in Hawaii!
@@ -82,53 +85,68 @@ func TestTimeTZ(t *testing.T) {
 	weirdTimeZone := MakeTimeTZ(timeofday.New(10, 0, 0, 0), -((5 * 60 * 60) + 30*60 + 15))
 
 	testCases := []struct {
-		t           TimeTZ
-		toTime      time.Time
-		largerThan  []TimeTZ
-		smallerThan []TimeTZ
-		equalTo     []TimeTZ
+		t               TimeTZ
+		toTime          time.Time
+		largerThan      []TimeTZ
+		smallerThan     []TimeTZ
+		equalTo         []TimeTZ
+		roundedToSecond TimeTZ
 	}{
 		{
-			t:           weirdTimeZone,
-			toTime:      time.Date(1970, 1, 1, 10, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation((5*60*60)+(30*60)+15, "TimeTZ")),
-			largerThan:  []TimeTZ{minTime},
-			smallerThan: []TimeTZ{maxTime},
-			equalTo:     []TimeTZ{weirdTimeZone},
+			t:               weirdTimeZone,
+			toTime:          time.Date(1970, 1, 1, 10, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation((5*60*60)+(30*60)+15, "TimeTZ")),
+			largerThan:      []TimeTZ{minTime},
+			smallerThan:     []TimeTZ{maxTime},
+			equalTo:         []TimeTZ{weirdTimeZone},
+			roundedToSecond: weirdTimeZone,
 		},
 		{
-			t:           utcTime,
-			toTime:      time.Date(1970, 1, 1, 11, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(0, "TimeTZ")),
-			largerThan:  []TimeTZ{minTime, sydneyTime},
-			smallerThan: []TimeTZ{maxTime, hawaiiTime},
-			equalTo:     []TimeTZ{utcTime},
+			t:               utcTime,
+			toTime:          time.Date(1970, 1, 1, 11, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(0, "TimeTZ")),
+			largerThan:      []TimeTZ{minTime, sydneyTime},
+			smallerThan:     []TimeTZ{maxTime, hawaiiTime},
+			equalTo:         []TimeTZ{utcTime},
+			roundedToSecond: utcTime,
 		},
 		{
-			t:           sydneyTime,
-			toTime:      time.Date(1970, 1, 1, 21, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(10*60*60, "TimeTZ")),
-			largerThan:  []TimeTZ{minTime},
-			smallerThan: []TimeTZ{maxTime, utcTime, hawaiiTime},
-			equalTo:     []TimeTZ{sydneyTime},
+			t:               sydneyTime,
+			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(10*60*60, "TimeTZ")),
+			largerThan:      []TimeTZ{minTime},
+			smallerThan:     []TimeTZ{maxTime, utcTime, hawaiiTime},
+			equalTo:         []TimeTZ{sydneyTime},
+			roundedToSecond: sydneyTime,
 		},
 		{
-			t:           hawaiiTime,
-			toTime:      time.Date(1970, 1, 1, 1, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(-10*60*60, "TimeTZ")),
-			largerThan:  []TimeTZ{minTime, utcTime, sydneyTime},
-			smallerThan: []TimeTZ{maxTime},
-			equalTo:     []TimeTZ{hawaiiTime},
+			t:               sydneyTimeWithMillisecond,
+			toTime:          time.Date(1970, 1, 1, 21, 14, 15, 1000000, timeutil.FixedOffsetTimeZoneToLocation(10*60*60, "TimeTZ")),
+			largerThan:      []TimeTZ{minTime, utcTime, hawaiiTime, sydneyTime},
+			smallerThan:     []TimeTZ{maxTime},
+			equalTo:         []TimeTZ{sydneyTimeWithMillisecond},
+			roundedToSecond: sydneyTime,
 		},
 		{
-			t:           minTime,
-			toTime:      time.Date(1970, 1, 1, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(15*60*60+59*60, "TimeTZ")),
-			largerThan:  []TimeTZ{},
-			smallerThan: []TimeTZ{maxTime, utcTime, sydneyTime, hawaiiTime},
-			equalTo:     []TimeTZ{minTime},
+			t:               hawaiiTime,
+			toTime:          time.Date(1970, 1, 1, 1, 14, 15, 0, timeutil.FixedOffsetTimeZoneToLocation(-10*60*60, "TimeTZ")),
+			largerThan:      []TimeTZ{minTime, utcTime, sydneyTime},
+			smallerThan:     []TimeTZ{maxTime},
+			equalTo:         []TimeTZ{hawaiiTime},
+			roundedToSecond: hawaiiTime,
 		},
 		{
-			t:           maxTime,
-			toTime:      time.Date(1970, 1, 2, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(-(15*60*60+59*60), "TimeTZ")),
-			largerThan:  []TimeTZ{minTime, utcTime, sydneyTime, hawaiiTime},
-			smallerThan: []TimeTZ{},
-			equalTo:     []TimeTZ{maxTime},
+			t:               minTime,
+			toTime:          time.Date(1970, 1, 1, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(15*60*60+59*60, "TimeTZ")),
+			largerThan:      []TimeTZ{},
+			smallerThan:     []TimeTZ{maxTime, utcTime, sydneyTime, hawaiiTime},
+			equalTo:         []TimeTZ{minTime},
+			roundedToSecond: minTime,
+		},
+		{
+			t:               maxTime,
+			toTime:          time.Date(1970, 1, 2, 0, 0, 0, 0, timeutil.FixedOffsetTimeZoneToLocation(-(15*60*60+59*60), "TimeTZ")),
+			largerThan:      []TimeTZ{minTime, utcTime, sydneyTime, hawaiiTime},
+			smallerThan:     []TimeTZ{},
+			equalTo:         []TimeTZ{maxTime},
+			roundedToSecond: maxTime,
 		},
 	}
 	for i, tc := range testCases {
@@ -146,33 +164,41 @@ func TestTimeTZ(t *testing.T) {
 			for _, equalTo := range tc.equalTo {
 				assert.True(t, tc.t.Equal(equalTo), "%s = %s", tc.t.String(), equalTo)
 			}
+
+			assert.Equal(t, tc.roundedToSecond, tc.t.Round(time.Second))
 		})
 	}
 }
 
 func TestParseTimeTZ(t *testing.T) {
 	testCases := []struct {
-		str           string
+		str       string
+		precision time.Duration
+
 		expected      TimeTZ
 		expectedError bool
 	}{
-		{str: "01:02:03", expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
-		{str: "01:02:03.000123", expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0)},
-		{str: "4:5:6", expected: MakeTimeTZ(timeofday.New(4, 5, 6, 0), 0)},
-		{str: "24:00", expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "24:00:00", expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "24:00:00.000", expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "24:00:00.000000", expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "01:02:03+13", expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -13*60*60)},
-		{str: "01:02:03-13", expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 13*60*60)},
-		{str: "01:02:03+7", expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -7*60*60)},
-		{str: "01:02:03-0730", expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 7*60*60+30*60)},
-		{str: "24:00+3", expected: MakeTimeTZ(timeofday.Time2400, -3*60*60)},
-		{str: "24:00:00+4", expected: MakeTimeTZ(timeofday.Time2400, -4*60*60)},
-		{str: "24:00:00.000-5", expected: MakeTimeTZ(timeofday.Time2400, 5*60*60)},
-		{str: "24:00:00.000000+6", expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
-		{str: "00:00-1559", expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MaxTimeTZOffsetSecs)},
-		{str: "00:00+1559", expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MinTimeTZOffsetSecs)},
+		{str: "01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
+		{str: "01:02:03.000123", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0)},
+		{str: "4:5:6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(4, 5, 6, 0), 0)},
+		{str: "24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
+		{str: "24:00:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
+		{str: "24:00:00.000", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
+		{str: "24:00:00.000000", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
+		{str: "01:02:03+13", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -13*60*60)},
+		{str: "01:02:03-13", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 13*60*60)},
+		{str: "01:02:03+7", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -7*60*60)},
+		{str: "01:02:03-0730", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 7*60*60+30*60)},
+		{str: "24:00+3", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -3*60*60)},
+		{str: "24:00:00+4", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -4*60*60)},
+		{str: "24:00:00.000-5", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 5*60*60)},
+		{str: "24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
+		{str: "00:00-1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MaxTimeTZOffsetSecs)},
+		{str: "00:00+1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MinTimeTZOffsetSecs)},
+
+		{str: "01:02:03.000123", precision: time.Millisecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
+		{str: "01:02:03.000123", precision: time.Millisecond / 10, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 100), 0)},
+		{str: "01:02:03.500123", precision: time.Second, expected: MakeTimeTZ(timeofday.New(1, 2, 4, 0), 0)},
 
 		{str: "", expectedError: true},
 		{str: "foo", expectedError: true},
@@ -183,7 +209,7 @@ func TestParseTimeTZ(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("#%d: %s", i, tc.str), func(t *testing.T) {
-			actual, err := ParseTimeTZ(timeutil.Now(), tc.str)
+			actual, err := ParseTimeTZ(timeutil.Now(), tc.str, tc.precision)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {

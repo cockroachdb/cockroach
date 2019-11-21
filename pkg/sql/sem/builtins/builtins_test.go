@@ -348,7 +348,7 @@ func TestExtractStringFromTimeTZ(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s_%s", tc.timeSpan, tc.timeTZString), func(t *testing.T) {
-			timeTZ, err := tree.ParseDTimeTZ(nil, tc.timeTZString)
+			timeTZ, err := tree.ParseDTimeTZ(nil, tc.timeTZString, time.Microsecond)
 			assert.NoError(t, err)
 
 			datum, err := extractStringFromTimeTZ(timeTZ, tc.timeSpan)

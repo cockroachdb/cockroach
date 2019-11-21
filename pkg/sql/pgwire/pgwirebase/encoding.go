@@ -281,13 +281,13 @@ func DecodeOidDatum(
 			}
 			return d, nil
 		case oid.T_time:
-			d, err := tree.ParseDTime(nil, string(b))
+			d, err := tree.ParseDTime(nil, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as time", b)
 			}
 			return d, nil
 		case oid.T_timetz:
-			d, err := tree.ParseDTimeTZ(ctx, string(b))
+			d, err := tree.ParseDTimeTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timetz", b)
 			}
