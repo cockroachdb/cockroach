@@ -252,6 +252,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.AdminRelocateRangeRequest:
 			case *roachpb.HeartbeatTxnRequest:
 			case *roachpb.GCRequest:
+			case *roachpb.FastGCRequest:
 			case *roachpb.LeaseInfoRequest:
 			case *roachpb.PushTxnRequest:
 			case *roachpb.QueryTxnRequest:

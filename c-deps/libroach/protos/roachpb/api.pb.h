@@ -48,7 +48,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[118];
+  static const ::google::protobuf::internal::ParseTable schema[121];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -203,6 +203,15 @@ extern ExternalStorage_S3DefaultTypeInternal _ExternalStorage_S3_default_instanc
 class ExternalStorage_Workload;
 class ExternalStorage_WorkloadDefaultTypeInternal;
 extern ExternalStorage_WorkloadDefaultTypeInternal _ExternalStorage_Workload_default_instance_;
+class FastGCRequest;
+class FastGCRequestDefaultTypeInternal;
+extern FastGCRequestDefaultTypeInternal _FastGCRequest_default_instance_;
+class FastGCRequest_GCKey;
+class FastGCRequest_GCKeyDefaultTypeInternal;
+extern FastGCRequest_GCKeyDefaultTypeInternal _FastGCRequest_GCKey_default_instance_;
+class FastGCResponse;
+class FastGCResponseDefaultTypeInternal;
+extern FastGCResponseDefaultTypeInternal _FastGCResponse_default_instance_;
 class GCRequest;
 class GCRequestDefaultTypeInternal;
 extern GCRequestDefaultTypeInternal _GCRequest_default_instance_;
@@ -463,6 +472,9 @@ template<> ::cockroach::roachpb::ExternalStorage_Http* Arena::CreateMaybeMessage
 template<> ::cockroach::roachpb::ExternalStorage_LocalFilePath* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_LocalFilePath>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage_S3* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_S3>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage_Workload* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Workload>(Arena*);
+template<> ::cockroach::roachpb::FastGCRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::FastGCRequest>(Arena*);
+template<> ::cockroach::roachpb::FastGCRequest_GCKey* Arena::CreateMaybeMessage<::cockroach::roachpb::FastGCRequest_GCKey>(Arena*);
+template<> ::cockroach::roachpb::FastGCResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::FastGCResponse>(Arena*);
 template<> ::cockroach::roachpb::GCRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest>(Arena*);
 template<> ::cockroach::roachpb::GCRequest_GCKey* Arena::CreateMaybeMessage<::cockroach::roachpb::GCRequest_GCKey>(Arena*);
 template<> ::cockroach::roachpb::GCResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::GCResponse>(Arena*);
@@ -7009,6 +7021,364 @@ class GCResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_
 };
 // -------------------------------------------------------------------
 
+class FastGCRequest_GCKey : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.FastGCRequest.GCKey) */ {
+ public:
+  FastGCRequest_GCKey();
+  virtual ~FastGCRequest_GCKey();
+
+  FastGCRequest_GCKey(const FastGCRequest_GCKey& from);
+
+  inline FastGCRequest_GCKey& operator=(const FastGCRequest_GCKey& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  FastGCRequest_GCKey(FastGCRequest_GCKey&& from) noexcept
+    : FastGCRequest_GCKey() {
+    *this = ::std::move(from);
+  }
+
+  inline FastGCRequest_GCKey& operator=(FastGCRequest_GCKey&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const FastGCRequest_GCKey& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const FastGCRequest_GCKey* internal_default_instance() {
+    return reinterpret_cast<const FastGCRequest_GCKey*>(
+               &_FastGCRequest_GCKey_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    53;
+
+  void Swap(FastGCRequest_GCKey* other);
+  friend void swap(FastGCRequest_GCKey& a, FastGCRequest_GCKey& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline FastGCRequest_GCKey* New() const final {
+    return CreateMaybeMessage<FastGCRequest_GCKey>(NULL);
+  }
+
+  FastGCRequest_GCKey* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<FastGCRequest_GCKey>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const FastGCRequest_GCKey& from);
+  void MergeFrom(const FastGCRequest_GCKey& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(FastGCRequest_GCKey* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key(::std::string&& value);
+  #endif
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 2;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.FastGCRequest.GCKey)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::cockroach::util::hlc::Timestamp* timestamp_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class FastGCRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.FastGCRequest) */ {
+ public:
+  FastGCRequest();
+  virtual ~FastGCRequest();
+
+  FastGCRequest(const FastGCRequest& from);
+
+  inline FastGCRequest& operator=(const FastGCRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  FastGCRequest(FastGCRequest&& from) noexcept
+    : FastGCRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline FastGCRequest& operator=(FastGCRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const FastGCRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const FastGCRequest* internal_default_instance() {
+    return reinterpret_cast<const FastGCRequest*>(
+               &_FastGCRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    54;
+
+  void Swap(FastGCRequest* other);
+  friend void swap(FastGCRequest& a, FastGCRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline FastGCRequest* New() const final {
+    return CreateMaybeMessage<FastGCRequest>(NULL);
+  }
+
+  FastGCRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<FastGCRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const FastGCRequest& from);
+  void MergeFrom(const FastGCRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(FastGCRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  typedef FastGCRequest_GCKey GCKey;
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::RequestHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::RequestHeader& header() const;
+  ::cockroach::roachpb::RequestHeader* release_header();
+  ::cockroach::roachpb::RequestHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
+
+  bool has_gc_key() const;
+  void clear_gc_key();
+  static const int kGcKeyFieldNumber = 2;
+  private:
+  const ::cockroach::roachpb::FastGCRequest_GCKey& _internal_gc_key() const;
+  public:
+  const ::cockroach::roachpb::FastGCRequest_GCKey& gc_key() const;
+  ::cockroach::roachpb::FastGCRequest_GCKey* release_gc_key();
+  ::cockroach::roachpb::FastGCRequest_GCKey* mutable_gc_key();
+  void set_allocated_gc_key(::cockroach::roachpb::FastGCRequest_GCKey* gc_key);
+
+  bool has_gc_stats() const;
+  void clear_gc_stats();
+  static const int kGcStatsFieldNumber = 3;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCStats& _internal_gc_stats() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCStats& gc_stats() const;
+  ::cockroach::storage::engine::enginepb::MVCCStats* release_gc_stats();
+  ::cockroach::storage::engine::enginepb::MVCCStats* mutable_gc_stats();
+  void set_allocated_gc_stats(::cockroach::storage::engine::enginepb::MVCCStats* gc_stats);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.FastGCRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::RequestHeader* header_;
+  ::cockroach::roachpb::FastGCRequest_GCKey* gc_key_;
+  ::cockroach::storage::engine::enginepb::MVCCStats* gc_stats_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class FastGCResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.FastGCResponse) */ {
+ public:
+  FastGCResponse();
+  virtual ~FastGCResponse();
+
+  FastGCResponse(const FastGCResponse& from);
+
+  inline FastGCResponse& operator=(const FastGCResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  FastGCResponse(FastGCResponse&& from) noexcept
+    : FastGCResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline FastGCResponse& operator=(FastGCResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const FastGCResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const FastGCResponse* internal_default_instance() {
+    return reinterpret_cast<const FastGCResponse*>(
+               &_FastGCResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    55;
+
+  void Swap(FastGCResponse* other);
+  friend void swap(FastGCResponse& a, FastGCResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline FastGCResponse* New() const final {
+    return CreateMaybeMessage<FastGCResponse>(NULL);
+  }
+
+  FastGCResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<FastGCResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const FastGCResponse& from);
+  void MergeFrom(const FastGCResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(FastGCResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::ResponseHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::ResponseHeader& header() const;
+  ::cockroach::roachpb::ResponseHeader* release_header();
+  ::cockroach::roachpb::ResponseHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.FastGCResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::ResponseHeader* header_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class PushTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.PushTxnRequest) */ {
  public:
   PushTxnRequest();
@@ -7043,7 +7413,7 @@ class PushTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_PushTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    53;
+    56;
 
   void Swap(PushTxnRequest* other);
   friend void swap(PushTxnRequest& a, PushTxnRequest& b) {
@@ -7206,7 +7576,7 @@ class PushTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_PushTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    54;
+    57;
 
   void Swap(PushTxnResponse* other);
   friend void swap(PushTxnResponse& a, PushTxnResponse& b) {
@@ -7324,7 +7694,7 @@ class RecoverTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RecoverTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    55;
+    58;
 
   void Swap(RecoverTxnRequest* other);
   friend void swap(RecoverTxnRequest& a, RecoverTxnRequest& b) {
@@ -7449,7 +7819,7 @@ class RecoverTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RecoverTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    56;
+    59;
 
   void Swap(RecoverTxnResponse* other);
   friend void swap(RecoverTxnResponse& a, RecoverTxnResponse& b) {
@@ -7567,7 +7937,7 @@ class QueryTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_QueryTxnRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    57;
+    60;
 
   void Swap(QueryTxnRequest* other);
   friend void swap(QueryTxnRequest& a, QueryTxnRequest& b) {
@@ -7714,7 +8084,7 @@ class QueryTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_QueryTxnResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    58;
+    61;
 
   void Swap(QueryTxnResponse* other);
   friend void swap(QueryTxnResponse& a, QueryTxnResponse& b) {
@@ -7854,7 +8224,7 @@ class QueryIntentRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_QueryIntentRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    59;
+    62;
 
   void Swap(QueryIntentRequest* other);
   friend void swap(QueryIntentRequest& a, QueryIntentRequest& b) {
@@ -7979,7 +8349,7 @@ class QueryIntentResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_QueryIntentResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    60;
+    63;
 
   void Swap(QueryIntentResponse* other);
   friend void swap(QueryIntentResponse& a, QueryIntentResponse& b) {
@@ -8092,7 +8462,7 @@ class ResolveIntentRequest : public ::google::protobuf::MessageLite /* @@protoc_
                &_ResolveIntentRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    61;
+    64;
 
   void Swap(ResolveIntentRequest* other);
   friend void swap(ResolveIntentRequest& a, ResolveIntentRequest& b) {
@@ -8224,7 +8594,7 @@ class ResolveIntentResponse : public ::google::protobuf::MessageLite /* @@protoc
                &_ResolveIntentResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    62;
+    65;
 
   void Swap(ResolveIntentResponse* other);
   friend void swap(ResolveIntentResponse& a, ResolveIntentResponse& b) {
@@ -8330,7 +8700,7 @@ class ResolveIntentRangeRequest : public ::google::protobuf::MessageLite /* @@pr
                &_ResolveIntentRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    63;
+    66;
 
   void Swap(ResolveIntentRangeRequest* other);
   friend void swap(ResolveIntentRangeRequest& a, ResolveIntentRangeRequest& b) {
@@ -8474,7 +8844,7 @@ class ResolveIntentRangeResponse : public ::google::protobuf::MessageLite /* @@p
                &_ResolveIntentRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    64;
+    67;
 
   void Swap(ResolveIntentRangeResponse* other);
   friend void swap(ResolveIntentRangeResponse& a, ResolveIntentRangeResponse& b) {
@@ -8580,7 +8950,7 @@ class MergeRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_MergeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    65;
+    68;
 
   void Swap(MergeRequest* other);
   friend void swap(MergeRequest& a, MergeRequest& b) {
@@ -8698,7 +9068,7 @@ class MergeResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_MergeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    66;
+    69;
 
   void Swap(MergeResponse* other);
   friend void swap(MergeResponse& a, MergeResponse& b) {
@@ -8804,7 +9174,7 @@ class TruncateLogRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_TruncateLogRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    67;
+    70;
 
   void Swap(TruncateLogRequest* other);
   friend void swap(TruncateLogRequest& a, TruncateLogRequest& b) {
@@ -8923,7 +9293,7 @@ class TruncateLogResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_TruncateLogResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    68;
+    71;
 
   void Swap(TruncateLogResponse* other);
   friend void swap(TruncateLogResponse& a, TruncateLogResponse& b) {
@@ -9029,7 +9399,7 @@ class RequestLeaseRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RequestLeaseRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    69;
+    72;
 
   void Swap(RequestLeaseRequest* other);
   friend void swap(RequestLeaseRequest& a, RequestLeaseRequest& b) {
@@ -9171,7 +9541,7 @@ class TransferLeaseRequest : public ::google::protobuf::MessageLite /* @@protoc_
                &_TransferLeaseRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    70;
+    73;
 
   void Swap(TransferLeaseRequest* other);
   friend void swap(TransferLeaseRequest& a, TransferLeaseRequest& b) {
@@ -9301,7 +9671,7 @@ class LeaseInfoRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_LeaseInfoRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    71;
+    74;
 
   void Swap(LeaseInfoRequest* other);
   friend void swap(LeaseInfoRequest& a, LeaseInfoRequest& b) {
@@ -9407,7 +9777,7 @@ class LeaseInfoResponse : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_LeaseInfoResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    72;
+    75;
 
   void Swap(LeaseInfoResponse* other);
   friend void swap(LeaseInfoResponse& a, LeaseInfoResponse& b) {
@@ -9525,7 +9895,7 @@ class RequestLeaseResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RequestLeaseResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    73;
+    76;
 
   void Swap(RequestLeaseResponse* other);
   friend void swap(RequestLeaseResponse& a, RequestLeaseResponse& b) {
@@ -9631,7 +10001,7 @@ class ComputeChecksumRequest : public ::google::protobuf::MessageLite /* @@proto
                &_ComputeChecksumRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    74;
+    77;
 
   void Swap(ComputeChecksumRequest* other);
   friend void swap(ComputeChecksumRequest& a, ComputeChecksumRequest& b) {
@@ -9777,7 +10147,7 @@ class ComputeChecksumResponse : public ::google::protobuf::MessageLite /* @@prot
                &_ComputeChecksumResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    75;
+    78;
 
   void Swap(ComputeChecksumResponse* other);
   friend void swap(ComputeChecksumResponse& a, ComputeChecksumResponse& b) {
@@ -9897,7 +10267,7 @@ class ExternalStorage_LocalFilePath : public ::google::protobuf::MessageLite /* 
                &_ExternalStorage_LocalFilePath_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    76;
+    79;
 
   void Swap(ExternalStorage_LocalFilePath* other);
   friend void swap(ExternalStorage_LocalFilePath& a, ExternalStorage_LocalFilePath& b) {
@@ -10012,7 +10382,7 @@ class ExternalStorage_Http : public ::google::protobuf::MessageLite /* @@protoc_
                &_ExternalStorage_Http_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    77;
+    80;
 
   void Swap(ExternalStorage_Http* other);
   friend void swap(ExternalStorage_Http& a, ExternalStorage_Http& b) {
@@ -10121,7 +10491,7 @@ class ExternalStorage_S3 : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ExternalStorage_S3_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    78;
+    81;
 
   void Swap(ExternalStorage_S3* other);
   friend void swap(ExternalStorage_S3& a, ExternalStorage_S3& b) {
@@ -10335,7 +10705,7 @@ class ExternalStorage_GCS : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExternalStorage_GCS_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    79;
+    82;
 
   void Swap(ExternalStorage_GCS* other);
   friend void swap(ExternalStorage_GCS& a, ExternalStorage_GCS& b) {
@@ -10504,7 +10874,7 @@ class ExternalStorage_Azure : public ::google::protobuf::MessageLite /* @@protoc
                &_ExternalStorage_Azure_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    80;
+    83;
 
   void Swap(ExternalStorage_Azure* other);
   friend void swap(ExternalStorage_Azure& a, ExternalStorage_Azure& b) {
@@ -10658,7 +11028,7 @@ class ExternalStorage_Workload : public ::google::protobuf::MessageLite /* @@pro
                &_ExternalStorage_Workload_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    81;
+    84;
 
   void Swap(ExternalStorage_Workload* other);
   friend void swap(ExternalStorage_Workload& a, ExternalStorage_Workload& b) {
@@ -10849,7 +11219,7 @@ class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ExternalStorage_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    82;
+    85;
 
   void Swap(ExternalStorage* other);
   friend void swap(ExternalStorage& a, ExternalStorage& b) {
@@ -11033,7 +11403,7 @@ class WriteBatchRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_WriteBatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    83;
+    86;
 
   void Swap(WriteBatchRequest* other);
   friend void swap(WriteBatchRequest& a, WriteBatchRequest& b) {
@@ -11166,7 +11536,7 @@ class WriteBatchResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_WriteBatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    84;
+    87;
 
   void Swap(WriteBatchResponse* other);
   friend void swap(WriteBatchResponse& a, WriteBatchResponse& b) {
@@ -11291,7 +11661,7 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ExportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    86;
+    89;
 
   void Swap(ExportRequest* other);
   friend void swap(ExportRequest& a, ExportRequest& b) {
@@ -11462,7 +11832,7 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BulkOpSummary_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    87;
+    90;
 
   void Swap(BulkOpSummary* other);
   friend void swap(BulkOpSummary& a, BulkOpSummary& b) {
@@ -11584,7 +11954,7 @@ class ExportResponse_File : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExportResponse_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    88;
+    91;
 
   void Swap(ExportResponse_File* other);
   friend void swap(ExportResponse_File& a, ExportResponse_File& b) {
@@ -11760,7 +12130,7 @@ class ExportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ExportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    89;
+    92;
 
   void Swap(ExportResponse* other);
   friend void swap(ExportResponse& a, ExportResponse& b) {
@@ -11892,7 +12262,7 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ImportRequest_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    90;
+    93;
 
   void Swap(ImportRequest_File* other);
   friend void swap(ImportRequest_File& a, ImportRequest_File& b) {
@@ -12028,7 +12398,7 @@ class ImportRequest_TableRekey : public ::google::protobuf::MessageLite /* @@pro
                &_ImportRequest_TableRekey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    91;
+    94;
 
   void Swap(ImportRequest_TableRekey* other);
   friend void swap(ImportRequest_TableRekey& a, ImportRequest_TableRekey& b) {
@@ -12143,7 +12513,7 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ImportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    92;
+    95;
 
   void Swap(ImportRequest* other);
   friend void swap(ImportRequest& a, ImportRequest& b) {
@@ -12300,7 +12670,7 @@ class ImportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ImportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    93;
+    96;
 
   void Swap(ImportResponse* other);
   friend void swap(ImportResponse& a, ImportResponse& b) {
@@ -12418,7 +12788,7 @@ class AdminScatterRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_AdminScatterRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    94;
+    97;
 
   void Swap(AdminScatterRequest* other);
   friend void swap(AdminScatterRequest& a, AdminScatterRequest& b) {
@@ -12531,7 +12901,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
                &_AdminScatterResponse_Range_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    95;
+    98;
 
   void Swap(AdminScatterResponse_Range* other);
   friend void swap(AdminScatterResponse_Range& a, AdminScatterResponse_Range& b) {
@@ -12637,7 +13007,7 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_AdminScatterResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    96;
+    99;
 
   void Swap(AdminScatterResponse* other);
   friend void swap(AdminScatterResponse& a, AdminScatterResponse& b) {
@@ -12757,7 +13127,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AddSSTableRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    97;
+    100;
 
   void Swap(AddSSTableRequest* other);
   friend void swap(AddSSTableRequest& a, AddSSTableRequest& b) {
@@ -12904,7 +13274,7 @@ class AddSSTableResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AddSSTableResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    98;
+    101;
 
   void Swap(AddSSTableResponse* other);
   friend void swap(AddSSTableResponse& a, AddSSTableResponse& b) {
@@ -13010,7 +13380,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RefreshRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    99;
+    102;
 
   void Swap(RefreshRequest* other);
   friend void swap(RefreshRequest& a, RefreshRequest& b) {
@@ -13123,7 +13493,7 @@ class RefreshResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_RefreshResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    100;
+    103;
 
   void Swap(RefreshResponse* other);
   friend void swap(RefreshResponse& a, RefreshResponse& b) {
@@ -13229,7 +13599,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RefreshRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    101;
+    104;
 
   void Swap(RefreshRangeRequest* other);
   friend void swap(RefreshRangeRequest& a, RefreshRangeRequest& b) {
@@ -13342,7 +13712,7 @@ class RefreshRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RefreshRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    102;
+    105;
 
   void Swap(RefreshRangeResponse* other);
   friend void swap(RefreshRangeResponse& a, RefreshRangeResponse& b) {
@@ -13448,7 +13818,7 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SubsumeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    103;
+    106;
 
   void Swap(SubsumeRequest* other);
   friend void swap(SubsumeRequest& a, SubsumeRequest& b) {
@@ -13579,7 +13949,7 @@ class SubsumeResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_SubsumeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    104;
+    107;
 
   void Swap(SubsumeResponse* other);
   friend void swap(SubsumeResponse& a, SubsumeResponse& b) {
@@ -13716,7 +14086,7 @@ class RangeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    105;
+    108;
 
   void Swap(RangeStatsRequest* other);
   friend void swap(RangeStatsRequest& a, RangeStatsRequest& b) {
@@ -13822,7 +14192,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    106;
+    109;
 
   void Swap(RangeStatsResponse* other);
   friend void swap(RangeStatsResponse& a, RangeStatsResponse& b) {
@@ -13961,6 +14331,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
     kAdminRelocateRange = 45,
     kHeartbeatTxn = 12,
     kGc = 13,
+    kFastGc = 49,
     kPushTxn = 14,
     kRecoverTxn = 46,
     kResolveIntent = 16,
@@ -13995,7 +14366,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    107;
+    110;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -14273,6 +14644,18 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::cockroach::roachpb::GCRequest* release_gc();
   ::cockroach::roachpb::GCRequest* mutable_gc();
   void set_allocated_gc(::cockroach::roachpb::GCRequest* gc);
+
+  // .cockroach.roachpb.FastGCRequest fast_gc = 49;
+  bool has_fast_gc() const;
+  void clear_fast_gc();
+  static const int kFastGcFieldNumber = 49;
+  private:
+  const ::cockroach::roachpb::FastGCRequest& _internal_fast_gc() const;
+  public:
+  const ::cockroach::roachpb::FastGCRequest& fast_gc() const;
+  ::cockroach::roachpb::FastGCRequest* release_fast_gc();
+  ::cockroach::roachpb::FastGCRequest* mutable_fast_gc();
+  void set_allocated_fast_gc(::cockroach::roachpb::FastGCRequest* fast_gc);
 
   // .cockroach.roachpb.PushTxnRequest push_txn = 14;
   bool has_push_txn() const;
@@ -14597,6 +14980,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
   void set_has_admin_relocate_range();
   void set_has_heartbeat_txn();
   void set_has_gc();
+  void set_has_fast_gc();
   void set_has_push_txn();
   void set_has_recover_txn();
   void set_has_resolve_intent();
@@ -14648,6 +15032,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
     ::cockroach::roachpb::AdminRelocateRangeRequest* admin_relocate_range_;
     ::cockroach::roachpb::HeartbeatTxnRequest* heartbeat_txn_;
     ::cockroach::roachpb::GCRequest* gc_;
+    ::cockroach::roachpb::FastGCRequest* fast_gc_;
     ::cockroach::roachpb::PushTxnRequest* push_txn_;
     ::cockroach::roachpb::RecoverTxnRequest* recover_txn_;
     ::cockroach::roachpb::ResolveIntentRequest* resolve_intent_;
@@ -14729,6 +15114,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
     kAdminRelocateRange = 45,
     kHeartbeatTxn = 12,
     kGc = 13,
+    kFastGc = 49,
     kPushTxn = 14,
     kRecoverTxn = 46,
     kResolveIntent = 16,
@@ -14762,7 +15148,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    108;
+    111;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15040,6 +15426,18 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::roachpb::GCResponse* release_gc();
   ::cockroach::roachpb::GCResponse* mutable_gc();
   void set_allocated_gc(::cockroach::roachpb::GCResponse* gc);
+
+  // .cockroach.roachpb.FastGCResponse fast_gc = 49;
+  bool has_fast_gc() const;
+  void clear_fast_gc();
+  static const int kFastGcFieldNumber = 49;
+  private:
+  const ::cockroach::roachpb::FastGCResponse& _internal_fast_gc() const;
+  public:
+  const ::cockroach::roachpb::FastGCResponse& fast_gc() const;
+  ::cockroach::roachpb::FastGCResponse* release_fast_gc();
+  ::cockroach::roachpb::FastGCResponse* mutable_fast_gc();
+  void set_allocated_fast_gc(::cockroach::roachpb::FastGCResponse* fast_gc);
 
   // .cockroach.roachpb.PushTxnResponse push_txn = 14;
   bool has_push_txn() const;
@@ -15352,6 +15750,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void set_has_admin_relocate_range();
   void set_has_heartbeat_txn();
   void set_has_gc();
+  void set_has_fast_gc();
   void set_has_push_txn();
   void set_has_recover_txn();
   void set_has_resolve_intent();
@@ -15402,6 +15801,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
     ::cockroach::roachpb::AdminRelocateRangeResponse* admin_relocate_range_;
     ::cockroach::roachpb::HeartbeatTxnResponse* heartbeat_txn_;
     ::cockroach::roachpb::GCResponse* gc_;
+    ::cockroach::roachpb::FastGCResponse* fast_gc_;
     ::cockroach::roachpb::PushTxnResponse* push_txn_;
     ::cockroach::roachpb::RecoverTxnResponse* recover_txn_;
     ::cockroach::roachpb::ResolveIntentResponse* resolve_intent_;
@@ -15468,7 +15868,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    109;
+    112;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -15672,7 +16072,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    113;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -15790,7 +16190,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    114;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -15946,7 +16346,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    115;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16066,7 +16466,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    116;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16184,7 +16584,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    117;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16304,7 +16704,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    118;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16422,7 +16822,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    119;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -16528,7 +16928,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    120;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -21621,6 +22021,323 @@ inline void GCResponse::set_allocated_header(::cockroach::roachpb::ResponseHeade
   }
   header_ = header;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GCResponse.header)
+}
+
+// -------------------------------------------------------------------
+
+// FastGCRequest_GCKey
+
+inline void FastGCRequest_GCKey::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& FastGCRequest_GCKey::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FastGCRequest.GCKey.key)
+  return key_.GetNoArena();
+}
+inline void FastGCRequest_GCKey::set_key(const ::std::string& value) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.FastGCRequest.GCKey.key)
+}
+#if LANG_CXX11
+inline void FastGCRequest_GCKey::set_key(::std::string&& value) {
+  
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.FastGCRequest.GCKey.key)
+}
+#endif
+inline void FastGCRequest_GCKey::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.FastGCRequest.GCKey.key)
+}
+inline void FastGCRequest_GCKey::set_key(const void* value, size_t size) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.FastGCRequest.GCKey.key)
+}
+inline ::std::string* FastGCRequest_GCKey::mutable_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FastGCRequest.GCKey.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* FastGCRequest_GCKey::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FastGCRequest.GCKey.key)
+  
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void FastGCRequest_GCKey::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    
+  } else {
+    
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FastGCRequest.GCKey.key)
+}
+
+inline bool FastGCRequest_GCKey::has_timestamp() const {
+  return this != internal_default_instance() && timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& FastGCRequest_GCKey::_internal_timestamp() const {
+  return *timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& FastGCRequest_GCKey::timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FastGCRequest.GCKey.timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* FastGCRequest_GCKey::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FastGCRequest.GCKey.timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* FastGCRequest_GCKey::mutable_timestamp() {
+  
+  if (timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FastGCRequest.GCKey.timestamp)
+  return timestamp_;
+}
+inline void FastGCRequest_GCKey::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(timestamp_);
+  }
+  if (timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  timestamp_ = timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FastGCRequest.GCKey.timestamp)
+}
+
+// -------------------------------------------------------------------
+
+// FastGCRequest
+
+inline bool FastGCRequest::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void FastGCRequest::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::RequestHeader& FastGCRequest::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::RequestHeader& FastGCRequest::header() const {
+  const ::cockroach::roachpb::RequestHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FastGCRequest.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RequestHeader*>(
+      &::cockroach::roachpb::_RequestHeader_default_instance_);
+}
+inline ::cockroach::roachpb::RequestHeader* FastGCRequest::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FastGCRequest.header)
+  
+  ::cockroach::roachpb::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::RequestHeader* FastGCRequest::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::RequestHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FastGCRequest.header)
+  return header_;
+}
+inline void FastGCRequest::set_allocated_header(::cockroach::roachpb::RequestHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FastGCRequest.header)
+}
+
+inline bool FastGCRequest::has_gc_key() const {
+  return this != internal_default_instance() && gc_key_ != NULL;
+}
+inline void FastGCRequest::clear_gc_key() {
+  if (GetArenaNoVirtual() == NULL && gc_key_ != NULL) {
+    delete gc_key_;
+  }
+  gc_key_ = NULL;
+}
+inline const ::cockroach::roachpb::FastGCRequest_GCKey& FastGCRequest::_internal_gc_key() const {
+  return *gc_key_;
+}
+inline const ::cockroach::roachpb::FastGCRequest_GCKey& FastGCRequest::gc_key() const {
+  const ::cockroach::roachpb::FastGCRequest_GCKey* p = gc_key_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FastGCRequest.gc_key)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::FastGCRequest_GCKey*>(
+      &::cockroach::roachpb::_FastGCRequest_GCKey_default_instance_);
+}
+inline ::cockroach::roachpb::FastGCRequest_GCKey* FastGCRequest::release_gc_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FastGCRequest.gc_key)
+  
+  ::cockroach::roachpb::FastGCRequest_GCKey* temp = gc_key_;
+  gc_key_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::FastGCRequest_GCKey* FastGCRequest::mutable_gc_key() {
+  
+  if (gc_key_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::FastGCRequest_GCKey>(GetArenaNoVirtual());
+    gc_key_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FastGCRequest.gc_key)
+  return gc_key_;
+}
+inline void FastGCRequest::set_allocated_gc_key(::cockroach::roachpb::FastGCRequest_GCKey* gc_key) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete gc_key_;
+  }
+  if (gc_key) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      gc_key = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, gc_key, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  gc_key_ = gc_key;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FastGCRequest.gc_key)
+}
+
+inline bool FastGCRequest::has_gc_stats() const {
+  return this != internal_default_instance() && gc_stats_ != NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCStats& FastGCRequest::_internal_gc_stats() const {
+  return *gc_stats_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCStats& FastGCRequest::gc_stats() const {
+  const ::cockroach::storage::engine::enginepb::MVCCStats* p = gc_stats_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FastGCRequest.gc_stats)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCStats*>(
+      &::cockroach::storage::engine::enginepb::_MVCCStats_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCStats* FastGCRequest::release_gc_stats() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FastGCRequest.gc_stats)
+  
+  ::cockroach::storage::engine::enginepb::MVCCStats* temp = gc_stats_;
+  gc_stats_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCStats* FastGCRequest::mutable_gc_stats() {
+  
+  if (gc_stats_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCStats>(GetArenaNoVirtual());
+    gc_stats_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FastGCRequest.gc_stats)
+  return gc_stats_;
+}
+inline void FastGCRequest::set_allocated_gc_stats(::cockroach::storage::engine::enginepb::MVCCStats* gc_stats) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(gc_stats_);
+  }
+  if (gc_stats) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      gc_stats = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, gc_stats, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  gc_stats_ = gc_stats;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FastGCRequest.gc_stats)
+}
+
+// -------------------------------------------------------------------
+
+// FastGCResponse
+
+inline bool FastGCResponse::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void FastGCResponse::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::ResponseHeader& FastGCResponse::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::ResponseHeader& FastGCResponse::header() const {
+  const ::cockroach::roachpb::ResponseHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.FastGCResponse.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ResponseHeader*>(
+      &::cockroach::roachpb::_ResponseHeader_default_instance_);
+}
+inline ::cockroach::roachpb::ResponseHeader* FastGCResponse::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.FastGCResponse.header)
+  
+  ::cockroach::roachpb::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::ResponseHeader* FastGCResponse::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ResponseHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.FastGCResponse.header)
+  return header_;
+}
+inline void FastGCResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.FastGCResponse.header)
 }
 
 // -------------------------------------------------------------------
@@ -29512,6 +30229,50 @@ inline ::cockroach::roachpb::GCRequest* RequestUnion::mutable_gc() {
   return value_.gc_;
 }
 
+// .cockroach.roachpb.FastGCRequest fast_gc = 49;
+inline bool RequestUnion::has_fast_gc() const {
+  return value_case() == kFastGc;
+}
+inline void RequestUnion::set_has_fast_gc() {
+  _oneof_case_[0] = kFastGc;
+}
+inline void RequestUnion::clear_fast_gc() {
+  if (has_fast_gc()) {
+    delete value_.fast_gc_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::roachpb::FastGCRequest& RequestUnion::_internal_fast_gc() const {
+  return *value_.fast_gc_;
+}
+inline ::cockroach::roachpb::FastGCRequest* RequestUnion::release_fast_gc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RequestUnion.fast_gc)
+  if (has_fast_gc()) {
+    clear_has_value();
+      ::cockroach::roachpb::FastGCRequest* temp = value_.fast_gc_;
+    value_.fast_gc_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline const ::cockroach::roachpb::FastGCRequest& RequestUnion::fast_gc() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.fast_gc)
+  return has_fast_gc()
+      ? *value_.fast_gc_
+      : *reinterpret_cast< ::cockroach::roachpb::FastGCRequest*>(&::cockroach::roachpb::_FastGCRequest_default_instance_);
+}
+inline ::cockroach::roachpb::FastGCRequest* RequestUnion::mutable_fast_gc() {
+  if (!has_fast_gc()) {
+    clear_value();
+    set_has_fast_gc();
+    value_.fast_gc_ = CreateMaybeMessage< ::cockroach::roachpb::FastGCRequest >(
+        GetArenaNoVirtual());
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.fast_gc)
+  return value_.fast_gc_;
+}
+
 // .cockroach.roachpb.PushTxnRequest push_txn = 14;
 inline bool RequestUnion::has_push_txn() const {
   return value_case() == kPushTxn;
@@ -31459,6 +32220,50 @@ inline ::cockroach::roachpb::GCResponse* ResponseUnion::mutable_gc() {
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.gc)
   return value_.gc_;
+}
+
+// .cockroach.roachpb.FastGCResponse fast_gc = 49;
+inline bool ResponseUnion::has_fast_gc() const {
+  return value_case() == kFastGc;
+}
+inline void ResponseUnion::set_has_fast_gc() {
+  _oneof_case_[0] = kFastGc;
+}
+inline void ResponseUnion::clear_fast_gc() {
+  if (has_fast_gc()) {
+    delete value_.fast_gc_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::roachpb::FastGCResponse& ResponseUnion::_internal_fast_gc() const {
+  return *value_.fast_gc_;
+}
+inline ::cockroach::roachpb::FastGCResponse* ResponseUnion::release_fast_gc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ResponseUnion.fast_gc)
+  if (has_fast_gc()) {
+    clear_has_value();
+      ::cockroach::roachpb::FastGCResponse* temp = value_.fast_gc_;
+    value_.fast_gc_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline const ::cockroach::roachpb::FastGCResponse& ResponseUnion::fast_gc() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.fast_gc)
+  return has_fast_gc()
+      ? *value_.fast_gc_
+      : *reinterpret_cast< ::cockroach::roachpb::FastGCResponse*>(&::cockroach::roachpb::_FastGCResponse_default_instance_);
+}
+inline ::cockroach::roachpb::FastGCResponse* ResponseUnion::mutable_fast_gc() {
+  if (!has_fast_gc()) {
+    clear_value();
+    set_has_fast_gc();
+    value_.fast_gc_ = CreateMaybeMessage< ::cockroach::roachpb::FastGCResponse >(
+        GetArenaNoVirtual());
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.fast_gc)
+  return value_.fast_gc_;
 }
 
 // .cockroach.roachpb.PushTxnResponse push_txn = 14;
@@ -33766,6 +34571,12 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -1057,3 +1057,253 @@ func TestGCQueueChunkRequests(t *testing.T) {
 		t.Errorf("expected %d gc requests; got %d", e, a)
 	}
 }
+
+func TestGCQueueProcessFastGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	tc.manualClock.Increment(48 * 60 * 60 * 1E9) // 2d past the epoch
+	now := tc.Clock().Now().WallTime
+
+	ts1 := makeTS(now-2*24*60*60*1E9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1E9, 0)                         // GC will occur at time=25 hours
+	ts2m1 := ts2.Prev()                                        // ts2 - 1 so we have something not right at the GC time
+	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
+	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
+	ts5 := makeTS(now-1E9, 0)                                  // 1s old
+	key1 := roachpb.Key("a")
+	key2 := roachpb.Key("b")
+	key3 := roachpb.Key("c")
+	key4 := roachpb.Key("d")
+	key5 := roachpb.Key("e")
+	key6 := roachpb.Key("f")
+	key7 := roachpb.Key("g")
+	key8 := roachpb.Key("h")
+	key9 := roachpb.Key("i")
+	key10 := roachpb.Key("j")
+	key11 := roachpb.Key("k")
+
+	data := []struct {
+		key roachpb.Key
+		ts  hlc.Timestamp
+		del bool
+		txn bool
+	}{
+		// For key1, we expect first value to GC.
+		//{key1, ts1, false, false},
+		//{key1, ts2, false, false},
+		//{key1, ts5, false, false},
+		// For key2, we expect values to GC, even though most recent is deletion.
+		{key2, ts1, false, false},
+		{key2, ts2m1, false, false}, // use a value < the GC time to verify it's kept
+		{key2, ts5, true, false},
+		// For key3, we expect just ts1 to GC, because most recent deletion is intent.
+		{key3, ts1, false, false},
+		{key3, ts2, false, false},
+		{key3, ts5, true, true},
+		// For key4, expect oldest value to GC.
+		{key4, ts1, false, false},
+		{key4, ts2, false, false},
+		// For key5, expect all values to GC (most recent value deleted).
+		{key5, ts1, false, false},
+		{key5, ts2, true, false}, // deleted, so GC
+		// For key6, expect no values to GC because most recent value is intent.
+		{key6, ts1, false, false},
+		{key6, ts5, false, true},
+		// For key7, expect no values to GC because intent is exactly 2h old.
+		{key7, ts2, false, false},
+		{key7, ts4, false, true},
+		// For key8, expect most recent value to resolve by aborting, which will clean it up.
+		{key8, ts2, false, false},
+		{key8, ts3, true, true},
+		// For key9, resolve naked intent with no remaining values.
+		{key9, ts3, false, true},
+		// For key10, GC ts1 because it's a delete but not ts3 because it's above the threshold.
+		{key10, ts1, true, false},
+		{key10, ts3, true, false},
+		{key10, ts4, false, false},
+		{key10, ts5, false, false},
+		// For key11, we can't GC anything because ts1 isn't a delete.
+		{key11, ts1, false, false},
+		{key11, ts3, true, false},
+		{key11, ts4, true, false},
+		{key11, ts5, true, false},
+	}
+
+	for i, datum := range data {
+		if datum.del {
+			dArgs := deleteArgs(datum.key)
+			var txn *roachpb.Transaction
+			if datum.txn {
+				txn = newTransaction("test", datum.key, 1, tc.Clock())
+				txn.OrigTimestamp = datum.ts
+				txn.Timestamp = datum.ts
+				assignSeqNumsForReqs(txn, &dArgs)
+			}
+			if _, err := tc.SendWrappedWith(roachpb.Header{
+				Timestamp: datum.ts,
+				Txn:       txn,
+			}, &dArgs); err != nil {
+				t.Fatalf("%d: could not delete data: %s", i, err)
+			}
+		} else {
+			pArgs := putArgs(datum.key, []byte("value"))
+			var txn *roachpb.Transaction
+			if datum.txn {
+				txn = newTransaction("test", datum.key, 1, tc.Clock())
+				txn.OrigTimestamp = datum.ts
+				txn.Timestamp = datum.ts
+				assignSeqNumsForReqs(txn, &pArgs)
+			}
+			if _, err := tc.SendWrappedWith(roachpb.Header{
+				Timestamp: datum.ts,
+				Txn:       txn,
+			}, &pArgs); err != nil {
+				t.Fatalf("%d: could not put data: %s", i, err)
+			}
+		}
+	}
+
+	// The total size of the GC'able versions of the keys and values in GCInfo.
+	// Key size: len("a") + mvccVersionTimestampSize (13 bytes) = 14 bytes.
+	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
+	// key1 at ts1  (14 bytes) => "value" (10 bytes)
+	// key2 at ts1  (14 bytes) => "value" (10 bytes)
+	// key3 at ts1  (14 bytes) => "value" (10 bytes)
+	// key4 at ts1  (14 bytes) => "value" (10 bytes)
+	// key5 at ts1  (14 bytes) => "value" (10 bytes)
+	// key5 at ts2  (14 bytes) => delete (0 bytes)
+	// key10 at ts1 (14 bytes) => delete (0 bytes)
+	var expectedVersionsKeyBytes int64 = 7 * 14
+	var expectedVersionsValBytes int64 = 5 * 10
+	for i := 0; i < 10243; i++ {
+		var pArgs roachpb.PutRequest
+		var ts hlc.Timestamp
+		switch i {
+		case 0:
+			pArgs = putArgs(key1, []byte("value"))
+			ts = ts1
+		case 10241:
+			pArgs = putArgs(key1, []byte("value"))
+			ts = ts2
+		case 10242:
+			pArgs = putArgs(key1, []byte("value"))
+			ts = ts5
+		default:
+			pArgs = putArgs(key1, make([]byte, 1024))
+			ts = makeTS(now-2*24*60*60*1E9+int64(i+1)*1E9, 0)
+			expectedVersionsKeyBytes += 14
+			expectedVersionsValBytes += 1024+5
+		}
+		var txn *roachpb.Transaction
+		if _, err := tc.SendWrappedWith(roachpb.Header{
+			Timestamp: ts,
+			Txn:       txn,
+		}, &pArgs); err != nil {
+			t.Fatalf("%d: could not put data: %s", i, err)
+		}
+	}
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
+		t.Fatal("config not set")
+	}
+
+	// Call RunGC with dummy functions to get current GCInfo.
+	gcInfo, err := func() (GCInfo, error) {
+		snap := tc.repl.store.Engine().NewSnapshot()
+		desc := tc.repl.Desc()
+		defer snap.Close()
+
+		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+		if err != nil {
+			t.Fatalf("could not find zone config for range %s: %s", tc.repl, err)
+		}
+
+		ctx := context.Background()
+		now := tc.Clock().Now()
+		return RunGC(ctx, desc, snap, now, *zone.GC,
+			NoopGCer{},
+			func(ctx context.Context, intents []roachpb.Intent) error {
+				return nil
+			},
+			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent) error {
+				return nil
+			})
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gcInfo.AffectedVersionsKeyBytes != expectedVersionsKeyBytes {
+		t.Fatalf("expected total keys size: %d bytes; got %d bytes", expectedVersionsKeyBytes, gcInfo.AffectedVersionsKeyBytes)
+	}
+	if gcInfo.AffectedVersionsValBytes != expectedVersionsValBytes {
+		t.Fatalf("expected total values size: %d bytes; got %d bytes", expectedVersionsValBytes, gcInfo.AffectedVersionsValBytes)
+	}
+
+	// Process through a scan queue.
+	gcQ := newGCQueue(tc.store, tc.gossip)
+	if err := gcQ.process(context.Background(), tc.repl, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	expKVs := []struct {
+		key roachpb.Key
+		ts  hlc.Timestamp
+	}{
+		{key1, ts5},
+		{key1, ts2},
+		{key2, ts5},
+		{key2, ts2m1},
+		{key3, hlc.Timestamp{}},
+		{key3, ts5},
+		{key3, ts2},
+		{key4, ts2},
+		{key6, hlc.Timestamp{}},
+		{key6, ts5},
+		{key6, ts1},
+		{key7, hlc.Timestamp{}},
+		{key7, ts4},
+		{key7, ts2},
+		{key8, ts2},
+		{key10, ts5},
+		{key10, ts4},
+		{key10, ts3},
+		{key11, ts5},
+		{key11, ts4},
+		{key11, ts3},
+		{key11, ts1},
+	}
+	// Read data directly from engine to avoid intent errors from MVCC.
+	// However, because the GC processing pushes transactions and
+	// resolves intents asynchronously, we use a SucceedsSoon loop.
+	testutils.SucceedsSoon(t, func() error {
+		kvs, err := engine.Scan(tc.store.Engine(), key1, keys.MaxKey, 0)
+		if err != nil {
+			return err
+		}
+		for i, kv := range kvs {
+			if log.V(1) {
+				log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			}
+		}
+		if len(kvs) != len(expKVs) {
+			return fmt.Errorf("expected length %d; got %d", len(expKVs), len(kvs))
+		}
+		for i, kv := range kvs {
+			if !kv.Key.Key.Equal(expKVs[i].key) {
+				return fmt.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, kv.Key.Key)
+			}
+			if kv.Key.Timestamp != expKVs[i].ts {
+				return fmt.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
+			}
+			if log.V(1) {
+				log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			}
+		}
+		return nil
+	})
+}
+

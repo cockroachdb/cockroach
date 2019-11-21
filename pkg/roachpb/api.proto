@@ -868,6 +868,30 @@ message GCResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+message FastGCRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  message GCKey {
+    option (gogoproto.equal) = true;
+
+    bytes key = 1 [(gogoproto.casttype) = "Key"];
+    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+  GCKey gc_key = 2 [(gogoproto.nullable) = false];
+
+  // MVCCStats are the MVCC statistics for the range that will GC the
+  // request.
+  storage.engine.enginepb.MVCCStats gc_stats = 3 [
+       (gogoproto.nullable) = false,
+       (gogoproto.customname) = "Delta"
+  ];
+}
+
+message FastGCResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // PushTxnType determines what action to take when pushing a transaction.
 enum PushTxnType {
   option (gogoproto.goproto_enum_prefix) = false;
@@ -1649,6 +1673,7 @@ message RequestUnion {
     AdminRelocateRangeRequest admin_relocate_range = 45;
     HeartbeatTxnRequest heartbeat_txn = 12;
     GCRequest gc = 13;
+    FastGCRequest fast_gc = 49;
     PushTxnRequest push_txn = 14;
     RecoverTxnRequest recover_txn = 46;
     ResolveIntentRequest resolve_intent = 16;
@@ -1701,6 +1726,7 @@ message ResponseUnion {
     AdminRelocateRangeResponse admin_relocate_range = 45;
     HeartbeatTxnResponse heartbeat_txn = 12;
     GCResponse gc = 13;
+    FastGCResponse fast_gc = 49;
     PushTxnResponse push_txn = 14;
     RecoverTxnResponse recover_txn = 46;
     ResolveIntentResponse resolve_intent = 16;

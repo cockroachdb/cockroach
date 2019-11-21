@@ -3597,3 +3597,61 @@ func checkForKeyCollisionsGo(
 
 	return skippedKVStats, nil
 }
+
+// MVCCGCStats scans the underlying engine with the key and
+// computes stats counters based on the values. This method is used Fast GC
+//
+// When optional callbacks are specified, they are invoked for each physical
+// key-value pair (i.e. not for implicit meta records), and iteration is aborted
+// on the first error returned from any of them.
+func MVCCGCStats(ctx context.Context,
+	engine Reader,
+	ms *enginepb.MVCCStats,
+	key MVCCKey,
+	timestamp hlc.Timestamp, callbacks ...func(MVCCKey, []byte)error) error {
+	iter := engine.NewIterator(IterOptions{LowerBound: roachpb.Key(key.Key)})
+	defer iter.Close()
+	iter.SeekGE(key)
+	prevNanos := timestamp.WallTime
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		} else if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		unsafeIterKey := iter.UnsafeKey()
+		unsafeIterValue := iter.UnsafeValue()
+		if !unsafeIterKey.Key.Equal(key.Key) {
+			break
+		}
+		if !unsafeIterKey.IsValue() {
+			break
+		}
+		for _, f := range callbacks {
+			if err := f(unsafeIterKey, unsafeIterValue); err != nil {
+				return err
+			}
+		}
+		if !key.Timestamp.Less(unsafeIterKey.Timestamp) {
+			if ms != nil {
+				// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
+				// when it's a deletion.
+				valSize := int64(len(iter.UnsafeValue()))
+
+				// A non-deletion becomes non-live when its newer neighbor shows up.
+				// A deletion tombstone becomes non-live right when it is created.
+				fromNS := prevNanos
+				if valSize == 0 {
+					fromNS = unsafeIterKey.Timestamp.WallTime
+				}
+
+				ms.Add(updateStatsOnGC(key.Key, MVCCVersionTimestampSize,
+					valSize, nil, fromNS))
+			}
+		}
+		prevNanos = unsafeIterKey.Timestamp.WallTime
+	}
+	return nil
+}

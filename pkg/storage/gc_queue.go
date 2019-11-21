@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"sync"
 )
 
 const (
@@ -56,6 +57,10 @@ const (
 	// gcKeyVersionChunkBytes is the threshold size for splitting
 	// GCRequests into multiple batches.
 	gcKeyVersionChunkBytes = base.ChunkRaftCommandThresholdBytes
+	gcKeyVersionChunkLimit = 1024
+	hotKeyVersionThreshold = 500 * time.Millisecond
+
+	fastGCBytesThreshold = 512 << 10 // 512KiB
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -474,6 +479,8 @@ func (NoopGCer) SetGCThreshold(context.Context, GCThreshold) error { return nil 
 // GC implements storage.GCer.
 func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
 
+func (NoopGCer) FastGC(ctx context.Context, key engine.MVCCKey, ms enginepb.MVCCStats) error {return nil}
+
 type replicaGCer struct {
 	repl  *Replica
 	count int32 // update atomically
@@ -490,16 +497,21 @@ func (r *replicaGCer) template() roachpb.GCRequest {
 	return template
 }
 
-func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
+func (r *replicaGCer) send(ctx context.Context, req roachpb.Request) error {
 	n := atomic.AddInt32(&r.count, 1)
-	log.Eventf(ctx, "sending batch %d (%d keys)", n, len(req.Keys))
+	switch r := req.(type) {
+	case *roachpb.GCRequest:
+		log.Eventf(ctx, "sending batch %d (%d keys)", n, len(r.Keys))
+	case *roachpb.FastGCRequest:
+		log.Eventf(ctx, "sending batch %d (fast GC %s)", n, r.GcKey.Key)
+	}
 
 	var ba roachpb.BatchRequest
 
 	// Technically not needed since we're talking directly to the Replica.
 	ba.RangeID = r.repl.Desc().RangeID
 	ba.Timestamp = r.repl.Clock().Now()
-	ba.Add(&req)
+	ba.Add(req)
 
 	if _, pErr := r.repl.Send(ctx, ba); pErr != nil {
 		log.VErrEvent(ctx, 2, pErr.String())
@@ -511,7 +523,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh GCThreshold) error {
 	req := r.template()
 	req.Threshold = thresh.Key
-	return r.send(ctx, req)
+	return r.send(ctx, &req)
 }
 
 func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) error {
@@ -520,8 +532,19 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 	}
 	req := r.template()
 	req.Keys = keys
-	return r.send(ctx, req)
+	return r.send(ctx, &req)
 }
+
+func (r *replicaGCer) FastGC(ctx context.Context, key engine.MVCCKey, ms enginepb.MVCCStats) error {
+	desc := r.repl.Desc()
+	var req roachpb.FastGCRequest
+	req.Key = desc.StartKey.AsRawKey()
+	req.GcKey.Key = key.Key
+	req.GcKey.Timestamp = key.Timestamp
+	req.Delta = ms
+	return r.send(ctx, &req)
+}
+
 
 // process iterates through all keys in a replica's range, calling the garbage
 // collector for each key and associated set of values. GC'd keys are batched
@@ -666,6 +689,7 @@ type GCThreshold struct {
 type GCer interface {
 	SetGCThreshold(context.Context, GCThreshold) error
 	GC(context.Context, []roachpb.GCRequest_GCKey) error
+	FastGC(ctx context.Context, key engine.MVCCKey, ms enginepb.MVCCStats) error
 }
 
 // RunGC runs garbage collection for the specified descriptor on the
@@ -708,11 +732,13 @@ func RunGC(
 
 	var batchGCKeys []roachpb.GCRequest_GCKey
 	var batchGCKeysBytes int64
+	var batchGCKeysCount int
 	var expBaseKey roachpb.Key
 	var keys []engine.MVCCKey
 	var vals [][]byte
 	var keyBytes int64
 	var valBytes int64
+	var gcBytes int64
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
@@ -723,8 +749,13 @@ func RunGC(
 	// resolution and values after the MVCC metadata, and possible
 	// intent, are sent for garbage collection.
 	processKeysAndValues := func() {
+		var gcLimit bool
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
+			// Check if it's a hot key
+			if len(vals[0]) > 0 || now.Less(keys[1].Timestamp.Add(int64(hotKeyVersionThreshold), 0)) {
+				gcLimit = true
+			}
 			meta := &enginepb.MVCCMetadata{}
 			if err := protoutil.Unmarshal(vals[0], meta); err != nil {
 				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keys[0], err)
@@ -775,10 +806,11 @@ func RunGC(
 						infoMu.GCInfo.AffectedVersionsValBytes += valBytes
 
 						batchGCKeysBytes += keyBytes
+						batchGCKeysCount++
 						// If the current key brings the batch over the target
 						// size, add the current timestamp to finish the current
 						// chunk and start a new one.
-						if batchGCKeysBytes >= gcKeyVersionChunkBytes {
+						if gcLimit && batchGCKeysCount >= gcKeyVersionChunkLimit || batchGCKeysBytes >= gcKeyVersionChunkBytes {
 							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
 
 							err := gcer.GC(ctx, batchGCKeys)
@@ -787,6 +819,7 @@ func RunGC(
 							iter.ResetAllocator()
 							batchGCKeys = nil
 							batchGCKeysBytes = 0
+							batchGCKeysCount = 0
 
 							if err != nil {
 								// Even though we are batching the GC process, it's
@@ -808,8 +841,72 @@ func RunGC(
 		}
 	}
 
+	processFastGC := func(ctx_ context.Context) error {
+		// fast GC will takes a lot of time for process stats,
+		// so we need hijack context for timeout
+		ctx, cancel := newHijackContextWithCancel(ctx_)
+		defer cancel()
+		if len(keys) < 2 {
+			return nil
+		}
+		meta := &enginepb.MVCCMetadata{}
+		if err := protoutil.Unmarshal(vals[0], meta); err != nil {
+			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
+			return err
+		}
+		startIdx := 1
+		if meta.Txn != nil {
+			if hlc.Timestamp(meta.Timestamp).Less(intentExp) {
+				txnID := meta.Txn.ID
+				if _, ok := txnMap[txnID]; !ok {
+					txnMap[txnID] = &roachpb.Transaction{
+						TxnMeta: *meta.Txn,
+					}
+					// IntentTxns and PushTxn will be equal here, since
+					// pushes to transactions whose record lies in this
+					// range (but which are not associated to a remaining
+					// intent on it) happen asynchronously and are accounted
+					// for separately. Thus higher up in the stack, we
+					// expect PushTxn > IntentTxns.
+					infoMu.IntentTxns++
+					// All transactions in txnMap may be PENDING and
+					// cleanupIntentsFn will push them to finalize them.
+					infoMu.PushTxn++
+				}
+				infoMu.IntentsConsidered++
+				intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
+			}
+			startIdx = 2
+		}
+		if _, gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); gcTS != (hlc.Timestamp{}) {
+			from := engine.MVCCKey{Key: keys[0].Key, Timestamp: gcTS}
+			to := engine.MVCCKey{Key: from.Key.PrefixEnd()}
+			var ms enginepb.MVCCStats
+			if err := engine.MVCCGCStats(ctx, snap, &ms, from, now, func(key engine.MVCCKey, val []byte) error {
+				// the key and value is unsafe
+				infoMu.GCInfo.AffectedVersionsKeyBytes += int64(key.EncodedSize())
+				infoMu.GCInfo.AffectedVersionsValBytes += int64(len(val))
+				return nil
+			}); err != nil {
+				log.Errorf(ctx, "compute GC stats failed, err %v", err)
+				return err
+			}
+			err := gcer.FastGC(ctx, from, ms)
+			if err != nil {
+				log.Errorf(ctx, "fast GC failed, %s err %v", from, err)
+				return err
+			}
+			iter.ResetAllocator()
+			infoMu.NumKeysAffected++
+			// seek to the next key
+			iter.Seek(to)
+		}
+		return nil
+	}
+
 	// Iterate through the keys and values of this replica's range.
 	log.Event(ctx, "iterating through range")
+	Loop:
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return GCInfo{}, err
@@ -817,16 +914,18 @@ func RunGC(
 			break
 		} else if ctx.Err() != nil {
 			// Stop iterating if our context has expired.
-			return GCInfo{}, err
+			return GCInfo{}, ctx.Err()
 		}
 		iterKey := iter.Key()
+		iterValue := iter.Value()
 		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {
 			// Moving to the next key (& values).
 			processKeysAndValues()
 			expBaseKey = iterKey.Key
+			gcBytes = 0
 			if !iterKey.IsValue() {
-				keys = []engine.MVCCKey{iter.Key()}
-				vals = [][]byte{iter.Value()}
+				keys = []engine.MVCCKey{iterKey}
+				vals = [][]byte{iterValue}
 				continue
 			}
 			// An implicit metadata.
@@ -836,8 +935,33 @@ func RunGC(
 			// determine that there is no intent.
 			vals = [][]byte{nil}
 		}
-		keys = append(keys, iter.Key())
-		vals = append(vals, iter.Value())
+		if len(keys) < 2 {
+			keys = append(keys, iterKey)
+			vals = append(vals, iterValue)
+		} else if !gc.Threshold.Less(iterKey.Timestamp) && gcBytes < fastGCBytesThreshold {
+			keys = append(keys, iterKey)
+			vals = append(vals, iterValue)
+			gcBytes += int64(iterKey.EncodedSize() + len(iterValue))
+		}
+		// check whether use fast GC
+		if gcBytes >= fastGCBytesThreshold {
+			// GC keys in batch
+			if len(batchGCKeys) > 0 {
+				if err := gcer.GC(ctx, batchGCKeys); err != nil {
+					return GCInfo{}, err
+				}
+			}
+			//
+			if err := processFastGC(ctx); err != nil {
+				return GCInfo{}, err
+			}
+			// we need reset keys and values
+			keys = keys[:0]
+			vals = vals[:0]
+			gcBytes = 0
+			// skip iter.Next() to avoid lose next key
+			goto Loop
+		}
 	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
@@ -895,4 +1019,86 @@ func (*gcQueue) timer(_ time.Duration) time.Duration {
 // purgatoryChan returns nil.
 func (*gcQueue) purgatoryChan() <-chan time.Time {
 	return nil
+}
+
+// only for Fast GC
+type hijackContext struct {
+	lock         sync.RWMutex
+	parent       context.Context
+	ctx          context.Context
+	cancel       context.CancelFunc
+	done         chan struct{}
+	err          error
+}
+
+func newHijackContext(parent, child context.Context, cancel context.CancelFunc) (context.Context, context.CancelFunc) {
+	// default cancel for hijack context
+	if cancel == nil {
+		child, cancel = context.WithCancel(child)
+	}
+	c := &hijackContext{parent: parent, ctx: child, cancel:cancel, done: make(chan struct{})}
+	cancelWithError := func(err error) {
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		if c.err != nil {
+			return
+		}
+		c.err = err
+		if c.cancel != nil {
+			c.cancel()
+		}
+		close(c.done)
+	}
+
+	cancelFunc := func() {
+		cancelWithError(context.Canceled)
+		<-c.done
+	}
+
+	go func(parent, ctx context.Context, cancel func(err error)) {
+		select {
+		case <-parent.Done():
+			// ignore timeout
+			if parent.Err() == context.DeadlineExceeded {
+				// do nothing
+			} else {
+				cancel(parent.Err())
+			}
+		case <-ctx.Done():
+			return
+		}
+	}(c.parent, c.ctx, cancelWithError)
+	return c, cancelFunc
+}
+
+func newHijackContextWithCancel(ctx context.Context) (context.Context, context.CancelFunc) {
+	c, cancel := context.WithCancel(context.Background())
+	return newHijackContext(ctx, c, cancel)
+}
+
+func newHijackContextWithTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc ){
+	c, cancel := context.WithTimeout(context.Background(), timeout)
+	return newHijackContext(ctx, c, cancel)
+}
+
+func (hijack *hijackContext) Deadline() (deadline time.Time, ok bool) {
+	deadline, ok =  hijack.ctx.Deadline()
+	if !ok {
+		return hijack.parent.Deadline()
+	}
+	return
+}
+
+func (hijack *hijackContext) Done() <-chan struct{} {
+	return hijack.done
+}
+
+func (hijack *hijackContext) Err() error {
+	hijack.lock.RLock()
+	defer hijack.lock.RUnlock()
+	return hijack.err
+}
+
+func (hijack *hijackContext) Value(key interface{}) interface{} {
+	return hijack.parent.Value(key)
 }

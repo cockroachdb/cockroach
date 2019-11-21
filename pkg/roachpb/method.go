@@ -158,4 +158,6 @@ const (
 	Subsume
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
+	// FastGC will clear expired versions of key with range delete
+	FastGC
 )

@@ -535,6 +535,9 @@ func (*HeartbeatTxnRequest) Method() Method { return HeartbeatTxn }
 func (*GCRequest) Method() Method { return GC }
 
 // Method implements the Request interface.
+func (*FastGCRequest) Method() Method { return FastGC }
+
+// Method implements the Request interface.
 func (*PushTxnRequest) Method() Method { return PushTxn }
 
 // Method implements the Request interface.
@@ -728,6 +731,12 @@ func (htr *HeartbeatTxnRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (gcr *GCRequest) ShallowCopy() Request {
+	shallowCopy := *gcr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (gcr *FastGCRequest) ShallowCopy() Request {
 	shallowCopy := *gcr
 	return &shallowCopy
 }
@@ -1080,6 +1089,7 @@ func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() int  { return isAdmin | isAlone }
 func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
 func (*GCRequest) flags() int                  { return isWrite | isRange }
+func (*FastGCRequest) flags() int              { return isWrite }
 
 // PushTxnRequest updates the read timestamp cache when pushing a transaction's
 // timestamp and updates the write timestamp cache when aborting a transaction.
