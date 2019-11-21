@@ -403,23 +403,8 @@ func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 		return err
 	}
 	if orig != check {
-		// Ignore the fingerprint mismatch if there was an in-progress schema change job
-		// on the table.
-		// TODO(aayush): We currently need to have this hack here since we emit changefeed
-		// level backfill row updates at the wrong time in the `DROP COLUMN` case. See
-		// issue #41961 for more details.
-		var pendingJobs int
-		var countJobsStmt bytes.Buffer
-		fmt.Fprintf(&countJobsStmt, `SELECT count(*) from [show jobs] AS OF SYSTEM TIME '%s'`+
-			`where job_type = 'SCHEMA CHANGE' and status = 'running' or status = 'pending'`,
-			ts.AsOfSystemTime())
-		if err := v.sqlDB.QueryRow(countJobsStmt.String()).Scan(&pendingJobs); err != nil {
-			return err
-		}
-		if pendingJobs == 0 {
-			v.failures = append(v.failures, fmt.Sprintf(
-				`fingerprints did not match at %s: %s vs %s`, ts.AsOfSystemTime(), orig, check))
-		}
+		v.failures = append(v.failures, fmt.Sprintf(
+			`fingerprints did not match at %s: %s vs %s`, ts.AsOfSystemTime(), orig, check))
 	}
 	return nil
 }
