@@ -831,7 +831,8 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						execgen.SET(outCol, outStartIdx, v)
 						// {{ end }}
 					} else {
-						out.Copy(
+						o.allocator.Copy(
+							out,
 							coldata.CopySliceArgs{
 								SliceArgs: coldata.SliceArgs{
 									ColType:     colType,

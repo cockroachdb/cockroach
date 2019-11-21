@@ -205,7 +205,8 @@ func (t *topKSorter) emit() coldata.Batch {
 	}
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
-		vec.Copy(
+		t.allocator.Copy(
+			vec,
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
 					ColType:   t.inputTypes[i],
