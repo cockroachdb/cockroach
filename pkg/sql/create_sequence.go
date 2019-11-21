@@ -95,13 +95,19 @@ func doCreateSequence(
 		telemetry.Inc(sqltelemetry.CreateTempSequenceCounter)
 	}
 
+	// creationTime is initialized to a zero value and populated at read time.
+	// See the comment in desc.MaybeIncrementVersion.
+	//
+	// TODO(ajwerner): remove the timestamp from MakeSequenceTableDesc, it's
+	// currently relied on in import and restore code and tests.
+	var creationTime hlc.Timestamp
 	desc, err := MakeSequenceTableDesc(
 		name.Table(),
 		opts,
 		dbDesc.GetID(),
 		schemaID,
 		id,
-		params.creationTimeForNewTableDescriptor(),
+		creationTime,
 		privs,
 		isTemporary,
 		&params,
