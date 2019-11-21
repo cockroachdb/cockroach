@@ -2304,6 +2304,7 @@ special_function ::=
 	'CURRENT_DATE' '(' ')'
 	| 'CURRENT_SCHEMA' '(' ')'
 	| 'CURRENT_TIMESTAMP' '(' ')'
+	| 'CURRENT_TIMESTAMP' '(' a_expr ')'
 	| 'CURRENT_USER' '(' ')'
 	| 'EXTRACT' '(' extract_list ')'
 	| 'EXTRACT_DURATION' '(' extract_list ')'

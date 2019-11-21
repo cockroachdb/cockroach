@@ -183,6 +183,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`clock_timestamp()`, `clock_timestamp()`},
 		{`now()`, `now()`},
 		{`current_timestamp()`, `current_timestamp()`},
+		{`current_timestamp(5)`, `current_timestamp(5)`},
 		{`transaction_timestamp()`, `transaction_timestamp()`},
 		{`statement_timestamp()`, `statement_timestamp()`},
 		{`cluster_logical_timestamp()`, `cluster_logical_timestamp()`},
