@@ -239,7 +239,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException `+
 				// And one more ssh failure we've seen, apparently encountered when
 				// downloading logs.
-				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure"`,
+				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure "`+
+				// And sometimes the analysis succeeds and yet we still get an error code for some reason.
+				`-e "Everything looks good"`,
 		); err == nil {
 			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
 				"Ignoring it and considering the test successful. " +
@@ -255,6 +257,8 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			t.l.Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
 		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
+		} else {
+			t.l.Printf("downloaded jepsen logs in failure-logs.tbz")
 		}
 		if ignoreErr {
 			t.Skip("recognized known error", testErr.Error())
