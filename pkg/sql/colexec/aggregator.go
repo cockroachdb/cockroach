@@ -312,7 +312,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			// We still have overflow output values.
 			a.scratch.SetLength(uint16(a.scratch.outputSize))
 			for i := 0; i < len(a.outputTypes); i++ {
-				a.unsafeBatch.ColVec(i).Copy(
+				a.allocator.Copy(
+					a.unsafeBatch.ColVec(i),
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
 							Src:         a.scratch.ColVec(i),
@@ -365,7 +366,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	if a.scratch.resumeIdx > a.scratch.outputSize {
 		a.scratch.SetLength(uint16(a.scratch.outputSize))
 		for i := 0; i < len(a.outputTypes); i++ {
-			a.unsafeBatch.ColVec(i).Copy(
+			a.allocator.Copy(
+				a.unsafeBatch.ColVec(i),
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
 						Src:         a.scratch.ColVec(i),

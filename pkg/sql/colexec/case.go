@@ -148,16 +148,18 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 		// Copy the results into the output vector, using the toSubtract selection
 		// vector to copy only the elements that we actually wrote according to the
 		// current case arm.
-		outputCol.Copy(coldata.CopySliceArgs{
-			SliceArgs: coldata.SliceArgs{
-				ColType:     c.typ,
-				Src:         inputCol,
-				Sel:         toSubtract,
-				SrcStartIdx: 0,
-				SrcEndIdx:   uint64(len(toSubtract)),
-			},
-			SelOnDest: true,
-		})
+		c.allocator.Copy(
+			outputCol,
+			coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
+					ColType:     c.typ,
+					Src:         inputCol,
+					Sel:         toSubtract,
+					SrcStartIdx: 0,
+					SrcEndIdx:   uint64(len(toSubtract)),
+				},
+				SelOnDest: true,
+			})
 		if oldSel := c.buffer.batch.Batch.Selection(); oldSel != nil {
 			// We have an old selection vector, which represents the tuples that
 			// haven't yet been matched. Remove the ones that just matched from the
@@ -199,16 +201,18 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	// that's done, restore the original selection vector and return the batch.
 	batch := c.elseOp.Next(ctx)
 	inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1])
-	outputCol.Copy(coldata.CopySliceArgs{
-		SliceArgs: coldata.SliceArgs{
-			ColType:     c.typ,
-			Src:         inputCol,
-			Sel:         batch.Selection(),
-			SrcStartIdx: 0,
-			SrcEndIdx:   uint64(batch.Length()),
-		},
-		SelOnDest: true,
-	})
+	c.allocator.Copy(
+		outputCol,
+		coldata.CopySliceArgs{
+			SliceArgs: coldata.SliceArgs{
+				ColType:     c.typ,
+				Src:         inputCol,
+				Sel:         batch.Selection(),
+				SrcStartIdx: 0,
+				SrcEndIdx:   uint64(batch.Length()),
+			},
+			SelOnDest: true,
+		})
 	batch.SetLength(origLen)
 	batch.SetSelection(origHasSel)
 	if origHasSel {
