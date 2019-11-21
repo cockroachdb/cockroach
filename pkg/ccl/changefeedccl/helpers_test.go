@@ -52,11 +52,13 @@ func waitForSchemaChange(
 	})
 }
 
-func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
+func readNextMessages(t testing.TB, f cdctest.TestFeed, numMessages int, stripTs bool) []string {
 	t.Helper()
 
 	var actual []string
-	for len(actual) < len(expected) {
+	var value []byte
+	var message map[string]interface{}
+	for len(actual) < numMessages {
 		m, err := f.Next()
 		if log.V(1) {
 			log.Infof(context.TODO(), `%v %s: %s->%s`, err, m.Topic, m.Key, m.Value)
@@ -66,18 +68,43 @@ func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 		} else if m == nil {
 			t.Fatal(`expected message`)
 		} else if len(m.Key) > 0 || len(m.Value) > 0 {
-			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+			if stripTs {
+				if err := gojson.Unmarshal(m.Value, &message); err != nil {
+					t.Fatalf(`%s: %s`, m.Value, err)
+				}
+				delete(message, "updated")
+				value, err = cdctest.ReformatJSON(message)
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				value = m.Value
+			}
+			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, value))
 		}
 	}
+	return actual
+}
 
-	// The tests that use this aren't concerned with order, just that these are
-	// the next len(expected) messages.
+func assertPayloadsBase(t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool) {
+	t.Helper()
+	actual := readNextMessages(t, f, len(expected), stripTs)
 	sort.Strings(expected)
 	sort.Strings(actual)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
 	}
+}
+
+func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
+	t.Helper()
+	assertPayloadsBase(t, f, expected, false)
+}
+
+func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
+	t.Helper()
+	assertPayloadsBase(t, f, expected, true)
 }
 
 func avroToJSON(t testing.TB, reg *testSchemaRegistry, avroBytes []byte) []byte {

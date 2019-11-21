@@ -27,15 +27,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -570,23 +576,47 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
+		// Expected semantics:
+		//
+		// 1) DROP COLUMN
+		// If the table descriptor is at version 1 when the `ALTER TABLE` stmt is issued,
+		// we expect the changefeed level backfill to be triggered at the `ModificationTime` of
+		// version 2 of the said descriptor. This is because this is the descriptor
+		// version at which the dropped column stops being visible to SELECTs. Note that
+		// this means we will see row updates resulting from the schema-change level
+		// backfill _after_ the changefeed level backfill.
+		//
+		// 2) ADD COLUMN WITH DEFAULT & ADD COLUMN AS ... STORED
+		// If the table descriptor is at version 1 when the `ALTER TABLE` stmt is issued,
+		// we expect the changefeed level backfill to be triggered at the
+		// `ModificationTime` of version 4 of said descriptor. This is because this is the
+		// descriptor version which makes the schema-change level backfill for the
+		// newly-added column public. This means we wil see row updates resulting from the
+		// schema-change level backfill _before_ the changefeed level backfill.
+
 		t.Run(`add column with default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
 			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2)`)
-			addColumnDef := feed(t, f, `CREATE CHANGEFEED FOR add_column_def`)
+			addColumnDef := feed(t, f, `CREATE CHANGEFEED FOR add_column_def WITH updated`)
 			defer closeFeed(t, addColumnDef)
-			assertPayloads(t, addColumnDef, []string{
+			assertPayloadsStripTs(t, addColumnDef, []string{
 				`add_column_def: [1]->{"after": {"a": 1}}`,
 				`add_column_def: [2]->{"after": {"a": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
+			ts := fetchDescVersionModificationTime(t, db, f, `add_column_def`, 4)
+			// Schema change backfill
+			assertPayloadsStripTs(t, addColumnDef, []string{
+				`add_column_def: [1]->{"after": {"a": 1}}`,
+				`add_column_def: [2]->{"after": {"a": 2}}`,
+			})
+			// Changefeed level backfill
 			assertPayloads(t, addColumnDef, []string{
-				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `add_column_def: [1]->{"after": {"a": 1}}`,
-				// `add_column_def: [2]->{"after": {"a": 2}}`,
-				`add_column_def: [1]->{"after": {"a": 1, "b": "d"}}`,
-				`add_column_def: [2]->{"after": {"a": 2, "b": "d"}}`,
+				fmt.Sprintf(`add_column_def: [1]->{"after": {"a": 1, "b": "d"}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
+				fmt.Sprintf(`add_column_def: [2]->{"after": {"a": 2, "b": "d"}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
 			})
 		})
 
@@ -594,19 +624,23 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_col_comp (a INT PRIMARY KEY, b INT AS (a + 5) STORED)`)
 			sqlDB.Exec(t, `INSERT INTO add_col_comp VALUES (1)`)
 			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
-			addColComp := feed(t, f, `CREATE CHANGEFEED FOR add_col_comp`)
+			addColComp := feed(t, f, `CREATE CHANGEFEED FOR add_col_comp WITH updated`)
 			defer closeFeed(t, addColComp)
-			assertPayloads(t, addColComp, []string{
+			assertPayloadsStripTs(t, addColComp, []string{
 				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
 				`add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
+			assertPayloadsStripTs(t, addColComp, []string{
+				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
+				`add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
+			})
+			ts := fetchDescVersionModificationTime(t, db, f, `add_col_comp`, 4)
 			assertPayloads(t, addColComp, []string{
-				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
-				// `add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
-				`add_col_comp: [1]->{"after": {"a": 1, "b": 6, "c": 11}}`,
-				`add_col_comp: [2]->{"after": {"a": 2, "b": 7, "c": 12}}`,
+				fmt.Sprintf(`add_col_comp: [1]->{"after": {"a": 1, "b": 6, "c": 11}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
+				fmt.Sprintf(`add_col_comp: [2]->{"after": {"a": 2, "b": 7, "c": 12}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
 			})
 		})
 
@@ -614,22 +648,23 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2, '2')`)
-			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column`)
+			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column WITH updated`)
 			defer closeFeed(t, dropColumn)
-			assertPayloads(t, dropColumn, []string{
+			assertPayloadsStripTs(t, dropColumn, []string{
 				`drop_column: [1]->{"after": {"a": 1, "b": "1"}}`,
 				`drop_column: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
-			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
-			// Dropped columns are immediately invisible.
+			ts := fetchDescVersionModificationTime(t, db, f, `drop_column`, 2)
 			assertPayloads(t, dropColumn, []string{
+				fmt.Sprintf(`drop_column: [1]->{"after": {"a": 1}, "updated": "%s"}`, ts.AsOfSystemTime()),
+				fmt.Sprintf(`drop_column: [2]->{"after": {"a": 2}, "updated": "%s"}`, ts.AsOfSystemTime()),
+			})
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
+			assertPayloadsStripTs(t, dropColumn, []string{
+				`drop_column: [3]->{"after": {"a": 3}}`,
 				`drop_column: [1]->{"after": {"a": 1}}`,
 				`drop_column: [2]->{"after": {"a": 2}}`,
-				`drop_column: [3]->{"after": {"a": 3}}`,
-				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `drop_column: [1]->{"after": {"a": 1}}`,
-				// `drop_column: [2]->{"after": {"a": 2}}`,
 			})
 		})
 
@@ -649,9 +684,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = waitSinkHook
 
-			multipleAlters := feed(t, f, `CREATE CHANGEFEED FOR multiple_alters`)
+			multipleAlters := feed(t, f, `CREATE CHANGEFEED FOR multiple_alters WITH updated`)
 			defer closeFeed(t, multipleAlters)
-			assertPayloads(t, multipleAlters, []string{
+			assertPayloadsStripTs(t, multipleAlters, []string{
 				`multiple_alters: [1]->{"after": {"a": 1, "b": "1"}}`,
 				`multiple_alters: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
@@ -664,28 +699,39 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters ADD COLUMN d STRING DEFAULT 'dee'`)
 			wg.Done()
 
+			ts := fetchDescVersionModificationTime(t, db, f, `multiple_alters`, 2)
+			// Changefeed level backfill for DROP COLUMN b.
 			assertPayloads(t, multipleAlters, []string{
-				// Backfill no-ops for DROP. Dropped columns are immediately invisible.
+				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1}, "updated": "%s"}`, ts.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2}, "updated": "%s"}`, ts.AsOfSystemTime()),
+			})
+			assertPayloadsStripTs(t, multipleAlters, []string{
+				// Schema-change backfill for DROP COLUMN b.
 				`multiple_alters: [1]->{"after": {"a": 1}}`,
 				`multiple_alters: [2]->{"after": {"a": 2}}`,
-				// Scan output for DROP
-				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `multiple_alters: [1]->{"after": {"a": 1}}`,
-				// `multiple_alters: [2]->{"after": {"a": 2}}`,
-				// Backfill no-ops for column C
-				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `multiple_alters: [1]->{"after": {"a": 1}}`,
-				// `multiple_alters: [2]->{"after": {"a": 2}}`,
-				// Scan output for column C
+				// Schema-change backfill for ADD COLUMN c.
+				`multiple_alters: [1]->{"after": {"a": 1}}`,
+				`multiple_alters: [2]->{"after": {"a": 2}}`,
+			})
+			ts = fetchDescVersionModificationTime(t, db, f, `multiple_alters`, 7)
+			// Changefeed level backfill for ADD COLUMN c.
+			assertPayloads(t, multipleAlters, []string{
+				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
+			})
+			// Schema change level backfill for ADD COLUMN d.
+			assertPayloadsStripTs(t, multipleAlters, []string{
 				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
 				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
+			})
+			ts = fetchDescVersionModificationTime(t, db, f, `multiple_alters`, 10)
+			// Changefeed level backfill for ADD COLUMN d.
+			assertPayloads(t, multipleAlters, []string{
 				// Backfill no-ops for column D (C schema change is complete)
 				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// `multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
-				// `multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
 				// Scan output for column C
-				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}}`,
-				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}}`,
+				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
 			})
 		})
 	}
@@ -700,6 +746,74 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	if len(entries) > 0 {
 		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
 	}
+}
+
+// fetchDescVersionModificationTime fetches the `ModificationTime` of the specified
+// `version` of `tableName`'s table descriptor.
+func fetchDescVersionModificationTime(
+	t testing.TB, db *gosql.DB, f cdctest.TestFeedFactory, tableName string, version int,
+) hlc.Timestamp {
+	tblKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	header := roachpb.RequestHeader{
+		Key:    tblKey,
+		EndKey: tblKey.PrefixEnd(),
+	}
+	dropColTblID := sqlutils.QueryTableID(t, db, `d`, tableName)
+	req := &roachpb.ExportRequest{
+		RequestHeader: header,
+		MVCCFilter:    roachpb.MVCCFilter_All,
+		StartTime:     hlc.Timestamp{},
+		ReturnSST:     true,
+	}
+	clock := hlc.NewClock(hlc.UnixNano, time.Minute)
+	hh := roachpb.Header{Timestamp: clock.Now()}
+	res, pErr := client.SendWrappedWith(context.Background(),
+		f.Server().DB().NonTransactionalSender(), hh, req)
+	if pErr != nil {
+		t.Fatal(pErr.GoError())
+	}
+	for _, file := range res.(*roachpb.ExportResponse).Files {
+		it, err := engine.NewMemSSTIterator(file.SST, false /* verify */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer it.Close()
+		for it.SeekGE(engine.NilKey); ; it.Next() {
+			if ok, err := it.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				continue
+			}
+			k := it.UnsafeKey()
+			remaining, _, _, err := sqlbase.DecodeTableIDIndexID(k.Key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, tableID, err := encoding.DecodeUvarintAscending(remaining)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tableID != uint64(dropColTblID) {
+				continue
+			}
+			unsafeValue := it.UnsafeValue()
+			if unsafeValue == nil {
+				t.Fatal(errors.New(`value was dropped or truncated`))
+			}
+			value := roachpb.Value{RawBytes: unsafeValue}
+			var desc sqlbase.Descriptor
+			if err := value.GetProto(&desc); err != nil {
+				t.Fatal(err)
+			}
+			if tableDesc := desc.Table(k.Timestamp); tableDesc != nil {
+				if int(tableDesc.Version) == version {
+					return tableDesc.ModificationTime
+				}
+			}
+		}
+	}
+	t.Fatal(errors.New(`couldn't find table desc for given version`))
+	return hlc.Timestamp{}
 }
 
 // Regression test for #34314

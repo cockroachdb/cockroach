@@ -609,7 +609,7 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 		if desc.ModificationTime.Less(lastVersion.ModificationTime) {
 			return nil
 		}
-		if lastVersion.HasColumnBackfillMutation() && !desc.HasColumnBackfillMutation() {
+		if shouldAddScanBoundary(lastVersion, desc) {
 			boundaryTime := desc.GetModificationTime()
 			// Only mutations that happened after the changefeed started are
 			// interesting here.
@@ -642,6 +642,33 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 	}
 	p.mu.previousTableVersion[desc.ID] = desc
 	return nil
+}
+
+func shouldAddScanBoundary(
+	lastVersion *sqlbase.TableDescriptor, desc *sqlbase.TableDescriptor,
+) (res bool) {
+	return newColumnBackfillComplete(lastVersion, desc) ||
+		hasNewColumnDropBackfillMutation(lastVersion, desc)
+}
+
+func hasNewColumnDropBackfillMutation(oldDesc, newDesc *sqlbase.TableDescriptor) (res bool) {
+	dropMutationExists := func(desc *sqlbase.TableDescriptor) bool {
+		for _, m := range desc.Mutations {
+			if m.Direction == sqlbase.DescriptorMutation_DROP &&
+				m.State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				return true
+			}
+		}
+		return false
+	}
+	// Make sure that the old descriptor *doesn't* have the same mutation to avoid adding
+	// the same scan boundary more than once.
+	return !dropMutationExists(oldDesc) && dropMutationExists(newDesc)
+}
+
+func newColumnBackfillComplete(oldDesc, newDesc *sqlbase.TableDescriptor) (res bool) {
+	return len(oldDesc.Columns) < len(newDesc.Columns) &&
+		oldDesc.HasColumnBackfillMutation() && !newDesc.HasColumnBackfillMutation()
 }
 
 func fetchSpansForTargets(

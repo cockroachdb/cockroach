@@ -337,6 +337,17 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	}, nil
 }
 
+func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *TeeEngine {
+	// Note that we use the same unmodified directories for both pebble and
+	// rocksdb. This is to make sure the file paths match up, and that we're
+	// able to write to both and ingest from both memory filesystems.
+	pebbleInMem := newPebbleInMem(ctx, attrs, cacheSize)
+	rocksDBInMem := newRocksDBInMem(attrs, cacheSize)
+	tee := NewTee(ctx, rocksDBInMem, pebbleInMem)
+	tee.inMem = true
+	return tee
+}
+
 func newPebbleInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *Pebble {
 	opts := DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(cacheSize)

@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -436,10 +437,10 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	var cache engine.RocksDBCache
 	var pebbleCache *pebble.Cache
-	if cfg.StorageEngine == enginepb.EngineTypePebble {
+	if cfg.StorageEngine == enginepb.EngineTypePebble || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		details = append(details, fmt.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 		pebbleCache = pebble.NewCache(cfg.CacheSize)
-	} else {
+	} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB || cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
 		details = append(details, fmt.Sprintf("RocksDB cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 		cache = engine.NewRocksDBCache(cfg.CacheSize)
 		defer cache.Release()
@@ -524,7 +525,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				pebbleConfig.Opts.Cache = pebbleCache
 				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 				eng, err = engine.NewPebble(ctx, pebbleConfig)
-			} else {
+			} else if cfg.StorageEngine == enginepb.EngineTypeRocksDB {
 				rocksDBConfig := engine.RocksDBConfig{
 					StorageConfig:           storageConfig,
 					MaxOpenFiles:            openFileLimitPerStore,
@@ -533,6 +534,34 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 
 				eng, err = engine.NewRocksDB(rocksDBConfig, cache)
+			} else {
+				// cfg.StorageEngine == enginepb.EngineTypeTeePebbleRocksDB
+				pebbleConfig := engine.PebbleConfig{
+					StorageConfig: storageConfig,
+					Opts:          engine.DefaultPebbleOptions(),
+				}
+				pebbleConfig.Dir = filepath.Join(pebbleConfig.Dir, "pebble")
+				pebbleConfig.Opts.Cache = pebbleCache
+				pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+				pebbleEng, err := engine.NewPebble(ctx, pebbleConfig)
+				if err != nil {
+					return nil, err
+				}
+
+				rocksDBConfig := engine.RocksDBConfig{
+					StorageConfig:           storageConfig,
+					MaxOpenFiles:            openFileLimitPerStore,
+					WarnLargeBatchThreshold: 500 * time.Millisecond,
+					RocksDBOptions:          spec.RocksDBOptions,
+				}
+				rocksDBConfig.Dir = filepath.Join(rocksDBConfig.Dir, "rocksdb")
+
+				rocksdbEng, err := engine.NewRocksDB(rocksDBConfig, cache)
+				if err != nil {
+					return nil, err
+				}
+
+				eng = engine.NewTee(ctx, rocksdbEng, pebbleEng)
 			}
 			if err != nil {
 				return Engines{}, err
