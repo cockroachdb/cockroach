@@ -57,8 +57,8 @@ func _ROWS_TO_COL_VEC(
 	for i := range rows {
 		row := rows[i]
 		if row[columnIdx].Datum == nil {
-			if err := row[columnIdx].EnsureDecoded(columnType, alloc); err != nil {
-				return err
+			if err = row[columnIdx].EnsureDecoded(columnType, alloc); err != nil {
+				break
 			}
 		}
 		datum := row[columnIdx].Datum
@@ -67,7 +67,7 @@ func _ROWS_TO_COL_VEC(
 		} else {
 			v, err := datumToPhysicalFn(datum)
 			if err != nil {
-				return err
+				break
 			}
 
 			castV := v.(_GOTYPE)
@@ -87,12 +87,14 @@ var _ interface{} = execgen.UNSAFEGET
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.
 func EncDatumRowsToColVec(
+	allocator *Allocator,
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
 	columnType *types.T,
 	alloc *sqlbase.DatumAlloc,
 ) error {
+	var err error
 	switch columnType.Family() {
 	// {{range .}}
 	case _FAMILY:
@@ -100,13 +102,25 @@ func EncDatumRowsToColVec(
 		switch columnType.Width() {
 		// {{range .Widths}}
 		case _WIDTH:
-			_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
+			allocator.performOperation(
+				[]coldata.Vec{vec},
+				func() {
+					_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
+				},
+			)
+			return err
 		// {{end}}
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
 		}
 		// {{ else }}
-		_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
+		allocator.performOperation(
+			[]coldata.Vec{vec},
+			func() {
+				_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
+			},
+		)
+		return err
 		// {{end}}
 	// {{end}}
 	default:

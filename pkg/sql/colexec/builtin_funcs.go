@@ -56,45 +56,51 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	for i := uint16(0); i < n; i++ {
-		rowIdx := i
-		if sel != nil {
-			rowIdx = sel[i]
-		}
+	output := batch.ColVec(b.outputIdx)
+	b.allocator.performOperation(
+		[]coldata.Vec{output},
+		func() {
+			for i := uint16(0); i < n; i++ {
+				rowIdx := i
+				if sel != nil {
+					rowIdx = sel[i]
+				}
 
-		hasNulls := false
+				hasNulls := false
 
-		for j := range b.argumentCols {
-			col := batch.ColVec(b.argumentCols[j])
-			b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, b.da, &b.columnTypes[b.argumentCols[j]])
-			hasNulls = hasNulls || b.row[j] == tree.DNull
-		}
+				for j := range b.argumentCols {
+					col := batch.ColVec(b.argumentCols[j])
+					b.row[j] = PhysicalTypeColElemToDatum(col, rowIdx, b.da, &b.columnTypes[b.argumentCols[j]])
+					hasNulls = hasNulls || b.row[j] == tree.DNull
+				}
 
-		var (
-			res tree.Datum
-			err error
-		)
-		// Some functions cannot handle null arguments.
-		if hasNulls && !b.funcExpr.CanHandleNulls() {
-			res = tree.DNull
-		} else {
-			res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
-			if err != nil {
-				execerror.NonVectorizedPanic(err)
+				var (
+					res tree.Datum
+					err error
+				)
+				// Some functions cannot handle null arguments.
+				if hasNulls && !b.funcExpr.CanHandleNulls() {
+					res = tree.DNull
+				} else {
+					res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
+					if err != nil {
+						execerror.NonVectorizedPanic(err)
+					}
+				}
+
+				// Convert the datum into a physical type and write it out.
+				if res == tree.DNull {
+					batch.ColVec(b.outputIdx).Nulls().SetNull(rowIdx)
+				} else {
+					converted, err := b.converter(res)
+					if err != nil {
+						execerror.VectorizedInternalPanic(err)
+					}
+					coldata.SetValueAt(output, converted, rowIdx, b.outputPhysType)
+				}
 			}
-		}
-
-		// Convert the datum into a physical type and write it out.
-		if res == tree.DNull {
-			batch.ColVec(b.outputIdx).Nulls().SetNull(rowIdx)
-		} else {
-			converted, err := b.converter(res)
-			if err != nil {
-				execerror.VectorizedInternalPanic(err)
-			}
-			coldata.SetValueAt(batch.ColVec(b.outputIdx), converted, rowIdx, b.outputPhysType)
-		}
-	}
+		},
+	)
 	return batch
 }
 
@@ -126,53 +132,58 @@ func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()
 	startVec := batch.ColVec(s.argumentCols[1]).Int64()
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
-	outputVec := batch.ColVec(s.outputIdx).Bytes()
-	for i := uint16(0); i < n; i++ {
-		rowIdx := i
-		if sel != nil {
-			rowIdx = sel[i]
-		}
+	outputVec := batch.ColVec(s.outputIdx)
+	outputCol := outputVec.Bytes()
+	s.allocator.performOperation(
+		[]coldata.Vec{outputVec},
+		func() {
+			for i := uint16(0); i < n; i++ {
+				rowIdx := i
+				if sel != nil {
+					rowIdx = sel[i]
+				}
 
-		// The substring operator does not support nulls. If any of the arguments
-		// are NULL, we output NULL.
-		isNull := false
-		for _, col := range s.argumentCols {
-			if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-				isNull = true
-				break
+				// The substring operator does not support nulls. If any of the arguments
+				// are NULL, we output NULL.
+				isNull := false
+				for _, col := range s.argumentCols {
+					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
+						isNull = true
+						break
+					}
+				}
+				if isNull {
+					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
+					continue
+				}
+
+				runes := runeVec.Get(int(rowIdx))
+				// Substring start is 1 indexed.
+				start := int(startVec[rowIdx]) - 1
+				length := int(lengthVec[rowIdx])
+				if length < 0 {
+					execerror.VectorizedInternalPanic(fmt.Sprintf("negative substring length %d not allowed", length))
+				}
+
+				end := start + length
+				// Check for integer overflow.
+				if end < start {
+					end = len(runes)
+				} else if end < 0 {
+					end = 0
+				} else if end > len(runes) {
+					end = len(runes)
+				}
+
+				if start < 0 {
+					start = 0
+				} else if start > len(runes) {
+					start = len(runes)
+				}
+				outputCol.Set(int(rowIdx), runes[start:end])
 			}
-		}
-		if isNull {
-			batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-			continue
-		}
-
-		runes := runeVec.Get(int(rowIdx))
-		// Substring start is 1 indexed.
-		start := int(startVec[rowIdx]) - 1
-		length := int(lengthVec[rowIdx])
-		if length < 0 {
-			execerror.VectorizedInternalPanic(fmt.Sprintf("negative substring length %d not allowed", length))
-		}
-
-		end := start + length
-		// Check for integer overflow.
-		if end < start {
-			end = len(runes)
-		} else if end < 0 {
-			end = 0
-		} else if end > len(runes) {
-			end = len(runes)
-		}
-
-		if start < 0 {
-			start = 0
-		} else if start > len(runes) {
-			start = len(runes)
-		}
-		outputVec.Set(int(rowIdx), runes[start:end])
-	}
-
+		},
+	)
 	return batch
 }
 

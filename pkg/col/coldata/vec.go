@@ -130,6 +130,12 @@ type Vec interface {
 	// SetLength sets the length of the slice that is underlying this Vec. Note
 	// that the length of the batch which this Vec belongs to "takes priority".
 	SetLength(int)
+
+	// Capacity returns the capacity of the Golang's slice that is underlying
+	// this Vec. Note that if there is no "slice" (like in case of flat bytes),
+	// the "capacity" of such object is undefined, so is the behavior of this
+	// method.
+	Capacity() int
 }
 
 var _ Vec = &memColumn{}
@@ -269,6 +275,29 @@ func (m *memColumn) SetLength(l int) {
 		m.col = m.col.([]apd.Decimal)[:l]
 	case coltypes.Timestamp:
 		m.col = m.col.([]time.Time)[:l]
+	default:
+		panic(fmt.Sprintf("unhandled type %s", m.t))
+	}
+}
+
+func (m *memColumn) Capacity() int {
+	switch m.t {
+	case coltypes.Bool:
+		return cap(m.col.([]bool))
+	case coltypes.Bytes:
+		panic("Capacity should not be called on Vec of Bytes type")
+	case coltypes.Int16:
+		return cap(m.col.([]int16))
+	case coltypes.Int32:
+		return cap(m.col.([]int32))
+	case coltypes.Int64:
+		return cap(m.col.([]int64))
+	case coltypes.Float64:
+		return cap(m.col.([]float64))
+	case coltypes.Decimal:
+		return cap(m.col.([]apd.Decimal))
+	case coltypes.Timestamp:
+		return cap(m.col.([]time.Time))
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}

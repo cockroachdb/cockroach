@@ -40,7 +40,7 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 	ct := types.Bool
 
 	// Test converting column 0.
-	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
+	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 		t.Fatal(err)
 	}
 	expected := testAllocator.NewMemColumn(coltypes.Bool, 2)
@@ -51,7 +51,7 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 	}
 
 	// Test converting column 1.
-	if err := EncDatumRowsToColVec(rows, vec, 1 /* columnIdx */, ct, &alloc); err != nil {
+	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 1 /* columnIdx */, ct, &alloc); err != nil {
 		t.Fatal(err)
 	}
 	expected.Bool()[0] = true
@@ -68,7 +68,7 @@ func TestEncDatumRowsToColVecInt16(t *testing.T) {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(42)}},
 	}
 	vec := testAllocator.NewMemColumn(coltypes.Int16, 2)
-	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, types.Int2, &alloc); err != nil {
+	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, types.Int2, &alloc); err != nil {
 		t.Fatal(err)
 	}
 	expected := testAllocator.NewMemColumn(coltypes.Int16, 2)
@@ -89,7 +89,7 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 	for _, width := range []int32{0, 25} {
 		ct := types.MakeString(width)
 		vec.Bytes().Reset()
-		if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
+		if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 			t.Fatal(err)
 		}
 		expected := testAllocator.NewMemColumn(coltypes.Bytes, 2)
@@ -117,7 +117,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 	}
 	vec := testAllocator.NewMemColumn(coltypes.Decimal, 3)
 	ct := types.Decimal
-	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
+	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(vec, expected) {
