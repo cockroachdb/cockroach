@@ -4930,7 +4930,7 @@ func asJSONBuildObjectKey(d tree.Datum) (string, error) {
 		return t.Contents, nil
 	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp, *tree.DTimestampTZ,
 		*tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid,
-		*tree.DTime, *tree.DBitArray:
+		*tree.DTime, *tree.DTimeTZ, *tree.DBitArray:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:
 		return "", errors.AssertionFailedf("unexpected type %T for key value", d)
