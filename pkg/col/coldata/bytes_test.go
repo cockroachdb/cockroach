@@ -28,7 +28,7 @@ type bytesMethod int
 
 const (
 	set bytesMethod = iota
-	slice
+	window
 	copySlice
 	appendSlice
 	appendVal
@@ -38,8 +38,8 @@ func (m bytesMethod) String() string {
 	switch m {
 	case set:
 		return "Set"
-	case slice:
-		return "Slice"
+	case window:
+		return "Window"
 	case copySlice:
 		return "CopySlice"
 	case appendSlice:
@@ -51,7 +51,7 @@ func (m bytesMethod) String() string {
 	}
 }
 
-var bytesMethods = []bytesMethod{set, slice, copySlice, appendSlice, appendVal}
+var bytesMethods = []bytesMethod{set, window, copySlice, appendSlice, appendVal}
 
 // applyMethodsAndVerify applies the given methods on b1 and a reference
 // [][]byte implementation and checks if the results are equal. If
@@ -92,24 +92,23 @@ func applyMethodsAndVerify(
 			debugString += fmt.Sprintf("(%d, %v)", i, new)
 			b1.Set(i, new)
 			b2[i] = new
-		case slice:
+		case window:
 			start := rng.Intn(n)
 			end := rng.Intn(n + 1)
 			if start > end {
 				end = start + 1
-			} else if start == end {
-				// If start == end, do a noop Slice, otherwise the rest of the methods
-				// won't do much (and rng.Intn will panic with an n of 0).
-				start = 0
-				end = n
 			}
 			debugString += fmt.Sprintf("(%d, %d)", start, end)
-			b1 = b1.Slice(start, end)
-			b2 = b2[start:end]
-			if selfReferencingSources {
-				b1Source = b1
-				b2Source = b2
+			b1Window := b1.Window(start, end)
+			b2Window := b2[start:end]
+			// b1Window is not allowed to be modified, so we check explicitly whether
+			// it equals the reference, and we do not update b1 and b2.
+			b1Window.AssertOffsetsAreNonDecreasing(uint64(b1Window.Len()))
+			debugString += fmt.Sprintf("\n%s\n", b1Window)
+			if err := verifyEqual(b1Window, b2Window); err != nil {
+				return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat:\n%sreference:\n%s", debugString, b1Window.String(), prettyByteSlice(b2Window)))
 			}
+			continue
 		case copySlice, appendSlice:
 			// Generate a length-inclusive destIdx.
 			destIdx := rng.Intn(n + 1)
@@ -339,9 +338,9 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, "source two", string(b1.Get(1)))
 		require.Equal(t, "source one", string(b1.Get(2)))
 
-		// Slice b1 to test slicing logic and follow it with testing a full
-		// overwrite of only one element.
-		b1 = b1.Slice(0, 1)
+		// Set the length to 1 and  follow it with testing a full overwrite of only
+		// one element.
+		b1.SetLength(1)
 		require.Equal(t, 1, b1.Len())
 		b1.CopySlice(b2, 0, 0, b2.Len())
 		require.Equal(t, 1, b1.Len())
@@ -353,34 +352,32 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, "source two", string(b1.Get(0)))
 	})
 
-	t.Run("Slice", func(t *testing.T) {
+	t.Run("Window", func(t *testing.T) {
 		b1 := NewBytes(0)
 		b1.AppendVal([]byte("one"))
 		b1.AppendVal([]byte("two"))
 		b1.AppendVal([]byte("three"))
 
-		s := b1.Slice(0, 3)
-		require.NotEqual(t, unsafe.Pointer(b1), unsafe.Pointer(s), "Bytes.Slice should create a new object")
-		b2 := b1.Slice(1, 2)
+		w := b1.Window(0, 3)
+		require.NotEqual(t, unsafe.Pointer(b1), unsafe.Pointer(w), "Bytes.Window should create a new object")
+		b2 := b1.Window(1, 2)
 		require.Equal(t, "one", string(b1.Get(0)))
 		require.Equal(t, "two", string(b1.Get(1)))
 		require.Equal(t, "two", string(b2.Get(0)))
 
-		b2.AppendVal([]byte("four"))
-		require.Equal(t, "four", string(b1.Get(2)), "appending to the slice of b1 should have updated b1")
-		require.Equal(t, "four", string(b2.Get(1)))
+		require.Panics(t, func() { b2.AppendVal([]byte("four")) }, "appending to the window into b1 should have panicked")
 	})
 
 	t.Run("InvariantSimple", func(t *testing.T) {
 		b1 := NewBytes(8)
 		b1.Set(0, []byte("zero"))
-		other := b1.Slice(0, 2)
+		other := b1.Window(0, 2)
 		other.AssertOffsetsAreNonDecreasing(2)
 
 		b2 := NewBytes(8)
 		b2.Set(0, []byte("zero"))
 		b2.Set(2, []byte("two"))
-		other = b2.Slice(0, 4)
+		other = b2.Window(0, 4)
 		other.AssertOffsetsAreNonDecreasing(4)
 	})
 }

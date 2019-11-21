@@ -110,7 +110,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 				}
 			} else {
 				col = execgen.SLICE(col, 0, int(n))
-				for execgen.RANGE(i, col) {
+				for execgen.RANGE(i, col, 0, int(n)) {
 					execgen.SET(col, i, c.constVal)
 				}
 			}

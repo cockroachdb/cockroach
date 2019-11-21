@@ -144,6 +144,7 @@ var (
 	_ = Bool.Len
 	_ = Bool.Range
 	_ = Bool.Zero
+	_ = Bool.Window
 )
 
 // GoTypeSliceName returns how a slice of the receiver type is represented.
@@ -188,7 +189,11 @@ func (t T) Set(target, i, new string) string {
 // Slice is a function that should only be used in templates.
 func (t T) Slice(target, start, end string) string {
 	if t == Bytes {
-		return fmt.Sprintf("%s.Slice(%s, %s)", target, start, end)
+		// Slice is a noop for Bytes. We also add a few lines to address "unused
+		// variable" compiler errors.
+		return fmt.Sprintf(`%s
+_ = %s
+_ = %s`, target, start, end)
 	}
 	return fmt.Sprintf("%s[%s:%s]", target, start, end)
 }
@@ -284,9 +289,9 @@ func (t T) Len(target string) string {
 }
 
 // Range is a function that should only be used in templates.
-func (t T) Range(loopVariableIdent string, target string) string {
+func (t T) Range(loopVariableIdent, target, start, end string) string {
 	if t == Bytes {
-		return fmt.Sprintf("%[1]s := 0; %[1]s < %[2]s.Len(); %[1]s++", loopVariableIdent, target)
+		return fmt.Sprintf("%[1]s := %[2]s; %[1]s < %[3]s; %[1]s++", loopVariableIdent, start, end)
 	}
 	return fmt.Sprintf("%[1]s := range %[2]s", loopVariableIdent, target)
 }
@@ -302,4 +307,12 @@ func (t T) Zero(target string) string {
 }`, target)
 	}
 	return fmt.Sprintf("for n := 0; n < len(%[1]s); n += copy(%[1]s[n:], zero%sColumn) {}", target, t.String())
+}
+
+// Window is a function that should only be used in templates.
+func (t T) Window(target, start, end string) string {
+	if t == Bytes {
+		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
+	}
+	return fmt.Sprintf("%s[%s:%s]", target, start, end)
 }
