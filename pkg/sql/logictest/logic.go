@@ -535,8 +535,10 @@ var (
 	defaultConfigNames = []string{
 		"local",
 		"local-vec-off",
+		"local-vec",
 		"fakedist",
 		"fakedist-vec-off",
+		"fakedist-vec",
 		"fakedist-metadata",
 		"fakedist-disk",
 	}
