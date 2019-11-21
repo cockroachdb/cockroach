@@ -147,7 +147,7 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 		}
 	}
 
-	foo, err := f.Feed(`CREATE CHANGEFEED FOR foo WITH updated, resolved`)
+	foo, err := f.Feed(`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff`)
 	if err != nil {
 		return nil, err
 	}
@@ -162,12 +162,17 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 	if _, err := db.Exec(createFprintStmtBuf.String()); err != nil {
 		return nil, err
 	}
+	baV, err := NewBeforeAfterValidator(db, `foo`)
+	if err != nil {
+		return nil, err
+	}
 	fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
 	if err != nil {
 		return nil, err
 	}
 	ns.v = MakeCountValidator(Validators{
 		NewOrderValidator(`foo`),
+		baV,
 		fprintV,
 	})
 
@@ -642,8 +647,7 @@ func noteFeedMessage(a fsm.Args) error {
 
 	ns.availableRows--
 	log.Infof(a.Ctx, "%s->%s", m.Key, m.Value)
-	ns.v.NoteRow(m.Partition, string(m.Key), string(m.Value), ts)
-	return nil
+	return ns.v.NoteRow(m.Partition, string(m.Key), string(m.Value), ts)
 }
 
 func pause(a fsm.Args) error {

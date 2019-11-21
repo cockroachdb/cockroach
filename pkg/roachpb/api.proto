@@ -1875,13 +1875,21 @@ message BatchResponse {
 message RangeFeedRequest {
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Span   span   = 2 [(gogoproto.nullable) = false];
+  // with_diff specifies whether RangeFeedValue updates should contain the
+  // previous value that was overwritten.
+  bool with_diff = 3;
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to
 // the specified key with the provided value.
 message RangeFeedValue {
-  bytes key   = 1 [(gogoproto.casttype) = "Key"];
-  Value value = 2 [(gogoproto.nullable) = false];
+  bytes key       = 1 [(gogoproto.casttype) = "Key"];
+  Value value     = 2 [(gogoproto.nullable) = false];
+  // prev_value is only populated if both:
+  // 1. with_diff was passed in the corresponding RangeFeedRequest.
+  // 2. the key-value was present and not a deletion tombstone before
+  //    this event.
+  Value prev_value = 3 [(gogoproto.nullable) = false];
 }
 
 // RangeFeedCheckpoint is a variant of RangeFeedEvent that represents the

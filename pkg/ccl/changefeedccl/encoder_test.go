@@ -52,7 +52,9 @@ func TestEncoders(t *testing.T) {
 		} {
 			opts = append(opts,
 				map[string]string{optFormat: f, optEnvelope: e},
+				map[string]string{optFormat: f, optEnvelope: e, optDiff: ``},
 				map[string]string{optFormat: f, optEnvelope: e, optUpdatedTimestamps: ``},
+				map[string]string{optFormat: f, optEnvelope: e, optUpdatedTimestamps: ``, optDiff: ``},
 			)
 		}
 	}
@@ -74,6 +76,12 @@ func TestEncoders(t *testing.T) {
 			delete:   `[1]->`,
 			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
 		},
+		`format=json,envelope=key_only,diff`: {
+			err: `diff is only usable with envelope=wrapped`,
+		},
+		`format=json,envelope=key_only,updated,diff`: {
+			err: `diff is only usable with envelope=wrapped`,
+		},
 		`format=json,envelope=row`: {
 			insert:   `[1]->{"a": 1, "b": "bar"}`,
 			delete:   `[1]->`,
@@ -83,6 +91,12 @@ func TestEncoders(t *testing.T) {
 			insert:   `[1]->{"__crdb__": {"updated": "1.0000000002"}, "a": 1, "b": "bar"}`,
 			delete:   `[1]->`,
 			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
+		},
+		`format=json,envelope=row,diff`: {
+			err: `diff is only usable with envelope=wrapped`,
+		},
+		`format=json,envelope=row,updated,diff`: {
+			err: `diff is only usable with envelope=wrapped`,
 		},
 		`format=json,envelope=wrapped`: {
 			insert:   `[1]->{"after": {"a": 1, "b": "bar"}}`,
@@ -94,20 +108,40 @@ func TestEncoders(t *testing.T) {
 			delete:   `[1]->{"after": null, "updated": "1.0000000002"}`,
 			resolved: `{"resolved":"1.0000000002"}`,
 		},
+		`format=json,envelope=wrapped,diff`: {
+			insert:   `[1]->{"after": {"a": 1, "b": "bar"}, "before": null}`,
+			delete:   `[1]->{"after": null, "before": {"a": 1, "b": "bar"}}`,
+			resolved: `{"resolved":"1.0000000002"}`,
+		},
+		`format=json,envelope=wrapped,updated,diff`: {
+			insert:   `[1]->{"after": {"a": 1, "b": "bar"}, "before": null, "updated": "1.0000000002"}`,
+			delete:   `[1]->{"after": null, "before": {"a": 1, "b": "bar"}, "updated": "1.0000000002"}`,
+			resolved: `{"resolved":"1.0000000002"}`,
+		},
 		`format=experimental_avro,envelope=key_only`: {
 			insert:   `{"a":{"long":1}}->`,
 			delete:   `{"a":{"long":1}}->`,
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
 		`format=experimental_avro,envelope=key_only,updated`: {
-			insert:   `{"a":{"long":1}}->`,
-			delete:   `{"a":{"long":1}}->`,
-			resolved: `{"resolved":{"string":"1.0000000002"}}`,
+			err: `updated is only usable with envelope=wrapped`,
+		},
+		`format=experimental_avro,envelope=key_only,diff`: {
+			err: `diff is only usable with envelope=wrapped`,
+		},
+		`format=experimental_avro,envelope=key_only,updated,diff`: {
+			err: `updated is only usable with envelope=wrapped`,
 		},
 		`format=experimental_avro,envelope=row`: {
 			err: `envelope=row is not supported with format=experimental_avro`,
 		},
 		`format=experimental_avro,envelope=row,updated`: {
+			err: `envelope=row is not supported with format=experimental_avro`,
+		},
+		`format=experimental_avro,envelope=row,diff`: {
+			err: `envelope=row is not supported with format=experimental_avro`,
+		},
+		`format=experimental_avro,envelope=row,updated,diff`: {
 			err: `envelope=row is not supported with format=experimental_avro`,
 		},
 		`format=experimental_avro,envelope=wrapped`: {
@@ -123,12 +157,35 @@ func TestEncoders(t *testing.T) {
 			delete:   `{"a":{"long":1}}->{"after":null,"updated":{"string":"1.0000000002"}}`,
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
+		`format=experimental_avro,envelope=wrapped,diff`: {
+			insert: `{"a":{"long":1}}->` +
+				`{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},` +
+				`"before":null}`,
+			delete: `{"a":{"long":1}}->` +
+				`{"after":null,` +
+				`"before":{"foo_before":{"a":{"long":1},"b":{"string":"bar"}}}}`,
+			resolved: `{"resolved":{"string":"1.0000000002"}}`,
+		},
+		`format=experimental_avro,envelope=wrapped,updated,diff`: {
+			insert: `{"a":{"long":1}}->` +
+				`{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},` +
+				`"before":null,` +
+				`"updated":{"string":"1.0000000002"}}`,
+			delete: `{"a":{"long":1}}->` +
+				`{"after":null,` +
+				`"before":{"foo_before":{"a":{"long":1},"b":{"string":"bar"}}},` +
+				`"updated":{"string":"1.0000000002"}}`,
+			resolved: `{"resolved":{"string":"1.0000000002"}}`,
+		},
 	}
 
 	for _, o := range opts {
 		name := fmt.Sprintf("format=%s,envelope=%s", o[optFormat], o[optEnvelope])
 		if _, ok := o[optUpdatedTimestamps]; ok {
 			name += `,updated`
+		}
+		if _, ok := o[optDiff]; ok {
+			name += `,diff`
 		}
 		t.Run(name, func(t *testing.T) {
 			expected := expecteds[name]
@@ -162,9 +219,11 @@ func TestEncoders(t *testing.T) {
 			require.NoError(t, err)
 
 			rowInsert := encodeRow{
-				datums:    row,
-				updated:   ts,
-				tableDesc: tableDesc,
+				datums:        row,
+				updated:       ts,
+				tableDesc:     tableDesc,
+				prevDatums:    nil,
+				prevTableDesc: tableDesc,
 			}
 			keyInsert, err := e.EncodeKey(context.TODO(), rowInsert)
 			require.NoError(t, err)
@@ -174,10 +233,12 @@ func TestEncoders(t *testing.T) {
 			require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
 
 			rowDelete := encodeRow{
-				datums:    row,
-				deleted:   true,
-				updated:   ts,
-				tableDesc: tableDesc,
+				datums:        row,
+				deleted:       true,
+				prevDatums:    row,
+				updated:       ts,
+				tableDesc:     tableDesc,
+				prevTableDesc: tableDesc,
 			}
 			keyDelete, err := e.EncodeKey(context.TODO(), rowDelete)
 			require.NoError(t, err)
@@ -284,12 +345,12 @@ func TestAvroEncoder(t *testing.T) {
 		).Scan(&ts1)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2, resolved`,
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
 			optFormatAvro, reg.server.URL)
 		defer closeFeed(t, foo)
 		assertPayloadsAvro(t, reg, foo, []string{
-			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}}}`,
-			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}}}`,
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},"before":null}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
 		})
 		resolved := expectResolvedTimestampAvro(t, reg, foo)
 		if ts := parseTimeToHLC(t, ts1); !ts.Less(resolved) {
@@ -297,7 +358,7 @@ func TestAvroEncoder(t *testing.T) {
 		}
 
 		fooUpdated := feed(t, f, `CREATE CHANGEFEED FOR foo `+
-			`WITH format=$1, confluent_schema_registry=$2, updated`,
+			`WITH format=$1, confluent_schema_registry=$2, diff, updated`,
 			optFormatAvro, reg.server.URL)
 		defer closeFeed(t, fooUpdated)
 		// Skip over the first two rows since we don't know the statement timestamp.
@@ -314,6 +375,7 @@ func TestAvroEncoder(t *testing.T) {
 		}))
 		assertPayloadsAvro(t, reg, fooUpdated, []string{
 			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"baz"}}},` +
+				`"before":null,` +
 				`"updated":{"string":"` + ts2 + `"}}`,
 		})
 	}

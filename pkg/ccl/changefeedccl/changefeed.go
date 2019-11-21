@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var changefeedPollInterval = func() *settings.DurationSetting {
@@ -61,15 +62,19 @@ func kvsToRows(
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (bufferEntry, error),
 ) func(context.Context) ([]emitEntry, error) {
+	_, withDiff := details.Opts[optDiff]
 	rfCache := newRowFetcherCache(leaseMgr)
 
 	var kvs row.SpanKVFetcher
 	appendEmitEntryForKV := func(
-		ctx context.Context, output []emitEntry, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
+		ctx context.Context,
+		output []emitEntry,
+		kv roachpb.KeyValue,
+		prevVal roachpb.Value,
+		schemaTimestamp hlc.Timestamp,
+		prevSchemaTimestamp hlc.Timestamp,
 		bufferGetTimestamp time.Time,
 	) ([]emitEntry, error) {
-		// Reuse kvs to save allocations.
-		kvs.KVs = kvs.KVs[:0]
 
 		desc, err := rfCache.TableDescForKey(ctx, kv.Key, schemaTimestamp)
 		if err != nil {
@@ -87,27 +92,91 @@ func kvsToRows(
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Handle tables with multiple column families.
-		kvs.KVs = append(kvs.KVs, kv)
-		if err := rf.StartScanFrom(ctx, &kvs); err != nil {
-			return nil, err
-		}
 
-		for {
-			var r emitEntry
-			r.bufferGetTimestamp = bufferGetTimestamp
+		// Get new value.
+		var r emitEntry
+		r.bufferGetTimestamp = bufferGetTimestamp
+		{
+			// TODO(dan): Handle tables with multiple column families.
+			// Reuse kvs to save allocations.
+			kvs.KVs = kvs.KVs[:0]
+			kvs.KVs = append(kvs.KVs, kv)
+			if err := rf.StartScanFrom(ctx, &kvs); err != nil {
+				return nil, err
+			}
+
 			r.row.datums, r.row.tableDesc, _, err = rf.NextRow(ctx)
 			if err != nil {
 				return nil, err
 			}
 			if r.row.datums == nil {
-				break
+				return nil, errors.AssertionFailedf("unexpected empty datums")
 			}
 			r.row.datums = append(sqlbase.EncDatumRow(nil), r.row.datums...)
 			r.row.deleted = rf.RowIsDeleted()
 			r.row.updated = schemaTimestamp
-			output = append(output, r)
+
+			// Assert that we don't get a second row from the row.Fetcher. We
+			// fed it a single KV, so that would be surprising.
+			var nextRow emitEntry
+			nextRow.row.datums, nextRow.row.tableDesc, _, err = rf.NextRow(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if nextRow.row.datums != nil {
+				return nil, errors.AssertionFailedf("unexpected non-empty datums")
+			}
 		}
+
+		// Get prev value, if necessary.
+		if withDiff {
+			prevRF := rf
+			if prevSchemaTimestamp != schemaTimestamp {
+				// If the previous value is being interpreted under a different
+				// version of the schema, fetch the correct table descriptor and
+				// create a new row.Fetcher with it.
+				prevDesc, err := rfCache.TableDescForKey(ctx, kv.Key, prevSchemaTimestamp)
+				if err != nil {
+					return nil, err
+				}
+
+				prevRF, err = rfCache.RowFetcherForTableDesc(prevDesc)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			prevKV := roachpb.KeyValue{Key: kv.Key, Value: prevVal}
+			// TODO(dan): Handle tables with multiple column families.
+			// Reuse kvs to save allocations.
+			kvs.KVs = kvs.KVs[:0]
+			kvs.KVs = append(kvs.KVs, prevKV)
+			if err := prevRF.StartScanFrom(ctx, &kvs); err != nil {
+				return nil, err
+			}
+			r.row.prevDatums, r.row.prevTableDesc, _, err = prevRF.NextRow(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if r.row.prevDatums == nil {
+				return nil, errors.AssertionFailedf("unexpected empty datums")
+			}
+			r.row.prevDatums = append(sqlbase.EncDatumRow(nil), r.row.prevDatums...)
+			r.row.prevDeleted = prevRF.RowIsDeleted()
+
+			// Assert that we don't get a second row from the row.Fetcher. We
+			// fed it a single KV, so that would be surprising.
+			var nextRow emitEntry
+			nextRow.row.prevDatums, nextRow.row.prevTableDesc, _, err = prevRF.NextRow(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if nextRow.row.prevDatums != nil {
+				return nil, errors.AssertionFailedf("unexpected non-empty datums")
+			}
+		}
+
+		output = append(output, r)
 		return output, nil
 	}
 
@@ -125,11 +194,15 @@ func kvsToRows(
 					log.Infof(ctx, "changed key %s %s", input.kv.Key, input.kv.Value.Timestamp)
 				}
 				schemaTimestamp := input.kv.Value.Timestamp
-				if input.schemaTimestamp != (hlc.Timestamp{}) {
-					schemaTimestamp = input.schemaTimestamp
+				prevSchemaTimestamp := schemaTimestamp
+				if input.backfillTimestamp != (hlc.Timestamp{}) {
+					schemaTimestamp = input.backfillTimestamp
+					prevSchemaTimestamp = schemaTimestamp.Prev()
 				}
 				output, err = appendEmitEntryForKV(
-					ctx, output, input.kv, schemaTimestamp, input.bufferGetTimestamp)
+					ctx, output, input.kv, input.prevVal,
+					schemaTimestamp, prevSchemaTimestamp,
+					input.bufferGetTimestamp)
 				if err != nil {
 					return nil, err
 				}

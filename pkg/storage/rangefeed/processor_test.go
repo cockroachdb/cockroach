@@ -110,11 +110,16 @@ func makeRangeFeedEvent(val interface{}) *roachpb.RangeFeedEvent {
 	return &event
 }
 
-func rangeFeedValue(key roachpb.Key, val roachpb.Value) *roachpb.RangeFeedEvent {
+func rangeFeedValueWithPrev(key roachpb.Key, val, prev roachpb.Value) *roachpb.RangeFeedEvent {
 	return makeRangeFeedEvent(&roachpb.RangeFeedValue{
-		Key:   key,
-		Value: val,
+		Key:       key,
+		Value:     val,
+		PrevValue: prev,
 	})
+}
+
+func rangeFeedValue(key roachpb.Key, val roachpb.Value) *roachpb.RangeFeedEvent {
+	return rangeFeedValueWithPrev(key, val, roachpb.Value{})
 }
 
 func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeedEvent {
@@ -186,7 +191,8 @@ func TestProcessorBasic(t *testing.T) {
 	r1OK := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil, /* catchUpIter */
+		nil,   /* catchUpIter */
+		false, /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
@@ -301,7 +307,8 @@ func TestProcessorBasic(t *testing.T) {
 	r2OK := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
-		nil, /* catchUpIter */
+		nil,   /* catchUpIter */
+		false, /* withDiff */
 		r2Stream,
 		r2ErrC,
 	)
@@ -371,7 +378,8 @@ func TestProcessorBasic(t *testing.T) {
 	r3OK := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
-		nil, /* catchUpIter */
+		nil,   /* catchUpIter */
+		false, /* withDiff */
 		r3Stream,
 		r3ErrC,
 	)
@@ -394,7 +402,7 @@ func TestNilProcessor(t *testing.T) {
 	// The following should panic because they are not safe
 	// to call on a nil Processor.
 	require.Panics(t, func() { p.Start(stop.NewStopper(), nil) })
-	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, nil, nil) })
+	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, false, nil, nil) })
 }
 
 func TestProcessorSlowConsumer(t *testing.T) {
@@ -411,7 +419,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil, /* catchUpIter */
+		nil,   /* catchUpIter */
+		false, /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
@@ -420,7 +429,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
-		nil, /* catchUpIter */
+		nil,   /* catchUpIter */
+		false, /* withDiff */
 		r2Stream,
 		r2ErrC,
 	)
@@ -539,7 +549,8 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil, /* catchUpIter */
+		nil,   /* catchUpIter */
+		false, /* withDiff */
 		r1Stream,
 		make(chan *roachpb.Error, 1),
 	)
@@ -783,7 +794,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 			runtime.Gosched()
 			s := newTestStream()
 			errC := make(chan<- *roachpb.Error, 1)
-			p.Register(p.Span, hlc.Timestamp{}, nil, s, errC)
+			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
 		}()
 		go func() {
 			defer wg.Done()
@@ -852,7 +863,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			s := newTestStream()
 			regs[s] = firstIdx
 			errC := make(chan *roachpb.Error, 1)
-			p.Register(p.Span, hlc.Timestamp{}, nil, s, errC)
+			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
 			regDone <- struct{}{}
 		}
 	}()

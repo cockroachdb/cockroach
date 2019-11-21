@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 )
 
 // The file contains a very specific marriage between avro and our SQL schemas.
@@ -124,8 +124,8 @@ type avroMetadata map[string]interface{}
 
 // avroEnvelopeOpts controls which fields in avroEnvelopeRecord are set.
 type avroEnvelopeOpts struct {
+	beforeField, afterField     bool
 	updatedField, resolvedField bool
-	afterField                  bool
 }
 
 // avroEnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
@@ -133,8 +133,8 @@ type avroEnvelopeOpts struct {
 type avroEnvelopeRecord struct {
 	avroRecord
 
-	opts  avroEnvelopeOpts
-	after *avroDataRecord
+	opts          avroEnvelopeOpts
+	before, after *avroDataRecord
 }
 
 // columnDescToAvroSchema converts a column descriptor into its corresponding
@@ -385,12 +385,26 @@ func indexToAvroSchema(
 	return schema, nil
 }
 
+const (
+	// avroSchemaNoSuffix can be passed to tableToAvroSchema to indicate that
+	// no suffix should be appended to the avro record's name.
+	avroSchemaNoSuffix = ``
+)
+
 // tableToAvroSchema converts a column descriptor into its corresponding avro
 // record schema. The fields are kept in the same order as `tableDesc.Columns`.
-func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroDataRecord, error) {
+// If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
+// appended to the end of the avro record's name.
+func tableToAvroSchema(
+	tableDesc *sqlbase.TableDescriptor, nameSuffix string,
+) (*avroDataRecord, error) {
+	name := SQLNameToAvroName(tableDesc.Name)
+	if nameSuffix != avroSchemaNoSuffix {
+		name = name + `_` + nameSuffix
+	}
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
-			Name:       SQLNameToAvroName(tableDesc.Name),
+			Name:       name,
 			SchemaType: `record`,
 		},
 		fieldIdxByName:   make(map[string]int),
@@ -499,7 +513,7 @@ func (r *avroDataRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRow,
 // envelopeToAvroSchema creates an avro record schema for an envelope containing
 // before and after versions of a row change and metadata about that row change.
 func envelopeToAvroSchema(
-	topic string, opts avroEnvelopeOpts, after *avroDataRecord,
+	topic string, opts avroEnvelopeOpts, before, after *avroDataRecord,
 ) (*avroEnvelopeRecord, error) {
 	schema := &avroEnvelopeRecord{
 		avroRecord: avroRecord{
@@ -509,6 +523,24 @@ func envelopeToAvroSchema(
 		opts: opts,
 	}
 
+	if opts.beforeField {
+		schema.before = before
+		beforeField := &avroSchemaField{
+			Name:       `before`,
+			SchemaType: []avroSchemaType{avroSchemaNull, before},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, beforeField)
+	}
+	if opts.afterField {
+		schema.after = after
+		afterField := &avroSchemaField{
+			Name:       `after`,
+			SchemaType: []avroSchemaType{avroSchemaNull, after},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, afterField)
+	}
 	if opts.updatedField {
 		updatedField := &avroSchemaField{
 			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
@@ -525,15 +557,6 @@ func envelopeToAvroSchema(
 		}
 		schema.Fields = append(schema.Fields, resolvedField)
 	}
-	if opts.afterField {
-		schema.after = after
-		afterField := &avroSchemaField{
-			Name:       `after`,
-			SchemaType: []avroSchemaType{avroSchemaNull, after},
-			Default:    nil,
-		}
-		schema.Fields = append(schema.Fields, afterField)
-	}
 
 	schemaJSON, err := json.Marshal(schema)
 	if err != nil {
@@ -549,10 +572,30 @@ func envelopeToAvroSchema(
 // BinaryFromRow encodes the given metadata and row data into avro's defined
 // binary format.
 func (r *avroEnvelopeRecord) BinaryFromRow(
-	buf []byte, meta avroMetadata, row sqlbase.EncDatumRow,
+	buf []byte, meta avroMetadata, beforeRow, afterRow sqlbase.EncDatumRow,
 ) ([]byte, error) {
-	native := map[string]interface{}{
-		`after`: nil,
+	native := map[string]interface{}{}
+	if r.opts.beforeField {
+		if beforeRow == nil {
+			native[`before`] = nil
+		} else {
+			beforeNative, err := r.before.nativeFromRow(beforeRow)
+			if err != nil {
+				return nil, err
+			}
+			native[`before`] = goavro.Union(avroUnionKey(&r.before.avroRecord), beforeNative)
+		}
+	}
+	if r.opts.afterField {
+		if afterRow == nil {
+			native[`after`] = nil
+		} else {
+			afterNative, err := r.after.nativeFromRow(afterRow)
+			if err != nil {
+				return nil, err
+			}
+			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
+		}
 	}
 	if r.opts.updatedField {
 		native[`updated`] = nil
@@ -576,17 +619,8 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 			native[`resolved`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
 		}
 	}
-	// WIP verify that meta is now empty
-	if r.opts.afterField {
-		if row == nil {
-			native[`after`] = nil
-		} else {
-			afterNative, err := r.after.nativeFromRow(row)
-			if err != nil {
-				return nil, err
-			}
-			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
-		}
+	for k := range meta {
+		return nil, errors.AssertionFailedf(`unhandled meta key: %s`, k)
 	}
 	return r.codec.BinaryFromNative(buf, native)
 }

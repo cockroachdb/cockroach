@@ -57,6 +57,7 @@ const (
 	optKeyInValue              = `key_in_value`
 	optResolvedTimestamps      = `resolved`
 	optUpdatedTimestamps       = `updated`
+	optDiff                    = `diff`
 
 	optEnvelopeKeyOnly       envelopeType = `key_only`
 	optEnvelopeRow           envelopeType = `row`
@@ -90,6 +91,7 @@ var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	optKeyInValue:              sql.KVStringOptRequireNoValue,
 	optResolvedTimestamps:      sql.KVStringOptAny,
 	optUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
+	optDiff:                    sql.KVStringOptRequireNoValue,
 }
 
 // changefeedPlanHook implements sql.PlanHookFn.

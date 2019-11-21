@@ -187,6 +187,7 @@ message MVCCWriteValueOp {
   bytes key = 1;
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   bytes value = 3;
+  bytes prev_value = 4;
 }
 
 // MVCCUpdateIntentOp corresponds to an intent being written for a given
@@ -221,6 +222,7 @@ message MVCCCommitIntentOp {
   bytes key = 2;
   util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   bytes value = 4;
+  bytes prev_value = 5;
 }
 
 // MVCCAbortIntentOp corresponds to an intent being aborted for a given
