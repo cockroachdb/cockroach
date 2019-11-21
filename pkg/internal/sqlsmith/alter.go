@@ -28,6 +28,7 @@ func init() {
 		{1, makeDropTable},
 
 		{1, makeAddColumn},
+		{1, makeJSONComputedColumn},
 		{1, makeDropColumn},
 		{1, makeRenameColumn},
 		{1, makeAlterColumnType},
@@ -170,6 +171,44 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 	}, true
 }
 
+func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, colRefs, ok := s.getSchemaTable()
+	if !ok {
+		return nil, false
+	}
+	colRefs.stripTableName()
+	// Shuffle columns and find the first one that's JSON.
+	s.rnd.Shuffle(len(colRefs), func(i, j int) {
+		colRefs[i], colRefs[j] = colRefs[j], colRefs[i]
+	})
+	var ref *colRef
+	for _, c := range colRefs {
+		if c.typ.Family() == types.JsonFamily {
+			ref = c
+			break
+		}
+	}
+	// If we didn't find any JSON columns, return.
+	if ref == nil {
+		return nil, false
+	}
+	col, err := tree.NewColumnTableDef(s.name("col"), types.Jsonb, false /* isSerial */, nil)
+	if err != nil {
+		return nil, false
+	}
+	col.Computed.Computed = true
+	col.Computed.Expr = tree.NewTypedBinaryExpr(tree.JSONFetchText, ref.typedExpr(), sqlbase.RandDatumSimple(s.rnd, types.String), types.String)
+
+	return &tree.AlterTable{
+		Table: tableRef.TableName.ToUnresolvedObjectName(),
+		Cmds: tree.AlterTableCmds{
+			&tree.AlterTableAddColumn{
+				ColumnDef: col,
+			},
+		},
+	}, true
+}
+
 func makeDropColumn(s *Smither) (tree.Statement, bool) {
 	_, _, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
@@ -196,25 +235,31 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	var cols tree.IndexElemList
 	seen := map[tree.Name]bool{}
 	inverted := false
+	unique := s.coin()
 	for len(cols) < 1 || s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
 		}
 		seen[col.Name] = true
-		cols = append(cols, tree.IndexElem{
-			Column:    col.Name,
-			Direction: s.randDirection(),
-		})
-		// If this is the first column and it's JSON, then usually make
-		// this an inverted index.
-		if len(cols) == 1 && col.Type.Family() == types.JsonFamily && s.rnd.Intn(3) > 0 {
+		// If this is the first column and it's invertable (i.e., JSONB), make an inverted index.
+		if len(cols) == 0 && sqlbase.ColumnTypeIsInvertedIndexable(col.Type) {
 			inverted = true
+			unique = false
+			cols = append(cols, tree.IndexElem{
+				Column: col.Name,
+			})
 			break
+		}
+		if sqlbase.ColumnTypeIsIndexable(col.Type) {
+			cols = append(cols, tree.IndexElem{
+				Column:    col.Name,
+				Direction: s.randDirection(),
+			})
 		}
 	}
 	var storing tree.NameList
-	for s.coin() {
+	for !inverted && s.coin() {
 		col := tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
@@ -226,7 +271,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	return &tree.CreateIndex{
 		Name:     s.name("idx"),
 		Table:    *tableRef.TableName,
-		Unique:   s.coin(),
+		Unique:   unique,
 		Columns:  cols,
 		Storing:  storing,
 		Inverted: inverted,

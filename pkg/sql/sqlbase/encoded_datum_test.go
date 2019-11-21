@@ -110,7 +110,7 @@ func TestEncDatum(t *testing.T) {
 }
 
 func columnTypeCompatibleWithEncoding(typ *types.T, enc DatumEncoding) bool {
-	return enc == DatumEncoding_VALUE || columnTypeIsIndexable(typ)
+	return enc == DatumEncoding_VALUE || ColumnTypeIsIndexable(typ)
 }
 
 func TestEncDatumNull(t *testing.T) {
