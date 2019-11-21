@@ -80,9 +80,14 @@ func doCreateSequence(
 
 	// Inherit permissions from the database descriptor.
 	privs := dbDesc.GetPrivileges()
-
+	// creationTime is initialized to a zero value and populated at read time.
+	// See the comment in desc.MaybeIncrementVersion.
+	//
+	// TODO(ajwerner): remove the timestamp from MakeSequenceTableDesc, it's
+	// currently relied on in import and restore code and tests.
+	var creationTime hlc.Timestamp
 	desc, err := MakeSequenceTableDesc(name.Table(), opts,
-		dbDesc.ID, id, params.creationTimeForNewTableDescriptor(), privs, &params)
+		dbDesc.ID, id, creationTime, privs, &params)
 	if err != nil {
 		return err
 	}

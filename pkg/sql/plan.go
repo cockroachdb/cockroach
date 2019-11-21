@@ -14,11 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -54,26 +52,6 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 // Ann is a shortcut for the Annotations from the eval context.
 func (r *runParams) Ann() *tree.Annotations {
 	return r.extendedEvalCtx.EvalContext.Annotations
-}
-
-// createTimeForNewTableDescriptor consults the cluster version to determine
-// whether the CommitTimestamp() needs to be observed when creating a new
-// TableDescriptor. See TableDescriptor.ModificationTime.
-//
-// TODO(ajwerner): remove in 20.1.
-func (r *runParams) creationTimeForNewTableDescriptor() hlc.Timestamp {
-	// Before 19.2 we needed to observe the transaction CommitTimestamp to ensure
-	// that CreateAsOfTime and ModificationTime reflected the timestamp at which the
-	// creating transaction committed. Starting in 19.2 we use a zero-valued
-	// CreateAsOfTime and ModificationTime when creating a table descriptor and then
-	// upon reading use the MVCC timestamp to populate the values.
-	var ts hlc.Timestamp
-	if !cluster.Version.IsActive(
-		r.ctx, r.ExecCfg().Settings, cluster.VersionTableDescModificationTimeFromMVCC,
-	) {
-		ts = r.p.txn.CommitTimestamp()
-	}
-	return ts
 }
 
 // planNode defines the interface for executing a query or portion of a query.

@@ -62,14 +62,19 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
-
+	// creationTime is initialized to a zero value and populated at read time.
+	// See the comment in desc.MaybeIncrementVersion.
+	//
+	// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
+	// currently relied on in import and restore code and tests.
+	var creationTime hlc.Timestamp
 	desc, err := makeViewTableDesc(
 		viewName,
 		n.viewQuery,
 		n.dbDesc.ID,
 		id,
 		n.columns,
-		params.creationTimeForNewTableDescriptor(),
+		creationTime,
 		privs,
 		&params.p.semaCtx,
 	)
