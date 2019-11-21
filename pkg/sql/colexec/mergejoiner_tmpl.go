@@ -677,10 +677,15 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 
 					if !isNull {
 						val = execgen.UNSAFEGET(srcCol, srcStartIdx)
-						for i := 0; i < toAppend; i++ {
-							execgen.SET(outCol, outStartIdx, val)
-							outStartIdx++
-						}
+						o.allocator.performOperation(
+							[]coldata.Vec{out},
+							func() {
+								for i := 0; i < toAppend; i++ {
+									execgen.SET(outCol, outStartIdx, val)
+									outStartIdx++
+								}
+							},
+						)
 					}
 				}
 
@@ -811,8 +816,6 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 					// Optimization in the case that group length is 1, use assign
 					// instead of copy.
 					if toAppend == 1 {
-						// TODO(yuzefovich): think about making execgen.SET set both the
-						// value and the null.
 						// {{ if _HAS_SELECTION }}
 						// {{ if _HAS_NULLS }}
 						if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
@@ -820,7 +823,20 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						}
 						// {{ end }}
 						v := execgen.UNSAFEGET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
-						execgen.SET(outCol, outStartIdx, v)
+						// We are in the fast path (we're setting a single element), so in
+						// order to not kill the performance, we only update the memory
+						// account in case of Bytes type (other types will not change the
+						// amount of memory accounted for).
+						// {{ if eq .LTyp.String "Bytes" }}
+						o.allocator.performOperation(
+							[]coldata.Vec{out},
+							func() {
+								// {{ end }}
+								execgen.SET(outCol, outStartIdx, v)
+								// {{ if eq .LTyp.String "Bytes" }}
+							},
+						)
+						// {{ end }}
 						// {{ else }}
 						// {{ if _HAS_NULLS }}
 						if src.Nulls().NullAt64(uint64(o.builderState.right.curSrcStartIdx)) {
@@ -828,7 +844,20 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						}
 						// {{ end }}
 						v := execgen.UNSAFEGET(srcCol, o.builderState.right.curSrcStartIdx)
-						execgen.SET(outCol, outStartIdx, v)
+						// We are in the fast path (we're setting a single element), so in
+						// order to not kill the performance, we only update the memory
+						// account in case of Bytes type (other types will not change the
+						// amount of memory accounted for).
+						// {{ if eq .LTyp.String "Bytes" }}
+						o.allocator.performOperation(
+							[]coldata.Vec{out},
+							func() {
+								// {{ end }}
+								execgen.SET(outCol, outStartIdx, v)
+								// {{ if eq .LTyp.String "Bytes" }}
+							},
+						)
+						// {{ end }}
 						// {{ end }}
 					} else {
 						o.allocator.Copy(

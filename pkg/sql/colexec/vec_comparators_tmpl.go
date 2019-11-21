@@ -81,8 +81,10 @@ type vecComparator interface {
 
 // {{range .}}
 type _TYPEVecComparator struct {
-	vecs  []_GOTYPESLICE
-	nulls []*coldata.Nulls
+	allocator *Allocator
+	vecs      []coldata.Vec
+	typedVecs []_GOTYPESLICE
+	nulls     []*coldata.Nulls
 }
 
 func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int {
@@ -95,15 +97,16 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint
 	} else if n2 {
 		return 1
 	}
-	left := execgen.UNSAFEGET(c.vecs[vecIdx1], int(valIdx1))
-	right := execgen.UNSAFEGET(c.vecs[vecIdx2], int(valIdx2))
+	left := execgen.UNSAFEGET(c.typedVecs[vecIdx1], int(valIdx1))
+	right := execgen.UNSAFEGET(c.typedVecs[vecIdx2], int(valIdx2))
 	var cmp int
 	_COMPARE("cmp", "left", "right")
 	return cmp
 }
 
 func (c *_TYPEVecComparator) setVec(idx int, vec coldata.Vec) {
-	c.vecs[idx] = vec._TYPE()
+	c.vecs[idx] = vec
+	c.typedVecs[idx] = vec._TYPE()
 	c.nulls[idx] = vec.Nulls()
 }
 
@@ -119,23 +122,32 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 		// variable number of bytes in `dstVecIdx`, so we will have to either shift
 		// the bytes after that element left or right, depending on how long the
 		// source bytes slice is. Refer to the CopySlice comment for an example.
-		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], int(dstIdx), int(srcIdx), int(srcIdx+1))
+		c.allocator.performOperation(
+			[]coldata.Vec{c.vecs[dstVecIdx]},
+			func() {
+				execgen.COPYSLICE(c.typedVecs[dstVecIdx], c.typedVecs[srcVecIdx], int(dstIdx), int(srcIdx), int(srcIdx+1))
+			},
+		)
 		// {{ else }}
-		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], int(srcIdx))
-		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
+		v := execgen.UNSAFEGET(c.typedVecs[srcVecIdx], int(srcIdx))
+		// We allow for this SET to go around the Allocator because we Bytes is
+		// handled separately and other types will not update the memory account.
+		execgen.SET(c.typedVecs[dstVecIdx], int(dstIdx), v)
 		// {{ end }}
 	}
 }
 
 // {{end}}
 
-func GetVecComparator(t coltypes.T, numVecs int) vecComparator {
+func GetVecComparator(allocator *Allocator, t coltypes.T, numVecs int) vecComparator {
 	switch t {
 	// {{range .}}
 	case coltypes._TYPE:
 		return &_TYPEVecComparator{
-			vecs:  make([]_GOTYPESLICE, numVecs),
-			nulls: make([]*coldata.Nulls, numVecs),
+			allocator: allocator,
+			vecs:      make([]coldata.Vec, numVecs),
+			typedVecs: make([]_GOTYPESLICE, numVecs),
+			nulls:     make([]*coldata.Nulls, numVecs),
 		}
 		// {{end}}
 	}

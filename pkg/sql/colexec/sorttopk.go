@@ -88,7 +88,7 @@ func (t *topKSorter) Init() {
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i := range t.inputTypes {
 		typ := t.inputTypes[i]
-		t.comparators[i] = GetVecComparator(typ, 2)
+		t.comparators[i] = GetVecComparator(t.allocator, typ, 2)
 	}
 	t.output = t.allocator.NewMemBatchWithSize(t.inputTypes, int(coldata.BatchSize()))
 }

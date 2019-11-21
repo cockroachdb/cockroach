@@ -137,7 +137,7 @@ func (o *OrderedSynchronizer) Init() {
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
 		typ := o.columnTypes[o.ordering[i].ColIdx]
-		o.comparators[i] = GetVecComparator(typ, len(o.inputs))
+		o.comparators[i] = GetVecComparator(o.allocator, typ, len(o.inputs))
 	}
 }
 

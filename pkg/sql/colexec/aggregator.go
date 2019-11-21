@@ -193,7 +193,7 @@ func NewOrderedAggregator(
 		isScalar:  isScalar,
 	}
 
-	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns)
+	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(a.allocator, aggTypes, aggFns)
 
 	if err != nil {
 		return nil, err
@@ -203,7 +203,7 @@ func NewOrderedAggregator(
 }
 
 func makeAggregateFuncs(
-	aggTyps [][]coltypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
+	allocator *Allocator, aggTyps [][]coltypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
 ) ([]aggregateFunc, []coltypes.T, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
 	outTyps := make([]coltypes.T, len(aggFns))
@@ -212,7 +212,7 @@ func makeAggregateFuncs(
 		var err error
 		switch aggFns[i] {
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
-			funcs[i], err = newAnyNotNullAgg(aggTyps[i][0])
+			funcs[i], err = newAnyNotNullAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_AVG:
 			funcs[i], err = newAvgAgg(aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
@@ -222,9 +222,9 @@ func makeAggregateFuncs(
 		case execinfrapb.AggregatorSpec_COUNT:
 			funcs[i] = newCountAgg()
 		case execinfrapb.AggregatorSpec_MIN:
-			funcs[i], err = newMinAgg(aggTyps[i][0])
+			funcs[i], err = newMinAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_MAX:
-			funcs[i], err = newMaxAgg(aggTyps[i][0])
+			funcs[i], err = newMaxAgg(allocator, aggTyps[i][0])
 		default:
 			return nil, nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}

@@ -152,7 +152,7 @@ func (m colIdxMap) get(c sqlbase.ColumnID) (int, bool) {
 //   err := rf.StartScan(..)
 //   // Handle err
 //   for {
-//      res, err := rf.NextBatch()
+//      res, err := rf.nextBatch()
 //      // Handle err
 //      if res.colBatch.Length() == 0 {
 //         // Done
@@ -227,6 +227,14 @@ type cFetcher struct {
 		// having to call batch.Vec too often in the tight loop.
 		colvecs []coldata.Vec
 	}
+
+	// adapter is a utility struct that helps with memory accounting.
+	adapter struct {
+		ctx       context.Context
+		allocator *Allocator
+		batch     coldata.Batch
+		err       error
+	}
 }
 
 // Init sets up a Fetcher for a given table and index. If we are using a
@@ -235,6 +243,7 @@ type cFetcher struct {
 func (rf *cFetcher) Init(
 	allocator *Allocator, reverse, returnRangeInfo bool, isCheck bool, tables ...row.FetcherTableArgs,
 ) error {
+	rf.adapter.allocator = allocator
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
 	}
@@ -454,7 +463,7 @@ func (rf *cFetcher) StartScan(
 	return nil
 }
 
-// fetcherState is the state enum for NextBatch.
+// fetcherState is the state enum for nextBatch.
 type fetcherState int
 
 //go:generate stringer -type=fetcherState
@@ -530,7 +539,7 @@ const (
 	// stateFinished.
 	stateEmitLastBatch
 
-	// stateFinished is the end state of the state machine - it causes NextBatch
+	// stateFinished is the end state of the state machine - it causes nextBatch
 	// to return empty batches forever.
 	stateFinished
 )
@@ -538,13 +547,27 @@ const (
 // Turn this on to enable super verbose logging of the fetcher state machine.
 const debugState = false
 
-// NextBatch processes keys until we complete one batch of rows,
-// coldata.BatchSize() in length, which are returned in columnar format as an
-// exec.Batch. The batch contains one Vec per table column, regardless of the
-// index used; columns that are not needed (as per neededCols) are empty. The
-// Batch should not be modified and is only valid until the next call.
-// When there are no more rows, the Batch.Length is 0.
+// NextBatch is nextBatch with the addition of memory accounting.
 func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
+	rf.adapter.ctx = ctx
+	rf.adapter.allocator.performOperation(
+		rf.machine.colvecs,
+		rf.nextAdapter,
+	)
+	return rf.adapter.batch, rf.adapter.err
+}
+
+func (rf *cFetcher) nextAdapter() {
+	rf.adapter.batch, rf.adapter.err = rf.nextBatch(rf.adapter.ctx)
+}
+
+// nextBatch processes keys until we complete one batch of rows,
+// coldata.BatchSize() in length, which are returned in columnar format as a
+// coldata.Batch. The batch contains one Vec per table column, regardless of
+// the index used; columns that are not needed (as per neededCols) are empty.
+// The Batch should not be modified and is only valid until the next call.
+// When there are no more rows, the Batch.Length is 0.
+func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
 		if debugState {
 			log.Infof(ctx, "State %s", rf.machine.state[0])
