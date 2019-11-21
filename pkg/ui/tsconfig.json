@@ -15,6 +15,7 @@
     "outDir": "./dist/",
     "sourceMap": true,
     "strictNullChecks": false,
+    "skipLibCheck": true,
     "target": "es6",
     "baseUrl": ".",
     "paths": {
