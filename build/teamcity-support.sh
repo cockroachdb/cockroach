@@ -24,6 +24,13 @@ run() {
   "$@"
 }
 
+runlogged() {
+  echo "$1"
+  shift
+  "$@"
+}
+
+
 # Returns the list of release branches from origin (origin/release-*), ordered
 # by version (higher version numbers first).
 get_release_branches() {
