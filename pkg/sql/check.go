@@ -73,21 +73,25 @@ func validateCheckExpr(
 //
 // SELECT * FROM child@c_idx
 // WHERE
-//   NOT ((COALESCE(a_id, b_id) IS NULL) OR (a_id IS NOT NULL AND b_id IS NOT NULL))
+//   (a_id IS NULL OR b_id IS NULL) AND (a_id IS NOT NULL OR b_id IS NOT NULL)
 // LIMIT 1;
 func matchFullUnacceptableKeyQuery(
 	prefix int, srcName *string, srcIdx *sqlbase.IndexDescriptor,
 ) string {
-	srcCols, srcNotNullClause := make([]string, prefix), make([]string, prefix)
+	srcCols := make([]string, prefix)
+	srcNullExistsClause := make([]string, prefix)
+	srcNotNullExistsClause := make([]string, prefix)
+
 	for i := 0; i < prefix; i++ {
 		srcCols[i] = tree.NameString(srcIdx.ColumnNames[i])
-		srcNotNullClause[i] = fmt.Sprintf("%s IS NOT NULL", tree.NameString(srcIdx.ColumnNames[i]))
+		srcNullExistsClause[i] = fmt.Sprintf("%s IS NULL", tree.NameString(srcIdx.ColumnNames[i]))
+		srcNotNullExistsClause[i] = fmt.Sprintf("%s IS NOT NULL", tree.NameString(srcIdx.ColumnNames[i]))
 	}
 	return fmt.Sprintf(
-		`SELECT * FROM %s@%s WHERE NOT ((COALESCE(%s) IS NULL) OR (%s)) LIMIT 1`,
+		`SELECT * FROM %s@%s WHERE (%s) AND (%s) LIMIT 1`,
 		*srcName, tree.NameString(srcIdx.Name),
-		strings.Join(srcCols, ", "),
-		strings.Join(srcNotNullClause, " AND "),
+		strings.Join(srcNullExistsClause, " OR "),
+		strings.Join(srcNotNullExistsClause, " OR "),
 	)
 }
 
