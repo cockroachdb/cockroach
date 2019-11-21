@@ -69,3 +69,10 @@ ORDER BY
 ----
 1d6eaf81-8a2c-43c5-a495-a3b102917ab1  3697877132
 d2d225e2-e9be-4420-a645-d1b8f577511c  3697877132
+
+# Regression: #36830 (can't run wrapped window node)
+statement ok
+CREATE TABLE table9 (a INT8);
+
+statement ok
+INSERT INTO table9 SELECT lag(a) OVER (PARTITION BY a) FROM table9;
