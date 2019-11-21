@@ -32,6 +32,10 @@ type Bytes struct {
 	// enables us to disallow unordered sets (which would require data movement).
 	// Also, this helps us maintain the assumption of non-decreasing offsets.
 	maxSetIndex int
+
+	// isWindow indicates whether this Bytes is a "window" into another Bytes.
+	// If it is, no modifications are allowed (all of them will panic).
+	isWindow bool
 }
 
 // NewBytes returns a Bytes struct with enough capacity for n zero-length
@@ -64,6 +68,16 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n uint64) {
 // method - we assume that *always*, before returning a batch, the length is
 // set on it.
 func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
+	// TODO(yuzefovich): when uncommented, this breaks chunkingBatchSource - I
+	// can't seem to find a way around it (the problem is that we're calling
+	// batch.SetLength() which calls UpdateOffsetsToBeNonDecreasing, so we would
+	// need to override that). I think it is ok, though, because although the
+	// function modifies the "window" Bytes, it maintains the invariant that we
+	// need to have. Thoughts?
+
+	//if b.isWindow {
+	//	panic("UpdateOffsetsToBeNonDecreasing is called on a window into Bytes")
+	//}
 	prev := b.offsets[0]
 	for j := uint64(1); j <= n; j++ {
 		if b.offsets[j] > prev {
@@ -79,6 +93,9 @@ func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
 // b.maxSetIndex+1 are non-decreasing. Note that this method can be a noop when
 // i <= b.maxSetIndex+1.
 func (b *Bytes) maybeBackfillOffsets(i int) {
+	if b.isWindow {
+		panic("maybeBackfillOffsets is called on a window into Bytes")
+	}
 	for j := b.maxSetIndex + 2; j <= i; j++ {
 		b.offsets[j] = b.offsets[b.maxSetIndex+1]
 	}
@@ -97,6 +114,9 @@ func (b *Bytes) Get(i int) []byte {
 // away necessary space in the flat buffer. Note that a nil value will be
 // "converted" into an empty byte slice.
 func (b *Bytes) Set(i int, v []byte) {
+	if b.isWindow {
+		panic("Set is called on a window into Bytes")
+	}
 	if i < b.maxSetIndex {
 		panic(
 			fmt.Sprintf(
@@ -123,32 +143,20 @@ func (b *Bytes) Set(i int, v []byte) {
 	b.maxSetIndex = i
 }
 
-// Slice returns a shallow copy of the receiver Bytes struct sliced according
-// to start and end.
-// NOTE: slicing is a lightweight operation, so the underlying memory will be
-// shared between the receiver and a newly created Bytes struct. Beware that
-// modification of the newly created slice can invalidate the receiver's data.
-// Use with caution.
-// TODO(yuzefovich): consider removing this entirely or making it a noop.
-func (b *Bytes) Slice(start, end int) *Bytes {
+// Window creates a "window" into the receiver. It behaves similarly to
+// Golang's slice, but the returned object is *not* allowed to be modified - it
+// is read-only. Window is a lightweight operation that doesn't involve copying
+// the underlying data.
+func (b *Bytes) Window(start, end int) *Bytes {
 	if start < 0 || start > end || end > b.Len() {
 		panic(
 			fmt.Sprintf(
-				"invalid slice arguments: start=%d end=%d when Bytes.Len()=%d",
+				"invalid window arguments: start=%d end=%d when Bytes.Len()=%d",
 				start, end, b.Len(),
 			),
 		)
 	}
 	b.maybeBackfillOffsets(end)
-	maxSetIndex := end - start - 1
-	if start == end {
-		maxSetIndex = 0
-	}
-	if maxSetIndex > b.maxSetIndex-start {
-		maxSetIndex = b.maxSetIndex - start
-	}
-	// Note that during slicing we don't use an offset for a start index so
-	// that we don't need to translate the offsets.
 	data := b.data[:b.offsets[end]]
 	if end == 0 {
 		data = b.data[:0]
@@ -156,9 +164,9 @@ func (b *Bytes) Slice(start, end int) *Bytes {
 	return &Bytes{
 		data: data,
 		// We use 'end+1' because of the extra offset to know the length of the
-		// last element of the newly created slice.
-		offsets:     b.offsets[start : end+1],
-		maxSetIndex: maxSetIndex,
+		// last element of the newly created window.
+		offsets:  b.offsets[start : end+1],
+		isWindow: true,
 	}
 }
 
@@ -175,13 +183,16 @@ func (b *Bytes) Slice(start, end int) *Bytes {
 // Similarly, if "a", is instead "alongerstring", "world" would have to be
 // shifted right.
 func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
+	if b.isWindow {
+		panic("CopySlice is called on a window into Bytes")
+	}
 	if destIdx < 0 || destIdx > b.Len() {
 		panic(
 			fmt.Sprintf(
 				"dest index %d out of range (len=%d)", destIdx, b.Len(),
 			),
 		)
-	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() ||
+	} else if srcStartIdx < 0 || srcStartIdx > src.Len() ||
 		srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
 		panic(
 			fmt.Sprintf(
@@ -271,13 +282,16 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 // AppendSlice appends srcStartIdx inclusive and srcEndIdx exclusive []byte
 // values from src into the receiver starting at destIdx.
 func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
+	if b.isWindow {
+		panic("AppendSlice is called on a window into Bytes")
+	}
 	if destIdx < 0 || destIdx > b.Len() {
 		panic(
 			fmt.Sprintf(
 				"dest index %d out of range (len=%d)", destIdx, b.Len(),
 			),
 		)
-	} else if srcStartIdx < 0 || srcStartIdx >= src.Len() ||
+	} else if srcStartIdx < 0 || srcStartIdx > src.Len() ||
 		srcEndIdx > src.Len() || srcStartIdx > srcEndIdx {
 		panic(
 			fmt.Sprintf(
@@ -332,6 +346,9 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 // AppendVal appends the given []byte value to the end of the receiver. A nil
 // value will be "converted" into an empty byte slice.
 func (b *Bytes) AppendVal(v []byte) {
+	if b.isWindow {
+		panic("AppendVal is called on a window into Bytes")
+	}
 	b.maybeBackfillOffsets(b.Len())
 	b.maxSetIndex = b.Len()
 	b.offsets[b.Len()] = int32(len(b.data))
@@ -342,6 +359,9 @@ func (b *Bytes) AppendVal(v []byte) {
 // SetLength sets the length of this Bytes. Note that it will panic if there is
 // not enough capacity.
 func (b *Bytes) SetLength(l int) {
+	if b.isWindow {
+		panic("SetLength is called on a window into Bytes")
+	}
 	// We need +1 for an extra offset at the end.
 	b.offsets = b.offsets[:l+1]
 }

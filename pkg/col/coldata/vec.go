@@ -106,9 +106,11 @@ type Vec interface {
 	// Refer to the CopySliceArgs comment for specifics and TestCopy for examples.
 	Copy(CopySliceArgs)
 
-	// Slice returns a new Vec representing a slice of the current Vec from
-	// [start, end).
-	Slice(colType coltypes.T, start uint64, end uint64) Vec
+	// Window returns a "window" into the Vec. A "window" is similar to Golang's
+	// slice of the current Vec from [start, end), but the returned object is NOT
+	// allowed to be modified (the modification might result in an undefined
+	// behavior).
+	Window(colType coltypes.T, start uint64, end uint64) Vec
 
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this Vec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
