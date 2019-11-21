@@ -799,6 +799,12 @@ message TableDescriptor {
   message Replacement {
     option (gogoproto.equal) = true;
     optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // Time is just used for debugging purposes. It is not used in business
+    // logic. It is an HLC rather than just wall time only for historical
+    // reasons. Prior to 20.1 it was populated with the commit timestamp of the
+    // transaction which created this replacement. In 20.1 and after it is
+    // populated with the read timestamp at which the descriptor being
+    // replaced was read.
     optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false];
   }
 
