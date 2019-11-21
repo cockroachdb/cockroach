@@ -11,9 +11,9 @@
 package row
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -21,43 +21,21 @@ import (
 // tuple of columns.
 func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	if values == nil {
-		key := roachpb.Key(f.searchPrefix)
+		key := roachpb.Key(f.spanBuilder.KeyPrefix)
 		return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
 	}
-	return FKCheckSpan(
-		f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix,
-	)
+	return FKCheckSpan(f.spanBuilder, values, f.ids, f.prefixLen)
 }
 
 // FKCheckSpan returns a span that can be scanned to ascertain existence of a
 // specific row in a given index.
 func FKCheckSpan(
-	tableDesc *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	numCols int,
-	colMap map[sqlbase.ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
+	s *span.Builder, values []tree.Datum, colMap map[sqlbase.ColumnID]int, numCols int,
 ) (roachpb.Span, error) {
-	// If we are scanning the (entire) primary key, only scan family 0 (which is
-	// always present).
-	// TODO(radu): this logic will need to be improved when secondary indexes also
-	// conform to families.
-	if index.ID == tableDesc.PrimaryIndex.ID && numCols == len(index.ColumnIDs) {
-		// This code is equivalent to calling EncodePartialIndexSpan followed by
-		// MakeFamilyKey but saves an unnecessary allocation.
-		key, _, err := sqlbase.EncodePartialIndexKey(
-			tableDesc, index, numCols, colMap, values, keyPrefix,
-		)
-		if err != nil {
-			return roachpb.Span{}, err
-		}
-		key = keys.MakeFamilyKey(key, 0)
-		return roachpb.Span{Key: key, EndKey: roachpb.Key(key).PrefixEnd()}, nil
+	// If it is safe to split this lookup into multiple families, generate a point lookup for
+	// family 0. Because we are just checking for existence, we only need family 0.
+	if s.CanSplitSpanIntoSeparateFamilies(1 /* numNeededFamilies */, numCols) {
+		return s.PointSpanFromDatumRow(values, 0 /* family */, colMap)
 	}
-
-	span, _, err := sqlbase.EncodePartialIndexSpan(
-		tableDesc, index, numCols, colMap, values, keyPrefix,
-	)
-	return span, err
+	return s.SpanFromDatumRow(values, numCols, colMap)
 }

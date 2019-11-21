@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -111,7 +112,8 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		return err
 	}
 	scan.index = scan.specifiedIndex
-	scan.spans, err = unconstrainedSpans(o.tableDesc, o.indexDesc, false /* forDelete */)
+	sb := span.MakeBuilder(o.tableDesc.TableDesc(), o.indexDesc)
+	scan.spans, err = sb.UnconstrainedSpans(false /* forDelete */)
 	if err != nil {
 		return err
 	}

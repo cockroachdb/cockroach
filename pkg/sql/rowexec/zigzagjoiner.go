@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -381,6 +382,8 @@ type zigzagJoinerInfo struct {
 	// endKey marks where this side should stop fetching, taking into account the
 	// fixedValues.
 	endKey roachpb.Key
+
+	spanBuilder *span.Builder
 }
 
 // Setup the curInfo struct for the current z.side, which specifies the side
@@ -434,6 +437,8 @@ func (z *zigzagJoiner) setupInfo(
 
 	// Setup the RowContainers.
 	info.container.Reset()
+
+	info.spanBuilder = span.MakeBuilder(info.table, info.index)
 
 	// Setup the Fetcher.
 	_, _, err := initRowFetcher(
@@ -613,15 +618,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
-	return sqlbase.MakeSpanFromEncDatums(
-		info.prefix,
-		neededDatums,
-		info.indexTypes[:len(neededDatums)],
-		info.indexDirs,
-		info.table,
-		info.index,
-		info.alloc,
-	)
+	return info.spanBuilder.SpanFromEncDatums(neededDatums, len(neededDatums))
 }
 
 // Returns the column types of the equality columns.

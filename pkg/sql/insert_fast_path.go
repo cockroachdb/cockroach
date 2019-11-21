@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -85,16 +86,18 @@ type insertFastPathFKSpanInfo struct {
 type insertFastPathFKCheck struct {
 	exec.InsertFastPathFKCheck
 
-	tabDesc   *sqlbase.ImmutableTableDescriptor
-	idxDesc   *sqlbase.IndexDescriptor
-	keyPrefix []byte
-	colMap    map[sqlbase.ColumnID]int
+	tabDesc     *sqlbase.ImmutableTableDescriptor
+	idxDesc     *sqlbase.IndexDescriptor
+	keyPrefix   []byte
+	colMap      map[sqlbase.ColumnID]int
+	spanBuilder *span.Builder
 }
 
 func (c *insertFastPathFKCheck) init() error {
 	c.tabDesc = c.ReferencedTable.(*optTable).desc
 	c.idxDesc = c.ReferencedIndex.(*optIndex).desc
 	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(&c.tabDesc.TableDescriptor, c.idxDesc.ID)
+	c.spanBuilder = span.MakeBuilder(c.tabDesc.TableDesc(), c.idxDesc)
 
 	if len(c.InsertCols) > len(c.idxDesc.ColumnIDs) {
 		return errors.AssertionFailedf(
@@ -113,9 +116,7 @@ func (c *insertFastPathFKCheck) init() error {
 // generateSpan returns the span that we need to look up to confirm existence of
 // the referenced row.
 func (c *insertFastPathFKCheck) generateSpan(inputRow tree.Datums) (roachpb.Span, error) {
-	return row.FKCheckSpan(
-		&c.tabDesc.TableDescriptor, c.idxDesc, len(c.InsertCols), c.colMap, inputRow, c.keyPrefix,
-	)
+	return row.FKCheckSpan(c.spanBuilder, inputRow, c.colMap, len(c.InsertCols))
 }
 
 // errorForRow returns an error indicating failure of this FK check for the

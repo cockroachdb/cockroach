@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -45,16 +46,12 @@ type indexJoiner struct {
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
 
-	// keyPrefix is the primary index's key prefix.
-	keyPrefix []byte
 	// spans is the batch of spans we will next retrieve from the index.
 	spans roachpb.Spans
 
-	// neededFamilies maintains what families we need to query from if our
-	// needed columns span multiple queries
-	neededFamilies []sqlbase.FamilyID
-
 	alloc sqlbase.DatumAlloc
+
+	spanBuilder *span.Builder
 }
 
 var _ execinfra.Processor = &indexJoiner{}
@@ -79,7 +76,6 @@ func newIndexJoiner(
 	ij := &indexJoiner{
 		input:     input,
 		desc:      spec.Table,
-		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
 		batchSize: indexJoinerBatchSize,
 	}
 	needMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
@@ -125,11 +121,8 @@ func newIndexJoiner(
 		ij.fetcher = &fetcher
 	}
 
-	ij.neededFamilies = sqlbase.NeededColumnFamilyIDs(
-		spec.Table.ColumnIdxMap(),
-		spec.Table.Families,
-		ij.Out.NeededColumns(),
-	)
+	ij.spanBuilder = span.MakeBuilder(&spec.Table, &spec.Table.PrimaryIndex)
+	ij.spanBuilder.SetNeededColumns(ij.Out.NeededColumns())
 
 	return ij, nil
 }
@@ -161,12 +154,12 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 				if row == nil {
 					break
 				}
-				span, err := ij.generateSpan(row)
+				spans, err := ij.generateSpans(row)
 				if err != nil {
 					ij.MoveToDraining(err)
 					return nil, ij.DrainHelper()
 				}
-				ij.spans = append(ij.spans, ij.maybeSplitSpanIntoSeparateFamilies(span)...)
+				ij.spans = append(ij.spans, spans...)
 			}
 			if len(ij.spans) == 0 {
 				// All done.
@@ -205,30 +198,20 @@ func (ij *indexJoiner) ConsumerClosed() {
 	ij.InternalClose()
 }
 
-func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
+func (ij *indexJoiner) generateSpans(row sqlbase.EncDatumRow) (roachpb.Spans, error) {
 	numKeyCols := len(ij.desc.PrimaryIndex.ColumnIDs)
 	if len(row) < numKeyCols {
-		return roachpb.Span{}, errors.Errorf(
+		return nil, errors.Errorf(
 			"index join input has %d columns, expected at least %d", len(row), numKeyCols)
 	}
 	// There may be extra values on the row, e.g. to allow an ordered
 	// synchronizer to interleave multiple input streams. Will need at most
 	// numKeyCols.
-	keyRow := row[:numKeyCols]
-	types := ij.input.OutputTypes()[:numKeyCols]
-	return sqlbase.MakeSpanFromEncDatums(
-		ij.keyPrefix, keyRow, types, ij.desc.PrimaryIndex.ColumnDirections, &ij.desc,
-		&ij.desc.PrimaryIndex, &ij.alloc)
-}
-
-func (ij *indexJoiner) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
-	// we are always looking up a single row, because we are always
-	// looking up a full primary key
-	if len(ij.neededFamilies) > 0 &&
-		len(ij.neededFamilies) < len(ij.desc.Families) {
-		return sqlbase.SplitSpanIntoSeparateFamilies(span, ij.neededFamilies)
+	span, err := ij.spanBuilder.SpanFromEncDatums(row, numKeyCols)
+	if err != nil {
+		return nil, err
 	}
-	return roachpb.Spans{span}
+	return ij.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, numKeyCols), nil
 }
 
 // outputStatsToTrace outputs the collected indexJoiner stats to the trace. Will
