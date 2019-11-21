@@ -270,6 +270,7 @@ func readMysqlCreateTable(
 	ctx context.Context,
 	input io.Reader,
 	evalCtx *tree.EvalContext,
+	p sql.PlanHookState,
 	startingID, parentID sqlbase.ID,
 	match string,
 	fks fkHandler,
@@ -302,7 +303,7 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := sqlbase.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks, seqVals)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals)
 			if err != nil {
 				return nil, err
 			}
@@ -342,6 +343,7 @@ func safeName(in mysqlIdent) tree.Name {
 func mysqlTableToCockroach(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
+	p sql.PlanHookState,
 	parentID, id sqlbase.ID,
 	name string,
 	in *mysql.TableSpec,
@@ -387,7 +389,18 @@ func mysqlTableToCockroach(
 			opts = tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &startingValue}}
 			seqVals[id] = startingValue
 		}
-		desc, err := sql.MakeSequenceTableDesc(seqName, opts, parentID, id, time, priv, nil)
+		var desc sqlbase.MutableTableDescriptor
+		var err error
+		if p != nil {
+			params := p.RunParams(ctx)
+			desc, err = sql.MakeSequenceTableDesc(
+				seqName, opts, parentID, id, time, priv, &params,
+			)
+		} else {
+			desc, err = sql.MakeSequenceTableDesc(
+				seqName, opts, parentID, id, time, priv, nil, /* params */
+			)
+		}
 		if err != nil {
 			return nil, nil, err
 		}

@@ -1035,11 +1035,11 @@ func MakeTableDesc(
 ) (sqlbase.MutableTableDescriptor, error) {
 	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
 	// been populated.
-	columnSequenceExprMap := make(map[int]tree.TypedExpr)
+	columnDefaultExprs := make([]tree.TypedExpr, len(n.Defs))
 
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges, temporary)
 
-	for _, def := range n.Defs {
+	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
 				switch d.Type.Oid() {
@@ -1058,7 +1058,9 @@ func MakeTableDesc(
 			desc.AddColumn(col)
 			if d.HasDefaultExpr() {
 				// This resolution must be delayed until ColumnIDs have been populated.
-				columnSequenceExprMap[len(desc.Columns)-1] = expr
+				columnDefaultExprs[i] = expr
+			} else {
+				columnDefaultExprs[i] = nil
 			}
 
 			if idx != nil {
@@ -1212,8 +1214,8 @@ func MakeTableDesc(
 
 	// Once all the IDs have been allocated, we can add the Sequence dependencies
 	// as maybeAddSequenceDependencies requires ColumnIDs to be correct.
-	for i := range desc.Columns {
-		if expr, ok := columnSequenceExprMap[i]; ok {
+	for i := range n.Defs {
+		if expr := columnDefaultExprs[i]; expr != nil {
 			changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, &desc.Columns[i], expr, affected)
 			if err != nil {
 				return desc, err

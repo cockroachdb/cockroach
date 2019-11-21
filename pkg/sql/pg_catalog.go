@@ -1072,7 +1072,6 @@ CREATE TABLE pg_catalog.pg_depend (
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
-
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db *sqlbase.DatabaseDescriptor,
@@ -1080,12 +1079,27 @@ CREATE TABLE pg_catalog.pg_depend (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
+			pgConstraintTableOid := defaultOid(pgConstraintsDesc.ID)
+			pgClassTableOid := defaultOid(pgClassDesc.ID)
+			if table.IsSequence() &&
+				!table.SequenceOpts.SequenceOwner.Equal(sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}) {
+				refObjID := defaultOid(table.SequenceOpts.SequenceOwner.OwnerTableID)
+				refObjSubID := tree.NewDInt(tree.DInt(table.SequenceOpts.SequenceOwner.OwnerColumnID))
+				objID := defaultOid(table.GetID())
+				return addRow(
+					pgConstraintTableOid, // classid
+					objID,                // objid
+					zeroVal,              // objsubid
+					pgClassTableOid,      // refclassid
+					refObjID,             // refobjid
+					refObjSubID,          // refobjsubid
+					depTypeAuto,          // deptype
+				)
+			}
 			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
-			pgConstraintTableOid := defaultOid(pgConstraintsDesc.ID)
-			pgClassTableOid := defaultOid(pgClassDesc.ID)
 			for _, con := range conInfo {
 				if con.Kind != sqlbase.ConstraintTypeFK {
 					continue

@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -209,9 +208,10 @@ func removeDefaultRegclass(create *tree.CreateTable) {
 // readPostgresCreateTable returns table descriptors for all tables or the
 // matching table from SQL statements.
 func readPostgresCreateTable(
+	ctx context.Context,
 	input io.Reader,
 	evalCtx *tree.EvalContext,
-	settings *cluster.Settings,
+	p sql.PlanHookState,
 	match string,
 	parentID sqlbase.ID,
 	walltime int64,
@@ -228,6 +228,7 @@ func readPostgresCreateTable(
 	createSeq := make(map[string]*tree.CreateSequence)
 	tableFKs := make(map[string][]*tree.ForeignKeyConstraintTableDef)
 	ps := newPostgreStream(input, max)
+	params := p.RunParams(ctx)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -241,7 +242,7 @@ func readPostgresCreateTable(
 					id,
 					hlc.Timestamp{WallTime: walltime},
 					sqlbase.NewDefaultPrivilegeDescriptor(),
-					settings,
+					&params,
 				)
 				if err != nil {
 					return nil, err
@@ -256,7 +257,7 @@ func readPostgresCreateTable(
 				}
 				removeDefaultRegclass(create)
 				id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
-				desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, fks, walltime)
+				desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), p.ExecCfg().Settings, create, parentID, id, fks, walltime)
 				if err != nil {
 					return nil, err
 				}
@@ -271,7 +272,7 @@ func readPostgresCreateTable(
 				}
 				for _, constraint := range constraints {
 					if err := sql.ResolveFK(
-						evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sql.NewTable, tree.ValidationDefault, settings,
+						evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sql.NewTable, tree.ValidationDefault, p.ExecCfg().Settings,
 					); err != nil {
 						return nil, err
 					}

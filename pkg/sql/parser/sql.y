@@ -546,7 +546,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
-%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
+%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NONE NORMAL
 %token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -2184,13 +2184,11 @@ comment_stmt:
     if err != nil {
       return setErr(sqllex, err)
     }
-
     columnItem, ok := varName.(*tree.ColumnItem)
     if !ok {
       sqllex.Error(fmt.Sprintf("invalid column name: %q", tree.ErrString($4.unresolvedName())))
-      return 1
+            return 1
     }
-
     $$.val = &tree.CommentOnColumn{ColumnItem: columnItem, Comment: $6.strPtr()}
   }
 | COMMENT ON INDEX table_index_name IS comment_text
@@ -4958,7 +4956,17 @@ sequence_option_elem:
 | CYCLE                        { /* SKIP DOC */
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
 | NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }
-| OWNED BY column_path         { return unimplementedWithIssue(sqllex, 26382) }
+| OWNED BY NONE                { $$.val = tree.SequenceOption{Name: tree.SeqOptOwnedBy, ColumnItemVal: nil} }
+| OWNED BY column_path         { varName, err := $3.unresolvedName().NormalizeVarName()
+                                     if err != nil {
+                                       return setErr(sqllex, err)
+                                     }
+                                     columnItem, ok := varName.(*tree.ColumnItem)
+                                     if !ok {
+                                       sqllex.Error(fmt.Sprintf("invalid column name: %q", tree.ErrString($3.unresolvedName())))
+                                             return 1
+                                     }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptOwnedBy, ColumnItemVal: columnItem} }
 | CACHE signed_iconst64        { /* SKIP DOC */
                                  x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &x} }
@@ -9681,6 +9689,7 @@ type_func_name_keyword:
 | LEFT
 | LIKE
 | NATURAL
+| NONE
 | NOTNULL
 | OUTER
 | OVERLAPS
