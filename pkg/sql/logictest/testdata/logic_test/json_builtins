@@ -458,9 +458,9 @@ SELECT json_build_object('a', 2, 'b', 4)
 {"a": 2, "b": 4}
 
 query T
-SELECT jsonb_build_object(true,'val',1, 0, 1.3, 2, date '2019-02-03' - date '2019-01-01', 4)
+SELECT jsonb_build_object(true,'val',1, 0, 1.3, 2, date '2019-02-03' - date '2019-01-01', 4, '2001-01-01 11:00+3'::timestamptz, '11:00+3'::timetz)
 ----
-{"1": 0, "1.3": 2, "33": 4, "true": "val"}
+{"1": 0, "1.3": 2, "2001-01-01 11:00:00+03:00": "11:00:00+03:00:00", "33": 4, "true": "val"}
 
 query T
 SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e','{"x": 3, "y": [1,2,3]}'::JSON)
