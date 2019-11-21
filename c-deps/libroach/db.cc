@@ -937,6 +937,10 @@ DBSstFileWriter* DBSstFileWriterNew() {
   table_options.format_version = 0;
   table_options.checksum = rocksdb::kCRC32c;
   table_options.whole_key_filtering = false;
+  // This makes the sstables produced by Pebble and RocksDB byte-by-byte identical, which is
+  // useful for testing.
+  table_options.index_shortening =
+    rocksdb::BlockBasedTableOptions::IndexShorteningMode::kShortenSeparatorsAndSuccessor;
 
   rocksdb::Options* options = new rocksdb::Options();
   options->comparator = &kComparator;

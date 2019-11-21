@@ -53,14 +53,48 @@ var MVCCComparer = &pebble.Comparer{
 		return mvccKeyFormatter{key: decoded}
 	},
 
-	// TODO(itsbilal): Improve separator to shorten index blocks in SSTables.
-	// Current implementation mimics what we use with RocksDB.
 	Separator: func(dst, a, b []byte) []byte {
-		return append(dst, a...)
+		aKey, _, ok := enginepb.SplitMVCCKey(a)
+		if !ok {
+			return append(dst, a...)
+		}
+		bKey, _, ok := enginepb.SplitMVCCKey(b)
+		if !ok {
+			return append(dst, a...)
+		}
+		// If the keys are the same just return a.
+		if bytes.Equal(aKey, bKey) {
+			return append(dst, a...)
+		}
+		n := len(dst)
+		// MVCC key comparison uses bytes.Compare on the roachpb.Key, which is the same semantics as
+		// pebble.DefaultComparer, so reuse the latter's Separator implementation.
+		dst = pebble.DefaultComparer.Separator(dst, aKey, bKey)
+		// Did it pick a separator different than aKey -- if it did not we can't do better than a.
+		buf := dst[n:]
+		if bytes.Equal(aKey, buf) {
+			return append(dst[:n], a...)
+		}
+		// The separator is > aKey, so we only need to add the timestamp sentinel.
+		return append(dst, 0)
 	},
 
 	Successor: func(dst, a []byte) []byte {
-		return append(dst, a...)
+		aKey, _, ok := enginepb.SplitMVCCKey(a)
+		if !ok {
+			return append(dst, a...)
+		}
+		n := len(dst)
+		// MVCC key comparison uses bytes.Compare on the roachpb.Key, which is the same semantics as
+		// pebble.DefaultComparer, so reuse the latter's Successor implementation.
+		dst = pebble.DefaultComparer.Successor(dst, aKey)
+		// Did it pick a successor different than aKey -- if it did not we can't do better than a.
+		buf := dst[n:]
+		if bytes.Equal(aKey, buf) {
+			return append(dst[:n], a...)
+		}
+		// The successor is > aKey, so we only need to add the timestamp sentinel.
+		return append(dst, 0)
 	},
 
 	Split: func(k []byte) int {
