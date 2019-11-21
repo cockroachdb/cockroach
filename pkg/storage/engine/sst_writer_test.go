@@ -11,6 +11,7 @@
 package engine_test
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -103,7 +104,9 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 	const numKeys, valueSize, revisions = 5000, 100, 100
 
 	kvs := makeIntTableKVs(numKeys, valueSize, revisions)
+	fmt.Printf("rocks\n")
 	sstRocks := makeRocksSST(t, kvs)
+	fmt.Printf("pebbles\n")
 	sstPebble := makePebbleSST(t, kvs)
 
 	itRocks, err := engine.NewMemSSTIterator(sstRocks, false)

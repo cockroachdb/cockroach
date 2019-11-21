@@ -39,9 +39,89 @@ int DBComparator::Compare(const rocksdb::Slice& a, const rocksdb::Slice& b) cons
 
 bool DBComparator::Equal(const rocksdb::Slice& a, const rocksdb::Slice& b) const { return a == b; }
 
-// The RocksDB docs say it is safe to leave these two methods unimplemented.
-void DBComparator::FindShortestSeparator(std::string* start, const rocksdb::Slice& limit) const {}
+namespace {
 
-void DBComparator::FindShortSuccessor(std::string* key) const {}
+void ShrinkSlice(rocksdb::Slice* a, size_t size) {
+  a->remove_suffix(a->size() - size);
+}
+
+int SharedPrefixLen(const rocksdb::Slice& a, const rocksdb::Slice& b) {
+  auto n = std::min(a.size(), b.size());
+  int i = 0;
+  for (; i < n && a[i] == b[i]; ++i) {}
+  return i;
+}
+
+bool SliceSeparator(rocksdb::Slice* a, const rocksdb::Slice& b) {
+  auto prefix = SharedPrefixLen(*a, b);
+  auto n = std::min(a->size(), b.size());
+  if (prefix >= n) {
+    // The > case is not actually possible.
+    assert(prefix == n);
+    // One slice is a prefix of another.
+    return false;
+  }
+  // prefix < n. So can look at the characters at prefix, where they differed.
+  if ((*a)[prefix] >= b[prefix]) {
+    // == is not possible since they differed.
+    assert((*a)[prefix] != b[prefix]);
+    // So b is smaller than a.
+    return false;
+  }
+  if ((*a)[prefix] + 1 < b[prefix]) {
+    // They do not have consecutive characters at prefix.
+    const_cast<char*>(a->data())[prefix]++;
+    ShrinkSlice(a, prefix + 1);
+    return true;
+  }
+  // They two slices have consecutive characters at prefix, so we leave the
+  // character at prefix unchanged for a. Now we are free to increment any
+  // subsequent character in a, to make the new a bigger than the old a.
+  ++prefix;
+  for (auto i = prefix; i < a->size() - 1; ++i) {
+    if (static_cast<unsigned char>((*a)[i]) != 0xff) {
+      const_cast<char*>(a->data())[i]++;
+      ShrinkSlice(a, i + 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
+void DBComparator::FindShortestSeparator(std::string* start, const rocksdb::Slice& limit) const {
+  std::printf("Separator: a: %s, b: %s\n", rocksdb::Slice(*start).ToString(true).c_str(), limit.ToString(true).c_str());
+  rocksdb::Slice key_s, key_l;
+  rocksdb::Slice ts_s, ts_l;
+  if (!SplitKey(*start, &key_s, &ts_s) || !SplitKey(limit, &key_l, &ts_l)) {
+    return;
+  }
+  auto found = SliceSeparator(&key_s, key_l);
+  if (!found) return;
+  assert(key_s.size() < n);
+  start->resize(key_s.size() + 1);
+  (*start)[key_s.size()] = 0x00;
+  std::printf("Separator: sep: %s\n", rocksdb::Slice(*start).ToString(true).c_str());
+  return;
+}
+
+void DBComparator::FindShortSuccessor(std::string* key) const {
+  std::printf("Successor: %s\n", rocksdb::Slice(*key).ToString(true).c_str());  
+  rocksdb::Slice k, ts;
+  if (!SplitKey(*key, &k, &ts)) {
+    return;
+  }
+  int i;
+  for (i = 0; i < k.size(); ++i) {
+    if (static_cast<unsigned char>(k[i]) != 0xff) {
+      ++(*key)[i];
+      key->resize(i + 2);
+      (*key)[i + 1] = 0;
+      std::printf("Successor2: %s\n", rocksdb::Slice(*key).ToString(true).c_str());  
+      return;
+    }
+  }
+}
 
 }  // namespace cockroach
