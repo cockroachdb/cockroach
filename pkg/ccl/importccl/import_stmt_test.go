@@ -549,6 +549,16 @@ d
 			},
 		},
 		{
+			name:   "nullif empty string plus escape",
+			create: `a INT8, b INT8`,
+			with:   `WITH fields_terminated_by = ',', fields_escaped_by = '\', nullif = ''`,
+			typ:    "DELIMITED",
+			data:   ",4",
+			query: map[string][][]string{
+				`SELECT * from t`: {{"NULL", "4"}},
+			},
+		},
+		{
 			name:   "nullif single char string",
 			create: `a string, b string`,
 			with:   `WITH fields_terminated_by = ',', nullif = 'f'`,
