@@ -34,6 +34,10 @@ type Bytes struct {
 	maxSetIndex int
 }
 
+// BytesInitialAllocationFactor is an estimate of how many bytes each []byte
+// slice takes up. It is used during the initialization of Bytes.
+const BytesInitialAllocationFactor = 64
+
 // NewBytes returns a Bytes struct with enough capacity for n zero-length
 // []byte values. It is legal to call Set on the returned Bytes at this point,
 // but Get is undefined until at least one element is Set.
@@ -42,7 +46,7 @@ func NewBytes(n int) *Bytes {
 		// Given that the []byte slices are of variable length, we multiply the
 		// number of elements by some constant factor.
 		// TODO(asubiotto): Make this tunable.
-		data:    make([]byte, 0, n*64),
+		data:    make([]byte, 0, n*BytesInitialAllocationFactor),
 		offsets: make([]int32, n+1),
 	}
 }
@@ -353,10 +357,13 @@ func (b *Bytes) Len() int {
 
 // FlatBytesOverhead is the overhead of Bytes in bytes.
 const FlatBytesOverhead = unsafe.Sizeof(Bytes{})
+const sizeOfInt32 = unsafe.Sizeof(int32(0))
 
 // Size returns the total size of the receiver in bytes.
 func (b *Bytes) Size() uintptr {
-	return FlatBytesOverhead + uintptr(len(b.data))
+	return FlatBytesOverhead +
+		uintptr(cap(b.data)) +
+		uintptr(cap(b.offsets))*sizeOfInt32
 }
 
 var zeroInt32Slice = make([]int32, BatchSize())

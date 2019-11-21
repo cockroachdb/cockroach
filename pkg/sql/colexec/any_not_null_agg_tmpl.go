@@ -29,11 +29,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(t coltypes.T) (aggregateFunc, error) {
+func newAnyNotNullAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
-		return &anyNotNull_TYPEAgg{}, nil
+		return &anyNotNull_TYPEAgg{allocator: allocator}, nil
 		// {{end}}
 	default:
 		return nil, errors.Errorf("unsupported any not null agg type %s", t)
@@ -69,6 +69,7 @@ var _ interface{} = execgen.UNSAFEGET
 // anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNull_TYPEAgg struct {
+	allocator                   *Allocator
 	done                        bool
 	groups                      []bool
 	vec                         _GOTYPESLICE
@@ -124,31 +125,36 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TemplateType(), vec.Nulls()
 
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
-				_FIND_ANY_NOT_NULL(a, nulls, i, true)
+	a.allocator.performOperation(
+		[]coldata.Vec{vec},
+		func() {
+			if nulls.MaybeHasNulls() {
+				if sel != nil {
+					sel = sel[:inputLen]
+					for _, i := range sel {
+						_FIND_ANY_NOT_NULL(a, nulls, i, true)
+					}
+				} else {
+					col = execgen.SLICE(col, 0, int(inputLen))
+					for execgen.RANGE(i, col) {
+						_FIND_ANY_NOT_NULL(a, nulls, i, true)
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:inputLen]
+					for _, i := range sel {
+						_FIND_ANY_NOT_NULL(a, nulls, i, false)
+					}
+				} else {
+					col = execgen.SLICE(col, 0, int(inputLen))
+					for execgen.RANGE(i, col) {
+						_FIND_ANY_NOT_NULL(a, nulls, i, false)
+					}
+				}
 			}
-		} else {
-			col = execgen.SLICE(col, 0, int(inputLen))
-			for execgen.RANGE(i, col) {
-				_FIND_ANY_NOT_NULL(a, nulls, i, true)
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
-				_FIND_ANY_NOT_NULL(a, nulls, i, false)
-			}
-		} else {
-			col = execgen.SLICE(col, 0, int(inputLen))
-			for execgen.RANGE(i, col) {
-				_FIND_ANY_NOT_NULL(a, nulls, i, false)
-			}
-		}
-	}
+		},
+	)
 }
 
 func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {

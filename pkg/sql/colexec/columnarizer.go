@@ -108,7 +108,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 
 	// Write each column into the output batch.
 	for idx, ct := range columnTypes {
-		err := EncDatumRowsToColVec(c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
+		err := EncDatumRowsToColVec(c.allocator, c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
 		if err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}

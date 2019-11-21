@@ -99,17 +99,23 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return batch
 	}
-	col := batch.ColVec(c.outputIdx)._TemplateType()
-	if sel := batch.Selection(); sel != nil {
-		for _, i := range sel[:n] {
-			execgen.SET(col, int(i), c.constVal)
-		}
-	} else {
-		col = execgen.SLICE(col, 0, int(n))
-		for execgen.RANGE(i, col) {
-			execgen.SET(col, i, c.constVal)
-		}
-	}
+	vec := batch.ColVec(c.outputIdx)
+	col := vec._TemplateType()
+	c.allocator.performOperation(
+		[]coldata.Vec{vec},
+		func() {
+			if sel := batch.Selection(); sel != nil {
+				for _, i := range sel[:n] {
+					execgen.SET(col, int(i), c.constVal)
+				}
+			} else {
+				col = execgen.SLICE(col, 0, int(n))
+				for execgen.RANGE(i, col) {
+					execgen.SET(col, i, c.constVal)
+				}
+			}
+		},
+	)
 	return batch
 }
 

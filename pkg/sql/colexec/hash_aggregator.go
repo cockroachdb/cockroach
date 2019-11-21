@@ -118,7 +118,7 @@ func NewHashAggregator(
 		},
 	)
 
-	funcs, outTyps, err := makeAggregateFuncs(aggTyps, aggFns)
+	funcs, outTyps, err := makeAggregateFuncs(allocator, aggTyps, aggFns)
 	if err != nil {
 		return nil, err
 	}
