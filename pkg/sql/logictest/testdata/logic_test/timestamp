@@ -149,3 +149,41 @@ select column_name, data_type FROM [SHOW COLUMNS FROM timestamp_test] ORDER BY c
 id   INT8
 t    TIMESTAMP
 ttz  TIMESTAMPTZ(5)
+
+subtest regression_django-cockroachdb_47
+
+statement ok
+SET TIME ZONE -3
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00+01'::timestamptz)
+----
+9
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00'::timestamp)
+----
+13
+
+query R
+SELECT extract(timezone FROM '2001-01-01 13:00:00+01:15'::timestamptz)
+----
+-10800
+
+statement ok
+SET TIME ZONE +3
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00+01'::timestamptz)
+----
+15
+
+query R
+SELECT extract(hour FROM '2001-01-01 13:00:00'::timestamp)
+----
+13
+
+query R
+SELECT extract(timezone FROM '2001-01-01 13:00:00+01:15'::timestamptz)
+----
+10800
