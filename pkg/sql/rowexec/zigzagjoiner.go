@@ -379,6 +379,8 @@ type zigzagJoinerInfo struct {
 	// endKey marks where this side should stop fetching, taking into account the
 	// fixedValues.
 	endKey roachpb.Key
+
+	spanBuilder *row.SpanBuilder
 }
 
 // Setup the curInfo struct for the current z.side, which specifies the side
@@ -432,6 +434,8 @@ func (z *zigzagJoiner) setupInfo(
 
 	// Setup the RowContainers.
 	info.container.Reset()
+
+	info.spanBuilder = row.MakeSpanBuilder(info.table, info.index)
 
 	// Setup the Fetcher.
 	_, _, err := execinfra.InitRowFetcher(
@@ -611,15 +615,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
-	return sqlbase.MakeSpanFromEncDatums(
-		info.prefix,
-		neededDatums,
-		info.indexTypes[:len(neededDatums)],
-		info.indexDirs,
-		info.table,
-		info.index,
-		info.alloc,
-	)
+	return info.spanBuilder.SpanFromEncDatums(neededDatums, len(neededDatums))
 }
 
 // Returns the column types of the equality columns.
