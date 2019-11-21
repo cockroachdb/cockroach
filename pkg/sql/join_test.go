@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -44,9 +45,8 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 		}
 	}
 	scan.reqOrdering = ordering
-
-	scan.spans, err = spansFromConstraint(
-		desc, &desc.PrimaryIndex, nil /* constraint */, exec.ColumnOrdinalSet{}, false /* forDelete */)
+	sb := execinfra.MakeSpanBuilder(desc.TableDesc(), &desc.PrimaryIndex)
+	scan.spans, err = sb.SpansFromConstraint(nil /* constraint */, exec.ColumnOrdinalSet{}, false /* forDelete */)
 	if err != nil {
 		return nil, err
 	}

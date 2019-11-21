@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -81,7 +82,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
-	scan.spans, err = unconstrainedSpans(desc, scan.index, scan.isDeleteSource)
+	sb := execinfra.MakeSpanBuilder(desc.TableDesc(), scan.index)
+	scan.spans, err = sb.UnconstrainedSpans(scan.isDeleteSource)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
