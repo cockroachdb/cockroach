@@ -1,0 +1,61 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+
+._search-form
+  width 450px
+  height 40px
+  .ant-input-affix-wrapper
+    &:hover
+      .ant-input:not(.ant-input-disabled)
+        border-color $adminui-blue-1-base
+        border-right-width 2px !important
+  .ant-btn
+    margin 0
+    padding 0
+    width auto
+    height auto
+    border none
+    font-size 14px
+  ._prefix-icon
+    color $adminui-grey-2
+    &:hover
+      color $adminui-grey-2
+  ._clear-search
+    color $text-color
+    &:hover
+      color $text-color
+  ._submit-search
+    font-family Lato-Regular
+    font-size 14px
+    color $adminui-grey-2
+    line-height 0px !important
+    &:hover
+      color $adminui-grey-2
+  .ant-input
+    font-size 14px
+    font-family Lato-Regular
+    color $adminui-grey-1
+    border-radius 3px
+    border 2px solid $grey5
+    &:focus
+      box-shadow 0px 0px 2px 4px rgba(224,238,251,1)
+      border 2px solid $adminui-blue-1-base
+      border-right-width 2px !important
+    &:placeholder
+      color $adminui-grey-2
+    &:not(:first-child)
+      padding-left 35px
+      padding-right 60px
+  ._submitted
+    .ant-input
+      &:not(:first-child)
+        padding-right 40px

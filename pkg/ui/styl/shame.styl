@@ -133,29 +133,52 @@
   font-size 10px
 
 .ant-divider
-  background #c8cbd4
+  background $button-border-color
   margin-left 0
   margin-right 22px
   &.ant-divider-vertical
     height auto
-.ant-tooltip-inner
-  font-size 12px
+
+.ant-tooltip
+  .ant-tooltip-inner
+    font-size 12px
+    border-radius 4px
+    background-color $body-color
+    font-family Lato-Regular
+    color #fff
+    box-shadow none
+    padding 5px 8px
+    min-width 0
+    min-height 0
+  &.preset-black
+    .ant-tooltip-inner
+      background-color #000
+      pre
+        font-family RobotoMono-Medium
+        font-size 12px
+        color #e7ecf3
+        letter-spacing 0.7px
+        line-height 24px
+        ._text-bold
+          font-family RobotoMono-Bold
+          color #8dbcff
+
 .ant-input, .ant-time-picker-input
   height 40px
   padding 0px 11px
   border-radius 3px
-  border solid 1px #c8cbd4
+  border solid 1px $button-border-color
   &:focus
-    border solid 1px #3a7ce1
+    border solid 1px $link-color
     box-shadow none
   &:hover
-    border-color #3a7ce1
+    border-color $link-color
 
 .ant-time-picker-panel-combobox
   display flex
 
 .ant-calendar-picker:hover .ant-calendar-picker-input:not(.ant-input-disabled)
-  border-color #3a7ce1
+  border-color $link-color
 
 .ant-calendar
   font-size 12px
@@ -166,23 +189,23 @@
 
 .ant-calendar-selected-day
   .ant-calendar-date
-    background #eff5fe
-    color #3a7ce1
+    background $grey2
+    color $link-color
     &:hover
       background #e0efff
-      color #2367cd
+      color $blue-color
 
 .ant-calendar-today 
   &.ant-calendar-date
-    color #3a7ce1
-    border-color #3a7ce1
+    color $link-color
+    border-color $link-color
     &:hover
-      background #eff5fd
+      background $grey3
   &.ant-calendar-selected-day
     .ant-calendar-date
-      background #eff5fd
+      background $grey3
       &:hover
-        background #e0efff
+        background $grey4
         font-weight bold
   &.ant-calendar-disabled-cell
     .ant-calendar-date
@@ -191,7 +214,7 @@
         background #f5f5f5
 
 .ant-calendar-date, .ant-time-picker-panel li
-  color #5F6C87
+  color $body-color
   font-family Lato-Regular
   font-size 12px
   &.ant-time-picker-panel-addon-option-disabled
@@ -199,7 +222,7 @@
   &:hover
     background #f6f6f6
   &:focus
-    color #3a7ce1
+    color $link-color
 
 .ant-time-picker-panel li
   display flex
@@ -223,9 +246,9 @@
       left 15px
     .ant-calendar-month-select, .ant-calendar-year-select
       font-size 14px
-      color #5f6c87
+      color $body-color
       &:hover
-        color #3a7ce1
+        color $link-color
   .ant-calendar-prev-year-btn, .ant-calendar-next-year-btn
     display none
 
@@ -252,3 +275,109 @@
   &-default, .active, &:focus, &:hover
     border none
 
+.ant-form-item
+  margin 0
+
+.ant-pagination
+  display flex
+  justify-content center
+  align-items flex-end
+  height 100%
+  margin 40px 0
+  &.mini
+    .ant-pagination-item, .ant-pagination-prev, .ant-pagination-next
+      margin 0 5px
+  .ant-pagination-item
+    a
+      color $body-color
+      font-size 14px
+      font-family Lato-Medium
+      &:hover
+        color $link-color
+  .ant-pagination-item-active
+    background transparent
+    border-radius 2px
+    border 1px solid $link-color
+    a
+      color $link-color
+  .ant-pagination-next, .ant-pagination-prev
+    .ant-pagination-item-link
+      font-size 12px
+      color $body-color
+    &:hover
+      .ant-pagination-item-link
+        color $link-color
+    &.ant-pagination-disabled
+      .ant-pagination-item-link
+        color #b8bbbc
+      &:hover
+        .ant-pagination-item-link
+          color #b8bbbc
+
+.drawer--preset-black
+  display flex
+  align-items center
+  /* width */
+  ::-webkit-scrollbar {
+    width 7px
+  }
+
+  /* Track */
+  ::-webkit-scrollbar-track {
+    background transparent
+    border-radius 10px
+  }
+
+  /* Handle */
+  ::-webkit-scrollbar-thumb {
+    background #5f6c87
+    border-radius 10px
+  }
+
+  /* Handle on hover */
+  ::-webkit-scrollbar-thumb:hover {
+    background #5f6c87ad
+  }
+  .ant-divider
+    width 1px
+    background #5f6c87
+    margin: 0 15px
+    height 14px
+  .__actions
+    button, a
+      width auto
+      color #f6f6f6
+      font-size 12px
+      font-family Lato-Bold
+      line-height 2
+      letter-spacing 0.1px
+      &:hover
+        color #5f6c87
+  .ant-drawer-content
+    overflow auto
+  .ant-drawer-mask
+    background-color transparent
+  .ant-drawer-content-wrapper
+    padding-left 80px
+    box-shadow none !important
+  .ant-drawer-content
+    background #242a35
+  .ant-drawer-header
+    padding 15px 0
+    margin 0 24px
+    background transparent
+    border-bottom: 1px solid #5f6c87;
+  .ant-drawer-body
+    padding 15px 20px
+    margin 0 4px
+    height 190px
+    overflow-x hidde
+    overflow-y auto
+  .drawer__content
+    color #f6f6f6
+    font-family RobotoMono-Regular
+    font-size 12px
+    line-height 24px
+    ._text-bold
+      color #87beff
+      font-family RobotoMono-Bold
