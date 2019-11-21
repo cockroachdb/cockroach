@@ -3609,20 +3609,21 @@ func MVCCGCStats(ctx context.Context,
 	ms *enginepb.MVCCStats,
 	key MVCCKey,
 	timestamp hlc.Timestamp, callbacks ...func(MVCCKey, []byte)error) error {
-	iter := engine.NewIterator(IterOptions{LowerBound: roachpb.Key(key.Key)})
-	defer iter.Close()
-	iter.SeekGE(key)
+
+	it := engine.NewIterator(IterOptions{LowerBound: key.Key})
+	defer it.Close()
+	it.SeekGE(key)
 	prevNanos := timestamp.WallTime
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
 			return err
 		} else if !ok {
 			break
 		} else if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		unsafeIterKey := iter.UnsafeKey()
-		unsafeIterValue := iter.UnsafeValue()
+		unsafeIterKey := it.UnsafeKey()
+		unsafeIterValue := it.UnsafeValue()
 		if !unsafeIterKey.Key.Equal(key.Key) {
 			break
 		}
@@ -3638,7 +3639,7 @@ func MVCCGCStats(ctx context.Context,
 			if ms != nil {
 				// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
 				// when it's a deletion.
-				valSize := int64(len(iter.UnsafeValue()))
+				valSize := int64(len(it.UnsafeValue()))
 
 				// A non-deletion becomes non-live when its newer neighbor shows up.
 				// A deletion tombstone becomes non-live right when it is created.

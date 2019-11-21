@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"sync/atomic"
 	"time"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
-	"sync"
 )
 
 const (
@@ -478,7 +478,8 @@ func (NoopGCer) SetGCThreshold(context.Context, GCThreshold) error { return nil 
 // GC implements storage.GCer.
 func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
 
-func (NoopGCer) FastGC(ctx context.Context, key engine.MVCCKey, ms enginepb.MVCCStats) error {return nil}
+// FastGC implements storage.GCer.
+func (NoopGCer) FastGC(context.Context, engine.MVCCKey, enginepb.MVCCStats) error {return nil}
 
 type replicaGCer struct {
 	repl  *Replica
@@ -840,17 +841,17 @@ func RunGC(
 		}
 	}
 
-	processFastGC := func(ctx_ context.Context) error {
+	processFastGC := func() error {
 		// fast GC will takes a lot of time for process stats,
 		// so we need hijack context for timeout
-		ctx, cancel := newHijackContextWithCancel(ctx_)
+		fCtx, cancel := newHijackContextWithCancel(ctx)
 		defer cancel()
 		if len(keys) < 2 {
 			return nil
 		}
 		meta := &enginepb.MVCCMetadata{}
 		if err := protoutil.Unmarshal(vals[0], meta); err != nil {
-			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
+			log.Errorf(fCtx, "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			return err
 		}
 		startIdx := 1
@@ -881,18 +882,18 @@ func RunGC(
 			from := engine.MVCCKey{Key: keys[0].Key, Timestamp: gcTS}
 			to := engine.MVCCKey{Key: from.Key.PrefixEnd()}
 			var ms enginepb.MVCCStats
-			if err := engine.MVCCGCStats(ctx, snap, &ms, from, now, func(key engine.MVCCKey, val []byte) error {
+			if err := engine.MVCCGCStats(fCtx, snap, &ms, from, now, func(key engine.MVCCKey, val []byte) error {
 				// the key and value is unsafe
 				infoMu.GCInfo.AffectedVersionsKeyBytes += int64(key.EncodedSize())
 				infoMu.GCInfo.AffectedVersionsValBytes += int64(len(val))
 				return nil
 			}); err != nil {
-				log.Errorf(ctx, "compute GC stats failed, err %v", err)
+				log.Errorf(fCtx, "compute GC stats failed, err %v", err)
 				return err
 			}
-			err := gcer.FastGC(ctx, from, ms)
+			err := gcer.FastGC(fCtx, from, ms)
 			if err != nil {
-				log.Errorf(ctx, "fast GC failed, %s err %v", from, err)
+				log.Errorf(fCtx, "fast GC failed, %s err %v", from, err)
 				return err
 			}
 			iter.ResetAllocator()
@@ -950,7 +951,7 @@ func RunGC(
 				}
 			}
 			//
-			if err := processFastGC(ctx); err != nil {
+			if err := processFastGC(); err != nil {
 				return GCInfo{}, err
 			}
 			// we need reset keys and values

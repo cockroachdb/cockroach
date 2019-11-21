@@ -158,6 +158,8 @@ func (ri *ReplicaDataIterator) advance() {
 	}
 }
 
+// Seek advances the iterator to the first key in the engine which
+// is >= the provided key.
 func (ri *ReplicaDataIterator) Seek(key engine.MVCCKey) {
 	ri.it.SeekGE(key)
 	for i, rng := range ri.ranges {
@@ -189,16 +191,6 @@ func (ri *ReplicaDataIterator) Value() []byte {
 	value := ri.it.UnsafeValue()
 	ri.a, value = ri.a.Copy(value, 0)
 	return value
-}
-
-// Key returns the current key.
-func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
-	return ri.it.UnsafeKey()
-}
-
-// Value returns the current value.
-func (ri *ReplicaDataIterator) UnsafeValue() []byte {
-	return ri.it.UnsafeValue()
 }
 
 // ResetAllocator resets the ReplicaDataIterator's internal byte allocator.
