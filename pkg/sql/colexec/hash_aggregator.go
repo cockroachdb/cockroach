@@ -246,7 +246,8 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 	for i, colIdx := range op.ht.outCols {
 		toCol := op.batch.ColVec(i)
 		fromCol := op.ht.vals[colIdx]
-		toCol.Copy(
+		op.ht.allocator.Copy(
+			toCol,
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
 					ColType:     op.ht.valTypes[op.ht.outCols[i]],

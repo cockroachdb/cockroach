@@ -319,7 +319,8 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 		valCol := hj.ht.vals[inColIdx]
 		colType := hj.ht.valTypes[inColIdx]
 
-		outCol.Copy(
+		hj.allocator.Copy(
+			outCol,
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
 					ColType:   colType,
@@ -980,7 +981,8 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 			// Note that if for some index i, probeRowUnmatched[i] is true, then
 			// prober.buildIdx[i] == 0 which will copy the garbage zeroth row of the
 			// hash table, but we will set the NULL value below.
-			outCol.Copy(
+			prober.ht.allocator.Copy(
+				outCol,
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
 						ColType:   colType,
@@ -1007,7 +1009,8 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		valCol := batch.ColVec(int(inColIdx))
 		colType := prober.spec.sourceTypes[inColIdx]
 
-		outCol.Copy(
+		prober.ht.allocator.Copy(
+			outCol,
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
 					ColType:   colType,

@@ -78,11 +78,11 @@ func (a *Allocator) AppendColumn(b coldata.Batch, t coltypes.T) {
 	b.AppendCol(col)
 }
 
-// Append appends elements of a source coldata.Vec into dest according to
-// coldata.SliceArgs.
-func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
+// performOperation executes 'operation' (that somehow modifies 'dest') and
+// updates the memory account accordingly.
+func (a *Allocator) performOperation(dest coldata.Vec, operation func()) {
 	var before, after, delta int64
-	// To simplify the accounting, we perform the append first and then will
+	// To simplify the accounting, we perform the operation first and then will
 	// update the memory account. The minor "drift" in accounting that is caused
 	// by this approach is ok.
 	if dest.Type() == coltypes.Bytes {
@@ -90,7 +90,7 @@ func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
 	} else {
 		before = int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Length()))
 	}
-	dest.Append(args)
+	operation()
 	if dest.Type() == coltypes.Bytes {
 		after = int64(dest.Bytes().Size())
 	} else {
@@ -106,8 +106,19 @@ func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
 	}
 }
 
-// TODO(yuzefovich): Vec.Copy and execgen.SET need to also go through the
-// Allocator.
+// Append appends elements of a source coldata.Vec into dest according to
+// coldata.SliceArgs.
+func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
+	a.performOperation(dest, func() { dest.Append(args) })
+}
+
+// Copy copies elements of a source coldata.Vec into dest according to
+// coldata.CopySliceArgs.
+func (a *Allocator) Copy(dest coldata.Vec, args coldata.CopySliceArgs) {
+	a.performOperation(dest, func() { dest.Copy(args) })
+}
+
+// TODO(yuzefovich): execgen.SET needs to also go through the Allocator.
 // TODO(yuzefovich): extend Allocator so that it could free up the memory (and
 // resize the memory account accordingly) when the caller is done with the
 // batches.
