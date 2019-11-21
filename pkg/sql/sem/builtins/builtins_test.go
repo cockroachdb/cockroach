@@ -246,6 +246,80 @@ func TestLPadRPad(t *testing.T) {
 	}
 }
 
+func TestExtractStringFromTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	utcPositiveOffset := time.FixedZone("otan happy time", 60*60*4+30*60)
+	utcNegativeOffset := time.FixedZone("otan sad time", -60*60*4-30*60)
+
+	testCases := []struct {
+		input    time.Time
+		timeSpan string
+
+		expected      tree.DFloat
+		expectedError string
+	}{
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "timezone", expected: 0},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "timezone_hour", expected: 0},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "timezone_minute", expected: 0},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "millennia", expected: 3},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "century", expected: 21},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "decade", expected: 201},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "year", expected: 2019},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "month", expected: 12},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "day", expected: 11},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "hour", expected: 0},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "minute", expected: 14},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "second", expected: 15.123456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "millisecond", expected: 15123.456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "microsecond", expected: 15123456},
+
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "timezone", expected: 4*60*60 + 30*60},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "timezone_hour", expected: 4},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "timezone_minute", expected: 30},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "millennia", expected: 3},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "century", expected: 21},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "decade", expected: 201},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "year", expected: 2019},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "month", expected: 12},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "day", expected: 11},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "hour", expected: 0},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "minute", expected: 14},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "second", expected: 15.123456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "millisecond", expected: 15123.456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "microsecond", expected: 15123456},
+
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "timezone", expected: -4*60*60 - 30*60},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "timezone_hour", expected: -4},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "timezone_minute", expected: -30},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "millennia", expected: 3},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "century", expected: 21},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "decade", expected: 201},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "year", expected: 2019},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "month", expected: 12},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "day", expected: 11},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "hour", expected: 0},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "minute", expected: 14},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "second", expected: 15.123456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "millisecond", expected: 15123.456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "microsecond", expected: 15123456},
+
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "it's numberwang!", expectedError: "unsupported timespan: it's numberwang!"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s_%s", tc.timeSpan, tc.input.Format(time.RFC3339)), func(t *testing.T) {
+			datum, err := extractStringFromTimestampTZ(nil, tc.input, tc.timeSpan)
+			if tc.expectedError != "" {
+				assert.EqualError(t, err, tc.expectedError)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expected, *(datum.(*tree.DFloat)))
+			}
+		})
+	}
+}
+
 func TestExtractStringFromTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
