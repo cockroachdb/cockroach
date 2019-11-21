@@ -8238,6 +8238,10 @@ special_function:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
+| CURRENT_TIMESTAMP '(' a_expr ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: tree.Exprs{$3.expr()}}
+  }
 | CURRENT_TIMESTAMP '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_TIME '(' ')'
   {
