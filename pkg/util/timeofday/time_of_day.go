@@ -97,6 +97,20 @@ func Random(rng *rand.Rand) TimeOfDay {
 	return TimeOfDay(rng.Int63n(microsecondsPerDay))
 }
 
+// Round takes a TimeOfDay, and rounds it to the given precision.
+func (t TimeOfDay) Round(precision time.Duration) TimeOfDay {
+	if t == Time2400 {
+		return t
+	}
+	ret := t.ToTime().Round(precision)
+	// Rounding Max should give Time2400, not 00:00.
+	// To catch this, see if we went to the next day.
+	if ret.Day() == 2 {
+		return Time2400
+	}
+	return FromTime(ret)
+}
+
 // Add adds a Duration to a TimeOfDay, wrapping into the next day if necessary.
 func (t TimeOfDay) Add(d duration.Duration) TimeOfDay {
 	return FromInt(int64(t) + d.Nanos()/nanosPerMicro)

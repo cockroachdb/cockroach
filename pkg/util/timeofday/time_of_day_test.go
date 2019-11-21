@@ -66,6 +66,28 @@ func TestFromAndToTime(t *testing.T) {
 	}
 }
 
+func TestRound(t *testing.T) {
+	testData := []struct {
+		t     TimeOfDay
+		round time.Duration
+		exp   TimeOfDay
+	}{
+		{New(12, 0, 0, 1000), time.Second, New(12, 0, 0, 0)},
+		{New(12, 0, 0, 1000), time.Millisecond, New(12, 0, 0, 1000)},
+		{Max, time.Second, Time2400},
+		{Time2400, time.Second, Time2400},
+		{Min, time.Second, Min},
+	}
+	for _, td := range testData {
+		t.Run(fmt.Sprintf("%s,%s", td.t, td.round), func(t *testing.T) {
+			actual := td.t.Round(td.round)
+			if actual != td.exp {
+				t.Errorf("expected %s, got %s", td.exp, actual)
+			}
+		})
+	}
+}
+
 func TestAdd(t *testing.T) {
 	testData := []struct {
 		t      TimeOfDay

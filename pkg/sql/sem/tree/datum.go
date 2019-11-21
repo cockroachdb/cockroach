@@ -1862,7 +1862,7 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 
 // ParseDTime parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
-func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
+func ParseDTime(ctx ParseTimeContext, s string, precision time.Duration) (*DTime, error) {
 	now := relativeParseTime(ctx)
 
 	// special case on 24:00 and 24:00:00 as the parser
@@ -1876,7 +1876,7 @@ func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 		// Build our own error message to avoid exposing the dummy date.
 		return nil, makeParseError(s, types.Time, nil)
 	}
-	return MakeDTime(timeofday.FromTime(t)), nil
+	return MakeDTime(timeofday.FromTime(t).Round(precision)), nil
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1897,6 +1897,11 @@ func (d *DTime) Compare(ctx *EvalContext, other Datum) int {
 func (d *DTime) Prev(_ *EvalContext) (Datum, bool) {
 	prev := *d - 1
 	return &prev, true
+}
+
+// Round returns a new DTime to the specified precision.
+func (d *DTime) Round(precision time.Duration) *DTime {
+	return MakeDTime(timeofday.TimeOfDay(*d).Round(precision))
 }
 
 // Next implements the Datum interface.
@@ -1981,9 +1986,9 @@ func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ 
 
 // ParseDTimeTZ parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
-func ParseDTimeTZ(ctx ParseTimeContext, s string) (*DTimeTZ, error) {
+func ParseDTimeTZ(ctx ParseTimeContext, s string, precision time.Duration) (*DTimeTZ, error) {
 	now := relativeParseTime(ctx)
-	d, err := timetz.ParseTimeTZ(now, s)
+	d, err := timetz.ParseTimeTZ(now, s, precision)
 	if err != nil {
 		return nil, err
 	}
@@ -2033,6 +2038,11 @@ func (d *DTimeTZ) IsMin(_ *EvalContext) bool {
 // Max implements the Datum interface.
 func (d *DTimeTZ) Max(_ *EvalContext) (Datum, bool) {
 	return dMaxTimeTZ, true
+}
+
+// Round returns a new DTimeTZ to the specified precision.
+func (d *DTimeTZ) Round(precision time.Duration) *DTimeTZ {
+	return NewDTimeTZ(d.TimeTZ.Round(precision))
 }
 
 // Min implements the Datum interface.
