@@ -252,7 +252,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
-			"tar -chj --ignore-failed-read -f- /mnt/data1/jepsen/cockroachdb/store/latest /mnt/data1/jepsen/cockroachdb/invoke.log")
+			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log")
 		if output, err := cmd.Output(); err != nil {
 			t.l.Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
 		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
