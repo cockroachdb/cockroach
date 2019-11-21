@@ -72,14 +72,16 @@ func validateCheckExpr(
 //
 // SELECT s.a_id, s.b_id, s.pk1, s.pk2 FROM child@c_idx
 // WHERE
-//   NOT ((COALESCE(a_id, b_id) IS NULL) OR (a_id IS NOT NULL AND b_id IS NOT NULL))
+//   (a_id IS NULL OR b_id IS NULL) AND (a_id IS NOT NULL OR b_id IS NOT NULL)
 // LIMIT 1;
 func matchFullUnacceptableKeyQuery(
 	srcTbl *sqlbase.TableDescriptor, fk *sqlbase.ForeignKeyConstraint, limitResults bool,
 ) (sql string, colNames []string, _ error) {
 	nCols := len(fk.OriginColumnIDs)
 	srcCols := make([]string, nCols)
-	srcNotNullClause := make([]string, nCols)
+	srcNullExistsClause := make([]string, nCols)
+	srcNotNullExistsClause := make([]string, nCols)
+
 	returnedCols := srcCols
 	for i := 0; i < nCols; i++ {
 		col, err := srcTbl.FindColumnByID(fk.OriginColumnIDs[i])
@@ -87,7 +89,8 @@ func matchFullUnacceptableKeyQuery(
 			return "", nil, err
 		}
 		srcCols[i] = tree.NameString(col.Name)
-		srcNotNullClause[i] = fmt.Sprintf("%s IS NOT NULL", srcCols[i])
+		srcNullExistsClause[i] = fmt.Sprintf("%s IS NULL", srcCols[i])
+		srcNotNullExistsClause[i] = fmt.Sprintf("%s IS NOT NULL", srcCols[i])
 	}
 
 	for _, id := range srcTbl.PrimaryIndex.ColumnIDs {
@@ -112,12 +115,12 @@ func matchFullUnacceptableKeyQuery(
 		limit = " LIMIT 1"
 	}
 	return fmt.Sprintf(
-		`SELECT %[1]s FROM [%[2]d AS tbl] WHERE NOT ((COALESCE(%[3]s) IS NULL) OR (%[4]s)) %[5]s`,
-		strings.Join(returnedCols, ","),         // 1
-		srcTbl.ID,                               // 2
-		strings.Join(srcCols, ", "),             // 3
-		strings.Join(srcNotNullClause, " AND "), // 4
-		limit,                                   // 5
+		`SELECT %[1]s FROM [%[2]d AS tbl] WHERE (%[3]s) AND (%[4]s) %[5]s`,
+		strings.Join(returnedCols, ","),              // 1
+		srcTbl.ID,                                    // 2
+		strings.Join(srcNullExistsClause, " OR "),    // 3
+		strings.Join(srcNotNullExistsClause, " OR "), // 4
+		limit, // 5
 	), returnedCols, nil
 }
 
