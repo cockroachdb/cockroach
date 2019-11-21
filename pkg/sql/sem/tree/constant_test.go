@@ -205,7 +205,14 @@ func mustParseDDate(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDTime(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTime(nil, s)
+	d, err := tree.ParseDTime(nil, s, time.Microsecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+func mustParseDTimeTZ(t *testing.T, s string) tree.Datum {
+	d, err := tree.ParseDTimeTZ(nil, s, time.Microsecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,6 +277,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.Bool:         mustParseDBool,
 	types.Date:         mustParseDDate,
 	types.Time:         mustParseDTime,
+	types.TimeTZ:       mustParseDTimeTZ,
 	types.Timestamp:    mustParseDTimestamp,
 	types.TimestampTZ:  mustParseDTimestampTZ,
 	types.Interval:     mustParseDInterval,
