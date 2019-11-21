@@ -277,7 +277,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 	}
 	var jobID string
 	if err := db.QueryRow(
-		`CREATE CHANGEFEED FOR bank.bank INTO $1 WITH updated, resolved`, kafka.sinkURL(ctx),
+		`CREATE CHANGEFEED FOR bank.bank INTO $1 WITH updated, resolved, diff`, kafka.sinkURL(ctx),
 	).Scan(&jobID); err != nil {
 		t.Fatal(err)
 	}
@@ -314,12 +314,17 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		}
 
 		const requestedResolved = 100
+		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`)
+		if err != nil {
+			return err
+		}
 		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
 		if err != nil {
 			return err
 		}
 		v := cdctest.MakeCountValidator(cdctest.Validators{
 			cdctest.NewOrderValidator(`bank`),
+			baV,
 			fprintV,
 		})
 
@@ -335,7 +340,9 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 
 			partitionStr := strconv.Itoa(int(m.Partition))
 			if len(m.Key) > 0 {
-				v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated)
+				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated); err != nil {
+					return err
+				}
 			} else {
 				if err := v.NoteResolved(partitionStr, resolved); err != nil {
 					return err
@@ -383,7 +390,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 	var jobID string
 	if err := db.QueryRow(
 		`CREATE CHANGEFEED FOR foo INTO $1`+
-			`WITH updated, resolved, format=experimental_avro, confluent_schema_registry=$2`,
+			`WITH updated, resolved, diff, format=experimental_avro, confluent_schema_registry=$2`,
 		kafka.sinkURL(ctx), kafka.schemaRegistryURL(ctx),
 	).Scan(&jobID); err != nil {
 		t.Fatal(err)
@@ -442,13 +449,13 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 	sort.Strings(updated)
 
 	expected := []string{
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1},"c":null}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1}}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"b":{"string":"2"}}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"c":null}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"c":{"long":3}}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":4},"c":{"long":4}}}}`,
+		`{"before":null,"after":{"foo":{"a":{"long":1}}},"updated":{"string":""}}`,
+		`{"before":null,"after":{"foo":{"a":{"long":2},"b":{"string":"2"}}},"updated":{"string":""}}`,
+		`{"before":null,"after":{"foo":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}},"updated":{"string":""}}`,
+		`{"before":null,"after":{"foo":{"a":{"long":4},"c":{"long":4}}},"updated":{"string":""}}`,
+		`{"before":{"foo_before":{"a":{"long":1},"c":null}},"after":{"foo":{"a":{"long":1},"c":null}},"updated":{"string":""}}`,
+		`{"before":{"foo_before":{"a":{"long":2},"c":null}},"after":{"foo":{"a":{"long":2},"c":null}},"updated":{"string":""}}`,
+		`{"before":{"foo_before":{"a":{"long":3},"c":{"long":3}}},"after":{"foo":{"a":{"long":3},"c":{"long":3}}},"updated":{"string":""}}`,
 	}
 	if strings.Join(expected, "\n") != strings.Join(updated, "\n") {
 		t.Fatalf("expected\n%s\n\ngot\n%s\n\n",

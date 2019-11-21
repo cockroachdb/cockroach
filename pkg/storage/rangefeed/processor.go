@@ -353,6 +353,7 @@ func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchupIter engine.SimpleIterator,
+	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,
 ) bool {
@@ -362,8 +363,8 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchupIter, p.Config.EventChanCap,
-		p.Metrics, stream, errC,
+		span.AsRawSpanWithNoLocals(), startTS, catchupIter, withDiff,
+		p.Config.EventChanCap, p.Metrics, stream, errC,
 	)
 	select {
 	case p.regC <- r:
@@ -522,7 +523,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
 			// Publish the new value directly.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue)
 
 		case *enginepb.MVCCWriteIntentOp:
 			// No updates to publish.
@@ -532,7 +533,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue)
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
@@ -565,13 +566,16 @@ func (p *Processor) initResolvedTS(ctx context.Context) {
 }
 
 func (p *Processor) publishValue(
-	ctx context.Context, key roachpb.Key, timestamp hlc.Timestamp, value []byte,
+	ctx context.Context, key roachpb.Key, timestamp hlc.Timestamp, value, prevValue []byte,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
 		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
 	}
 
-	span := roachpb.Span{Key: key}
+	var prevVal roachpb.Value
+	if prevValue != nil {
+		prevVal.RawBytes = prevValue
+	}
 	var event roachpb.RangeFeedEvent
 	event.MustSetValue(&roachpb.RangeFeedValue{
 		Key: key,
@@ -579,8 +583,9 @@ func (p *Processor) publishValue(
 			RawBytes:  value,
 			Timestamp: timestamp,
 		},
+		PrevValue: prevVal,
 	})
-	p.reg.PublishToOverlapping(span, &event)
+	p.reg.PublishToOverlapping(roachpb.Span{Key: key}, &event)
 }
 
 func (p *Processor) publishCheckpoint(ctx context.Context) {

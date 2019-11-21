@@ -20,22 +20,31 @@ import (
 // It can be used to avoid performing extra work to provide the Processor with
 // information which will be ignored.
 type Filter struct {
-	needVals interval.RangeGroup
-	// TODO(nvanbenschoten): When addressing #28666, we can extend this with
-	// a second `needPreVals interval.RangeGroup` to avoid fetching existing
-	// values for spans that don't need them.
+	needPrevVals interval.RangeGroup
+	needVals     interval.RangeGroup
 }
 
 func newFilterFromRegistry(reg *registry) *Filter {
 	f := &Filter{
-		needVals: interval.NewRangeList(),
+		needPrevVals: interval.NewRangeList(),
+		needVals:     interval.NewRangeList(),
 	}
 	reg.tree.Do(func(i interval.Interface) (done bool) {
 		r := i.(*registration)
+		if r.withDiff {
+			f.needPrevVals.Add(r.Range())
+		}
 		f.needVals.Add(r.Range())
 		return false
 	})
 	return f
+}
+
+// NeedPrevVal returns whether the Processor requires MVCCWriteValueOp and
+// MVCCCommitIntentOp operations over the specified key span to contain
+// populated PrevValue fields.
+func (r *Filter) NeedPrevVal(s roachpb.Span) bool {
+	return r.needPrevVals.Overlaps(s.AsRange())
 }
 
 // NeedVal returns whether the Processor requires MVCCWriteValueOp and

@@ -1230,6 +1230,10 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	tc.mu.txn.MaxTimestamp = ts
 	tc.mu.txn.CommitTimestampFixed = true
 
+	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
+	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
+	tc.mu.txn.MinTimestamp.Backward(ts)
+
 	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too.
 	tc.mu.txn.DeprecatedOrigTimestamp = ts
 
