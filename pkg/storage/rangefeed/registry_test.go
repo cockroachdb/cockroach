@@ -131,10 +131,11 @@ func (r *testRegistration) Err() *roachpb.Error {
 func TestRegistrationBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	val := roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 1}}
+	key := roachpb.Key("a")
+	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev2.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
 
 	// Registration with no catchup scan specified.
 	noCatchupReg := newTestRegistration(spAB, hlc.Timestamp{}, nil)
@@ -267,13 +268,14 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 func TestRegistryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	val := roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 1}}
+	key := roachpb.Key("a")
+	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
 	ev3, ev4 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev2.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev3.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev4.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
+	ev3.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
+	ev4.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
 	err1 := roachpb.NewErrorf("error1")
 
 	reg := makeRegistry()
@@ -320,6 +322,18 @@ func TestRegistryBasic(t *testing.T) {
 	require.Nil(t, rCD.Err())
 	require.Nil(t, rAC.Err())
 
+	// Check the registry's operation filter.
+	f := reg.NewFilter()
+	require.True(t, f.NeedVal(spAB))
+	require.True(t, f.NeedVal(spBC))
+	require.True(t, f.NeedVal(spCD))
+	require.True(t, f.NeedVal(spAC))
+	require.False(t, f.NeedVal(spXY))
+	require.True(t, f.NeedVal(roachpb.Span{Key: keyA}))
+	require.True(t, f.NeedVal(roachpb.Span{Key: keyB}))
+	require.True(t, f.NeedVal(roachpb.Span{Key: keyC}))
+	require.False(t, f.NeedVal(roachpb.Span{Key: keyX}))
+
 	// Disconnect span that overlaps with rCD.
 	reg.DisconnectWithErr(spCD, err1)
 	require.Equal(t, 3, reg.Len())
@@ -339,7 +353,19 @@ func TestRegistryBasic(t *testing.T) {
 	require.Nil(t, rAB.Err())
 	require.Equal(t, 1, reg.Len())
 
-	// Register and unregister.
+	// Check the registry's operation filter again.
+	f = reg.NewFilter()
+	require.False(t, f.NeedVal(spAB))
+	require.True(t, f.NeedVal(spBC))
+	require.False(t, f.NeedVal(spCD))
+	require.True(t, f.NeedVal(spAC))
+	require.False(t, f.NeedVal(spXY))
+	require.False(t, f.NeedVal(roachpb.Span{Key: keyA}))
+	require.True(t, f.NeedVal(roachpb.Span{Key: keyB}))
+	require.False(t, f.NeedVal(roachpb.Span{Key: keyC}))
+	require.False(t, f.NeedVal(roachpb.Span{Key: keyX}))
+
+	// Unregister the rBC registration.
 	reg.Unregister(&rBC.registration)
 	require.Equal(t, 0, reg.Len())
 }
@@ -374,6 +400,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	// Publish a checkpoint with a timestamp beneath the registration's. Should
 	// be delivered.
 	ev.MustSetValue(&roachpb.RangeFeedCheckpoint{
+		Span:       roachpb.Span{Key: roachpb.Key("a")},
 		ResolvedTS: hlc.Timestamp{WallTime: 5},
 	})
 	reg.PublishToOverlapping(spAB, ev)
