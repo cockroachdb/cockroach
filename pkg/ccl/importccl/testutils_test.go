@@ -44,7 +44,7 @@ func descForTable(
 		ts := hlc.Timestamp{WallTime: nanos}
 		priv := sqlbase.NewDefaultPrivilegeDescriptor()
 		desc, err := sql.MakeSequenceTableDesc(
-			name, tree.SequenceOptions{}, parent, id-1, ts, priv, settings,
+			name, tree.SequenceOptions{}, parent, id-1, ts, priv, nil, /* params */
 		)
 		if err != nil {
 			t.Fatal(err)

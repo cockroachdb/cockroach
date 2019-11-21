@@ -1633,6 +1633,7 @@ type_func_name_keyword ::=
 	| 'LEFT'
 	| 'LIKE'
 	| 'NATURAL'
+	| 'NONE'
 	| 'NOTNULL'
 	| 'OUTER'
 	| 'OVERLAPS'
@@ -1999,6 +2000,8 @@ alter_index_cmd ::=
 
 sequence_option_elem ::=
 	'NO' 'CYCLE'
+	| 'OWNED' 'BY' 'NONE'
+	| 'OWNED' 'BY' column_path
 	| 'INCREMENT' signed_iconst64
 	| 'INCREMENT' 'BY' signed_iconst64
 	| 'MINVALUE' signed_iconst64
