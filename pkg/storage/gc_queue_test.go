@@ -1306,4 +1306,3 @@ func TestGCQueueProcessFastGC(t *testing.T) {
 		return nil
 	})
 }
-

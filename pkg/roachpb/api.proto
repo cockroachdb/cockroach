@@ -1647,6 +1647,16 @@ message RangeStatsResponse {
   double queries_per_second = 3;
 }
 
+message CorrectMVCCStatsRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message CorrectMVCCStatsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //

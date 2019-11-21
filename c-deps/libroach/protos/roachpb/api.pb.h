@@ -48,7 +48,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[121];
+  static const ::google::protobuf::internal::ParseTable schema[123];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -152,6 +152,12 @@ extern ConditionalPutRequestDefaultTypeInternal _ConditionalPutRequest_default_i
 class ConditionalPutResponse;
 class ConditionalPutResponseDefaultTypeInternal;
 extern ConditionalPutResponseDefaultTypeInternal _ConditionalPutResponse_default_instance_;
+class CorrectMVCCStatsRequest;
+class CorrectMVCCStatsRequestDefaultTypeInternal;
+extern CorrectMVCCStatsRequestDefaultTypeInternal _CorrectMVCCStatsRequest_default_instance_;
+class CorrectMVCCStatsResponse;
+class CorrectMVCCStatsResponseDefaultTypeInternal;
+extern CorrectMVCCStatsResponseDefaultTypeInternal _CorrectMVCCStatsResponse_default_instance_;
 class DeleteRangeRequest;
 class DeleteRangeRequestDefaultTypeInternal;
 extern DeleteRangeRequestDefaultTypeInternal _DeleteRangeRequest_default_instance_;
@@ -455,6 +461,8 @@ template<> ::cockroach::roachpb::ComputeChecksumRequest* Arena::CreateMaybeMessa
 template<> ::cockroach::roachpb::ComputeChecksumResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ComputeChecksumResponse>(Arena*);
 template<> ::cockroach::roachpb::ConditionalPutRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::ConditionalPutRequest>(Arena*);
 template<> ::cockroach::roachpb::ConditionalPutResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::ConditionalPutResponse>(Arena*);
+template<> ::cockroach::roachpb::CorrectMVCCStatsRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::CorrectMVCCStatsRequest>(Arena*);
+template<> ::cockroach::roachpb::CorrectMVCCStatsResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::CorrectMVCCStatsResponse>(Arena*);
 template<> ::cockroach::roachpb::DeleteRangeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::DeleteRangeRequest>(Arena*);
 template<> ::cockroach::roachpb::DeleteRangeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::DeleteRangeResponse>(Arena*);
 template<> ::cockroach::roachpb::DeleteRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::DeleteRequest>(Arena*);
@@ -14283,6 +14291,218 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
 };
 // -------------------------------------------------------------------
 
+class CorrectMVCCStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.CorrectMVCCStatsRequest) */ {
+ public:
+  CorrectMVCCStatsRequest();
+  virtual ~CorrectMVCCStatsRequest();
+
+  CorrectMVCCStatsRequest(const CorrectMVCCStatsRequest& from);
+
+  inline CorrectMVCCStatsRequest& operator=(const CorrectMVCCStatsRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  CorrectMVCCStatsRequest(CorrectMVCCStatsRequest&& from) noexcept
+    : CorrectMVCCStatsRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline CorrectMVCCStatsRequest& operator=(CorrectMVCCStatsRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const CorrectMVCCStatsRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const CorrectMVCCStatsRequest* internal_default_instance() {
+    return reinterpret_cast<const CorrectMVCCStatsRequest*>(
+               &_CorrectMVCCStatsRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    110;
+
+  void Swap(CorrectMVCCStatsRequest* other);
+  friend void swap(CorrectMVCCStatsRequest& a, CorrectMVCCStatsRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline CorrectMVCCStatsRequest* New() const final {
+    return CreateMaybeMessage<CorrectMVCCStatsRequest>(NULL);
+  }
+
+  CorrectMVCCStatsRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<CorrectMVCCStatsRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const CorrectMVCCStatsRequest& from);
+  void MergeFrom(const CorrectMVCCStatsRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(CorrectMVCCStatsRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::RequestHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::RequestHeader& header() const;
+  ::cockroach::roachpb::RequestHeader* release_header();
+  ::cockroach::roachpb::RequestHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.CorrectMVCCStatsRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::RequestHeader* header_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class CorrectMVCCStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.CorrectMVCCStatsResponse) */ {
+ public:
+  CorrectMVCCStatsResponse();
+  virtual ~CorrectMVCCStatsResponse();
+
+  CorrectMVCCStatsResponse(const CorrectMVCCStatsResponse& from);
+
+  inline CorrectMVCCStatsResponse& operator=(const CorrectMVCCStatsResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  CorrectMVCCStatsResponse(CorrectMVCCStatsResponse&& from) noexcept
+    : CorrectMVCCStatsResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline CorrectMVCCStatsResponse& operator=(CorrectMVCCStatsResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const CorrectMVCCStatsResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const CorrectMVCCStatsResponse* internal_default_instance() {
+    return reinterpret_cast<const CorrectMVCCStatsResponse*>(
+               &_CorrectMVCCStatsResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    111;
+
+  void Swap(CorrectMVCCStatsResponse* other);
+  friend void swap(CorrectMVCCStatsResponse& a, CorrectMVCCStatsResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline CorrectMVCCStatsResponse* New() const final {
+    return CreateMaybeMessage<CorrectMVCCStatsResponse>(NULL);
+  }
+
+  CorrectMVCCStatsResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<CorrectMVCCStatsResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const CorrectMVCCStatsResponse& from);
+  void MergeFrom(const CorrectMVCCStatsResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(CorrectMVCCStatsResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::ResponseHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::ResponseHeader& header() const;
+  ::cockroach::roachpb::ResponseHeader* release_header();
+  ::cockroach::roachpb::ResponseHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.CorrectMVCCStatsResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::ResponseHeader* header_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.RequestUnion) */ {
  public:
   RequestUnion();
@@ -14366,7 +14586,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    112;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -15148,7 +15368,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    113;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15868,7 +16088,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    114;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -16072,7 +16292,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    115;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -16190,7 +16410,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    116;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16346,7 +16566,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    117;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16466,7 +16686,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    118;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16584,7 +16804,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    119;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16704,7 +16924,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    118;
+    120;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16822,7 +17042,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    119;
+    121;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -16928,7 +17148,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    120;
+    122;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -29391,6 +29611,120 @@ inline void RangeStatsResponse::set_queries_per_second(double value) {
 
 // -------------------------------------------------------------------
 
+// CorrectMVCCStatsRequest
+
+inline bool CorrectMVCCStatsRequest::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void CorrectMVCCStatsRequest::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::RequestHeader& CorrectMVCCStatsRequest::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::RequestHeader& CorrectMVCCStatsRequest::header() const {
+  const ::cockroach::roachpb::RequestHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CorrectMVCCStatsRequest.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RequestHeader*>(
+      &::cockroach::roachpb::_RequestHeader_default_instance_);
+}
+inline ::cockroach::roachpb::RequestHeader* CorrectMVCCStatsRequest::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.CorrectMVCCStatsRequest.header)
+  
+  ::cockroach::roachpb::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::RequestHeader* CorrectMVCCStatsRequest::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::RequestHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CorrectMVCCStatsRequest.header)
+  return header_;
+}
+inline void CorrectMVCCStatsRequest::set_allocated_header(::cockroach::roachpb::RequestHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.CorrectMVCCStatsRequest.header)
+}
+
+// -------------------------------------------------------------------
+
+// CorrectMVCCStatsResponse
+
+inline bool CorrectMVCCStatsResponse::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void CorrectMVCCStatsResponse::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::ResponseHeader& CorrectMVCCStatsResponse::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::ResponseHeader& CorrectMVCCStatsResponse::header() const {
+  const ::cockroach::roachpb::ResponseHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CorrectMVCCStatsResponse.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ResponseHeader*>(
+      &::cockroach::roachpb::_ResponseHeader_default_instance_);
+}
+inline ::cockroach::roachpb::ResponseHeader* CorrectMVCCStatsResponse::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.CorrectMVCCStatsResponse.header)
+  
+  ::cockroach::roachpb::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::ResponseHeader* CorrectMVCCStatsResponse::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ResponseHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CorrectMVCCStatsResponse.header)
+  return header_;
+}
+inline void CorrectMVCCStatsResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.CorrectMVCCStatsResponse.header)
+}
+
+// -------------------------------------------------------------------
+
 // RequestUnion
 
 // .cockroach.roachpb.GetRequest get = 1;
@@ -34571,6 +34905,10 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

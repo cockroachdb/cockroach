@@ -59,7 +59,6 @@ const (
 	gcKeyVersionChunkBytes = base.ChunkRaftCommandThresholdBytes
 	gcKeyVersionChunkLimit = 1024
 	hotKeyVersionThreshold = 500 * time.Millisecond
-
 	fastGCBytesThreshold = 512 << 10 // 512KiB
 )
 
@@ -903,7 +902,6 @@ func RunGC(
 		}
 		return nil
 	}
-
 	// Iterate through the keys and values of this replica's range.
 	log.Event(ctx, "iterating through range")
 	Loop:
