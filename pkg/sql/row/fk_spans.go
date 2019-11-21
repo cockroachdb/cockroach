@@ -11,38 +11,22 @@
 package row
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // spanForValues produce access spans for a single FK constraint and a
 // tuple of columns.
 func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	if values == nil {
-		key := roachpb.Key(f.searchPrefix)
+		key := roachpb.Key(f.spanBuilder.keyPrefix)
 		return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
 	}
-
-	// If we are scanning the (entire) primary key, only scan family 0 (which is
-	// always present).
-	// TODO(radu): this logic will need to be improved when secondary indexes also
-	// conform to families.
-	if f.searchIdx.ID == f.searchTable.PrimaryIndex.ID && f.prefixLen == len(f.searchIdx.ColumnIDs) {
-		// This code is equivalent to calling EncodePartialIndexSpan followed by
-		// MakeFamilyKey but saves an unnecessary allocation.
-		key, _, err := sqlbase.EncodePartialIndexKey(
-			f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix,
-		)
-		if err != nil {
-			return roachpb.Span{}, err
-		}
-		key = keys.MakeFamilyKey(key, 0)
-		return roachpb.Span{Key: key, EndKey: roachpb.Key(key).PrefixEnd()}, nil
+	span, err := f.spanBuilder.SpanFromDatumRow(values, f.prefixLen, f.ids)
+	if err != nil {
+		return roachpb.Span{}, err
 	}
-
-	span, _, err := sqlbase.EncodePartialIndexSpan(
-		f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
-	return span, err
+	// We can always return the first element in the resulting span list -- if we can't split the span, then it
+	// will be the original span. If we split the span, we only requested one family, so the slice has length 1 anyway.
+	return f.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, f.prefixLen)[0], nil
 }
