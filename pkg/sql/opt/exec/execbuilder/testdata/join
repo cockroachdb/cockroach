@@ -1525,6 +1525,7 @@ lookup-join       ·                      ·
  │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
+ │                parallel               ·
  └── zigzag-join  ·                      ·
       │           type                   inner
       │           pred                   (@2 = 5) AND (@3 = 6.0)
@@ -1546,6 +1547,7 @@ lookup-join       ·                      ·
  │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
+ │                parallel               ·
  │                pred                   @4 > 4.0
  └── zigzag-join  ·                      ·
       │           type                   inner
