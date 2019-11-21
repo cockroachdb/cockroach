@@ -35,7 +35,6 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
 import { AggregateStatistics, StatementsSortedTable, makeNodesColumns } from "./statementsTable";
 import { Params } from "react-router/lib/Router";
-import { ListIterateeBoolean } from "lodash";
 
 interface Fraction {
   numerator: number;
@@ -448,7 +447,7 @@ function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: Execut
   return { numerator, denominator };
 }
 
-function filterByRouterParamsPredicate(params: Params): ListIterateeBoolean<ExecutionStatistics> {
+function filterByRouterParamsPredicate(params: Params): (stat: ExecutionStatistics) => boolean {
   const statement = params[statementAttr];
   const implicitTxn = (params[implicitTxnAttr] === "true");
   let app = params[appAttr];
