@@ -1272,6 +1272,8 @@ func TestLint(t *testing.T) {
 				// for efficient hashing.
 				stream.GrepNot(`pkg/sql/colexec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 				stream.GrepNot(`^#`), // comment line
+				// This exception is for the colexec generated files.
+				stream.GrepNot(`pkg/sql/colexec/.*\.eg.go:[0-9:]+: self-assignment of .* to .*`),
 			})
 		}
 		printfuncs := strings.Join([]string{

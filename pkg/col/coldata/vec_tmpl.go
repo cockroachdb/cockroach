@@ -64,7 +64,13 @@ func (m *memColumn) Append(args SliceArgs) {
 			// TODO(asubiotto): We could be more efficient for fixed width types by
 			// preallocating a destination slice (not so for variable length types).
 			// Improve this.
+			// {{if eq .LTyp.String "Bytes"}}
+			// We need to truncate toCol before appending to it, so in case of Bytes,
+			// we append an empty slice.
+			execgen.APPENDSLICE(toCol, toCol, int(args.DestIdx), 0, 0)
+			// {{else}}
 			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
+			// {{end}}
 			for _, selIdx := range sel {
 				val := execgen.UNSAFEGET(fromCol, int(selIdx))
 				execgen.APPENDVAL(toCol, val)
@@ -163,14 +169,14 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	}
 }
 
-func (m *memColumn) Slice(colType coltypes.T, start uint64, end uint64) Vec {
+func (m *memColumn) Window(colType coltypes.T, start uint64, end uint64) Vec {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
 		col := m._TemplateType()
 		return &memColumn{
 			t:     colType,
-			col:   execgen.SLICE(col, int(start), int(end)),
+			col:   execgen.WINDOW(col, int(start), int(end)),
 			nulls: m.nulls.Slice(start, end),
 		}
 	// {{end}}

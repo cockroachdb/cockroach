@@ -333,8 +333,8 @@ func TestOutboxInbox(t *testing.T) {
 				for i := range typs {
 					require.Equal(
 						t,
-						inputBatch.ColVec(i).Slice(typs[i], 0, uint64(inputBatch.Length())),
-						outputBatch.ColVec(i).Slice(typs[i], 0, uint64(outputBatch.Length())),
+						inputBatch.ColVec(i).Window(typs[i], 0, uint64(inputBatch.Length())),
+						outputBatch.ColVec(i).Window(typs[i], 0, uint64(outputBatch.Length())),
 						"batchNum: %d", batchNum,
 					)
 				}

@@ -137,7 +137,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		colLen := execgen.LEN(col1)
 		_ = _RET_UNSAFEGET(projCol, colLen-1)
 		_ = _R_UNSAFEGET(col2, colLen-1)
-		for execgen.RANGE(i, col1) {
+		for execgen.RANGE(i, col1, 0, int(n)) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	}
