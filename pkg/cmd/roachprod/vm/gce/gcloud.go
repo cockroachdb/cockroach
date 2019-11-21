@@ -221,10 +221,14 @@ func (v projectsVal) String() string {
 }
 
 func makeProviderOpts() providerOpts {
+	project := os.Getenv("GCE_PROJECT")
+	if project == "" {
+		project = defaultProject
+	}
 	return providerOpts{
 		// projects needs space for one project, which is set by the flags for
 		// commands that accept a single project.
-		projects: []string{defaultProject},
+		projects: []string{project},
 	}
 }
 
@@ -264,11 +268,6 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
-	project := os.Getenv("GCE_PROJECT")
-	if project == "" {
-		project = defaultProject
-	}
-
 	var usage string
 	if opt == vm.SingleProject {
 		usage = "GCE project to manage"
