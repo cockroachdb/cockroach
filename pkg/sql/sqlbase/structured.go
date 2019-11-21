@@ -2168,14 +2168,14 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 	return 0, true
 }
 
-// columnTypeIsIndexable returns whether the type t is valid as an indexed column.
-func columnTypeIsIndexable(t *types.T) bool {
+// ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
+func ColumnTypeIsIndexable(t *types.T) bool {
 	return !MustBeValueEncoded(t.Family())
 }
 
-// columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
+// ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
-func columnTypeIsInvertedIndexable(t *types.T) bool {
+func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	return t.Family() == types.JsonFamily
 }
 
@@ -2213,7 +2213,7 @@ func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames 
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !columnTypeIsIndexable(&col.Type) {
+				if !ColumnTypeIsIndexable(&col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -2235,7 +2235,7 @@ func checkColumnsValidForInvertedIndex(
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !columnTypeIsInvertedIndexable(&col.Type) {
+				if !ColumnTypeIsInvertedIndexable(&col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}

@@ -259,12 +259,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	}
 }
 
+const simpleRange = 10
+
 // RandDatumSimple generates a random Datum of the given type. The generated
 // datums will be simple (i.e., only one character or an integer between 0
 // and 9), such that repeated calls to this function will regularly return a
 // previously generated datum.
 func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
-	const simpleRange = 10
 	datum := tree.DNull
 	switch typ.Family() {
 	case types.BitFamily:
@@ -276,8 +277,7 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 			datum = tree.DBoolFalse
 		}
 	case types.BytesFamily:
-		p := string(rng.Intn(simpleRange))
-		datum = tree.NewDBytes(tree.DBytes(p))
+		datum = tree.NewDBytes(tree.DBytes(randStringSimple(rng)))
 	case types.DateFamily:
 		date, _ := pgdate.MakeDateFromPGEpoch(rng.Int31n(simpleRange))
 		datum = tree.NewDDate(date)
@@ -304,13 +304,11 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 			},
 		})
 	case types.JsonFamily:
-		p := string('A' + rng.Intn(simpleRange))
-		datum = tree.NewDJSON(json.FromString(p))
+		datum = tree.NewDJSON(randJSONSimple(rng))
 	case types.OidFamily:
 		datum = tree.NewDOid(tree.DInt(rng.Intn(simpleRange)))
 	case types.StringFamily:
-		p := string('A' + rng.Intn(simpleRange))
-		datum = tree.NewDString(p)
+		datum = tree.NewDString(randStringSimple(rng))
 	case types.TimeFamily:
 		datum = tree.MakeDTime(timeofday.New(0, rng.Intn(simpleRange), 0, 0))
 	case types.TimestampFamily:
@@ -323,6 +321,37 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 		})
 	}
 	return datum
+}
+
+func randStringSimple(rng *rand.Rand) string {
+	return string('A' + rng.Intn(simpleRange))
+}
+
+func randJSONSimple(rng *rand.Rand) json.JSON {
+	switch rng.Intn(10) {
+	case 0:
+		return json.NullJSONValue
+	case 1:
+		return json.FalseJSONValue
+	case 2:
+		return json.TrueJSONValue
+	case 3:
+		return json.FromInt(rng.Intn(simpleRange))
+	case 4:
+		return json.FromString(randStringSimple(rng))
+	case 5:
+		a := json.NewArrayBuilder(0)
+		for i := rng.Intn(3); i >= 0; i-- {
+			a.Add(randJSONSimple(rng))
+		}
+		return a.Build()
+	default:
+		a := json.NewObjectBuilder(0)
+		for i := rng.Intn(3); i >= 0; i-- {
+			a.Add(randStringSimple(rng), randJSONSimple(rng))
+		}
+		return a.Build()
+	}
 }
 
 var (
