@@ -84,6 +84,8 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, needed)
 
+	sb := row.MakeSpanBuilder(tabDesc.TableDesc(), indexDesc)
+
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
 	// and does not need to be rechecked. In fact, it's an error to check the
@@ -108,13 +110,7 @@ func (ef *execFactory) ConstructScan(
 	scan.maxResults = maxResults
 	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
 	var err error
-	scan.spans, err = spansFromConstraint(
-		tabDesc,
-		indexDesc,
-		indexConstraint,
-		needed,
-		false, /* forDelete */
-	)
+	scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
 	if err != nil {
 		return nil, err
 	}
@@ -1627,16 +1623,11 @@ func (ef *execFactory) ConstructDeleteRange(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := &tabDesc.PrimaryIndex
+	sb := row.MakeSpanBuilder(tabDesc.TableDesc(), indexDesc)
 
 	// Setting the "forDelete" flag includes all column families in case where a
 	// single record is deleted.
-	spans, err := spansFromConstraint(
-		tabDesc,
-		indexDesc,
-		indexConstraint,
-		needed,
-		true, /* forDelete */
-	)
+	spans, err := sb.SpansFromConstraint(indexConstraint, needed, true /* forDelete */)
 	if err != nil {
 		return nil, err
 	}

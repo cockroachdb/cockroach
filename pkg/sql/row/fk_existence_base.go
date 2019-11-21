@@ -58,9 +58,6 @@ type fkExistenceCheckBaseHelper struct {
 	// `(x,y,z)`.
 	prefixLen int
 
-	// Pre-computed KV key prefix for searchIdx.
-	searchPrefix []byte
-
 	// ids maps column IDs in index searchIdx to positions of the `row`
 	// array provided to each FK existence check. This tells the checker
 	// where to find the values in the row for each column of the
@@ -86,6 +83,9 @@ type fkExistenceCheckBaseHelper struct {
 	// valuesScratch is memory used to populate an error message when the check
 	// fails.
 	valuesScratch tree.Datums
+
+	// spanBuilder is responsible for constructing spans for FK lookups.
+	spanBuilder *SpanBuilder
 }
 
 // makeFkExistenceCheckBaseHelper instantiates a FK helper.
@@ -136,9 +136,6 @@ func makeFkExistenceCheckBaseHelper(
 		return ret, err
 	}
 
-	// Precompute the KV lookup prefix.
-	searchPrefix := sqlbase.MakeIndexKeyPrefix(searchTable.TableDesc(), searchIdx.ID)
-
 	// Initialize the row fetcher.
 	tableArgs := FetcherTableArgs{
 		Desc:             searchTable,
@@ -163,8 +160,8 @@ func makeFkExistenceCheckBaseHelper(
 		mutatedIdx:    mutatedIdx,
 		ids:           ids,
 		prefixLen:     len(ref.OriginColumnIDs),
-		searchPrefix:  searchPrefix,
 		valuesScratch: make(tree.Datums, len(ref.OriginColumnIDs)),
+		spanBuilder:   MakeSpanBuilder(searchTable.TableDesc(), searchIdx),
 	}, nil
 }
 
