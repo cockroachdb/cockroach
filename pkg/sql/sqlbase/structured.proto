@@ -134,9 +134,14 @@ message ColumnDescriptor {
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
+// For more information, look at `docs/tech-notes/encoding.md#value-encoding`.
 message ColumnFamilyDescriptor {
   option (gogoproto.equal) = true;
   optional string name = 1 [(gogoproto.nullable) = false];
+  // Column family 0 is *always* included in k/v pairs for a row. This makes
+  // sure that rows will all NULL values still have a k/v pair. When performing
+  // optimizations involving column families, ensure that column family 0
+  // is scanned if the row may have nulls.
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "FamilyID"];
 
@@ -540,6 +545,8 @@ message TableDescriptor {
   // next_column_id is used to ensure that deleted column ids are not reused.
   optional uint32 next_column_id = 9 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
+  // families holds information about the column families of this table.
+  // This list has at least length 1, in which case all columns are stored in the same family.
   repeated ColumnFamilyDescriptor families = 22 [(gogoproto.nullable) = false];
   // next_family_id is used to ensure that deleted family ids are not reused.
   optional uint32 next_family_id = 23 [(gogoproto.nullable) = false,
