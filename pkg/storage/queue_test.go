@@ -864,7 +864,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{
 			maxSize:              1,
-			processTimeout:       time.Millisecond,
+			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 			acceptsUnsplitRanges: true,
 		})
 	bq.Start(stopper)
@@ -920,7 +920,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	bq := makeTestBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{
 			maxSize:              1,
-			processTimeout:       time.Millisecond,
+			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 			acceptsUnsplitRanges: true,
 		})
 	bq.Start(stopper)
@@ -930,7 +930,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 		if v := bq.successes.Count(); v != 1 {
 			return errors.Errorf("expected 1 processed replicas; got %d", v)
 		}
-		if min, v := bq.queueConfig.processTimeout, bq.processingNanos.Count(); v < min.Nanoseconds() {
+		if min, v := bq.queueConfig.processTimeoutFunc(nil), bq.processingNanos.Count(); v < min.Nanoseconds() {
 			return errors.Errorf("expected >= %s in processing time; got %s", min, time.Duration(v))
 		}
 		return nil
