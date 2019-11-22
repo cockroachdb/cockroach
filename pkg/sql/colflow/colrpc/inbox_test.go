@@ -149,11 +149,12 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 func TestInboxTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+
 	inbox, err := NewInbox(testAllocator, []coltypes.T{coltypes.Int64}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	var (
-		ctx         = context.Background()
 		readerErrCh = make(chan error)
 		rpcLayer    = makeMockFlowStreamRPCLayer()
 	)
@@ -199,7 +200,7 @@ func TestInboxShutdown(t *testing.T) {
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
 		typs               = []coltypes.T{coltypes.Int64}
-		batch              = colexec.RandomBatch(rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
+		batch              = colexec.RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
 	)
 
 	for _, runDrainMetaGoroutine := range []bool{false, true} {
@@ -218,13 +219,18 @@ func TestInboxShutdown(t *testing.T) {
 					"drain=%t/next=%t/stream=%t/inf=%t",
 					runDrainMetaGoroutine, runNextGoroutine, runRunWithStreamGoroutine, infiniteBatches,
 				), func(t *testing.T) {
-					inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+					inboxCtx, inboxCancel := context.WithCancel(context.Background())
+					inboxMemAccount := testMemMonitor.MakeBoundAccount()
+					defer inboxMemAccount.Close(inboxCtx)
+					inbox, err := NewInbox(
+						colexec.NewAllocator(inboxCtx, &inboxMemAccount),
+						typs, execinfrapb.StreamID(0),
+					)
 					require.NoError(t, err)
 					c, err := colserde.NewArrowBatchConverter(typs)
 					require.NoError(t, err)
 					r, err := colserde.NewRecordBatchSerializer(typs)
 					require.NoError(t, err)
-					inboxCtx, inboxCancel := context.WithCancel(context.Background())
 
 					goroutines := []struct {
 						name           string

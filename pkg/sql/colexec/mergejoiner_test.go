@@ -1632,7 +1632,10 @@ func TestMergeJoiner(t *testing.T) {
 		runner(t, []tuples{tc.leftTuples, tc.rightTuples}, nil /* typs */, tc.expected, mergeJoinVerifier,
 			func(input []Operator) (Operator, error) {
 				spec := createSpecForMergeJoiner(tc)
-				result, err := NewColOperator(ctx, flowCtx, spec, input)
+				result, err := NewColOperator(
+					ctx, flowCtx, spec, input, testMemAcc,
+					true, /* useStreamingMemAccountForBuffering */
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -2163,6 +2166,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				s := mergeJoinInnerOp{
 					mergeJoinBase{
+						allocator: testAllocator,
 						left: mergeJoinInput{
 							eqCols:      []uint32{0},
 							outCols:     []uint32{0, 1},
@@ -2204,6 +2208,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				s := mergeJoinInnerOp{
 					mergeJoinBase{
+						allocator: testAllocator,
 						left: mergeJoinInput{
 							eqCols:      []uint32{0},
 							outCols:     []uint32{0, 1},
@@ -2246,6 +2251,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				s := mergeJoinInnerOp{
 					mergeJoinBase{
+						allocator: testAllocator,
 						left: mergeJoinInput{
 							eqCols:      []uint32{0},
 							outCols:     []uint32{0, 1},

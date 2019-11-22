@@ -908,7 +908,6 @@ type finiteBatchSource struct {
 	ZeroInputNode
 
 	repeatableBatch *RepeatableBatchSource
-	zeroBatch       coldata.Batch
 
 	usableCount int
 }
@@ -920,7 +919,6 @@ var _ Operator = &finiteBatchSource{}
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
-		zeroBatch:       testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */),
 		usableCount:     usableCount,
 	}
 }
@@ -934,8 +932,7 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 		f.usableCount--
 		return f.repeatableBatch.Next(ctx)
 	}
-	f.zeroBatch.SetLength(0)
-	return f.zeroBatch
+	return zeroBatch
 }
 
 // finiteChunksSource is an Operator that returns a batch specified number of
@@ -945,7 +942,6 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 type finiteChunksSource struct {
 	ZeroInputNode
 	repeatableBatch *RepeatableBatchSource
-	zeroBatch       coldata.Batch
 
 	usableCount int
 	matchLen    int
@@ -957,7 +953,6 @@ var _ Operator = &finiteChunksSource{}
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
-		zeroBatch:       testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */),
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -992,8 +987,7 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 		}
 		return batch
 	}
-	f.zeroBatch.SetLength(0)
-	return f.zeroBatch
+	return zeroBatch
 }
 
 func TestOpTestInputOutput(t *testing.T) {

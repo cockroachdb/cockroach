@@ -422,8 +422,15 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		panic("flow cleanup called twice")
 	}
 
-	if f.VectorizedBoundAccount != nil {
-		f.VectorizedBoundAccount.Close(ctx)
+	// This cleans up all the memory monitoring of the vectorized flow.
+	if f.VectorizedStreamingMemAccount != nil {
+		f.VectorizedStreamingMemAccount.Close(ctx)
+	}
+	for _, memAcc := range f.VectorizedBufferingMemAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMon := range f.VectorizedBufferingMemMonitors {
+		memMon.Stop(ctx)
 	}
 
 	// This closes the monitor opened in ServerImpl.setupFlow.

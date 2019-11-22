@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
@@ -27,7 +26,7 @@ type bufferOp struct {
 	batch *selectionBatch
 }
 
-var _ StaticMemoryOperator = &bufferOp{}
+var _ InternalMemoryOperator = &bufferOp{}
 
 // NewBufferOp returns a new bufferOp, initialized to buffer batches from the
 // supplied input.
@@ -40,8 +39,9 @@ func NewBufferOp(input Operator) Operator {
 	}
 }
 
-func (b *bufferOp) EstimateStaticMemoryUsage() int {
-	return cap(b.batch.sel) * int(unsafe.Sizeof(uint16(0)))
+func (b *bufferOp) InternalMemoryUsage() int {
+	// We internally use a single selection vector within the selectionBatch.
+	return sizeOfBatchSizeSelVector
 }
 
 func (b *bufferOp) Init() {

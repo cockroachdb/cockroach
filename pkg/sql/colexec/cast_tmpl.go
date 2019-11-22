@@ -72,11 +72,17 @@ func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
 var _ interface{} = execgen.UNSAFEGET
 
 func GetCastOperator(
-	input Operator, colIdx int, resultIdx int, fromType *semtypes.T, toType *semtypes.T,
+	allocator *Allocator,
+	input Operator,
+	colIdx int,
+	resultIdx int,
+	fromType *semtypes.T,
+	toType *semtypes.T,
 ) (Operator, error) {
 	if fromType.Family() == semtypes.UnknownFamily {
 		return &castOpNullAny{
 			OneInputNode: NewOneInputNode(input),
+			allocator:    allocator,
 			colIdx:       colIdx,
 			outputIdx:    resultIdx,
 			toType:       typeconv.FromColumnType(toType),
@@ -91,6 +97,7 @@ func GetCastOperator(
 		case coltypes._OVERLOADTYPES:
 			return &castOp_FROMTYPE_TOTYPE{
 				OneInputNode: NewOneInputNode(input),
+				allocator:    allocator,
 				colIdx:       colIdx,
 				outputIdx:    resultIdx,
 				fromType:     from,
@@ -109,16 +116,13 @@ func GetCastOperator(
 
 type castOpNullAny struct {
 	OneInputNode
+	allocator *Allocator
 	colIdx    int
 	outputIdx int
 	toType    coltypes.T
 }
 
-var _ StaticMemoryOperator = &castOpNullAny{}
-
-func (c *castOpNullAny) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{c.toType}, int(coldata.BatchSize()))
-}
+var _ Operator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.input.Init()
@@ -127,7 +131,7 @@ func (c *castOpNullAny) Init() {
 func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	if c.outputIdx == batch.Width() {
-		batch.AppendCol(c.toType)
+		c.allocator.AppendColumn(batch, c.toType)
 	}
 	n := batch.Length()
 	if n == 0 {
@@ -164,17 +168,14 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 
 type castOp_FROMTYPE_TOTYPE struct {
 	OneInputNode
+	allocator *Allocator
 	colIdx    int
 	outputIdx int
 	fromType  coltypes.T
 	toType    coltypes.T
 }
 
-var _ StaticMemoryOperator = &castOp_FROMTYPE_TOTYPE{}
-
-func (c *castOp_FROMTYPE_TOTYPE) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{c.toType}, int(coldata.BatchSize()))
-}
+var _ Operator = &castOp_FROMTYPE_TOTYPE{}
 
 func (c *castOp_FROMTYPE_TOTYPE) Init() {
 	c.input.Init()
@@ -187,7 +188,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	if c.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes._TOTYPE)
+		c.allocator.AppendColumn(batch, coltypes._TOTYPE)
 	}
 	vec := batch.ColVec(c.colIdx)
 	col := vec._FROMTYPE()

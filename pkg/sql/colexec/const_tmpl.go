@@ -57,13 +57,14 @@ var _ interface{} = execgen.UNSAFEGET
 // NewConstOp creates a new operator that produces a constant value constVal of
 // type t at index outputIdx.
 func NewConstOp(
-	input Operator, t coltypes.T, constVal interface{}, outputIdx int,
+	allocator *Allocator, input Operator, t coltypes.T, constVal interface{}, outputIdx int,
 ) (Operator, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
 		return &const_TYPEOp{
 			OneInputNode: NewOneInputNode(input),
+			allocator:    allocator,
 			outputIdx:    outputIdx,
 			typ:          t,
 			constVal:     constVal.(_GOTYPE),
@@ -79,6 +80,7 @@ func NewConstOp(
 type const_TYPEOp struct {
 	OneInputNode
 
+	allocator *Allocator
 	typ       coltypes.T
 	outputIdx int
 	constVal  _GOTYPE
@@ -92,7 +94,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
 	if batch.Width() == c.outputIdx {
-		batch.AppendCol(c.typ)
+		c.allocator.AppendColumn(batch, c.typ)
 	}
 	if n == 0 {
 		return batch
@@ -115,9 +117,10 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
-func NewConstNullOp(input Operator, outputIdx int, typ coltypes.T) Operator {
+func NewConstNullOp(allocator *Allocator, input Operator, outputIdx int, typ coltypes.T) Operator {
 	return &constNullOp{
 		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
 		outputIdx:    outputIdx,
 		typ:          typ,
 	}
@@ -125,15 +128,12 @@ func NewConstNullOp(input Operator, outputIdx int, typ coltypes.T) Operator {
 
 type constNullOp struct {
 	OneInputNode
+	allocator *Allocator
 	outputIdx int
 	typ       coltypes.T
 }
 
-var _ StaticMemoryOperator = &constNullOp{}
-
-func (c constNullOp) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{c.typ}, int(coldata.BatchSize()))
-}
+var _ Operator = &constNullOp{}
 
 func (c constNullOp) Init() {
 	c.input.Init()
@@ -144,7 +144,7 @@ func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	n := batch.Length()
 
 	if batch.Width() == c.outputIdx {
-		batch.AppendCol(c.typ)
+		c.allocator.AppendColumn(batch, c.typ)
 	}
 
 	if n == 0 {

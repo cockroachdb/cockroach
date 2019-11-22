@@ -82,7 +82,10 @@ func TestCaseOp(t *testing.T) {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(inputs []Operator) (Operator, error) {
 			spec.Input[0].ColumnTypes = tc.inputTypes
 			spec.Post.RenderExprs[0].Expr = tc.renderExpr
-			result, err := NewColOperator(ctx, flowCtx, spec, inputs)
+			result, err := NewColOperator(
+				ctx, flowCtx, spec, inputs, testMemAcc,
+				true, /* useStreamingMemAccountForBuffering */
+			)
 			if err != nil {
 				return nil, err
 			}

@@ -48,7 +48,7 @@ func verifyColOperator(
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := execinfra.MakeTestDiskMonitor(ctx, st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -75,7 +75,9 @@ func verifyColOperator(
 		return errors.New("processor is unexpectedly not a RowSource")
 	}
 
-	testAllocator := colexec.NewAllocator()
+	acc := evalCtx.Mon.MakeBoundAccount()
+	defer acc.Close(ctx)
+	testAllocator := colexec.NewAllocator(ctx, &acc)
 	columnarizers := make([]colexec.Operator, len(inputs))
 	for i, input := range inputsColOp {
 		c, err := colexec.NewColumnarizer(ctx, testAllocator, flowCtx, int32(i)+1, input)
@@ -85,9 +87,16 @@ func verifyColOperator(
 		columnarizers[i] = c
 	}
 
-	result, err := colexec.NewColOperator(ctx, flowCtx, pspec, columnarizers)
+	result, err := colexec.NewColOperator(
+		ctx, flowCtx, pspec, columnarizers, &acc,
+		true, /* useStreamingMemAccountForBuffering */
+	)
 	if err != nil {
 		return err
+	}
+	if result.BufferingOpMemMonitor != nil {
+		defer result.BufferingOpMemMonitor.Stop(ctx)
+		defer result.BufferingOpMemAccount.Close(ctx)
 	}
 
 	outColOp, err := colexec.NewMaterializer(

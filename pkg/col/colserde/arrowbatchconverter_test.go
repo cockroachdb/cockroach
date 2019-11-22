@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colserde
+package colserde_test
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -24,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func randomBatch() ([]coltypes.T, coldata.Batch) {
+func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
@@ -43,7 +44,7 @@ func randomBatch() ([]coltypes.T, coldata.Batch) {
 
 	capacity := rng.Intn(int(coldata.BatchSize())) + 1
 	length := rng.Intn(capacity)
-	b := colexec.RandomBatch(rng, typs, capacity, length, rng.Float64())
+	b := colexec.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
 }
 
@@ -121,7 +122,7 @@ func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 
 	unsupportedTypes := []coltypes.T{coltypes.Decimal}
 	for _, typ := range unsupportedTypes {
-		_, err := NewArrowBatchConverter([]coltypes.T{typ})
+		_, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
 		require.Error(t, err)
 	}
 }
@@ -129,8 +130,8 @@ func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs, b := randomBatch()
-	c, err := NewArrowBatchConverter(typs)
+	typs, b := randomBatch(testAllocator)
+	c, err := colserde.NewArrowBatchConverter(typs)
 	require.NoError(t, err)
 
 	// Make a copy of the original batch because the converter modifies and casts
@@ -150,7 +151,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 // batch is equal to the input batch. Make sure to copy the input batch before
 // passing it to this function to assert equality.
 func roundTripBatch(
-	b coldata.Batch, c *ArrowBatchConverter, r *RecordBatchSerializer,
+	b coldata.Batch, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
 ) (coldata.Batch, error) {
 	var buf bytes.Buffer
 	arrowDataIn, err := c.BatchToArrow(b)
@@ -176,10 +177,10 @@ func roundTripBatch(
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs, b := randomBatch()
-	c, err := NewArrowBatchConverter(typs)
+	typs, b := randomBatch(testAllocator)
+	c, err := colserde.NewArrowBatchConverter(typs)
 	require.NoError(t, err)
-	r, err := NewRecordBatchSerializer(typs)
+	r, err := colserde.NewRecordBatchSerializer(typs)
 	require.NoError(t, err)
 
 	// Make a copy of the original batch because the converter modifies and casts
@@ -215,7 +216,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colexec.RandomBatch(rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
+		batch := colexec.RandomBatch(testAllocator, rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
@@ -238,7 +239,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			}
 			batch.ColVec(0).SetCol(newBytes)
 		}
-		c, err := NewArrowBatchConverter([]coltypes.T{typ})
+		c, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
 		require.NoError(b, err)
 		nullFractions := []float64{0, 0.25, 0.5}
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {

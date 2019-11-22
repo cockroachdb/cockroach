@@ -38,8 +38,8 @@ type Batch interface {
 	Selection() []uint16
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
-	// AppendCol appends a Vec with the specified type to this batch.
-	AppendCol(coltypes.T)
+	// AppendCol appends the given Vec to this batch.
+	AppendCol(Vec)
 	// Reset modifies the caller in-place to have the given length and columns
 	// with the given coltypes. If it's possible, Reset will reuse the existing
 	// columns and allocations, invalidating existing references to the Batch or
@@ -147,8 +147,8 @@ func (m *MemBatch) SetLength(n uint16) {
 }
 
 // AppendCol implements the Batch interface.
-func (m *MemBatch) AppendCol(t coltypes.T) {
-	m.b = append(m.b, NewMemColumn(t, int(BatchSize())))
+func (m *MemBatch) AppendCol(col Vec) {
+	m.b = append(m.b, col)
 }
 
 // Reset implements the Batch interface.
