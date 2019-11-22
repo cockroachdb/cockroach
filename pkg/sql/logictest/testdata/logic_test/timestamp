@@ -155,6 +155,26 @@ id   INT8
 t    TIMESTAMP
 ttz  TIMESTAMPTZ(5)
 
+subtest regression_timestamp_comparison
+
+statement ok
+SET TIME ZONE -5
+
+query B
+SELECT '2001-01-01'::date = '2001-01-01 00:00:00'::timestamp
+----
+true
+
+query B
+SELECT '2001-01-01'::date = '2001-01-01 00:00:00-5'::timestamptz
+----
+true
+
+query B
+SELECT '2001-01-01 00:00:00'::timestamp = '2001-01-01 01:00:00-4'::timestamptz
+----
+true
+
 subtest regression_django-cockroachdb_47
 
 statement ok
