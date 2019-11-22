@@ -68,6 +68,8 @@ type extendedEvalContext struct {
 
 	SchemaChangers *schemaChangerCollection
 
+	ScheduledJobs *[]int64
+
 	schemaAccessors *schemaInterface
 
 	sqlStatsCollector *sqlStatsCollector

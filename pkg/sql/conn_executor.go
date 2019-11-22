@@ -854,6 +854,8 @@ type connExecutor struct {
 		// is done if the statement was executed in an implicit txn).
 		schemaChangers schemaChangerCollection
 
+		jobs jobsCollection
+
 		// autoRetryCounter keeps track of the which iteration of a transaction
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not
 		// stateOpen.
@@ -1867,6 +1869,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		DistSQLPlanner:    ex.server.cfg.DistSQLPlanner,
 		TxnModesSetter:    ex,
 		SchemaChangers:    &ex.extraTxnState.schemaChangers,
+		ScheduledJobs:     &ex.extraTxnState.jobs.scheduled,
 		schemaAccessors:   scInterface,
 		sqlStatsCollector: ex.statsCollector,
 	}
@@ -1998,6 +2001,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			log.Error(ex.Ctx(), err)
 			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
+		}
+
+		jobs := &ex.extraTxnState.jobs.scheduled
+		if len(*jobs) != 0 {
+			log.Infof(ex.ctxHolder.connCtx, "scheduled jobs %+v", *jobs)
+			//ex.execStmtInNoTxnState(ctx, "SHOW JOBS WHEN COMPLETE ...")
 		}
 		scc := &ex.extraTxnState.schemaChangers
 		if len(scc.schemaChangers) != 0 {

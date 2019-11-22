@@ -1627,13 +1627,9 @@ func TestJobInTxn(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	done := make(chan struct{})
-	defer close(done)
-
 	registry := s.JobRegistry().(*jobs.Registry)
 	mockJob := jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}}
 	var job *jobs.Job
-	//var resultsCh chan<- tree.Datums
 	var hasRun bool
 	sql.AddPlanHook(
 		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
@@ -1648,6 +1644,7 @@ func TestJobInTxn(t *testing.T) {
 				if err != nil {
 					return err
 				}
+				*phs.ExtendedEvalContext().ScheduledJobs = append(*phs.ExtendedEvalContext().ScheduledJobs, *job.ID())
 				return nil
 			}
 			return fn, nil, nil, false, nil
@@ -1662,15 +1659,6 @@ func TestJobInTxn(t *testing.T) {
 				lock.Unlock()
 				return nil
 			},
-			Fail: func() error {
-				return nil
-			},
-			Success: func() error {
-				return nil
-			},
-			Terminal: func() {
-				return
-			},
 		}
 	})
 	t.Run("normal success", func(t *testing.T) {
@@ -1678,7 +1666,10 @@ func TestJobInTxn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		txn.Exec("BACKUP doesnot.matter TO doesnotmattter")
+		_, err = txn.Exec("BACKUP doesnot.matter TO doesnotmattter")
+		if err != nil {
+			t.Fatal(err)
+		}
 		time.Sleep(time.Second)
 		lock.Lock()
 		if hasRun {
