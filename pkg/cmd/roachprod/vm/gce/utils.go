@@ -50,7 +50,7 @@ mount_opts="discard,defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
 disknum=0
-for d in $(ls /dev/disk/by-id/google-local-ssd-*); do
+for d in $(ls /dev/disk/by-id/google-local-*); do
   let "disknum++"
   grep -e "${d}" /etc/fstab > /dev/null
   if [ $? -ne 0 ]; then
