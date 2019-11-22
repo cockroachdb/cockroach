@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1684,6 +1685,16 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.startServeSQL(ctx, workersCtx, connManager, pgL); err != nil {
 		return err
 	}
+
+	// Record node start in telemetry. Get the right counter for this storage
+	// engine type as well as type of start (initial boot vs restart).
+	nodeStartCounter := "storage.engine." + s.cfg.StorageEngine.String() + "."
+	if s.InitialBoot() {
+		nodeStartCounter += "initial-boot"
+	} else {
+		nodeStartCounter += "restart"
+	}
+	telemetry.Count(nodeStartCounter)
 
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
