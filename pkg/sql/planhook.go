@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -97,6 +98,7 @@ type PlanHookState interface {
 	ResolveMutableTableDescriptor(
 		ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
 	) (table *MutableTableDescriptor, err error)
+	ScheduleJob(record jobs.Record) (*jobs.Job, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

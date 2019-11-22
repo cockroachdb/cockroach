@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -67,6 +68,8 @@ type extendedEvalContext struct {
 	TxnModesSetter txnModesSetter
 
 	SchemaChangers *schemaChangerCollection
+
+	Jobs *jobsCollection
 
 	schemaAccessors *schemaInterface
 
@@ -583,6 +586,15 @@ func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]stri
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData
+}
+
+func (p *planner) ScheduleJob(record jobs.Record) (*jobs.Job, error) {
+	job, err := p.execCfg.JobRegistry.CreateJobWithTxn(p.EvalContext().Context, record, p.ExtendedEvalContext().Txn)
+	if err != nil {
+		return nil, err
+	}
+	p.ExtendedEvalContext().Jobs.scheduled = append(p.ExtendedEvalContext().Jobs.scheduled, *job.ID())
+	return job, nil
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

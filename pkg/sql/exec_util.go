@@ -1065,6 +1065,10 @@ type schemaChangerCollection struct {
 	schemaChangers []SchemaChanger
 }
 
+type jobsCollection struct {
+	scheduled []int64
+}
+
 func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChanger) {
 	scc.schemaChangers = append(scc.schemaChangers, schemaChanger)
 }
