@@ -723,6 +723,25 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"pg_total_relation_size": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"table", types.RegClass}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(0), nil
+			},
+			Info: notUsableInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"table", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(0), nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	"pg_get_userbyid": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
 		tree.Overload{
 			Types: tree.ArgTypes{

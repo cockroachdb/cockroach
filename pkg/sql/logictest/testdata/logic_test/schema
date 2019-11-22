@@ -1,0 +1,19 @@
+# LogicTest
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS public
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS crdb_internal
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS pg_catalog
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS information_schema
+
+statement error unimplemented: new schemas are unsupported
+CREATE SCHEMA IF NOT EXISTS derp
+
+statement error unimplemented: this syntax
+CREATE SCHEMA derp

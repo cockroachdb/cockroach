@@ -870,6 +870,12 @@ func (stmt *CreateTable) walkStmt(v Visitor) Statement {
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *CreateSchema) copyNode() *CreateSchema {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *CancelQueries) copyNode() *CancelQueries {
 	stmtCopy := *stmt
 	return &stmtCopy
