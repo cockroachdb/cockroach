@@ -378,7 +378,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			p.opts.SSDCount = 2
 		}
 		for i := 0; i < p.opts.SSDCount; i++ {
-			args = append(args, "--local-ssd", "interface=SCSI")
+			args = append(args, "--local-ssd", "interface=NVME")
 		}
 		if opts.SSDOpts.NoExt4Barrier {
 			extraMountOpts = "nobarrier"
