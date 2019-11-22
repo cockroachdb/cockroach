@@ -407,7 +407,9 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
-	// SettingsTable is the descriptor for the jobs table.
+
+	// SettingsTable is the descriptor for the settings table.
+	// It contains all cluster settings for which a value has been set.
 	SettingsTable = TableDescriptor{
 		Name:     "settings",
 		ID:       keys.SettingsTableID,
