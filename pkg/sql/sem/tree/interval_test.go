@@ -122,6 +122,9 @@ func TestInvalidSQLIntervalSyntax(t *testing.T) {
 		{`+`, ``, `invalid input syntax for type interval +`},
 		{`++`, ``, `invalid input syntax for type interval ++`},
 		{`--`, ``, `invalid input syntax for type interval --`},
+		{`{1,2}`, ``, `invalid input syntax for type interval {1,2}`},
+		{`0.000,0`, ``, `invalid input syntax for type interval 0.000,0`},
+		{`0,0`, ``, `invalid input syntax for type interval 0,0`},
 	}
 	for i, test := range testData {
 		dur, err := sqlStdToDuration(test.input)
