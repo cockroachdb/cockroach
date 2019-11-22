@@ -197,9 +197,6 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 //
 // It is OK to call DrainAndForwardMetadata() multiple times concurrently on the
 // same dst (as RowReceiver.Push() is guaranteed to be thread safe).
-//
-// TODO(andrei): errors seen while draining should be reported to the gateway,
-// but they shouldn't fail a SQL query.
 func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver) {
 	src.ConsumerDone()
 	for {
