@@ -67,6 +67,8 @@ typedef struct DBCache DBCache;
 typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
 typedef void* DBWritableFile;
+typedef void* DBReadableFile;
+typedef void* DBDirectory;  
 
 // DBOptions contains local database options.
 typedef struct {
@@ -541,6 +543,15 @@ DBStatus DBUnlockFile(DBFileLock lock);
 // start and end DBKeys to an SSTable using an IncrementalIterator.
 DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIterOptions iter_opts,
                        DBEngine* engine, DBString* data, DBString* write_intent, DBString* summary);
+
+// TODO: add comments.
+DBStatus DBEnvOpenReadableFile(DBEngine* db, DBSlice path, DBReadableFile* file);
+DBStatus DBEnvReadAtFile(DBEngine* db, DBReadableFile file, DBSlice buffer, int64_t offset, int* n);
+DBStatus DBEnvCloseReadableFile(DBEngine* db, DBReadableFile file);
+DBStatus DBEnvOpenDirectory(DBEngine* db, DBSlice path, DBDirectory* file);
+DBStatus DBEnvSyncDirectory(DBEngine* db, DBDirectory file);
+DBStatus DBEnvCloseDirectory(DBEngine* db, DBDirectory file);
+DBStatus DBEnvRenameFile(DBEngine* db, DBSlice oldname, DBSlice newname);
 
 #ifdef __cplusplus
 }  // extern "C"

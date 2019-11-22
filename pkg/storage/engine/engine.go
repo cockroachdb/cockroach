@@ -13,6 +13,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -461,6 +462,44 @@ type Batch interface {
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
+}
+
+// File and FS are a partial attempt at offering the Pebble vfs.FS interface. Given the constraints
+// of the Rocksdb Env interface we've chosen to only include what is easy to implement. Additionally,
+// it does not try to subsume all the file related functionality already in the Engine interface.
+// It seems preferable to do a final cleanup only when the implementation can simply use Pebble's
+// implementation of vfs.FS. At that point the following interface will become a superset of vfs.FS.
+type File interface {
+	io.Closer
+	io.Reader
+	io.ReaderAt
+	io.Writer
+	Sync() error
+}
+
+// FS provides a filesystem interface.
+type FS interface {
+	// CreateFile creates the named file for writing, truncating it if it already
+	// exists.
+	CreateFile(name string) (File, error)
+
+	// LinkFile creates newname as a hard link to the oldname file.
+	LinkFile(oldname, newname string) error
+
+	// Open opens the named file for reading.
+	// TODO: OpenFile() but already used that name in Engine for creation (super confusing). Change
+	// that to CreateDBFile?
+	Open(name string) (File, error)
+
+	// OpenDir opens the named directory for syncing.
+	OpenDir(name string) (File, error)
+
+	// DeleteFile removes the named file.
+	DeleteFile(name string) error
+
+	// RenameFile renames a file. It overwrites the file at newname if one exists,
+	// the same as os.Rename.
+	RenameFile(oldname, newname string) error
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB
