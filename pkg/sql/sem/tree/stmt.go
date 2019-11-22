@@ -316,6 +316,17 @@ func (*CreateIndex) StatementType() StatementType { return DDL }
 func (*CreateIndex) StatementTag() string { return "CREATE INDEX" }
 
 // StatementType implements the Statement interface.
+func (n *CreateSchema) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *CreateSchema) StatementTag() string {
+	return "CREATE SCHEMA"
+}
+
+// modifiesSchema implements the canModifySchema interface.
+func (*CreateSchema) modifiesSchema() bool { return true }
+
+// StatementType implements the Statement interface.
 func (n *CreateTable) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -928,6 +939,7 @@ func (n *CreateIndex) String() string                    { return AsString(n) }
 func (n *CreateRole) String() string                     { return AsString(n) }
 func (n *CreateUser) String() string                     { return AsString(n) }
 func (n *CreateTable) String() string                    { return AsString(n) }
+func (n *CreateSchema) String() string                   { return AsString(n) }
 func (n *CreateSequence) String() string                 { return AsString(n) }
 func (n *CreateStats) String() string                    { return AsString(n) }
 func (n *CreateView) String() string                     { return AsString(n) }
