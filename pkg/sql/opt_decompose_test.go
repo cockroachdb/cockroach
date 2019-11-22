@@ -13,8 +13,6 @@ package sql
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -59,35 +57,4 @@ func testTableDesc(
 		t.Fatal(err)
 	}
 	return sqlbase.NewImmutableTableDescriptor(mut.TableDescriptor)
-}
-
-func makeSelectNode(t *testing.T, p *planner) *renderNode {
-	desc := testTableDesc(t, func(*MutableTableDescriptor) {})
-	sel := testInitDummySelectNode(t, p, desc)
-	numColumns := len(sel.sourceInfo[0].SourceColumns)
-	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, numColumns)
-	p.extendedEvalCtx.IVarContainer = sel
-	return sel
-}
-
-func parseAndNormalizeExpr(t *testing.T, p *planner, sql string, sel *renderNode) tree.TypedExpr {
-	expr, err := parser.ParseExpr(sql)
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-
-	// Perform name resolution because {decompose,simplify}Expr want
-	// expressions containing IndexedVars.
-	if expr, _, _, err = p.resolveNamesForRender(expr, sel); err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	p.semaCtx.IVarContainer = p.extendedEvalCtx.IVarContainer
-	typedExpr, err := tree.TypeCheck(expr, &p.semaCtx, types.Any)
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	if typedExpr, err = p.extendedEvalCtx.NormalizeExpr(typedExpr); err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	return typedExpr
 }
