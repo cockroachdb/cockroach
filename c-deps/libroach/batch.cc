@@ -587,6 +587,14 @@ DBStatus DBBatch::EnvDeleteDirAndFiles(DBSlice dir) { return FmtStatus("unsuppor
 
 DBStatus DBBatch::EnvLinkFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
 
+DBStatus DBBatch::EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset, int* n) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvCloseReadableFile(rocksdb::RandomAccessFile* file) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvOpenDirectory(DBSlice path, rocksdb::Directory** file) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvSyncDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvCloseDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvRenameFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
+  
 DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep, db->iters), updates(0) {}
 
 DBWriteOnlyBatch::~DBWriteOnlyBatch() {}
@@ -697,6 +705,14 @@ DBStatus DBWriteOnlyBatch::EnvDeleteDirAndFiles(DBSlice dir) { return FmtStatus(
 DBStatus DBWriteOnlyBatch::EnvLinkFile(DBSlice oldname, DBSlice newname) {
   return FmtStatus("unsupported");
 }
+
+DBStatus DBWriteOnlyBatch::EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset, int* n) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvCloseReadableFile(rocksdb::RandomAccessFile* file) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvOpenDirectory(DBSlice path, rocksdb::Directory** file) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvSyncDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvCloseDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvRenameFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
 
 rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
   return new DBBatchInserter(batch);

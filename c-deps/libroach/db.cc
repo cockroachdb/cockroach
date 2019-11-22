@@ -1141,3 +1141,31 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIter
 
   return res;
 }
+
+DBStatus DBEnvOpenReadableFile(DBEngine* db, DBSlice path, DBReadableFile* file) {
+  return db->EnvOpenReadableFile(path, (rocksdb::RandomAccessFile**)file);
+}
+
+DBStatus DBEnvReadAtFile(DBEngine* db, DBReadableFile file, DBSlice buffer, int64_t offset, int* n) {
+  return db->EnvReadAtFile((rocksdb::RandomAccessFile*)file, buffer, offset, n);
+}
+
+DBStatus DBEnvCloseReadableFile(DBEngine* db, DBReadableFile file) {
+  return db->EnvCloseReadableFile((rocksdb::RandomAccessFile*)file);
+}
+
+DBStatus DBEnvOpenDirectory(DBEngine* db, DBSlice path, DBDirectory* file) {
+  return db->EnvOpenDirectory(path, (rocksdb::Directory**)file);
+}
+
+DBStatus DBEnvSyncDirectory(DBEngine* db, DBDirectory file) {
+  return db->EnvSyncDirectory((rocksdb::Directory*)file);
+}
+
+DBStatus DBEnvCloseDirectory(DBEngine* db, DBDirectory file) {
+  return db->EnvCloseDirectory((rocksdb::Directory*)file);
+}
+
+DBStatus DBEnvRenameFile(DBEngine* db, DBSlice oldname, DBSlice newname) {
+  return db->EnvRenameFile(oldname, newname);
+}
