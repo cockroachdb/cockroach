@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -68,6 +69,8 @@ type extendedEvalContext struct {
 
 	SchemaChangers *schemaChangerCollection
 
+	Jobs *jobsCollection
+
 	schemaAccessors *schemaInterface
 
 	sqlStatsCollector *sqlStatsCollector
@@ -78,6 +81,21 @@ func (ctx *extendedEvalContext) copy() *extendedEvalContext {
 	cpy := *ctx
 	cpy.EvalContext = *ctx.EvalContext.Copy()
 	return &cpy
+}
+
+// QueueJob creates a new job from record and queues it for execution after
+// the transaction commits.
+func (ctx *extendedEvalContext) QueueJob(record jobs.Record) (*jobs.Job, error) {
+	job, err := ctx.ExecCfg.JobRegistry.CreateJobWithTxn(
+		ctx.Context,
+		record,
+		ctx.Txn,
+	)
+	if err != nil {
+		return nil, err
+	}
+	*ctx.Jobs = append(*ctx.Jobs, *job.ID())
+	return job, nil
 }
 
 // schemaInterface provides access to the database and table descriptors.

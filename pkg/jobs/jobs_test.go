@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // expectation defines the information necessary to determine the validity of
@@ -1610,5 +1613,83 @@ func TestShowJobWhenComplete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	})
+}
+
+func TestJobInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.ResetConstructors()()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Accessed atomically.
+	var hasRun int32
+	var job *jobs.Job
+	sql.AddPlanHook(
+		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
+		) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+			_, ok := stmt.(*tree.Backup)
+			if !ok {
+				return nil, nil, nil, false, nil
+			}
+			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
+				var err error
+				job, err = phs.ExtendedEvalContext().QueueJob(
+					jobs.Record{
+						Details:  jobspb.BackupDetails{},
+						Progress: jobspb.BackupProgress{},
+					},
+				)
+				return err
+			}
+			return fn, nil, nil, false, nil
+		})
+
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func() error {
+				// Inc instead of just storing 1 to count how many jobs ran.
+				atomic.AddInt32(&hasRun, 1)
+				return nil
+			},
+		}
+	})
+	t.Run("normal success", func(t *testing.T) {
+		txn, err := sqlDB.Begin()
+		require.NoError(t, err)
+		_, err = txn.Exec("BACKUP doesnot.matter TO doesnotmattter")
+		require.NoError(t, err)
+
+		// If we rollback then the job should not run
+		require.NoError(t, txn.Rollback())
+		registry := s.JobRegistry().(*jobs.Registry)
+		_, err = registry.LoadJob(ctx, *job.ID())
+		require.Error(t, err, "the job should not exist after the txn is rolled back")
+
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		// Just in case the job was scheduled let's wait for it to finish
+		// to avoid a race.
+		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", *job.ID())
+		require.Equal(t, int32(0), atomic.LoadInt32(&hasRun),
+			"job has run in transaction before txn commit")
+
+		// Now let's actually commit the transaction and check that the job ran.
+		txn, err = sqlDB.Begin()
+		require.NoError(t, err)
+		_, err = txn.Exec("BACKUP doesnot.matter2 TO doesnotmattter2")
+		require.NoError(t, err)
+		require.NoError(t, txn.Commit())
+		_, err = registry.LoadJob(ctx, *job.ID())
+		require.NoError(t, err, "queued job not found")
+		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", *job.ID())
+		require.Equal(t, int32(1), atomic.LoadInt32(&hasRun),
+			"job scheduled in transaction did not run")
 	})
 }
