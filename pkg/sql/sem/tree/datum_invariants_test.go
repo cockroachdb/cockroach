@@ -13,7 +13,9 @@ package tree
 import (
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -44,10 +46,13 @@ func TestCompareTimestamps(t *testing.T) {
 	pacificTimeZone := int32(7 * 60 * 60)
 	sydneyTimeZone := int32(-10 * 60 * 60)
 
+	sydneyFixedZone := time.FixedZone("otan@sydney", -int(sydneyTimeZone))
+
 	testCases := []struct {
 		desc     string
 		left     Datum
 		right    Datum
+		location *time.Location
 		expected int
 	}{
 		{
@@ -60,6 +65,19 @@ func TestCompareTimestamps(t *testing.T) {
 			desc:     "same DTimeTZ are equal",
 			left:     NewDTimeTZFromOffset(timeofday.New(22, 0, 0, 0), sydneyTimeZone),
 			right:    NewDTimeTZFromOffset(timeofday.New(22, 0, 0, 0), sydneyTimeZone),
+			expected: 0,
+		},
+		{
+			desc:     "DTime and DTimeTZ both UTC, and so are equal",
+			left:     MakeDTime(timeofday.New(12, 0, 0, 0)),
+			right:    NewDTimeTZFromOffset(timeofday.New(12, 0, 0, 0), 0),
+			expected: 0,
+		},
+		{
+			desc:     "DTime and DTimeTZ both Sydney time, and so are equal",
+			left:     MakeDTime(timeofday.New(12, 0, 0, 0)),
+			right:    NewDTimeTZFromOffset(timeofday.New(12, 0, 0, 0), sydneyTimeZone),
+			location: sydneyFixedZone,
 			expected: 0,
 		},
 		{
@@ -92,8 +110,15 @@ func TestCompareTimestamps(t *testing.T) {
 		t.Run(
 			fmt.Sprintf("%s cmp %s", tc.left.String(), tc.right.String()),
 			func(t *testing.T) {
-				assert.Equal(nil, tc.expected, compareTimestamps(nil, tc.left, tc.right))
-				assert.Equal(nil, -tc.expected, compareTimestamps(nil, tc.right, tc.left))
+				ctx := &EvalContext{
+					SessionData: &sessiondata.SessionData{
+						DataConversion: sessiondata.DataConversionConfig{
+							Location: tc.location,
+						},
+					},
+				}
+				assert.Equal(t, tc.expected, compareTimestamps(ctx, tc.left, tc.right))
+				assert.Equal(t, -tc.expected, compareTimestamps(ctx, tc.right, tc.left))
 			},
 		)
 	}

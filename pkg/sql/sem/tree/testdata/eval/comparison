@@ -266,6 +266,71 @@ eval
 false
 
 eval
+'12:00:00'::time = '12:00:00+0'::timetz
+----
+true
+
+eval
+'12:00:00'::time != '12:00:00+0'::timetz
+----
+false
+
+eval
+'12:00:00'::time < '11:00:00-1'::timetz
+----
+true
+
+eval
+'12:00:00'::time >= '11:00:00-1'::timetz
+----
+false
+
+eval
+'12:00:00'::time > '13:00:00+1'::timetz
+----
+true
+
+eval
+'12:00:00'::time <= '13:00:00+1'::timetz
+----
+false
+
+eval
+'12:00:00-07'::timetz = '12:00:00-08'::timetz
+----
+false
+
+eval
+'12:00:00+09'::timetz = '12:00:00+09'::timetz
+----
+true
+
+eval
+'12:00:00+01'::timetz != '12:00:00-01'::timetz
+----
+true
+
+eval
+'12:00:00+01'::timetz < '12:00:00-01'::timetz
+----
+true
+
+eval
+'12:00:00+01'::timetz <= '12:00:00-01'::timetz
+----
+true
+
+eval
+'12:00:00+10'::timetz > '12:00:00+09'::timetz
+----
+false
+
+eval
+'12:00:00+10'::timetz >= '12:00:00+09'::timetz
+----
+false
+
+eval
 '2015-10-01'::timestamp = '2015-10-02'::timestamp
 ----
 false
@@ -639,6 +704,36 @@ NULL
 
 eval
 NULL <= '12:00:00'::time
+----
+NULL
+
+eval
+'12:00:00+01'::timetz = NULL
+----
+NULL
+
+eval
+'12:00:00+01'::timetz < NULL
+----
+NULL
+
+eval
+'12:00:00+01'::timetz <= NULL
+----
+NULL
+
+eval
+NULL = '12:00:00+01'::timetz
+----
+NULL
+
+eval
+NULL < '12:00:00+01'::timetz
+----
+NULL
+
+eval
+NULL <= '12:00:00+01'::timetz
 ----
 NULL
 
