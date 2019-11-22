@@ -140,7 +140,7 @@ func (ssss *SSTSnapshotStorageScratch) Clear() error {
 type SSTSnapshotStorageFile struct {
 	ssss      *SSTSnapshotStorageScratch
 	created   bool
-	file      engine.DBFile
+	file      engine.File
 	filename  string
 	ctx       context.Context
 	chunkSize int64
@@ -159,7 +159,7 @@ func (sssf *SSTSnapshotStorageFile) openFile() error {
 			return err
 		}
 	}
-	file, err := sssf.ssss.sss.engine.OpenFile(sssf.filename)
+	file, err := sssf.ssss.sss.engine.CreateFile(sssf.filename)
 	if err != nil {
 		return err
 	}

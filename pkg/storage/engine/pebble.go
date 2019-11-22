@@ -767,19 +767,6 @@ func (p *Pebble) InMem() bool {
 	return p.path == ""
 }
 
-// OpenFile implements the Engine interface.
-func (p *Pebble) OpenFile(filename string) (DBFile, error) {
-	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
-	// directory does not exist. Various tests in the storage package depend on
-	// this because they are accidentally creating the required directory on the
-	// actual filesystem instead of in the memory filesystem. See
-	// diskSideloadedStorage and SSTSnapshotStrategy.
-	if p.InMem() {
-		_ = p.fs.MkdirAll(p.fs.PathDir(filename), 0755)
-	}
-	return p.fs.Create(filename)
-}
-
 // ReadFile implements the Engine interface.
 func (p *Pebble) ReadFile(filename string) ([]byte, error) {
 	file, err := p.fs.Open(filename)
@@ -803,7 +790,7 @@ func (p *Pebble) WriteFile(filename string, data []byte) error {
 	return err
 }
 
-// DeleteFile implements the Engine interface.
+// DeleteFile implements the FS interface.
 func (p *Pebble) DeleteFile(filename string) error {
 	return p.fs.Remove(filename)
 }
@@ -837,9 +824,39 @@ func (p *Pebble) DeleteDirAndFiles(dir string) error {
 	return nil
 }
 
-// LinkFile implements the Engine interface.
+// LinkFile implements the FS interface.
 func (p *Pebble) LinkFile(oldname, newname string) error {
 	return p.fs.Link(oldname, newname)
+}
+
+var _ FS = &Pebble{}
+
+// CreateFile implements the FS interface.
+func (p *Pebble) CreateFile(name string) (File, error) {
+	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
+	// directory does not exist. Various tests in the storage package depend on
+	// this because they are accidentally creating the required directory on the
+	// actual filesystem instead of in the memory filesystem. See
+	// diskSideloadedStorage and SSTSnapshotStrategy.
+	if p.InMem() {
+		_ = p.fs.MkdirAll(p.fs.PathDir(name), 0755)
+	}
+	return p.fs.Create(name)
+}
+
+// OpenFile implements the FS interface.
+func (p *Pebble) OpenFile(name string) (File, error) {
+	return p.fs.Open(name)
+}
+
+// OpenDir implements the FS interface.
+func (p *Pebble) OpenDir(name string) (File, error) {
+	return p.fs.OpenDir(name)
+}
+
+// RenameFile implements the FS interface.
+func (p *Pebble) RenameFile(oldname, newname string) error {
+	return p.fs.Rename(oldname, newname)
 }
 
 // CreateCheckpoint implements the Engine interface.
