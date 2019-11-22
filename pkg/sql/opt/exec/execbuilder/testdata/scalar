@@ -56,7 +56,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     3          ·    ·
  └── scan  ·            ·          ()   ·
@@ -67,7 +67,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a + 2 AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     a + 2      ·    ·
  └── scan  ·            ·          (a)  ·
@@ -78,7 +78,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 AND b <= 10 AND c < 4 AS r FROM t
 ----
 ·          distributed  false                                 ·          ·
-·          vectorized   false                                 ·          ·
+·          vectorized   true                                  ·          ·
 render     ·            ·                                     (r)        ·
  │         render 0     ((a >= 5) AND (b <= 10)) AND (c < 4)  ·          ·
  └── scan  ·            ·                                     (a, b, c)  ·
@@ -89,7 +89,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 OR b <= 10 OR c < 4 AS r FROM t
 ----
 ·          distributed  false                               ·          ·
-·          vectorized   false                               ·          ·
+·          vectorized   true                                ·          ·
 render     ·            ·                                   (r)        ·
  │         render 0     ((a >= 5) OR (b <= 10)) OR (c < 4)  ·          ·
  └── scan  ·            ·                                   (a, b, c)  ·
@@ -100,7 +100,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a = 5) AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     a != 5     ·    ·
  └── scan  ·            ·          (a)  ·
@@ -111,7 +111,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a > 5 AND b >= 10) AS r FROM t
 ----
 ·          distributed  false                 ·       ·
-·          vectorized   false                 ·       ·
+·          vectorized   true                  ·       ·
 render     ·            ·                     (r)     ·
  │         render 0     (a <= 5) OR (b < 10)  ·       ·
  └── scan  ·            ·                     (a, b)  ·
@@ -122,7 +122,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) AS r FROM t
 ----
 ·          distributed  false                                                ·          ·
-·          vectorized   false                                                ·          ·
+·          vectorized   true                                                 ·          ·
 render     ·            ·                                                    (r)        ·
  │         render 0     ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))  ·          ·
  └── scan  ·            ·                                                    (a, b, c)  ·
@@ -133,7 +133,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) AS r FROM t
 ----
 ·          distributed  false                                ·          ·
-·          vectorized   false                                ·          ·
+·          vectorized   true                                 ·          ·
 render     ·            ·                                    (r)        ·
  │         render 0     ((a < 5) AND (b > 10)) AND (c < 10)  ·          ·
  └── scan  ·            ·                                    (a, b, c)  ·
@@ -144,7 +144,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) = (1, 2)  AS r FROM t
 ----
 ·          distributed  false                ·       ·
-·          vectorized   false                ·       ·
+·          vectorized   true                 ·       ·
 render     ·            ·                    (r)     ·
  │         render 0     (a = 1) AND (b = 2)  ·       ·
  └── scan  ·            ·                    (a, b)  ·
@@ -155,7 +155,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a IN (1, 2) AS r FROM t
 ----
 ·          distributed  false        ·    ·
-·          vectorized   false        ·    ·
+·          vectorized   true         ·    ·
 render     ·            ·            (r)  ·
  │         render 0     a IN (1, 2)  ·    ·
  └── scan  ·            ·            (a)  ·
@@ -177,7 +177,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  AS r FROM t
 ----
 ·          distributed  false                                                            ·             ·
-·          vectorized   false                                                            ·             ·
+·          vectorized   true                                                             ·             ·
 render     ·            ·                                                                (r)           ·
  │         render 0     ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·             ·
  └── scan  ·            ·                                                                (a, b, c, d)  ·
@@ -188,7 +188,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  AS r FROM t
 ----
 ·          distributed  false                                            ·             ·
-·          vectorized   false                                            ·             ·
+·          vectorized   true                                             ·             ·
 render     ·            ·                                                (r)           ·
  │         render 0     (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)  ·             ·
  └── scan  ·            ·                                                (a, b, c, d)  ·
@@ -199,7 +199,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) AS r FROM t
 ----
 ·          distributed  false                                                                                  ·             ·
-·          vectorized   false                                                                                  ·             ·
+·          vectorized   true                                                                                   ·             ·
 render     ·            ·                                                                                      (r)           ·
  │         render 0     (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)  ·             ·
  └── scan  ·            ·                                                                                      (a, b, c, s)  ·
@@ -210,7 +210,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NULL AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     a IS NULL  ·    ·
  └── scan  ·            ·          (a)  ·
@@ -221,7 +221,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL AS r FROM t
 ----
 ·          distributed  false      ·    ·
-·          vectorized   false      ·    ·
+·          vectorized   true       ·    ·
 render     ·            ·          (r)  ·
  │         render 0     a IS NULL  ·    ·
  └── scan  ·            ·          (a)  ·
@@ -243,7 +243,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL AS r FROM t
 ----
 ·          distributed  false          ·    ·
-·          vectorized   false          ·    ·
+·          vectorized   true           ·    ·
 render     ·            ·              (r)  ·
  │         render 0     a IS NOT NULL  ·    ·
  └── scan  ·            ·              (a)  ·
@@ -254,7 +254,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL AS r FROM t
 ----
 ·          distributed  false          ·    ·
-·          vectorized   false          ·    ·
+·          vectorized   true           ·    ·
 render     ·            ·              (r)  ·
  │         render 0     a IS NOT NULL  ·    ·
  └── scan  ·            ·              (a)  ·
@@ -298,7 +298,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END AS r FROM t
 ----
 ·          distributed  false                              ·    ·
-·          vectorized   false                              ·    ·
+·          vectorized   true                               ·    ·
 render     ·            ·                                  (r)  ·
  │         render 0     CASE WHEN a = 2 THEN 1 ELSE 2 END  ·    ·
  └── scan  ·            ·                                  (a)  ·
@@ -321,7 +321,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 END AS r FROM t
 ----
 ·          distributed  false                       ·    ·
-·          vectorized   false                       ·    ·
+·          vectorized   true                        ·    ·
 render     ·            ·                           (r)  ·
  │         render 0     CASE WHEN a = 2 THEN 1 END  ·    ·
  └── scan  ·            ·                           (a)  ·
@@ -353,7 +353,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT length(s) FROM t
 ----
 ·          distributed  false      ·         ·
-·          vectorized   false      ·         ·
+·          vectorized   true       ·         ·
 render     ·            ·          (length)  ·
  │         render 0     length(s)  ·         ·
  └── scan  ·            ·          (s)       ·
@@ -538,7 +538,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
 ----
 ·          distributed  false                  ·          ·
-·          vectorized   false                  ·          ·
+·          vectorized   true                   ·          ·
 render     ·            ·                      (a)        ·
  │         render 0     a                      ·          ·
  └── scan  ·            ·                      (a, b, d)  ·
@@ -550,7 +550,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
 ·          distributed  false               ·          ·
-·          vectorized   false               ·          ·
+·          vectorized   true                ·          ·
 render     ·            ·                   (a)        ·
  │         render 0     a                   ·          ·
  └── scan  ·            ·                   (a, b, d)  ·
@@ -562,7 +562,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
 ·          distributed  false                                               ·          ·
-·          vectorized   false                                               ·          ·
+·          vectorized   true                                                ·          ·
 render     ·            ·                                                   (r)        ·
  │         render 0     ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·          ·
  └── scan  ·            ·                                                   (a, b, d)  ·
@@ -573,7 +573,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a NOT BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
 ·          distributed  false                                          ·          ·
-·          vectorized   false                                          ·          ·
+·          vectorized   true                                           ·          ·
 render     ·            ·                                              (r)        ·
  │         render 0     ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·          ·
  └── scan  ·            ·                                              (a, b, d)  ·
@@ -628,7 +628,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY (1, 2, 3) FROM t
 ----
 ·          distributed  false      ·             ·
-·          vectorized   false      ·             ·
+·          vectorized   true       ·             ·
 render     ·            ·          ("?column?")  ·
  │         render 0     true       ·             ·
  └── scan  ·            ·          ()            ·
@@ -639,7 +639,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY () FROM t
 ----
 ·          distributed  false      ·             ·
-·          vectorized   false      ·             ·
+·          vectorized   true       ·             ·
 render     ·            ·          ("?column?")  ·
  │         render 0     false      ·             ·
  └── scan  ·            ·          ()            ·
@@ -704,7 +704,7 @@ EXPLAIN (VERBOSE) SELECT 1::FLOAT + length(upper(concat('a', 'b', 'c')))::FLOAT 
                          1::FLOAT + length(upper(concat('a', 'b', s)))::FLOAT AS r2 FROM t
 ----
 ·          distributed  false                                             ·         ·
-·          vectorized   false                                             ·         ·
+·          vectorized   true                                              ·         ·
 render     ·            ·                                                 (r1, r2)  ·
  │         render 0     4.0                                               ·         ·
  │         render 1     length(upper(concat('a', 'b', s)))::FLOAT8 + 1.0  ·         ·

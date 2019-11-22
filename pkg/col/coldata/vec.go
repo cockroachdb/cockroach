@@ -169,6 +169,8 @@ func NewMemColumn(t coltypes.T, n int) Vec {
 		return &memColumn{t: t, col: make([]apd.Decimal, n), nulls: nulls}
 	case coltypes.Timestamp:
 		return &memColumn{t: t, col: make([]time.Time, n), nulls: nulls}
+	case coltypes.Unhandled:
+		return unknown{}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
 	}
