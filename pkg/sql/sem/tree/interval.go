@@ -329,6 +329,8 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 			} else {
 				return d, newInvalidSQLDurationError(s)
 			}
+		} else {
+			return d, newInvalidSQLDurationError(s)
 		}
 	}
 	return d, nil

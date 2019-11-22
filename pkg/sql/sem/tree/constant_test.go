@@ -345,7 +345,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		for _, availType := range test.c.AvailableTypes() {
 			res, err := test.c.ResolveAsType(&tree.SemaContext{}, availType)
 			if err != nil {
-				if !strings.Contains(err.Error(), "could not parse") {
+				if !strings.Contains(err.Error(), "could not parse") && !strings.Contains(err.Error(), "parsing") {
 					// Parsing errors are permitted for this test, but the number of correctly
 					// parseable types will be verified. Any other error should throw a failure.
 					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
