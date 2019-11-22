@@ -11,8 +11,6 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -219,92 +217,4 @@ func (p *joinPredicate) eval(ctx *tree.EvalContext, leftRow, rightRow tree.Datum
 func (p *joinPredicate) prepareRow(result, leftRow, rightRow tree.Datums) {
 	copy(result[:len(leftRow)], leftRow)
 	copy(result[len(leftRow):], rightRow)
-}
-
-// usingColumns captures the information about equality columns
-// from USING and NATURAL JOIN statements.
-type usingColumn struct {
-	name tree.Name
-	// Index and type of the column in the left source.
-	leftIdx  int
-	leftType *types.T
-	// Index and type of the column in the right source.
-	rightIdx  int
-	rightType *types.T
-}
-
-func makeUsingColumns(
-	leftCols, rightCols sqlbase.ResultColumns, usingColNames tree.NameList,
-) ([]usingColumn, error) {
-	if len(usingColNames) == 0 {
-		return nil, nil
-	}
-
-	// Check for duplicate columns, e.g. USING(x,x).
-	seenNames := make(map[string]struct{})
-	for _, syntaxColName := range usingColNames {
-		colName := string(syntaxColName)
-		if _, ok := seenNames[colName]; ok {
-			return nil, pgerror.Newf(pgcode.DuplicateColumn,
-				"column %q appears more than once in USING clause", colName)
-		}
-		seenNames[colName] = struct{}{}
-	}
-
-	res := make([]usingColumn, len(usingColNames))
-	for i, name := range usingColNames {
-		res[i].name = name
-		var err error
-		// Find the column name on the left.
-		res[i].leftIdx, res[i].leftType, err = pickUsingColumn(leftCols, string(name), "left")
-		if err != nil {
-			return nil, err
-		}
-
-		// Find the column name on the right.
-		res[i].rightIdx, res[i].rightType, err = pickUsingColumn(rightCols, string(name), "right")
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-// pickUsingColumn searches for a column whose name matches colName.
-// The column index and type are returned if found, otherwise an error
-// is reported.
-func pickUsingColumn(
-	cols sqlbase.ResultColumns, colName string, context string,
-) (int, *types.T, error) {
-	idx := invalidColIdx
-	for j, col := range cols {
-		if col.Hidden {
-			continue
-		}
-		if col.Name == colName {
-			idx = j
-			break
-		}
-	}
-	if idx == invalidColIdx {
-		return idx, nil, pgerror.Newf(pgcode.UndefinedColumn,
-			"column \"%s\" specified in USING clause does not exist in %s table", colName, context)
-	}
-	return idx, cols[idx].Typ, nil
-}
-
-const invalidColIdx = -1
-
-// mergeConj combines two predicates.
-func mergeConj(left, right tree.TypedExpr) tree.TypedExpr {
-	if isFilterTrue(left) {
-		if right == tree.DBoolTrue {
-			return nil
-		}
-		return right
-	}
-	if isFilterTrue(right) {
-		return left
-	}
-	return tree.NewTypedAndExpr(left, right)
 }
