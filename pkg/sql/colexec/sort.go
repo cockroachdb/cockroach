@@ -262,7 +262,8 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		}
 
 		for j := 0; j < len(p.inputTypes); j++ {
-			p.output.ColVec(j).Copy(
+			p.allocator.Copy(
+				p.output.ColVec(j),
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
 						ColType:     p.inputTypes[j],

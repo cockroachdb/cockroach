@@ -78,23 +78,29 @@ func (a *Allocator) AppendColumn(b coldata.Batch, t coltypes.T) {
 	b.AppendCol(col)
 }
 
-// Append appends elements of a source coldata.Vec into dest according to
-// coldata.SliceArgs.
-func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
+// performOperation executes 'operation' (that somehow modifies 'destVecs') and
+// updates the memory account accordingly.
+func (a *Allocator) performOperation(destVecs []coldata.Vec, operation func()) {
 	var before, after, delta int64
-	// To simplify the accounting, we perform the append first and then will
-	// update the memory account. The minor "drift" in accounting that is caused
-	// by this approach is ok.
-	if dest.Type() == coltypes.Bytes {
-		before = int64(dest.Bytes().Size())
-	} else {
-		before = int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Length()))
+	for _, dest := range destVecs {
+		// To simplify the accounting, we perform the operation first and then will
+		// update the memory account. The minor "drift" in accounting that is
+		// caused by this approach is ok.
+		if dest.Type() == coltypes.Bytes {
+			before += int64(dest.Bytes().Size())
+		} else {
+			before += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Capacity()))
+		}
 	}
-	dest.Append(args)
-	if dest.Type() == coltypes.Bytes {
-		after = int64(dest.Bytes().Size())
-	} else {
-		after = int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Length()))
+
+	operation()
+
+	for _, dest := range destVecs {
+		if dest.Type() == coltypes.Bytes {
+			after += int64(dest.Bytes().Size())
+		} else {
+			after += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Capacity()))
+		}
 	}
 	delta = after - before
 	if delta >= 0 {
@@ -106,8 +112,18 @@ func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
 	}
 }
 
-// TODO(yuzefovich): Vec.Copy and execgen.SET need to also go through the
-// Allocator.
+// Append appends elements of a source coldata.Vec into dest according to
+// coldata.SliceArgs.
+func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
+	a.performOperation([]coldata.Vec{dest}, func() { dest.Append(args) })
+}
+
+// Copy copies elements of a source coldata.Vec into dest according to
+// coldata.CopySliceArgs.
+func (a *Allocator) Copy(dest coldata.Vec, args coldata.CopySliceArgs) {
+	a.performOperation([]coldata.Vec{dest}, func() { dest.Copy(args) })
+}
+
 // TODO(yuzefovich): extend Allocator so that it could free up the memory (and
 // resize the memory account accordingly) when the caller is done with the
 // batches.
@@ -139,14 +155,13 @@ func estimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 		case coltypes.Bool:
 			acc += sizeOfBool
 		case coltypes.Bytes:
-			// TODO(yuzefovich): we actually do not allocate any memory for b.data
-			// when calling NewBytes(), so remove this estimation once execgen.SET is
-			// handled by the Allocator.
-
-			// We don't know without looking at the data in a batch to see how
-			// much space each byte array takes up. Use some default value as a
-			// heuristic right now.
-			acc += 100
+			// For byte arrays, we initially allocate BytesInitialAllocationFactor
+			// number of bytes (plus an int32 for the offset) for each row, so we use
+			// the sum of two values as the estimate. However, later, the exact
+			// memory footprint will be used: whenever a modification of Bytes takes
+			// place, the Allocator will measure the old footprint and the updated
+			// one and will update the memory account accordingly.
+			acc += coldata.BytesInitialAllocationFactor + sizeOfInt32
 		case coltypes.Int16:
 			acc += sizeOfInt16
 		case coltypes.Int32:
