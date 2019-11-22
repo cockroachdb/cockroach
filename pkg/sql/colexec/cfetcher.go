@@ -237,7 +237,10 @@ type cFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *cFetcher) Init(
-	allocator *Allocator, reverse, returnRangeInfo bool, isCheck bool, tables ...row.FetcherTableArgs,
+	allocator *Allocator,
+	reverse, returnRangeInfo bool,
+	isCheck bool,
+	tables ...row.FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
@@ -266,7 +269,9 @@ func (rf *cFetcher) Init(
 	typs := make([]coltypes.T, len(colDescriptors))
 	for i := range typs {
 		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == coltypes.Unhandled {
+		if typs[i] == coltypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
+			// Only return an error if the type is unhandled and needed. If not needed,
+			// a placeholder Vec will be created.
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
 		}
 	}
