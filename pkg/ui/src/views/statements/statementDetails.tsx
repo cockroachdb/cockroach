@@ -199,7 +199,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
       const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
 
       return (
-        <Fragment>
+        <React.Fragment>
           <section className="section">
             <SqlBox value={ statement } />
           </section>
@@ -210,7 +210,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
               Back to Statements
             </Link>
           </section>
-        </Fragment>
+        </React.Fragment>
       );
     }
 
