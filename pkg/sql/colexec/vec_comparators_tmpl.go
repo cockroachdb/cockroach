@@ -73,6 +73,8 @@ type vecComparator interface {
 
 	// set sets the value of the vector at dstVecIdx at index dstValIdx to the value
 	// at the vector at srcVecIdx at index srcValIdx.
+	// NOTE: whenever set is used, the caller is responsible for updating the
+	// memory accounts.
 	set(srcVecIdx, dstVecIdx int, srcValIdx, dstValIdx uint16)
 
 	// setVec updates the vector at idx.

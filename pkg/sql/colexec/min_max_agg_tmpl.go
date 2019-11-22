@@ -75,11 +75,11 @@ var _ interface{} = execgen.UNSAFEGET
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAgg(t coltypes.T) (aggregateFunc, error) {
+func new_AGG_TITLEAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .Overloads}}
 	case _TYPES_T:
-		return &_AGG_TYPEAgg{}, nil
+		return &_AGG_TYPEAgg{allocator: allocator}, nil
 	// {{end}}
 	default:
 		return nil, errors.Errorf("unsupported min agg type %s", t)
@@ -89,14 +89,17 @@ func new_AGG_TITLEAgg(t coltypes.T) (aggregateFunc, error) {
 // {{range .Overloads}}
 
 type _AGG_TYPEAgg struct {
-	done   bool
-	groups []bool
-	curIdx int
+	allocator *Allocator
+	done      bool
+	groups    []bool
+	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg _GOTYPE
-	// vec points to the output vector we are updating.
-	vec _GOTYPESLICE
+	// col points to the output vector we are updating.
+	col _GOTYPESLICE
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
 	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -108,14 +111,15 @@ var _ aggregateFunc = &_AGG_TYPEAgg{}
 
 func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
-	a.vec = v._TYPE()
+	a.vec = v
+	a.col = v._TYPE()
 	a.nulls = v.Nulls()
 	a.Reset()
 }
 
 func (a *_AGG_TYPEAgg) Reset() {
 	// TODO(asubiotto): Zeros don't seem necessary.
-	execgen.ZERO(a.vec)
+	execgen.ZERO(a.col)
 	a.curAgg = zero_TYPEColumn[0]
 	a.curIdx = -1
 	a.foundNonNullForCurrentGroup = false
@@ -130,8 +134,8 @@ func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
 func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		vecLen := execgen.LEN(a.vec)
-		target := execgen.SLICE(a.vec, idx+1, vecLen)
+		vecLen := execgen.LEN(a.col)
+		target := execgen.SLICE(a.col, idx+1, vecLen)
 		execgen.ZERO(target)
 		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
@@ -149,38 +153,48 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(uint16(a.curIdx))
 		}
-		execgen.SET(a.vec, a.curIdx, a.curAgg)
+		a.allocator.performOperation(
+			[]coldata.Vec{a.vec},
+			func() {
+				execgen.SET(a.col, a.curIdx, a.curAgg)
+			},
+		)
 		a.curIdx++
 		a.done = true
 		return
 	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TYPE(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
-				_ACCUMULATE_MINMAX(a, nulls, i, true)
+	a.allocator.performOperation(
+		[]coldata.Vec{a.vec},
+		func() {
+			if nulls.MaybeHasNulls() {
+				if sel != nil {
+					sel = sel[:inputLen]
+					for _, i := range sel {
+						_ACCUMULATE_MINMAX(a, nulls, i, true)
+					}
+				} else {
+					col = execgen.SLICE(col, 0, int(inputLen))
+					for execgen.RANGE(i, col) {
+						_ACCUMULATE_MINMAX(a, nulls, i, true)
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:inputLen]
+					for _, i := range sel {
+						_ACCUMULATE_MINMAX(a, nulls, i, false)
+					}
+				} else {
+					col = execgen.SLICE(col, 0, int(inputLen))
+					for execgen.RANGE(i, col) {
+						_ACCUMULATE_MINMAX(a, nulls, i, false)
+					}
+				}
 			}
-		} else {
-			col = execgen.SLICE(col, 0, int(inputLen))
-			for execgen.RANGE(i, col) {
-				_ACCUMULATE_MINMAX(a, nulls, i, true)
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
-				_ACCUMULATE_MINMAX(a, nulls, i, false)
-			}
-		} else {
-			col = execgen.SLICE(col, 0, int(inputLen))
-			for execgen.RANGE(i, col) {
-				_ACCUMULATE_MINMAX(a, nulls, i, false)
-			}
-		}
-	}
+		},
+	)
 }
 
 func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
@@ -206,14 +220,14 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(uint16(a.curIdx))
 			}
-			execgen.SET(a.vec, a.curIdx, a.curAgg)
+			execgen.SET(a.col, a.curIdx, a.curAgg)
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 		// The next element of vec is guaranteed  to be initialized to the zero
 		// value. We can't use zero_TYPEColumn here because this is outside of
 		// the earlier template block.
-		a.curAgg = execgen.UNSAFEGET(a.vec, a.curIdx)
+		a.curAgg = execgen.UNSAFEGET(a.col, a.curIdx)
 	}
 	var isNull bool
 	// {{ if .HasNulls }}

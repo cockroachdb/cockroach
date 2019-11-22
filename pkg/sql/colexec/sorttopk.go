@@ -165,19 +165,24 @@ func (t *topKSorter) spool(ctx context.Context) {
 	for inputBatch.Length() > 0 {
 		t.updateComparators(inputVecIdx, inputBatch)
 		sel := inputBatch.Selection()
-		for i := inputBatchIdx; i < inputBatch.Length(); i++ {
-			idx := i
-			if sel != nil {
-				idx = sel[i]
-			}
-			maxIdx := t.heap[0]
-			if t.compareRow(inputVecIdx, topKVecIdx, idx, maxIdx) < 0 {
-				for j := range t.inputTypes {
-					t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
+		t.allocator.performOperation(
+			t.topK.ColVecs(),
+			func() {
+				for i := inputBatchIdx; i < inputBatch.Length(); i++ {
+					idx := i
+					if sel != nil {
+						idx = sel[i]
+					}
+					maxIdx := t.heap[0]
+					if t.compareRow(inputVecIdx, topKVecIdx, idx, maxIdx) < 0 {
+						for j := range t.inputTypes {
+							t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
+						}
+						heap.Fix(t, 0)
+					}
 				}
-				heap.Fix(t, 0)
-			}
-		}
+			},
+		)
 		inputBatch = t.input.Next(ctx)
 		inputBatchIdx = 0
 	}
@@ -205,7 +210,8 @@ func (t *topKSorter) emit() coldata.Batch {
 	}
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
-		vec.Copy(
+		t.allocator.Copy(
+			vec,
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
 					ColType:   t.inputTypes[i],

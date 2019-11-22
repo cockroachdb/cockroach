@@ -194,53 +194,58 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 	col := vec._FROMTYPE()
 	projVec := batch.ColVec(c.outputIdx)
 	projCol := projVec._TOTYPE()
-	if vec.MaybeHasNulls() {
-		vecNulls := vec.Nulls()
-		projNulls := projVec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if vecNulls.NullAt(i) {
-					projNulls.SetNull(i)
+	c.allocator.performOperation(
+		[]coldata.Vec{projVec},
+		func() {
+			if vec.MaybeHasNulls() {
+				vecNulls := vec.Nulls()
+				projNulls := projVec.Nulls()
+				if sel := batch.Selection(); sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if vecNulls.NullAt(i) {
+							projNulls.SetNull(i)
+						} else {
+							v := _FROM_TYPE_UNSAFEGET(col, int(i))
+							var r _GOTYPE
+							_ASSIGN_CAST(r, v)
+							_TO_TYPE_SET(projCol, int(i), r)
+						}
+					}
 				} else {
-					v := _FROM_TYPE_UNSAFEGET(col, int(i))
-					var r _GOTYPE
-					_ASSIGN_CAST(r, v)
-					_TO_TYPE_SET(projCol, int(i), r)
+					col = _FROM_TYPE_SLICE(col, 0, int(n))
+					for execgen.RANGE(i, col) {
+						if vecNulls.NullAt(uint16(i)) {
+							projNulls.SetNull(uint16(i))
+						} else {
+							v := _FROM_TYPE_UNSAFEGET(col, int(i))
+							var r _GOTYPE
+							_ASSIGN_CAST(r, v)
+							_TO_TYPE_SET(projCol, int(i), r)
+						}
+					}
+				}
+			} else {
+				if sel := batch.Selection(); sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := _FROM_TYPE_UNSAFEGET(col, int(i))
+						var r _GOTYPE
+						_ASSIGN_CAST(r, v)
+						_TO_TYPE_SET(projCol, int(i), r)
+					}
+				} else {
+					col = _FROM_TYPE_SLICE(col, 0, int(n))
+					for execgen.RANGE(i, col) {
+						v := _FROM_TYPE_UNSAFEGET(col, int(i))
+						var r _GOTYPE
+						_ASSIGN_CAST(r, v)
+						_TO_TYPE_SET(projCol, int(i), r)
+					}
 				}
 			}
-		} else {
-			col = _FROM_TYPE_SLICE(col, 0, int(n))
-			for execgen.RANGE(i, col) {
-				if vecNulls.NullAt(uint16(i)) {
-					projNulls.SetNull(uint16(i))
-				} else {
-					v := _FROM_TYPE_UNSAFEGET(col, int(i))
-					var r _GOTYPE
-					_ASSIGN_CAST(r, v)
-					_TO_TYPE_SET(projCol, int(i), r)
-				}
-			}
-		}
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				v := _FROM_TYPE_UNSAFEGET(col, int(i))
-				var r _GOTYPE
-				_ASSIGN_CAST(r, v)
-				_TO_TYPE_SET(projCol, int(i), r)
-			}
-		} else {
-			col = _FROM_TYPE_SLICE(col, 0, int(n))
-			for execgen.RANGE(i, col) {
-				v := _FROM_TYPE_UNSAFEGET(col, int(i))
-				var r _GOTYPE
-				_ASSIGN_CAST(r, v)
-				_TO_TYPE_SET(projCol, int(i), r)
-			}
-		}
-	}
+		},
+	)
 	return batch
 }
 

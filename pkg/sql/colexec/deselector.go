@@ -59,7 +59,8 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	for i, t := range p.inputTypes {
 		toCol := p.output.ColVec(i)
 		fromCol := batch.ColVec(i)
-		toCol.Copy(
+		p.allocator.Copy(
+			toCol,
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
 					ColType:   t,
