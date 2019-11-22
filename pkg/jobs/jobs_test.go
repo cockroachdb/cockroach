@@ -1648,6 +1648,7 @@ func TestJobInTxn(t *testing.T) {
 				if err != nil {
 					return err
 				}
+				*phs.ExtendedEvalContext().ScheduledJobs = append(*phs.ExtendedEvalContext().ScheduledJobs, *job.ID())
 				return nil
 			}
 			return fn, nil, nil, false, nil

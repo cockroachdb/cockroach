@@ -71,6 +71,8 @@ type extendedEvalContext struct {
 	schemaAccessors *schemaInterface
 
 	sqlStatsCollector *sqlStatsCollector
+
+	ScheduledJobs *[]int64
 }
 
 // copy returns a deep copy of ctx.
