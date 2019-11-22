@@ -567,10 +567,13 @@ func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
-	userName, err := userFromContext(ctx)
+	// TODO(someone): perform authorization based on the requesting user's
+	// SELECT privilege over the requested table.
+	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	// Get table span.
 	path, err := s.queryDescriptorIDPath(
 		ctx, userName, []string{req.Database, req.Table},
@@ -589,6 +592,10 @@ func (s *adminServer) TableStats(
 func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
+	if _, err := s.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	timeSeriesStats, err := s.statsForSpan(ctx, roachpb.Span{
 		Key:    keys.TimeseriesPrefix,
 		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
@@ -798,11 +805,7 @@ func (s *adminServer) Events(
 ) (*serverpb.EventsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	isAdmin, err := s.hasAdminRole(ctx, userName)
+	userName, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -897,7 +900,8 @@ func (s *adminServer) RangeLog(
 ) (*serverpb.RangeLogResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	// Range keys, even when pretty-printed, contain PII.
+	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1540,6 +1544,10 @@ func (s *adminServer) Decommission(
 func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
 ) (*serverpb.DataDistributionResponse, error) {
+	if _, err := s.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	resp := &serverpb.DataDistributionResponse{
 		DatabaseInfo: make(map[string]serverpb.DataDistributionResponse_DatabaseInfo),
 		ZoneConfigs:  make(map[string]serverpb.DataDistributionResponse_ZoneConfig),
@@ -1703,6 +1711,10 @@ func (s *adminServer) DataDistribution(
 func (s *adminServer) EnqueueRange(
 	ctx context.Context, req *serverpb.EnqueueRangeRequest,
 ) (*serverpb.EnqueueRangeResponse, error) {
+	if _, err := s.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
 		return nil, remoteDebuggingErr
 	}
@@ -2176,6 +2188,28 @@ func (s *adminServer) dialNode(
 	return serverpb.NewAdminClient(conn), nil
 }
 
+func (s *adminServer) requireAdminUser(ctx context.Context) (userName string, err error) {
+	userName, isAdmin, err := s.getUserAndRole(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !isAdmin {
+		return "", errInsufficientPrivilege
+	}
+	return userName, nil
+}
+
+func (s *adminServer) getUserAndRole(
+	ctx context.Context,
+) (userName string, isAdmin bool, err error) {
+	userName, err = userFromContext(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	isAdmin, err = s.hasAdminRole(ctx, userName)
+	return userName, isAdmin, err
+}
+
 func (s *adminServer) hasAdminRole(ctx context.Context, sessionUser string) (bool, error) {
 	if sessionUser == security.RootUser {
 		// Shortcut.
@@ -2196,3 +2230,5 @@ func (s *adminServer) hasAdminRole(ctx context.Context, sessionUser string) (boo
 	}
 	return bool(dbDatum), nil
 }
+
+var errInsufficientPrivilege = errors.New("this operation requires admin privilege")
