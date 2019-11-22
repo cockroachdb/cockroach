@@ -13,6 +13,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -400,24 +401,17 @@ type Engine interface {
 	// addSSTablePreApply to select alternate code paths, but really there should
 	// be a unified code path there.
 	InMem() bool
-	// OpenFile opens a DBFile with the given filename. The file should be created
-	// if it doesn't exist already, and should be writable.
-	OpenFile(filename string) (DBFile, error)
+
+	// Filesystem functionality.
+	FS
 	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
 	ReadFile(filename string) ([]byte, error)
 	// WriteFile writes data to a file in this RocksDB's env.
 	WriteFile(filename string, data []byte) error
-	// DeleteFile deletes the file with the given filename from this RocksDB's env.
-	// If the file with given filename doesn't exist, return os.ErrNotExist.
-	DeleteFile(filename string) error
 	// DeleteDirAndFiles deletes the directory and any files it contains but
 	// not subdirectories from this RocksDB's env. If dir does not exist,
 	// DeleteDirAndFiles returns nil (no error).
 	DeleteDirAndFiles(dir string) error
-	// LinkFile creates 'newname' as a hard link to 'oldname'. This is done using
-	// the engine implementation. For RocksDB, this means using the Env responsible for the file
-	// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
-	LinkFile(oldname, newname string) error
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
@@ -461,6 +455,41 @@ type Batch interface {
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
+}
+
+// File and FS are a partial attempt at offering the Pebble vfs.FS interface. Given the constraints
+// of the RocksDB Env interface we've chosen to only include what is easy to implement. Additionally,
+// it does not try to subsume all the file related functionality already in the Engine interface.
+// It seems preferable to do a final cleanup only when the implementation can simply use Pebble's
+// implementation of vfs.FS. At that point the following interface will become a superset of vfs.FS.
+type File interface {
+	io.ReadWriteCloser
+	io.ReaderAt
+	Sync() error
+}
+
+// FS provides a filesystem interface.
+type FS interface {
+	// CreateFile creates the named file for writing, truncating it if it already
+	// exists.
+	CreateFile(name string) (File, error)
+
+	// LinkFile creates newname as a hard link to the oldname file.
+	LinkFile(oldname, newname string) error
+
+	// OpenFile opens the named file for reading.
+	OpenFile(name string) (File, error)
+
+	// OpenDir opens the named directory for syncing.
+	OpenDir(name string) (File, error)
+
+	// DeleteFile removes the named file. If the file with given name doesn't exist, return an error
+	// that returns true from os.IsNotExist().
+	DeleteFile(name string) error
+
+	// RenameFile renames a file. It overwrites the file at newname if one exists,
+	// the same as os.Rename.
+	RenameFile(oldname, newname string) error
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB

@@ -90,4 +90,12 @@ DBStatus DBSnapshot::EnvLinkFile(DBSlice oldname, DBSlice newname) {
   return FmtStatus("unsupported");
 }
 
+DBStatus DBSnapshot::EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset, int* n) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvCloseReadableFile(rocksdb::RandomAccessFile* file) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvOpenDirectory(DBSlice path, rocksdb::Directory** file) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvSyncDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvCloseDirectory(rocksdb::Directory* file) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvRenameFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
+
 }  // namespace cockroach
