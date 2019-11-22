@@ -53,13 +53,6 @@ func CreateTestTableDescriptor(
 	return desc.TableDescriptor, err
 }
 
-func makeTestingExtendedEvalContext(st *cluster.Settings) extendedEvalContext {
-	return extendedEvalContext{
-		EvalContext: tree.MakeTestingEvalContext(st),
-		Tracing:     &SessionTracing{},
-	}
-}
-
 // StmtBufReader is an exported interface for reading a StmtBuf.
 // Normally only the write interface of the buffer is exported, as it is used by
 // the pgwire.

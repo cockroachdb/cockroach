@@ -18,14 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// resolveNamesForRender resolves the names in expr using the naming
-// context of the given renderNode (FROM clause).
-func (p *planner) resolveNamesForRender(
-	expr tree.Expr, s *renderNode,
-) (tree.Expr, bool, bool, error) {
-	return p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
-}
-
 // resolveNames walks the provided expression and resolves all names
 // using the tableInfo and iVarHelper.
 // If anything that looks like a column reference (indexed vars, star,
