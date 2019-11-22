@@ -2089,6 +2089,7 @@ character_without_length ::=
 
 const_datetime ::=
 	'DATE'
+	| 'TIME' opt_timezone
 	| 'TIMETZ'
 	| 'TIMESTAMP' opt_timezone
 	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone

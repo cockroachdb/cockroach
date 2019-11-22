@@ -7298,8 +7298,11 @@ const_datetime:
   }
 | TIME opt_timezone
   {
-    if $2.bool() { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
-    $$.val = types.Time
+    if $2.bool() {
+      $$.val = types.TimeTZ
+    } else {
+      $$.val = types.Time
+    }
   }
 | TIME '(' iconst32 ')' opt_timezone
   {
