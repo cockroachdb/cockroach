@@ -1631,8 +1631,8 @@ func TestJobInTxn(t *testing.T) {
 	defer close(done)
 
 	registry := s.JobRegistry().(*jobs.Registry)
-	mockJob := registry.NewJob(jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}})
-	var resultsCh chan<- tree.Datums
+	mockJob := jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}}
+	//var resultsCh chan<- tree.Datums
 	var hasRun bool
 	sql.AddPlanHook(
 		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
@@ -1642,20 +1642,19 @@ func TestJobInTxn(t *testing.T) {
 				return nil, nil, nil, false, nil
 			}
 			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
-				//phs.ExtendedEvalContext().Txn
-				errCh, err := registry.StartJob(ctx, resultsCh, mockJob)
+				_, err := registry.CreateJobWithTxn(ctx, mockJob, phs.ExtendedEvalContext().Txn)
 				if err != nil {
-					t.Fatal(err)
+					return err
 				}
-				return <-errCh
+				return nil
 			}
 			return fn, nil, nil, false, nil
 		})
 
+	var lock syncutil.Mutex
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
 			OnResume: func() error {
-				var lock syncutil.Mutex
 				lock.Lock()
 				hasRun = true
 				lock.Unlock()
@@ -1678,16 +1677,21 @@ func TestJobInTxn(t *testing.T) {
 			t.Fatal(err)
 		}
 		txn.Exec("BACKUP doesnot.matter TO doesnotmattter")
-		time.Sleep(time.Second)
+		time.Sleep(3 * time.Second)
+		lock.Lock()
 		if hasRun {
 			t.Fatalf("job has run in transaction before txn commit")
 		}
+		lock.Unlock()
 		err = txn.Commit()
 		if err != nil {
 			t.Fatal(err)
 		}
+		time.Sleep(time.Second)
+		lock.Lock()
 		if !hasRun {
 			t.Fatalf("job scheduled in transaction did not run")
 		}
+		lock.Unlock()
 	})
 }
