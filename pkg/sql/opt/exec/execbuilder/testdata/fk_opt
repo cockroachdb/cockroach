@@ -3,72 +3,742 @@
 statement ok
 SET experimental_optimizer_foreign_keys = true
 
+# -- Tests with INSERT --
+
 statement ok
-CREATE TABLE parent (p INT PRIMARY KEY, other INT)
+CREATE TABLE parent (p INT PRIMARY KEY, other INT UNIQUE)
 
 statement ok
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
 
-query TTTTT
-EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
+query TTT
+EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
 ----
-·                                          distributed            false              ·                   ·
-·                                          vectorized             false              ·                   ·
-root                                       ·                      ·                  ()                  ·
- ├── count                                 ·                      ·                  ()                  ·
- │    └── insert                           ·                      ·                  ()                  ·
- │         │                               into                   child(c, p)        ·                   ·
- │         │                               strategy               inserter           ·                   ·
- │         └── buffer node                 ·                      ·                  (column1, column2)  ·
- │              │                          label                  buffer 1           ·                   ·
- │              └── values                 ·                      ·                  (column1, column2)  ·
- │                                         size                   2 columns, 2 rows  ·                   ·
- │                                         row 0, expr 0          1                  ·                   ·
- │                                         row 0, expr 1          1                  ·                   ·
- │                                         row 1, expr 0          2                  ·                   ·
- │                                         row 1, expr 1          2                  ·                   ·
- └── postquery                             ·                      ·                  ()                  ·
-      └── error if rows                    ·                      ·                  ()                  ·
-           └── lookup-join                 ·                      ·                  (column2)           ·
-                │                          table                  parent@primary     ·                   ·
-                │                          type                   anti               ·                   ·
-                │                          equality               (column2) = (p)    ·                   ·
-                │                          equality cols are key  ·                  ·                   ·
-                │                          parallel               ·                  ·                   ·
-                └── render                 ·                      ·                  (column2)           ·
-                     │                     render 0               column2            ·                   ·
-                     └── scan buffer node  ·                      ·                  (column1, column2)  ·
-·                                          label                  buffer 1           ·                   ·
+·                                          distributed            false
+·                                          vectorized             false
+root                                       ·                      ·
+ ├── count                                 ·                      ·
+ │    └── insert                           ·                      ·
+ │         │                               into                   child(c, p)
+ │         │                               strategy               inserter
+ │         └── buffer node                 ·                      ·
+ │              │                          label                  buffer 1
+ │              └── values                 ·                      ·
+ │                                         size                   2 columns, 2 rows
+ └── postquery                             ·                      ·
+      └── error if rows                    ·                      ·
+           └── lookup-join                 ·                      ·
+                │                          table                  parent@primary
+                │                          type                   anti
+                │                          equality               (column2) = (p)
+                │                          equality cols are key  ·
+                │                          parallel               ·
+                └── render                 ·                      ·
+                     └── scan buffer node  ·                      ·
+·                                          label                  buffer 1
 
 # Use data from a different table as input.
 statement ok
 CREATE TABLE xy (x INT, y INT)
 
-query TTTTT
-EXPLAIN (VERBOSE) INSERT INTO child SELECT x,y FROM xy
+query TTT
+EXPLAIN INSERT INTO child SELECT x,y FROM xy
 ----
-·                                          distributed         false           ·       ·
-·                                          vectorized          false           ·       ·
-root                                       ·                   ·               ()      ·
- ├── count                                 ·                   ·               ()      ·
- │    └── insert                           ·                   ·               ()      ·
- │         │                               into                child(c, p)     ·       ·
- │         │                               strategy            inserter        ·       ·
- │         └── buffer node                 ·                   ·               (x, y)  ·
- │              │                          label               buffer 1        ·       ·
- │              └── scan                   ·                   ·               (x, y)  ·
- │                                         table               xy@primary      ·       ·
- │                                         spans               ALL             ·       ·
- └── postquery                             ·                   ·               ()      ·
-      └── error if rows                    ·                   ·               ()      ·
-           └── hash-join                   ·                   ·               (y)     ·
-                │                          type                anti            ·       ·
-                │                          equality            (y) = (p)       ·       ·
-                │                          right cols are key  ·               ·       ·
-                ├── render                 ·                   ·               (y)     ·
-                │    │                     render 0            y               ·       ·
-                │    └── scan buffer node  ·                   ·               (x, y)  ·
-                │                          label               buffer 1        ·       ·
-                └── scan                   ·                   ·               (p)     ·
-·                                          table               parent@primary  ·       ·
-·                                          spans               ALL             ·       ·
+·                                          distributed         false
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── insert                           ·                   ·
+ │         │                               into                child(c, p)
+ │         │                               strategy            inserter
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── scan                   ·                   ·
+ │                                         table               xy@primary
+ │                                         spans               ALL
+ └── postquery                             ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (y) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               ALL
+
+statement ok
+CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
+
+# Because the input column can be NULL (in which case it requires no FK match),
+# we have to add an extra filter.
+query TTT
+EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
+----
+·                                               distributed            false
+·                                               vectorized             false
+root                                            ·                      ·
+ ├── count                                      ·                      ·
+ │    └── insert                                ·                      ·
+ │         │                                    into                   child_nullable(c, p)
+ │         │                                    strategy               inserter
+ │         └── buffer node                      ·                      ·
+ │              │                               label                  buffer 1
+ │              └── values                      ·                      ·
+ │                                              size                   2 columns, 2 rows
+ └── postquery                                  ·                      ·
+      └── error if rows                         ·                      ·
+           └── lookup-join                      ·                      ·
+                │                               table                  parent@primary
+                │                               type                   anti
+                │                               equality               (column2) = (p)
+                │                               equality cols are key  ·
+                │                               parallel               ·
+                └── filter                      ·                      ·
+                     │                          filter                 column2 IS NOT NULL
+                     └── render                 ·                      ·
+                          └── scan buffer node  ·                      ·
+·                                               label                  buffer 1
+
+# Tests with multicolumn FKs.
+statement ok
+CREATE TABLE multi_col_parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r))
+
+statement ok
+CREATE TABLE multi_col_child  (
+  c INT PRIMARY KEY,
+  p INT, q INT, r INT,
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES multi_col_parent(p,q,r) MATCH SIMPLE
+)
+
+# Only p and q are nullable.
+query TTT
+EXPLAIN INSERT INTO multi_col_child VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
+----
+·                                               distributed            false
+·                                               vectorized             false
+root                                            ·                      ·
+ ├── count                                      ·                      ·
+ │    └── insert                                ·                      ·
+ │         │                                    into                   multi_col_child(c, p, q, r)
+ │         │                                    strategy               inserter
+ │         └── buffer node                      ·                      ·
+ │              │                               label                  buffer 1
+ │              └── values                      ·                      ·
+ │                                              size                   4 columns, 2 rows
+ └── postquery                                  ·                      ·
+      └── error if rows                         ·                      ·
+           └── lookup-join                      ·                      ·
+                │                               table                  multi_col_parent@primary
+                │                               type                   anti
+                │                               equality               (column2, column3, column4) = (p, q, r)
+                │                               equality cols are key  ·
+                │                               parallel               ·
+                └── filter                      ·                      ·
+                     │                          filter                 (column2 IS NOT NULL) AND (column3 IS NOT NULL)
+                     └── render                 ·                      ·
+                          └── scan buffer node  ·                      ·
+·                                               label                  buffer 1
+
+statement ok
+CREATE TABLE multi_ref_parent_a (a INT PRIMARY KEY, other INT)
+
+statement ok
+CREATE TABLE multi_ref_parent_bc (b INT, c INT, PRIMARY KEY (b,c), other INT)
+
+statement ok
+CREATE TABLE multi_ref_child (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES multi_ref_parent_a(a),
+  CONSTRAINT fk2 FOREIGN KEY (b,c) REFERENCES multi_ref_parent_bc(b,c)
+)
+
+query TTT
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+----
+·                                               distributed            false
+·                                               vectorized             false
+root                                            ·                      ·
+ ├── count                                      ·                      ·
+ │    └── insert                                ·                      ·
+ │         │                                    into                   multi_ref_child(k, a, b, c)
+ │         │                                    strategy               inserter
+ │         └── buffer node                      ·                      ·
+ │              │                               label                  buffer 1
+ │              └── values                      ·                      ·
+ │                                              size                   4 columns, 1 row
+ ├── postquery                                  ·                      ·
+ │    └── error if rows                         ·                      ·
+ │         └── lookup-join                      ·                      ·
+ │              │                               table                  multi_ref_parent_a@primary
+ │              │                               type                   anti
+ │              │                               equality               (column2) = (a)
+ │              │                               equality cols are key  ·
+ │              │                               parallel               ·
+ │              └── filter                      ·                      ·
+ │                   │                          filter                 column2 IS NOT NULL
+ │                   └── render                 ·                      ·
+ │                        └── scan buffer node  ·                      ·
+ │                                              label                  buffer 1
+ └── postquery                                  ·                      ·
+      └── error if rows                         ·                      ·
+           └── lookup-join                      ·                      ·
+                │                               table                  multi_ref_parent_bc@primary
+                │                               type                   anti
+                │                               equality               (column3, column4) = (b, c)
+                │                               equality cols are key  ·
+                │                               parallel               ·
+                └── filter                      ·                      ·
+                     │                          filter                 (column3 IS NOT NULL) AND (column4 IS NOT NULL)
+                     └── render                 ·                      ·
+                          └── scan buffer node  ·                      ·
+·                                               label                  buffer 1
+
+# -- Tests with DELETE --
+
+query TTT
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+·                                          distributed  false
+·                                          vectorized   false
+root                                       ·            ·
+ ├── count                                 ·            ·
+ │    └── delete                           ·            ·
+ │         │                               from         parent
+ │         │                               strategy     deleter
+ │         └── buffer node                 ·            ·
+ │              │                          label        buffer 1
+ │              └── scan                   ·            ·
+ │                                         table        parent@primary
+ │                                         spans        /3-/3/#
+ ├── postquery                             ·            ·
+ │    └── error if rows                    ·            ·
+ │         └── lookup-join                 ·            ·
+ │              │                          table        child@child_auto_index_fk_p_ref_parent
+ │              │                          type         semi
+ │              │                          equality     (p) = (p)
+ │              └── render                 ·            ·
+ │                   └── scan buffer node  ·            ·
+ │                                         label        buffer 1
+ └── postquery                             ·            ·
+      └── error if rows                    ·            ·
+           └── lookup-join                 ·            ·
+                │                          table        child_nullable@child_nullable_auto_index_fk_p_ref_parent
+                │                          type         semi
+                │                          equality     (p) = (p)
+                └── render                 ·            ·
+                     └── scan buffer node  ·            ·
+·                                          label        buffer 1
+
+statement ok
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
+
+query TTT
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+·                                          distributed  false
+·                                          vectorized   false
+root                                       ·            ·
+ ├── count                                 ·            ·
+ │    └── delete                           ·            ·
+ │         │                               from         parent
+ │         │                               strategy     deleter
+ │         └── buffer node                 ·            ·
+ │              │                          label        buffer 1
+ │              └── scan                   ·            ·
+ │                                         table        parent@primary
+ │                                         spans        /3-/3/#
+ ├── postquery                             ·            ·
+ │    └── error if rows                    ·            ·
+ │         └── lookup-join                 ·            ·
+ │              │                          table        child@child_auto_index_fk_p_ref_parent
+ │              │                          type         semi
+ │              │                          equality     (p) = (p)
+ │              └── render                 ·            ·
+ │                   └── scan buffer node  ·            ·
+ │                                         label        buffer 1
+ ├── postquery                             ·            ·
+ │    └── error if rows                    ·            ·
+ │         └── lookup-join                 ·            ·
+ │              │                          table        child_nullable@child_nullable_auto_index_fk_p_ref_parent
+ │              │                          type         semi
+ │              │                          equality     (p) = (p)
+ │              └── render                 ·            ·
+ │                   └── scan buffer node  ·            ·
+ │                                         label        buffer 1
+ └── postquery                             ·            ·
+      └── error if rows                    ·            ·
+           └── lookup-join                 ·            ·
+                │                          table        child2@child2_auto_index_fk_p_ref_parent
+                │                          type         semi
+                │                          equality     (other) = (p)
+                └── render                 ·            ·
+                     └── scan buffer node  ·            ·
+·                                          label        buffer 1
+
+statement ok
+CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
+
+statement ok
+CREATE TABLE doublechild (
+  c INT8 PRIMARY KEY,
+  p1 INT8,
+  p2 INT8,
+  FOREIGN KEY (p1, p2) REFERENCES doubleparent (p1, p2)
+)
+
+query TTT
+EXPLAIN DELETE FROM doubleparent WHERE p1 = 10
+----
+·                                     distributed  false
+·                                     vectorized   false
+root                                  ·            ·
+ ├── count                            ·            ·
+ │    └── delete                      ·            ·
+ │         │                          from         doubleparent
+ │         │                          strategy     deleter
+ │         └── buffer node            ·            ·
+ │              │                     label        buffer 1
+ │              └── scan              ·            ·
+ │                                    table        doubleparent@primary
+ │                                    spans        /10-/11
+ └── postquery                        ·            ·
+      └── error if rows               ·            ·
+           └── lookup-join            ·            ·
+                │                     table        doublechild@doublechild_auto_index_fk_p1_ref_doubleparent
+                │                     type         semi
+                │                     equality     (p1, p2) = (p1, p2)
+                └── scan buffer node  ·            ·
+·                                     label        buffer 1
+
+# -- Tests with UPDATE --
+
+query TTT
+EXPLAIN UPDATE child SET p = 4
+----
+·                                          distributed         false
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               ALL
+ └── postquery                             ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (column5) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               ALL
+
+query TTT
+EXPLAIN UPDATE child SET p = 4 WHERE c = 10
+----
+·                                          distributed            false
+·                                          vectorized             false
+root                                       ·                      ·
+ ├── count                                 ·                      ·
+ │    └── update                           ·                      ·
+ │         │                               table                  child
+ │         │                               set                    p
+ │         │                               strategy               updater
+ │         └── buffer node                 ·                      ·
+ │              │                          label                  buffer 1
+ │              └── render                 ·                      ·
+ │                   └── scan              ·                      ·
+ │                                         table                  child@primary
+ │                                         spans                  /10-/10/#
+ └── postquery                             ·                      ·
+      └── error if rows                    ·                      ·
+           └── lookup-join                 ·                      ·
+                │                          table                  parent@primary
+                │                          type                   anti
+                │                          equality               (column5) = (p)
+                │                          equality cols are key  ·
+                │                          parallel               ·
+                └── render                 ·                      ·
+                     └── scan buffer node  ·                      ·
+·                                          label                  buffer 1
+
+query TTT
+EXPLAIN UPDATE parent SET p = p+1
+----
+·                                                         distributed         false
+·                                                         vectorized          false
+root                                                      ·                   ·
+ ├── count                                                ·                   ·
+ │    └── update                                          ·                   ·
+ │         │                                              table               parent
+ │         │                                              set                 p
+ │         │                                              strategy            updater
+ │         └── buffer node                                ·                   ·
+ │              │                                         label               buffer 1
+ │              └── render                                ·                   ·
+ │                   └── scan                             ·                   ·
+ │                                                        table               parent@primary
+ │                                                        spans               ALL
+ ├── postquery                                            ·                   ·
+ │    └── error if rows                                   ·                   ·
+ │         └── render                                     ·                   ·
+ │              └── hash-join                             ·                   ·
+ │                   │                                    type                inner
+ │                   │                                    equality            (p) = (p)
+ │                   │                                    right cols are key  ·
+ │                   ├── render                           ·                   ·
+ │                   │    └── union                       ·                   ·
+ │                   │         ├── render                 ·                   ·
+ │                   │         │    └── scan buffer node  ·                   ·
+ │                   │         │                          label               buffer 1
+ │                   │         └── render                 ·                   ·
+ │                   │              └── scan buffer node  ·                   ·
+ │                   │                                    label               buffer 1
+ │                   └── distinct                         ·                   ·
+ │                        │                               distinct on         p
+ │                        │                               order key           p
+ │                        └── scan                        ·                   ·
+ │                                                        table               child@child_auto_index_fk_p_ref_parent
+ │                                                        spans               ALL
+ └── postquery                                            ·                   ·
+      └── error if rows                                   ·                   ·
+           └── render                                     ·                   ·
+                └── hash-join                             ·                   ·
+                     │                                    type                inner
+                     │                                    equality            (p) = (p)
+                     │                                    right cols are key  ·
+                     ├── render                           ·                   ·
+                     │    └── union                       ·                   ·
+                     │         ├── render                 ·                   ·
+                     │         │    └── scan buffer node  ·                   ·
+                     │         │                          label               buffer 1
+                     │         └── render                 ·                   ·
+                     │              └── scan buffer node  ·                   ·
+                     │                                    label               buffer 1
+                     └── distinct                         ·                   ·
+                          │                               distinct on         p
+                          │                               order key           p
+                          └── scan                        ·                   ·
+·                                                         table               child_nullable@child_nullable_auto_index_fk_p_ref_parent
+·                                                         spans               ALL
+
+query TTT
+EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
+----
+·                                                    distributed  false
+·                                                    vectorized   false
+root                                                 ·            ·
+ ├── count                                           ·            ·
+ │    └── update                                     ·            ·
+ │         │                                         table        parent
+ │         │                                         set          p
+ │         │                                         strategy     updater
+ │         └── buffer node                           ·            ·
+ │              │                                    label        buffer 1
+ │              └── render                           ·            ·
+ │                   └── scan                        ·            ·
+ │                                                   table        parent@parent_other_key
+ │                                                   spans        /10-/11
+ ├── postquery                                       ·            ·
+ │    └── error if rows                              ·            ·
+ │         └── lookup-join                           ·            ·
+ │              │                                    table        child@child_auto_index_fk_p_ref_parent
+ │              │                                    type         semi
+ │              │                                    equality     (p) = (p)
+ │              └── render                           ·            ·
+ │                   └── union                       ·            ·
+ │                        ├── render                 ·            ·
+ │                        │    └── scan buffer node  ·            ·
+ │                        │                          label        buffer 1
+ │                        └── render                 ·            ·
+ │                             └── scan buffer node  ·            ·
+ │                                                   label        buffer 1
+ └── postquery                                       ·            ·
+      └── error if rows                              ·            ·
+           └── lookup-join                           ·            ·
+                │                                    table        child_nullable@child_nullable_auto_index_fk_p_ref_parent
+                │                                    type         semi
+                │                                    equality     (p) = (p)
+                └── render                           ·            ·
+                     └── union                       ·            ·
+                          ├── render                 ·            ·
+                          │    └── scan buffer node  ·            ·
+                          │                          label        buffer 1
+                          └── render                 ·            ·
+                               └── scan buffer node  ·            ·
+·                                                    label        buffer 1
+
+statement ok
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+
+query TTT
+EXPLAIN UPDATE child SET c = 4
+----
+·                                                         distributed         false
+·                                                         vectorized          false
+root                                                      ·                   ·
+ ├── count                                                ·                   ·
+ │    └── update                                          ·                   ·
+ │         │                                              table               child
+ │         │                                              set                 c
+ │         │                                              strategy            updater
+ │         └── buffer node                                ·                   ·
+ │              │                                         label               buffer 1
+ │              └── render                                ·                   ·
+ │                   └── scan                             ·                   ·
+ │                                                        table               child@primary
+ │                                                        spans               ALL
+ └── postquery                                            ·                   ·
+      └── error if rows                                   ·                   ·
+           └── render                                     ·                   ·
+                └── hash-join                             ·                   ·
+                     │                                    type                inner
+                     │                                    equality            (c) = (c)
+                     │                                    right cols are key  ·
+                     ├── render                           ·                   ·
+                     │    └── union                       ·                   ·
+                     │         ├── render                 ·                   ·
+                     │         │    └── scan buffer node  ·                   ·
+                     │         │                          label               buffer 1
+                     │         └── render                 ·                   ·
+                     │              └── scan buffer node  ·                   ·
+                     │                                    label               buffer 1
+                     └── distinct                         ·                   ·
+                          │                               distinct on         c
+                          │                               order key           c
+                          └── scan                        ·                   ·
+·                                                         table               grandchild@grandchild_auto_index_fk_c_ref_child
+·                                                         spans               ALL
+
+# This update shouldn't emit checks for c, since it's unchanged.
+query TTT
+EXPLAIN UPDATE child SET p = 4
+----
+·                                          distributed         false
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               ALL
+ └── postquery                             ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (column5) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               ALL
+
+query TTT
+EXPLAIN UPDATE child SET p = p
+----
+·                                          distributed         false
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               ALL
+ └── postquery                             ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (p) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               ALL
+
+query TTT
+EXPLAIN UPDATE child SET p = p+1, c = c+1
+----
+·                                                         distributed         false
+·                                                         vectorized          false
+root                                                      ·                   ·
+ ├── count                                                ·                   ·
+ │    └── update                                          ·                   ·
+ │         │                                              table               child
+ │         │                                              set                 c, p
+ │         │                                              strategy            updater
+ │         └── buffer node                                ·                   ·
+ │              │                                         label               buffer 1
+ │              └── render                                ·                   ·
+ │                   └── scan                             ·                   ·
+ │                                                        table               child@primary
+ │                                                        spans               ALL
+ ├── postquery                                            ·                   ·
+ │    └── error if rows                                   ·                   ·
+ │         └── hash-join                                  ·                   ·
+ │              │                                         type                anti
+ │              │                                         equality            (column5) = (p)
+ │              │                                         right cols are key  ·
+ │              ├── render                                ·                   ·
+ │              │    └── scan buffer node                 ·                   ·
+ │              │                                         label               buffer 1
+ │              └── scan                                  ·                   ·
+ │                                                        table               parent@primary
+ │                                                        spans               ALL
+ └── postquery                                            ·                   ·
+      └── error if rows                                   ·                   ·
+           └── render                                     ·                   ·
+                └── hash-join                             ·                   ·
+                     │                                    type                inner
+                     │                                    equality            (c) = (c)
+                     │                                    right cols are key  ·
+                     ├── render                           ·                   ·
+                     │    └── union                       ·                   ·
+                     │         ├── render                 ·                   ·
+                     │         │    └── scan buffer node  ·                   ·
+                     │         │                          label               buffer 1
+                     │         └── render                 ·                   ·
+                     │              └── scan buffer node  ·                   ·
+                     │                                    label               buffer 1
+                     └── distinct                         ·                   ·
+                          │                               distinct on         c
+                          │                               order key           c
+                          └── scan                        ·                   ·
+·                                                         table               grandchild@grandchild_auto_index_fk_c_ref_child
+·                                                         spans               ALL
+
+# Multiple grandchild tables
+statement ok
+CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+
+query TTT
+EXPLAIN UPDATE child SET p = 4
+----
+·                                          distributed         false
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               ALL
+ └── postquery                             ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (column5) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               ALL
+
+statement ok
+CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
+
+query TTT
+EXPLAIN UPDATE self SET y = 3
+----
+·                                          distributed         false
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               self
+ │         │                               set                 y
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               self@primary
+ │                                         spans               ALL
+ └── postquery                             ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (column5) = (x)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               self@primary
+·                                          spans               ALL
+
+query TTT
+EXPLAIN UPDATE self SET x = 3
+----
+·                                                         distributed         false
+·                                                         vectorized          false
+root                                                      ·                   ·
+ ├── count                                                ·                   ·
+ │    └── update                                          ·                   ·
+ │         │                                              table               self
+ │         │                                              set                 x
+ │         │                                              strategy            updater
+ │         └── buffer node                                ·                   ·
+ │              │                                         label               buffer 1
+ │              └── render                                ·                   ·
+ │                   └── scan                             ·                   ·
+ │                                                        table               self@primary
+ │                                                        spans               ALL
+ └── postquery                                            ·                   ·
+      └── error if rows                                   ·                   ·
+           └── render                                     ·                   ·
+                └── hash-join                             ·                   ·
+                     │                                    type                inner
+                     │                                    equality            (x) = (y)
+                     │                                    right cols are key  ·
+                     ├── render                           ·                   ·
+                     │    └── union                       ·                   ·
+                     │         ├── render                 ·                   ·
+                     │         │    └── scan buffer node  ·                   ·
+                     │         │                          label               buffer 1
+                     │         └── render                 ·                   ·
+                     │              └── scan buffer node  ·                   ·
+                     │                                    label               buffer 1
+                     └── distinct                         ·                   ·
+                          │                               distinct on         y
+                          │                               order key           y
+                          └── scan                        ·                   ·
+·                                                         table               self@self_auto_index_fk_y_ref_self
+·                                                         spans               ALL
