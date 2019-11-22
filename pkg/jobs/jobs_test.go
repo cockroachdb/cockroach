@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -1609,6 +1610,84 @@ func TestShowJobWhenComplete(t *testing.T) {
 		}
 		if err != nil {
 			t.Fatal(err)
+		}
+	})
+}
+
+func TestJobInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.ResetConstructors()()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	ctx := context.TODO()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	done := make(chan struct{})
+	defer close(done)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	mockJob := registry.NewJob(jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}})
+	var resultsCh chan<- tree.Datums
+	var hasRun bool
+	sql.AddPlanHook(
+		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
+		) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+			_, ok := stmt.(*tree.Backup)
+			if !ok {
+				return nil, nil, nil, false, nil
+			}
+			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
+				//phs.ExtendedEvalContext().Txn
+				errCh, err := registry.StartJob(ctx, resultsCh, mockJob)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return <-errCh
+			}
+			return fn, nil, nil, false, nil
+		})
+
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func() error {
+				var lock syncutil.Mutex
+				lock.Lock()
+				hasRun = true
+				lock.Unlock()
+				return nil
+			},
+			Fail: func() error {
+				return nil
+			},
+			Success: func() error {
+				return nil
+			},
+			Terminal: func() {
+				return
+			},
+		}
+	})
+	t.Run("normal success", func(t *testing.T) {
+		txn, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		txn.Exec("BACKUP doesnot.matter TO doesnotmattter")
+		time.Sleep(time.Second)
+		if hasRun {
+			t.Fatalf("job has run in transaction before txn commit")
+		}
+		err = txn.Commit()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !hasRun {
+			t.Fatalf("job scheduled in transaction did not run")
 		}
 	})
 }
