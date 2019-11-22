@@ -11,7 +11,6 @@
 package tree
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAllTypesCastableToString(t *testing.T) {
@@ -47,6 +47,11 @@ func TestCompareTimestamps(t *testing.T) {
 	sydneyTimeZone := int32(-10 * 60 * 60)
 
 	sydneyFixedZone := time.FixedZone("otan@sydney", -int(sydneyTimeZone))
+	// kiwiFixedZone is 2 hours ahead of Sydney.
+	kiwiFixedZone := time.FixedZone("otan@auckland", -int(sydneyTimeZone)+2*60*60)
+
+	ddate, err := NewDDateFromTime(time.Date(2019, time.November, 22, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
 
 	testCases := []struct {
 		desc     string
@@ -81,6 +86,34 @@ func TestCompareTimestamps(t *testing.T) {
 			expected: 0,
 		},
 		{
+			desc:     "DTimestamp and DTimestampTZ (Sydney) equal in Sydney zone",
+			left:     MakeDTimestamp(time.Date(2019, time.November, 22, 10, 0, 0, 0, time.UTC), time.Microsecond),
+			right:    MakeDTimestampTZ(time.Date(2019, time.November, 22, 10, 0, 0, 0, sydneyFixedZone), time.Microsecond),
+			location: sydneyFixedZone,
+			expected: 0,
+		},
+		{
+			desc:     "DTimestamp and DTimestampTZ (Sydney) equal in Sydney+2 zone",
+			left:     MakeDTimestamp(time.Date(2019, time.November, 22, 12, 0, 0, 0, time.UTC), time.Microsecond),
+			right:    MakeDTimestampTZ(time.Date(2019, time.November, 22, 10, 0, 0, 0, sydneyFixedZone), time.Microsecond),
+			location: kiwiFixedZone,
+			expected: 0,
+		},
+		{
+			desc:     "Date and DTimestampTZ (Sydney) equal in Sydney zone",
+			left:     ddate,
+			right:    MakeDTimestampTZ(time.Date(2019, time.November, 22, 0, 0, 0, 0, sydneyFixedZone), time.Microsecond),
+			location: sydneyFixedZone,
+			expected: 0,
+		},
+		{
+			desc:     "Date and DTimestampTZ (Sydney) equal in Sydney+2 zone",
+			left:     ddate,
+			right:    MakeDTimestampTZ(time.Date(2019, time.November, 21, 22, 0, 0, 0, sydneyFixedZone), time.Microsecond),
+			location: kiwiFixedZone,
+			expected: 0,
+		},
+		{
 			desc:     "equal wall clock time for DTime and DTimeTZ, with TimeTZ ahead",
 			left:     MakeDTime(timeofday.New(12, 0, 0, 0)),
 			right:    NewDTimeTZFromOffset(timeofday.New(22, 0, 0, 0), sydneyTimeZone),
@@ -108,7 +141,7 @@ func TestCompareTimestamps(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(
-			fmt.Sprintf("%s cmp %s", tc.left.String(), tc.right.String()),
+			tc.desc,
 			func(t *testing.T) {
 				ctx := &EvalContext{
 					SessionData: &sessiondata.SessionData{
