@@ -54,8 +54,8 @@ func (f *vectorizedFlow) Setup(
 ) error {
 	f.SetSpec(spec)
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
-	acc := f.EvalCtx.Mon.MakeBoundAccount()
-	f.VectorizedBoundAccount = &acc
+	streamingMemAccount := f.EvalCtx.Mon.MakeBoundAccount()
+	f.VectorizedStreamingMemAccount = &streamingMemAccount
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
@@ -70,12 +70,14 @@ func (f *vectorizedFlow) Setup(
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
 	)
-	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc, opt)
+	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &streamingMemAccount, opt)
 	if err == nil {
+		f.operatorConcurrency = creator.operatorConcurrency
+		f.VectorizedBufferingMemMonitors = append(f.VectorizedBufferingMemMonitors, creator.bufferingMemMonitors...)
+		f.VectorizedBufferingMemAccounts = append(f.VectorizedBufferingMemAccounts, creator.bufferingMemAccounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return nil
 	}
-	f.operatorConcurrency = creator.operatorConcurrency
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 	return err
 }
@@ -225,6 +227,12 @@ type vectorizedFlowCreator struct {
 	leaves []execinfra.OpNode
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
+	// bufferingMemMonitors contains all memory monitors of the buffering
+	// components in the vectorized flow.
+	bufferingMemMonitors []*mon.BytesMonitor
+	// bufferingMemAccounts contains all memory accounts of the buffering
+	// components in the vectorized flow.
+	bufferingMemAccounts []*mon.BoundAccount
 }
 
 func newVectorizedFlowCreator(
@@ -254,12 +262,17 @@ func newVectorizedFlowCreator(
 // the given StreamEndpointSpec. It will also drain all MetadataSources in the
 // metadataSourcesQueue.
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
+	ctx context.Context,
 	op colexec.Operator,
 	outputTyps []coltypes.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
+	streamingMemAccount *mon.BoundAccount,
 ) (execinfra.OpNode, error) {
-	outbox, err := s.remoteComponentCreator.newOutbox(colexec.NewAllocator(), op, outputTyps, metadataSourcesQueue)
+	outbox, err := s.remoteComponentCreator.newOutbox(
+		colexec.NewAllocator(ctx, streamingMemAccount),
+		op, outputTyps, metadataSourcesQueue,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -292,10 +305,13 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 // NOTE: This method supports only BY_HASH routers. Callers should handle
 // PASS_THROUGH routers separately.
 func (s *vectorizedFlowCreator) setupRouter(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	input colexec.Operator,
 	outputTyps []coltypes.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
+	streamingMemAccount *mon.BoundAccount,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
@@ -306,7 +322,16 @@ func (s *vectorizedFlowCreator) setupRouter(
 	for i := range hashCols {
 		hashCols[i] = int(output.HashColumns[i])
 	}
-	router, outputs := colexec.NewHashRouter(colexec.NewAllocator(), input, outputTyps, hashCols, len(output.Streams))
+	hashRouterMemMonitor := execinfra.NewLimitedMonitor(
+		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hash-router-limited",
+	)
+	hashRouterMemAccount := hashRouterMemMonitor.MakeBoundAccount()
+	s.bufferingMemMonitors = append(s.bufferingMemMonitors, hashRouterMemMonitor)
+	s.bufferingMemAccounts = append(s.bufferingMemAccounts, &hashRouterMemAccount)
+	router, outputs := colexec.NewHashRouter(
+		colexec.NewAllocator(ctx, &hashRouterMemAccount), input, outputTyps,
+		hashCols, len(output.Streams),
+	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
 	}
@@ -322,7 +347,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
-			if _, err := s.setupRemoteOutputStream(op, outputTyps, stream, metadataSourcesQueue); err != nil {
+			if _, err := s.setupRemoteOutputStream(
+				ctx, op, outputTyps, stream, metadataSourcesQueue, streamingMemAccount,
+			); err != nil {
 				return err
 			}
 		case execinfrapb.StreamEndpointSpec_LOCAL:
@@ -361,8 +388,11 @@ func (s *vectorizedFlowCreator) setupRouter(
 // []distqlpb.MetadataSource so that any remote metadata can be read through
 // calling DrainMeta.
 func (s *vectorizedFlowCreator) setupInput(
-	input execinfrapb.InputSyncSpec, opt flowinfra.FuseOpt,
-) (op colexec.Operator, _ []execinfrapb.MetadataSource, memUsed int, _ error) {
+	ctx context.Context,
+	input execinfrapb.InputSyncSpec,
+	opt flowinfra.FuseOpt,
+	streamingMemAccount *mon.BoundAccount,
+) (op colexec.Operator, _ []execinfrapb.MetadataSource, _ error) {
 	inputStreamOps := make([]colexec.Operator, 0, len(input.Streams))
 	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
 	for _, inputStream := range input.Streams {
@@ -375,20 +405,19 @@ func (s *vectorizedFlowCreator) setupInput(
 			// If the input is remote, the input operator does not exist in
 			// streamIDToInputOp. Create an inbox.
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
-				return nil, nil, memUsed, err
+				return nil, nil, err
 			}
 			typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
 			if err != nil {
-				return nil, nil, memUsed, err
+				return nil, nil, err
 			}
-			inbox, err := s.remoteComponentCreator.newInbox(colexec.NewAllocator(), typs, inputStream.StreamID)
+			inbox, err := s.remoteComponentCreator.newInbox(colexec.NewAllocator(ctx, streamingMemAccount), typs, inputStream.StreamID)
 			if err != nil {
-				return nil, nil, memUsed, err
+				return nil, nil, err
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			metaSources = append(metaSources, inbox)
 			op = inbox
-			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 			if s.recordingStats {
 				op, err = wrapWithVectorizedStatsCollector(
 					inbox,
@@ -401,12 +430,12 @@ func (s *vectorizedFlowCreator) setupInput(
 					},
 				)
 				if err != nil {
-					return nil, nil, memUsed, err
+					return nil, nil, err
 				}
 			}
 			inputStreamOps = append(inputStreamOps, op)
 		default:
-			return nil, nil, memUsed, errors.Errorf("unsupported input stream type %s", inputStream.Type)
+			return nil, nil, errors.Errorf("unsupported input stream type %s", inputStream.Type)
 		}
 	}
 	op = inputStreamOps[0]
@@ -414,18 +443,17 @@ func (s *vectorizedFlowCreator) setupInput(
 		statsInputs := inputStreamOps
 		typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
 		if err != nil {
-			return nil, nil, memUsed, err
+			return nil, nil, err
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
-				colexec.NewAllocator(), inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				colexec.NewAllocator(ctx, streamingMemAccount), inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
-			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
 			if opt == flowinfra.FuseAggressively {
-				op = colexec.NewSerialUnorderedSynchronizer(colexec.NewAllocator(), inputStreamOps, typs)
+				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, typs)
 			} else {
-				op = colexec.NewParallelUnorderedSynchronizer(colexec.NewAllocator(), inputStreamOps, typs, s.waitGroup)
+				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
 				s.operatorConcurrency = true
 			}
 			// Don't use the unordered synchronizer's inputs for stats collection
@@ -439,11 +467,11 @@ func (s *vectorizedFlowCreator) setupInput(
 			var err error
 			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &execinfrapb.ProcessorSpec{ProcessorID: -1})
 			if err != nil {
-				return nil, nil, memUsed, err
+				return nil, nil, err
 			}
 		}
 	}
-	return op, metaSources, memUsed, nil
+	return op, metaSources, nil
 }
 
 // setupOutput sets up any necessary infrastructure according to the output
@@ -459,16 +487,20 @@ func (s *vectorizedFlowCreator) setupOutput(
 	op colexec.Operator,
 	opOutputTypes []coltypes.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
+	streamingMemAccount *mon.BoundAccount,
 ) error {
 	output := &pspec.Output[0]
 	if output.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
 		return s.setupRouter(
+			ctx,
+			flowCtx,
 			op,
 			opOutputTypes,
 			output,
 			// Pass in a copy of the queue to reset metadataSourcesQueue for
 			// further appends without overwriting.
 			metadataSourcesQueue,
+			streamingMemAccount,
 		)
 	}
 
@@ -502,7 +534,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				},
 			)
 		}
-		outbox, err := s.setupRemoteOutputStream(op, opOutputTypes, outputStream, metadataSourcesQueue)
+		outbox, err := s.setupRemoteOutputStream(ctx, op, opOutputTypes, outputStream, metadataSourcesQueue, streamingMemAccount)
 		if err != nil {
 			return err
 		}
@@ -555,7 +587,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
-	acc *mon.BoundAccount,
+	streamingMemAccount *mon.BoundAccount,
 	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
@@ -597,18 +629,25 @@ func (s *vectorizedFlowCreator) setupFlow(
 		metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			input, metadataSources, memUsed, err := s.setupInput(pspec.Input[i], opt)
+			input, metadataSources, err := s.setupInput(ctx, pspec.Input[i], opt, streamingMemAccount)
 			if err != nil {
 				return nil, err
-			}
-			if err = acc.Grow(ctx, int64(memUsed)); err != nil {
-				return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
 			inputs = append(inputs, input)
 		}
 
-		result, err := colexec.NewColOperator(ctx, flowCtx, pspec, inputs)
+		result, err := colexec.NewColOperator(
+			ctx, flowCtx, pspec, inputs, streamingMemAccount,
+			false, /* useStreamingMemAccountForBuffering */
+		)
+		// Even when err is non-nil, it is possible that the buffering memory
+		// monitor and account have been created, so we always want to accumulate
+		// them for a proper cleanup.
+		if result.BufferingOpMemMonitor != nil {
+			s.bufferingMemMonitors = append(s.bufferingMemMonitors, result.BufferingOpMemMonitor)
+			s.bufferingMemAccounts = append(s.bufferingMemAccounts, result.BufferingOpMemAccount)
+		}
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
@@ -619,7 +658,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			!result.IsStreaming {
 			return nil, errors.Errorf("non-streaming operator encountered when vectorize=auto")
 		}
-		if err = acc.Grow(ctx, int64(result.MemUsage)); err != nil {
+		if err = streamingMemAccount.Grow(ctx, int64(result.InternalMemUsage)); err != nil {
 			return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 		}
 		metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
@@ -647,7 +686,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			return nil, err
 		}
 		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue,
+			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue, streamingMemAccount,
 		); err != nil {
 			return nil, err
 		}
@@ -833,6 +872,14 @@ func SupportsVectorized(
 	defer memoryMonitor.Stop(ctx)
 	acc := memoryMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
+	defer func() {
+		for _, memAcc := range creator.bufferingMemAccounts {
+			memAcc.Close(ctx)
+		}
+		for _, memMon := range creator.bufferingMemMonitors {
+			memMon.Stop(ctx)
+		}
+	}()
 	if vecErr := execerror.CatchVectorizedRuntimeError(func() {
 		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, &acc, fuseOpt)
 	}); vecErr != nil {

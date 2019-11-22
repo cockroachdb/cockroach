@@ -365,27 +365,9 @@ func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
 	return outColTypes
 }
 
-func (o *mergeJoinBase) EstimateStaticMemoryUsage() int {
+func (o *mergeJoinBase) InternalMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
-	leftDistincter := o.left.distincter.(StaticMemoryOperator)
-	rightDistincter := o.right.distincter.(StaticMemoryOperator)
-	filterMemUsage := 0
-	if o.filter != nil {
-		filterMemUsage = o.filter.EstimateStaticMemoryUsage()
-	}
-	return EstimateBatchSizeBytes(
-		o.getOutColTypes(), int(coldata.BatchSize()),
-	) + // base.output
-		EstimateBatchSizeBytes(
-			o.left.sourceTypes, int(coldata.BatchSize()),
-		) + // base.proberState.lBufferedGroup
-		EstimateBatchSizeBytes(
-			o.right.sourceTypes, int(coldata.BatchSize()),
-		) + // base.proberState.rBufferedGroup
-		4*sizeOfGroup*int(coldata.BatchSize()) + // base.groups
-		leftDistincter.EstimateStaticMemoryUsage() + // base.left.distincter
-		rightDistincter.EstimateStaticMemoryUsage() + // base.right.distincter
-		filterMemUsage
+	return 8 * int(coldata.BatchSize()) * sizeOfGroup // o.groups
 }
 
 func (o *mergeJoinBase) Init() {

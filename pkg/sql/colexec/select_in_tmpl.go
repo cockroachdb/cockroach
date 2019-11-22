@@ -77,7 +77,13 @@ const (
 )
 
 func GetInProjectionOperator(
-	ct *types.T, input Operator, colIdx int, resultIdx int, datumTuple *tree.DTuple, negate bool,
+	allocator *Allocator,
+	ct *types.T,
+	input Operator,
+	colIdx int,
+	resultIdx int,
+	datumTuple *tree.DTuple,
+	negate bool,
 ) (Operator, error) {
 	var err error
 	switch t := typeconv.FromColumnType(ct); t {
@@ -85,6 +91,7 @@ func GetInProjectionOperator(
 	case coltypes._TYPE:
 		obj := &projectInOp_TYPE{
 			OneInputNode: NewOneInputNode(input),
+			allocator:    allocator,
 			colIdx:       colIdx,
 			outputIdx:    resultIdx,
 			negate:       negate,
@@ -135,6 +142,7 @@ type selectInOp_TYPE struct {
 
 type projectInOp_TYPE struct {
 	OneInputNode
+	allocator *Allocator
 	colIdx    int
 	outputIdx int
 	filterRow []_GOTYPE
@@ -142,11 +150,7 @@ type projectInOp_TYPE struct {
 	negate    bool
 }
 
-var _ StaticMemoryOperator = &projectInOp_TYPE{}
-
-func (p *projectInOp_TYPE) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes([]coltypes.T{coltypes.Bool}, int(coldata.BatchSize()))
-}
+var _ Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
 	conv := typeconv.GetDatumToPhysicalFn(ct)
@@ -264,7 +268,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	batch := pi.input.Next(ctx)
 	if pi.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes.Bool)
+		pi.allocator.AppendColumn(batch, coltypes.Bool)
 	}
 	if batch.Length() == 0 {
 		return batch

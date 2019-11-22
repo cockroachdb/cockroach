@@ -99,7 +99,7 @@ func TestRandomizedCast(t *testing.T) {
 			}
 			runTests(t, []tuples{input}, output, orderedVerifier,
 				func(input []Operator) (Operator, error) {
-					return GetCastOperator(input[0], 0 /* inputIdx*/, 1 /* resultIdx */, c.fromTyp, c.toTyp)
+					return GetCastOperator(testAllocator, input[0], 0 /* inputIdx*/, 1 /* resultIdx */, c.fromTyp, c.toTyp)
 				})
 		})
 	}

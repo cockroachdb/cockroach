@@ -118,13 +118,18 @@ func (n *twoInputNode) Child(nth int) execinfra.OpNode {
 	return nil
 }
 
-// StaticMemoryOperator is an interface that streaming operators can implement
-// if they are able to declare their memory usage upfront.
-type StaticMemoryOperator interface {
+// TODO(yuzefovich): audit all Operators to make sure that all internal memory
+// is accounted for.
+
+// InternalMemoryOperator is an interface that operators which use internal
+// memory need to implement. "Internal memory" is defined as memory that is
+// "private" to the operator and is not exposed to the outside; notably, it
+// does *not* include any coldata.Batch'es and coldata.Vec's.
+type InternalMemoryOperator interface {
 	Operator
-	// EstimateStaticMemoryUsage estimates the memory usage (in bytes)
-	// of an operator.
-	EstimateStaticMemoryUsage() int
+	// InternalMemoryUsage reports the internal memory usage (in bytes) of an
+	// operator.
+	InternalMemoryUsage() int
 }
 
 // resetter is an interface that operators can implement if they can be reset

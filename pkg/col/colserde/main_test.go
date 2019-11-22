@@ -8,16 +8,41 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colserde
+package colserde_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+)
+
+var (
+	// testAllocator is a colexec.Allocator with an unlimited budget for use in
+	// tests.
+	testAllocator *colexec.Allocator
+
+	// testMemMonitor and testMemAcc are a test monitor with an unlimited budget
+	// and a memory account bound to it for use in tests.
+	testMemMonitor *mon.BytesMonitor
+	testMemAcc     *mon.BoundAccount
 )
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
-	os.Exit(m.Run())
+	os.Exit(func() int {
+		ctx := context.Background()
+		testMemMonitor = execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
+		defer testMemMonitor.Stop(ctx)
+		memAcc := testMemMonitor.MakeBoundAccount()
+		testMemAcc = &memAcc
+		testAllocator = colexec.NewAllocator(ctx, testMemAcc)
+		defer testMemAcc.Close(ctx)
+		return m.Run()
+	}())
 }

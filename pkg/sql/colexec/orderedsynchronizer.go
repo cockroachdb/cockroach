@@ -40,7 +40,7 @@ type OrderedSynchronizer struct {
 	output      coldata.Batch
 }
 
-var _ StaticMemoryOperator = &OrderedSynchronizer{}
+var _ Operator = &OrderedSynchronizer{}
 
 // ChildCount implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount() int {
@@ -62,11 +62,6 @@ func NewOrderedSynchronizer(
 		ordering:    ordering,
 		columnTypes: typs,
 	}
-}
-
-// EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
-func (o *OrderedSynchronizer) EstimateStaticMemoryUsage() int {
-	return EstimateBatchSizeBytes(o.columnTypes, int(coldata.BatchSize()))
 }
 
 // Next is part of the Operator interface.

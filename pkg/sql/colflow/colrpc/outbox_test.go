@@ -27,8 +27,9 @@ import (
 func TestOutboxCatchesPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+
 	var (
-		ctx      = context.Background()
 		input    = colexec.NewBatchBuffer()
 		typs     = []coltypes.T{coltypes.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
@@ -49,7 +50,11 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		wg.Done()
 	}()
 
-	inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+	inboxMemAccount := testMemMonitor.MakeBoundAccount()
+	defer inboxMemAccount.Close(ctx)
+	inbox, err := NewInbox(
+		colexec.NewAllocator(ctx, &inboxMemAccount), typs, execinfrapb.StreamID(0),
+	)
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
@@ -72,18 +77,19 @@ func TestOutboxCatchesPanics(t *testing.T) {
 func TestOutboxDrainsMetadataSources(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+
 	var (
-		ctx   = context.Background()
 		input = colexec.NewBatchBuffer()
 		typs  = []coltypes.T{coltypes.Int64}
 	)
 
 	// Define common function that returns both an Outbox and a pointer to a
 	// uint32 that is set atomically when the outbox drains a metadata source.
-	newOutboxWithMetaSources := func() (*Outbox, *uint32, error) {
+	newOutboxWithMetaSources := func(allocator *colexec.Allocator) (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(
-			testAllocator,
+			allocator,
 			input,
 			typs,
 			[]execinfrapb.MetadataSource{
@@ -103,7 +109,11 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 	t.Run("AfterSuccessfulRun", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		outbox, sourceDrained, err := newOutboxWithMetaSources()
+		outboxMemAccount := testMemMonitor.MakeBoundAccount()
+		defer outboxMemAccount.Close(ctx)
+		outbox, sourceDrained, err := newOutboxWithMetaSources(
+			colexec.NewAllocator(ctx, &outboxMemAccount),
+		)
 		require.NoError(t, err)
 
 		b := testAllocator.NewMemBatch(typs)
@@ -126,7 +136,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		require.Panics(t, func() { input.Next(ctx) })
 
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		outbox, sourceDrained, err := newOutboxWithMetaSources()
+		outbox, sourceDrained, err := newOutboxWithMetaSources(testAllocator)
 		require.NoError(t, err)
 
 		close(rpcLayer.client.csChan)

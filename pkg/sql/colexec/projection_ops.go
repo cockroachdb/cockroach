@@ -14,6 +14,7 @@ package colexec
 // constant, except for the constant itself.
 type projConstOpBase struct {
 	OneInputNode
+	allocator *Allocator
 	colIdx    int
 	outputIdx int
 }
@@ -21,6 +22,7 @@ type projConstOpBase struct {
 // projOpBase contains all of the fields for non-constant binary projections.
 type projOpBase struct {
 	OneInputNode
+	allocator *Allocator
 	col1Idx   int
 	col2Idx   int
 	outputIdx int
