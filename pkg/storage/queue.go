@@ -44,6 +44,10 @@ const (
 	defaultQueueMaxSize = 10000
 )
 
+func defaultProcessTimeoutFunc(replicaInQueue) time.Duration {
+	return defaultProcessTimeout
+}
+
 // a purgatoryError indicates a replica processing failure which indicates
 // the replica can be placed into purgatory for faster retries when the
 // failure condition changes.
@@ -253,8 +257,8 @@ type queueConfig struct {
 	// processDestroyedReplicas controls whether or not we want to process replicas
 	// that have been destroyed but not GCed.
 	processDestroyedReplicas bool
-	// processTimeout is the timeout for processing a replica.
-	processTimeout time.Duration
+	// processTimeout returns the timeout for processing a replica.
+	processTimeoutFunc func(replicaInQueue) time.Duration
 	// successes is a counter of replicas processed successfully.
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
@@ -374,8 +378,8 @@ func newBaseQueue(
 	name string, impl queueImpl, store *Store, gossip *gossip.Gossip, cfg queueConfig,
 ) *baseQueue {
 	// Use the default process timeout if none specified.
-	if cfg.processTimeout == 0 {
-		cfg.processTimeout = defaultProcessTimeout
+	if cfg.processTimeoutFunc == nil {
+		cfg.processTimeoutFunc = defaultProcessTimeoutFunc
 	}
 	if cfg.maxConcurrency == 0 {
 		cfg.maxConcurrency = 1
@@ -850,9 +854,8 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 
 	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
 	defer span.Finish()
-
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
-		bq.processTimeout, func(ctx context.Context) error {
+		bq.processTimeoutFunc(repl), func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
 
 			if !repl.IsInitialized() {
