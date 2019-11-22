@@ -268,9 +268,7 @@ func (ef *execFactory) ConstructHashJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
-	)
+	pred, err := makePredicate(joinType, leftSrc.info, rightSrc.info, nil /* usingColumn */)
 	if err != nil {
 		return nil, err
 	}
@@ -314,10 +312,7 @@ func (ef *execFactory) ConstructApplyJoin(
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(fakeRight)
 	rightSrc.plan.Close(context.TODO())
-	p := ef.planner
-	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
-	)
+	pred, err := makePredicate(joinType, leftSrc.info, rightSrc.info, nil /* usingColumn */)
 	if err != nil {
 		return nil, err
 	}
@@ -340,9 +335,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
-	)
+	pred, err := makePredicate(joinType, leftSrc.info, rightSrc.info, nil /* usingColumn */)
 	if err != nil {
 		return nil, err
 	}

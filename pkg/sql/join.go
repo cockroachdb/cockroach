@@ -12,11 +12,9 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // joinNode is a planNode whose rows are the result of an inner or
@@ -41,71 +39,6 @@ type joinNode struct {
 
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
-}
-
-// makeJoinPredicate builds a joinPredicate from a join condition. Also returns
-// any USING or NATURAL JOIN columns (these need to be merged into one column
-// after the join).
-func (p *planner) makeJoinPredicate(
-	ctx context.Context,
-	left *sqlbase.DataSourceInfo,
-	right *sqlbase.DataSourceInfo,
-	joinType sqlbase.JoinType,
-	cond tree.JoinCond,
-) (*joinPredicate, []usingColumn, error) {
-	switch cond.(type) {
-	case tree.NaturalJoinCond, *tree.UsingJoinCond:
-		var usingColNames tree.NameList
-
-		switch t := cond.(type) {
-		case tree.NaturalJoinCond:
-			usingColNames = commonColumns(left, right)
-		case *tree.UsingJoinCond:
-			usingColNames = t.Cols
-		}
-
-		usingColumns, err := makeUsingColumns(
-			left.SourceColumns, right.SourceColumns, usingColNames,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		pred, err := makePredicate(joinType, left, right, usingColumns)
-		if err != nil {
-			return nil, nil, err
-		}
-		return pred, usingColumns, nil
-
-	case nil, *tree.OnJoinCond:
-		pred, err := makePredicate(joinType, left, right, nil /* usingColumns */)
-		if err != nil {
-			return nil, nil, err
-		}
-		switch t := cond.(type) {
-		case *tree.OnJoinCond:
-			// Do not allow special functions in the ON clause.
-			p.semaCtx.Properties.Require("ON", tree.RejectSpecial)
-
-			// Determine the on condition expression. Note that the predicate can't
-			// already have onCond set (we haven't passed any usingColumns).
-			pred.onCond, err = p.analyzeExpr(
-				ctx,
-				t.Expr,
-				sqlbase.MultiSourceInfo{pred.info},
-				pred.iVarHelper,
-				types.Bool,
-				true, /* requireType */
-				"ON",
-			)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-		return pred, nil /* usingColumns */, nil
-
-	default:
-		panic(fmt.Sprintf("unsupported join condition %#v", cond))
-	}
 }
 
 func (p *planner) makeJoinNode(
