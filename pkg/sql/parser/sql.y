@@ -703,6 +703,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
+%type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_user_stmt
@@ -845,6 +846,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <str> schema_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target
@@ -2262,7 +2264,6 @@ create_unsupported:
 | CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
-| CREATE SCHEMA error { return unimplementedWithIssueDetail(sqllex, 26443, "create") }
 | CREATE SERVER error { return unimplemented(sqllex, "create server") }
 | CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
@@ -2306,6 +2307,7 @@ create_ddl_stmt:
   create_changefeed_stmt
 | create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
+| create_schema_stmt   // EXTEND WITH HELP: CREATE SCHEMA
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
@@ -4232,6 +4234,26 @@ pause_stmt:
     $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.PauseJob}
   }
 | PAUSE error // SHOW HELP: PAUSE JOBS
+
+// %Help: CREATE SCHEMA - create a new schema (not yet supported)
+// %Category: DDL
+// %Text:
+// CREATE SCHEMA [IF NOT EXISTS] <schemaname>
+create_schema_stmt:
+  CREATE SCHEMA schema_name
+  {
+    $$.val = &tree.CreateSchema{
+      Schema: $3,
+    }
+  }
+| CREATE SCHEMA IF NOT EXISTS schema_name
+  {
+    $$.val = &tree.CreateSchema{
+      Schema: $6,
+      IfNotExists: true,
+    }
+  }
+| CREATE SCHEMA error // SHOW HELP: CREATE SCHEMA
 
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL
@@ -9544,6 +9566,8 @@ view_name:             table_name
 type_name:             db_object_name
 
 sequence_name:         db_object_name
+
+schema_name:           name
 
 table_name:            db_object_name
 

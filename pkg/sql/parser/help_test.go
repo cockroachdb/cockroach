@@ -125,6 +125,10 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE TABLE blah AS (SELECT 1) ??`, `CREATE TABLE`},
 		{`CREATE TABLE blah AS SELECT 1 ??`, `SELECT`},
 
+		{`CREATE SCHEMA IF ??`, `CREATE SCHEMA`},
+		{`CREATE SCHEMA IF NOT ??`, `CREATE SCHEMA`},
+		{`CREATE SCHEMA bli ??`, `CREATE SCHEMA`},
+
 		{`DELETE FROM ??`, `DELETE`},
 		{`DELETE FROM blah ??`, `DELETE`},
 		{`DELETE FROM blah WHERE ??`, `DELETE`},

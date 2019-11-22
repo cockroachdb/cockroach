@@ -76,6 +76,8 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'C.UTF-8'`},
 		{`CREATE DATABASE IF NOT EXISTS a LC_CTYPE = 'INVALID'`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'`},
+		{`CREATE SCHEMA IF NOT EXISTS foo`},
+		{`CREATE SCHEMA foo`},
 
 		{`CREATE INDEX a ON b (c)`},
 		{`EXPLAIN CREATE INDEX a ON b (c)`},
@@ -3132,7 +3134,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE OPERATOR a`, 0, `create operator`},
 		{`CREATE PUBLICATION a`, 0, `create publication`},
 		{`CREATE RULE a`, 0, `create rule`},
-		{`CREATE SCHEMA a`, 26443, `create`},
 		{`CREATE SERVER a`, 0, `create server`},
 		{`CREATE SUBSCRIPTION a`, 0, `create subscription`},
 		{`CREATE TEXT SEARCH a`, 7821, `create text`},

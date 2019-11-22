@@ -348,6 +348,7 @@ create_ddl_stmt ::=
 	create_changefeed_stmt
 	| create_database_stmt
 	| create_index_stmt
+	| create_schema_stmt
 	| create_table_stmt
 	| create_table_as_stmt
 	| create_view_stmt
@@ -1033,6 +1034,10 @@ create_index_stmt ::=
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
 
+create_schema_stmt ::=
+	'CREATE' 'SCHEMA' schema_name
+	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' schema_name
+
 create_table_stmt ::=
 	'CREATE' opt_temp_create_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
 	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
@@ -1427,6 +1432,9 @@ opt_interleave ::=
 opt_partition_by ::=
 	partition_by
 	| 
+
+schema_name ::=
+	name
 
 opt_temp_create_table ::=
 	opt_temp
