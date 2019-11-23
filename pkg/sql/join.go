@@ -49,7 +49,7 @@ func (p *planner) makeJoinNode(
 		right:    right,
 		joinType: pred.joinType,
 		pred:     pred,
-		columns:  pred.info.SourceColumns,
+		columns:  pred.cols,
 	}
 	return n
 }
@@ -72,27 +72,6 @@ func (n *joinNode) Values() tree.Datums {
 func (n *joinNode) Close(ctx context.Context) {
 	n.right.plan.Close(ctx)
 	n.left.plan.Close(ctx)
-}
-
-// commonColumns returns the names of columns common on the
-// right and left sides, for use by NATURAL JOIN.
-func commonColumns(left, right *sqlbase.DataSourceInfo) tree.NameList {
-	var res tree.NameList
-	for _, cLeft := range left.SourceColumns {
-		if cLeft.Hidden {
-			continue
-		}
-		for _, cRight := range right.SourceColumns {
-			if cRight.Hidden {
-				continue
-			}
-
-			if cLeft.Name == cRight.Name {
-				res = append(res, tree.Name(cLeft.Name))
-			}
-		}
-	}
-	return res
 }
 
 // interleavedNodes returns the ancestor on which an interleaved join is

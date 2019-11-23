@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -64,6 +65,12 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 		}
 	}
 	return true
+}
+
+// NodeFormatter returns a tree.NodeFormatter that, when formatted,
+// represents the column at the input column index.
+func (r ResultColumns) NodeFormatter(colIdx int) tree.NodeFormatter {
+	return &varFormatter{ColumnName: tree.Name(r[colIdx].Name)}
 }
 
 // ExplainPlanColumns are the result columns of an EXPLAIN (PLAN) ...

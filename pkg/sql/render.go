@@ -31,12 +31,6 @@ type renderNode struct {
 	// potentially modified by index selection.
 	source planDataSource
 
-	// sourceInfo contains the reference to the DataSourceInfo in the
-	// source planDataSource that is needed for name resolution.
-	// We keep one instance of multiSourceInfo cached here so as to avoid
-	// re-creating it every time analyzeExpr() is called in computeRender().
-	sourceInfo sqlbase.MultiSourceInfo
-
 	// Helper for indexed vars. This holds the actual instances of
 	// IndexedVars replaced in Exprs. The indexed vars contain indices
 	// to the array of source columns.
@@ -72,12 +66,12 @@ func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum,
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarResolvedType(idx int) *types.T {
-	return r.sourceInfo[0].SourceColumns[idx].Typ
+	return r.source.columns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return r.sourceInfo[0].NodeFormatter(idx)
+	return r.source.columns.NodeFormatter(idx)
 }
 
 func (r *renderNode) startExec(runParams) error {

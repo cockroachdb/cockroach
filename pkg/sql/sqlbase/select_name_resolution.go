@@ -24,7 +24,6 @@ import (
 // resolve the column names in an expression.
 type NameResolutionVisitor struct {
 	err        error
-	sources    MultiSourceInfo
 	iVarHelper tree.IndexedVarHelper
 	searchPath sessiondata.SearchPath
 	resolver   ColumnResolver
@@ -71,9 +70,8 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 			return false, expr
 		}
 
-		srcIdx := v.resolver.ResolverState.SrcIdx
 		colIdx := v.resolver.ResolverState.ColIdx
-		ivar := v.iVarHelper.IndexedVar(v.sources[srcIdx].ColOffset + colIdx)
+		ivar := v.iVarHelper.IndexedVar(colIdx)
 		v.foundDependentVars = true
 		return true, ivar
 
@@ -114,12 +112,12 @@ func (*NameResolutionVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr 
 // ResolveNames is a wrapper around ResolveNamesUsingVisitor.
 func ResolveNames(
 	expr tree.Expr,
-	sources MultiSourceInfo,
+	source *DataSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	searchPath sessiondata.SearchPath,
 ) (tree.Expr, bool, error) {
 	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, sources, ivarHelper, searchPath)
+	return ResolveNamesUsingVisitor(&v, expr, source, ivarHelper, searchPath)
 }
 
 // ResolveNamesUsingVisitor resolves the names in the given expression. It
@@ -128,22 +126,16 @@ func ResolveNames(
 func ResolveNamesUsingVisitor(
 	v *NameResolutionVisitor,
 	expr tree.Expr,
-	sources MultiSourceInfo,
+	source *DataSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	searchPath sessiondata.SearchPath,
 ) (tree.Expr, bool, error) {
 	*v = NameResolutionVisitor{
-		sources:    sources,
 		iVarHelper: ivarHelper,
 		searchPath: searchPath,
 		resolver: ColumnResolver{
-			Sources: sources,
+			Source: source,
 		},
-	}
-	colOffset := 0
-	for _, s := range v.sources {
-		s.ColOffset = colOffset
-		colOffset += len(s.SourceColumns)
 	}
 
 	expr, _ = tree.WalkExpr(v, expr)

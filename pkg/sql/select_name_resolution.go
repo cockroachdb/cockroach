@@ -25,10 +25,10 @@ import (
 // row in a table, the 2nd return value is true.
 // If any star is expanded, the 3rd return value is true.
 func (p *planner) resolveNames(
-	expr tree.Expr, sources sqlbase.MultiSourceInfo, ivarHelper tree.IndexedVarHelper,
+	expr tree.Expr, source *sqlbase.DataSourceInfo, ivarHelper tree.IndexedVarHelper,
 ) (tree.Expr, bool, error) {
 	if expr == nil {
 		return nil, false, nil
 	}
-	return sqlbase.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, sources, ivarHelper, p.SessionData().SearchPath)
+	return sqlbase.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, source, ivarHelper, p.SessionData().SearchPath)
 }

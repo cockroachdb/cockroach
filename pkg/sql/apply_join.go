@@ -126,7 +126,7 @@ func newApplyJoinNode(
 		rightProps:      rightProps,
 		rightCols:       rightCols,
 		right:           right,
-		columns:         pred.info.SourceColumns,
+		columns:         pred.cols,
 	}, nil
 }
 

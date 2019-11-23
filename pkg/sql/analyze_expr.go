@@ -29,7 +29,7 @@ import (
 func (p *planner) analyzeExpr(
 	ctx context.Context,
 	raw tree.Expr,
-	sources sqlbase.MultiSourceInfo,
+	source *sqlbase.DataSourceInfo,
 	iVarHelper tree.IndexedVarHelper,
 	expectedType *types.T,
 	requireType bool,
@@ -37,9 +37,9 @@ func (p *planner) analyzeExpr(
 ) (tree.TypedExpr, error) {
 	// Perform optional name resolution.
 	resolved := raw
-	if sources != nil {
+	if source != nil {
 		var err error
-		resolved, _, err = p.resolveNames(raw, sources, iVarHelper)
+		resolved, _, err = p.resolveNames(raw, source, iVarHelper)
 		if err != nil {
 			return nil, err
 		}

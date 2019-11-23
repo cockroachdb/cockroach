@@ -971,9 +971,9 @@ func makeTableDescIfAs(
 }
 
 func dequalifyColumnRefs(
-	ctx context.Context, sources sqlbase.MultiSourceInfo, expr tree.Expr,
+	ctx context.Context, source *sqlbase.DataSourceInfo, expr tree.Expr,
 ) (tree.Expr, error) {
-	resolver := sqlbase.ColumnResolver{Sources: sources}
+	resolver := sqlbase.ColumnResolver{Source: source}
 	return tree.SimpleVisit(
 		expr,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -987,9 +987,8 @@ func dequalifyColumnRefs(
 					if err != nil {
 						return false, nil, err
 					}
-					srcIdx := resolver.ResolverState.SrcIdx
 					colIdx := resolver.ResolverState.ColIdx
-					col := sources[srcIdx].SourceColumns[colIdx]
+					col := source.SourceColumns[colIdx]
 					return false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}, nil
 				}
 			}
@@ -1086,7 +1085,6 @@ func MakeTableDesc(
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		n.Table, sqlbase.ResultColumnsFromColDescs(desc.Columns),
 	)
-	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
@@ -1096,7 +1094,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 
-			expr, err = dequalifyColumnRefs(ctx, sources, expr)
+			expr, err = dequalifyColumnRefs(ctx, sourceInfo, expr)
 			if err != nil {
 				return desc, err
 			}
@@ -1603,9 +1601,8 @@ func MakeCheckConstraint(
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		tableName, sqlbase.ResultColumnsFromColDescs(desc.TableDesc().AllNonDropColumns()),
 	)
-	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
-	expr, err = dequalifyColumnRefs(ctx, sources, d.Expr)
+	expr, err = dequalifyColumnRefs(ctx, sourceInfo, d.Expr)
 	if err != nil {
 		return nil, err
 	}
