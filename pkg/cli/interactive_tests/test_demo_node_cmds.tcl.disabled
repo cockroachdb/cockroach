@@ -1,5 +1,7 @@
 #! /usr/bin/env expect -f
 
+# Tests are temporarily disabled due to #42634
+
 source [file join [file dirname $argv0] common.tcl]
 
 start_test "Check \\demo_node commands work as expected"
