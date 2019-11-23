@@ -128,12 +128,6 @@ type ColumnItem struct {
 	TableName *UnresolvedObjectName
 	// ColumnName names the designated column.
 	ColumnName Name
-
-	// This column is a selector column expression used in a SELECT
-	// for an UPDATE/DELETE.
-	// TODO(vivek): Do not artificially create such expressions
-	// when scanning columns for an UPDATE/DELETE.
-	ForUpdateOrDelete bool
 }
 
 // Format implements the NodeFormatter interface.

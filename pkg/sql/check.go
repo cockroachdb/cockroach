@@ -41,7 +41,7 @@ func validateCheckExpr(
 	// Construct AST and then convert to a string, to avoid problems with escaping the check expression
 	tblref := tree.TableRef{TableID: int64(tableDesc.ID), As: tree.AliasClause{Alias: "t"}}
 	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns, false /* forUpdateOrDelete */),
+		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
 		From:  tree.From{Tables: []tree.TableExpr{&tblref}},
 		Where: &tree.Where{Type: tree.AstWhere, Expr: &tree.NotExpr{Expr: expr}},
 	}

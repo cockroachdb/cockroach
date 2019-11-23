@@ -26,9 +26,9 @@ import (
 // If any star is expanded, the 3rd return value is true.
 func (p *planner) resolveNames(
 	expr tree.Expr, sources sqlbase.MultiSourceInfo, ivarHelper tree.IndexedVarHelper,
-) (tree.Expr, bool, bool, error) {
+) (tree.Expr, bool, error) {
 	if expr == nil {
-		return nil, false, false, nil
+		return nil, false, nil
 	}
 	return sqlbase.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, sources, ivarHelper, p.SessionData().SearchPath)
 }

@@ -97,10 +97,9 @@ type ColumnResolver struct {
 	// resolverState is modified in-place by the implementation of the
 	// tree.ColumnItemResolver interface in resolver.go.
 	ResolverState struct {
-		ForUpdateOrDelete bool
-		SrcIdx            int
-		ColIdx            int
-		ColSetIdx         int
+		SrcIdx    int
+		ColIdx    int
+		ColSetIdx int
 	}
 }
 
@@ -246,16 +245,6 @@ func (r *ColumnResolver) findColHelper(
 ) (int, int, error) {
 	col := src.SourceColumns[idx]
 	if col.Name == colName {
-		// Do not return a match if:
-		// 1. The column is being backfilled and therefore should not be
-		// used to resolve a column expression, and,
-		// 2. The column expression being resolved is not from a selector
-		// column expression from an UPDATE/DELETE.
-		if backfillThreshold := len(src.SourceColumns) - src.NumBackfillColumns; idx >= backfillThreshold && !r.ResolverState.ForUpdateOrDelete {
-			return invalidSrcIdx, invalidColIdx,
-				pgerror.Newf(pgcode.InvalidColumnReference,
-					"column %q is being backfilled", tree.ErrString(src.NodeFormatter(idx)))
-		}
 		if colIdx != invalidColIdx {
 			colString := tree.ErrString(src.NodeFormatter(idx))
 			var msgBuf bytes.Buffer

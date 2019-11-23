@@ -78,7 +78,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	tn.ExplicitCatalog = true
 	tn.ExplicitSchema = true
 	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns, false /* forUpdateOrDelete */),
+		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns),
 		From: tree.From{
 			Tables: tree.TableExprs{&tn},
 		},
