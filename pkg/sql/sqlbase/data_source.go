@@ -121,10 +121,6 @@ type DataSourceInfo struct {
 	// The value is populated and used during name resolution, and shouldn't get
 	// touched by anything but the nameResolutionVisitor without care.
 	ColOffset int
-
-	// The number of backfill source columns. The backfill columns are
-	// always the last columns from SourceColumns.
-	NumBackfillColumns int
 }
 
 // SourceAlias associates a table name (alias) to a set of columns in the result

@@ -154,7 +154,7 @@ func MakeComputedExprs(
 			}
 			continue
 		}
-		expr, _, _, err := ResolveNames(exprs[compExprIdx],
+		expr, _, err := ResolveNames(exprs[compExprIdx],
 			MakeMultiSourceInfo(sources...),
 			ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
