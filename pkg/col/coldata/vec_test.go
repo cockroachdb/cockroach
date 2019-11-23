@@ -11,6 +11,7 @@
 package coldata
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -211,6 +212,35 @@ func TestAppend(t *testing.T) {
 			dest := NewMemColumn(typ, int(BatchSize()))
 			dest.Append(tc.args)
 			require.Equal(t, tc.expectedLength, len(dest.Int64()))
+		})
+	}
+}
+
+// TestAppendBytesWithNullsAndSel makes sure that Append handles correctly the
+// case when the last element of Bytes vector is NULL.
+func TestAppendBytesWithNulls(t *testing.T) {
+	src := NewMemColumn(coltypes.Bytes, 3)
+	sel := []uint16{0, 2, 3}
+	src.Bytes().Set(0, []byte("zero"))
+	src.Nulls().SetNull(1)
+	src.Bytes().Set(2, []byte("two"))
+	src.Nulls().SetNull(3)
+	sliceArgs := SliceArgs{
+		Src:         src,
+		ColType:     coltypes.Bytes,
+		DestIdx:     0,
+		SrcStartIdx: 0,
+		SrcEndIdx:   uint64(len(sel)),
+	}
+	dest := NewMemColumn(coltypes.Bytes, 3)
+	for _, withSel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AppendBytesWithNulls/sel=%t", withSel), func(t *testing.T) {
+			if withSel {
+				sliceArgs.Sel = sel
+			} else {
+				sliceArgs.Sel = nil
+			}
+			dest.Append(sliceArgs)
 		})
 	}
 }

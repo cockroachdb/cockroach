@@ -75,6 +75,13 @@ func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
 	// Note that we're not checking whether this Bytes is a window because
 	// although this function modifies the "window" Bytes, it maintains the
 	// invariant that we need to have.
+	if uint64(len(b.offsets)) <= n {
+		if uint64(cap(b.offsets)) <= n {
+			b.offsets = append(b.offsets, make([]int32, n+1-uint64(cap(b.offsets)))...)
+		} else {
+			b.offsets = b.offsets[:n+1]
+		}
+	}
 	prev := b.offsets[0]
 	for j := uint64(1); j <= n; j++ {
 		if b.offsets[j] > prev {

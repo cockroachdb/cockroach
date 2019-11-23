@@ -57,6 +57,8 @@ func (m *memColumn) Append(args SliceArgs) {
 	case _TYPES_T:
 		fromCol := args.Src._TemplateType()
 		toCol := m._TemplateType()
+		// TODO(yuzefovich): refactor this to handle NULLs more appropriately (only
+		// setting the values for non-NULLs).
 		if args.Sel == nil {
 			execgen.APPENDSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
 		} else {
@@ -70,6 +72,15 @@ func (m *memColumn) Append(args SliceArgs) {
 			execgen.APPENDSLICE(toCol, toCol, int(args.DestIdx), 0, 0)
 			// {{else}}
 			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
+			// {{end}}
+			// {{if eq .LTyp.String "Bytes"}}
+			maxIdx := uint16(0)
+			for _, selIdx := range sel {
+				if selIdx > maxIdx {
+					maxIdx = selIdx
+				}
+			}
+			fromCol.UpdateOffsetsToBeNonDecreasing(uint64(maxIdx + 1))
 			// {{end}}
 			for _, selIdx := range sel {
 				val := execgen.UNSAFEGET(fromCol, int(selIdx))
@@ -161,6 +172,8 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 			return
 		}
 		// No Sel or Sel64.
+		// TODO(yuzefovich): refactor this to handle NULLs more appropriately (only
+		// setting the values for non-NULLs).
 		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
 		m.nulls.set(args.SliceArgs)
 	// {{end}}
