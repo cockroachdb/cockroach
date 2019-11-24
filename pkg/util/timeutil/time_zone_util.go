@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -68,32 +68,42 @@ func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, suc
 	return offset, strings.TrimSuffix(strings.TrimPrefix(origRepr, "("), ")"), true
 }
 
-// TimeZoneOffsetStringConversion converts a string like GMT+08:00 or -08:00 to offset seconds
-// Supported time zone strings :- UTC+08:00, GMT-12:00, +05:00, UTC+08:30
-// Unsupported time zone strings :- UTC+8:00, -8:00, -12:53, UTC+08:08
+// TimeZoneOffsetStringConversion converts a time string to offset seconds
+// Supported time zone strings :- GMT/UTC±[00:00:00 - 15:59:59], GMT/UTC±[0-16]
+// Unsupported time zone strings :- GMT/UTC±16:00 to upper, GMT/UTC±6.5
+// (case insensitive)
 func TimeZoneOffsetStringConversion(s string) (offset int64, ok bool) {
-	pattern := `(?mi)(GMT|UTC)[+-](((12:00)|(11:(0|3)0))|(0([0-9]):(0|3)0))\b`
-	var re = regexp.MustCompile(pattern)
+	pattern := `(?i)(GMT|UTC)[+-]((((0?\d)|(1[0-5])):([0-5]\d))|(((0?\d)|(1[0-5])):([0-5]\d):([0-5]\d))|((1+[0-6])|(0?\d)))\b$`
+	re := regexp.MustCompile(pattern)
+	if !(re.MatchString(s)) {
+		return 0, false
+	}
 
-	timeString := string(re.Find([]byte(s)))
-	if timeString == "" {
-		return 0, false
-	}
-	if !strings.ContainsAny(s, "+-") {
-		return 0, false
-	}
-	var prefix string = "+"
+	prefix := "+"
 	if strings.Contains(s, "-") {
 		prefix = "-"
-	} else {
-		prefix = "+"
 	}
-	parts := strings.Split(timeString, prefix)
-	offsets := strings.Split(parts[1], ":")
-	hoursString, minutesString := offsets[0], offsets[1]
+	parts := strings.Split(s, prefix)
+	var (
+		hoursString   = "0"
+		minutesString = "0"
+		secondsString = "0"
+	)
+
+	if strings.Contains(parts[1], ":") {
+		offsets := strings.Split(parts[1], ":")
+		hoursString, minutesString = offsets[0], offsets[1]
+		if len(offsets) == 3 {
+			secondsString = offsets[2]
+		}
+	} else {
+		hoursString = parts[1]
+	}
+
 	hours, _ := strconv.ParseInt(hoursString, 10, 64)
 	minutes, _ := strconv.ParseInt(minutesString, 10, 64)
-	offset = (hours * 60 * 60) + (minutes * 60)
+	seconds, _ := strconv.ParseInt(secondsString, 10, 64)
+	offset = (hours * 60 * 60) + (minutes * 60) + seconds
 	if prefix == "-" {
 		offset *= -1
 	}
