@@ -21,14 +21,14 @@ extern "C" {
 // A DBSlice contains read-only data that does not need to be freed.
 typedef struct {
   char* data;
-  int len;
+  size_t len;
 } DBSlice;
 
 // A DBString is structurally identical to a DBSlice, but the data it
 // contains must be freed via a call to free().
 typedef struct {
   char* data;
-  int len;
+  size_t len;
 } DBString;
 
 // A DBStatus is an alias for DBString and is used to indicate that
