@@ -115,3 +115,63 @@ $input
     )
     $private
 )
+
+# PushLimitIntoLeftJoin pushes a Limit into the left input of a left join. Since
+# the left join creates an output row for each left input row, we only need that
+# many rows from that input. We can only do this if the limit ordering refers
+# only to the left input columns. We also check that the cardinality of the left
+# input is more than the limit, to prevent repeated applications of the rule.
+[PushLimitIntoLeftJoin, Normalize]
+(Limit
+    $input:(LeftJoin
+        $left:*
+        $right:*
+        $on:*
+        $private:*
+    )
+    (Const $limit:*) & ^(LimitGeMaxRows $limit $left)
+    $ordering:* & (HasColsInOrdering $left $ordering)
+)
+=>
+(Limit
+    (LeftJoin
+        (Limit
+            $left
+            (Const $limit)
+            (PruneOrdering $ordering (OutputCols $left))
+        )
+        $right
+        $on
+        $private
+    )
+    (Const $limit)
+    $ordering
+)
+
+# PushLimitIntoRightJoin is symmetric with PushLimitIntoLeftJoin.
+[PushLimitIntoRightJoin, Normalize]
+(Limit
+    $input:(RightJoin
+        $left:*
+        $right:*
+        $on:*
+        $private:*
+    )
+    (Const $limit:*) & ^(LimitGeMaxRows $limit $right)
+    $ordering:* & (HasColsInOrdering $right $ordering)
+)
+=>
+(Limit
+    (RightJoin
+        $left
+        (Limit
+            $right
+            (Const $limit)
+            (PruneOrdering $ordering (OutputCols $right))
+        )
+        $on
+        $private
+    )
+    (Const $limit)
+    $ordering
+)

@@ -3,7 +3,15 @@ CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
 
 exec-ddl
-CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
+CREATE TABLE b (x INT PRIMARY KEY, y INT)
+----
+
+exec-ddl
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+----
+
+exec-ddl
+CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
 
 # --------------------------------------------------
@@ -627,4 +635,660 @@ limit
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-5)
  │         └── limit hint: 10.00
+ └── const: 10 [type=int]
+
+# ---------------------
+# PushLimitIntoLeftJoin
+# ---------------------
+
+norm expect=PushLimitIntoLeftJoin
+SELECT * FROM ab LEFT JOIN uv ON a = u LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── left-join (hash)
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── limit hint: 10.00
+ │    ├── limit
+ │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan ab
+ │    │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    └── limit hint: 10.00
+ │    │    └── const: 10 [type=int]
+ │    ├── scan uv
+ │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    ├── key: (3)
+ │    │    └── fd: (3)-->(4)
+ │    └── filters
+ │         └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Ordering can be pushed down.
+norm expect=PushLimitIntoLeftJoin
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY a LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +1
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── limit
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── internal-ordering: +1
+ │         │    ├── cardinality: [0 - 10]
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2)
+ │         │    ├── scan ab
+ │         │    │    ├── columns: a:1(int!null) b:2(int)
+ │         │    │    ├── key: (1)
+ │         │    │    ├── fd: (1)-->(2)
+ │         │    │    ├── ordering: +1
+ │         │    │    └── limit hint: 10.00
+ │         │    └── const: 10 [type=int]
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+norm expect=PushLimitIntoLeftJoin
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY b LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +2
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── limit
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── internal-ordering: +2
+ │         │    ├── cardinality: [0 - 10]
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2)
+ │         │    ├── sort
+ │         │    │    ├── columns: a:1(int!null) b:2(int)
+ │         │    │    ├── key: (1)
+ │         │    │    ├── fd: (1)-->(2)
+ │         │    │    ├── ordering: +2
+ │         │    │    ├── limit hint: 10.00
+ │         │    │    └── scan ab
+ │         │    │         ├── columns: a:1(int!null) b:2(int)
+ │         │    │         ├── key: (1)
+ │         │    │         └── fd: (1)-->(2)
+ │         │    └── const: 10 [type=int]
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Ordering on u is not equivalent to ordering on a because of NULLs; it cannot
+# be pushed down.
+norm expect-not=PushLimitIntoLeftJoin
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY u LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── internal-ordering: +3
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +3
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Ordering cannot be pushed down.
+norm expect-not=PushLimitIntoLeftJoin
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY v LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── internal-ordering: +4
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +4
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +4
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+norm expect-not=PushLimitIntoLeftJoin
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY a, v LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── internal-ordering: +1,+4
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +1,+4
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +1,+4
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+norm expect-not=PushLimitIntoLeftJoin
+SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY u, b LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── internal-ordering: +3,+2
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +3,+2
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +3,+2
+ │    ├── limit hint: 10.00
+ │    └── left-join (hash)
+ │         ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Rule should not fire if the input's cardinality is already less than the
+# limit.
+norm expect-not=PushLimitIntoLeftJoin
+SELECT * FROM (SELECT * FROM ab LIMIT 5) LEFT JOIN uv ON a = u LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── left-join (hash)
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── limit hint: 10.00
+ │    ├── limit
+ │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    ├── cardinality: [0 - 5]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan ab
+ │    │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    └── limit hint: 5.00
+ │    │    └── const: 5 [type=int]
+ │    ├── scan uv
+ │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    ├── key: (3)
+ │    │    └── fd: (3)-->(4)
+ │    └── filters
+ │         └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Push the limit even if the input is already limited (but with a higher limit).
+norm expect=PushLimitIntoLeftJoin
+SELECT * FROM (SELECT * FROM ab LIMIT 20) LEFT JOIN uv ON a = u LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── left-join (hash)
+ │    ├── columns: a:1(int!null) b:2(int) u:3(int) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── limit hint: 10.00
+ │    ├── limit
+ │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── limit
+ │    │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    │    ├── cardinality: [0 - 20]
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── limit hint: 10.00
+ │    │    │    ├── scan ab
+ │    │    │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2)
+ │    │    │    │    └── limit hint: 20.00
+ │    │    │    └── const: 20 [type=int]
+ │    │    └── const: 10 [type=int]
+ │    ├── scan uv
+ │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    ├── key: (3)
+ │    │    └── fd: (3)-->(4)
+ │    └── filters
+ │         └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# ----------------------
+# PushLimitIntoRightJoin
+# ----------------------
+
+norm expect=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN uv ON a = u LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── right-join (hash)
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── limit hint: 10.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── limit
+ │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    │    ├── key: (3)
+ │    │    │    ├── fd: (3)-->(4)
+ │    │    │    └── limit hint: 10.00
+ │    │    └── const: 10 [type=int]
+ │    └── filters
+ │         └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Ordering can be pushed down.
+norm expect=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN uv ON a = u ORDER BY u LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── internal-ordering: +3
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +3
+ │    ├── limit hint: 10.00
+ │    └── right-join (hash)
+ │         ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── limit
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── internal-ordering: +3
+ │         │    ├── cardinality: [0 - 10]
+ │         │    ├── key: (3)
+ │         │    ├── fd: (3)-->(4)
+ │         │    ├── scan uv
+ │         │    │    ├── columns: u:3(int!null) v:4(int)
+ │         │    │    ├── key: (3)
+ │         │    │    ├── fd: (3)-->(4)
+ │         │    │    ├── ordering: +3
+ │         │    │    └── limit hint: 10.00
+ │         │    └── const: 10 [type=int]
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+norm expect=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN uv ON a = u ORDER BY v LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── internal-ordering: +4
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +4
+ ├── sort
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +4
+ │    ├── limit hint: 10.00
+ │    └── right-join (hash)
+ │         ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── limit
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── internal-ordering: +4
+ │         │    ├── cardinality: [0 - 10]
+ │         │    ├── key: (3)
+ │         │    ├── fd: (3)-->(4)
+ │         │    ├── sort
+ │         │    │    ├── columns: u:3(int!null) v:4(int)
+ │         │    │    ├── key: (3)
+ │         │    │    ├── fd: (3)-->(4)
+ │         │    │    ├── ordering: +4
+ │         │    │    ├── limit hint: 10.00
+ │         │    │    └── scan uv
+ │         │    │         ├── columns: u:3(int!null) v:4(int)
+ │         │    │         ├── key: (3)
+ │         │    │         └── fd: (3)-->(4)
+ │         │    └── const: 10 [type=int]
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Ordering on a is not equivalent to ordering on u because of NULLs; it cannot
+# be pushed down.
+norm expect-not=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN uv ON a = u ORDER BY a LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +1
+ │    ├── limit hint: 10.00
+ │    └── right-join (hash)
+ │         ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Ordering cannot be pushed down.
+norm expect-not=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN uv ON a = u ORDER BY b LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +2
+ │    ├── limit hint: 10.00
+ │    └── right-join (hash)
+ │         ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+norm expect-not=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN uv ON a = u ORDER BY u, b LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── internal-ordering: +3,+2
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +3,+2
+ ├── sort
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +3,+2
+ │    ├── limit hint: 10.00
+ │    └── right-join (hash)
+ │         ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+norm expect-not=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN uv ON a = u ORDER BY a, v LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── internal-ordering: +1,+4
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── ordering: +1,+4
+ ├── sort
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── ordering: +1,+4
+ │    ├── limit hint: 10.00
+ │    └── right-join (hash)
+ │         ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │         ├── key: (1,3)
+ │         ├── fd: (1)-->(2), (3)-->(4)
+ │         ├── scan ab
+ │         │    ├── columns: a:1(int!null) b:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan uv
+ │         │    ├── columns: u:3(int!null) v:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── a = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── const: 10 [type=int]
+
+# Rule should not fire if the input's cardinality is already less than the
+# limit.
+norm expect-not=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN (SELECT * FROM uv LIMIT 5) ON b = v LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── right-join (hash)
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── limit hint: 10.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── limit
+ │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    ├── cardinality: [0 - 5]
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    │    ├── key: (3)
+ │    │    │    ├── fd: (3)-->(4)
+ │    │    │    └── limit hint: 5.00
+ │    │    └── const: 5 [type=int]
+ │    └── filters
+ │         └── b = v [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+ └── const: 10 [type=int]
+
+# Push the limit even if the input is already limited (but with a higher limit).
+norm expect=PushLimitIntoRightJoin
+SELECT * FROM ab RIGHT JOIN (SELECT * FROM uv LIMIT 20) ON b = v LIMIT 10
+----
+limit
+ ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── right-join (hash)
+ │    ├── columns: a:1(int) b:2(int) u:3(int!null) v:4(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4)
+ │    ├── limit hint: 10.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1(int!null) b:2(int)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── limit
+ │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4)
+ │    │    ├── limit
+ │    │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    │    ├── cardinality: [0 - 20]
+ │    │    │    ├── key: (3)
+ │    │    │    ├── fd: (3)-->(4)
+ │    │    │    ├── limit hint: 10.00
+ │    │    │    ├── scan uv
+ │    │    │    │    ├── columns: u:3(int!null) v:4(int)
+ │    │    │    │    ├── key: (3)
+ │    │    │    │    ├── fd: (3)-->(4)
+ │    │    │    │    └── limit hint: 20.00
+ │    │    │    └── const: 20 [type=int]
+ │    │    └── const: 10 [type=int]
+ │    └── filters
+ │         └── b = v [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
  └── const: 10 [type=int]
