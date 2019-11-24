@@ -2601,7 +2601,7 @@ func goToCSlice(b []byte) C.DBSlice {
 	}
 	return C.DBSlice{
 		data: (*C.char)(unsafe.Pointer(&b[0])),
-		len:  C.int(len(b)),
+		len:  C.size_t(len(b)),
 	}
 }
 
@@ -2648,7 +2648,7 @@ func cStringToGoString(s C.DBString) string {
 	if s.data == nil {
 		return ""
 	}
-	result := C.GoStringN(s.data, s.len)
+	result := C.GoStringN(s.data, C.int(s.len))
 	C.free(unsafe.Pointer(s.data))
 	return result
 }
