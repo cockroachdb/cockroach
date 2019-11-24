@@ -166,6 +166,24 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
 }
 
+// Strawman for future
+type stateMachineDurabilityTracker struct {
+	// TODO: maintains a small list of stateMachineSeqNum => raftIndex (evenly drops some to
+	// maintain a size limit, but always keeps the latest provided by Add() since it could
+	// be the last one before quiescence).
+	// Add() is called by replicaAppBatch.ApplyToStateMachine() in the same place where it
+	// updates RaftAppliedIndex (after committing to the state machine -- the commit will return
+	// a stateMachineSeqNum).
+	// DurableUpto() is triggered by a callback from the engine. It drops the prefix in the
+	// list that is now durable and returns the highest raftIndex that has become durable which
+	// is used to update Replica.mu.DurableRaftAppliedIndex.
+}
+func (s *stateMachineDurabilityTracker) Add(raftIndex uint64, stateMachineSeqNum uint64) {
+}
+func (s *stateMachineDurabilityTracker) DurableUpto(stateMachineSeqNum uint64) (raftIndex uint64) {
+	return 0
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -254,6 +272,11 @@ type Replica struct {
 		mergeComplete chan struct{}
 		// The state of the Raft state machine.
 		state storagepb.ReplicaState
+
+		// Not for submission (sketching out future)
+		DurableRaftAppliedIndex uint64
+		StateMachineDurabilityTracker stateMachineDurabilityTracker
+
 		// Last index/term persisted to the raft log (not necessarily
 		// committed). Note that lastTerm may be 0 (and thus invalid) even when
 		// lastIndex is known, in which case the term will have to be retrieved
@@ -273,6 +296,23 @@ type Replica struct {
 		// already finished snapshot "pending" for extended periods of time
 		// (preventing log truncation).
 		snapshotLogTruncationConstraints map[uuid.UUID]snapTruncationInfo
+		// These size variables serve two purposes:
+		// - stats/metrics about the size of the log.
+		// - to drive truncation decisions. Note that truncation can only be done up to the
+		//   the RaftAppliedIndex, while this is the size of the whole log, including uncommitted
+		//   entries.
+		//   - the difference between raftLogLastCheckSize and raftLogSize is used to check whether
+		//     the log should be truncated.
+		//   - the absolute value of raftLogSize can be used to do truncation even when the number
+		//     of entries is not large (say a large entry). Since that truncation will not be able to
+		//     truncate an uncommitted entry, the truncation may trigger again.
+		//   Overall, this behavior is suboptimal, but it is a pain to maintain any size
+		//   values, so instead of also maintaining a raftLogAppliedSize, raftLogAppliedSizeTrusted,
+		//   raftLastCheckedLogAppliedSize, we make do with these values. At worst, it will trigger
+		//   some small truncations. Small truncations are possible at the leaseholder even if we
+		//   had more accurate tracking since it may not be able to truncate all the applied entries
+		//   (due to lagging followers).
+		//
 		// raftLogSize is the approximate size in bytes of the persisted raft
 		// log, including sideloaded entries' payloads. The value itself is not
 		// persisted and is computed lazily, paced by the raft log truncation
