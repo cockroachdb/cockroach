@@ -13,5 +13,5 @@
 package engine
 
 const (
-	maxArrayLen = 1<<31 - 1
+	MaxArrayLen = 1<<31 - 1
 )
