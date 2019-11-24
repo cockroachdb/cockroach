@@ -13,5 +13,6 @@
 package engine
 
 const (
-	maxArrayLen = 1<<31 - 1
+	// MaxArrayLen is a safe maximum length for slices on this architecture.
+	MaxArrayLen = 1<<31 - 1
 )

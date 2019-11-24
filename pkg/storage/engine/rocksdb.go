@@ -1229,7 +1229,7 @@ func (r *RocksDB) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, err
 		return nil, err
 	}
 
-	tickers := (*[maxArrayLen / C.sizeof_TickerInfo]C.TickerInfo)(
+	tickers := (*[MaxArrayLen / C.sizeof_TickerInfo]C.TickerInfo)(
 		unsafe.Pointer(s.tickers))[:s.tickers_len:s.tickers_len]
 	res.Tickers = make(map[string]uint64)
 	for _, ticker := range tickers {
@@ -1240,7 +1240,7 @@ func (r *RocksDB) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, err
 	C.free(unsafe.Pointer(s.tickers))
 
 	res.Histograms = make(map[string]enginepb.HistogramData)
-	histograms := (*[maxArrayLen / C.sizeof_HistogramInfo]C.HistogramInfo)(
+	histograms := (*[MaxArrayLen / C.sizeof_HistogramInfo]C.HistogramInfo)(
 		unsafe.Pointer(s.histograms))[:s.histograms_len:s.histograms_len]
 	for _, histogram := range histograms {
 		name := cStringToGoString(histogram.name)
@@ -2302,7 +2302,7 @@ func (r *rocksDBIterator) Value() []byte {
 }
 
 func (r *rocksDBIterator) ValueProto(msg protoutil.Message) error {
-	if r.value.len <= 0 {
+	if r.value.len == 0 {
 		return nil
 	}
 	return protoutil.Unmarshal(r.UnsafeValue(), msg)
@@ -2601,7 +2601,7 @@ func goToCSlice(b []byte) C.DBSlice {
 	}
 	return C.DBSlice{
 		data: (*C.char)(unsafe.Pointer(&b[0])),
-		len:  C.int(len(b)),
+		len:  C.size_t(len(b)),
 	}
 }
 
@@ -2648,7 +2648,8 @@ func cStringToGoString(s C.DBString) string {
 	if s.data == nil {
 		return ""
 	}
-	result := C.GoStringN(s.data, s.len)
+	// Reinterpret the string as a slice, then cast to string which does a copy.
+	result := string(cSliceToUnsafeGoBytes(C.DBSlice{s.data, s.len}))
 	C.free(unsafe.Pointer(s.data))
 	return result
 }
@@ -2674,7 +2675,7 @@ func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
 		return nil
 	}
 	// Interpret the C pointer as a pointer to a Go array, then slice.
-	return (*[maxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+	return (*[MaxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
 }
 
 func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
@@ -2807,7 +2808,7 @@ func dbGetProto(
 	if err = statusToError(C.DBGet(rdb, goToCKey(key), &result)); err != nil {
 		return
 	}
-	if result.len <= 0 {
+	if result.len == 0 {
 		msg.Reset()
 		return
 	}
