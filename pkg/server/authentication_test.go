@@ -504,7 +504,7 @@ func TestLogout(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Log in.
-	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie()
+	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName, true)
 	if err != nil {
 		t.Fatal("error opening HTTP client", err)
 	}
@@ -589,7 +589,7 @@ func TestAuthenticationMux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	authClient, err := tsrv.GetAuthenticatedHTTPClient()
+	authClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}

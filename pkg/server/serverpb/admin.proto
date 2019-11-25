@@ -253,6 +253,12 @@ message EventsRequest {
   // returned. When set to > 0, at most only that number of results are
   // returned. When set to < 0, an unlimited number of results are returned.
   int32 limit = 3;
+  // unredacted_events indicates that the values in the events should
+  // not be redacted. The default is to redact, so that older versions
+  // of `cockroach zip` do not see un-redacted values by default.
+  // For good security, this field is only obeyed by the server after
+  // checking that the client of the RPC is an admin user.
+  bool unredacted_events = 4;
 }
 
 // EventsResponse contains a set of event log entries. This is always limited
@@ -761,18 +767,20 @@ service Admin {
 
   // Drain puts the node into the specified drain mode(s) and optionally
   // instructs the process to terminate.
+  // We do not expose this via HTTP unless we have a way to authenticate
+  // + authorize streaming RPC connections. See #42567.
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
-    option (google.api.http) = {
-      post: "/_admin/v1/drain"
-      body: "*"
-    };
   }
 
   // Decommission puts the node(s) into the specified decommissioning state.
+  // If this ever becomes exposed via HTTP, ensure that it performs
+  // authorization. See #42567.
   rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
   }
 
   // DecommissionStatus retrieves the decommissioning status of the specified nodes.
+  // If this ever becomes exposed via HTTP, ensure that it performs
+  // authorization. See #42567.
   rpc DecommissionStatus(DecommissionStatusRequest) returns (DecommissionStatusResponse) {
   }
 
