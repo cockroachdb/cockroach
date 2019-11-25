@@ -58,11 +58,8 @@ SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01'
 statement error pq: AS OF SYSTEM TIME: interval value '0.1us' too small, absolute value must be >= 1µs
 SELECT * FROM t AS OF SYSTEM TIME '0.1us'
 
-statement error pq: AS OF SYSTEM TIME: interval value '0,0' too small, absolute value must be >= 1µs
-SELECT * FROM t AS OF SYSTEM TIME '0,0'
-
-statement error pq: AS OF SYSTEM TIME: interval value '0.000000000,0' too small, absolute value must be >= 1µs
-SELECT * FROM t AS OF SYSTEM TIME '0.000000000,0'
+statement error pq: AS OF SYSTEM TIME: interval value '0-0' too small, absolute value must be >= 1µs
+SELECT * FROM t AS OF SYSTEM TIME '0-0'
 
 statement error pq: AS OF SYSTEM TIME: interval value '-0.1us' too small, absolute value must be >= 1µs
 SELECT * FROM t AS OF SYSTEM TIME '-0.1us'
