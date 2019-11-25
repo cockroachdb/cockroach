@@ -297,8 +297,12 @@ func (p *pebbleIterator) FindSplitKey(
 
 	sizeSoFar := int64(0)
 	bestDiff := int64(math.MaxInt64)
-	var bestSplitKey MVCCKey
-	var prevKey []byte
+	bestSplitKey := MVCCKey{}
+	// found indicates that we have found a valid split key that is the best
+	// known so far. If bestSplitKey is empty => that split key
+	// is in prevKey, else it is in bestSplitKey.
+	found := false
+	prevKey := MVCCKey{}
 
 	// We only have to consider no-split spans if our minimum split key possibly
 	// lies before them. Note that the no-split spans are ordered by end-key.
@@ -325,30 +329,43 @@ func (p *pebbleIterator) FindSplitKey(
 		if diff < 0 {
 			diff = -diff
 		}
-		if diff > bestDiff && bestSplitKey.Key != nil {
+		if diff > bestDiff {
+			// diff will keep increasing past this point. And we must have had a valid
+			// candidate in the past since we can't be worse than MaxInt64.
 			break
 		}
 
-		if diff < bestDiff &&
-			(mvccMinSplitKey.Key == nil || !mvccKey.Less(mvccMinSplitKey)) &&
-			(len(noSplitSpans) == 0 || isValidSplitKey(mvccKey.Key, noSplitSpans)) {
-			// We are going to have to copy bestSplitKey, since by the time we find
-			// out it's the actual best split key, the underlying slice would have
-			// changed (due to the iter.Next() call).
-			//
-			// TODO(itsbilal): Instead of copying into bestSplitKey each time,
-			// consider just calling iter.Prev() at the end to get to the same
-			// key. This isn't quite as easy as it sounds due to the mvccKey and
-			// noSplitSpans checks.
-			bestDiff = diff
-			bestSplitKey.Key = append(bestSplitKey.Key[:0], mvccKey.Key...)
-			bestSplitKey.Timestamp = mvccKey.Timestamp
-			// Avoid comparing against minSplitKey on future iterations.
+		if mvccMinSplitKey.Key != nil && !mvccKey.Less(mvccMinSplitKey) {
+			// mvccKey is >= mvccMinSplitKey. Set the minSplitKey to nil so we do
+			// not have to make any more checks going forward.
 			mvccMinSplitKey.Key = nil
 		}
 
+		if mvccMinSplitKey.Key == nil &&
+			(len(noSplitSpans) == 0 || isValidSplitKey(mvccKey.Key, noSplitSpans)) {
+			// This is a valid candidate for a split key.
+			if diff < bestDiff {
+				// Instead of copying bestSplitKey just yet, flip the found flag. In
+				// the most common case where the actual best split key is followed
+				// by a key that has diff > bestDiff (see the if statement with that
+				// predicate above), this lets us save a copy by reusing prevKey as the
+				// best split key.
+				bestDiff = diff
+				found = true
+				// Set length of bestSplitKey to 0, which the rest of this method relies
+				// on to check if the last key encountered was the best split key.
+				bestSplitKey.Key = bestSplitKey.Key[:0]
+			}
+		} else if found && len(bestSplitKey.Key) == 0 {
+			// We were just at a valid split key candidate, but then we came across
+			// a key that cannot be a split key (i.e. is in noSplitSpans). Copy the
+			// previous key as the bestSplitKey.
+			bestSplitKey.Timestamp = prevKey.Timestamp
+			bestSplitKey.Key = append(bestSplitKey.Key[:0], prevKey.Key...)
+		}
+
 		sizeSoFar += int64(len(p.iter.Value()))
-		if mvccKey.IsValue() && bytes.Equal(prevKey, mvccKey.Key) {
+		if mvccKey.IsValue() && bytes.Equal(prevKey.Key, mvccKey.Key) {
 			// We only advanced timestamps, but not new mvcc keys.
 			sizeSoFar += timestampLen
 		} else {
@@ -358,9 +375,32 @@ func (p *pebbleIterator) FindSplitKey(
 			}
 		}
 
-		prevKey = append(prevKey[:0], mvccKey.Key...)
+		prevKey.Key = append(prevKey.Key[:0], mvccKey.Key...)
+		prevKey.Timestamp = mvccKey.Timestamp
 	}
 
+	// There are three distinct types of cases possible here:
+	//
+	// 1. No valid split key was found (found == false), in which case we return
+	//    bestSplitKey (which should be MVCCKey{}).
+	// 2. The best candidate seen for a split key so far was encountered in the
+	//    last iteration of the above loop. We broke out of the loop either due
+	//    to iterator exhaustion (!p.iter.Valid()), or an increasing diff. Return
+	//    prevKey as the best split key.
+	// 3. The best split key was seen multiple iterations ago, and was copied into
+	//    bestSplitKey at some point (found == true, len(bestSplitKey.Key) > 0).
+	//    Keys encountered after that point were invalid for being in noSplitSpans
+	//    so return the bestSplitKey that had been copied.
+	//
+	// This if statement checks for case 2.
+	if found && len(bestSplitKey.Key) == 0 {
+		// Use the last key found as the best split key, since we broke out of the
+		// loop (due to iterator exhaustion or increasing diff) right after we saw
+		// the best split key. prevKey has to be a valid split key since the only
+		// way we'd have both found && len(bestSplitKey.Key) == 0 is when we've
+		// already checked prevKey for validity.
+		return prevKey, nil
+	}
 	return bestSplitKey, nil
 }
 
