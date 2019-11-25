@@ -1371,8 +1371,8 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 			if fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
 				laxIn.UnionWith(fd.to)
 
-				// Equivalencies and constants are always transitive.
-				if fd.equiv || fd.from.Empty() {
+				// Equivalencies are always transitive.
+				if fd.equiv {
 					in.UnionWith(fd.to)
 
 					// Restart iteration to get transitive closure.
