@@ -222,6 +222,9 @@ func (s *statusServer) dialNode(
 func (s *statusServer) Gossip(
 	ctx context.Context, req *serverpb.GossipRequest,
 ) (*gossip.InfoStatus, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
@@ -247,6 +250,10 @@ func (s *statusServer) Gossip(
 func (s *statusServer) EngineStats(
 	ctx context.Context, req *serverpb.EngineStatsRequest,
 ) (*serverpb.EngineStatsResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -291,6 +298,10 @@ func (s *statusServer) EngineStats(
 func (s *statusServer) Allocator(
 	ctx context.Context, req *serverpb.AllocatorRequest,
 ) (*serverpb.AllocatorResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
 	// logging range start/end keys in the simulated allocator runs.
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
@@ -400,6 +411,10 @@ func recordedSpansToTraceEvents(spans []tracing.RecordedSpan) []*serverpb.TraceE
 func (s *statusServer) AllocatorRange(
 	ctx context.Context, req *serverpb.AllocatorRangeRequest,
 ) (*serverpb.AllocatorRangeResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
 	// logging range start/end keys in the simulated allocator runs.
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
@@ -489,6 +504,10 @@ func (s *statusServer) AllocatorRange(
 func (s *statusServer) Certificates(
 	ctx context.Context, req *serverpb.CertificatesRequest,
 ) (*serverpb.CertificatesResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -604,6 +623,10 @@ func extractCertFields(contents []byte, details *serverpb.CertificateDetails) er
 func (s *statusServer) Details(
 	ctx context.Context, req *serverpb.DetailsRequest,
 ) (*serverpb.DetailsResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -653,6 +676,10 @@ func (s *statusServer) Details(
 func (s *statusServer) GetFiles(
 	ctx context.Context, req *serverpb.GetFilesRequest,
 ) (*serverpb.GetFilesResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
@@ -719,6 +746,10 @@ func checkFilePattern(pattern string) error {
 func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
 ) (*serverpb.LogFilesListResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -744,6 +775,10 @@ func (s *statusServer) LogFilesList(
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
@@ -819,6 +854,9 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 func (s *statusServer) Logs(
 	ctx context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
@@ -885,6 +923,10 @@ func (s *statusServer) Logs(
 func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
 ) (*serverpb.JSONResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -921,6 +963,10 @@ func (s *statusServer) Stacks(
 func (s *statusServer) Profile(
 	ctx context.Context, req *serverpb.ProfileRequest,
 ) (*serverpb.JSONResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
@@ -1067,6 +1113,10 @@ func (s *statusServer) Metrics(
 func (s *statusServer) RaftDebug(
 	ctx context.Context, req *serverpb.RaftDebugRequest,
 ) (*serverpb.RaftDebugResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodes, err := s.Nodes(ctx, nil)
@@ -1166,6 +1216,10 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -1324,6 +1378,10 @@ func (s *statusServer) Ranges(
 func (s *statusServer) HotRanges(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
@@ -1410,6 +1468,10 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 func (s *statusServer) Range(
 	ctx context.Context, req *serverpb.RangeRequest,
 ) (*serverpb.RangeResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
@@ -1461,13 +1523,12 @@ func (s *statusServer) ListLocalSessions(
 		return nil, remoteDebuggingErr
 	}
 
-	sessionUser, err := userFromContext(ctx)
+	sessionUser, isAdmin, err := s.admin.getUserAndRole(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	superuser := s.isSuperUser(ctx, sessionUser)
-	if !superuser {
+	if !isAdmin {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
 		if req.Username == "" {
@@ -1584,11 +1645,11 @@ func (s *statusServer) iterateNodes(
 func (s *statusServer) ListSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
 
+	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	response := &serverpb.ListSessionsResponse{
@@ -1625,6 +1686,16 @@ func (s *statusServer) ListSessions(
 func (s *statusServer) CancelSession(
 	ctx context.Context, req *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
+	sessionUser, isAdmin, err := s.admin.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isAdmin && sessionUser != req.Username {
+		// A user can only cancel their own sessions.
+		return nil, errInsufficientPrivilege
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 
@@ -1656,6 +1727,16 @@ func (s *statusServer) CancelSession(
 func (s *statusServer) CancelQuery(
 	ctx context.Context, req *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
+	sessionUser, isAdmin, err := s.admin.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isAdmin && sessionUser != req.Username {
+		// A user can only cancel their own queries.
+		return nil, errInsufficientPrivilege
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -1688,6 +1769,10 @@ func (s *statusServer) CancelQuery(
 func (s *statusServer) SpanStats(
 	ctx context.Context, req *serverpb.SpanStatsRequest,
 ) (*serverpb.SpanStatsResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeID)
@@ -1747,6 +1832,10 @@ func (s *statusServer) Diagnostics(
 func (s *statusServer) Stores(
 	ctx context.Context, req *serverpb.StoresRequest,
 ) (*serverpb.StoresResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -1848,27 +1937,6 @@ func userFromContext(ctx context.Context) (string, error) {
 			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
 	}
 	return usernames[0], nil
-}
-
-type superUserChecker interface {
-	RequireSuperUser(ctx context.Context, action string) error
-}
-
-func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
-	if username == security.RootUser {
-		return true
-	}
-	planner, cleanup := sql.NewInternalPlanner(
-		"check-superuser",
-		client.NewTxn(ctx, s.db, s.gossip.NodeID.Get(), client.RootTxn),
-		username,
-		&sql.MemoryMetrics{},
-		s.admin.server.execCfg)
-	defer cleanup()
-	if err := planner.(superUserChecker).RequireSuperUser(ctx, "access status server endpoint"); err != nil {
-		return false
-	}
-	return true
 }
 
 type systemInfoOnce struct {

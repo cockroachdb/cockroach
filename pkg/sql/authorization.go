@@ -47,6 +47,13 @@ type AuthorizationAccessor interface {
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
 	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error
 
+	// HasAdminRole returns tuple of bool and error:
+	// (true, nil) means that the user has an admin role (i.e. root or node)
+	// (false, nil) means that the user has NO admin role
+	// (false, err) means that there was an error running the query on
+	// the `system.users` table
+	HasAdminRole(ctx context.Context) (bool, error)
+
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
 	RequireSuperUser(ctx context.Context, action string) error
@@ -141,6 +148,29 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 
 	return fmt.Errorf("user %s has no privileges on %s %s",
 		p.SessionData().User, descriptor.TypeName(), descriptor.GetName())
+}
+
+// HasAdminRole implements the AuthorizationAccessor interface.
+func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
+	user := p.SessionData().User
+
+	// Check if user is 'root' or 'node'.
+	if user == security.RootUser || user == security.NodeUser {
+		return true, nil
+	}
+
+	// Expand role memberships.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+
+	// Check is 'user' is a member of role 'admin'.
+	if _, ok := memberOf[sqlbase.AdminRole]; ok {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
