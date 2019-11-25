@@ -178,3 +178,14 @@ $result
 )
 =>
 $result
+
+# FoldEqualsAnyNull, conversts a scalar ANY operation to NULL if the right-hand
+# side tuple is NULL, e.g. x = ANY(NULL::int[]). See #42562.
+[FoldEqualsAnyNull, Normalize]
+(AnyScalar
+    *
+    (Null)
+    *
+)
+=>
+(Null (BoolType))
