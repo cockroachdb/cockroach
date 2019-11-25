@@ -55,7 +55,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				sstFile := &engine.MemFile{}
-				sst := engine.MakeSSTWriter(sstFile)
+				sst := engine.MakeBackupSSTWriter(sstFile)
 
 				id++
 				backup.ResetKeyValueIteration()

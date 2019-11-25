@@ -58,7 +58,7 @@ var engineImpls = []struct {
 
 func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
 	sstFile := &engine.MemFile{}
-	sst := engine.MakeSSTWriter(sstFile)
+	sst := engine.MakeBackupSSTWriter(sstFile)
 	defer sst.Close()
 	if err := sst.Put(key, value); err != nil {
 		return nil, err
@@ -406,7 +406,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 
 			mkSST := func(kvs []engine.MVCCKeyValue) []byte {
 				sstFile := &engine.MemFile{}
-				sst := engine.MakeSSTWriter(sstFile)
+				sst := engine.MakeBackupSSTWriter(sstFile)
 				defer sst.Close()
 				for _, kv := range kvs {
 					if err := sst.Put(kv.Key, kv.Value); err != nil {
@@ -510,7 +510,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 
 			getSSTBytes := func(sstKVs []engine.MVCCKeyValue) []byte {
 				sstFile := &engine.MemFile{}
-				sst := engine.MakeSSTWriter(sstFile)
+				sst := engine.MakeBackupSSTWriter(sstFile)
 				defer sst.Close()
 				for _, kv := range sstKVs {
 					if err := sst.Put(kv.Key, kv.Value); err != nil {

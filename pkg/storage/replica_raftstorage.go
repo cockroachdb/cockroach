@@ -822,7 +822,7 @@ func (r *Replica) applySnapshot(
 	}(timeutil.Now())
 
 	unreplicatedSSTFile := &engine.MemFile{}
-	unreplicatedSST := engine.MakeSSTWriter(unreplicatedSSTFile)
+	unreplicatedSST := engine.MakeIngestionSSTWriter(unreplicatedSSTFile)
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
@@ -1029,7 +1029,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	for _, sr := range subsumedRepls {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &engine.MemFile{}
-		subsumedReplSST := engine.MakeSSTWriter(subsumedReplSSTFile)
+		subsumedReplSST := engine.MakeIngestionSSTWriter(subsumedReplSSTFile)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RaftTombstoneKey. Since Clears and Puts need to be done in increasing
@@ -1085,7 +1085,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	for i := range keyRanges {
 		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
 			subsumedReplSSTFile := &engine.MemFile{}
-			subsumedReplSST := engine.MakeSSTWriter(subsumedReplSSTFile)
+			subsumedReplSST := engine.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
 			if err := engine.ClearRangeWithHeuristic(
 				r.store.Engine(),

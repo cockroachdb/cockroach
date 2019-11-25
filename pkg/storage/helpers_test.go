@@ -375,7 +375,7 @@ func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
 
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {
 	sstFile := &engine.MemFile{}
-	sst := engine.MakeSSTWriter(sstFile)
+	sst := engine.MakeIngestionSSTWriter(sstFile)
 	defer sst.Close()
 
 	v := roachpb.MakeValueFromBytes([]byte(value))

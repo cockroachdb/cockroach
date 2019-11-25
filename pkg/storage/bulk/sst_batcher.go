@@ -177,7 +177,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 func (b *SSTBatcher) Reset() error {
 	b.sstWriter.Close()
 	b.sstFile = &engine.MemFile{}
-	b.sstWriter = engine.MakeSSTWriter(b.sstFile)
+	b.sstWriter = engine.MakeIngestionSSTWriter(b.sstFile)
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -471,7 +471,7 @@ func createSplitSSTable(
 	iter engine.SimpleIterator,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &engine.MemFile{}
-	w := engine.MakeSSTWriter(sstFile)
+	w := engine.MakeIngestionSSTWriter(sstFile)
 	defer w.Close()
 
 	split := false
@@ -501,7 +501,7 @@ func createSplitSSTable(
 				disallowShadowing: disallowShadowing,
 			}
 			*sstFile = engine.MemFile{}
-			w = engine.MakeSSTWriter(sstFile)
+			w = engine.MakeIngestionSSTWriter(sstFile)
 			split = true
 			first = nil
 			last = nil
