@@ -3,38 +3,49 @@
 # Names should be added to this file as one of
 #     Organization's name
 #     Individual's name <submission email address>
-#     Individual's name <submission email address> <email2> <emailN>
-
+#     Individual's name <submission email address> [alias] <email2> [alias] <emailN>
+#
+# If you wish to keep your @cockroachlabs.com address hidden,
+# please still list <@cockroachlabs.com> (with no user name)
+# in the list of aliases.
+#
+# (Note: there is no point in hiding it if it is mentioned
+# in the git log already.)
+#
+# For more details about the format, see git-check-mailmap(1)
+#
 # Please keep the list sorted.
 
 1lann <me@chuie.io>
-aarondunnington <aaron.dunnington@gmail.com>
-Abhemailk abhi.madan01@gmail.com <abhishek@cockroachlabs.com>
-Abhishek Madan <abhi.madan01@gmail.com> <abhimadan@users.noreply.github.com> <abhishek@cockroachlabs.com>
+Aaron Dunnington <aaron.dunnington@gmail.com> aarondunnington <aaron.dunnington@gmail.com>
+Aayush Shah <aayush.shah15@gmail.com> <@cockroachlabs.com>
+Abhishek Madan <abhi.madan01@gmail.com> <abhimadan@users.noreply.github.com> <abhishek@cockroachlabs.com> Abhemailk abhi.madan01@gmail.com <abhishek@cockroachlabs.com>
 Abhishek Soni <abhishek.rocks26@gmail.com>
-AbhishekSaha <as1695@scarletmail.rutgers.edu>
+Abhishek Saha <as1695@scarletmail.rutgers.edu> AbhishekSaha <as1695@scarletmail.rutgers.edu>
 acoshift <acoshift@gmail.com>
 Adam Gee <adamgee@gmail.com>
 Adam Pantel <adam@cockroachlabs.com>
 Adam Yao <adam.yao.qinglin@gmail.com>
+Aditya Maru <adityamaru@cockroachlabs.com>
 Aid Idrizović <idrizovicaid@gmail.com>
 Ajaya Agrawal <ajku.agr@gmail.com>
 Alex Gaynor <alex.gaynor@gmail.com>
-Alex Robinson <alexdwanerobinson@gmail.com> <arob@google.com>
-Alfonso Subiotto Marqués <alfonso.subiotto.marques@gmail.com> <alfonso@cockroachlabs.com>
+Alex Robinson <alexdwanerobinson@gmail.com> <arob@google.com> <@cockroachlabs.com>
+Alfonso Subiotto Marqués <alfonso.subiotto.marques@gmail.com> Alfonso Subiotto Marques <alfonso@cockroachlabs.com>
 Amos Bird <amosbird@gmail.com>
-Amruta Ranade <amruta@cockroachlabs.com> <amruta2799@gmail.com>
+Amruta Ranade <amruta@cockroachlabs.com> Amruta <amruta@cockroachlabs.com> <amruta2799@gmail.com>
 Andrei Matei <andrei@cockroachlabs.com> <andreimatei1@gmail.com>
 Andrew Bonventre <abonventre@palantir.com> <andybons@gmail.com>
 Andrew Couch <andrew@cockroachlabs.com> <github@couchand.com> <hi@andrewcou.ch>
-Andrew Kimball <andyk@cockroachlabs.com> <kimball.andy@gmail.com> <32096062+andy-kimball@users.noreply.github.com> <andyk@cockroachlabs.com>
-Andrew Kryczka <andrew.kryczka2@gmail.com>
+Andy Kimball <andyk@cockroachlabs.com> <kimball.andy@gmail.com> <32096062+andy-kimball@users.noreply.github.com> Andrew Kimball <andyk@cockroachlabs.com>
+Andrew Kryczka <andrew.kryczka2@gmail.com> Andrew Kryczka <ajkr@users.noreply.github.com> <@cockroachlabs.com>
 Andrew NS Yeow <ngeesoon80@yahoo.com>
 Andrew Werner <ajwerner@cockroachlabs.com>
-Andrew Woods <andy@cockroachlabs.com>
+Andy Woods <andy@cockroachlabs.com> Andrew Woods <andy@cockroachlabs.com>
 Andrey Shinkevich <andyogen@gmail.com>
+Angela Chang <angelachang27@gmail.com> changangela <angelachang27@gmail.com> <angela@cockroachlabs.com>
 Antoine Grondin <antoinegrondin@gmail.com>
-Arjun Ravi Narayan <arjun@cockroachlabs.com> <arjunravinarayan@gmail.com> <arjun@cockroachlabs.com> <arjunravinarayan@users.noreply.github.com>
+Arjun Ravi Narayan <arjun@cockroachlabs.com> <arjunravinarayan@gmail.com> Arjun Narayan <arjun@cockroachlabs.com> <arjunravinarayan@users.noreply.github.com>
 Art Nikpal <ai.radio.org@gmail.com>
 Arul Ajmani <arula@cockroachlabs.com> <arulajmani@gmail.com>
 Asit Mahato <asitm9@gmail.com>
@@ -43,47 +54,44 @@ Ben Darnell <ben@bendarnell.com> <ben@cockroachlabs.com>
 Bilal Akhtar <bilal@cockroachlabs.com> <me@itsbilal.com>
 Bob Potter <bobby.potter@gmail.com>
 Bob Vawter <bob@cockroachlabs.com>
-Bogdan Batog <bogdanbatog@gmail.com>
-bogdanbatog <bogdanbatog@gmail.com>
+Bogdan Batog <bogdanbatog@gmail.com> bogdanbatog <bogdanbatog@gmail.com>
 Brad Seiler <seiler@squareup.com>
 Bram Gruneir <BramGruneir@users.noreply.github.com> <MycroftH@users.noreply.github.com> <bram.gruneir@gmail.com> <bram@cockroachlabs.com>
 Brandon Gonzalez <brandon.gonzalez.451@gmail.com>
 Brett Snyder <bsnyder788@gmail.com>
 Celia La <celia@cockroachlabs.com>
 Céline O'Neil <celineloneil@gmail.com> <celineo@cockroachlabs.com>
-changangela <angela@cockroachlabs.com> <angelachang27@gmail.com>
 chengwei <252684445@qq.com>
-Chris Seto <chriskseto@gmail.com>
+Chris Seto <chriskseto@gmail.com> <@cockroachlabs.com>
 Christian Meunier <chris@jumpn.com>
-christopherrouth <routhcr@gmail.com>
-CMajeri <chervine.majeri@elca.ch>
+Christopher Routh <routhcr@gmail.com> christopherrouth <routhcr@gmail.com>
+Chervine Majeri <chervine.majeri@elca.ch> CMajeri <chervine.majeri@elca.ch>
 Cockroach Labs Inc.
 coldwater <zhangcoldwater@163.com>
 Constantine Peresypkin <constantine.peresypkin@datarobot.com> <pconstantine@gmail.com>
-ctkou <adamkouct@gmail.com>
+Adam Kouct <adamkouct@gmail.com> ctkou <adamkouct@gmail.com>
 Cuong Do <cdo@cockroachlabs.com> <cuongdo@users.noreply.github.com>
-Dan Kortschak <dan.kortschak@adelaide.edu.au>
-Daniel Harrison <dan@cockroachlabs.com> <daniel.harrison@gmail.com> <daniel.harrison@gmail.com>
+Dan Kortschak <dan.kortschak@adelaide.edu.au> kortschak <dan.kortschak@adelaide.edu.au>
+Daniel Harrison <dan@cockroachlabs.com> <daniel.harrison@gmail.com>
 Daniel Theophanes <kardianos@gmail.com>
 Daniel Upton <daniel@floppy.co>
-Darin Peshev <darinp@gmail.com> <darinp@gmail.com>
+Darin Peshev <darinp@gmail.com> Darin <darinp@gmail.com> <@cockroachlabs.com>
 David Eisenstat <eisen@cockroachlabs.com>
 David López <not4rent@gmail.com>
-David Taylor <tinystatemachine@gmail.com>
+David Taylor <tinystatemachine@gmail.com> <@cockroachlabs.com>
 dchenk <dcherchenko@gmail.com>
 Dexter Valkyrie <skynode@users.noreply.github.com>
-Diana Hsieh <dianahsieh323@gmail.com>
-dianasaur323 <diana@cockroachlabs.com> <dianahsieh323@gmail.com>
-DiSiqueira <dieg0@live.com>
+Diana Hsieh <dianahsieh323@gmail.com> dianasaur323 <dianahsieh323@gmail.com> dianasaur323 <diana@cockroachlabs.com>
+Diego DiSiquera <dieg0@live.com> DiSiqueira <dieg0@live.com>
 Dmitry Saveliev <d.e.saveliev@gmail.com>
 Dmitry Vorobev <dimahabr@gmail.com>
 Dominique Luna <dluna132@gmail.com>
 Dong Liang <dong.liang@rubrik.com>
 Dustin Hiatt <dustin.hiatt@rkinetic.com>
-EamonZhang <zhang.eamon@hotmail.com>
+Eamon Zhang <zhang.eamon@hotmail.com> EamonZhang <zhang.eamon@hotmail.com>
 Eli Lindsey <eli@siliconsprawl.com>
 embark <wolfire9@users.noreply.github.com>
-Emmanuel <absolutezero2a03@gmail.com>
+Emmanuel Sales <absolutezero2a03@gmail.com> Emmanuel <absolutezero2a03@gmail.com> <emsal1863@gmail.com> <@cockroachlabs.com>
 Erik Trinh <erik@cockroachlabs.com>
 es-chow <es-chow@users.noreply.github.com> <es_chow@163.com>
 Evgeniy Vasilev <aquilax@gmail.com>
@@ -95,14 +103,13 @@ George Papadrosou <gpapadrosou@gmail.com>
 George Utsin <george@cockroachlabs.com>
 Georgia Hong <georgiah@cockroachlabs.com>
 Gustav Paul <gpaul@mesosphere.io>
-Haines Chan <zhinhai@gmail.com>
-hainesc <zhinhai@gmail.com>
+Haines Chan <zhinhai@gmail.com> hainesc <zhinhai@gmail.com>
 Harshit Chopra <harshit@squareup.com>
 Hayden A. James <hayden.james@gmail.com>
 Ibrahim AshShohail <ibra.sho@gmail.com>
 Igor Kharin <igorkharin@gmail.com>
 il9ue <oodanq@gmail.com>
-irfan sharif <irfanmahmoudsharif@gmail.com>
+Irfan Sharif <irfanmahmoudsharif@gmail.com> irfan sharif <irfanmahmoudsharif@gmail.com> <@cockroachlabs.com>
 Isaac Rogers <therealplato@gmail.com>
 Israel Gilyadov <israelg99@gmail.com>
 Iuri Sitinschi <iuri.sitinschi@visual-meta.com> <yukas66@gmail.com>
@@ -114,11 +121,11 @@ Jason E. Aten <j.e.aten@gmail.com>
 Jason Young <RustJason@users.noreply.github.com>
 Jay Kominek <kominek@gmail.com>
 Jeffrey Dallatezza <jeffreydallatezza@gmail.com>
-Jeffrey Xiao <jeffrey.xiao1998@gmail.com>
+Jeffrey Xiao <jeffrey.xiao1998@gmail.com> <@cockroachlabs.com>
 Jesse Seldess <j_seldess@hotmail.com> <jesse@cockroachlabs.com>
 Jessica Edwards <jessica@cockroachlabs.com> <jess-edwards@users.noreply.github.com>
 Jiajia Han <jiajia@squareup.com>
-jiangmingyang <jiangming.yang@gmail.com>
+Jiangming Yang <jiangming.yang@gmail.com> jiangmingyang <jiangming.yang@gmail.com>
 Jimmy Larsson <jimmy.larsson@trioptima.com>
 Jincheng Li <mail@jincheng.li>
 Jingguo Yao <yaojingguo@gmail.com>
@@ -143,32 +150,31 @@ Karl Southern <karl@theangryangel.co.uk>
 Kathy Spradlin <kathyspradlin@gmail.com>
 Kenji Kaneda <kaneda@squareup.com> <kenji.kaneda@gmail.com>
 Kenjiro Nakayama <nakayamakenjiro@gmail.com>
+Kenneth Liu <ken@cockroachlabs.com>
 Kevin Guan <keynovo@gmail.com>
 kiran <crackerplace@gmail.com>
-kortschak <dan.kortschak@adelaide.edu.au>
 lanzao <395818758@qq.com>
 Lasantha Pambagoda <lpambagoda@gmail.com>
-Lauren Hirata <lauren@cockroachlabs.com>
+Lauren Hirata <lauren@cockroachlabs.com> Lauren <lauren@cockroachlabs.com> lhirata <lauren@cockroachlabs.com>
 Lee Reilly <lee@github.com>
 Levon Lloyd <levon@squareup.com>
-liuqi <liuqi@wandoujia.com>
 liyanan <liyananfamily@gmail.com>
 Lizhong <z.lizhong@gmail.com>
-louishust <hdchild@163.com>
+Louis Hust <hdchild@163.com> louishust <hdchild@163.com>
 Lu Guanqun <guanqun.lu@gmail.com>
-Lucy Zhang <lucy-zhang@users.noreply.github.com>
+Lucy Zhang <lucy-zhang@users.noreply.github.com> <lucy@cockroachlabs.com>
 M-srivatsa <srivatsa.dev@gmail.com>
 MaBo <mabo163@163.com>
-madhavsuresh <madhav@cockroachlabs.com>
+Madhav Suresh <madhav@cockroachlabs.com> madhavsuresh <madhav@cockroachlabs.com>
 Mahmoud Al-Qudsi <mqudsi@neosmart.net>
 Maitri Morarji <vivek1@viveks-MacBook-Pro.local>
 Manik Surtani <manik@squareup.com> <manik@surtani.org>
-Marc Berhault <marc.berhault@gmail.com> <marc@cockroachlabs.com> <marc.berhault@gmail.com>
+Marc Berhault <marc.berhault@gmail.com> marc <marc@cockroachlabs.com> MBerhault <marc.berhault@gmail.com>
 Marcus Westin <marcus.westin@gmail.com>
 Marko Bonaći <mbonaci@users.noreply.github.com>
 Martin Bertschler <mbertschler@gmail.com>
 Masha Schneider <masha@cockroachlabs.com> <mshv14282@gmail.com>
-Matt Jibson <matt.jibson@gmail.com>
+Matt Jibson <matt.jibson@gmail.com> <@cockroachlabs.com>
 Matt Tracy <matt.r.tracy@gmail.com> <matt@cockroachlabs.com>
 Matthew O'Connor <matthew@squareup.com> <matthew.t.oconnor@gmail.com>
 Max Lang <max@cockroachlabs.com> <maxwell.g.lang@gmail.com>
@@ -176,22 +182,22 @@ Mayank Oli <mayankoli96@gmail.com>
 mbonaci <mbonaci@gmail.com>
 Mo Firouz <mofirouz@mofirouz.com>
 Mohamed Elqdusy <mohamedelqdusy@gmail.com>
-Nate <nathaniel.p.stewart@gmail.com>
+Nate Stewart <nathaniel.p.stewart@gmail.com> Nate <nathaniel.p.stewart@gmail.com> <nate@cockroachlabs.com>
 Nathan Johnson <njohnson@ena.com>
-Nathan VanBenschoten <nvanbenschoten@gmail.com>
-Nathaniel Stewart <nate@cockroachlabs.com>
+Nathan VanBenschoten <nvanbenschoten@gmail.com> <@cockroachlabs.com>
+Nathan Stilwell <nathanstilwell@cockroachlabs.com>
 neeral <neeral@users.noreply.github.com>
-nexdrew <andrewbgoode@gmail.com>
-ngaut <liuqi@wandoujia.com> <ngaut@users.noreply.github.com> <goroutine@126.com> <ngaut@126.com>
+Andrew B. Goode <andrewbgoode@gmail.com> nexdrew <andrewbgoode@gmail.com>
+ngaut <liuqi@wandoujia.com> liuqi <liuqi@wandoujia.com> goroutine <ngaut@users.noreply.github.com> <goroutine@126.com> <ngaut@126.com>
 Nick <linicks@gmail.com>
 Nick Gottlieb <ngottlieb1@gmail.com>
-Nikhil Benesch <nikhil.benesch@gmail.com>
+Nikhil Benesch <nikhil.benesch@gmail.com> <@cockroachlabs.com>
 Nishant Gupta <nishant.gupta@rubrik.com>
 noonan <noonan@noonan-vb-17.10-CDB>
 Oliver Tan <otan@cockroachlabs.com> <sinovercosequalstan@gmail.com>
 Panos Mamatsis <pmamatsis@gmail.com>
 Paul Banks <banks@banksdesigns.co.uk>
-Paul Bardea <paul@pbardea.com> <pbardea@gmail.com>
+Paul Bardea <paul@pbardea.com> <pbardea@gmail.com> <@cockroachlabs.com>
 Peng Gao <peng.gao.dut@gmail.com>
 Pete Vilter <7341+vilterp@users.noreply.github.com> <vilterp@cockroachlabs.com>
 Peter Mattis <peter@cockroachlabs.com> <petermattis@gmail.com>
@@ -200,16 +206,15 @@ Philippe Laflamme <philippe.laflamme@gmail.com>
 phynalle <phynalism@gmail.com>
 Piotr Zurek <p.zurek@gmail.com>
 pocockn <pocockn@hotmail.co.uk>
-Poornima <poornima.malepati@gmail.com>
-Radu Berinde <radu.berinde@gmail.com> <radu@cockroachlabs.com>
+Poornima Malepati <poornima.malepati@gmail.com> Poornima <poornima.malepati@gmail.com>
+Radu Berinde <radu.berinde@gmail.com> RaduBerinde <radu@cockroachlabs.com>
 Rafi Shamim <rafi@cockroachlabs.com> <rafiss@gmail.com>
-Raphael 'kena' Poss <knz@cockroachlabs.com> <knz@thaumogen.net> <knz@thaumogen.net> <knz@users.noreply.github.com>
+Raphael 'kena' Poss <knz@cockroachlabs.com> kena <knz@thaumogen.net> Raphael Poss <knz@thaumogen.net> <knz@users.noreply.github.com>
 ReadmeCritic <frankensteinbot@gmail.com>
-Rebecca Taft <becca@cockroachlabs.com> <rytaft@gmail.com>
-Rich Loveland <loveland.richard@gmail.com> <rich@cockroachlabs.com>
+Rebecca Taft <becca@cockroachlabs.com> rytaft <becca@cockroachlabs.com> <rytaft@gmail.com>
+Rich Loveland <loveland.richard@gmail.com> <rich@cockroachlabs.com> Richard Loveland <rloveland@richards-mbp.lan>
 Richard Artoul <richardartoul@gmail.com>
-Richard Loveland <rloveland@richards-mbp.lan>
-Richard Wu <richardwu1997@gmail.com>
+Richard Wu <richardwu1997@gmail.com> <@cockroachlabs.com>
 Ridwan Sharif <ridwan@cockroachlabs.com> <ridwanmsharif@Ridwans-MacBook-Pro.local>
 Rohan Yadav <rohany@cockroachlabs.com>
 Roland Crosby <roland@cockroachlabs.com>
@@ -222,35 +227,36 @@ Sergei Turukin <rampage644@gmail.com>
 Seth Bunce <seth.bunce@gmail.com>
 shakeelrao <shakeelrao79@gmail.com>
 Shawn Morel <shawn@squareup.com> <shawn@strangemonad.com> <strangemonad@squareup.com>
-Solon Gordon <solon@cockroachlabs.com> <solongordon@gmail.com>
-songhao <songhao9021@gmail.com>
+Solon Gordon <solon@cockroachlabs.com> solongordon <solongordon@gmail.com>
+Song Hao <songhao9021@gmail.com> songhao <songhao9021@gmail.com>
 Spas Bojanov <spas@cockroachlabs.com> <pachob@gmail.com>
-Spencer Kimball <spencer.kimball@gmail.com>
+Spencer Kimball <spencer.kimball@gmail.com> <spencer@cockroachlabs.com>
+Sumeer Bhola <sumeer@cockroachlabs.com> sumeerbhola <sumeer@cockroachlabs.com>
 sum12 <sumitjami@gmail.com>
 Syd <324760805@qq.com>
 Takuya Kuwahara <taakuu19@gmail.com>
-Tamir Duberstein <tamird@gmail.com>
-Tamir Duberstein and Kenji Kaneda <tamird+kenji.kaneda@gmail.com>
+Tamir Duberstein <tamird@gmail.com> <@cockroachlabs.com>
+Tamir Duberstein and Kenji Kaneda <tamird+kenji.kaneda@gmail.com> <@cockroachlabs.com>
 Tarek Badr <tarekbadrshalaan@gmail.com>
 Teodor Pripoae <teodor.pripoae@gmail.com>
 Terrell Russell <terrellrussell@gmail.com>
 Thanakom Sangnetra <thanakom.sangnetra@hotelquickly.com> <loki.top11@gmail.com>
 Thomas Schroeter <thomas@cliqz.com> <thschroeter@gmail.com>
 thundercw <thundercw@gmail.com>
-tim-o <38867162+tim-o@users.noreply.github.com>
+Tim O'Brien <38867162+tim-o@users.noreply.github.com> tim-o <38867162+tim-o@users.noreply.github.com> <@cockroachlabs.com>
 Timothy Chen <tnachen@gmail.com>
-Tobias Schottdorf <tobias@tkschmidt.me> <tobias.schottdorf@gmail.com> <tobias.schottdorf@hrs.de>
-Tristan Ohlson <tsohlson@gmail.com>
+Tobias Schottdorf <tobias@tkschmidt.me> <tobias.schottdorf@gmail.com> <tobias.schottdorf@hrs.de> <@cockroachlabs.com>
+Tristan Ohlson <tsohlson@gmail.com> <@cockroachlabs.com>
 Tristan Rice <rice@fn.lc> <wiz@cockroachlabs.com>
 Txiaozhe <txiaozhe@gmail.com>
 Tyler Neely <tan@tumblr.com>
-Tyler Roberts <tyler@cockroachlabs.com>
+Tyler Roberts <tyler@cockroachlabs.com> Tyler314 <tyler@cockroachlabs.com>
 Umesh Yadav <dungeonmaster18@users.noreply.github.com>
 vagrant <vagrant@precise64.(none)>
 veteranlu <23907238@qq.com>
 Victor Chen <victor@cockroachlabs.com>
 Vijay Karthik <vijay.karthik@rubrik.com>
-Vivek Menezes <vivek.menezes@gmail.com> <vivek1@viveks-MacBook-Pro.local> <vivek@cockroachlabs.com> <vivekmenezes@users.noreply.github.com>
+Vivek Menezes <vivek.menezes@gmail.com> <vivek1@viveks-MacBook-Pro.local> <vivek@cockroachlabs.com> vivekmenezes <vivekmenezes@users.noreply.github.com>
 wenyong-h <weyo.huang@gmail.com>
 Will Haack <will.haack@appboy.com> <will@cockroachlabs.com>
 Xiang Li <xiangli.cs@gmail.com>
@@ -258,7 +264,7 @@ Xinyu Zhou (Joe) <joe.zxy@foxmail.com>
 XisiHuang <cockhuangxh@163.com>
 xphoniex <dj.2dixx@gmail.com>
 Xudong Zheng <7pkvm5aw@slicealias.com>
-Yahor Yuzefovich <yahor@cockroachlabs.com>
+Yahor Yuzefovich <yahor@cockroachlabs.com> yuzefovich <yahor@cockroachlabs.com>
 Yan Long <rafaelyim@qq.com>
 yananzhi <alkfbb@gmail.com> <zac.zhiyanan@gmail.com>
 Yang Yuting <william.yangyt@gmail.com>
@@ -267,8 +273,8 @@ Yevgeniy Miretskiy <yevgeniy@cockroachlabs.com> <yevgeniy@gmail.com>
 Yosi Attias <yosy101@gmail.com>
 yuhit <longyuhit@163.com>
 Yulei Xiao <21739034@qq.com>
-yznming <rafaelyim@qq.com>
+Rafael Yim <rafelyim@qq.com> yznming <rafaelyim@qq.com>
 Zach Brock <zbrock@gmail.com> <zbrock@squareup.com>
-Zachary.smith <Zachary.smith@yodle.com>
+Zachary Smith <Zachary.smith@yodle.com> Zachary.smith <Zachary.smith@yodle.com>
 何羿宏 <heyihong.cn@gmail.com>
 智雅楠 <zac.zhiyanan@gmail.com>

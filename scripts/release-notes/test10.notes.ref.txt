@@ -1,0 +1,24 @@
+### Bug fixes
+
+- Some fix. [#unknown][#unknown] [aebaacf87][aebaacf87]
+
+### Doc updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 1 standalone commit by 1 author.
+We would like to thank the following contributors from the CockroachDB community:
+
+- test10
+
+### PRs merged by contributors
+
+- test10:
+  - 2018-04-22 [#unknown][#unknown] [aebaacf87][aebaacf87] (+   0 -   0 ~   0/ 0) master update
+
+
+[#unknown]: https://github.com/cockroachdb/cockroach/pull/unknown
+[aebaacf87]: https://github.com/cockroachdb/cockroach/commit/aebaacf87
+

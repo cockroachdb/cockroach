@@ -17,7 +17,7 @@ We would like to thank the following contributors from the CockroachDB community
 
 - test7:
   - 2018-04-22 [#200  ][#200  ] [28245dacd][28245dacd] (+   0 -   0 ~   0/ 0) PR title 2 alternate format (2 commits)
-  - 2018-04-22 [#100  ][#100  ] [ba15054b5][ba15054b5] (+   0 -   0 ~   0/ 0) PR title 1 alternate format
+  - 2018-04-22 [#100  ][#100  ] [ba15054b5][ba15054b5] (+   0 -   0 ~   0/ 0) PR title 1 alternate format [NO RELEASE NOTE]
   - 2018-04-22 [#1    ][#1    ] [191b497b9][191b497b9] (+   0 -   0 ~   0/ 0) PR title 1 (2 commits)
 
 
