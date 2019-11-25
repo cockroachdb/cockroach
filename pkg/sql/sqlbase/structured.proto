@@ -504,6 +504,13 @@ message TableDescriptor {
   // ID of the parent database.
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  // ID of the parentSchema. Before this field being introduced goes hand in hand
+  // with CRDB supporting additional physical schemas (other than public). If
+  // this field is not set, it implies the descriptor was created when every
+  // table was scoped under the public physical schema, so this field has the
+  // implied value of 29 (when unset).
+  optional uint32 parent__schema_id = 40 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
   //
   // The design maintains two invariants:
@@ -681,6 +688,10 @@ message TableDescriptor {
     // renamed from one db to another).
     optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+    // The schemaID of the schema the table belongs to before the rename/drop.
+    // Required to reclaim the old table name back.
+    optional uint32 parent_schema_id = 3 [(gogoproto.nullable) = false,
+          (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
     optional string name = 2 [(gogoproto.nullable) = false];
   }
 

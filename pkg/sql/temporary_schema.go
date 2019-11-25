@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,4 +45,44 @@ func (p *planner) createSchemaWithID(
 	b.CPut(schemaNameKey, schemaID, nil)
 
 	return p.txn.Run(ctx, b)
+}
+
+func TemporarySchemaName(sessionID ClusterWideID) string {
+	return fmt.Sprintf("pg_temp_%v%v", sessionID.Hi, sessionID.Lo)
+}
+
+func cleanupSessionTempObjects(ctx context.Context, p *planner, sessionID ClusterWideID) error {
+	tempSchemaName := TemporarySchemaName(sessionID)
+	if p.sessionDataMutator != nil && p.sessionDataMutator.data.SearchPath.GetTemporarySchemaName() != tempSchemaName {
+		return nil
+	}
+	dbIDs, err := GetAllDatabaseDescriptorIDs(ctx, p.txn)
+	if err != nil {
+		return err
+	}
+	for _, id := range dbIDs {
+		dbDesc, err := p.Tables().databaseCache.getDatabaseDescByID(ctx, p.txn, id)
+		if err != nil {
+			return err
+		}
+		tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tempSchemaName, true /*explicitPrefix*/)
+		for i := range tbNames {
+			tbDesc, err := p.ResolveMutableTableDescriptor(ctx, &tbNames[i], true /* true */, ResolveAnyDescType)
+			if err != nil {
+				return err
+			}
+			_, err = p.dropTableImpl(ctx, tbDesc)
+			if err != nil {
+				return err
+			}
+		}
+		// TODO(arul): When there is a schema cache, this should probably go through
+		// there, so that the cache entry is removed as well.
+		//
+		// Finally, also remove the temporary schema from the namespace table
+		if err := sqlbase.RemoveSchemaNamespaceEntry(ctx, p.txn, id, tempSchemaName); err != nil {
+			return err
+		}
+	}
+	return nil
 }

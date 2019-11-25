@@ -304,4 +304,5 @@ enum Type {
   CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
   AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
+  DELETE_TEMP_TABLES = 8 [(gogoproto.enumvalue_customname) = "TypeDeleteTempTables"];
 }

@@ -148,7 +148,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			// TODO(knz): dependent dropped views should be qualified here.
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		} else {
-			cascadedViews, err := p.dropTableImpl(params, tbDesc)
+			cascadedViews, err := p.dropTableImpl(ctx, tbDesc)
 			if err != nil {
 				return err
 			}
