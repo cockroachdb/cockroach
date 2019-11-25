@@ -1056,6 +1056,21 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr></tbody>
 </table>
 
+### TIMETZ functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="current_time"></a><code>current_time() &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with no time zone.</p>
+</span></td></tr>
+<tr><td><a name="current_time"></a><code>current_time() &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with time zone.</p>
+</span></td></tr>
+<tr><td><a name="current_time"></a><code>current_time(precision: <a href="int.html">int</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with no time zone.</p>
+</span></td></tr>
+<tr><td><a name="current_time"></a><code>current_time(precision: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with time zone.</p>
+</span></td></tr></tbody>
+</table>
+
 ### TUPLE functions
 
 <table>

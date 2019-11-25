@@ -94,6 +94,51 @@ SELECT '2001-01-01 11:00+04:00'::timestamptz::timetz
 statement ok
 SET TIME ZONE UTC
 
+subtest current_time_tests
+
+# current_time cannot be subtracted, but can as a timestamp.
+query B
+select
+  ('1970-01-01 ' || current_time(3)::string)::timestamp -
+  ('1970-01-01 ' || current_time::string)::timestamp
+<= '1ms'::interval
+----
+true
+
+statement ok
+CREATE TABLE current_time_test (
+  id INTEGER PRIMARY KEY,
+  a TIMETZ(3) DEFAULT CURRENT_TIME,
+  b TIMETZ DEFAULT CURRENT_TIME
+)
+
+statement ok
+INSERT INTO current_time_test (id) VALUES (1)
+
+statement ok
+INSERT INTO current_time_test (id, a, b) VALUES
+  (2, current_time, current_time),
+  (3, current_time, current_time(3))
+
+query I
+SELECT id FROM current_time_test WHERE
+  ('1970-01-01 ' || b::string)::timestamp -
+  ('1970-01-01 ' || a::string)::timestamp
+> '1ms'::interval ORDER BY id ASC
+----
+
+# switching timezones should make current_time() change timezones too.
+statement ok
+set time zone +4
+
+query B
+select current_time() + current_timestamp()::date = current_timestamp()
+----
+true
+
+statement ok
+set time zone UTC
+
 subtest precision_tests
 
 query error precision 7 out of range

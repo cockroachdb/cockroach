@@ -419,3 +419,51 @@ query T
 SELECT '2001-01-01 01:24:00'::time
 ----
 0000-01-01 01:24:00 +0000 UTC
+
+subtest current_time_tests
+
+statement ok
+CREATE TABLE current_time_test (
+  id INTEGER PRIMARY KEY,
+  a TIME(3) DEFAULT CURRENT_TIME,
+  b TIME DEFAULT CURRENT_TIME
+)
+
+statement ok
+INSERT INTO current_time_test (id) VALUES (1)
+
+statement ok
+INSERT INTO current_time_test (id, a, b) VALUES
+  (2, current_time, current_time),
+  (3, current_time, current_time(3))
+
+query I
+SELECT id FROM current_time_test WHERE
+  ('1970-01-01 ' || b::string)::timestamp -
+  ('1970-01-01 ' || a::string)::timestamp
+> '1ms'::interval ORDER BY id ASC
+----
+
+# test that current_time is correct in different timezones.
+
+statement ok
+set time zone +3
+
+statement ok
+create table current_time_tzset_test (id integer, a time, b time)
+
+statement ok
+insert into current_time_tzset_test (id, a) values (1, current_time)
+
+statement ok
+set time zone 0
+
+statement ok
+update current_time_tzset_test set b = current_time
+
+# a was written at an interval 3 hours ahead, and should persist that way.
+# make sure they're roughly 3 hours apart.
+query I
+select id from current_time_tzset_test WHERE interval '2h59m' < a - b and a - b < interval '3h'
+----
+1
