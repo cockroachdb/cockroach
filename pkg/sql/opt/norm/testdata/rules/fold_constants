@@ -891,3 +891,15 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── ('foo',) [type=tuple{string}]
+
+# --------------------------------------------------
+# FoldEqualsAnyNull
+# --------------------------------------------------
+norm expect=FoldEqualsAnyNull
+SELECT * FROM a WHERE i = ANY (NULL::int[])
+----
+values
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) arr:6(int[]!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-6)
