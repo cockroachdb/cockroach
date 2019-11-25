@@ -66,7 +66,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 		}
 	}()
 
-	c.Run(ctx, c.Node(1), "./workload run kv {pgurl:1} --init --max-ops=1 --splits 100")
+	c.Run(ctx, c.Node(1), "./workload init kv --splits 100 {pgurl:1}")
 
 	// Kill the third node so it won't know that all of its replicas are moved
 	// elsewhere. (We don't use the first because that's what roachprod will

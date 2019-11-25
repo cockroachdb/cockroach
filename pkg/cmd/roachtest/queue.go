@@ -47,13 +47,11 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(dbNodeCount*64))
 			duration := fmt.Sprintf(" --duration=%s", duration.String())
 			batch := " --batch 100"
-			init := ""
 			if initTables {
-				init = " --init"
+				c.Run(ctx, c.Node(workloadNode), "./workload init queue {pgurl:1}")
 			}
 			cmd := fmt.Sprintf(
 				"./workload run queue --histograms="+perfArtifactsDir+"/stats.json"+
-					init+
 					concurrency+
 					duration+
 					batch+

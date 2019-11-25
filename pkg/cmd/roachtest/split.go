@@ -190,8 +190,9 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 		if params.sequential {
 			extraFlags += "--sequential"
 		}
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init kv {pgurl:1}"))
 		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload run kv "+
-			"--init --concurrency=%d --read-percent=%d --span-percent=%d %s {pgurl:1-%d} --duration='%s'",
+			"--concurrency=%d --read-percent=%d --span-percent=%d %s {pgurl:1-%d} --duration='%s'",
 			params.concurrency, params.readPercent, params.spanPercent, extraFlags, c.spec.NodeCount,
 			params.waitDuration.String()))
 

@@ -87,8 +87,9 @@ func registerKV(r *testRegistry) {
 				splits = "" // no splits
 				sequential = " --sequential"
 			}
-			cmd := fmt.Sprintf("./workload run kv --init"+
-				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+
+			c.Run(ctx, c.Node(nodes+1), "./workload init kv"+splits+" {pgurl:1}")
+			cmd := fmt.Sprintf("./workload run kv"+
+				histograms+concurrency+duration+readPercent+batchSize+blockSize+sequential+
 				" {pgurl:1-%d}", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
@@ -224,10 +225,14 @@ func registerKVContention(r *testRegistry) {
 
 				// Run the workload for an hour. Add a secondary index to avoid
 				// UPSERTs performing blind writes.
+				initCmd := fmt.Sprintf(
+					"./workload init kv --splits=%d --secondary-index --cycle-length=%d {pgurl:1}",
+					splits, cycleLength)
+				c.Run(ctx, c.Node(nodes+1), initCmd)
 				const duration = 1 * time.Hour
-				cmd := fmt.Sprintf("./workload run kv --init --secondary-index --duration=%s "+
-					"--cycle-length=%d --concurrency=%d --batch=%d --splits=%d {pgurl:1-%d}",
-					duration, cycleLength, concurrency, batchSize, splits, nodes)
+				cmd := fmt.Sprintf("./workload run kv --duration=%s "+
+					"--cycle-length=%d --concurrency=%d --batch=%d {pgurl:1-%d}",
+					duration, cycleLength, concurrency, batchSize, nodes)
 				start := timeutil.Now()
 				c.Run(ctx, c.Node(nodes+1), cmd)
 				end := timeutil.Now()
@@ -297,7 +302,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 
 			// Initialize the database with ~10k ranges so that the absence of
 			// quiescence hits hard once a node goes down.
-			run("./workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}", false)
+			run("./workload init kv --splits 10000 {pgurl:1}", false)
 			run(kv+" --seed 0 {pgurl:1}", true) // warm-up
 			// Measure qps with all nodes up (i.e. with quiescence).
 			qpsAllUp := qps(func() {
@@ -344,7 +349,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 			// Initialize the database with a lot of ranges so that there are
 			// definitely a large number of leases on the node that we shut down
 			// before it starts draining.
-			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
+			splitCmd := "./workload init kv --splits 100 {pgurl:1}"
 			c.Run(ctx, c.Node(nodes+1), splitCmd)
 
 			m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -473,13 +478,8 @@ func registerKVSplits(r *testRegistry) {
 				t.Status("running workload")
 				m := newMonitor(ctx, c, c.Range(1, nodes))
 				m.Go(func(ctx context.Context) error {
-					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 					splits := " --splits=" + ifLocal("2000", fmt.Sprint(item.splits))
-					cmd := fmt.Sprintf(
-						"./workload run kv --init --max-ops=1"+
-							concurrency+splits+
-							" {pgurl:1-%d}",
-						nodes)
+					cmd := fmt.Sprintf("./workload init kv"+splits+" {pgurl:1-%d}", nodes)
 					c.Run(ctx, c.Node(nodes+1), cmd)
 					return nil
 				})
@@ -504,17 +504,20 @@ func registerKVScalability(r *testRegistry) {
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
-				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
-					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
-					" {pgurl:1-%d}",
-					percent, nodes)
-
 				l, err := t.l.ChildLogger(fmt.Sprint(i))
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer l.close()
 
+				if err := c.RunL(
+					ctx, l, c.Node(nodes+1), `./workload init kv --splits=1000 {pgurl:1}`,
+				); err != nil {
+					return err
+				}
+				cmd := fmt.Sprintf("./workload run kv --read-percent=%d "+
+					"--duration=1m "+fmt.Sprintf("--concurrency=%d", i)+" {pgurl:1-%d}",
+					percent, nodes)
 				return c.RunL(ctx, l, c.Node(nodes+1), cmd)
 			})
 			m.Wait()
