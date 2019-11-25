@@ -59,7 +59,6 @@ var libPQBlacklist20_1 = blacklist{
 	"pq.TestRowsResultTag":               "5807",
 	"pq.TestRuntimeParameters":           "12137",
 	"pq.TestStringWithNul":               "26366",
-	"pq.TestTimestampWithTimeZone":       "41565",
 }
 
 var libPQBlacklist19_2 = blacklist{
