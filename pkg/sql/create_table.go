@@ -62,6 +62,7 @@ type createTableRun struct {
 }
 
 func (n *createTableNode) startExec(params runParams) error {
+	schemaID := sqlbase.ID(keys.PublicSchemaID)
 	isTemporary, err := n.n.Table.IsTemporary(n.n.Temporary)
 	if err != nil {
 		return err
@@ -80,12 +81,12 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		tempSchemaName := params.p.TemporarySchemaName()
 		sKey := sqlbase.NewSchemaKey(n.dbDesc.ID, tempSchemaName)
-		schemaID, err := getDescriptorID(params.ctx, params.p.txn, sKey)
+		var err error
+		schemaID, err = getDescriptorID(params.ctx, params.p.txn, sKey)
 		if err != nil {
 			return err
 		} else if schemaID == sqlbase.InvalidID {
 			// The temporary schema has not been created yet.
-			// TODO(arul): Add a job that does deletion for this session(temp schema)
 			if schemaID, err = createTempSchema(params, sKey); err != nil {
 				return err
 			}
@@ -142,7 +143,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		desc, err = makeTableDescIfAs(params,
-			n.n, n.dbDesc.ID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
+			n.n, n.dbDesc.ID, schemaID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
 		if err != nil {
 			return err
 		}
@@ -154,7 +155,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected, isTemporary)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, schemaID, id, creationTime, privs, affected, isTemporary)
 		if err != nil {
 			return err
 		}
@@ -881,7 +882,7 @@ var CreatePartitioningCCL = func(
 
 // InitTableDescriptor returns a blank TableDescriptor.
 func InitTableDescriptor(
-	id, parentID sqlbase.ID,
+	id, parentID, parentSchemaID sqlbase.ID,
 	name string,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
@@ -891,6 +892,7 @@ func InitTableDescriptor(
 		ID:               id,
 		Name:             name,
 		ParentID:         parentID,
+		ParentSchemaID:   parentSchemaID,
 		FormatVersion:    sqlbase.InterleavedFormatVersion,
 		Version:          1,
 		ModificationTime: creationTime,
@@ -944,7 +946,7 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 func makeTableDescIfAs(
 	params runParams,
 	p *tree.CreateTable,
-	parentID, id sqlbase.ID,
+	parentID, parentSchemaID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
@@ -982,7 +984,7 @@ func makeTableDescIfAs(
 	desc, err = makeTableDesc(
 		params,
 		p,
-		parentID, id,
+		parentID, parentSchemaID, id,
 		creationTime,
 		privileges,
 		nil, /* affected */
@@ -1047,7 +1049,7 @@ func MakeTableDesc(
 	vt SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
-	parentID, id sqlbase.ID,
+	parentID, parentSchemaID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
@@ -1059,8 +1061,7 @@ func MakeTableDesc(
 	// been populated.
 	columnSequenceExprMap := make(map[int]tree.TypedExpr)
 
-	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges, temporary)
-
+	desc := InitTableDescriptor(id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, temporary)
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
@@ -1312,7 +1313,7 @@ func MakeTableDesc(
 func makeTableDesc(
 	params runParams,
 	n *tree.CreateTable,
-	parentID, id sqlbase.ID,
+	parentID, parentSchemaID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
@@ -1360,6 +1361,7 @@ func makeTableDesc(
 			params.p.ExecCfg().Settings,
 			n,
 			parentID,
+			parentSchemaID,
 			id,
 			creationTime,
 			privileges,

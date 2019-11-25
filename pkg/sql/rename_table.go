@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -114,10 +115,15 @@ func (n *renameTableNode) startExec(params runParams) error {
 	}
 
 	descID := tableDesc.GetID()
+	parentSchemaID := tableDesc.GetParentSchemaID()
+	if parentSchemaID == sqlbase.InvalidID {
+		parentSchemaID = keys.PublicSchemaID
+	}
 
 	renameDetails := sqlbase.TableDescriptor_NameInfo{
-		ParentID: prevDbDesc.ID,
-		Name:     oldTn.Table()}
+		ParentID:       prevDbDesc.ID,
+		ParentSchemaID: parentSchemaID,
+		Name:           oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
 	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
 		return err

@@ -139,22 +139,11 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	for _, toDel := range n.td {
-		tbDesc := toDel.desc
-		if tbDesc.IsView() {
-			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade)
-			if err != nil {
-				return err
-			}
-			// TODO(knz): dependent dropped views should be qualified here.
-			tbNameStrings = append(tbNameStrings, cascadedViews...)
-		} else {
-			cascadedViews, err := p.dropTableImpl(params, tbDesc)
-			if err != nil {
-				return err
-			}
-			// TODO(knz): dependent dropped table names should be qualified here.
-			tbNameStrings = append(tbNameStrings, cascadedViews...)
+		cascadedViews, err := p.dropAppropriateDesc(ctx, toDel.desc, tree.DropCascade)
+		if err != nil {
+			return err
 		}
+		tbNameStrings = append(tbNameStrings, cascadedViews...)
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 

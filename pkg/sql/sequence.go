@@ -358,11 +358,14 @@ func maybeAddSequenceDependencies(
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func removeSequenceDependencies(
-	tableDesc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor, params runParams,
+	ctx context.Context,
+	p *planner,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	col *sqlbase.ColumnDescriptor,
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc, err := params.p.Tables().getMutableTableVersionByID(params.ctx, sequenceID, params.p.txn)
+		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}
@@ -404,7 +407,7 @@ func removeSequenceDependencies(
 				seqDesc.DependedOnBy[refTableIdx+1:]...)
 		}
 
-		if err := params.p.writeSchemaChange(params.ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {
+		if err := p.writeSchemaChange(ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}

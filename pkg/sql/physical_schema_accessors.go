@@ -150,7 +150,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 			return nil, err
 		}
 		alreadySeen[tableName] = true
-		tn := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(tableName))
+		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), tree.Name(tableName))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
 		tableNames = append(tableNames, tn)
@@ -166,7 +166,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 		if alreadySeen[tableName] {
 			continue
 		}
-		tn := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(tableName))
+		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), tree.Name(tableName))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
 		tableNames = append(tableNames, tn)

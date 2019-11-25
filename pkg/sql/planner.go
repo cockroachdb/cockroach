@@ -385,9 +385,7 @@ func (p *planner) User() string {
 }
 
 func (p *planner) TemporarySchemaName() string {
-	return fmt.Sprintf("pg_temp_%v%v",
-		p.ExtendedEvalContext().SessionID.Hi,
-		p.ExtendedEvalContext().SessionID.Lo)
+	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }
 
 func (p *planner) SetTemporarySchemaName(scName string) {

@@ -740,8 +740,43 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 	ex.close(ctx, normalClose)
 }
 
+func (ex *connExecutor) maybeCleanupTempObjects() {
+	// Has to happen in a new context, because the context associated with  the
+	// session is cancelled when the connection is closed.
+	ctx := context.Background()
+	err := ex.planner.ExtendedEvalContext().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		ex.resetPlanner(ctx, &ex.planner, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, 0)
+		return cleanupSessionTempObjects(ctx, &ex.planner, ex.sessionID)
+	})
+	if err != nil {
+		log.Error(ctx, err)
+	}
+	err = ex.planner.ExtendedEvalContext().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		ieFactory := func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
+			ex.resetPlanner(ctx, &ex.planner, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, 0)
+			ie := NewSessionBoundInternalExecutor(
+				ctx,
+				sd,
+				ex.server,
+				ex.memMetrics,
+				ex.server.cfg.Settings,
+			)
+			return ie
+		}
+		err = ex.planner.extendedEvalCtx.SchemaChangers.execSchemaChanges(ctx, ex.server.cfg, &ex.sessionTracing, ieFactory)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		log.Error(ctx, err)
+	}
+}
+
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
+	ex.maybeCleanupTempObjects()
 
 	ev := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {

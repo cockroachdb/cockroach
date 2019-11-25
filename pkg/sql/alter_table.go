@@ -325,7 +325,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
 			if len(col.UsesSequenceIds) > 0 {
-				if err := removeSequenceDependencies(n.tableDesc, col, params); err != nil {
+				if err := removeSequenceDependencies(params.ctx, params.p, n.tableDesc, col); err != nil {
 					return err
 				}
 			}
@@ -808,7 +808,7 @@ func applyColumnMutation(
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {
-			if err := removeSequenceDependencies(tableDesc, col, params); err != nil {
+			if err := removeSequenceDependencies(params.ctx, params.p, tableDesc, col); err != nil {
 				return err
 			}
 		}
