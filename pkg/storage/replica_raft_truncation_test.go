@@ -47,7 +47,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 		eng := engine.NewDefaultInMem()
 		defer eng.Close()
 
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "prev":
 				d.ScanArgs(t, "index", &prevTruncatedState.Index)

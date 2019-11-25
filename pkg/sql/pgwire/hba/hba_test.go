@@ -19,13 +19,14 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	datadriven.RunTest(t, filepath.Join("testdata", "parse"), func(d *datadriven.TestData) string {
-		conf, err := Parse(d.Input)
-		if err != nil {
-			return fmt.Sprintf("error: %v\n", err)
-		}
-		return conf.String()
-	})
+	datadriven.RunTest(t, filepath.Join("testdata", "parse"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			conf, err := Parse(d.Input)
+			if err != nil {
+				return fmt.Sprintf("error: %v\n", err)
+			}
+			return conf.String()
+		})
 }
 
 // TODO(mjibson): these are untested outside ccl +gss builds.

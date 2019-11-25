@@ -50,7 +50,7 @@ func RunTest(t *testing.T, path, addr, user string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "send":
 			for _, line := range strings.Split(d.Input, "\n") {

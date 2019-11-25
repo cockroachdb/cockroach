@@ -40,7 +40,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 		USE t;
 	`)
 
-	datadriven.RunTest(t, "testdata/explain_tree", func(d *datadriven.TestData) string {
+	datadriven.RunTest(t, "testdata/explain_tree", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "exec":
 			r.Exec(t, d.Input)

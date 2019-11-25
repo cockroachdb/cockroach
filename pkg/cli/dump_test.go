@@ -60,7 +60,7 @@ func TestDumpData(t *testing.T) {
 		c.omitArgs = true
 		defer c.cleanup()
 
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			args := []string{d.Cmd}
 			switch d.Cmd {
 			case "sql":
