@@ -291,17 +291,17 @@ type ExternalStorage interface {
 }
 
 var (
-	gcsDefault = settings.RegisterStringSetting(
+	gcsDefault = settings.RegisterPublicStringSetting(
 		cloudstorageGSDefaultKey,
 		"if set, JSON key to use during Google Cloud Storage operations",
 		"",
 	)
-	httpCustomCA = settings.RegisterStringSetting(
+	httpCustomCA = settings.RegisterPublicStringSetting(
 		cloudstorageHTTPCASetting,
 		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 		"",
 	)
-	timeoutSetting = settings.RegisterDurationSetting(
+	timeoutSetting = settings.RegisterPublicDurationSetting(
 		cloudStorageTimeout,
 		"the timeout for import/export storage operations",
 		10*time.Minute)

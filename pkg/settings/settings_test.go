@@ -151,7 +151,8 @@ var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
 var mA = settings.RegisterStateMachineSettingImpl("statemachine", "foo", &dummyTransformer{})
 
 func init() {
-	settings.RegisterBoolSetting("sekretz", "desc", false).SetConfidential()
+	settings.RegisterBoolSetting("sekretz", "desc", false).SetReportable(false)
+	settings.RegisterBoolSetting("rezervedz", "desc", false).SetVisibility(settings.Reserved)
 }
 
 var strVal = settings.RegisterValidatedStringSetting(
@@ -293,31 +294,31 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("lookup", func(t *testing.T) {
-		if actual, ok := settings.Lookup("i.1"); !ok || i1A != actual {
+		if actual, ok := settings.Lookup("i.1", settings.LookupForLocalAccess); !ok || i1A != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", i1A, actual, ok)
 		}
-		if actual, ok := settings.Lookup("i.Val"); !ok || iVal != actual {
+		if actual, ok := settings.Lookup("i.Val", settings.LookupForLocalAccess); !ok || iVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", iVal, actual, ok)
 		}
-		if actual, ok := settings.Lookup("f"); !ok || fA != actual {
+		if actual, ok := settings.Lookup("f", settings.LookupForLocalAccess); !ok || fA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("fVal"); !ok || fVal != actual {
+		if actual, ok := settings.Lookup("fVal", settings.LookupForLocalAccess); !ok || fVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fVal, actual, ok)
 		}
-		if actual, ok := settings.Lookup("d"); !ok || dA != actual {
+		if actual, ok := settings.Lookup("d", settings.LookupForLocalAccess); !ok || dA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("dVal"); !ok || dVal != actual {
+		if actual, ok := settings.Lookup("dVal", settings.LookupForLocalAccess); !ok || dVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dVal, actual, ok)
 		}
-		if actual, ok := settings.Lookup("e"); !ok || eA != actual {
+		if actual, ok := settings.Lookup("e", settings.LookupForLocalAccess); !ok || eA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("statemachine"); !ok || mA != actual {
+		if actual, ok := settings.Lookup("statemachine", settings.LookupForLocalAccess); !ok || mA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", mA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("dne"); ok {
+		if actual, ok := settings.Lookup("dne", settings.LookupForLocalAccess); ok {
 			t.Fatalf("expected nothing, got %v", actual)
 		}
 	})
@@ -636,33 +637,33 @@ func TestCache(t *testing.T) {
 
 }
 
-func TestHide(t *testing.T) {
-	keys := make(map[string]struct{})
-	for _, k := range settings.Keys() {
-		keys[k] = struct{}{}
+func TestIsReportable(t *testing.T) {
+	if v, ok := settings.Lookup("bool.t", settings.LookupForLocalAccess); !ok || !settings.TestingIsReportable(v) {
+		t.Errorf("expected 'bool.t' to be marked as isReportable() = true")
 	}
-	if _, ok := keys["bool.t"]; !ok {
-		t.Errorf("expected 'bool.t' to be unhidden")
-	}
-	if _, ok := keys["sekretz"]; ok {
-		t.Errorf("expected 'sekretz' to be hidden")
+	if v, ok := settings.Lookup("sekretz", settings.LookupForLocalAccess); !ok || settings.TestingIsReportable(v) {
+		t.Errorf("expected 'sekretz' to be marked as isReportable() = false")
 	}
 }
 
 func TestOnChangeWithMaxSettings(t *testing.T) {
 	// Register MaxSettings settings to ensure that no errors occur.
-	maxName, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-1-len(settings.Keys()))
+	maxName, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-settings.NumRegisteredSettings())
 	if err != nil {
-		t.Errorf("expected no error to register 128 settings, but get error : %s", err)
+		t.Fatalf("expected no error to register %d settings, but get error: %v", settings.MaxSettings, err)
 	}
 
 	// Change the max slotIdx setting to ensure that no errors occur.
 	sv := &settings.Values{}
 	sv.Init(settings.TestOpaque)
 	var changes int
-	intSetting, ok := settings.Lookup(maxName)
+	s, ok := settings.Lookup(maxName, settings.LookupForLocalAccess)
 	if !ok {
-		t.Errorf("expected lookup of %s to succeed", maxName)
+		t.Fatalf("expected lookup of %s to succeed", maxName)
+	}
+	intSetting, ok := s.(*settings.IntSetting)
+	if !ok {
+		t.Fatalf("expected int setting, got %T", s)
 	}
 	intSetting.SetOnChange(sv, func() { changes++ })
 
@@ -677,18 +678,13 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 }
 
 func TestMaxSettingsPanics(t *testing.T) {
-	var origRegistry = make(map[string]settings.Setting)
-	for k, v := range settings.Registry {
-		origRegistry[k] = v
-	}
-	defer func() {
-		settings.Registry = origRegistry
-	}()
+	defer settings.TestingSaveRegistry()()
 
 	// Register too many settings which will cause a panic which is caught and converted to an error.
-	_, err := batchRegisterSettings(t, t.Name(), settings.MaxSettings-len(settings.Keys()))
+	_, err := batchRegisterSettings(t, t.Name(),
+		settings.MaxSettings-settings.NumRegisteredSettings()+1)
 	expectedErr := "too many settings; increase MaxSettings"
-	if err == nil || err.Error() != expectedErr {
+	if !testutils.IsError(err, expectedErr) {
 		t.Errorf("expected error %v, but got %v", expectedErr, err)
 	}
 

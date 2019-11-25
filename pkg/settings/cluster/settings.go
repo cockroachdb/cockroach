@@ -123,38 +123,45 @@ var Version = registerClusterVersionSetting()
 // it with the cluster settings registry.
 func registerClusterVersionSetting() clusterVersionSetting {
 	s := makeClusterVersionSetting()
+	s.StateMachineSetting.SetReportable(true)
 	settings.RegisterStateMachineSetting(
 		KeyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<unstable>,
 		&s.StateMachineSetting)
+	s.SetVisibility(settings.Public)
 	return s
 }
 
-var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
-	"cluster.preserve_downgrade_option",
-	"disable (automatic or manual) cluster version upgrade from the specified version until reset",
-	"",
-	func(sv *settings.Values, s string) error {
-		if sv == nil || s == "" {
-			return nil
-		}
-		opaque := sv.Opaque()
-		st := opaque.(*Settings)
-		clusterVersion := Version.ActiveVersion(context.TODO(), st).Version
-		downgradeVersion, err := roachpb.ParseVersion(s)
-		if err != nil {
-			return err
-		}
+var preserveDowngradeVersion = func() *settings.StringSetting {
+	s := settings.RegisterValidatedStringSetting(
+		"cluster.preserve_downgrade_option",
+		"disable (automatic or manual) cluster version upgrade from the specified version until reset",
+		"",
+		func(sv *settings.Values, s string) error {
+			if sv == nil || s == "" {
+				return nil
+			}
+			opaque := sv.Opaque()
+			st := opaque.(*Settings)
+			clusterVersion := Version.ActiveVersion(context.TODO(), st).Version
+			downgradeVersion, err := roachpb.ParseVersion(s)
+			if err != nil {
+				return err
+			}
 
-		// cluster.preserve_downgrade_option can only be set to the current cluster version.
-		if downgradeVersion != clusterVersion {
-			return errors.Errorf(
-				"cannot set cluster.preserve_downgrade_option to %s (cluster version is %s)",
-				s, clusterVersion)
-		}
-		return nil
-	},
-)
+			// cluster.preserve_downgrade_option can only be set to the current cluster version.
+			if downgradeVersion != clusterVersion {
+				return errors.Errorf(
+					"cannot set cluster.preserve_downgrade_option to %s (cluster version is %s)",
+					s, clusterVersion)
+			}
+			return nil
+		},
+	)
+	s.SetReportable(true)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // MakeTestingClusterSettings returns a Settings object that has had its version
 // initialized to BinaryServerVersion.

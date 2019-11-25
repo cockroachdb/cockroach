@@ -51,13 +51,21 @@ func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	})
 }
 
-// ShowAllClusterSettings represents a SHOW CLUSTER SETTING statement.
-type ShowAllClusterSettings struct {
+// ShowClusterSettingList represents a SHOW [ALL|PUBLIC] CLUSTER SETTINGS statement.
+type ShowClusterSettingList struct {
+	// All indicates whether to include non-public settings in the output.
+	All bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowAllClusterSettings) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW ALL CLUSTER SETTINGS")
+func (node *ShowClusterSettingList) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW ")
+	qual := "PUBLIC"
+	if node.All {
+		qual = "ALL"
+	}
+	ctx.WriteString(qual)
+	ctx.WriteString(" CLUSTER SETTINGS")
 }
 
 // BackupDetails represents the type of details to display for a SHOW BACKUP

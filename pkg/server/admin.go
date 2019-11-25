@@ -1158,16 +1158,42 @@ func (s *adminServer) Settings(
 		keys = settings.Keys()
 	}
 
+	sessionUser, err := userFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	isAdmin, err := s.hasAdminRole(ctx, sessionUser)
+	if err != nil {
+		return nil, err
+	}
+
+	var lookupPurpose settings.LookupPurpose
+	if isAdmin {
+		// Root accesses can customize the purpose.
+		// This is used by the UI to see all values (local access)
+		// and `cockroach zip` to redact the values (telemetry).
+		lookupPurpose = settings.LookupForReporting
+		if req.UnredactedValues {
+			lookupPurpose = settings.LookupForLocalAccess
+		}
+	} else {
+		// Non-root access cannot see the values in any case.
+		lookupPurpose = settings.LookupForReporting
+	}
+
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
-		v, ok := settings.Lookup(k)
+		v, ok := settings.Lookup(k, lookupPurpose)
 		if !ok {
 			continue
 		}
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
-			Type:        v.Typ(),
-			Value:       settings.SanitizedValue(k, &s.server.st.SV),
+			Type: v.Typ(),
+			// Note: v.String() redacts the values if the purpose is not "LocalAccess".
+			Value:       v.String(&s.server.st.SV),
 			Description: v.Description(),
+			Public:      v.Visibility() == settings.Public,
 		}
 	}
 

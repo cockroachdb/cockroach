@@ -199,9 +199,13 @@ Output the list of cluster settings known to this binary.
 
 		var rows [][]string
 		for _, name := range settings.Keys() {
-			setting, ok := settings.Lookup(name)
+			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
+			}
+			if setting.Visibility() != settings.Public {
+				// We don't document non-public settings at this time.
+				continue
 			}
 
 			typ, ok := settings.ReadableTypes[setting.Typ()]

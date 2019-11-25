@@ -402,6 +402,13 @@ message SettingsRequest {
   // The array of setting names to retrieve.
   // An empty keys array means "all".
   repeated string keys = 1;
+
+  // Indicate whether to see unredacted setting values.
+  // This is opt-in so that a previous version `cockroach zip`
+  // does not start reporting values when this becomes active.
+  // For good security, the server only obeys this after it checks
+  // that the logger-in user has admin privilege.
+  bool unredacted_values = 2;
 }
 
 // SettingsResponse is the response to SettingsRequest.
@@ -410,6 +417,7 @@ message SettingsResponse {
       string value = 1;
       string type = 2;
       string description = 3;
+      bool public = 4;
    }
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }

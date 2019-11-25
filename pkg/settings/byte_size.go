@@ -22,7 +22,7 @@ type ByteSizeSetting struct {
 	IntSetting
 }
 
-var _ Setting = &ByteSizeSetting{}
+var _ extendedSetting = &ByteSizeSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*ByteSizeSetting) Typ() string {
@@ -36,6 +36,13 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 // RegisterByteSizeSetting defines a new setting with type bytesize.
 func RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
 	return RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterPublicByteSizeSetting defines a new setting with type bytesize and makes it public.
+func RegisterPublicByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
+	s := RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
+	s.SetVisibility(Public)
+	return s
 }
 
 // RegisterValidatedByteSizeSetting defines a new setting with type bytesize

@@ -29,7 +29,11 @@ var enterpriseLicense = func() *settings.StringSetting {
 			return err
 		},
 	)
-	s.SetConfidential()
+	// Even though string settings are non-reportable by default, we
+	// still mark them explicitly in case a future code change flips the
+	// default.
+	s.SetReportable(false)
+	s.SetVisibility(settings.Public)
 	return s
 }()
 

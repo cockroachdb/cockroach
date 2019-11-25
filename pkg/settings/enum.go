@@ -26,7 +26,7 @@ type EnumSetting struct {
 	enumValues map[int64]string
 }
 
-var _ Setting = &EnumSetting{}
+var _ extendedSetting = &EnumSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (e *EnumSetting) Typ() string {
@@ -83,6 +83,15 @@ func enumValuesToDesc(enumValues map[int64]string) string {
 	}
 	buffer.WriteString("]")
 	return buffer.String()
+}
+
+// RegisterPublicEnumSetting defines a new setting with type int and makes it public.
+func RegisterPublicEnumSetting(
+	key, desc string, defaultValue string, enumValues map[int64]string,
+) *EnumSetting {
+	s := RegisterEnumSetting(key, desc, defaultValue, enumValues)
+	s.SetVisibility(Public)
+	return s
 }
 
 // RegisterEnumSetting defines a new setting with type int.

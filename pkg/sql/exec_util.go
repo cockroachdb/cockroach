@@ -66,34 +66,42 @@ import (
 )
 
 // ClusterOrganization is the organization name.
-var ClusterOrganization = settings.RegisterStringSetting(
+var ClusterOrganization = settings.RegisterPublicStringSetting(
 	"cluster.organization",
 	"organization name",
 	"",
 )
 
-// ClusterSecret is a cluster specific secret. This setting is hidden.
+// ClusterSecret is a cluster specific secret. This setting is
+// non-reportable.
 var ClusterSecret = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
 		"cluster.secret",
 		"cluster specific secret",
 		"",
 	)
-	s.SetConfidential()
+	// Even though string settings are non-reportable by default, we
+	// still mark them explicitly in case a future code change flips the
+	// default.
+	s.SetReportable(false)
 	return s
 }()
 
 // defaultIntSize controls how a "naked" INT type will be parsed.
 // TODO(bob): Change this to 4 in v2.3; https://github.com/cockroachdb/cockroach/issues/32534
 // TODO(bob): Remove or n-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
-var defaultIntSize = settings.RegisterValidatedIntSetting(
-	"sql.defaults.default_int_size",
-	"the size, in bytes, of an INT type", 8, func(i int64) error {
-		if i != 4 && i != 8 {
-			return errors.New("only 4 or 8 are valid values")
-		}
-		return nil
-	})
+var defaultIntSize = func() *settings.IntSetting {
+	s := settings.RegisterValidatedIntSetting(
+		"sql.defaults.default_int_size",
+		"the size, in bytes, of an INT type", 8, func(i int64) error {
+			if i != 4 && i != 8 {
+				return errors.New("only 4 or 8 are valid values")
+			}
+			return nil
+		})
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // traceTxnThreshold can be used to log SQL transactions that take
 // longer than duration to complete. For example, traceTxnThreshold=1s
@@ -102,7 +110,7 @@ var defaultIntSize = settings.RegisterValidatedIntSetting(
 // that any positive duration will enable tracing and will slow down
 // all execution because traces are gathered for all transactions even
 // if they are not output.
-var traceTxnThreshold = settings.RegisterDurationSetting(
+var traceTxnThreshold = settings.RegisterPublicDurationSetting(
 	"sql.trace.txn.enable_threshold",
 	"duration beyond which all transactions are traced (set to 0 to disable)", 0,
 )
@@ -111,9 +119,11 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 // that is normally kept for every SQL connection. The event log has a
 // non-trivial performance impact and also reveals SQL statements
 // which may be a privacy concern.
-var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
+var traceSessionEventLogEnabled = settings.RegisterPublicBoolSetting(
 	"sql.trace.session_eventlog.enabled",
-	"set to true to enable session tracing", false,
+	"set to true to enable session tracing. "+
+		"Note that enabling this may have a non-trivial negative performance impact.",
+	false,
 )
 
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
@@ -190,7 +200,7 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 
 // SerialNormalizationMode controls how the SERIAL type is interpreted in table
 // definitions.
-var SerialNormalizationMode = settings.RegisterEnumSetting(
+var SerialNormalizationMode = settings.RegisterPublicEnumSetting(
 	"sql.defaults.serial_normalization",
 	"default handling of SERIAL in table definitions",
 	"rowid",

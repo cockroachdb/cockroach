@@ -904,13 +904,13 @@ func TestAdminAPISettings(t *testing.T) {
 	allKeys := settings.Keys()
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.Lookup(k)
+		ref, ok := settings.Lookup(k, settings.LookupForReporting)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}
 		typ := ref.Typ()
 
-		if typ == "s" && k != "version" {
+		if !settings.TestingIsReportable(ref) {
 			if v.Value != "<redacted>" && v.Value != "" {
 				t.Errorf("%s: expected redacted value for %v, got %s", k, ref, v.Value)
 			}
@@ -918,6 +918,10 @@ func TestAdminAPISettings(t *testing.T) {
 			if ref.String(&st.SV) != v.Value {
 				t.Errorf("%s: expected value %v, got %s", k, ref, v.Value)
 			}
+		}
+
+		if expectedPublic := ref.Visibility() == settings.Public; expectedPublic != v.Public {
+			t.Errorf("%s: expected public %v, got %v", k, expectedPublic, v.Public)
 		}
 
 		if desc := ref.Description(); desc != v.Description {
@@ -960,7 +964,7 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 
 		if !seenRef {
-			t.Fatalf("failed to observe test setting %s, got %q", settingKey, resp.KeyValues)
+			t.Fatalf("failed to observe test setting %s, got %+v", settingKey, resp.KeyValues)
 		}
 	})
 

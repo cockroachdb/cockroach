@@ -93,7 +93,7 @@ var TestOpaque interface{} = testOpaqueType{}
 // The opaque argument can be retrieved later via Opaque().
 func (sv *Values) Init(opaque interface{}) {
 	sv.opaque = opaque
-	for _, s := range Registry {
+	for _, s := range registry {
 		s.setToDefault(sv)
 	}
 }
@@ -187,29 +187,72 @@ func (sv *Values) setOnChange(slotIdx int, fn func()) {
 // Values. This way we can have a global set of registered settings, each
 // with potentially multiple instances.
 type Setting interface {
-	setToDefault(sv *Values)
 	// Typ returns the short (1 char) string denoting the type of setting.
 	Typ() string
 	String(sv *Values) string
+	Description() string
+	Visibility() Visibility
+}
+
+// WritableSetting is the exported interface of non-masked settings.
+type WritableSetting interface {
+	Setting
+
 	// Encoded returns the encoded value of the current value of the setting.
 	Encoded(sv *Values) string
-
 	EncodedDefault() string
-
-	Description() string
-	setDescription(desc string)
-	setSlotIdx(slotIdx int)
-	getSlotIdx() int
-	Hidden() bool
-
 	SetOnChange(sv *Values, fn func())
 }
 
+type extendedSetting interface {
+	WritableSetting
+
+	isRetired() bool
+	setToDefault(sv *Values)
+	setDescription(desc string)
+	setSlotIdx(slotIdx int)
+	getSlotIdx() int
+	// isReportable indicates whether the value of the setting can be
+	// included in user-facing reports such as that produced by SHOW ALL
+	// CLUSTER SETTINGS.
+	// This only affects reports though; direct access is unconstrained.
+	// For example, `enterprise.license` is non-reportable:
+	// it cannot be listed, but can be accessed with `SHOW CLUSTER
+	// SETTING enterprise.license` or SET CLUSTER SETTING.
+	isReportable() bool
+}
+
+// Visibility describes how a user should feel confident that
+// they can customize the setting.  See the constant definitions below
+// for details.
+type Visibility int
+
+const (
+	// Reserved - which is the default - indicates that a setting is
+	// not documented and the CockroachDB team has not developed
+	// internal experience about the impact of customizing it to other
+	// values.
+	// In short: "Use at your own risk."
+	Reserved Visibility = iota
+	// Public indicates that a setting is documented, the range of
+	// possible values yields predictable results, and the CockroachDB
+	// team is there to assist if issues occur as a result of the
+	// customization.
+	// In short: "Go ahead but be careful."
+	Public
+)
+
 type common struct {
 	description string
-	hidden      bool
+	visibility  Visibility
 	// Each setting has a slotIdx which is used as a handle with Values.
-	slotIdx int
+	slotIdx       int
+	nonReportable bool
+	retired       bool
+}
+
+func (i *common) isRetired() bool {
+	return i.retired
 }
 
 func (i *common) setSlotIdx(slotIdx int) {
@@ -232,30 +275,39 @@ func (i *common) setDescription(s string) {
 func (i common) Description() string {
 	return i.description
 }
-func (i common) Hidden() bool {
-	return i.hidden
+
+func (i common) Visibility() Visibility {
+	return i.visibility
 }
 
-// SetConfidential prevents a setting from showing up in SHOW ALL
-// CLUSTER SETTINGS. It can still be used with SET and SHOW if the
-// exact setting name is known. Use SetConfidential for data that must
-// be hidden from standard setting report and troubleshooting
-// screenshots, such as license data or keys.
-func (i *common) SetConfidential() {
-	i.hidden = true
+func (i common) isReportable() bool {
+	return !i.nonReportable
 }
 
-// SetSensitive marks the setting as dangerous to modify. Use SetConfidential for settings
-// where the user must be strongly discouraged to tweak the values.
-func (i *common) SetSensitive() {
-	i.description += " (WARNING: may compromise cluster stability or correctness; do not edit without supervision)"
+// SetReportable indicates whether a setting's value can show up in SHOW ALL
+// CLUSTER SETTINGS and telemetry reports.
+//
+// The setting can still be used with SET and SHOW if the exact
+// setting name is known. Use SetReportable(false) for data that must
+// be hidden from standard setting report, telemetry and
+// troubleshooting screenshots, such as license data or keys.
+//
+// All string settings are also non-reportable by default and must be
+// opted in to reports manually with SetReportable(true).
+func (i *common) SetReportable(reportable bool) {
+	i.nonReportable = !reportable
 }
 
-// SetDeprecated marks the setting as obsolete. It also hides
+// SetVisibility customizes the visibility of a setting.
+func (i *common) SetVisibility(v Visibility) {
+	i.visibility = v
+}
+
+// SetRetired marks the setting as obsolete. It also hides
 // it from the output of SHOW CLUSTER SETTINGS.
-func (i *common) SetDeprecated() {
+func (i *common) SetRetired() {
 	i.description = "do not use - " + i.description
-	i.hidden = true
+	i.retired = true
 }
 
 // SetOnChange installs a callback to be called when a setting's value changes.
@@ -269,4 +321,15 @@ type numericSetting interface {
 	Setting
 	Validate(i int64) error
 	set(sv *Values, i int64) error
+}
+
+// TestingIsReportable is used in testing for reportability.
+func TestingIsReportable(s Setting) bool {
+	if _, ok := s.(*MaskedSetting); ok {
+		return false
+	}
+	if e, ok := s.(extendedSetting); ok {
+		return e.isReportable()
+	}
+	return true
 }

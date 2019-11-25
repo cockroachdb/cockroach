@@ -62,23 +62,27 @@ var FailedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
 const timeUntilStoreDeadSettingName = "server.time_until_store_dead"
 
 // TimeUntilStoreDead wraps "server.time_until_store_dead".
-var TimeUntilStoreDead = settings.RegisterValidatedDurationSetting(
-	timeUntilStoreDeadSettingName,
-	"the time after which if there is no new gossiped information about a store, it is considered dead",
-	5*time.Minute,
-	func(v time.Duration) error {
-		// Setting this to less than the interval for gossiping stores is a big
-		// no-no, since this value is compared to the age of the most recent gossip
-		// from each store to determine whether that store is live. Put a buffer of
-		// 15 seconds on top to allow time for gossip to propagate.
-		const minTimeUntilStoreDead = gossip.StoresInterval + 15*time.Second
-		if v < minTimeUntilStoreDead {
-			return errors.Errorf("cannot set %s to less than %v: %v",
-				timeUntilStoreDeadSettingName, minTimeUntilStoreDead, v)
-		}
-		return nil
-	},
-)
+var TimeUntilStoreDead = func() *settings.DurationSetting {
+	s := settings.RegisterValidatedDurationSetting(
+		timeUntilStoreDeadSettingName,
+		"the time after which if there is no new gossiped information about a store, it is considered dead",
+		5*time.Minute,
+		func(v time.Duration) error {
+			// Setting this to less than the interval for gossiping stores is a big
+			// no-no, since this value is compared to the age of the most recent gossip
+			// from each store to determine whether that store is live. Put a buffer of
+			// 15 seconds on top to allow time for gossip to propagate.
+			const minTimeUntilStoreDead = gossip.StoresInterval + 15*time.Second
+			if v < minTimeUntilStoreDead {
+				return errors.Errorf("cannot set %s to less than %v: %v",
+					timeUntilStoreDeadSettingName, minTimeUntilStoreDead, v)
+			}
+			return nil
+		},
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // The NodeCountFunc returns a count of the total number of nodes the user
 // intends for their to be in the cluster. The count includes dead nodes, but

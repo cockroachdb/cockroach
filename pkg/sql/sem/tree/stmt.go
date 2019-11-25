@@ -656,10 +656,10 @@ func (*ShowClusterSetting) StatementType() StatementType { return Rows }
 func (*ShowClusterSetting) StatementTag() string { return "SHOW" }
 
 // StatementType implements the Statement interface.
-func (*ShowAllClusterSettings) StatementType() StatementType { return Rows }
+func (*ShowClusterSettingList) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowAllClusterSettings) StatementTag() string { return "SHOW" }
+func (*ShowClusterSettingList) StatementTag() string { return "SHOW" }
 
 // StatementType implements the Statement interface.
 func (*ShowColumns) StatementType() StatementType { return Rows }
@@ -946,7 +946,7 @@ func (n *SetTracing) String() string                     { return AsString(n) }
 func (n *SetVar) String() string                         { return AsString(n) }
 func (n *ShowBackup) String() string                     { return AsString(n) }
 func (n *ShowClusterSetting) String() string             { return AsString(n) }
-func (n *ShowAllClusterSettings) String() string         { return AsString(n) }
+func (n *ShowClusterSettingList) String() string         { return AsString(n) }
 func (n *ShowColumns) String() string                    { return AsString(n) }
 func (n *ShowConstraints) String() string                { return AsString(n) }
 func (n *ShowCreate) String() string                     { return AsString(n) }
