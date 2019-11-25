@@ -29,119 +29,120 @@
 import sys
 import itertools
 import re
-import os
-import datetime, time
+import datetime
+import time
+from gitdb import exc
 import subprocess
 from git import Repo
 from optparse import OptionParser
 from git.repo.fun import name_to_object
 from git.util import Stats
+import os.path
 
 ### Global behavior constants ###
 
 # minimum sha length to disambiguate
 shamin = 9
 
-# FIXME(knz): This probably needs to use the .mailmap.
-author_aliases = {
-    'changangela': "Angela Chang",
-    'dianasaur323': "Diana Hsieh",
-    'kena': "Raphael 'kena' Poss",
-    'vivekmenezes': "Vivek Menezes",
-    'Darin':"Darin Peshev",
-    'RaduBerinde': "Radu Berinde",
-    'Andy Kimball': "Andrew Kimball",
-    'marc': "Marc Berhault",
-    'Lauren': "Lauren Hirata",
-    'lhirata' : "Lauren Hirata",
-    'Emmanuel': "Emmanuel Sales",
-    'MBerhault': "Marc Berhault",
-    'Nate': "Nathaniel Stewart",
-    'a6802739': "Song Hao",
-    'Abhemailk abhi.madan01@gmail.com': "Abhishek Madan",
-    'rytaft': "Rebecca Taft",
-    'songhao': "Song Hao",
-    'solongordon': "Solon Gordon",
-    'tim-o': "Tim O'Brien",
-    'Tyler314': "Tyler Roberts",
-    'Amruta': "Amruta Ranade",
-    'yuzefovich': "Yahor Yuzefovich",
-    'madhavsuresh': "Madhav Suresh",
-    'Richard Loveland': "Rich Loveland",
-}
+# Basic mailmap functionality using the AUTHORS file.
+mmre = re.compile(r'^(?P<name>.*?)\s+<(?P<addr>[^>]*)>(?P<aliases>(?:[^<]*<[^>]*>)*)$')
+mmare = re.compile('(?P<alias>[^<]*)<(?P<addr>[^>]*)>')
+crdb_folk = set()
+class P:
+    def __init__(self, name, addr):
+        self.name = name
+        self.email = addr
+        self.aliases = [(name, addr)]
+        self.crdb = '@cockroachlabs.com' in addr
+        if self.crdb:
+            crdb_folk.add(self)
+    def __repr__(self):
+        return "%s <%s>" % (self.name, self.email)
+    def __lt__(self, other):
+        return self.name < other.name or (self.name == other.name and self.email < other.email)
+mmap_bycanon = {}
+mmap_byaddr = {}
+mmap_byname = {}
+def define_person(name, addr):
+        p = P(name, addr)
+        canon = (name, addr)
+        if canon in mmap_bycanon:
+            print('warning: duplicate person %r, ignoring', canon)
+            return None
+        mmap_bycanon[canon] = p
+        byaddr = mmap_byaddr.get(addr, [])
+        byaddr.append(p)
+        mmap_byaddr[addr] = byaddr
+        byname = mmap_byname.get(name, [])
+        byname.append(p)
+        mmap_byname[name] = byname
+        return p
 
-# FIXME(knz): This too.
-crdb_folk = set([
-    "Abhishek Madan",
-    "Alex Robinson",
-    "Alfonso Subiotto Marqués",
-    "Amruta Ranade",
-    "Andrei Matei",
-    "Andrew Couch",
-    "Andrew Kimball",
-    "Andrew Werner",
-    "Andrew Kryczka",
-    "Andy Woods",
-    "Aditya Maru",
-    "Angela Chang",
-    "Arjun Narayan",
-    "Ben Darnell",
-    "Bilal Akhtar",
-    "Bob Vawter",
-    "Bram Gruneir",
-    "Celia La",
-    "Daniel Harrison",
-    "David Taylor",
-    "Darin Peshev",
-    "Diana Hsieh",
-    "Emmanuel Sales",
-    "Erik Trinh",
-    "George Utsin",
-    "Jesse Seldess",
-    "Jessica Edwards",
-    "Joseph Lowinske",
-    "Joey Pereira",
-    "Jordan Lewis",
-    "Justin Jaffray",
-    "Jeffrey Xiao",
-    "Ken Liu",
-    "Kendra Curtis",
-    "Kuan Luo",
-    "Lauren Hirata",
-    "Lucy Zhang",
-    "Madhav Suresh",
-    "Marc Berhault",
-    "Masha Schneider",
-    "Matt Jibson",
-    "Matt Tracy",
-    "Nathan VanBenschoten",
-    "Nathaniel Stewart",
-    "Nikhil Benesch",
-    "Paul Bardea",
-    "Pete Vilter",
-    "Peter Mattis",
-    "Radu Berinde",
-    "Rafi Shamim",
-    "Raphael 'kena' Poss",
-    "Rebecca Taft",
-    "Rich Loveland",
-    "Richard Wu",
-    "Ridwan Sharif",
-    "Rohan Yadav",
-    "Roland Crosby",
-    "Sean Loiselle",
-    "Solon Gordon",
-    "Spencer Kimball",
-    "Tamir Duberstein",
-    "Tim O'Brien",
-    "Tobias Schottdorf",
-    "Tyler Roberts",
-    "Will Cross",
-    "Victor Chen",
-    "Vivek Menezes",
-    "Yahor Yuzefovich",
-])
+if not os.path.exists('AUTHORS'):
+    print('warning: AUTHORS missing in current directory.', file=sys.stderr)
+    print('Maybe use "cd" to navigate to the working tree root.', file=sys.stderr)
+else:
+    with open('AUTHORS', 'r') as f:
+        for line in f.readlines():
+            if line.strip().startswith('#'):
+                continue
+            m = mmre.match(line)
+            if m is None:
+                continue
+            p = define_person(m.group('name'), m.group('addr'))
+            if p is None:
+                continue
+            p.crdb = '@cockroachlabs.com' in line
+            if p.crdb:
+                crdb_folk.add(p)
+            aliases = m.group('aliases')
+            aliases = mmare.findall(aliases)
+            for alias, addr in aliases:
+                name = alias.strip()
+                byaddr = mmap_byaddr.get(addr, [])
+                if p not in byaddr:
+                    byaddr.append(p)
+                mmap_byaddr[addr] = byaddr
+                if name == '':
+                    name = p.name
+                canon = (name, addr)
+                if canon in mmap_bycanon:
+                    print('warning: duplicate alias %r, ignoring', canon)
+                    continue
+                mmap_bycanon[canon] = p
+                p.aliases.append(canon)
+                byname = mmap_byname.get(name, [])
+                if p not in byname:
+                    byname.append(p)
+                mmap_byname[name] = byname
 
+# lookup_person retrieves the main identity of a person given one of their
+# names or email aliases in the mailmap.
+def lookup_person(name, email):
+    key = (name, email)
+    if key in mmap_bycanon:
+        # lucky case.
+        return mmap_bycanon[key]
+    # Name+email didn't work.
+    # Let's see email next.
+    if email in mmap_byaddr:
+        candidates = mmap_byaddr[email]
+        if len(candidates) > 1:
+            print('warning: no direct name match for', (name, email),
+                  'and addr', email, 'is ambiguous,',
+                  'keeping as-is', file=sys.stderr)
+            return define_person(name, email)
+        return candidates[0]
+    # Email didn't work either. That's not great.
+    if name in mmap_byname:
+        candidates = mmap_byname[name]
+        if len(candidates) > 1:
+            print('warning: no direct name match for', (name, email),
+                  'and name', name, 'is ambiguous,',
+                  'keeping as-is', file=sys.stderr)
+            return define_person(name, email)
+        return candidates[0]
+    return define_person(name, email)
 
 # Section titles for release notes.
 relnotetitles = {
@@ -256,34 +257,38 @@ hideheader = options.hide_header
 repo = Repo('.')
 heads = repo.heads
 
+
 def reformat_note(note_lines):
     sep = '\n'
     if options.one_line:
         sep = ' '
     return sep.join(note_lines).strip()
 
+
 # Check that pull_ref_prefix is valid
 testrefname = "%s/1" % pull_ref_prefix
+
 try:
     repo.commit(testrefname)
-except:
+except exc.ODBError:
     print("Unable to find pull request refs at %s." % pull_ref_prefix, file=sys.stderr)
     print("Is your repo set up to fetch them?  Try adding", file=sys.stderr)
     print("  fetch = +refs/pull/*/head:%s/*" % pull_ref_prefix, file=sys.stderr)
     print("to the GitHub remote section of .git/config.", file=sys.stderr)
     exit(1)
 
+
 def find_commits(from_commit_ref, until_commit_ref):
     try:
         firstCommit = repo.commit(from_commit_ref)
-    except:
+    except exc.ODBError:
         print("Unable to find the first commit of the range.", file=sys.stderr)
         print("No ref named %s." % from_commit_ref, file=sys.stderr)
         exit(1)
 
     try:
         commit = repo.commit(until_commit_ref)
-    except:
+    except exc.ODBError:
         print("Unable to find the last commit of the range.", file=sys.stderr)
         print("No ref named %s." % until_commit_ref, file=sys.stderr)
         exit(1)
@@ -347,6 +352,7 @@ def check_reachability(firstCommit, commit):
 
 firstCommit, commit = check_reachability(firstCommit, commit)
 options.from_commit = firstCommit.hexsha
+
 
 def extract_release_notes(commit):
     msglines = commit.message.split('\n')
@@ -424,6 +430,7 @@ def extract_release_notes(commit):
 
     return foundnote, notes
 
+
 spinner = itertools.cycle(['/', '-', '\\', '|'])
 counter = 0
 def spin():
@@ -442,6 +449,7 @@ def get_direct_history(firstCommit, lastCommit):
     for c in repo.iter_commits(firstCommit.hexsha + '..' + lastCommit.hexsha, first_parent = True):
         history.append(c)
     return history
+
 
 excluded_notes = set()
 if excludedFirst is not None:
@@ -481,17 +489,19 @@ print("Collecting release notes from\n%s\nuntil\n%s" % (identify_commit(firstCom
 release_notes = {}
 missing_release_notes = []
 
+
 def collect_authors(commit):
     authors = set()
-    author = author_aliases.get(commit.author.name, commit.author.name)
-    if author != 'GitHub':
+    author = lookup_person(commit.author.name, commit.author.email)
+    if author.name != 'GitHub':
         authors.add(author)
-    author = author_aliases.get(commit.committer.name, commit.committer.name)
-    if author != 'GitHub':
+    author = lookup_person(commit.committer.name, commit.committer.email)
+    if author.name != 'GitHub':
         authors.add(author)
     for m in coauthor.finditer(commit.message):
         aname = m.group('name').strip()
-        author = author_aliases.get(aname, aname)
+        amail = m.group('email').strip()
+        author = lookup_person(aname, amail)
         authors.add(author)
     return authors
 
@@ -515,12 +525,14 @@ def process_release_notes(pr, title, commit):
         missing_item = makeitem(pr, title, commit.hexsha[:shamin], authors)
     return missing_item, authors
 
+
 def makeitem(pr, prtitle, sha, authors):
-    return {'authors': ', '.join(sorted(authors)),
+    return {'authors': authors,
             'sha': sha,
             'pr': pr,
             'title': prtitle,
             'note': None}
+
 
 def completenote(commit, cat, notemsg, authors, pr, title):
     item = makeitem(pr, title, commit.hexsha[:shamin], authors)
@@ -531,9 +543,11 @@ def completenote(commit, cat, notemsg, authors, pr, title):
     catnotes.append(item)
     release_notes[cat] = catnotes
 
+
 per_group_history = {}
 individual_authors = set()
 allprs = set()
+
 
 # This function groups and counts all the commits that belong to a particular PR.
 # Some description is in order regarding the logic here: it should visit all
@@ -617,7 +631,6 @@ def analyze_pr(merge, pr):
 
     merge_base = merge_base_result[0]
 
-    commits_to_analyze = [tip]
     seen_commits = set()
 
     missing_items = []
@@ -650,6 +663,7 @@ def analyze_pr(merge, pr):
 
     collect_item(pr, note, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
 
+
 def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     individual_authors.update(authors)
     if len(authors) == 0:
@@ -663,9 +677,12 @@ def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
                  'date': datetime.date.fromtimestamp(prts).isoformat(),
                  })
 
-    history = per_group_history.get(item['authors'], [])
-    history.append(item)
-    per_group_history[item['authors']] = history
+    al = item['authors']
+    k = str(sorted(al))
+    history = per_group_history.get(k, (al, []))
+    history[1].append(item)
+    per_group_history[k] = history
+
 
 def analyze_standalone_commit(commit):
     # Some random out-of-branch commit. Let's not forget them.
@@ -715,15 +732,12 @@ ext_contributors = individual_authors - crdb_folk
 firsttime_contributors = []
 for a in individual_authors:
     # Find all aliases known for this person
-    aliases = [a]
-    for alias, name in author_aliases.items():
-        if name == a:
-            aliases.append(alias)
+    aliases = a.aliases
     # Collect the history for every alias
     hist = b''
     for al in aliases:
         spin()
-        c = subprocess.run(["git", "log", "--author=%s" % al, options.from_commit, '-n', '1'], stdout=subprocess.PIPE, check=True)
+        c = subprocess.run(["git", "log", "--author=%s <%s>" % al, options.from_commit, '-n', '1'], stdout=subprocess.PIPE, check=True)
         hist += c.stdout
     if len(hist) == 0:
         # No commit from that author older than the first commit
@@ -790,6 +804,8 @@ $ docker pull cockroachdb/cockroach""" + ("-unstable:" if "-" in current_version
 
 seenshas = set()
 seenprs = set()
+
+
 def renderlinks(item):
     ret = '[%(pr)s][%(pr)s]' % item
     seenprs.add(item['pr'])
@@ -797,6 +813,7 @@ def renderlinks(item):
         ret += ' [%(sha)s][%(sha)s]' % item
         seenshas.add(item['sha'])
     return ret
+
 
 for sec in relnote_sec_order:
     r = release_notes.get(sec, None)
@@ -834,7 +851,7 @@ if len(missing_release_notes) > 0:
     print("#### Changes without release note annotation")
     print()
     for item in missing_release_notes:
-        authors = item['authors']
+        authors = ', '.join(str(x) for x in sorted(item['authors']))
         print("- [%(pr)s][%(pr)s] [%(sha)s][%(sha)s] %(title)s" % item, "(%s)" % authors)
         seenshas.add(item['sha'])
         seenprs.add(item['pr'])
@@ -858,16 +875,16 @@ ext_contributors = individual_authors - crdb_folk
 
 notified_authors = sorted(set(ext_contributors) | set(firsttime_contributors))
 if len(notified_authors) > 0:
-        print("We would like to thank the following contributors from the CockroachDB community:")
+    print("We would like to thank the following contributors from the CockroachDB community:")
+    print()
+    for person in notified_authors:
+        print("-", person.name, end='')
+        if person in firsttime_contributors:
+            annot = ""
+            if person.crdb:
+                annot = ", CockroachDB team member"
+            print(" (first-time contributor%s)" % annot, end='')
         print()
-        for person in notified_authors:
-            print("-", person, end='')
-            if person in firsttime_contributors:
-                annot = ""
-                if person in crdb_folk:
-                    annot = ", CockroachDB team member"
-                print(" (first-time contributor%s)" % annot, end='')
-            print()
 print()
 
 ## Print the per-author contribution list.
@@ -880,9 +897,9 @@ if not hidepercontributor:
         fmt = "  - %(date)s [%(pr)-6s][%(pr)-6s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
 
     for group in allgroups:
-        items = per_group_history[group]
-        print("- %s:" % group)
+        al, items = per_group_history[group]
         items.sort(key=lambda x:x[sortkey],reverse=not revsort)
+        print("- %s:" % ', '.join(a.name for a in sorted(al)))
         for item in items:
             print(fmt % item, end='')
             if not hideshas:

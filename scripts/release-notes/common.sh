@@ -23,6 +23,7 @@ function test_init() {
 function init_repo() {
     git init
     touch foo; git add foo; git commit "${flags[@]}" -m "initial"; git tag initial
+	git tag v000-base
 }
 
 # Perform some arbitrary change.
