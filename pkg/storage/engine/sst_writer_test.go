@@ -64,9 +64,9 @@ func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
 	return sst
 }
 
-func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
+func makePebbleSST(t testing.TB, kvs []engine.MVCCKeyValue, ingestion bool) []byte {
 	f := &engine.MemFile{}
-	w := engine.MakeSSTWriter(f)
+	w := engine.MakeSSTWriter(f, ingestion)
 	defer w.Close()
 
 	for i := range kvs {
@@ -104,7 +104,7 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 
 	kvs := makeIntTableKVs(numKeys, valueSize, revisions)
 	sstRocks := makeRocksSST(t, kvs)
-	sstPebble := makePebbleSST(t, kvs)
+	sstPebble := makePebbleSST(t, kvs, false)
 
 	itRocks, err := engine.NewMemSSTIterator(sstRocks, false)
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func BenchmarkWriteSSTable(b *testing.B) {
 	b.ResetTimer()
 	b.StartTimer()
 	for i := 0; i < ssts; i++ {
-		_ = makePebbleSST(b, kvs)
+		_ = makePebbleSST(b, kvs, true)
 	}
 	b.StopTimer()
 }

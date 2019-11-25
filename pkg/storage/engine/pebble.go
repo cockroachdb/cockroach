@@ -977,7 +977,7 @@ func pebbleExportToSst(
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
 	sstFile := &MemFile{}
-	sstWriter := MakeSSTWriter(sstFile)
+	sstWriter := MakeSSTWriter(sstFile, false)
 	defer sstWriter.Close()
 
 	var rows RowCounter
