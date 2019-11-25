@@ -171,7 +171,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
 		sstFile := &engine.MemFile{}
-		sst := engine.MakeSSTWriter(sstFile)
+		sst := engine.MakeBackupSSTWriter(sstFile)
 		defer sst.Close()
 		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 		value := roachpb.MakeValueFromString("bar")

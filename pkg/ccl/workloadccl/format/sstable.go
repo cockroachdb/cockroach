@@ -76,7 +76,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 	g.GoCtx(func(ctx context.Context) error {
 		sstTS := hlc.Timestamp{WallTime: ts.UnixNano()}
 		sstFile := &engine.MemFile{}
-		sw := engine.MakeSSTWriter(sstFile)
+		sw := engine.MakeIngestionSSTWriter(sstFile)
 		defer sw.Close()
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {

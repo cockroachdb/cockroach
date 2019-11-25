@@ -33,13 +33,26 @@ type writeCloseSyncer interface {
 	Sync() error
 }
 
-// MakeSSTWriter creates a new SSTWriter.
-func MakeSSTWriter(f writeCloseSyncer) SSTWriter {
+// MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs. These
+// SSTs have bloom filters disabled and format set to LevelDB.
+func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
 	opts.TableFormat = sstable.TableFormatLevelDB
-	opts.MergerName = "nullptr"
-	// Disable bloom filters to produce SSTs matching those from RocksDB.
+	// Disable bloom filters to produce SSTs matching those from
+	// RocksDBSstFileWriter.
 	opts.FilterPolicy = nil
+	opts.MergerName = "nullptr"
+	sst := sstable.NewWriter(f, opts)
+	return SSTWriter{fw: sst, f: f}
+}
+
+// MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
+// These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
+// format set to RocksDBv2.
+func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
+	opts := DefaultPebbleOptions().MakeWriterOptions(0)
+	opts.TableFormat = sstable.TableFormatRocksDBv2
+	opts.MergerName = "nullptr"
 	sst := sstable.NewWriter(f, opts)
 	return SSTWriter{fw: sst, f: f}
 }

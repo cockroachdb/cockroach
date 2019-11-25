@@ -350,7 +350,7 @@ func writeSST(
 	log.Info(ctx, "writesst ", filename)
 
 	sstFile := &engine.MemFile{}
-	sst := engine.MakeSSTWriter(sstFile)
+	sst := engine.MakeBackupSSTWriter(sstFile)
 	defer sst.Close()
 	for _, kv := range kvs {
 		kv.Key.Timestamp = ts

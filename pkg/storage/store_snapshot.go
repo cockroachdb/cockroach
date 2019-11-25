@@ -148,7 +148,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create new sst file")
 	}
-	newSST := engine.MakeSSTWriter(newSSTFile)
+	newSST := engine.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
 		msstw.currSST.Close()

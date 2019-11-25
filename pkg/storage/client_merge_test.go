@@ -2891,7 +2891,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// Range-id local range of subsumed replicas.
 		for _, rangeID := range []roachpb.RangeID{roachpb.RangeID(3), roachpb.RangeID(4)} {
 			sstFile := &engine.MemFile{}
-			sst := engine.MakeSSTWriter(sstFile)
+			sst := engine.MakeIngestionSSTWriter(sstFile)
 			defer sst.Close()
 			r := rditer.MakeRangeIDLocalKeyRange(rangeID, false)
 			if err := sst.ClearRange(r.Start, r.End); err != nil {
@@ -2911,7 +2911,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// User key range of subsumed replicas.
 		sstFile := &engine.MemFile{}
-		sst := engine.MakeSSTWriter(sstFile)
+		sst := engine.MakeIngestionSSTWriter(sstFile)
 		defer sst.Close()
 		desc := roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey("d"),
