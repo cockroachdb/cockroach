@@ -55,7 +55,6 @@ SELECT y FROM a WHERE s = 'foo' AND x + y = 10
 ----
 project
  ├── columns: y:2(int)
- ├── lax-key: (2)
  ├── prune: (2)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string!null)
