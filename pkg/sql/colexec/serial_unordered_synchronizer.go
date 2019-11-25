@@ -64,7 +64,7 @@ func (s *SerialUnorderedSynchronizer) Init() {
 func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
-			return zeroBatch
+			return coldata.ZeroBatch
 		}
 		b := s.inputs[s.curSerialInputIdx].Next(ctx)
 		if b.Length() == 0 {

@@ -22,12 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-var zeroBatch = coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */)
-
-func init() {
-	zeroBatch.SetLength(0)
-}
-
 // Allocator is a memory management tool for vectorized components. It provides
 // new batches (and appends to existing ones) within a fixed memory budget. If
 // the budget is exceeded, it will panic with an error.
