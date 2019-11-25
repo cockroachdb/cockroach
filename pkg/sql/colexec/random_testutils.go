@@ -306,7 +306,7 @@ func (o *RandomDataOp) Init() {}
 func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
-		b := zeroBatch
+		b := coldata.ZeroBatch
 		if o.batchAccumulator != nil {
 			o.batchAccumulator(b)
 		}

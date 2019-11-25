@@ -91,6 +91,13 @@ func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
 	return b
 }
 
+// ZeroBatch is a schema-less Batch of length 0.
+var ZeroBatch = NewMemBatchWithSize(nil /* types */, 0 /* size */)
+
+func init() {
+	ZeroBatch.SetLength(0)
+}
+
 // MemBatch is an in-memory implementation of Batch.
 type MemBatch struct {
 	// length of batch or sel in tuples

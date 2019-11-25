@@ -822,7 +822,7 @@ func NewColOperator(
 		result.Op = NewOffsetOp(result.Op, post.Offset)
 	}
 	if post.Limit != 0 {
-		result.Op = NewLimitOp(NewAllocator(ctx, streamingMemAccount), result.Op, post.Limit)
+		result.Op = NewLimitOp(result.Op, post.Limit)
 	}
 	return result, err
 }
