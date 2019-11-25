@@ -1484,6 +1484,18 @@ func (t *T) upgradeType() error {
 		// Precision should always be set to 0 going forward.
 		t.InternalType.Precision = 0
 
+	case TimestampFamily, TimestampTZFamily, TimeFamily, TimeTZFamily:
+		// Some bad/experimental versions of master had precision stored as `-1`.
+		// This represented a default - so upgrade this to 0 with TimePrecisionIsSet = false.
+		if t.InternalType.Precision == -1 {
+			t.InternalType.Precision = 0
+			t.InternalType.TimePrecisionIsSet = false
+		}
+		// Going forwards after 19.2, we want `TimePrecisionIsSet` to be explicitly set
+		// if Precision is > 0.
+		if t.InternalType.Precision > 0 {
+			t.InternalType.TimePrecisionIsSet = true
+		}
 	case StringFamily, CollatedStringFamily:
 		// Map string-related visible types to corresponding Oid values.
 		switch t.InternalType.VisibleType {
