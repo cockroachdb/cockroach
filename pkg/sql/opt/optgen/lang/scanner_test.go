@@ -23,7 +23,7 @@ import (
 )
 
 func TestScanner(t *testing.T) {
-	datadriven.RunTest(t, "testdata/scanner", func(d *datadriven.TestData) string {
+	datadriven.RunTest(t, "testdata/scanner", func(t *testing.T, d *datadriven.TestData) string {
 		// Only scan command supported.
 		if d.Cmd != "scan" {
 			t.FailNow()

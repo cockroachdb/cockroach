@@ -245,7 +245,7 @@ func TestDataKeyManager(t *testing.T) {
 	}
 
 	datadriven.RunTest(t, "testdata/data_key_manager",
-		func(d *datadriven.TestData) string {
+		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
 				data := strings.Split(d.Input, "\n")
