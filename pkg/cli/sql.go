@@ -257,6 +257,12 @@ func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliSt
 	return nextState
 }
 
+func (c *cliState) internalServerError(nextState cliStateEnum, err error) cliStateEnum {
+	fmt.Fprintf(stderr, "internal server error: %v\n", err)
+	c.exitErr = err
+	return nextState
+}
+
 var options = map[string]struct {
 	description               string
 	isBoolean                 bool
@@ -489,25 +495,25 @@ func (c *cliState) handleDemoNode(cmd []string, nextState, errState cliStateEnum
 	switch cmd[0] {
 	case "shutdown":
 		if err := demoCtx.transientCluster.DrainNode(roachpb.NodeID(nodeID)); err != nil {
-			return c.invalidSyntax(errState, "%s", err.Error())
+			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been shutdown\n", nodeID)
 		return nextState
 	case "restart":
 		if err := demoCtx.transientCluster.RestartNode(roachpb.NodeID(nodeID)); err != nil {
-			return c.invalidSyntax(errState, "%s", err.Error())
+			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been restarted\n", nodeID)
 		return nextState
 	case "recommission":
 		if err := demoCtx.transientCluster.CallDecommission(roachpb.NodeID(nodeID), false /* decommissioning */); err != nil {
-			return c.invalidSyntax(errState, "%s", err.Error())
+			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been recommissioned\n", nodeID)
 		return nextState
 	case "decommission":
 		if err := demoCtx.transientCluster.CallDecommission(roachpb.NodeID(nodeID), true /* decommissioning */); err != nil {
-			return c.invalidSyntax(errState, "%s", err.Error())
+			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been decommissioned\n", nodeID)
 		return nextState

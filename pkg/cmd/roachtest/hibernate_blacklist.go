@@ -23,8 +23,8 @@ var hibernateBlacklists = blacklistsForVersion{
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
 var hibernateBlackList20_1 = blacklist{
-	"org.hibernate.id.QuotedIdentifierTest.testDirectIdPropertyAccess":                                                                                                               "26925",
-	"org.hibernate.id.hhh12973.PostgreSQLSequenceGeneratorWithSerialTest.test":                                                                                                       "unknown",
+	"org.hibernate.id.QuotedIdentifierTest.testDirectIdPropertyAccess":                                                                                                               "42662",
+	"org.hibernate.id.hhh12973.PostgreSQLSequenceGeneratorWithSerialTest.test":                                                                                                       "42662",
 	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                                                                                                         "31708",
 	"org.hibernate.jpa.test.criteria.basic.AggregationResultTest.testSumOfBigDecimals":                                                                                               "5807",
 	"org.hibernate.jpa.test.criteria.basic.AggregationResultTest.testSumOfBigIntegers":                                                                                               "5807",
@@ -42,8 +42,8 @@ var hibernateBlackList20_1 = blacklist{
 	"org.hibernate.jpa.test.lock.LockTest.testQuerySingleResultPessimisticWriteLockTimeoutException":                                                                                 "40205",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockSkipLocked":                                                                                               "40476",
 	"org.hibernate.jpa.test.lock.NativeSQLQueryTimeoutTest.test":                                                                                                                     "41335",
-	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementOverall":                                                                                             "40474",
-	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementSpecific":                                                                                            "40474",
+	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementOverall":                                                                                             "40476",
+	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementSpecific":                                                                                            "40476",
 	"org.hibernate.jpa.test.lock.StatementIsClosedAfterALockExceptionTest.testStatementIsClosed":                                                                                     "40476",
 	"org.hibernate.test.annotations.entity.BasicHibernateAnnotationsTest.testSerialized":                                                                                             "26725",
 	"org.hibernate.test.annotations.filter.subclass.joined.JoinedSubClassTest.testClub":                                                                                              "5807",
