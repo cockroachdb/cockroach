@@ -6,7 +6,7 @@
 
 #### Changes without release note annotation
 
-- [#2][#2] [8156afc96][8156afc96] PR title in need of release note (test5)
+- [#2][#2] [8156afc96][8156afc96] PR title in need of release note (test5 <test5@example.com>)
 
 ### Doc updates
 

@@ -1,0 +1,45 @@
+### Miscellaneous
+
+#### Changes without release note annotation
+
+- [#2][#2] [fc02f2ab9][fc02f2ab9] PR 2 title (Foo Foo <foo@example.com>, test8 <test8@example.com>)
+- [#1][#1] [f76e64ed3][f76e64ed3] PR 1 title (Foo Foo <foo@example.com>, test8 <test8@example.com>)
+- [#unknown][#unknown] [a1dec5651][a1dec5651] update AUTHORS (test8 <test8@example.com>)
+
+### Doc updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 4 merged PRs by 2 authors.
+We would like to thank the following contributors from the CockroachDB community:
+
+- Foo Foo (first-time contributor)
+- test8
+
+### PRs merged by contributors
+
+- Foo Foo, test8:
+  - 2018-04-22 [#2    ][#2    ] [20f736f8b][20f736f8b] (+   0 -   0 ~   0/ 0) PR 2 title
+  - 2018-04-22 [#1    ][#1    ] [931a97757][931a97757] (+   0 -   0 ~   0/ 0) PR 1 title
+
+- test8:
+  - 2018-04-22 [#unknown][#unknown] [a1dec5651][a1dec5651] (+   1 -   0 ~   1/ 1) update AUTHORS
+  - 2018-04-22 [#200  ][#200  ] [801acad03][801acad03] (+   0 -   0 ~   0/ 0) PR 2 title alternate format
+  - 2018-04-22 [#100  ][#100  ] [ac02f9cf6][ac02f9cf6] (+   0 -   0 ~   0/ 0) PR 1 title alternate format
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#2]: https://github.com/cockroachdb/cockroach/pull/2
+[#200]: https://github.com/cockroachdb/cockroach/pull/200
+[#unknown]: https://github.com/cockroachdb/cockroach/pull/unknown
+[20f736f8b]: https://github.com/cockroachdb/cockroach/commit/20f736f8b
+[801acad03]: https://github.com/cockroachdb/cockroach/commit/801acad03
+[931a97757]: https://github.com/cockroachdb/cockroach/commit/931a97757
+[a1dec5651]: https://github.com/cockroachdb/cockroach/commit/a1dec5651
+[ac02f9cf6]: https://github.com/cockroachdb/cockroach/commit/ac02f9cf6
+[f76e64ed3]: https://github.com/cockroachdb/cockroach/commit/f76e64ed3
+[fc02f2ab9]: https://github.com/cockroachdb/cockroach/commit/fc02f2ab9
+
