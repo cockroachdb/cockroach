@@ -105,7 +105,7 @@ func goToCSlice(b []byte) C.DBSlice {
 	}
 	return C.DBSlice{
 		data: (*C.char)(unsafe.Pointer(&b[0])),
-		len:  C.int(len(b)),
+		len:  C.size_t(len(b)),
 	}
 }
 
@@ -117,11 +117,20 @@ func goToCKey(key engine.MVCCKey) C.DBKey {
 	}
 }
 
+func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
+	if s.data == nil {
+		return nil
+	}
+	// Interpret the C pointer as a pointer to a Go array, then slice.
+	return (*[engine.MaxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+}
+
 func cStringToGoString(s C.DBString) string {
 	if s.data == nil {
 		return ""
 	}
-	result := C.GoStringN(s.data, s.len)
+	// Reinterpret the string as a slice, then cast to string which does a copy.
+	result := string(cSliceToUnsafeGoBytes(C.DBSlice{s.data, s.len}))
 	C.free(unsafe.Pointer(s.data))
 	return result
 }
