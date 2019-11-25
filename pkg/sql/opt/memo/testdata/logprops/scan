@@ -151,3 +151,41 @@ values
  ├── key: ()
  ├── fd: ()-->(1-4)
  └── prune: (1-4)
+
+
+# Regression test for #42731: we were incorrectly setting cardinality [0 - 1].
+exec-ddl
+CREATE TABLE t42731 (id INT PRIMARY KEY, unique_value INT, notnull_value INT NOT NULL, UNIQUE (unique_value))
+----
+TABLE t42731
+ ├── id int not null
+ ├── unique_value int
+ ├── notnull_value int not null
+ ├── INDEX primary
+ │    └── id int not null
+ └── INDEX secondary
+      ├── unique_value int
+      └── id int not null (storing)
+
+norm
+SELECT * FROM t42731 WHERE unique_value IS NULL AND notnull_value = 2000
+----
+select
+ ├── columns: id:1(int!null) unique_value:2(int) notnull_value:3(int!null)
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (2)~~>(1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1) (+2,+1)
+ ├── scan t42731
+ │    ├── columns: id:1(int!null) unique_value:2(int) notnull_value:3(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2)~~>(1,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1) (+2,+1)
+ └── filters [type=bool, outer=(2,3), constraints=(/2: [/NULL - /NULL]; /3: [/2000 - /2000]; tight), fd=()-->(2,3)]
+      ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
+      │    ├── variable: unique_value [type=int, outer=(2)]
+      │    └── null [type=unknown]
+      └── eq [type=bool, outer=(3), constraints=(/3: [/2000 - /2000]; tight)]
+           ├── variable: notnull_value [type=int, outer=(3)]
+           └── const: 2000 [type=int]
