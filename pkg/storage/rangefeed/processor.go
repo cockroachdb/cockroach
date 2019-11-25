@@ -391,7 +391,7 @@ func (p *Processor) Len() int {
 }
 
 // Filter returns a new operation filter based on the registrations attached to
-// the processor.
+// the processor. Returns nil if the processor has been stopped already.
 func (p *Processor) Filter() *Filter {
 	if p == nil {
 		return nil
