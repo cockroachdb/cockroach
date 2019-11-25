@@ -152,6 +152,11 @@ func (s SearchPath) GetTemporarySchemaName() string {
 	return s.tempSchemaName
 }
 
+// Returns true if a temporary schema has been created by the session.
+func (s SearchPath) HasCreatedTemporarySchema(expectedTempSchemaName string) bool {
+	return s.GetTemporarySchemaName() != expectedTempSchemaName
+}
+
 // Equals returns true if two SearchPaths are the same.
 func (s SearchPath) Equals(other *SearchPath) bool {
 	if s.containsPgCatalog != other.containsPgCatalog {

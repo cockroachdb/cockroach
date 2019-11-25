@@ -112,7 +112,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 			return err
 		}
 
-		droppedViews, err := params.p.dropTableImpl(params, droppedDesc)
+		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc)
 		if err != nil {
 			return err
 		}
@@ -230,10 +230,8 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
 func (p *planner) dropTableImpl(
-	params runParams, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
 ) ([]string, error) {
-	ctx := params.ctx
-
 	var droppedViews []string
 
 	// Remove foreign key back references from tables that this table has foreign
@@ -272,7 +270,7 @@ func (p *planner) dropTableImpl(
 
 	// Remove sequence dependencies.
 	for i := range tableDesc.Columns {
-		if err := removeSequenceDependencies(tableDesc, &tableDesc.Columns[i], params); err != nil {
+		if err := removeSequenceDependencies(ctx, p, tableDesc, &tableDesc.Columns[i]); err != nil {
 			return droppedViews, err
 		}
 	}
@@ -362,10 +360,16 @@ func (p *planner) initiateDropTable(
 
 	tableDesc.State = sqlbase.TableDescriptor_DROP
 	if drainName {
+		parentSchemaID := tableDesc.GetParentSchemaID()
+		if parentSchemaID == sqlbase.InvalidID {
+			parentSchemaID = keys.PublicSchemaID
+		}
+
 		// Queue up name for draining.
 		nameDetails := sqlbase.TableDescriptor_NameInfo{
-			ParentID: tableDesc.ParentID,
-			Name:     tableDesc.Name}
+			ParentID:       tableDesc.ParentID,
+			ParentSchemaID: parentSchemaID,
+			Name:           tableDesc.Name}
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
 	}
 
@@ -595,4 +599,19 @@ func (p *planner) removeTableComment(
 	}
 
 	return err
+}
+
+// Drops a descriptor based its type. Returns the names of any additional views
+// that were also dropped due to `cascade` behavior.
+func (p *planner) dropDesc(
+	ctx context.Context, desc *MutableTableDescriptor, behavior tree.DropBehavior,
+) ([]string, error) {
+	if desc.IsView() {
+		// TODO(knz): dependent dropped views should be qualified here.
+		return p.dropViewImpl(ctx, desc, behavior)
+	} else if desc.IsSequence() {
+		return nil, p.dropSequenceImpl(ctx, desc, behavior)
+	}
+	// TODO(knz): dependent dropped table names should be qualified here.
+	return p.dropTableImpl(ctx, desc)
 }

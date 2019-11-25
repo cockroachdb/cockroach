@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
 )
 
@@ -740,8 +741,58 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 	ex.close(ctx, normalClose)
 }
 
+// Removes all temporary objects created by the session.
+func (ex *connExecutor) cleanupTempObjects(ctx context.Context) error {
+	var queuedSchemaChanges *schemaChangerCollection
+	cleanupErr := ex.planner.ExtendedEvalContext().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		ex.resetPlanner(
+			ctx, &ex.planner, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, 0, /* numAnnotations */
+		)
+		queuedSchemaChanges, err = cleanupSessionTempObjects(ctx, &ex.planner, ex.sessionID)
+		return err
+	})
+	// schema changes run after the transaction that queued them has committed, so
+	// they must be run in a new transaction.
+	err := ex.planner.ExtendedEvalContext().DB.Txn(ctx,
+		func(ctx context.Context, txn *client.Txn) error {
+			ieFactory := func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
+				ie := NewSessionBoundInternalExecutor(
+					ctx,
+					sd,
+					ex.server,
+					ex.memMetrics,
+					ex.server.cfg.Settings,
+				)
+				return ie
+			}
+			err := queuedSchemaChanges.execSchemaChanges(ctx, ex.server.cfg, &ex.sessionTracing, ieFactory)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+	if cleanupErr != nil {
+		if err != nil {
+			log.Errorf(ctx,
+				"error running schema changes queued up during temp object deletion %v",
+				err)
+		}
+		return cleanupErr
+	}
+	return err
+}
+
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
+
+	// Don't inherit context cancellation. This cleanup happens after the
+	// connection is closed.
+	cleanupCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	err := ex.cleanupTempObjects(cleanupCtx)
+	if err != nil {
+		log.Errorf(ctx, "error deleting temporary objects %v", err)
+	}
 
 	ev := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
