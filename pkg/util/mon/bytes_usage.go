@@ -632,7 +632,6 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	if mm.mu.curAllocated < sz {
-		sz = mm.mu.curAllocated
 		log.ReportOrPanic(ctx, &mm.settings.SV,
 			"%s: no bytes to release, current %d, free %d",
 			mm.name, mm.mu.curAllocated, sz)
@@ -647,7 +646,7 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 		// We avoid VEventf here because we want to avoid computing the
 		// trace string if there is nothing to log.
 		log.Infof(ctx, "%s: now at %d bytes (-%d) - %s",
-			mm.name, mm.mu.curAllocated, sz, util.GetSmallTrace(3))
+			mm.name, mm.mu.curAllocated, sz, util.GetSmallTrace(5))
 	}
 }
 
