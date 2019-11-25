@@ -79,8 +79,20 @@ SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 sql.defaults.distsql
 off
 
-query TTTT colnames
+query TTTBT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+----
+variable              value  setting_type  public  description
+cluster.organization  ·      s             true    organization name
+
+query TTTT colnames
+SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+----
+variable              value  setting_type  description
+cluster.organization  ·      s             organization name
+
+query TTTT colnames
+SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 ----
 variable              value  setting_type  description
 cluster.organization  ·      s             organization name

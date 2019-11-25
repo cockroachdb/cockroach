@@ -12,14 +12,21 @@ package delegate
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-func (d *delegator) delegateShowAllClusterSettings(
-	stmt *tree.ShowAllClusterSettings,
+func (d *delegator) delegateShowClusterSettingList(
+	stmt *tree.ShowClusterSettingList,
 ) (tree.Statement, error) {
-	if err := d.catalog.RequireAdminRole(d.ctx, "SHOW ALL CLUSTER SETTINGS"); err != nil {
+	if err := d.catalog.RequireAdminRole(d.ctx, "SHOW CLUSTER SETTINGS"); err != nil {
 		return nil, err
+	}
+	if stmt.All {
+		return parse(
+			`SELECT variable, value, type AS setting_type, public, description
+       FROM   crdb_internal.cluster_settings`,
+		)
 	}
 	return parse(
 		`SELECT variable, value, type AS setting_type, description
-     FROM crdb_internal.cluster_settings`,
+     FROM   crdb_internal.cluster_settings
+     WHERE  public IS TRUE`,
 	)
 }

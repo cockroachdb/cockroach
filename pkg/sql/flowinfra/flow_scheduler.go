@@ -26,7 +26,7 @@ import (
 
 const flowDoneChanSize = 8
 
-var settingMaxRunningFlows = settings.RegisterIntSetting(
+var settingMaxRunningFlows = settings.RegisterPublicIntSetting(
 	"sql.distsql.max_running_flows",
 	"maximum number of concurrent flows that can be run on a node",
 	500,

@@ -18,7 +18,7 @@ type BoolSetting struct {
 	defaultValue bool
 }
 
-var _ Setting = &BoolSetting{}
+var _ extendedSetting = &BoolSetting{}
 
 // Get retrieves the bool value in the setting.
 func (b *BoolSetting) Get(sv *Values) bool {
@@ -81,4 +81,11 @@ func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
 	setting := &BoolSetting{defaultValue: defaultValue}
 	register(key, desc, setting)
 	return setting
+}
+
+// RegisterPublicBoolSetting defines a new setting with type bool and makes it public.
+func RegisterPublicBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
+	s := RegisterBoolSetting(key, desc, defaultValue)
+	s.SetVisibility(Public)
+	return s
 }

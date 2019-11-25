@@ -36,15 +36,11 @@ var enabled = settings.RegisterBoolSetting(
 // all ranges to be cleared when a big table is dropped, so the
 // compactor can determine contiguous stretches and efficient delete
 // sstable files.
-var minInterval = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
-		"compactor.min_interval",
-		"minimum time interval to wait before compacting",
-		15*time.Second,
-	)
-	s.SetSensitive()
-	return s
-}()
+var minInterval = settings.RegisterDurationSetting(
+	"compactor.min_interval",
+	"minimum time interval to wait before compacting",
+	15*time.Second,
+)
 
 // thresholdBytes is the threshold in bytes of suggested
 // reclamation, after which the compactor will begin processing
@@ -53,15 +49,11 @@ var minInterval = func() *settings.DurationSetting {
 // these are logical bytes (as in, from MVCCStats) which can't be
 // translated into SSTable-bytes. As a result, we conservatively set
 // a higher threshold.
-var thresholdBytes = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
-		"compactor.threshold_bytes",
-		"minimum expected logical space reclamation required before considering an aggregated suggestion",
-		256<<20, // more than 256MiB will trigger
-	)
-	s.SetSensitive()
-	return s
-}()
+var thresholdBytes = settings.RegisterByteSizeSetting(
+	"compactor.threshold_bytes",
+	"minimum expected logical space reclamation required before considering an aggregated suggestion",
+	256<<20, // more than 256MiB will trigger
+)
 
 // thresholdBytesUsedFraction is the fraction of total logical
 // bytes used which are up for suggested reclamation, after which
@@ -70,16 +62,12 @@ var thresholdBytes = func() *settings.ByteSizeSetting {
 // where a table is dropped which is a significant fraction of the
 // total space in the database, but does not exceed the absolute
 // defaultThresholdBytes threshold.
-var thresholdBytesUsedFraction = func() *settings.FloatSetting {
-	s := settings.RegisterValidatedFloatSetting(
-		"compactor.threshold_used_fraction",
-		"consider suggestions for at least the given percentage of the used logical space (zero to disable)",
-		0.10, // more than 10% of space will trigger
-		validateFraction,
-	)
-	s.SetSensitive()
-	return s
-}()
+var thresholdBytesUsedFraction = settings.RegisterValidatedFloatSetting(
+	"compactor.threshold_used_fraction",
+	"consider suggestions for at least the given percentage of the used logical space (zero to disable)",
+	0.10, // more than 10% of space will trigger
+	validateFraction,
+)
 
 // thresholdBytesAvailableFraction is the fraction of remaining
 // available space on a disk, which, if exceeded by the size of a suggested
@@ -87,26 +75,18 @@ var thresholdBytesUsedFraction = func() *settings.FloatSetting {
 // threshold is meant to make compaction more aggressive when a store is
 // nearly full, since reclaiming space is much more important in such
 // scenarios.	ThresholdBytesAvailableFraction() float64
-var thresholdBytesAvailableFraction = func() *settings.FloatSetting {
-	s := settings.RegisterValidatedFloatSetting(
-		"compactor.threshold_available_fraction",
-		"consider suggestions for at least the given percentage of the available logical space (zero to disable)",
-		0.10, // more than 10% of space will trigger
-		validateFraction,
-	)
-	s.SetSensitive()
-	return s
-}()
+var thresholdBytesAvailableFraction = settings.RegisterValidatedFloatSetting(
+	"compactor.threshold_available_fraction",
+	"consider suggestions for at least the given percentage of the available logical space (zero to disable)",
+	0.10, // more than 10% of space will trigger
+	validateFraction,
+)
 
 // maxSuggestedCompactionRecordAge is the maximum age of a
 // suggested compaction record. If not processed within this time
 // interval since the compaction was suggested, it will be deleted.
-var maxSuggestedCompactionRecordAge = func() *settings.DurationSetting {
-	s := settings.RegisterNonNegativeDurationSetting(
-		"compactor.max_record_age",
-		"discard suggestions not processed within this duration",
-		24*time.Hour,
-	)
-	s.SetSensitive()
-	return s
-}()
+var maxSuggestedCompactionRecordAge = settings.RegisterNonNegativeDurationSetting(
+	"compactor.max_record_age",
+	"discard suggestions not processed within this duration",
+	24*time.Hour,
+)

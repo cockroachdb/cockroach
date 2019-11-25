@@ -37,7 +37,7 @@ const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
 
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
-var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
+var AutomaticStatisticsClusterMode = settings.RegisterPublicBoolSetting(
 	AutoStatsClusterSettingName,
 	"automatic statistics collection mode",
 	true,
@@ -64,20 +64,28 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterValidatedFloatSetting(
 // the target fraction of rows in a table that should be stale before
 // statistics on that table are refreshed, in addition to the constant value
 // AutomaticStatisticsMinStaleRows.
-var AutomaticStatisticsFractionStaleRows = settings.RegisterNonNegativeFloatSetting(
-	"sql.stats.automatic_collection.fraction_stale_rows",
-	"target fraction of stale rows per table that will trigger a statistics refresh",
-	0.2,
-)
+var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
+	s := settings.RegisterNonNegativeFloatSetting(
+		"sql.stats.automatic_collection.fraction_stale_rows",
+		"target fraction of stale rows per table that will trigger a statistics refresh",
+		0.2,
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // AutomaticStatisticsMinStaleRows controls the cluster setting for the target
 // number of rows that should be updated before a table is refreshed, in
 // addition to the fraction AutomaticStatisticsFractionStaleRows.
-var AutomaticStatisticsMinStaleRows = settings.RegisterNonNegativeIntSetting(
-	"sql.stats.automatic_collection.min_stale_rows",
-	"target minimum number of stale rows per table that will trigger a statistics refresh",
-	500,
-)
+var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
+	s := settings.RegisterNonNegativeIntSetting(
+		"sql.stats.automatic_collection.min_stale_rows",
+		"target minimum number of stale rows per table that will trigger a statistics refresh",
+		500,
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 // DefaultRefreshInterval is the frequency at which the Refresher will check if
 // the stats for each table should be refreshed. It is mutable for testing.

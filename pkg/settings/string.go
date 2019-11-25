@@ -21,7 +21,7 @@ type StringSetting struct {
 	common
 }
 
-var _ Setting = &StringSetting{}
+var _ extendedSetting = &StringSetting{}
 
 func (s *StringSetting) String(sv *Values) string {
 	return s.Get(sv)
@@ -82,6 +82,13 @@ func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting
 	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterPublicStringSetting defines a new setting with type string and makes it public.
+func RegisterPublicStringSetting(key, desc string, defaultValue string) *StringSetting {
+	s := RegisterValidatedStringSetting(key, desc, defaultValue, nil)
+	s.SetVisibility(Public)
+	return s
+}
+
 // RegisterValidatedStringSetting defines a new setting with type string with a
 // validation function.
 func RegisterValidatedStringSetting(
@@ -96,6 +103,10 @@ func RegisterValidatedStringSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
+	// By default all string settings are considered to perhaps contain
+	// PII and are thus non-reportable (to exclude them from telemetry
+	// reports).
+	setting.SetReportable(false)
 	register(key, desc, setting)
 	return setting
 }

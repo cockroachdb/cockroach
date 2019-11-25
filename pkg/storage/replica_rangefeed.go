@@ -35,7 +35,7 @@ import (
 )
 
 // RangefeedEnabled is a cluster setting that enables rangefeed requests.
-var RangefeedEnabled = settings.RegisterBoolSetting(
+var RangefeedEnabled = settings.RegisterPublicBoolSetting(
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,

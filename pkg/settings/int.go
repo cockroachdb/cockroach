@@ -21,7 +21,7 @@ type IntSetting struct {
 	validateFn   func(int64) error
 }
 
-var _ Setting = &IntSetting{}
+var _ extendedSetting = &IntSetting{}
 
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get(sv *Values) int64 {
@@ -96,6 +96,13 @@ func (i *IntSetting) Default() int64 {
 // RegisterIntSetting defines a new setting with type int.
 func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterPublicIntSetting defines a new setting with type int and makes it public.
+func RegisterPublicIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	s := RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+	s.SetVisibility(Public)
+	return s
 }
 
 // RegisterNonNegativeIntSetting defines a new setting with type int.
