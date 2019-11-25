@@ -254,6 +254,7 @@ func (r *Replica) setRangefeedProcessor(p *rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.rangefeedMu.proc = p
+	r.updateRangefeedFilterLocked()
 	r.store.addReplicaWithRangefeed(r.RangeID)
 }
 
@@ -370,9 +371,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// process could have raced with ours because calling this method
 	// requires raftMu to be exclusively locked.
 	r.setRangefeedProcessor(p)
-
-	// Set the rangefeed filter now that the processor is set.
-	r.updateRangefeedFilterLocked()
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
