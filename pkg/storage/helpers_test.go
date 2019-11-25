@@ -44,6 +44,18 @@ import (
 	"go.etcd.io/etcd/raft"
 )
 
+func (s *Store) Transport() *RaftTransport {
+	return s.cfg.Transport
+}
+
+func (s *Store) FindTargetAndTransferLease(
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, zone *config.ZoneConfig,
+) (bool, error) {
+	return s.replicateQueue.findTargetAndTransferLease(
+		ctx, repl, desc, zone, transferLeaseOptions{},
+	)
+}
+
 // AddReplica adds the replica to the store's replica map and to the sorted
 // replicasByKey slice. To be used only by unittests.
 func (s *Store) AddReplica(repl *Replica) error {
