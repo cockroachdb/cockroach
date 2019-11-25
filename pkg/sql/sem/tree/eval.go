@@ -2946,6 +2946,28 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 	return MakeDTimestamp(ctx.TxnTimestamp, precision)
 }
 
+// GetTxnTime retrieves the current transaction time as per
+// the evaluation context.
+func (ctx *EvalContext) GetTxnTime(precision time.Duration) *DTimeTZ {
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
+	}
+	return NewDTimeTZFromTime(ctx.GetRelativeParseTime().Round(precision))
+}
+
+// GetTxnTimeNoZone retrieves the current transaction time as per
+// the evaluation context.
+func (ctx *EvalContext) GetTxnTimeNoZone(precision time.Duration) *DTime {
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
+	}
+	return MakeDTime(timeofday.FromTime(ctx.GetRelativeParseTime().Round(precision)))
+}
+
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
 	ctx.TxnTimestamp = ts

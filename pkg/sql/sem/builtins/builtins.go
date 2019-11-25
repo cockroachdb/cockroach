@@ -1674,7 +1674,52 @@ CockroachDB supports the following flags:
 		},
 	),
 
-	"now":                   txnTSImpl,
+	"now": txnTSImpl,
+	"current_time": makeBuiltin(
+		tree.FunctionProperties{Impure: true},
+		tree.Overload{
+			Types:             tree.ArgTypes{},
+			ReturnType:        tree.FixedReturnType(types.TimeTZ),
+			PreferredOverload: true,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTime(time.Microsecond), nil
+			},
+			Info: "Returns the current transaction's time with time zone.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Time),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTimeNoZone(time.Microsecond), nil
+			},
+			Info: "Returns the current transaction's time with no time zone.",
+		},
+		tree.Overload{
+			Types:             tree.ArgTypes{{"precision", types.Int}},
+			ReturnType:        tree.FixedReturnType(types.TimeTZ),
+			PreferredOverload: true,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				prec := int32(tree.MustBeDInt(args[0]))
+				if prec < 0 || prec > 6 {
+					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+				}
+				return ctx.GetTxnTime(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
+			},
+			Info: "Returns the current transaction's time with time zone.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"precision", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Time),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				prec := int32(tree.MustBeDInt(args[0]))
+				if prec < 0 || prec > 6 {
+					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+				}
+				return ctx.GetTxnTimeNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
+			},
+			Info: "Returns the current transaction's time with no time zone.",
+		},
+	),
 	"current_timestamp":     txnTSWithPrecisionImpl,
 	"transaction_timestamp": txnTSImpl,
 
