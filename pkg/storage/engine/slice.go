@@ -14,7 +14,7 @@ import "unsafe"
 
 func nonZeroingMakeByteSlice(len int) []byte {
 	ptr := mallocgc(uintptr(len), nil, false)
-	return (*[maxArrayLen]byte)(ptr)[:len:len]
+	return (*[MaxArrayLen]byte)(ptr)[:len:len]
 }
 
 // Replacement for C.GoBytes which does not zero initialize the returned slice
@@ -27,7 +27,7 @@ func gobytes(ptr unsafe.Pointer, len int) []byte {
 		return make([]byte, 0)
 	}
 	x := nonZeroingMakeByteSlice(len)
-	src := (*[maxArrayLen]byte)(ptr)[:len:len]
+	src := (*[MaxArrayLen]byte)(ptr)[:len:len]
 	copy(x, src)
 	return x
 }
