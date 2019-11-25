@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/lib/pq/oid"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTypes(t *testing.T) {
@@ -549,5 +550,120 @@ func TestOids(t *testing.T) {
 		if typ.Family() != ArrayFamily {
 			t.Errorf("expected ARRAY type, got %s", typ.Family())
 		}
+	}
+}
+
+func TestUpgradeType(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		input    *T
+		expected *T
+	}{
+		{
+			desc: "upgrading -1 precision to default precision for time",
+			input: &T{InternalType: InternalType{
+				Family:    TimestampFamily,
+				Precision: -1,
+				Oid:       oid.T_timestamp,
+				Locale:    &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:    TimestampFamily,
+				Precision: 0,
+				Oid:       oid.T_timestamp,
+				Locale:    &emptyLocale,
+			}},
+		},
+		{
+			desc: "upgrading default precision pre-20.1 to default precision",
+			input: &T{InternalType: InternalType{
+				Family:    TimestampFamily,
+				Precision: 0,
+				Oid:       oid.T_timestamp,
+				Locale:    &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          0,
+				TimePrecisionIsSet: false,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+		},
+		{
+			desc: "upgrading 6 precision pre-20.1 to default precision",
+			input: &T{InternalType: InternalType{
+				Family:    TimestampFamily,
+				Precision: 6,
+				Oid:       oid.T_timestamp,
+				Locale:    &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          6,
+				TimePrecisionIsSet: true,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+		},
+		{
+			desc: "idempotent for precision(3) set objects",
+			input: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          3,
+				TimePrecisionIsSet: true,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          3,
+				TimePrecisionIsSet: true,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+		},
+		{
+			desc: "idempotent for precision(0) set objects",
+			input: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          0,
+				TimePrecisionIsSet: true,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          0,
+				TimePrecisionIsSet: true,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+		},
+		{
+			desc: "idempotent for precision unset objects",
+			input: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          0,
+				TimePrecisionIsSet: false,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:             TimestampFamily,
+				Precision:          0,
+				TimePrecisionIsSet: false,
+				Oid:                oid.T_timestamp,
+				Locale:             &emptyLocale,
+			}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			err := tc.input.upgradeType()
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, tc.input)
+		})
 	}
 }
