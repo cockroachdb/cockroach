@@ -153,3 +153,16 @@ select column_name, data_type FROM [SHOW COLUMNS FROM timetz_precision_test] ORD
 ----
 id  INT8
 t   TIMETZ(6)
+
+subtest regression_42749
+
+# cast to string to prove it is 24:00
+query T
+SELECT '0000-01-01 24:00:00'::timetz::string
+----
+24:00:00+00:00:00
+
+query T
+SELECT '2001-01-01 01:24:00+3'::timetz
+----
+0000-01-01 01:24:00 +0300 +0300

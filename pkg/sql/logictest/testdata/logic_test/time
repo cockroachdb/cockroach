@@ -406,3 +406,16 @@ select column_name, data_type FROM [SHOW COLUMNS FROM time_precision_test] ORDER
 ----
 id  INT8
 t   TIME(6)
+
+subtest regression_42749
+
+# cast to string to prove it is 24:00
+query T
+SELECT '0000-01-01 24:00:00'::time::string
+----
+24:00:00
+
+query T
+SELECT '2001-01-01 01:24:00'::time
+----
+0000-01-01 01:24:00 +0000 UTC
