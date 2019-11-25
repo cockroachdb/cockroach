@@ -17,9 +17,11 @@ import { Link } from "react-router";
 
 import { AdminUIState } from "src/redux/state";
 import { selectLoginState, LoginState, doLogout } from "src/redux/login";
-import { LOGOUT_PAGE } from "src/routes/login";
 import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
+import UserAvatar from "src/views/shared/components/userAvatar";
+import UserMenu from "src/views/app/components/userMenu";
+import Popover from "src/views/shared/components/popover";
 
 import homeIcon from "!!raw-loader!assets/sidebarIcons/home.svg";
 import metricsIcon from "!!raw-loader!assets/sidebarIcons/metrics.svg";
@@ -77,39 +79,60 @@ interface LoginIndicatorProps {
   handleLogout: () => null;
 }
 
-function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
-  if (!loginState.useLogin()) {
-    return null;
+interface LoginIndicatorState {
+  isOpenMenu: boolean;
+}
+
+class LoginIndicator extends React.Component<LoginIndicatorProps, LoginIndicatorState> {
+  constructor(props: LoginIndicatorProps) {
+    super(props);
+    this.state = {
+      isOpenMenu: false,
+    };
   }
 
-  if (!loginState.loginEnabled()) {
+  onUserMenuToggle = (nextState: boolean) => {
+    this.setState({
+      isOpenMenu: nextState,
+    });
+  }
+
+  render() {
+    const { loginState, handleLogout } = this.props;
+    const { isOpenMenu } = this.state;
+    if (!loginState.useLogin()) {
+      return null;
+    }
+
+    if (!loginState.loginEnabled()) {
+      return (
+        <li className="login-indicator login-indicator--insecure">
+          <div className="image-container"
+               dangerouslySetInnerHTML={trustIcon(unlockedIcon)}/>
+          <div>Insecure mode</div>
+        </li>
+      );
+    }
+
+    const user = loginState.loggedInUser();
+    if (user == null) {
+      return null;
+    }
+
     return (
-      <li className="login-indicator login-indicator--insecure">
-        <div className="image-container"
-             dangerouslySetInnerHTML={trustIcon(unlockedIcon)}/>
-        <div>Insecure mode</div>
+      <li className="login-indicator">
+        <Popover
+          content={<UserAvatar userName={user} />}
+          visible={isOpenMenu}
+          onVisibleChange={this.onUserMenuToggle}
+        >
+          <UserMenu
+            userName={user}
+            onLogoutClick={handleLogout}/>
+        </Popover>
       </li>
     );
   }
-
-  const user = loginState.loggedInUser();
-  if (user == null) {
-    return null;
-  }
-
-  return (
-    <li className="login-indicator">
-      <Link to={LOGOUT_PAGE} onClick={handleLogout}>
-        <div
-          className="login-indicator__initial"
-          title={`Signed in as ${user}`}
-        >
-          {user[0]}
-        </div>
-        <div>Log Out</div>
-      </Link>
-    </li>
-  );
 }
 
 // tslint:disable-next-line:variable-name
