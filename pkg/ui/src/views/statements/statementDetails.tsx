@@ -10,7 +10,7 @@
 
 import d3 from "d3";
 import _ from "lodash";
-import React, { Fragment, ReactNode } from "react";
+import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
@@ -199,7 +199,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
       const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
 
       return (
-        <Fragment>
+        <React.Fragment>
           <section className="section">
             <SqlBox value={ statement } />
           </section>
@@ -210,7 +210,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
               Back to Statements
             </Link>
           </section>
-        </Fragment>
+        </React.Fragment>
       );
     }
 
@@ -446,7 +446,7 @@ function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: Execut
   return { numerator, denominator };
 }
 
-function filterByRouterParamsPredicate(params: Params) {
+function filterByRouterParamsPredicate(params: Params): (stat: ExecutionStatistics) => boolean {
   const statement = params[statementAttr];
   const implicitTxn = (params[implicitTxnAttr] === "true");
   let app = params[appAttr];
