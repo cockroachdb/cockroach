@@ -15,6 +15,8 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUnixMicros(t *testing.T) {
@@ -62,4 +64,9 @@ func TestUnixMicrosRounding(t *testing.T) {
 			t.Errorf("%d:ToUnixMicro: expected %v, but got %v", i, e, a)
 		}
 	}
+}
+
+func TestReplaceLibPQTimePrefix(t *testing.T) {
+	assert.Equal(t, "1970-02-02 11:00", ReplaceLibPQTimePrefix("1970-02-02 11:00"))
+	assert.Equal(t, "1970-01-01 11:00", ReplaceLibPQTimePrefix("0000-01-01 11:00"))
 }

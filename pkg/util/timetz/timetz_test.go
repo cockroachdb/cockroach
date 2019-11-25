@@ -180,6 +180,13 @@ func TestParseTimeTZ(t *testing.T) {
 	}{
 		{str: "01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
 		{str: "01:02:03.000123", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0)},
+		{str: "01:24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 24, 0, 0), 0)},
+		{str: "01:03:24", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 3, 24, 0), 0)},
+		{str: "1970-01-01 01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
+		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
+		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
+		{str: "0000-01-01  01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
+		{str: "01:02:03.000123", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0)},
 		{str: "4:5:6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(4, 5, 6, 0), 0)},
 		{str: "24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
 		{str: "24:00:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
@@ -193,8 +200,11 @@ func TestParseTimeTZ(t *testing.T) {
 		{str: "24:00:00+4", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -4*60*60)},
 		{str: "24:00:00.000-5", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 5*60*60)},
 		{str: "24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
+		{str: "24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
+		{str: "1970-01-01T24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
 		{str: "00:00-1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MaxTimeTZOffsetSecs)},
 		{str: "00:00+1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MinTimeTZOffsetSecs)},
+		{str: " 01:03:24", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 3, 24, 0), 0)},
 
 		{str: "01:02:03.000123", precision: time.Millisecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
 		{str: "01:02:03.000123", precision: time.Millisecond / 10, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 100), 0)},
@@ -206,6 +216,9 @@ func TestParseTimeTZ(t *testing.T) {
 		{str: "01:00=wat", expectedError: true},
 		{str: "00:00-1600", expectedError: true},
 		{str: "00:00+1600", expectedError: true},
+		{str: "00:00+24:00", expectedError: true},
+		{str: "1970-01-01 00:00+24:00", expectedError: true},
+		{str: "2010-09-28", expectedError: true},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("#%d: %s", i, tc.str), func(t *testing.T) {
