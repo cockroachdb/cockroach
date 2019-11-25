@@ -90,3 +90,15 @@ SELECT '2001-01-01 11:00+04:00'::timestamptz::timetz
 
 statement ok
 SET TIME ZONE UTC
+
+subtest regression_42749
+
+query T
+SELECT '0000-01-01 24:00:00'::timetz
+----
+0000-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT '2001-01-01 01:24:00+3'::timetz
+----
+0000-01-01 01:24:00 +0300 +0300

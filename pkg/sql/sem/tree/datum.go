@@ -65,7 +65,7 @@ var (
 	DZero = NewDInt(0)
 
 	// DTimeMaxTimeRegex is a compiled regex for parsing the 24:00 time value.
-	DTimeMaxTimeRegex = regexp.MustCompile("^24:00($|(:00$)|(:00.0+$))")
+	DTimeMaxTimeRegex = regexp.MustCompile(`^([0-9-]*(\s+T)?\s+)?24:00($|(:00$)|(:00.0+$))`)
 )
 
 // Datum represents a SQL value.
@@ -1865,11 +1865,15 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 	now := relativeParseTime(ctx)
 
-	// special case on 24:00 and 24:00:00 as the parser
+	// Special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
 	if DTimeMaxTimeRegex.MatchString(s) {
 		return MakeDTime(timeofday.Time2400), nil
 	}
+
+	// Replace "0000-01-01" as a date (which lib/pq outputs) to
+	// "1970-01-01", as pgdate cannot parse 0000-01-01.
+	s = strings.ReplaceAll(s, "0000-01-01", "1970-01-01")
 
 	t, err := pgdate.ParseTime(now, pgdate.ParseModeYMD, s)
 	if err != nil {

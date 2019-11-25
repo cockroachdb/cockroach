@@ -343,3 +343,15 @@ SELECT extract('day' from time '12:00:00')
 
 query error pgcode 22023 extract\(\): unsupported timespan: day
 SELECT extract('DAY' from time '12:00:00')
+
+subtest regression_42749
+
+query T
+SELECT '0000-01-01 24:00:00'::time
+----
+0000-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT '2001-01-01 01:24:00'::time
+----
+0000-01-01 01:24:00 +0000 UTC

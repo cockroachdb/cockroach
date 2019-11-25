@@ -211,6 +211,13 @@ func mustParseDTime(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDTimeTZ(t *testing.T, s string) tree.Datum {
+	d, err := tree.ParseDTimeTZ(nil, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 func mustParseDTimestamp(t *testing.T, s string) tree.Datum {
 	d, err := tree.ParseDTimestamp(nil, s, time.Millisecond)
 	if err != nil {
@@ -256,6 +263,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.Time:        mustParseDTime,
 	types.Timestamp:   mustParseDTimestamp,
 	types.TimestampTZ: mustParseDTimestampTZ,
+	types.TimeTZ:      mustParseDTimeTZ,
 	types.Interval:    mustParseDInterval,
 	types.Jsonb:       mustParseDJSON,
 	types.StringArray: mustParseDStringArray,
@@ -294,11 +302,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewStrVal("2010-09-28 12:00:00.1"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.Timestamp, types.TimestampTZ, types.Date),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            tree.NewStrVal("2006-07-08T00:00:00.000000123Z"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.Timestamp, types.TimestampTZ, types.Date),
+			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            tree.NewStrVal("PT12H2M"),
@@ -339,43 +347,45 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		parseableCount := 0
+		t.Run(test.c.String(), func(t *testing.T) {
+			parseableCount := 0
 
-		// Make sure it can be resolved as each of those types or throws a parsing error.
-		for _, availType := range test.c.AvailableTypes() {
-			res, err := test.c.ResolveAsType(&tree.SemaContext{}, availType)
-			if err != nil {
-				if !strings.Contains(err.Error(), "could not parse") {
-					// Parsing errors are permitted for this test, but the number of correctly
-					// parseable types will be verified. Any other error should throw a failure.
-					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
-						" or throw a parsing error, found %v",
-						i, test.c, availType, err)
+			// Make sure it can be resolved as each of those types or throws a parsing error.
+			for _, availType := range test.c.AvailableTypes() {
+				res, err := test.c.ResolveAsType(&tree.SemaContext{}, availType)
+				if err != nil {
+					if !strings.Contains(err.Error(), "could not parse") {
+						// Parsing errors are permitted for this test, but the number of correctly
+						// parseable types will be verified. Any other error should throw a failure.
+						t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
+							" or throw a parsing error, found %v",
+							i, test.c, availType, err)
+					}
+					continue
 				}
-				continue
-			}
-			parseableCount++
+				parseableCount++
 
-			if _, isExpected := test.parseOptions[availType]; !isExpected {
-				t.Errorf("%d: type %s not expected to be resolvable from the tree.StrVal %v, found %v",
-					i, availType, test.c, res)
-			} else {
-				expectedDatum := parseFuncs[availType](t, test.c.RawString())
-				evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-				defer evalCtx.Stop(context.Background())
-				if res.Compare(evalCtx, expectedDatum) != 0 {
-					t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
-						", found %v",
-						i, availType, test.c, expectedDatum, res)
+				if _, isExpected := test.parseOptions[availType]; !isExpected {
+					t.Errorf("%d: type %s not expected to be resolvable from the tree.StrVal %v, found %v",
+						i, availType, test.c, res)
+				} else {
+					expectedDatum := parseFuncs[availType](t, test.c.RawString())
+					evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+					defer evalCtx.Stop(context.Background())
+					if res.Compare(evalCtx, expectedDatum) != 0 {
+						t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
+							", found %v",
+							i, availType, test.c, expectedDatum, res)
+					}
 				}
 			}
-		}
 
-		// Make sure the expected number of types can be resolved from the tree.StrVal.
-		if expCount := len(test.parseOptions); parseableCount != expCount {
-			t.Errorf("%d: expected %d successfully resolvable types for the tree.StrVal %v, found %d",
-				i, expCount, test.c, parseableCount)
-		}
+			// Make sure the expected number of types can be resolved from the tree.StrVal.
+			if expCount := len(test.parseOptions); parseableCount != expCount {
+				t.Errorf("%d: expected %d successfully resolvable types for the tree.StrVal %v, found %d",
+					i, expCount, test.c, parseableCount)
+			}
+		})
 	}
 }
 

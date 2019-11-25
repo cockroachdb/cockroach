@@ -488,9 +488,12 @@ func TestParseDTime(t *testing.T) {
 		expected timeofday.TimeOfDay
 	}{
 		{"04:05:06", timeofday.New(4, 5, 6, 0)},
+		{"0000-01-01 04:05:06", timeofday.New(4, 5, 6, 0)},
+		{"2001-01-01 04:05:06", timeofday.New(4, 5, 6, 0)},
 		{"04:05:06.000001", timeofday.New(4, 5, 6, 1)},
 		{"04:05:06-07", timeofday.New(4, 5, 6, 0)},
 		{"4:5:6", timeofday.New(4, 5, 6, 0)},
+		{"4:5:6+24:00", timeofday.New(4, 5, 6, 0)},
 		{"24:00:00", timeofday.Time2400},
 		{"24:00:00.000", timeofday.Time2400},
 		{"24:00:00.000000", timeofday.Time2400},
