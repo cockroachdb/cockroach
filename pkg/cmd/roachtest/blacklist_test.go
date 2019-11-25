@@ -108,7 +108,7 @@ var issueTitleMap = map[int]string{
 	41779: "sql: extended protocol should have `interval` vs varchar` type mismatch error",
 	41781: "sql: support updates on cursor objects",
 	41786: "sql: handle infinite timestamps more accurately",
-	41870: "sql: SERIAL column should have database metadata IS_AUTOINCREMENT=YES",
+	41870: "sql: pg_catalog.pg_get_expr on SERIAL column should return `nextval(...)` instead of `unique_rowid()",
 	41872: "sql: unsupported binary operator: <string> || <oid>",
 }
 
