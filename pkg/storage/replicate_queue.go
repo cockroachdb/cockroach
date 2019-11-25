@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,11 +38,6 @@ const (
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
 
-	// minLeaseTransferInterval controls how frequently leases can be transferred
-	// for rebalancing. It does not prevent transferring leases in order to allow
-	// a replica to be removed from a range.
-	minLeaseTransferInterval = time.Second
-
 	// newReplicaGracePeriod is the amount of time that we allow for a new
 	// replica's raft state to catch up to the leader's before we start
 	// considering it to be behind for the sake of rebalancing. We choose a
@@ -49,6 +45,17 @@ const (
 	// in high latency clusters, and not allowing enough of a cushion can
 	// make rebalance thrashing more likely (#17879).
 	newReplicaGracePeriod = 5 * time.Minute
+)
+
+// minLeaseTransferInterval controls how frequently leases can be transferred
+// for rebalancing. It does not prevent transferring leases in order to allow
+// a replica to be removed from a range.
+var minLeaseTransferInterval = settings.RegisterNonNegativeDurationSetting(
+	"kv.allocator.min_lease_transfer_interval",
+	"controls how frequently leases can be transferred for rebalancing. "+
+		"It does not prevent transferring leases in order to allow a "+
+		"replica to be removed from a range.",
+	1*time.Second,
 )
 
 var (
@@ -934,11 +941,10 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 ) (bool, error) {
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
 	// so only consider the `Voters` replicas.
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas().Voters())
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,
-		candidates,
+		desc.Replicas().Voters(),
 		repl.store.StoreID(),
 		desc.RangeID,
 		repl.leaseholderStats,
@@ -1003,7 +1009,8 @@ func (rq *replicateQueue) changeReplicas(
 
 func (rq *replicateQueue) canTransferLease() bool {
 	if lastLeaseTransfer := rq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
-		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minLeaseTransferInterval
+		minInterval := minLeaseTransferInterval.Get(&rq.store.cfg.Settings.SV)
+		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minInterval
 	}
 	return true
 }
