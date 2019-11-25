@@ -64,7 +64,7 @@ var (
 	DZero = NewDInt(0)
 
 	// DTimeRegex is a compiled regex for parsing the 24:00 time value
-	DTimeRegex = regexp.MustCompile("^24:00($|(:00$)|(:00.0+$))")
+	DTimeRegex = regexp.MustCompile(`^([0-9-]*(\s|T))?\s*24:00(:00(.0+)?)?\s*$`)
 )
 
 // Datum represents a SQL value.
@@ -1864,13 +1864,15 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 	now := relativeParseTime(ctx)
 
-	// special case on 24:00 and 24:00:00 as the parser
+	// Special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
 	if DTimeRegex.MatchString(s) {
 		return MakeDTime(timeofday.Time2400), nil
 	}
 
-	t, err := pgdate.ParseTime(now, 0 /* mode */, s)
+	s = timeutil.ReplaceLibPQTimePrefix(s)
+
+	t, err := pgdate.ParseTime(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
 		return nil, makeParseError(s, types.Time, nil)
