@@ -63,6 +63,12 @@ func getStatusJSONProto(
 	return serverutils.GetJSONProto(ts, statusPrefix+path, response)
 }
 
+func getStatusJSONProtoWithAdminOption(
+	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+) error {
+	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
+}
+
 // TestStatusLocalStacks verifies that goroutine stack traces are available
 // via the /_status/stacks/local endpoint.
 func TestStatusLocalStacks(t *testing.T) {
@@ -991,7 +997,7 @@ func TestSpanStatsResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.TODO())
 
-	httpClient, err := ts.GetAuthenticatedHTTPClient()
+	httpClient, err := ts.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1430,33 +1436,50 @@ func TestListSessionsSecurity(t *testing.T) {
 	ts := s.(*TestServer)
 	defer ts.Stopper().Stop(context.TODO())
 
-	// HTTP requests respect the authenticated username from the HTTP session.
-	testCases := []struct {
-		endpoint    string
-		expectedErr string
-	}{
-		{"local_sessions", ""},
-		{"sessions", ""},
-		{fmt.Sprintf("local_sessions?username=%s", authenticatedUserName), ""},
-		{fmt.Sprintf("sessions?username=%s", authenticatedUserName), ""},
-		{"local_sessions?username=root", "does not have permission to view sessions from user"},
-		{"sessions?username=root", "does not have permission to view sessions from user"},
-	}
-	for _, tc := range testCases {
-		var response serverpb.ListSessionsResponse
-		err := getStatusJSONProto(ts, tc.endpoint, &response)
-		if tc.expectedErr == "" {
-			if err != nil || len(response.Errors) > 0 {
-				t.Errorf("unexpected failure listing sessions from %s; error: %v; response errors: %v",
-					tc.endpoint, err, response.Errors)
+	ctx := context.TODO()
+
+	for _, requestWithAdmin := range []bool{true, false} {
+		t.Run(fmt.Sprintf("admin=%v", requestWithAdmin), func(t *testing.T) {
+			myUser := authenticatedUserNameNoAdmin
+			expectedErrOnListingRootSessions := "does not have permission to view sessions from user"
+			if requestWithAdmin {
+				myUser = authenticatedUserName
+				expectedErrOnListingRootSessions = ""
 			}
-		} else {
-			if !testutils.IsError(err, tc.expectedErr) &&
-				!strings.Contains(response.Errors[0].Message, tc.expectedErr) {
-				t.Errorf("did not get expected error %q when listing sessions from %s: %v",
-					tc.expectedErr, tc.endpoint, err)
+
+			// HTTP requests respect the authenticated username from the HTTP session.
+			testCases := []struct {
+				endpoint    string
+				expectedErr string
+			}{
+				{"local_sessions", ""},
+				{"sessions", ""},
+				{fmt.Sprintf("local_sessions?username=%s", myUser), ""},
+				{fmt.Sprintf("sessions?username=%s", myUser), ""},
+				{"local_sessions?username=root", expectedErrOnListingRootSessions},
+				{"sessions?username=root", expectedErrOnListingRootSessions},
 			}
-		}
+			for _, tc := range testCases {
+				var response serverpb.ListSessionsResponse
+				err := getStatusJSONProtoWithAdminOption(ts, tc.endpoint, &response, requestWithAdmin)
+				if tc.expectedErr == "" {
+					if err != nil || len(response.Errors) > 0 {
+						t.Errorf("unexpected failure listing sessions from %s; error: %v; response errors: %v",
+							tc.endpoint, err, response.Errors)
+					}
+				} else {
+					respErr := "<no error>"
+					if len(response.Errors) > 0 {
+						respErr = response.Errors[0].Message
+					}
+					if !testutils.IsError(err, tc.expectedErr) &&
+						!strings.Contains(respErr, tc.expectedErr) {
+						t.Errorf("did not get expected error %q when listing sessions from %s: %v",
+							tc.expectedErr, tc.endpoint, err)
+					}
+				}
+			}
+		})
 	}
 
 	// gRPC requests behave as root and thus are always allowed.
@@ -1469,7 +1492,7 @@ func TestListSessionsSecurity(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := serverpb.NewStatusClient(conn)
-	ctx := context.Background()
+
 	for _, user := range []string{"", authenticatedUserName, "root"} {
 		request := &serverpb.ListSessionsRequest{Username: user}
 		if resp, err := client.ListLocalSessions(ctx, request); err != nil || len(resp.Errors) > 0 {

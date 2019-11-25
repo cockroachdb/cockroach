@@ -2555,6 +2555,9 @@ type EvalSessionAccessor interface {
 
 	// GetSessionVar retrieves the current value of a session variable.
 	GetSessionVar(ctx context.Context, settingName string, missingOk bool) (bool, string, error)
+
+	// HasAdminRole returns true iff the current session user has the admin role.
+	HasAdminRole(ctx context.Context) (bool, error)
 }
 
 // SessionBoundInternalExecutor is a subset of sqlutil.InternalExecutor used by

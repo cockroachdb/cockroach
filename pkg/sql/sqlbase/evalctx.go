@@ -127,3 +127,8 @@ func (ep *DummySessionAccessor) GetSessionVar(
 func (ep *DummySessionAccessor) SetSessionVar(_ context.Context, _, _ string) error {
 	return errEvalSessionVar
 }
+
+// HasAdminRole is part of the tree.EvalSessionAccessor interface.
+func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
+	return false, errEvalSessionVar
+}

@@ -99,6 +99,46 @@ func TestInternalExecutor(t *testing.T) {
 	}
 }
 
+func TestQueryIsAdminWithNoTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := db.Exec("create user testuser"); err != nil {
+		t.Fatal(err)
+	}
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	testData := []struct {
+		user     string
+		expAdmin bool
+	}{
+		{security.NodeUser, true},
+		{security.RootUser, true},
+		{"testuser", false},
+	}
+
+	for _, tc := range testData {
+		t.Run(tc.user, func(t *testing.T) {
+			rows, cols, err := ie.QueryWithUser(ctx, "test", nil /* txn */, tc.user, "SELECT crdb_internal.is_admin()")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 1 || len(cols) != 1 {
+				t.Fatalf("unexpected result shape %d, %d", len(rows), len(cols))
+			}
+			isAdmin := bool(*rows[0][0].(*tree.DBool))
+			if isAdmin != tc.expAdmin {
+				t.Fatalf("expected %q admin %v, got %v", tc.user, tc.expAdmin, isAdmin)
+			}
+		})
+	}
+}
+
 func TestSessionBoundInternalExecutor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
