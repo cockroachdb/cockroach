@@ -190,7 +190,10 @@ func (p *planner) truncateTable(
 	tableDesc.DropJobID = dropJobID
 	newTableDesc := sqlbase.NewMutableCreatedTableDescriptor(tableDesc.TableDescriptor)
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
-		ID: id, Time: p.txn.CommitTimestamp(),
+		ID: id,
+		// NB: Time is just used for debugging purposes. See the comment on the
+		// field for more details.
+		Time: p.txn.ReadTimestamp(),
 	}
 	newTableDesc.SetID(0)
 	newTableDesc.Version = 1
