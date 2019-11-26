@@ -29,7 +29,7 @@ import (
 func TestPebbleTimeBoundPropCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.RunTest(t, "testdata/time_bound_props", func(d *datadriven.TestData) string {
+	datadriven.RunTest(t, "testdata/time_bound_props", func(t *testing.T, d *datadriven.TestData) string {
 		c := &pebbleTimeBoundPropCollector{}
 		switch d.Cmd {
 		case "build":

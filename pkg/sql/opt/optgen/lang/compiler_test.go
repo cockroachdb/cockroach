@@ -21,7 +21,7 @@ import (
 )
 
 func TestCompiler(t *testing.T) {
-	datadriven.RunTest(t, "testdata/compiler", func(d *datadriven.TestData) string {
+	datadriven.RunTest(t, "testdata/compiler", func(t *testing.T, d *datadriven.TestData) string {
 		// Only compile command supported.
 		if d.Cmd != "compile" {
 			t.FailNow()

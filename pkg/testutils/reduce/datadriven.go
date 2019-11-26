@@ -55,7 +55,7 @@ func RunTest(
 	if testing.Verbose() {
 		log = os.Stderr
 	}
-	datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "contains":
 			contains = d.Input
