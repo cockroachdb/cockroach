@@ -199,6 +199,7 @@ func init() {
 		userCmd,
 		nodeCmd,
 		dumpCmd,
+		nodeLocalCmd,
 
 		// Miscellaneous commands.
 		// TODO(pmattis): stats

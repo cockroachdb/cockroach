@@ -12,9 +12,9 @@ package sql
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -25,10 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 const (
-	fileUploadTable = "crdb_internal.file_upload"
+	fileUploadTable = "file_upload"
 	copyOptionDest  = "destination"
 )
 
@@ -39,9 +40,10 @@ var copyFileOptionExpectValues = map[string]KVStringOptValidate{
 var _ copyMachineInterface = &fileUploadMachine{}
 
 type fileUploadMachine struct {
-	c           *copyMachine
-	writeToFile *io.PipeWriter
-	writeError  chan error
+	c              *copyMachine
+	writeToFile    *io.PipeWriter
+	wg             *sync.WaitGroup
+	failureCleanup func()
 }
 
 func newFileUploadMachine(
@@ -59,7 +61,10 @@ func newFileUploadMachine(
 		p:            planner{execCfg: execCfg},
 		resetPlanner: resetPlanner,
 	}
-	f = &fileUploadMachine{c: c}
+	f = &fileUploadMachine{
+		c:  c,
+		wg: &sync.WaitGroup{},
+	}
 
 	optsFn, err := f.c.p.TypeAsStringOpts(n.Options, copyFileOptionExpectValues)
 	if err != nil {
@@ -80,12 +85,20 @@ func newFileUploadMachine(
 	if err == nil {
 		return nil, fmt.Errorf("destination file already exists for %s", opts[copyOptionDest])
 	}
-	f.writeError = make(chan error, 1)
+	f.wg.Add(1)
 	go func() {
-		f.writeError <- localStorage.WriteFile(opts[copyOptionDest], pr)
-		close(f.writeError)
+		err := localStorage.WriteFile(opts[copyOptionDest], pr)
+		if err != nil {
+			_ = pr.CloseWithError(err)
+		}
+		f.wg.Done()
 	}()
 	f.writeToFile = pw
+	f.failureCleanup = func() {
+		// Ignoring this error because deletion would only fail
+		// if the file was not created in the first place.
+		_ = localStorage.Delete(opts[copyOptionDest])
+	}
 
 	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
 	c.resultColumns = make(sqlbase.ResultColumns, 1)
@@ -108,13 +121,14 @@ func CopyInFileStmt(destination, schema, table string) string {
 	)
 }
 
-func (f *fileUploadMachine) run(ctx context.Context) error {
-	err := f.c.run(ctx)
+func (f *fileUploadMachine) run(ctx context.Context) (err error) {
+	err = f.c.run(ctx)
 	_ = f.writeToFile.Close()
 	if err != nil {
-		return err
+		f.failureCleanup()
 	}
-	return <-f.writeError
+	f.wg.Wait()
+	return
 }
 
 func (f *fileUploadMachine) writeFile(ctx context.Context) error {
