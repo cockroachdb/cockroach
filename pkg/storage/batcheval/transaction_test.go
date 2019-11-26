@@ -156,9 +156,8 @@ func TestSetAbortSpan(t *testing.T) {
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
-			// Not poisoning, should clean up abort span entry. However, it currently
-			// doesn't! See https://github.com/cockroachdb/cockroach/issues/29128.
-			exp: &txnPrevAbortSpanEntry,
+			// Not poisoning, should clean up abort span entry.
+			exp: nil,
 		},
 		{
 			name: "end txn, rollback, poison, abort span missing",
