@@ -59,7 +59,7 @@ func TestExprIsNeverNull(t *testing.T) {
 	datadriven.Walk(t, "testdata/expr", func(t *testing.T, path string) {
 		catalog := testcat.New()
 
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
 			var iVarHelper tree.IndexedVarHelper
 			var err error

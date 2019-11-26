@@ -41,8 +41,7 @@ func (r *rocksDBMap) put(k []byte, v []byte) error {
 func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine diskmap.Factory) {
 	diskMaps := make(map[string]diskmap.SortedDiskMap)
 
-	datadriven.RunTest(t, filename, func(d *datadriven.TestData) string {
-
+	datadriven.RunTest(t, filename, func(t *testing.T, d *datadriven.TestData) string {
 		if d.Cmd == "raw-count" {
 			var keyCount int
 			// Trying to build a common interface to RocksDB and Pebble's iterator

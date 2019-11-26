@@ -37,7 +37,7 @@ func TestOptgen(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 				var buf bytes.Buffer
 
 				gen := optgen{useGoFmt: true, maxErrors: 2, stdErr: &buf}

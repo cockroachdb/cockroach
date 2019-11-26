@@ -25,7 +25,7 @@ func TestOptTester(t *testing.T) {
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		catalog := testcat.New()
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			tester := opttester.New(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)

@@ -47,19 +47,19 @@ func TestEval(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
-	walk := func(t *testing.T, getExpr func(*datadriven.TestData) string) {
+	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
 		datadriven.Walk(t, filepath.Join("testdata", "eval"), func(t *testing.T, path string) {
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 				if d.Cmd != "eval" {
 					t.Fatalf("unsupported command %s", d.Cmd)
 				}
-				return getExpr(d) + "\n"
+				return getExpr(t, d) + "\n"
 			})
 		})
 	}
 
 	walkExpr := func(t *testing.T, getExpr func(tree.TypedExpr) (tree.TypedExpr, error)) {
-		walk(t, func(d *datadriven.TestData) string {
+		walk(t, func(t *testing.T, d *datadriven.TestData) string {
 			expr, err := parser.ParseExpr(d.Input)
 			if err != nil {
 				t.Fatalf("%s: %v", d.Input, err)
@@ -102,7 +102,7 @@ func TestEval(t *testing.T) {
 		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
 
-		walk(t, func(d *datadriven.TestData) string {
+		walk(t, func(t *testing.T, d *datadriven.TestData) string {
 			var res gosql.NullString
 			if err := sqlDB.QueryRow(fmt.Sprintf("SELECT (%s)::STRING", d.Input)).Scan(&res); err != nil {
 				return strings.TrimPrefix(err.Error(), "pq: ")
@@ -165,7 +165,7 @@ func TestEval(t *testing.T) {
 	})
 
 	t.Run("vectorized", func(t *testing.T) {
-		walk(t, func(d *datadriven.TestData) string {
+		walk(t, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Input == "B'11111111111111111111111110000101'::int4" {
 				// Skip this test: https://github.com/cockroachdb/cockroach/pull/40790#issuecomment-532597294.
 				return strings.TrimSpace(d.Expected)

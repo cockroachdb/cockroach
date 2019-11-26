@@ -406,11 +406,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0bfb531e077e1f287ed41f059dc5a8f2bde8827d02890d3aadea88f9ccba1b33"
+  digest = "1:9c071ae52ffbdc073585b61aced5dfd0d5aa658815c36bbb51362993a00353a8"
   name = "github.com/cockroachdb/datadriven"
   packages = ["."]
   pruneopts = "UT"
-  revision = "474fb724652d5548aed79577a2280abee1e9302e"
+  revision = "1cff7050b0ae084e5178fc82da15995d8a32761d"
 
 [[projects]]
   digest = "1:35ff61e02c035785971ac6ec04d54428307a986412e5d0aea86b8b7f45677d09"

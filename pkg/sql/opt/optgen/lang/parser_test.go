@@ -20,7 +20,7 @@ import (
 )
 
 func TestParser(t *testing.T) {
-	datadriven.RunTest(t, "testdata/parser", func(d *datadriven.TestData) string {
+	datadriven.RunTest(t, "testdata/parser", func(t *testing.T, d *datadriven.TestData) string {
 		// Only parse command supported.
 		if d.Cmd != "parse" {
 			t.FailNow()

@@ -71,7 +71,7 @@ func TestIndexConstraints(t *testing.T) {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
 			var indexCols []opt.OrderingColumn
 			var notNullCols opt.ColSet

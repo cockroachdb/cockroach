@@ -1069,9 +1069,9 @@ func (ot *OptTester) Import(tb testing.TB) {
 		tb.Fatalf("unable to find file %s", ot.Flags.File)
 	}
 	path := filepath.Join(filepath.Dir(optTesterFile), "testfixtures", ot.Flags.File)
-	datadriven.RunTest(tb.(*testing.T), path, func(d *datadriven.TestData) string {
+	datadriven.RunTest(tb.(*testing.T), path, func(t *testing.T, d *datadriven.TestData) string {
 		tester := New(ot.catalog, d.Input)
-		return tester.RunCommand(tb.(*testing.T), d)
+		return tester.RunCommand(t, d)
 	})
 }
 
