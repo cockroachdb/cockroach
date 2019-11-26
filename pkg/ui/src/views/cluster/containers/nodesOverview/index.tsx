@@ -176,7 +176,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
  * NotLiveNodeListProps are the properties of NotLiveNodeList.
  */
 interface NotLiveNodeListProps extends NodeCategoryListProps {
-  status: LivenessStatus.DECOMMISSIONING | LivenessStatus.DEAD;
+  status: LivenessStatus.DECOMMISSIONED | LivenessStatus.DEAD;
 }
 
 /**
@@ -191,8 +191,8 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     }
 
     const statusName = _.capitalize(LivenessStatus[status]);
-    const icon = getLivenessIcon(status);
     const tooltip = getLivenessStatusDescription(status);
+    const icon = getLivenessIcon(status);
 
     return (
       <div className="embedded-table">
@@ -217,9 +217,13 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
               cell: (ns) => {
                 return (
                   <div>
-                    <span className="node-status-icon"
-                      title={tooltip}
-                      dangerouslySetInnerHTML={ trustIcon(icon) } />
+                    {
+                      icon && (
+                        <span className="node-status-icon"
+                              title={tooltip}
+                              dangerouslySetInnerHTML={ trustIcon(icon) } />
+                      )
+                    }
                     <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );

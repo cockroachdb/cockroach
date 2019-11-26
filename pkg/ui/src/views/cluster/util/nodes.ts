@@ -15,7 +15,6 @@ import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
 import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
 import decommissioningIcon from "!!raw-loader!assets/livenessIcons/decommissioning.svg";
-
 import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 export const getLivenessStatusDescription = (status: LivenessStatus) => {
@@ -41,6 +40,8 @@ export const getLivenessIcon = (livenessStatus: NodeLivenessStatus) => {
       return liveIcon;
     case NodeLivenessStatus.DECOMMISSIONING:
       return decommissioningIcon;
+    case NodeLivenessStatus.DECOMMISSIONED:
+      return null;
     case NodeLivenessStatus.DEAD:
       return deadIcon;
     default:
