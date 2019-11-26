@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -25,10 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 const (
-	fileUploadTable = "crdb_internal.file_upload"
+	fileUploadTable = "file_upload"
 	copyOptionDest  = "destination"
 )
 
@@ -39,9 +39,10 @@ var copyFileOptionExpectValues = map[string]KVStringOptValidate{
 var _ copyMachineInterface = &fileUploadMachine{}
 
 type fileUploadMachine struct {
-	c           *copyMachine
-	writeToFile *io.PipeWriter
-	writeError  chan error
+	c              *copyMachine
+	writeToFile    *io.PipeWriter
+	writeError     chan error
+	failureCleanup func()
 }
 
 func newFileUploadMachine(
@@ -86,6 +87,11 @@ func newFileUploadMachine(
 		close(f.writeError)
 	}()
 	f.writeToFile = pw
+	f.failureCleanup = func() {
+		// Ignoring this error because deletion would only fail
+		// if the file was not created in the first place.
+		_ = localStorage.Delete(opts[copyOptionDest])
+	}
 
 	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
 	c.resultColumns = make(sqlbase.ResultColumns, 1)
@@ -112,6 +118,7 @@ func (f *fileUploadMachine) run(ctx context.Context) error {
 	err := f.c.run(ctx)
 	_ = f.writeToFile.Close()
 	if err != nil {
+		f.failureCleanup()
 		return err
 	}
 	return <-f.writeError

@@ -49,10 +49,6 @@ func runCopyFile(t *testing.T, serverParams base.TestServerArgs, testSendFile st
 	s, db, _ := serverutils.StartServer(t, serverParams)
 	defer s.Stopper().Stop(context.TODO())
 
-	if _, err := db.Exec(`CREATE DATABASE d;`); err != nil {
-		t.Fatal(err)
-	}
-
 	txn, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +59,7 @@ func runCopyFile(t *testing.T, serverParams base.TestServerArgs, testSendFile st
 		}
 	}()
 
-	stmt, err := txn.Prepare(CopyInFileStmt(filename, "d", fileUploadTable))
+	stmt, err := txn.Prepare(CopyInFileStmt(filename, crdbInternalName, fileUploadTable))
 	if err != nil {
 		return err
 	}
