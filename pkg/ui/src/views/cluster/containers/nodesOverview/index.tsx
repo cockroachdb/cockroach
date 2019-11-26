@@ -23,17 +23,18 @@ import {
   selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
-import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
+import { BytesUsed, INodeStatus, MetricConstants } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
 import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
+import decommissioningIcon from "!!raw-loader!assets/livenessIcons/decommissioning.svg";
 import { cockroach } from "src/js/protos";
 
 import { BytesBarChart } from "./barChart";
@@ -76,6 +77,8 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
     switch (livenessStatus) {
       case NodeLivenessStatus.LIVE:
         return liveIcon;
+      case NodeLivenessStatus.DECOMMISSIONING:
+        return decommissioningIcon;
       case NodeLivenessStatus.DEAD:
         return deadIcon;
       default:
@@ -118,7 +121,8 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                     tooltip = "This node is currently healthy.";
                     break;
                   case LivenessStatus.DECOMMISSIONING:
-                    tooltip = "This node is currently being decommissioned.";
+                    tooltip = "This node is in the process of being decommissioned. It may take some time to transfer" +
+                      " the data to other nodes. When finished, it will appear below as a decommissioned node.";
                     break;
                   default:
                     tooltip = "This node has not recently reported as being live. " +
@@ -242,13 +246,6 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
               cell: (ns) => {
                 return (
                   <div>
-                    <span className="node-status-icon"
-                      title={
-                        "This node has not reported as live for a significant period and is considered dead. " +
-                        "The cut-off period for dead nodes is configurable as cluster setting " +
-                        "'server.time_until_store_dead'"
-                      }
-                      dangerouslySetInnerHTML={ trustIcon(deadIcon) } />
                     <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );
