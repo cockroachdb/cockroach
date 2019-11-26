@@ -200,7 +200,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 				rir.Key = ri.Key
 				rir.EndKey = roachpb.Key("c")
 
-				ac := abortspan.New(desc.RangeID)
+				as := abortspan.New(desc.RangeID)
 
 				var spans spanset.SpanSet
 				batch := engine.NewBatch()
@@ -211,7 +211,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 				h.RangeID = desc.RangeID
 
 				cArgs := CommandArgs{Header: h}
-				cArgs.EvalCtx = &mockEvalCtx{abortSpan: ac}
+				cArgs.EvalCtx = &mockEvalCtx{abortSpan: as}
 
 				if !ranged {
 					cArgs.Args = &ri
