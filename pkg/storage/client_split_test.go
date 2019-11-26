@@ -127,6 +127,17 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 
 	populateAbortSpan := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.ResolveIntentRequest {
 		pushee := txn(key, ts)
+
+		// First write an intent on the key...
+		incArgs := incrementArgs(key, 1)
+		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: pushee}, incArgs)
+		if pErr != nil {
+			t.Fatalf("while sending +%v: %s", incArgs, pErr)
+		}
+
+		// Then resolve the intent and poison. Without the intent write, the
+		// intent resolution would be a no-op and wouldn't leave an AbortSpan
+		// entry.
 		expAll = append(expAll, roachpb.AbortSpanEntry{
 			Key:       key,
 			Timestamp: ts,
@@ -186,7 +197,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	}
 
 	for _, arg := range args {
-		_, pErr := client.SendWrapped(context.Background(), store.TestSender(), arg)
+		_, pErr := client.SendWrapped(ctx, store.TestSender(), arg)
 		if pErr != nil {
 			t.Fatalf("while sending +%v: %s", arg, pErr)
 		}
