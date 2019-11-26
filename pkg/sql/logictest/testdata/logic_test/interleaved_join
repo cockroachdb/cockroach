@@ -589,3 +589,37 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.plan.interleaved-table-join' AND usage_count > 0
 ----
 sql.plan.interleaved-table-join
+
+subtest regression_42609
+
+statement ok
+CREATE TABLE parent (
+  a STRING,
+  b STRING,
+  extraParent STRING,
+  PRIMARY KEY (a, b)
+)
+
+statement ok
+CREATE TABLE child (
+  a STRING,
+  b STRING,
+  c STRING,
+  extra STRING,
+  PRIMARY KEY (a,b,c)
+) INTERLEAVE IN PARENT "parent" (a, b)
+
+statement ok
+INSERT INTO parent VALUES ('a', 'b', 'ccc')
+
+statement ok
+INSERT INTO child VALUES ('a', 'b', '1', 'extra')
+
+statement ok
+CREATE INDEX idx_parent_child on child(a,b) INTERLEAVE IN PARENT parent(a,b)
+
+# This query strictly uses the interleave index on the child to merge with the parent.
+query TTT
+select parent.a, parent.b, child.c from child@{force_index=idx_parent_child} left outer join parent on (parent.a=child.a and parent.b = child.b)
+----
+a  b  1
