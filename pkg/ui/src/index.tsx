@@ -39,6 +39,7 @@ import RaftMessages from "src/views/devtools/containers/raftMessages";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
+import NodeHistory from "src/views/reports/containers/nodes/nodeHistory";
 import JobsPage from "src/views/jobs";
 import Certificates from "src/views/reports/containers/certificates";
 import CustomChart from "src/views/reports/containers/customChart";
@@ -163,7 +164,10 @@ ReactDOM.render(
           </Route>
           <Route path="localities" component={ Localities } />
           <Route path="network" component={ Network } />
-          <Route path="nodes" component={ Nodes } />
+          <Route path="nodes">
+            <IndexRoute component={ Nodes } />
+            <Route path="history" component={ NodeHistory } />
+          </Route>
           <Route path="settings" component={ Settings } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
