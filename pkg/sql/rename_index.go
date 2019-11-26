@@ -36,6 +36,10 @@ type renameIndexNode struct {
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
 	_, tableDesc, err := expandMutableIndexName(ctx, p, n.Index, true /* requireTable */)
 	if err != nil {
+		if n.IfExists && pgerror.GetPGCodeInternal(err, pgerror.ComputeDefaultCode) == pgcode.UndefinedObject {
+			// Noop.
+			return newZeroNode(nil /* columns */), nil
+		}
 		return nil, err
 	}
 
