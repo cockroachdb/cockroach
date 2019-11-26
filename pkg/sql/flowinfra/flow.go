@@ -282,10 +282,12 @@ func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 // set. A new context is derived and returned, and it must be used when this
 // method returns so that all components running in their own goroutines could
 // listen for a cancellation on the same context.
-func (f *FlowBase) startInternal(ctx context.Context, doneFn func()) (context.Context, error) {
+func (f *FlowBase) startInternal(
+	ctx context.Context, processors []execinfra.Processor, doneFn func(),
+) (context.Context, error) {
 	f.doneFn = doneFn
 	log.VEventf(
-		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
+		ctx, 1, "starting (%d processors, %d startables)", len(processors), len(f.startables),
 	)
 
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
@@ -315,14 +317,14 @@ func (f *FlowBase) startInternal(ctx context.Context, doneFn func()) (context.Co
 	for _, s := range f.startables {
 		s.Start(ctx, &f.waitGroup, f.ctxCancel)
 	}
-	for i := 0; i < len(f.processors); i++ {
+	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
-			f.processors[i].Run(ctx)
+			processors[i].Run(ctx)
 			f.waitGroup.Done()
 		}(i)
 	}
-	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 0 || !f.IsLocal()
+	f.startedGoroutines = len(f.startables) > 0 || len(processors) > 0 || !f.IsLocal()
 	return ctx, nil
 }
 
@@ -338,7 +340,7 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if _, err := f.startInternal(ctx, doneFn); err != nil {
+	if _, err := f.startInternal(ctx, f.processors, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
@@ -360,10 +362,10 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 		return errors.AssertionFailedf("no processors in flow")
 	}
 	headProc = f.processors[len(f.processors)-1]
-	f.processors = f.processors[:len(f.processors)-1]
+	otherProcs := f.processors[:len(f.processors)-1]
 
 	var err error
-	if ctx, err = f.startInternal(ctx, doneFn); err != nil {
+	if ctx, err = f.startInternal(ctx, otherProcs, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
