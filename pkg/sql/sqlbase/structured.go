@@ -1180,6 +1180,34 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	return true
 }
 
+func (desc *MutableTableDescriptor) initIDs() {
+	if desc.NextColumnID == 0 {
+		desc.NextColumnID = 1
+	}
+	if desc.Version == 0 {
+		desc.Version = 1
+	}
+	if desc.NextMutationID == InvalidMutationID {
+		desc.NextMutationID = 1
+	}
+}
+
+// MaybeFillColumnID assigns a column ID to the given column if the said column has an ID
+// of 0.
+func (desc *MutableTableDescriptor) MaybeFillColumnID(
+	c *ColumnDescriptor, columnNames map[string]ColumnID,
+) {
+	desc.initIDs()
+
+	columnID := c.ID
+	if columnID == 0 {
+		columnID = desc.NextColumnID
+		desc.NextColumnID++
+	}
+	columnNames[c.Name] = columnID
+	c.ID = columnID
+}
+
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
 func (desc *MutableTableDescriptor) AllocateIDs() error {
@@ -1190,32 +1218,14 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 		}
 	}
 
-	if desc.NextColumnID == 0 {
-		desc.NextColumnID = 1
-	}
-	if desc.Version == 0 {
-		desc.Version = 1
-	}
-	if desc.NextMutationID == InvalidMutationID {
-		desc.NextMutationID = 1
-	}
-
+	desc.initIDs()
 	columnNames := map[string]ColumnID{}
-	fillColumnID := func(c *ColumnDescriptor) {
-		columnID := c.ID
-		if columnID == 0 {
-			columnID = desc.NextColumnID
-			desc.NextColumnID++
-		}
-		columnNames[c.Name] = columnID
-		c.ID = columnID
-	}
 	for i := range desc.Columns {
-		fillColumnID(&desc.Columns[i])
+		desc.MaybeFillColumnID(&desc.Columns[i], columnNames)
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
-			fillColumnID(c)
+			desc.MaybeFillColumnID(c, columnNames)
 		}
 	}
 

@@ -1065,7 +1065,8 @@ func MakeTableDesc(
 				if err != nil {
 					return desc, err
 				}
-				shardCol, err := createAndAddShardColToTable(int(buckets), &desc, []string{string(d.Name)})
+				shardCol, err := createAndAddShardColToTable(int(buckets), &desc,
+					[]string{string(d.Name)}, true /* shouldAssignID */)
 				if err != nil {
 					return desc, err
 				}
@@ -1153,7 +1154,8 @@ func MakeTableDesc(
 				if err != nil {
 					return desc, err
 				}
-				shardCol, err := createAndAddShardColToTable(int(buckets), &desc, colNames)
+				shardCol, err := createAndAddShardColToTable(int(buckets), &desc,
+					colNames, true /* shouldAssignID */)
 				if err != nil {
 					return desc, err
 				}
@@ -1211,7 +1213,8 @@ func MakeTableDesc(
 				if err != nil {
 					return desc, err
 				}
-				shardCol, err := createAndAddShardColToTable(int(buckets), &desc, colNames)
+				shardCol, err := createAndAddShardColToTable(int(buckets), &desc,
+					colNames, true /* shouldAssignID */)
 				sqlbase.AddShardToIndexDesc(&idx, shardCol.Name, colNames, buckets)
 				// Prepend the shard column because we want the shard values, which we
 				// assume to be roughly uniformly distributed, to determine the underlying
@@ -1724,7 +1727,6 @@ func MakeCheckConstraint(
 	}
 
 	expr, colIDsUsed, err := replaceVars(desc, d.Expr)
-	fmt.Printf(`colIDsUsed %v`, colIDsUsed)
 	if err != nil {
 		return nil, err
 	}

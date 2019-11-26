@@ -87,7 +87,8 @@ func MakeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		shardCol, err := createAndAddShardColToTable(int(buckets), tableDesc, colNames)
+		shardCol, err := createAndAddShardColToTable(int(buckets), tableDesc,
+			colNames, false /* shouldAssignID */)
 		if err != nil {
 			return nil, err
 		}
@@ -98,9 +99,9 @@ func MakeIndexDescriptor(
 		n.Columns = append(tree.IndexElemList{shardIdxElem}, n.Columns...)
 		sqlbase.AddShardToIndexDesc(&indexDesc, shardCol.Name, colNames, buckets)
 
-		// TODO DURING REVIEW (aayush): Not sure if we should be creating the check
-		// constraint here, but doing it above this function would lead to a bunch of code
-		// duplication.
+		// TODO DURING REVIEW (aayush): Not sure if this is the best place to create the
+		// check constraint here, but doing it above this function would lead to a bunch
+		// of code duplication.
 		ckDef, err := makeShardCheckConstraintDef(tableDesc, int(buckets), shardCol)
 
 		if err := tableDesc.AllocateIDs(); err != nil {
@@ -121,8 +122,8 @@ func MakeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
+		// Avoid creating duplicate check constraints.
 		if _, ok := inuseNames[ckName]; !ok {
-			// Avoid creating duplicate check constraints.
 			ck, err := MakeCheckConstraint(params.ctx, tableDesc, ckDef, inuseNames,
 				&params.p.semaCtx, params.p.tableName)
 			if err != nil {
@@ -139,7 +140,7 @@ func MakeIndexDescriptor(
 }
 
 func createAndAddShardColToTable(
-	shardBuckets int, desc *sqlbase.MutableTableDescriptor, colNames []string,
+	shardBuckets int, desc *sqlbase.MutableTableDescriptor, colNames []string, shouldAssignID bool,
 ) (*sqlbase.ColumnDescriptor, error) {
 	shardCol, err := makeShardColumnDesc(colNames, shardBuckets, false)
 	if err != nil {
@@ -147,6 +148,29 @@ func createAndAddShardColToTable(
 	}
 	if !hasColumn(*desc, shardCol.Name) {
 		desc.AddColumn(shardCol)
+	}
+	// In order to have the `SHOW CREATE TABLE ` output "roundtripable", we need to assign
+	// an ID to the implicitly added shard column here. This is because the shard column
+	// shows up in the output if it is a part of any column family.
+	//
+	// For example:
+	// CREATE TABLE a (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10);
+	// SHOW CREATE TABLE a;
+	// Produces:
+	// CREATE TABLE a (
+	// 	a INT8 NOT NULL,
+	// 	CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+	// 	FAMILY "primary" (a_shard__internal, a)
+	// )
+	// TODO DURING REVIEW (aayush): My solution here feels somewhat hacky. Additionally,
+	// it seems to me that this should be okay for us to do this everytime the sharded
+	// index is created in a 'CREATE TABLE` statement but I can't be 100% sure. Does this
+	// seem like a valid thing to do?
+	if shouldAssignID {
+		// Note that it is okay that we throw away the `columnNames` map here since the
+		// name of this shard column will still be correctly populated when
+		// `desc.AllocateIDs` is called.
+		desc.MaybeFillColumnID(shardCol, map[string]sqlbase.ColumnID{} /* columnNames */)
 	}
 	return shardCol, nil
 }

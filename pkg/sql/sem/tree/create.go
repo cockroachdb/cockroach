@@ -410,6 +410,10 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		}
 		if node.PrimaryKey.PrimaryKey {
 			ctx.WriteString(" PRIMARY KEY")
+			if node.PrimaryKey.Sharded {
+				ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
+				ctx.FormatNode(node.PrimaryKey.ShardBuckets)
+			}
 		} else if node.Unique {
 			ctx.WriteString(" UNIQUE")
 		}
@@ -586,7 +590,6 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteString("INDEX ")
 	if node.Name != "" {
 		ctx.FormatNode(&node.Name)
-		ctx.WriteByte(' ')
 	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)
