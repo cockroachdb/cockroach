@@ -64,7 +64,8 @@ case "${cmd}" in
     ;;
     stop)
     read -r -p "This will stop the VM. Are you sure? [yes] " response
-    response=${response,,} # to lowercase
+    # Convert to lowercase.
+    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
     if [[ $response != "yes" ]]; then
       echo Aborting
       exit 1
@@ -73,7 +74,8 @@ case "${cmd}" in
     ;;
     delete|destroy)
     read -r -p "This will delete the VM! Are you sure? [yes] " response
-    response=${response,,} # to lowercase
+    # Convert to lowercase.
+    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
     if [[ $response != "yes" ]]; then
       echo Aborting
       exit 1
