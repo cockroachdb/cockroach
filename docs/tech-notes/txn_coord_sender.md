@@ -400,13 +400,15 @@ split into three groups:
   become "trashed" (and unusable), but where the `*client.Txn` can
   continue/restart with a new TCS:
 
-  1. *retryable transaction aborts* (`TransactionAbortedError` with a
-     `TransactionRetryWithProtoRefreshError` payload), which occurs
-     when the KV transaction gets aborted preemptively due to some
-     internal CRDB mechanism, but not due to a logical
-     error. Intuitively, this corresponds to errors due to the
-     distributed nature of CRDB which would not occur in a
-     single-server sequential database.
+  1. *retryable transaction aborts* (`TransactionRetryWithProtoRefreshError`
+  with a `TransactionAbortedError` payload), which occurs when the KV
+  transaction gets aborted by some other transaction. This happens in case of
+  deadlock, or in case the coordinator fails to heartbeat the txn record for a
+  few seconds and another transaction is blocked on one of our intents. Faux
+  `TransactionAbortedErrors` can also happen for transactions that straddle a
+  lease transfer (the new leaseholder is not able to verify that the transaction
+  had not been aborted by someone else before the lease transfer because we lost
+  the information in the old timestamp cache).
 
   For these errors, the TCS becomes unusable but the `*client.Txn`
   immediately replaces the TCS by a fresh one, see
@@ -418,13 +420,13 @@ split into three groups:
 
   This group contains 3 kinds of errors:
 
-  1. *permanent transaction aborts* (`TransactionAbortedError`), which
-     occurs when the transaction encounteres a permanent unrecoverable
+  1. *permanent transaction errors*, which
+     occurs when the transaction encounters a permanent unrecoverable
      error typically due to client logic error (e.g. AOST read under GC).
 
   2. *transient processing errors*, for which it is certain that
      further processing is theoretically still possible after
-	 the error occurs. For example, attempting to read data using
+     the error occurs. For example, attempting to read data using
      a historical timestamp that has already been garbage collected,
     `CPut` condition failure, transient network error on the read path, etc.
 
