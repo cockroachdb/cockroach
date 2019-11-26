@@ -1085,6 +1085,7 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN ALTER INDEX b RENAME TO b`},
 		{`ALTER INDEX a@b RENAME TO b`},
 		{`ALTER INDEX a@primary RENAME TO like`},
+		{`ALTER INDEX IF EXISTS b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
 
