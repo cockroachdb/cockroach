@@ -164,11 +164,6 @@ var (
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
-	// LocalRangeDescriptorJointSuffix is the suffix for keys storing
-	// range descriptors. The value is a struct of type RangeDescriptor.
-	//
-	// TODO(tbg): decide what to actually store here. This is still unused.
-	LocalRangeDescriptorJointSuffix = roachpb.RKey("rdjt")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
