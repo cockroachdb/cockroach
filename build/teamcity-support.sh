@@ -24,12 +24,42 @@ run() {
   "$@"
 }
 
-runlogged() {
-  echo "$1"
-  shift
-  "$@"
+# Takes args that produce `go test -json` output. It filters stdout to contain
+# only test output related to failing tests and run/pass/skip events for the
+# other tests (no output). It writes artifacts/failures.log containing text
+# output for the failing tests.
+function run_json_test() {
+	go get github.com/cockroachdb/cockroach/pkg/cmd/testfilter
+	set +e
+	run "$@" 2>&1 \
+		| tee -a artifacts/debug.txt \
+		| testfilter -mode=strip \
+		| tee artifacts/stripped.txt
+	status=$?
+	set -e
+
+	# Create failures.log artifact and delete stripped.txt.
+	testfilter -mode=omit < artifacts/stripped.txt | testfilter -mode convert >> artifacts/failures.log
+	rm -f artifacts/stripped.txt
+
+	# Keep the debug file around for failed builds. Compress it to avoid
+	# clogging the agents with stuff we'll hopefully rarely ever need to
+	# look at.
+	tar --strip-components 1 -czf artifacts/debug.tgz artifacts/debug.txt
+	rm -f artifacts/debug.txt
+
+	return $status
 }
 
+# Takes a package name and remaining args that produce `go test` text output
+# for the given package.
+function run_text_test() {
+	pkg=$0
+	shift
+	echo "# ${pkg}"
+	echo "$@"
+	"$@" 2>&1 | go tool test2json -t -p "${pkg}" | run_json_test cat
+}
 
 # Returns the list of release branches from origin (origin/release-*), ordered
 # by version (higher version numbers first).

@@ -16,9 +16,6 @@ rm artifacts/bench-c-build.log
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Benchmarks"
-run build/builder.sh \
-	stdbuf -oL -eL \
-	make benchshort TESTFLAGS='-v' 2>&1 \
-	| tee artifacts/bench.log \
-	| go-test-teamcity
+run_json_test build/builder.sh stdbuf -oL -eL \
+	make benchshort GOTESTFLAGS=-json TESTFLAGS='-v'
 tc_end_block "Run Benchmarks"
