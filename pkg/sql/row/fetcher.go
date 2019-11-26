@@ -387,10 +387,10 @@ func (rf *Fetcher) Init(
 		// index key, except for composite columns.
 		table.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
 
-		if table.isSecondaryIndex {
+		if table.isSecondaryIndex && len(table.index.Interleave.Ancestors) == 0 {
 			for i := range table.cols {
 				if table.neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
-					return fmt.Errorf("requested column %s not in index", table.cols[i].Name)
+					return errors.Errorf("requested column %s not in index", table.cols[i].Name)
 				}
 			}
 		}
