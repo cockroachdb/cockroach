@@ -31,17 +31,10 @@ import { LongToMoment } from "src/util/convert";
 import { BytesUsed, INodeStatus, MetricConstants } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
 import { trustIcon } from "src/util/trust";
-import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
-import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
-import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
-import decommissioningIcon from "!!raw-loader!assets/livenessIcons/decommissioning.svg";
-import { cockroach } from "src/js/protos";
-import { getLivenessStatusDescription } from "src/views/cluster/util/nodes";
+import { getLivenessStatusDescription, getLivenessIcon } from "src/views/cluster/util/nodes";
 
 import { BytesBarChart } from "./barChart";
 import "./nodes.styl";
-
-import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -74,19 +67,6 @@ interface NodeCategoryListProps {
  * statistics for these nodes.
  */
 class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
-  getLivenessIcon(livenessStatus: NodeLivenessStatus) {
-    switch (livenessStatus) {
-      case NodeLivenessStatus.LIVE:
-        return liveIcon;
-      case NodeLivenessStatus.DECOMMISSIONING:
-        return decommissioningIcon;
-      case NodeLivenessStatus.DEAD:
-        return deadIcon;
-      default:
-        return suspectIcon;
-    }
-  }
-
   render() {
     const { statuses, nodesSummary, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
@@ -115,7 +95,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               title: "Address",
               cell: (ns) => {
                 const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE;
-                const icon = this.getLivenessIcon(status);
+                const icon = getLivenessIcon(status);
                 const tooltip = getLivenessStatusDescription(status);
                 return (
                   <div className="sort-table__unbounded-column">
@@ -211,6 +191,8 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     }
 
     const statusName = _.capitalize(LivenessStatus[status]);
+    const icon = getLivenessIcon(status);
+    const tooltip = getLivenessStatusDescription(status);
 
     return (
       <div className="embedded-table">
@@ -235,6 +217,9 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
               cell: (ns) => {
                 return (
                   <div>
+                    <span className="node-status-icon"
+                      title={tooltip}
+                      dangerouslySetInnerHTML={ trustIcon(icon) } />
                     <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );
