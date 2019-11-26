@@ -1,11 +1,9 @@
 #! /usr/bin/env expect -f
 
-# Tests are temporarily disabled due to #42634
-
 source [file join [file dirname $argv0] common.tcl]
 
 start_test "Check \\demo_node commands work as expected"
-# Start a demo with no nodes.
+# Start a demo with 5 nodes.
 spawn $argv demo movr --nodes=5
 
 # Ensure db is movr.
