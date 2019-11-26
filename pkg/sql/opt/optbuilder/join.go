@@ -38,6 +38,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	// The right side scope of a LATERAL join includes the columns produced by
 	// the left side.
 	if t, ok := join.Right.(*tree.AliasedTableExpr); ok && t.Lateral {
+		telemetry.Inc(sqltelemetry.LateralJoinUseCounter)
 		isLateral = true
 		inScopeRight = leftScope
 	}
