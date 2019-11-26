@@ -94,7 +94,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	}
 	txn2Pushed := *txn2
 	txn2Pushed.Timestamp = hlc.Timestamp{Logical: 6}
-	if err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.Intent{
+	if _, err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.Intent{
 		Span:   roachpb.Span{Key: testKey3},
 		Txn:    txn2Pushed.TxnMeta,
 		Status: txn2Pushed.Status,
@@ -103,7 +103,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	}
 	txn2Abort := txn2Pushed
 	txn2Abort.Status = roachpb.ABORTED
-	if err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.Intent{
+	if _, err := MVCCResolveWriteIntent(ctx, ol, nil, roachpb.Intent{
 		Span:   roachpb.Span{Key: testKey3},
 		Txn:    txn2Abort.TxnMeta,
 		Status: txn2Abort.Status,
