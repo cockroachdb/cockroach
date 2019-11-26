@@ -8,7 +8,19 @@ CREATE TABLE users (
 )
 
 statement ok
+CREATE TABLE users_dupe (
+  id    INT PRIMARY KEY,
+  name  VARCHAR NOT NULL,
+  title VARCHAR,
+  INDEX foo (name),
+  UNIQUE INDEX bar (id, name)
+)
+
+statement ok
 INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
+
+statement ok
+INSERT INTO users_dupe VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users
@@ -20,6 +32,16 @@ users       foo         true        2             id           ASC        false 
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
 
+query TTBITTBB colnames
+SHOW INDEXES FROM users_dupe
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+users_dupe  primary     false       1             id           ASC        false    false
+users_dupe  foo         true        1             name         ASC        false    false
+users_dupe  foo         true        2             id           ASC        false    true
+users_dupe  bar         false       1             id           ASC        false    false
+users_dupe  bar         false       2             name         ASC        false    false
+
 statement error index name "bar" already exists
 ALTER INDEX users@foo RENAME TO bar
 
@@ -29,11 +51,27 @@ ALTER INDEX users@foo RENAME TO ""
 statement error index "ffo" does not exist
 ALTER INDEX users@ffo RENAME TO ufo
 
+statement error index "ffo" does not exist
+ALTER INDEX ffo RENAME TO ufo
+
+statement error index name "foo" is ambiguous
+ALTER INDEX foo RENAME TO ufo
+
+statement error index name "foo" is ambiguous
+ALTER INDEX IF EXISTS foo RENAME TO ufo
+
 statement ok
 ALTER INDEX IF EXISTS users@ffo RENAME TO ufo
 
+# Regression test for #42399.
 statement ok
-ALTER INDEX users@foo RENAME TO ufoo
+ALTER INDEX IF EXISTS ffo RENAME TO ufo
+
+statement ok
+ALTER INDEX users@foo RENAME TO ufooo
+
+statement ok
+ALTER INDEX IF EXISTS ufooo RENAME TO ufoo
 
 statement ok
 ALTER INDEX ufoo RENAME TO ufo
