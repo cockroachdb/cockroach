@@ -2742,6 +2742,23 @@ func mvccResolveWriteIntent(
 		// If we're moving the intent's timestamp, adjust stats and rewrite it.
 		var prevValSize int64
 		if buf.newMeta.Timestamp != meta.Timestamp {
+			oldKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
+
+			// Rewrite the versioned value at the new timestamp.
+			iter.SeekGE(oldKey)
+			if valid, err := iter.Valid(); err != nil {
+				return false, err
+			} else if !valid || !iter.UnsafeKey().Equal(oldKey) {
+				return false, errors.Errorf("existing intent value missing: %s", oldKey)
+			}
+			if err = engine.Put(newKey, iter.UnsafeValue()); err != nil {
+				return false, err
+			}
+			if err = engine.Clear(oldKey); err != nil {
+				return false, err
+			}
+
 			// If there is a value under the intent as it moves timestamps, then
 			// that value may need an adjustment of its GCBytesAge. This is
 			// because it became non-live at orig.Timestamp originally, and now
@@ -2750,27 +2767,11 @@ func mvccResolveWriteIntent(
 			//
 			// Look for the first real versioned key, i.e. the key just below
 			// the (old) meta's timestamp.
-			latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
-			_, unsafeNextValue, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
-			if err != nil {
+			iter.Next()
+			if valid, err := iter.Valid(); err != nil {
 				return false, err
-			}
-			if haveNextVersion {
-				prevValSize = int64(len(unsafeNextValue))
-			}
-			iter = nil // prevent accidental use below
-
-			// Rewrite the versioned value at the new timestamp.
-			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
-			valBytes, err := engine.Get(latestKey)
-			if err != nil {
-				return false, err
-			}
-			if err = engine.Put(newKey, valBytes); err != nil {
-				return false, err
-			}
-			if err = engine.Clear(latestKey); err != nil {
-				return false, err
+			} else if valid && iter.UnsafeKey().Key.Equal(oldKey.Key) {
+				prevValSize = int64(len(iter.UnsafeValue()))
 			}
 		}
 
