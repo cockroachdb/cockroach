@@ -12,12 +12,17 @@ package timeutil
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
 const fixedOffsetPrefix string = "fixed offset:"
+const pattern = `(?i)(GMT|UTC)([+-])(\d{1,3}(:[0-5]\d){0,2})\b$`
+const bound = 167*60*60 + 59*60
+
+var re = regexp.MustCompile(pattern)
 
 // FixedOffsetTimeZoneToLocation creates a time.Location with a set offset and
 // with a name that can be marshaled by crdb between nodes.
@@ -67,4 +72,45 @@ func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, suc
 		return 0, "", false
 	}
 	return offset, strings.TrimSuffix(strings.TrimPrefix(origRepr, "("), ")"), true
+}
+
+// TimeZoneOffsetStringConversion converts a time string to offset seconds
+// Supported time zone strings :- GMT/UTC±[00:00:00 - 15:59:59], GMT/UTC±[0-16]
+// Unsupported time zone strings :- GMT/UTC±16:00 to upper, GMT/UTC±6.5
+// (case insensitive)
+func TimeZoneOffsetStringConversion(s string) (offset int64, ok bool) {
+	if !(re.MatchString(s)) {
+		return 0, false
+	}
+	prefix := string(re.FindStringSubmatch(s)[0][3])
+	timeString := string(re.FindStringSubmatch(s)[3])
+
+	var (
+		hoursString   = "0"
+		minutesString = "0"
+		secondsString = "0"
+	)
+	if strings.Contains(timeString, ":") {
+		offsets := strings.Split(timeString, ":")
+		hoursString, minutesString = offsets[0], offsets[1]
+		if len(offsets) == 3 {
+			secondsString = offsets[2]
+		}
+	} else {
+		hoursString = timeString
+	}
+
+	hours, _ := strconv.ParseInt(hoursString, 10, 64)
+	minutes, _ := strconv.ParseInt(minutesString, 10, 64)
+	seconds, _ := strconv.ParseInt(secondsString, 10, 64)
+	offset = (hours * 60 * 60) + (minutes * 60) + seconds
+
+	if prefix == "-" {
+		offset *= -1
+	}
+
+	if offset > bound || offset < -bound {
+		return 0, false
+	}
+	return offset, true
 }
