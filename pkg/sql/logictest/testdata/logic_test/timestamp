@@ -192,3 +192,14 @@ query R
 SELECT extract(timezone FROM '2001-01-01 13:00:00+01:15'::timestamptz)
 ----
 10800
+
+
+subtest regression_41776
+
+statement ok
+SET TIME ZONE 'GMT+1'
+
+query T
+SELECT '2001-01-01 00:00:00'::TIMESTAMP::TIMESTAMPTZ
+----
+2001-01-01 00:00:00 +0100 +0100
