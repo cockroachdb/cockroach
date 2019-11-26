@@ -247,18 +247,36 @@ func mustParseDStringArray(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDIntArray(t *testing.T, s string) tree.Datum {
+	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	d, err := tree.ParseDArrayFromString(&evalContext, s, types.Int)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+func mustParseDDecimalArray(t *testing.T, s string) tree.Datum {
+	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	d, err := tree.ParseDArrayFromString(&evalContext, s, types.Decimal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 
 var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
-	types.String:      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
-	types.Bytes:       func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
-	types.Bool:        mustParseDBool,
-	types.Date:        mustParseDDate,
-	types.Time:        mustParseDTime,
-	types.Timestamp:   mustParseDTimestamp,
-	types.TimestampTZ: mustParseDTimestampTZ,
-	types.Interval:    mustParseDInterval,
-	types.Jsonb:       mustParseDJSON,
-	types.StringArray: mustParseDStringArray,
+	types.String:       func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
+	types.Bytes:        func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
+	types.Bool:         mustParseDBool,
+	types.Date:         mustParseDDate,
+	types.Time:         mustParseDTime,
+	types.Timestamp:    mustParseDTimestamp,
+	types.TimestampTZ:  mustParseDTimestampTZ,
+	types.Interval:     mustParseDInterval,
+	types.Jsonb:        mustParseDJSON,
+	types.DecimalArray: mustParseDDecimalArray,
+	types.IntArray:     mustParseDIntArray,
+	types.StringArray:  mustParseDStringArray,
 }
 
 func typeSet(tys ...*types.T) map[*types.T]struct{} {
@@ -329,6 +347,14 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
 		},
 		{
+			c:            tree.NewStrVal(`{1,2}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.IntArray, types.DecimalArray),
+		},
+		{
+			c:            tree.NewStrVal(`{1.5,2.0}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.DecimalArray),
+		},
+		{
 			c:            tree.NewStrVal(`{a,b}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.StringArray),
 		},
@@ -345,7 +371,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		for _, availType := range test.c.AvailableTypes() {
 			res, err := test.c.ResolveAsType(&tree.SemaContext{}, availType)
 			if err != nil {
-				if !strings.Contains(err.Error(), "could not parse") {
+				if !strings.Contains(err.Error(), "could not parse") && !strings.Contains(err.Error(), "parsing") {
 					// Parsing errors are permitted for this test, but the number of correctly
 					// parseable types will be verified. Any other error should throw a failure.
 					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+

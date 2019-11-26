@@ -453,6 +453,8 @@ var (
 		types.Decimal,
 		types.Date,
 		types.StringArray,
+		types.IntArray,
+		types.DecimalArray,
 		types.Time,
 		types.TimeTZ,
 		types.Timestamp,
