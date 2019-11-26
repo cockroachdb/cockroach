@@ -239,11 +239,22 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	// TODO(#42243): re-compute the latency mapping.
 	args := testServerArgsForTransientCluster(nodeID, c.s.ServingRPCAddr())
 	serv := server.TestServerFactory.New(args).(*server.TestServer)
+
+	// We want to only return after the server is ready.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	serv.Cfg.ReadyFn = func(_ bool) {
+		wg.Done()
+	}
+
 	if err := serv.Start(args); err != nil {
 		return err
 	}
 	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 	c.servers[nodeIndex] = serv
+
+	// Wait until the server is ready to action.
+	wg.Wait()
 	return nil
 }
 
@@ -351,15 +362,19 @@ func setupTransientCluster(
 		}
 		servers = append(servers, serv)
 
+		// We force a wait for all servers until they are ready.
+		wg.Add(1)
+		serv.Cfg.ReadyFn = func(_ bool) {
+			wg.Done()
+		}
+
 		// If latency simulation is requested, start the servers in a background thread. We do this because
 		// the start routine needs to wait for the latency map construction after their RPC address has been computed.
 		if demoCtx.simulateLatency {
-			wg.Add(1)
 			go func(i int) {
 				if err := serv.Start(args); err != nil {
 					errChs[i] <- err
 				}
-				wg.Done()
 			}(i)
 			<-readyCh
 		} else {
