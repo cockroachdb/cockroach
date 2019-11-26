@@ -615,6 +615,7 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 	}
 
 	addedCTEs := make([]cteSource, len(with.CTEList))
+	hasRecursive := false
 
 	// Make a fake subquery to ensure that no CTEs are correlated.
 	// TODO(justin): relax this restriction.
@@ -624,6 +625,7 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i, cte := range with.CTEList {
+		hasRecursive = hasRecursive || with.Recursive
 		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
 
 		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
@@ -664,6 +666,9 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
+	if hasRecursive {
+		telemetry.Inc(sqltelemetry.RecursiveCteUseCounter)
+	}
 
 	return outScope
 }
@@ -972,6 +977,7 @@ func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outSc
 	// left-deep instead of right-deep.
 	for i := range tables {
 		if b.exprIsLateral(tables[i]) {
+			telemetry.Inc(sqltelemetry.LateralJoinUseCounter)
 			return b.buildFromWithLateral(tables, inScope)
 		}
 	}

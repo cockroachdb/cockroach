@@ -17,8 +17,13 @@ import (
 )
 
 // CteUseCounter is to be incremented every time a CTE (WITH ...)
-// is planned without error in a query.
+// is planned without error in a query (this includes both recursive and
+// non-recursive CTEs).
 var CteUseCounter = telemetry.GetCounterOnce("sql.plan.cte")
+
+// RecursiveCteUseCounter is to be incremented every time a recursive CTE (WITH
+// RECURSIVE...) is planned without error in a query.
+var RecursiveCteUseCounter = telemetry.GetCounterOnce("sql.plan.cte.recursive")
 
 // SubqueryUseCounter is to be incremented every time a subquery is
 // planned.
@@ -27,6 +32,10 @@ var SubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery")
 // CorrelatedSubqueryUseCounter is to be incremented every time a
 // correlated subquery has been processed during planning.
 var CorrelatedSubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery.correlated")
+
+// LateralJoinUseCounter is to be incremented whenever a query uses the
+// LATERAL keyword.
+var LateralJoinUseCounter = telemetry.GetCounterOnce("sql.plan.lateral-join")
 
 // HashJoinHintUseCounter is to be incremented whenever a query specifies a
 // hash join via a query hint.
