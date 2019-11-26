@@ -218,9 +218,12 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		execinfrapb.FlowID{},
 	)
 
-	acc := evalCtx.Mon.MakeBoundAccount()
-	defer acc.Close(ctx)
-	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, &acc, flowinfra.FuseNormally)
+	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)
+	defer func() {
+		for _, memAcc := range vfc.streamingMemAccounts {
+			memAcc.Close(ctx)
+		}
+	}()
 	require.NoError(t, err)
 
 	// Verify that an outbox was actually created.
