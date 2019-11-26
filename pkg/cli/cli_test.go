@@ -127,10 +127,11 @@ func newCLITest(params cliTestParams) cliTest {
 		}
 
 		s, err := serverutils.StartServerRaw(base.TestServerArgs{
-			Insecure:    params.insecure,
-			SSLCertsDir: c.certsDir,
-			StoreSpecs:  params.storeSpecs,
-			Locality:    params.locality,
+			Insecure:      params.insecure,
+			SSLCertsDir:   c.certsDir,
+			StoreSpecs:    params.storeSpecs,
+			Locality:      params.locality,
+			ExternalIODir: filepath.Join(certsDir, "extern"),
 		})
 		if err != nil {
 			c.fail(err)
@@ -358,7 +359,7 @@ func isSQLCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "user", "sql", "dump", "workload":
+	case "user", "sql", "dump", "workload", "nodelocal":
 		return true
 	case "node":
 		if len(args) == 0 {
@@ -1603,6 +1604,7 @@ Available Commands:
   node              list, inspect or remove nodes
   dump              dump sql tables
 
+  nodelocal         upload and delete nodelocal files
   demo              open a demo sql shell
   gen               generate auxiliary files
   version           output version information
