@@ -592,7 +592,7 @@ $(KRB5_DIR)/Makefile: $(C_DEPS_DIR)/krb5-rebuild $(KRB5_SRC_DIR)/src/configure
 	@# NOTE: If you change the configure flags below, bump the version in
 	@# $(C_DEPS_DIR)/krb5-rebuild. See above for rationale.
 	@# If CFLAGS is set to -g1 then make will fail. Use "env -" to clear the environment.
-	cd $(KRB5_DIR) && env -u CFLAGS -u CXXFLAGS $(KRB5_SRC_DIR)/src/configure $(xconfigure-flags) --enable-static --disable-shared
+	cd $(KRB5_DIR) && env -u CFLAGS -u CXXFLAGS $(KRB5_SRC_DIR)/src/configure $(xconfigure-flags) --enable-shared
 
 $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | bin/.submodules-initialized
 	rm -rf $(PROTOBUF_DIR)
