@@ -29,6 +29,7 @@ import { LongToMoment } from "src/util/convert";
 import {
   SummaryBar, SummaryLabel, SummaryValue,
 } from "src/views/shared/components/summaryBar";
+import { getLivenessStatusDescription } from "src/views/cluster/util/nodes";
 
 /**
  * TableRow is a small stateless component that renders a single row in the node
@@ -88,7 +89,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
 
     const liveness = nodesSummary.livenessStatusByNodeID[node.desc.node_id] || LivenessStatus.LIVE;
     const livenessString = livenessNomenclature(liveness);
-
+    const tooltip = getLivenessStatusDescription(liveness);
     return (
       <div>
         <Helmet>
@@ -166,6 +167,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 title="Health"
                 value={livenessString}
                 classModifier={livenessString}
+                tooltip={tooltip}
               />
               <SummaryValue title="Last Update" value={LongToMoment(node.updated_at).fromNow()} />
               <SummaryValue title="Build" value={node.build_info.tag} />

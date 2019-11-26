@@ -29,6 +29,7 @@ interface SummaryValueProps {
   title: React.ReactNode;
   value: React.ReactNode;
   classModifier?: string;
+  tooltip?: string;
 }
 
 interface SummaryStatProps {
@@ -82,21 +83,22 @@ export function SummaryBar(props: { children?: React.ReactNode }) {
  * as messages and breakdowns.
  */
 export function SummaryValue(props: SummaryValueProps & {children?: React.ReactNode}) {
+  const { classModifier, children, title, tooltip, value } = props;
   const topClasses = classNames(
     "summary-stat",
-    props.classModifier ? `summary-stat--${props.classModifier}` : null,
+    classModifier ? `summary-stat--${classModifier}` : null,
   );
   return (
     <div className={topClasses}>
       <div className="summary-stat__body">
         <span className="summary-stat__title">
-          { props.title }
+          { title }
         </span>
-        <span className="summary-stat__value">
-          { props.value }
+        <span className="summary-stat__value" title={tooltip}>
+          { value }
         </span>
       </div>
-      { props.children }
+      { children }
     </div>
   );
 }
