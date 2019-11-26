@@ -488,6 +488,11 @@ func (s *ChangeFrontierSpec) summary() (string, []string) {
 	return "ChangeFrontier", []string{}
 }
 
+// summary implements the diagramCellType interface.
+func (s *IntermediateResultsLoggerSpec) summary() (string, []string) {
+	return "IntermediateResultsLogger", []string{}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

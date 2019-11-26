@@ -754,6 +754,15 @@ func NewColOperator(
 
 		result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
+	case core.Logger != nil:
+		if err := checkNumIn(inputs, 1); err != nil {
+			return result, err
+		}
+		result.Op = newIntermediateResultsLogger(
+			inputs[0], spec.Input[0].ColumnTypes, core.Logger.ComponentID,
+		)
+		result.IsStreaming, result.ColumnTypes = true, spec.Input[0].ColumnTypes
+
 	default:
 		return result, errors.Newf("unsupported processor core %q", core)
 	}
