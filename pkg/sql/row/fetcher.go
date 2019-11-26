@@ -387,14 +387,6 @@ func (rf *Fetcher) Init(
 		// index key, except for composite columns.
 		table.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
 
-		if table.isSecondaryIndex {
-			for i := range table.cols {
-				if table.neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
-					return fmt.Errorf("requested column %s not in index", table.cols[i].Name)
-				}
-			}
-		}
-
 		// Prepare our index key vals slice.
 		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), indexColumnIDs)
 		if err != nil {
