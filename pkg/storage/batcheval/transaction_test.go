@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -126,6 +127,7 @@ func TestSetAbortSpan(t *testing.T) {
 		args := CommandArgs{
 			EvalCtx: rec,
 			Args:    &req,
+			MaxKeys: math.MaxInt64,
 		}
 
 		var resp roachpb.ResolveIntentRangeResponse
@@ -143,7 +145,7 @@ func TestSetAbortSpan(t *testing.T) {
 		//                       EndTransactionRequest                       //
 		///////////////////////////////////////////////////////////////////////
 		{
-			name: "end txn, rollback, no poison, abort span missing",
+			name: "end txn, rollback, no poison, intent missing, abort span missing",
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
@@ -151,7 +153,7 @@ func TestSetAbortSpan(t *testing.T) {
 			exp: nil,
 		},
 		{
-			name:   "end txn, rollback, no poison, abort span present",
+			name:   "end txn, rollback, no poison, intent missing, abort span present",
 			before: addAbortSpanEntry,
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
@@ -160,24 +162,24 @@ func TestSetAbortSpan(t *testing.T) {
 			exp: nil,
 		},
 		{
-			name: "end txn, rollback, poison, abort span missing",
+			name: "end txn, rollback, poison, intent missing, abort span missing",
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
-			// Poisoning, should add an abort span entry.
-			exp: &txnAbortSpanEntry,
+			// Poisoning, but no intents found, should not add an abort span entry.
+			exp: nil,
 		},
 		{
-			name:   "end txn, rollback, poison, abort span present",
+			name:   "end txn, rollback, poison, intent missing, abort span present",
 			before: addAbortSpanEntry,
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
-			// Poisoning, should update abort span entry.
-			exp: &txnAbortSpanEntry,
+			// Poisoning, but no intents found, don't touch abort span.
+			exp: &txnPrevAbortSpanEntry,
 		},
 		{
-			name: "end txn, commit, no poison, abort span missing",
+			name: "end txn, commit, no poison, intent missing, abort span missing",
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, false /* poison */)
 			},
@@ -187,7 +189,7 @@ func TestSetAbortSpan(t *testing.T) {
 		{
 			// NOTE: this request doesn't make sense, but we handle it. An abort
 			// span shouldn't be present if the transaction is still committable.
-			name:   "end txn, commit, no poison, abort span present",
+			name:   "end txn, commit, no poison, intent missing, abort span present",
 			before: addAbortSpanEntry,
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, false /* poison */)
@@ -198,7 +200,7 @@ func TestSetAbortSpan(t *testing.T) {
 		{
 			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
 			// should never pass Commit = true and Poison = true.
-			name: "end txn, commit, poison, abort span missing",
+			name: "end txn, commit, poison, intent missing, abort span missing",
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
@@ -208,8 +210,86 @@ func TestSetAbortSpan(t *testing.T) {
 		{
 			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
 			// should never pass Commit = true and Poison = true.
-			name:   "end txn, commit, poison, abort span present",
+			name:   "end txn, commit, poison, intent missing, abort span present",
 			before: addAbortSpanEntry,
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, true /* commit */, true /* poison */)
+			},
+			// Not aborted, don't touch abort span.
+			exp: &txnPrevAbortSpanEntry,
+		},
+		{
+			name:   "end txn, rollback, no poison, intent present, abort span missing",
+			before: addIntent,
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, false /* commit */, false /* poison */)
+			},
+			// Not poisoning, should not add an abort span entry.
+			exp: nil,
+		},
+		{
+			name:   "end txn, rollback, no poison, intent present, abort span present",
+			before: compose(addIntent, addAbortSpanEntry),
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, false /* commit */, false /* poison */)
+			},
+			// Not poisoning, should clean up abort span entry.
+			exp: nil,
+		},
+		{
+			name:   "end txn, rollback, poison, intent present, abort span missing",
+			before: addIntent,
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, false /* commit */, true /* poison */)
+			},
+			// Poisoning, should add an abort span entry.
+			exp: &txnAbortSpanEntry,
+		},
+		{
+			name:   "end txn, rollback, poison, intent present, abort span present",
+			before: compose(addIntent, addAbortSpanEntry),
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, false /* commit */, true /* poison */)
+			},
+			// Poisoning, should update abort span entry.
+			exp: &txnAbortSpanEntry,
+		},
+		{
+			name:   "end txn, commit, no poison, intent present, abort span missing",
+			before: addIntent,
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, true /* commit */, false /* poison */)
+			},
+			// Not poisoning, should not add an abort span entry.
+			exp: nil,
+		},
+		{
+			// NOTE: this request doesn't make sense, but we handle it. An abort
+			// span shouldn't be present if the transaction is still committable.
+			name:   "end txn, commit, no poison, intent present, abort span present",
+			before: compose(addIntent, addAbortSpanEntry),
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, true /* commit */, false /* poison */)
+			},
+			// Not aborted, don't touch abort span.
+			exp: &txnPrevAbortSpanEntry,
+		},
+		{
+			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
+			// should never pass Commit = true and Poison = true.
+			name:   "end txn, commit, poison, intent present, abort span missing",
+			before: addIntent,
+			run: func(b engine.ReadWriter, rec EvalContext) error {
+				return endTxn(b, rec, true /* commit */, true /* poison */)
+			},
+			// Poisoning but not aborted, should not add an abort span entry.
+			exp: nil,
+		},
+		{
+			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
+			// should never pass Commit = true and Poison = true.
+			name:   "end txn, commit, poison, intent present, abort span present",
+			before: compose(addIntent, addAbortSpanEntry),
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
@@ -333,8 +413,8 @@ func TestSetAbortSpan(t *testing.T) {
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
-			// Poisoning, should add an abort span entry.
-			exp: &txnAbortSpanEntry,
+			// Poisoning, but no intents found, should not add an abort span entry.
+			exp: nil,
 		},
 		{
 			name:   "resolve intent, txn aborted, poison, intent missing, abort span present",
@@ -342,8 +422,8 @@ func TestSetAbortSpan(t *testing.T) {
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
-			// Poisoning, should update abort span entry.
-			exp: &txnAbortSpanEntry,
+			// Poisoning, but no intents found, don't touch abort span.
+			exp: &txnPrevAbortSpanEntry,
 		},
 		{
 			name:   "resolve intent, txn aborted, poison, intent present, abort span missing",
@@ -560,8 +640,8 @@ func TestSetAbortSpan(t *testing.T) {
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
-			// Poisoning, should add an abort span entry.
-			exp: &txnAbortSpanEntry,
+			// Poisoning, but no intents found, should not add an abort span entry.
+			exp: nil,
 		},
 		{
 			name:   "resolve intent range, txn aborted, poison, intent missing, abort span present",
@@ -569,8 +649,8 @@ func TestSetAbortSpan(t *testing.T) {
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
-			// Poisoning, should update abort span entry.
-			exp: &txnAbortSpanEntry,
+			// Poisoning, but no intents found, don't touch abort span.
+			exp: &txnPrevAbortSpanEntry,
 		},
 		{
 			name:   "resolve intent range, txn aborted, poison, intent present, abort span missing",

@@ -9025,10 +9025,20 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			expProposal: false,
 		},
 		{
-			name: "resolve aborted intent req",
-			req:  resolveAbortedIntentReq,
+			name: "resolve aborted intent req, with intent",
+			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
+				return sendReq(ctx, repl, putReq, txn)
+			},
+			req: resolveAbortedIntentReq,
 			// Not a no-op - the request needs to poison the abort span.
 			expProposal: true,
+		},
+		{
+			name: "resolve aborted intent req, without intent",
+			req:  resolveAbortedIntentReq,
+			// No-op - the intent is missing, so there's nothing to resolve.
+			// This also means that the abort span isn't written.
+			expProposal: false,
 		},
 		{
 			name: "redundant resolve aborted intent req",

@@ -356,7 +356,7 @@ func TestMVCCEmptyKey(t *testing.T) {
 			if _, _, _, err := MVCCScan(ctx, engine, testKey1, key, math.MaxInt64, ts, MVCCScanOptions{}); err == nil {
 				t.Error("expected empty key error")
 			}
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{}); err == nil {
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{}); err == nil {
 				t.Error("expected empty key error")
 			}
 		})
@@ -3222,7 +3222,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 			txnCommit := txn
 			txnCommit.Status = roachpb.COMMITTED
 			txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txnCommit.Status,
 				Txn:    txnCommit.TxnMeta,
@@ -3373,7 +3373,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 			txnCommit := txn
 			txnCommit.Status = roachpb.COMMITTED
 			txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txnCommit.Status,
 				Txn:    txnCommit.TxnMeta,
@@ -3777,7 +3777,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 			}
 
 			// Resolve will write with txn1's timestamp which is 0,1.
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Txn:    txn1Commit.TxnMeta,
 				Status: txn1Commit.Status,
@@ -3822,7 +3822,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 			}
 
 			// Resolve will succeed but should remove the intent.
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Txn:    txn1Commit.TxnMeta,
 				Status: txn1Commit.Status,
@@ -3871,7 +3871,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 
 			// A bug (see #7654) caused intents to just stay where they were instead
 			// of being moved forward in the situation set up above.
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, intent); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, intent); err != nil {
 				t.Fatal(err)
 			}
 
@@ -4088,7 +4088,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 			txn1AbortWithTS := txn1Abort.Clone()
 			txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{Logical: 1}
 
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Txn:    txn1AbortWithTS.TxnMeta,
 				Status: txn1AbortWithTS.Status,
@@ -4135,7 +4135,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 			txn1AbortWithTS := txn1Abort.Clone()
 			txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 2}
 
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txn1AbortWithTS.Status,
 				Txn:    txn1AbortWithTS.TxnMeta,
@@ -4205,7 +4205,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 			txne2Commit := txne2
 			txne2Commit.Status = roachpb.COMMITTED
 			txne2Commit.WriteTimestamp = hlc.Timestamp{WallTime: 1}
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txne2Commit.Status,
 				Txn:    txne2Commit.TxnMeta,
@@ -4608,7 +4608,7 @@ func TestMVCCGetWithPushedTimestamp(t *testing.T) {
 					}
 					// Resolve the intent, pushing its timestamp forward.
 					txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-					if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+					if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 						Span:   roachpb.Span{Key: testKey1},
 						Status: txn.Status,
 						Txn:    txn.TxnMeta,
@@ -4702,7 +4702,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 			// Resolve with a higher commit timestamp -- this should rewrite the
 			// intent when making it permanent.
 			txn := makeTxn(*txn1Commit, hlc.Timestamp{WallTime: 1})
-			if err = MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err = MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txn.Status,
 				Txn:    txn.TxnMeta,
@@ -4756,7 +4756,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 			// Resolve with a higher commit timestamp, but with still-pending transaction.
 			// This represents a straightforward push (i.e. from a read/write conflict).
 			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-			if err = MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err = MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txn.Status,
 				Txn:    txn.TxnMeta,
@@ -4797,7 +4797,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 			defer engine.Close()
 
 			// Resolve a non existent key; noop.
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txn1Commit.Status,
 				Txn:    txn1Commit.TxnMeta,
@@ -4809,7 +4809,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txn2Commit.Status,
 				Txn:    txn2Commit.TxnMeta,
@@ -4824,7 +4824,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 
 			txn1CommitWithTS := txn2Commit.Clone()
 			txn1CommitWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 1}
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey2},
 				Status: txn1CommitWithTS.Status,
 				Txn:    txn1CommitWithTS.TxnMeta,
@@ -5702,7 +5702,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Resolve the intent with a low epoch.
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: testKey1},
 				Status: txn1.Status,
 				Txn:    txn1.TxnMeta,
@@ -5887,7 +5887,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Resolve the intent so we can use another transaction on this key.
-			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: key},
 				Status: roachpb.COMMITTED,
 				Txn:    txn.TxnMeta,
@@ -6099,7 +6099,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 			}
 
 			// Resolve the intent.
-			if err = MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+			if _, err = MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
 				Span:   roachpb.Span{Key: key},
 				Status: roachpb.COMMITTED,
 				Txn:    txn.TxnMeta,
