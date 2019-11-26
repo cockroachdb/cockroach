@@ -857,7 +857,7 @@ func makeFilterPlanningState(numLeftInputCols, numRightInputCols int) filterPlan
 func (p *filterPlanningState) renderAllNeededCols(
 	filter execinfrapb.Expression, leftOutCols []uint32, rightOutCols []uint32,
 ) ([]uint32, []uint32, error) {
-	neededColumnsForFilter, err := findIVarsInRange(
+	neededColumnsForFilter, err := execinfra.FindIVarsInRange(
 		filter,
 		0, /* start */
 		p.numLeftInputCols+p.numRightInputCols,
@@ -935,7 +935,7 @@ func (p *filterPlanningState) renderAllNeededCols(
 // from the right side.
 func (p *filterPlanningState) isFilterOnlyOnLeft(filter execinfrapb.Expression) (bool, error) {
 	// Find all needed columns for filter only from the right side.
-	neededColumnsForFilter, err := findIVarsInRange(
+	neededColumnsForFilter, err := execinfra.FindIVarsInRange(
 		filter, p.numLeftInputCols, p.numLeftInputCols+p.numRightInputCols,
 	)
 	if err != nil {

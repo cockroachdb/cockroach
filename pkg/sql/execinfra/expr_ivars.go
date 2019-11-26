@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package execinfra
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// findIVarsInRange searches Expr for presence of tree.IndexedVars with indices
+// FindIVarsInRange searches Expr for presence of tree.IndexedVars with indices
 // in range [start, end). It returns a slice containing all such indices.
-func findIVarsInRange(expr execinfrapb.Expression, start int, end int) ([]uint32, error) {
+func FindIVarsInRange(expr execinfrapb.Expression, start int, end int) ([]uint32, error) {
 	res := make([]uint32, 0)
 	if start >= end {
 		return res, nil

@@ -411,10 +411,34 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 			return err
 		}
 
-		// We require all values from the tables being read
-		// since we do not expect any projections or rendering
-		// on a scan before a join.
-		args[i].ValNeededForCol.AddRange(0, len(desc.Columns)-1)
+		if table.Post.Projection {
+			for _, outputCol := range table.Post.OutputColumns {
+				args[i].ValNeededForCol.Add(int(outputCol))
+			}
+		} else if len(table.Post.RenderExprs) > 0 {
+			for _, expr := range table.Post.RenderExprs {
+				colIdxs, err := execinfra.FindIVarsInRange(expr, 0, len(desc.Columns))
+				if err != nil {
+					return err
+				}
+				for _, idx := range colIdxs {
+					args[i].ValNeededForCol.Add(int(idx))
+				}
+			}
+		} else {
+			args[i].ValNeededForCol.AddRange(0, len(desc.Columns)-1)
+		}
+
+		if !table.Post.Filter.Empty() {
+			colIdxs, err := execinfra.FindIVarsInRange(table.Post.Filter, 0, len(desc.Columns))
+			if err != nil {
+				return err
+			}
+			for _, idx := range colIdxs {
+				args[i].ValNeededForCol.Add(int(idx))
+			}
+		}
+
 		args[i].ColIdxMap = desc.ColumnIdxMap()
 		args[i].Desc = desc
 		args[i].Cols = desc.Columns
