@@ -106,12 +106,27 @@ SELECT 3 FROM kv GROUP BY v HAVING k > 5
 ----
 error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
-# pg has a special case for grouping on primary key, which would allow this, but we do not.
-# See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
+# Special case for grouping on primary key.
 build
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
 ----
-error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
+project
+ ├── columns: "?column?":5(int!null)
+ ├── select
+ │    ├── columns: k:1(int!null) v:2(int!null)
+ │    ├── group-by
+ │    │    ├── columns: k:1(int!null) v:2(int)
+ │    │    ├── grouping columns: k:1(int!null) v:2(int)
+ │    │    └── project
+ │    │         ├── columns: k:1(int!null) v:2(int)
+ │    │         └── scan kv
+ │    │              └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── filters
+ │         └── gt [type=bool]
+ │              ├── variable: v [type=int]
+ │              └── const: 2 [type=int]
+ └── projections
+      └── const: 3 [type=int]
 
 build
 SELECT k FROM kv HAVING k > 7

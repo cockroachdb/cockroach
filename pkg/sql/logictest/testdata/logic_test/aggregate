@@ -361,8 +361,15 @@ SELECT count(*), k+v FROM kv GROUP BY k, v
 1 9
 1 NULL
 
-query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+query II rowsort
 SELECT count(*), k+v FROM kv GROUP BY k
+----
+1  3
+1  7
+1  NULL
+1  8
+1  9
+1  12
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT count(*), k+v FROM kv GROUP BY v
@@ -416,10 +423,12 @@ SELECT max(k), min(v) FROM kv HAVING k
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT 3 FROM kv GROUP BY v HAVING k > 5
 
-# pg has a special case for grouping on primary key, which would allow this, but we do not.
-# See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
-query error column "v" must appear in the GROUP BY clause or be used in an aggregate function
+# Special case for grouping on primary key.
+query I
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
+----
+3
+3
 
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT k FROM kv HAVING k > 7
@@ -1772,3 +1781,51 @@ SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 
 query error lpad
 SELECT count(*)::TEXT||lpad('foo', 23984729388383834723984) FROM (VALUES(1));
+
+# Tests for selecting any columns when grouping by the PK.
+statement ok
+DELETE FROM ab WHERE true;
+INSERT INTO ab VALUES (1,1), (2,1), (3,3), (4, 7)
+
+query I rowsort
+SELECT b FROM ab GROUP BY a
+----
+1
+1
+3
+7
+
+statement ok
+CREATE TABLE tab (
+  col1 INT PRIMARY KEY,
+  col2 INT,
+  col3 STRING
+)
+
+statement ok
+INSERT INTO tab VALUES (-3, 7, 'a'), (-2, 6, 'a'), (-1, 5, 'a'), (0, 7, 'b'), (1, 5, 'b'), (2, 6, 'b')
+
+query II rowsort
+SELECT a+b, count(*) FROM ab JOIN tab ON b=col2 GROUP BY a
+----
+11 2
+
+query IIII rowsort
+SELECT a, col1, b+col2, count(*) FROM ab JOIN tab ON b=col2 GROUP BY a, col1
+----
+4  -3  14  1
+4  0   14  1
+
+query IIII rowsort
+SELECT a, b, count(*), count(col2) FROM ab LEFT JOIN tab ON b=col2 GROUP BY a
+----
+1  1  1  0
+2  1  1  0
+3  3  1  0
+4  7  2  2
+
+query III rowsort
+SELECT a, b, count(*) FROM ab RIGHT JOIN tab ON b=col2 GROUP BY a
+----
+NULL  NULL  4
+4     7     2

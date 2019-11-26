@@ -49,7 +49,7 @@ func (b *Builder) buildScalar(
 	// Note that GROUP BY columns cannot be reused inside an aggregate input
 	// expression (when inAgg=true) because the aggregate input expressions and
 	// grouping expressions are built as part of the same projection.
-	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg &&
+	inGroupingContext := inScope.inGroupingContext() && !inScope.inAgg &&
 		!inScope.groupby.buildingGroupingCols
 	if inGroupingContext {
 		// TODO(rytaft): This currently regenerates a string for each subexpression.
@@ -72,13 +72,38 @@ func (b *Builder) buildScalar(
 			// Non-grouping column was referenced. Note that a column that is part
 			// of a larger grouping expression would have been detected by the
 			// groupStrs checking code above.
-			panic(newGroupingError(&t.name))
+			// Normally this would be a "column must appear in the GROUP BY clause"
+			// error. The only case where we allow this (for compatibility with
+			// Postgres) is when this column is part of a table and we are already
+			// grouping on the entire PK of that table.
+			g := inScope.groupby
+			if !b.allowImplicitGroupingColumn(t.id, g) {
+				panic(newGroupingError(&t.name))
+			}
+
+			// We add a new grouping column; these show up both in aggInScope and
+			// aggOutScope.
+			//
+			// Note that normalization rules will trim down the list of grouping
+			// columns based on FDs, so this is only for the purposes of building a
+			// valid operator.
+			aggInCol := b.addColumn(g.aggInScope, "" /* alias */, t)
+			b.finishBuildScalarRef(t, inScope, g.aggInScope, aggInCol, nil)
+			g.groupStrs[symbolicExprStr(t)] = aggInCol
+
+			g.aggOutScope.appendColumn(aggInCol)
+
+			return b.finishBuildScalarRef(t, g.aggOutScope, outScope, outCol, colRefs)
 		}
 
 		return b.finishBuildScalarRef(t, inScope, outScope, outCol, colRefs)
 
 	case *aggregateInfo:
-		return b.finishBuildScalarRef(t.col, inScope.groupby.aggOutScope, outScope, outCol, colRefs)
+		var aggOutScope *scope
+		if inScope.groupby != nil {
+			aggOutScope = inScope.groupby.aggOutScope
+		}
+		return b.finishBuildScalarRef(t.col, aggOutScope, outScope, outCol, colRefs)
 
 	case *windowInfo:
 		return b.finishBuildScalarRef(t.col, inScope, outScope, outCol, colRefs)
@@ -422,7 +447,7 @@ func (b *Builder) buildFunction(
 	f *tree.FuncExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	if f.WindowDef != nil {
-		if inScope.groupby.inAgg {
+		if inScope.inAgg {
 			panic(sqlbase.NewWindowInAggError())
 		}
 	}
@@ -533,8 +558,8 @@ func (b *Builder) checkSubqueryOuterCols(
 	}
 
 	// Check 1 (see function comment).
-	if b.semaCtx.Properties.IsSet(tree.RejectAggregates) && inScope.groupby.aggOutScope != nil {
-		aggCols := inScope.groupby.aggOutScope.getAggregateCols()
+	if b.semaCtx.Properties.IsSet(tree.RejectAggregates) && inScope.groupby != nil {
+		aggCols := inScope.groupby.aggregateResultCols()
 		for i := range aggCols {
 			if subqueryOuterCols.Contains(aggCols[i].id) {
 				panic(tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context))
