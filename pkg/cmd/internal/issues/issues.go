@@ -103,6 +103,7 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 var oldFriendsMap = map[string]string{
 	"a-robinson":   "andreimatei",
 	"benesch":      "nvanbenschoten",
+	"georgeutsin":  "yuzefovich",
 	"tamird":       "tbg",
 	"vivekmenezes": "",
 }
