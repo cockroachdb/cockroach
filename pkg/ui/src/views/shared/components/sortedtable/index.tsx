@@ -72,6 +72,7 @@ interface SortedTableProps<T> {
     // purposes of tracking whether it's expanded or not.
     expansionKey: (obj: T) => string;
   };
+  drawer?: boolean;
 }
 
 interface SortedTableState {
@@ -211,6 +212,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
           rowClass={this.rowClass(this.props)}
           className={this.props.className}
           expandableConfig={expandableConfig}
+          drawer={this.props.drawer}
         />
       );
     }
