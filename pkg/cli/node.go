@@ -229,7 +229,7 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 			return nil, nil, err
 		}
 		if len(rows) == 0 {
-			return nil, nil, fmt.Errorf("Error: node %d doesn't exist", nodeID)
+			return nil, nil, errors.Errorf("node %d doesn't exist", nodeID)
 		}
 		return headers, rows, nil
 	default:

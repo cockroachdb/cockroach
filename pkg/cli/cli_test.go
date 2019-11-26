@@ -406,8 +406,7 @@ func (c cliTest) runWithArgsUnredirected(origArgs []string) {
 
 		return Run(args)
 	}(); err != nil {
-		fmt.Println(err)
-		maybeShowErrorDetails(os.Stdout, err, false /*printNewLine*/)
+		cliOutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
 	}
 }
 
@@ -515,7 +514,8 @@ func Example_demo() {
 	// 1
 	// 1
 	// demo --set=errexit=0 -e select nonexistent -e select 123 as "123"
-	// pq: column "nonexistent" does not exist
+	// ERROR: column "nonexistent" does not exist
+	// SQLSTATE: 42703
 	// 123
 	// 123
 	// demo startrek -e show databases
@@ -607,14 +607,15 @@ func Example_sql() {
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
 	// sql -e copy t.f from stdin
-	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
+	// ERROR: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
 	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	// > SHOW USERS
 	// user_name
 	// root
 	// sql --set=errexit=0 -e select nonexistent -e select 123 as "123"
-	// pq: column "nonexistent" does not exist
+	// ERROR: column "nonexistent" does not exist
+	// SQLSTATE: 42703
 	// 123
 	// 123
 	// sql --set echo=true -e select 123 as "123"
@@ -623,7 +624,7 @@ func Example_sql() {
 	// 123
 	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
-	// invalid syntax
+	// ERROR: invalid syntax
 }
 
 func Example_sql_watch() {
@@ -641,7 +642,8 @@ func Example_sql_watch() {
 	// 0.5
 	// dec
 	// 1
-	// pq: division by zero
+	// ERROR: division by zero
+	// SQLSTATE: 22012
 }
 
 func Example_sql_format() {
@@ -1125,7 +1127,8 @@ func Example_sql_table() {
 	// sql -e insert into t.t values (e'a\tb\tc\n12\t123123213\t12313', 'tabs')
 	// INSERT 1
 	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
-	// pq: lexical error: invalid UTF-8 byte sequence
+	// ERROR: lexical error: invalid UTF-8 byte sequence
+	// SQLSTATE: 42601
 	// DETAIL: source SQL:
 	// insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
 	//                         ^
@@ -1484,13 +1487,13 @@ func Example_user() {
 	// CREATE USER 1
 	// user set ,foo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username ",foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set f,oo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username "f,oo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username "f,oo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foo,
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username "foo," invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username "foo," invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set 0foo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
@@ -1505,7 +1508,7 @@ func Example_user() {
 	// CREATE USER 1
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
@@ -1701,7 +1704,7 @@ func Example_node() {
 	//    1
 	// (1 row)
 	// node status 10000
-	// Error: node 10000 doesn't exist
+	// ERROR: node 10000 doesn't exist
 	// sql -e drop database defaultdb
 	// DROP DATABASE
 	// node ls
@@ -1726,7 +1729,8 @@ func TestCLITimeout(t *testing.T) {
 		}
 
 		const exp = `node status 1 --all --timeout 1ns
-pq: query execution canceled due to statement timeout
+ERROR: query execution canceled due to statement timeout
+SQLSTATE: 57014
 `
 		if out != exp {
 			err := errors.Errorf("unexpected output:\n%q\nwanted:\n%q", out, exp)
@@ -2088,7 +2092,7 @@ func TestJunkPositionalArguments(t *testing.T) {
 		if err != nil {
 			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
 		}
-		exp := fmt.Sprintf("%s\nunknown command %q for \"cockroach %s\"\n", line, junk, test)
+		exp := fmt.Sprintf("%s\nERROR: unknown command %q for \"cockroach %s\"\n", line, junk, test)
 		if exp != out {
 			t.Errorf("expected:\n%s\ngot:\n%s", exp, out)
 		}
@@ -2388,7 +2392,7 @@ func Example_dump_no_visible_columns() {
 	// CREATE TABLE t (,
 	// 	FAMILY "primary" (rowid)
 	// );
-	// table "defaultdb.public.t" has no visible columns
+	// ERROR: table "defaultdb.public.t" has no visible columns
 	// HINT: To proceed with the dump, either omit this table from the list of tables to dump, drop the table, or add some visible columns.
 	// --
 	// See: https://github.com/cockroachdb/cockroach/issues/37768

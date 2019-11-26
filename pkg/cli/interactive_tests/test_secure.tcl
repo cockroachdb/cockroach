@@ -92,7 +92,7 @@ end_test
 start_test "Check that root cannot use password."
 # Run as root but with a non-existent certs directory.
 send "$argv sql --url='postgresql://root@localhost:26257?sslmode=verify-full&sslrootcert=$certs_dir/ca.crt'\r"
-eexpect "Error: connections with user root must use a client certificate"
+eexpect "ERROR: connections with user root must use a client certificate"
 eexpect "Failed running \"sql\""
 end_test
 
@@ -119,7 +119,7 @@ eexpect $prompt
 send "$argv sql --certs-dir=$certs_dir --user=eisen\r"
 eexpect "Enter password:"
 send "*****\r"
-eexpect "Error: pq: password authentication failed for user eisen"
+eexpect "ERROR: password authentication failed for user eisen"
 eexpect "Failed running \"sql\""
 # Check that history is scrubbed.
 send "$argv sql --certs-dir=$certs_dir\r"
