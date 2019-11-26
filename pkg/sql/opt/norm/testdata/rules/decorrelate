@@ -4108,16 +4108,10 @@ values
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(2,7,9,12)
-                ├── left-join (hash)
+                ├── right-join (hash)
                 │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
-                │    ├── fd: (12)-->(2), ()~~>(9)
+                │    ├── fd: ()-->(2,12), ()~~>(9)
                 │    ├── limit hint: 1.00
-                │    ├── ordinality
-                │    │    ├── columns: i:2(int) rownum:12(int!null)
-                │    │    ├── key: (12)
-                │    │    ├── fd: (12)-->(2)
-                │    │    └── scan a
-                │    │         └── columns: i:2(int)
                 │    ├── project
                 │    │    ├── columns: true:9(bool!null) y:7(int)
                 │    │    ├── fd: ()-->(9)
@@ -4125,6 +4119,16 @@ values
                 │    │    │    └── columns: y:7(int)
                 │    │    └── projections
                 │    │         └── true [type=bool]
+                │    ├── ordinality
+                │    │    ├── columns: i:2(int) rownum:12(int!null)
+                │    │    ├── cardinality: [0 - 1]
+                │    │    ├── key: ()
+                │    │    ├── fd: ()-->(2,12)
+                │    │    └── scan a
+                │    │         ├── columns: i:2(int)
+                │    │         ├── limit: 1
+                │    │         ├── key: ()
+                │    │         └── fd: ()-->(2)
                 │    └── filters
                 │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
                 └── const: 1 [type=int]
