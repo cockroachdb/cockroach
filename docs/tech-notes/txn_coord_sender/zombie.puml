@@ -1,0 +1,29 @@
+@startuml
+skinparam BoxPadding 10
+
+box "On gateway node"
+  participant SQL
+  participant "RootTxn\n+TxnCoordSender" as RootTxn
+end box
+box "On other node"
+  participant dSQLServer
+  participant "LeafTxn\n+TxnCoordSender" as LeafTxn
+end box
+create RootTxn
+SQL -> RootTxn : NewTxn()
+SQL -> RootTxn : GetMeta()
+RootTxn --> SQL : leafmeta
+SQL -> dSQLServer : SetupFlow
+create LeafTxn
+dSQLServer -> LeafTxn : NewTxn(leafmeta)
+...
+SQL -> RootTxn : Send(BatchRequest)
+RootTxn -> cluster : Send(BatchRequest)
+cluster -[#red]-> RootTxn : unrecoverable error!
+RootTxn -> RootTxn : txnState = txnError
+activate RootTxn #red
+...
+dSQLServer -> LeafTxn : Send(BatchRequest)
+LeafTxn -> cluster : Send(BatchRequest)
+cluster -> cluster : **wut? zombie txn?**
+@enduml
