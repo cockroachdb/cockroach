@@ -478,11 +478,12 @@ func cmdResolveIntent(e *evalCtx) error {
 func (e *evalCtx) resolveIntent(
 	rw ReadWriter, key roachpb.Key, txn *roachpb.Transaction, resolveStatus roachpb.TransactionStatus,
 ) error {
-	return MVCCResolveWriteIntent(e.ctx, rw, nil, roachpb.Intent{
+	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, roachpb.Intent{
 		Span:   roachpb.Span{Key: key},
 		Status: resolveStatus,
 		Txn:    txn.TxnMeta,
 	})
+	return err
 }
 
 func cmdCheckIntent(e *evalCtx) error {

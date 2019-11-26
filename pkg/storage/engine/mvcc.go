@@ -2506,7 +2506,8 @@ func MVCCIterate(
 
 // MVCCResolveWriteIntent either commits or aborts (rolls back) an
 // extant write intent for a given txn according to commit parameter.
-// ResolveWriteIntent will skip write intents of other txns.
+// ResolveWriteIntent will skip write intents of other txns. It returns
+// whether or not an intent was found to resolve.
 //
 // Transaction epochs deserve a bit of explanation. The epoch for a
 // transaction is incremented on transaction retries. A transaction
@@ -2530,12 +2531,12 @@ func MVCCIterate(
 // when they're not at the timestamp the Txn mandates them to be.
 func MVCCResolveWriteIntent(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent,
-) error {
+) (bool, error) {
 	iterAndBuf := GetBufUsingIter(rw.NewIterator(IterOptions{Prefix: true}))
-	err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
+	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
 	// Using defer would be more convenient, but it is measurably slower.
 	iterAndBuf.Cleanup()
-	return err
+	return ok, err
 }
 
 // MVCCResolveWriteIntentUsingIter is a variant of MVCCResolveWriteIntent that
@@ -2546,17 +2547,16 @@ func MVCCResolveWriteIntentUsingIter(
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
-) error {
+) (bool, error) {
 	if len(intent.Key) == 0 {
-		return emptyKeyError()
+		return false, emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
-		return errors.Errorf("can't resolve range intent as point intent")
+		return false, errors.Errorf("can't resolve range intent as point intent")
 	}
-	_, err := mvccResolveWriteIntent(
+	return mvccResolveWriteIntent(
 		ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf, false, /* forRange */
 	)
-	return err
 }
 
 // unsafeNextVersion positions the iterator at the successor to latestKey. If this value
