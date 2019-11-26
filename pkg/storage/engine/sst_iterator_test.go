@@ -73,7 +73,7 @@ func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sstFile := &MemFile{}
-	sst := MakeSSTWriter(sstFile)
+	sst := MakeIngestionSSTWriter(sstFile)
 	defer sst.Close()
 	var allKVs []MVCCKeyValue
 	for i := 0; i < 10; i++ {
