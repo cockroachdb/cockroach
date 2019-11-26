@@ -103,6 +103,7 @@ message ProcessorCoreUnion {
   optional ChangeFrontierSpec changeFrontier = 26;
   optional OrdinalitySpec ordinality = 27;
   optional BulkRowWriterSpec bulkRowWriter = 28;
+  optional IntermediateResultsLoggerSpec logger = 29;
 
   reserved 6, 12;
 }
@@ -135,3 +136,9 @@ message MetadataTestReceiverSpec {
   repeated string sender_ids = 1 [(gogoproto.customname) = "SenderIDs"];
 }
 
+// IntermediateResultsLoggerSpec indicates a logger core that can be used while
+// debugging to log the intermediate results of a processor.
+message IntermediateResultsLoggerSpec {
+  optional string component_id = 1 [(gogoproto.nullable) = false,
+                                    (gogoproto.customname) = "ComponentID"];
+}

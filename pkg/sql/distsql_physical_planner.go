@@ -126,6 +126,13 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
+var logIntermediateResults = settings.RegisterBoolSetting(
+	"sql.distsql.log_intermediate_results.enabled",
+	"set to true to enable logging of intermediate results in DistSQL execution. "+
+		"Note that enabling this can have negative impact on performance.",
+	false,
+)
+
 // livenessProvider provides just the methods of storage.NodeLiveness that the
 // DistSQLPlanner needs, to avoid importing all of storage.
 type livenessProvider interface {
@@ -2402,6 +2409,26 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			plan.ResultTypes,
 			plan.MergeOrdering,
 		)
+	}
+
+	needIntermediateResults := logIntermediateResults.Get(&dsp.st.SV)
+	if needIntermediateResults {
+		lastProcessor := plan.Processors[len(plan.Processors)-1]
+		if lastProcessor.Spec.Core.Logger == nil {
+			// We want to add a logger only if the last processor is not the logger
+			// already.
+			lastProcessorID := lastProcessor.Spec.ProcessorID
+			plan.AddNoGroupingStage(
+				execinfrapb.ProcessorCoreUnion{
+					Logger: &execinfrapb.IntermediateResultsLoggerSpec{
+						ComponentID: fmt.Sprintf("%d", lastProcessorID),
+					},
+				},
+				execinfrapb.PostProcessSpec{},
+				plan.ResultTypes,
+				plan.MergeOrdering,
+			)
+		}
 	}
 
 	return plan, err
