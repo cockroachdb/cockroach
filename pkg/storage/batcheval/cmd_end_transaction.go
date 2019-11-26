@@ -504,13 +504,12 @@ func resolveLocalIntents(
 			return nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
 		}
 	}
-	// If the poison arg is set, make sure to set the abort span entry.
-	if args.Poison && txn.Status == roachpb.ABORTED {
-		if err := SetAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, true /* poison */); err != nil {
+
+	if WriteAbortSpanOnResolve(txn.Status) {
+		if err := SetAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, args.Poison); err != nil {
 			return nil, err
 		}
 	}
-
 	return externalIntents, nil
 }
 
