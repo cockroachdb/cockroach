@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,6 +39,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 		StartKey: roachpb.RKey(startKey),
 		EndKey:   roachpb.RKey(endKey),
 	}
+	as := abortspan.New(desc.RangeID)
 
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts, ts2, ts3 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}
@@ -1056,7 +1058,8 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			var resp roachpb.EndTransactionResponse
 			_, err := EndTransaction(ctx, batch, CommandArgs{
 				EvalCtx: &mockEvalCtx{
-					desc: &desc,
+					desc:      &desc,
+					abortSpan: as,
 					canCreateTxnFn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
 						require.NotNil(t, c.canCreateTxn, "CanCreateTxnRecord unexpectedly called")
 						if can, minTS := c.canCreateTxn(); can {
